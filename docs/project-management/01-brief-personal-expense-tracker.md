@@ -2,7 +2,7 @@
 
 **One-line pitch:** Expensa is a desktop web app where one person logs expenses by hand, tracks spending against a monthly budget split into categories, and gets AI-written insights about where the money goes. The Welcome screen says it directly: "Take control of your money."
 
-> **Source:** Figma file [Personal Expense Tracker](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=1-4), page "Screens", 17 frames in 5 sections (Onboarding, Dashboard, Transactions, Account, AI Insights). Everything in this brief comes from those frames. Inferences are labeled as inferences.
+> **Source:** Figma file [Personal Expense Tracker](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=1-4), page "Screens", 17 frames in 5 sections (Onboarding, Dashboard, Transactions, Account, AI Insights). Everything in this brief comes from those frames. Inferences are labeled as inferences.
 >
 > **Notation:** Figma frame names and some UI copy contain a long dash character. Per DECODE writing rules, these documents write it as a hyphen (so the frame is referenced as "06 · Transactions - List"). Everything else is quoted exactly as designed.
 
@@ -31,23 +31,23 @@ Log an expense in seconds, then see three things in one calm place: how the mont
 
 | Screen name | Figma frame (linked) | Purpose |
 |---|---|---|
-| Welcome | [01 · Welcome](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=41-696) | Entry screen with the pitch and two ways in: "Get started" and "I already have an account" |
-| Setup - Currency & budget | [02 · Setup - Currency & budget](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=42-700) | Step 1 of 2: pick a currency (USD - $) and set the monthly budget ($2,000) |
-| Setup - Starter categories | [03 · Setup - Starter categories](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=43-705) | Step 2 of 2: toggle starter category chips on or off, then "Finish setup" |
-| Dashboard | [04 · Dashboard](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=21-4) | Monthly overview: budget progress, stats, weekly trend, category donut, recent transactions, AI teaser |
-| Dashboard - Empty | [05 · Dashboard - Empty](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=44-706) | Same layout with zero data; every card points to adding a transaction |
-| Transactions - List | [06 · Transactions - List](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=26-90) | Searchable, filterable, sortable table of all transactions |
-| Transactions - Empty | [07 · Transactions - Empty](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=45-752) | Transactions page before any expense exists, with a single call to action |
-| Transaction detail | [08 · Transaction detail](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=34-349) | One transaction in full: amount, details, note, category month context, edit and delete |
-| Add transaction (modal) | [09 · Add transaction](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=28-135) | Form to log an expense: amount, category, date, merchant, optional note |
-| Row menu | [10 · Row menu](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=30-257) | Per-row kebab menu on the list with Edit and Delete |
-| Edit transaction (modal) | [11 · Edit transaction](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=29-196) | Same form prefilled, plus a "Delete transaction" action |
-| Delete confirmation | [12 · Delete confirmation](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=31-302) | Dialog that confirms permanent deletion of a transaction |
-| Categories | [13 · Categories](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=36-423) | Second tab of Transactions: budget allocation bar and one budget card per category |
-| AI Insights | [14 · AI Insights](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=38-495) | Monthly summary banner plus four insight cards, with Regenerate |
-| AI Insights - Generating | [15 · AI Insights - Generating](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=39-540) | Loading state with skeleton cards while insights are produced |
-| AI Insights - Empty | [16 · AI Insights - Empty](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=39-665) | Insights page before the first expense, explains what insights will do |
-| Settings | [17 · Settings](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=40-630) | Edit profile (name, email), preferences (currency, budget, month start), reach category management |
+| Welcome | [01 · Welcome](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=41-696) | Entry screen with the pitch and two ways in: "Get started" and "I already have an account" |
+| Setup - Currency & budget | [02 · Setup - Currency & budget](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=42-700) | Step 1 of 2: pick a currency (USD - $) and set the monthly budget ($2,000) |
+| Setup - Starter categories | [03 · Setup - Starter categories](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=43-705) | Step 2 of 2: toggle starter category chips on or off, then "Finish setup" |
+| Dashboard | [04 · Dashboard](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=21-4) | Monthly overview: budget progress, stats, weekly trend, category donut, recent transactions, AI teaser |
+| Dashboard - Empty | [05 · Dashboard - Empty](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=44-706) | Same layout with zero data; every card points to adding a transaction |
+| Transactions - List | [06 · Transactions - List](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=26-90) | Searchable, filterable, sortable table of all transactions |
+| Transactions - Empty | [07 · Transactions - Empty](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=45-752) | Transactions page before any expense exists, with a single call to action |
+| Transaction detail | [08 · Transaction detail](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=34-349) | One transaction in full: amount, details, note, category month context, edit and delete |
+| Add transaction (modal) | [09 · Add transaction](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=28-135) | Form to log an expense: amount, category, date, merchant, optional note |
+| Row menu | [10 · Row menu](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=30-257) | Per-row kebab menu on the list with Edit and Delete |
+| Edit transaction (modal) | [11 · Edit transaction](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=29-196) | Same form prefilled, plus a "Delete transaction" action |
+| Delete confirmation | [12 · Delete confirmation](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=31-302) | Dialog that confirms permanent deletion of a transaction |
+| Categories | [13 · Categories](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=36-423) | Second tab of Transactions: budget allocation bar and one budget card per category |
+| AI Insights | [14 · AI Insights](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=38-495) | Monthly summary banner plus four insight cards, with Regenerate |
+| AI Insights - Generating | [15 · AI Insights - Generating](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=39-540) | Loading state with skeleton cards while insights are produced |
+| AI Insights - Empty | [16 · AI Insights - Empty](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=39-665) | Insights page before the first expense, explains what insights will do |
+| Settings | [17 · Settings](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=40-630) | Edit profile (name, email), preferences (currency, budget, month start), reach category management |
 
 The file also contains Introduction (file navigation notes), Foundations (color and type tokens), and Components (component library) pages. Those support the Screens page and don't add screens.
 

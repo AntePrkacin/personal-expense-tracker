@@ -2,7 +2,7 @@
 
 You have three inputs: the **app brief** (what the app is), the **tech spec** (what to build, screen by screen), and the **Figma design** (what it looks like). You'll turn them into a Jira board: **7 epics** and roughly **20 to 30 tasks**. This handout is the whole method on a few pages, with one finished example to copy.
 
-Companion documents, next to this one: `01-brief-personal-expense-tracker` and `02-tech-spec-personal-expense-tracker`. Figma: [Personal Expense Tracker](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=1-4), page "Screens".
+Companion documents, next to this one: `01-brief-personal-expense-tracker` and `02-tech-spec-personal-expense-tracker`. Figma: [Personal Expense Tracker](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=1-4), page "Screens".
 
 ## The six words you need
 
@@ -112,7 +112,7 @@ Your teacher builds this live in class. Keep it open while you work, it's the mo
 
   Context: dialog "Delete this transaction?" quotes the target ("'Whole Foods - $62.40' (Oct 8)") and says removal is permanent (DEL-1). "Delete" deletes and refreshes, "Cancel" does nothing (DEL-2). Deletion recomputes dashboard cards, the donut, and category cards (DEL-3). Opens from the row menu, Transaction detail, and the edit modal.
 
-  Figma: [12 · Delete confirmation](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=31-302)
+  Figma: [12 · Delete confirmation](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=31-302)
 
   Acceptance criteria:
   1. Given the row menu on "Whole Foods", when I click "Delete", then a dialog shows "Delete this transaction?" and the text quotes the merchant, amount, and date

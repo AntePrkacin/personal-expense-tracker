@@ -2,7 +2,7 @@
 
 This spec turns the Figma design into buildable requirements. Every requirement references the screen it comes from. If a requirement has no screen behind it, it doesn't belong here.
 
-> **Source:** Figma file [Personal Expense Tracker](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=1-4), page "Screens" (17 frames). Frame names and UI copy are quoted as designed, except that long dashes are written as hyphens per DECODE writing rules.
+> **Source:** Figma file [Personal Expense Tracker](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=1-4), page "Screens" (17 frames). Frame names and UI copy are quoted as designed, except that long dashes are written as hyphens per DECODE writing rules.
 >
 > **How to read requirement IDs:** each screen has a code (WEL, BUD, CAT, DSH, TRN, DET, ADD, EDT, MNU, DEL, CTG, INS, SET). "TRN-3" means requirement 3 of the Transactions screens. Use these IDs when you write Jira tasks so every task traces back here.
 >
@@ -30,7 +30,7 @@ This spec turns the Figma design into buildable requirements. Every requirement 
 
 ### 2.1 Welcome
 
-**Figma frame:** [01 · Welcome](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=41-696). **Purpose:** entry point; pitch the product and route new vs. returning users.
+**Figma frame:** [01 · Welcome](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=41-696). **Purpose:** entry point; pitch the product and route new vs. returning users.
 
 UI elements and behavior:
 
@@ -49,7 +49,7 @@ Edge cases: none visible.
 
 ### 2.2 Setup - Currency & budget
 
-**Figma frame:** [02 · Setup - Currency & budget](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=42-700). **Purpose:** step 1 of 2; set the currency and the monthly budget the whole app tracks against.
+**Figma frame:** [02 · Setup - Currency & budget](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=42-700). **Purpose:** step 1 of 2; set the currency and the monthly budget the whole app tracks against.
 
 UI elements and behavior:
 
@@ -71,7 +71,7 @@ Edge cases: an empty or zero budget makes dashboard copy like "$2,000 left" mean
 
 ### 2.3 Setup - Starter categories
 
-**Figma frame:** [03 · Setup - Starter categories](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=43-705). **Purpose:** step 2 of 2; choose starter categories to track.
+**Figma frame:** [03 · Setup - Starter categories](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=43-705). **Purpose:** step 2 of 2; choose starter categories to track.
 
 UI elements and behavior:
 
@@ -90,7 +90,7 @@ Edge cases: the onboarding chip set conflicts with the categories the app screen
 
 ### 2.4 Dashboard (filled and empty)
 
-**Figma frames:** [04 · Dashboard](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=21-4), [05 · Dashboard - Empty](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=44-706). **Purpose:** show the month at a glance and route the user to logging, the list, and insights.
+**Figma frames:** [04 · Dashboard](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=21-4), [05 · Dashboard - Empty](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=44-706). **Purpose:** show the month at a glance and route the user to logging, the list, and insights.
 
 Shared shell (also applies to Transactions, AI Insights, Settings):
 
@@ -121,7 +121,7 @@ Edge cases visible or implied: "8 days left in October" and "Full month ahead" r
 
 ### 2.5 Transactions - List and empty state
 
-**Figma frames:** [06 · Transactions - List](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=26-90), [07 · Transactions - Empty](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=45-752). **Purpose:** the full expense log with search, filters, and sort.
+**Figma frames:** [06 · Transactions - List](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=26-90), [07 · Transactions - Empty](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=45-752). **Purpose:** the full expense log with search, filters, and sort.
 
 Header and tabs:
 
@@ -147,7 +147,7 @@ Navigation: entry from sidebar "Transactions", dashboard "View all", and after m
 
 ### 2.6 Transaction detail
 
-**Figma frame:** [08 · Transaction detail](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=34-349). **Purpose:** one transaction in full, with edit and delete.
+**Figma frame:** [08 · Transaction detail](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=34-349). **Purpose:** one transaction in full, with edit and delete.
 
 - **DET-1.** Breadcrumb "All transactions" returns to Transactions - List (06).
 - **DET-2.** Header: merchant as title ("Whole Foods"), caption "Oct 8, 2025 · 2:32 PM ·" plus a green category chip ("Groceries"). Buttons: "Edit" (opens 11) and "Delete" (danger style, opens 12).
@@ -164,7 +164,7 @@ Navigation: entry from a list row (TRN-7). Exits: breadcrumb → 06, "Edit" → 
 
 ### 2.7 Add transaction (modal)
 
-**Figma frame:** [09 · Add transaction](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=28-135). **Purpose:** log an expense manually.
+**Figma frame:** [09 · Add transaction](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=28-135). **Purpose:** log an expense manually.
 
 - **ADD-1.** Modal over the current page (mocked over Transactions - List, background dimmed) titled "Add transaction" with an X close button.
 - **ADD-2.** Fields, top to bottom: "Amount" ("$" prefix, numeric, shown focused with value "24.00"), "Category" (select, "Groceries", options are the user's categories), "Date" (select-style field, "Oct 8, 2025"), "Merchant" (text, "Whole Foods"), "Note (optional)" (text, "Weekly groceries").
@@ -185,7 +185,7 @@ Edge cases: saving a transaction dated in a past month must land in that month's
 
 ### 2.8 Edit transaction (modal)
 
-**Figma frame:** [11 · Edit transaction](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=29-196). **Purpose:** correct an existing expense.
+**Figma frame:** [11 · Edit transaction](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=29-196). **Purpose:** correct an existing expense.
 
 - **EDT-1.** Same form as Add transaction, titled "Edit transaction", prefilled with the transaction's values (mock: "24.00", "Groceries", "Oct 8, 2025", "Whole Foods", "Weekly groceries").
 - **EDT-2.** Footer right: "Cancel" and primary "Save changes" (persists edits, closes, refreshes list, detail, dashboard, and category cards, assumption A18).
@@ -196,14 +196,14 @@ Navigation: opens from the Row menu (10) and from Transaction detail "Edit" (DET
 
 ### 2.9 Row menu
 
-**Figma frame:** [10 · Row menu](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=30-257). **Purpose:** quick actions on one transaction without opening it.
+**Figma frame:** [10 · Row menu](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=30-257). **Purpose:** quick actions on one transaction without opening it.
 
 - **MNU-1.** The kebab button on a list row opens a small menu anchored to the row (mocked on the Uber row) with two items: "Edit" (pencil icon) and "Delete" (trash icon, red/danger color).
 - **MNU-2.** "Edit" opens the Edit transaction modal (11) for that row. "Delete" opens Delete confirmation (12). Clicking elsewhere closes the menu (standard behavior, assumption A19).
 
 ### 2.10 Delete confirmation
 
-**Figma frame:** [12 · Delete confirmation](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=31-302). **Purpose:** prevent accidental permanent deletion.
+**Figma frame:** [12 · Delete confirmation](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=31-302). **Purpose:** prevent accidental permanent deletion.
 
 - **DEL-1.** Centered dialog with a red trash icon in a tinted circle, title "Delete this transaction?", and body copy interpolating the target: "This permanently removes 'Whole Foods - $62.40' (Oct 8) from your records. This can't be undone."
 - **DEL-2.** Buttons: "Cancel" (closes, nothing happens) and danger primary "Delete" (deletes the transaction, closes, refreshes the list and badge).
@@ -213,7 +213,7 @@ Navigation: opens from the Row menu (10 via MNU-2), Transaction detail "Delete" 
 
 ### 2.11 Categories
 
-**Figma frame:** [13 · Categories](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=36-423). **Purpose:** per-category budgets and month status; the second tab of Transactions.
+**Figma frame:** [13 · Categories](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=36-423). **Purpose:** per-category budgets and month status; the second tab of Transactions.
 
 - **CTG-1.** Tabs: "All transactions 128" and active "Categories 8" (badge = category count). The header's primary button changes to "Add category", and the search input is not shown on this tab. "Add category" has no designed destination and stays non-functional until the category editor is designed (assumption A24).
 - **CTG-2.** Summary block "Budget allocation": "$1,800 allocated of $2,000 monthly budget", green chip "$200 unallocated", progress bar. Note: the eight card caps below add up to $2,970, which contradicts $1,800. Mock numbers are illustrative; compute allocation from real category caps (assumption A25).
@@ -230,7 +230,7 @@ Edge cases: a category over its cap shows a red bar, red "over" amount, and red 
 
 ### 2.12 AI Insights (ready, generating, empty)
 
-**Figma frames:** [14 · AI Insights](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=38-495), [15 · AI Insights - Generating](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=39-540), [16 · AI Insights - Empty](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=39-665). **Purpose:** turn transaction history into a monthly summary and insight cards.
+**Figma frames:** [14 · AI Insights](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=38-495), [15 · AI Insights - Generating](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=39-540), [16 · AI Insights - Empty](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=39-665). **Purpose:** turn transaction history into a monthly summary and insight cards.
 
 Header:
 
@@ -261,7 +261,7 @@ Edge cases: what triggers the very first generation isn't designed; the empty-st
 
 ### 2.13 Settings
 
-**Figma frame:** [17 · Settings](https://www.figma.com/design/h4ZIgwn11Y0SBSLJbvw5gC/Personal-Expense-Tracker?node-id=40-630). **Purpose:** edit the profile and preferences; reach category management.
+**Figma frame:** [17 · Settings](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=40-630). **Purpose:** edit the profile and preferences; reach category management.
 
 - **SET-1.** Header: overline "Manage your account", title "Settings".
 - **SET-2.** Card "Profile": avatar tile with initials "MK", label "Your avatar", caption "Your initials are used across Expensa." (initials derive from the name, no upload exists). Inputs: "First name" ("Marko"), "Last name" ("Kovač"), "Email" ("marko@email.com").
