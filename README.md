@@ -58,11 +58,12 @@ thing to notice: the frontend handles the failure rather than pretending it cann
 
 ## Prerequisites
 
-| Tool    | Version                                   | Note                                                        |
-| ------- | ----------------------------------------- | ----------------------------------------------------------- |
-| Node.js | see [`.nvmrc`](.nvmrc) (currently **24**) | `nvm use` picks it up automatically. CI uses this same file |
-| npm     | 10+                                       | Ships with Node 24                                          |
-| git     | any recent                                |                                                             |
+| Tool    | Version                                   | Note                                                                                    |
+| ------- | ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| Node.js | see [`.nvmrc`](.nvmrc) (currently **26**) | `nvm use` picks it up automatically. CI uses this same file                             |
+| npm     | 12+                                       | Ships with Node 26                                                                      |
+| git     | any recent                                |                                                                                         |
+| mise    | optional                                  | Runs the repo-wide tasks below. Every task wraps plain npm commands, so you can skip it |
 
 The hard floor is **v20.9.0**, which is what `next` declares in `engines`. All three
 `package.json` files carry that constraint, so npm warns with `EBADENGINE` if you are below
@@ -106,8 +107,43 @@ fnm use
 
 Add fnm's [shell hook](https://github.com/Schniz/fnm#shell-setup) so the version switches
 per directory. Alternatives: [nvm-windows](https://github.com/coreybutler/nvm-windows)
-(does not read `.nvmrc`, so pass `24` explicitly), `winget install OpenJS.NodeJS.LTS` for a
+(does not read `.nvmrc`, so pass `26` explicitly), `winget install OpenJS.NodeJS.LTS` for a
 plain install with no switching, or WSL2 plus the macOS/Linux steps inside it.
+
+### Installing mise (optional)
+
+[mise](https://mise.jdx.dev) is a task runner. This repo uses it for one reason: three
+`package.json` files mean most chores are the same command typed three times, and mise
+collapses each into one. It is **entirely optional**, and every task wraps plain npm
+commands you can always run by hand.
+
+```bash
+# macOS / Linux
+curl https://mise.run | sh
+
+# macOS (Homebrew)
+brew install mise
+
+# Windows
+winget install jdx.mise
+```
+
+Then activate it in your shell, which is the step people miss:
+
+```bash
+echo 'eval "$(mise activate bash)"' >> ~/.bashrc    # bash
+echo 'eval "$(mise activate zsh)"'  >> ~/.zshrc     # zsh
+```
+
+Reopen the terminal, then check it and see what is available:
+
+```bash
+mise --version
+mise tasks ls        # every task, with its description
+```
+
+No `mise trust` needed: `mise.toml` only declares plain tool versions and tasks, so
+nothing executes at load time.
 
 ## Quick start
 
@@ -147,6 +183,29 @@ cd frontend && npm run dev          # http://localhost:4200
 Open <http://localhost:4200>. You should see "Frontend + Backend connected" with the
 message fetched from the API.
 
+### Shortcut with mise
+
+With [mise](#installing-mise-optional) installed, all three installs are one command from
+the repo root:
+
+```bash
+mise run install
+```
+
+It runs the root install first, which is what activates the git hooks, then backend, then
+frontend, and copies both `.env` templates. It halts if a step fails, so you never end up
+with dependencies installed but hooks missing.
+
+Both dev servers together, still from the repo root:
+
+```bash
+mise run dev
+```
+
+That replaces the two terminals above, with one trade-off: both servers share a terminal,
+so their output interleaves and Ctrl+C stops both. Prefer the two-terminal version when
+you are actually debugging one of them.
+
 ### Verify the backend directly
 
 ```bash
@@ -181,6 +240,7 @@ frontend/                 Next.js 16 (App Router) + React 19 on :4200
 .claude/                  Claude Code skills, agents and permissions
 .github/workflows/ci.yml  Backend, frontend and commit-convention jobs
 .husky/                   pre-commit and commit-msg hooks
+mise.toml                 Optional task runner: repo-wide install, dev, audit, update
 CLAUDE.md                 Deeper architecture notes (also read by Claude Code)
 ```
 
@@ -208,6 +268,44 @@ Both apps use Jest, so `npm test` runs once and exits. To filter:
 
 Neither app has a `typecheck` script. `npm run build` is the typecheck, because it runs
 `tsc` (backend) or `next build` (frontend). Run it before you push.
+
+### Repo-wide tasks with mise
+
+Unlike the npm commands above, these run **from the repo root**, and each one covers all
+three packages in order.
+
+| Task                         | What it does                                                         |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `mise run install`           | `npm install` in root, backend, frontend, plus both `.env` templates |
+| `mise run dev`               | Both dev servers together in one terminal                            |
+| `mise run audit`             | `npm audit` in all three packages                                    |
+| `mise run check-for-updates` | `ncu` in all three, showing what is outdated                         |
+| `mise run update`            | `ncu -u --target minor`, then install and update, in all three       |
+
+Every task also has per-package variants when you want just one: `install:repo`,
+`install:backend`, `install:frontend`, `dev:backend`, `dev:frontend`, `update:repo`,
+`update:backend`, `update:frontend`.
+
+### Auditing and updating dependencies
+
+```bash
+mise run audit               # what is vulnerable
+mise run check-for-updates   # what is outdated
+mise run update              # bump minors and patches only, never majors
+```
+
+`update` is capped at `--target minor` on purpose: minor and patch bumps are safe to take
+in bulk, majors need reading a changelog and are yours to do deliberately.
+
+Two things about `audit` that will otherwise confuse you:
+
+- **It always exits 0.** `npm audit` exits 1 on any finding, so a gating version would
+  stop at the first package with findings and never reach the rest. This is a report, not
+  a gate.
+- **The headline totals are inflated.** npm counts every intermediate package in a
+  dependency chain separately, so a single advisory can be billed 25 times. The task
+  prints a production-only summary at the end, which is the number that matters.
+  [`docs/2026-07-30-audit.md`](docs/2026-07-30-audit.md) has the full triage.
 
 ## Environment variables
 
@@ -413,6 +511,9 @@ for the two supported setups and their trade-offs.
 | ESLint cannot find its config                             | You ran it from the repo root. Each app's ESLint runs from that app's directory                                                                      |
 | Ports look backwards                                      | They are asymmetric on purpose: backend **3000**, frontend **4200**. Both are wired into code and config, so do not swap them                        |
 | Port already in use                                       | A dev server from an earlier session. `lsof -nP -iTCP:3000 -sTCP:LISTEN` on macOS/Linux, `netstat -ano \| findstr :3000` on Windows                  |
+| `mise: command not found` after installing it             | You skipped the shell activation line. See [Installing mise](#installing-mise-optional)                                                              |
+| `mise run audit` lists vulnerabilities but still succeeds | Deliberate: it is a report, not a gate. See [Auditing and updating dependencies](#auditing-and-updating-dependencies)                                |
+| mise gives you a different Node major than CI             | `mise.toml` and `.nvmrc` both pin the major and must be bumped together. mise does not read `.nvmrc`, so the two are independent                     |
 
 ## Where to go from here
 

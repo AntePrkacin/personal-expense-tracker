@@ -1,0 +1,136 @@
+[tools]
+# Keep this major in sync with .nvmrc, which CI reads. mise does not read .nvmrc (its
+# idiomatic_version_file_enable_tools setting is empty by default), so the two are
+# independent and `latest` here would silently drift past CI the day a new major ships.
+node = "26"
+"npm:npm-check-updates" = "latest"
+
+# Audit
+#
+# `npm audit` exits 1 whenever it finds anything at all, so a plain `run` array aborts on
+# the first package with findings and silently never reaches the rest. Keep the `|| true`:
+# this task is a report, not a gate, so it visits every package and always exits 0.
+# A pass/fail gate belongs in CI, where `npm audit --omit=dev --audit-level=high` is the
+# check that matters. See docs/2026-07-30-audit.md for why the raw totals mislead.
+#
+# Those two flags correct two different distortions, and belong in a gate, never here:
+#
+#   --omit=dev          Answers "can an attacker reach this?". Dev dependencies are not
+#                       shipped; jest/eslint/@nestjs/cli run only against inputs we
+#                       control. As of 2026-07-30 this takes backend from 25 high to 0,
+#                       and frontend from 29 to 3, so the default number would block
+#                       merges over a DoS in a glob parser reading our own test paths.
+#   --audit-level=high  Sets where the gate trips. It changes only the exit code, not the
+#                       output (verified: --audit-level=critical still prints the high
+#                       findings but exits 0). Without it the gate trips on low/info,
+#                       which in a Next.js tree is a constant trickle we cannot act on.
+#
+# Caveat before adding this to ci.yml: it still exits 1 on frontend today, because the
+# next -> postcss/sharp findings have no upstream fix at any version. Land the `overrides`
+# from docs/2026-07-30-audit.md first, or scope the gate to backend only.
+[tasks."audit"]
+description = "Audit across the repository sequentially"
+raw = true # Forces direct terminal output for the whole sequence
+run = '''
+for dir in . backend frontend; do
+  printf '\n===== npm audit: %s =====\n' "$dir"
+  (cd "$dir" && npm audit) || true
+done
+
+printf '\nThe totals above count dev-only findings. Production dependencies only:\n'
+for dir in . backend frontend; do
+  printf '  %-9s ' "$dir"
+  if (cd "$dir" && npm audit --omit=dev --audit-level=high >/dev/null 2>&1); then
+    echo "clean"
+  else
+    echo "findings -> cd $dir && npm audit --omit=dev"
+  fi
+done
+'''
+
+# Safe upgrade, install and update
+[tasks."check-for-updates"]
+description = "Check all updates across the repository sequentially"
+raw = true # Forces direct terminal output for the whole sequence
+run = [
+  "ncu",
+  "cd backend && ncu",
+  "cd frontend && ncu"
+]
+
+[tasks."update:repo"]
+description = "Safely max out root repository tooling minor/patch versions"
+run = [
+  "ncu -u --target minor",
+  "npm install",
+  "npm update"
+]
+
+[tasks."update:backend"]
+description = "Safely max out backend minor/patch versions"
+dir = "backend"
+wait_for = ["update:repo"]
+run = [
+  "ncu -u --target minor",
+  "npm install",
+  "npm update"
+]
+
+[tasks."update:frontend"]
+description = "Safely max out frontend minor/patch versions"
+dir = "frontend"
+wait_for = ["update:repo", "update:backend"]
+run = [
+  "ncu -u --target minor",
+  "npm install",
+  "npm update"
+]
+
+# `depends` is what actually schedules the subtasks; `wait_for` on each subtask above is
+# what orders them. Using only `wait_for` here made this task a silent no-op: `wait_for`
+# waits for a task solely if something else already scheduled it, and nothing did.
+[tasks."update"]
+description = "Max out all minor versions across the entire repository sequentially"
+depends = ["update:repo", "update:backend", "update:frontend"]
+
+[tasks."install:repo"]
+description = "Install root tooling and activate git hooks"
+run = "npm install"
+
+# install:repo must complete first and must not be reordered: its `prepare` script is what
+# sets core.hooksPath, and if it fails the chain stops rather than leaving hooks absent.
+[tasks."install:backend"]
+description = "Install backend dependencies and setup env"
+dir = "backend"
+wait_for = ["install:repo"]
+run = [
+  "npm install",
+  "cp -n .env.example .env" # -n prevents overwriting your existing .env
+]
+
+[tasks."install:frontend"]
+description = "Install frontend dependencies and setup env"
+dir = "frontend"
+wait_for = ["install:repo", "install:backend"]
+run = [
+  "npm install",
+  "cp -n .env.example .env.local" # -n prevents overwriting your existing .env.local
+]
+
+[tasks.install]
+description = "Install everything and setup the repository"
+depends = ["install:repo", "install:backend", "install:frontend"]
+
+[tasks."dev:backend"]
+description = "Start backend development server"
+dir = "backend"
+run = "npm run start:dev"
+
+[tasks."dev:frontend"]
+description = "Start frontend development server"
+dir = "frontend"
+run = "npm run dev"
+
+[tasks.dev]
+description = "Start both backend and frontend servers together"
+depends = ["dev:backend", "dev:frontend"]
