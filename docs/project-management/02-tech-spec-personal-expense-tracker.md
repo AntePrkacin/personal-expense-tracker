@@ -479,9 +479,22 @@ Only what the design implies:
 - **Async and loading:** the only designed loading state is insight generation (15, skeletons). Sending a login link and creating an account are network round trips with no designed pending state (REG-4, LOG-3). No spinners, offline, or error states exist anywhere else (assumptions A19, A29).
 - **Accessibility observations:** statuses are never color-only (chips carry text: "On track", "Near", "Over"; the donut has a text legend; category dots pair with names). Input focus styles are designed (02, 09, 19). Small gray caption text on white cards should be contrast-checked. Modal keyboard behavior (focus trap, Escape) isn't specified and must follow standard practice.
 - **Responsiveness:** all frames are fixed 1440x1024 desktop, light mode only. No breakpoints designed.
-- **Visual system:** Foundations and Components pages define the tokens and a component library (Button with Primary/Secondary/Danger variants, Tag/Status in five tones, Section header, Input/Field, Select/Field, Stat, List row/Transaction with swappable category tile, Progress bar, Sidebar with four active-item variants). Build these as shared components, they repeat across every screen.
+- **Visual system:** the Foundations and Components pages (linked in 5.1) define the tokens and a component library (Button with Primary/Secondary/Danger variants, Tag/Status in five tones, Section header, Input/Field, Select/Field, Stat, List row/Transaction with swappable category tile, Progress bar, Sidebar with four active-item variants). Build these as shared components, they repeat across every screen.
 
 ### 5.1 Design tokens
+
+**Source pages in Figma.** Two pages sit beside "Screens" and are the authority for everything
+in this section:
+
+| Page | What it defines |
+|---|---|
+| [Foundations](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=5-2) | **Colour** (Brand, Surface, Text, Border, Status, Category), **typography** (19 named styles across Plus Jakarta Sans and Inter), **spacing** (4px base scale, `Space/2` to `Space/64`) and **radius** (`Radius/SM` to `Radius/Full`). Backed by Figma variables |
+| [Components](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=5-3) | The **component library** built on those tokens, each with its props: Button (Primary / Secondary / Danger), Tag / Status (Neutral, Green, Amber, Red, Indigo), Section header, Input / Field, Select / Field, Stat, Progress bar, List row / Transaction with a swappable category tile, and Sidebar with its four active-item variants |
+
+The tables below are a transcription of Foundations for convenience. Where the two disagree,
+Foundations wins. One known gap: the type list is shorter than the 19 styles on the page, since
+`Display/XXL` (64 / -3%) and `Display/L` (32 / -2%) are not described below; read those off
+Foundations directly.
 
 Read from the Figma variables attached to the frames, not eyedropped. Use these as the values behind your theme; do not introduce new greens, ambers, or reds alongside the Status tones.
 
@@ -492,6 +505,7 @@ Read from the Figma variables attached to the frames, not eyedropped. Use these 
 | Surface (dark) | Ink, Ink Raised, Ink Elevated | `#101720`, `#18202B`, `#232C38` |
 | Text | Primary, Secondary, Tertiary | `#131820`, `#566072`, `#98A0AE` |
 | Text on dark | On Dark, On Dark Muted, On Dark Subtle | `#FFFFFF`, `#B4BCC9`, `#7C8698` |
+| Text on accent | On Accent | `#FFFFFF` (label colour on Accent fills, e.g. primary button text) |
 | Border | Subtle, Default, Strong | `#EFF1F3`, `#E5E8EB`, `#D4D9DE` |
 | Status success | Success, Success Text, Success Soft | `#16A34A`, `#15803D`, `#E6F4EA` |
 | Status warning | Warning, Warning Text, Warning Soft | `#E0A020`, `#B4820E`, `#FBF0D9` |
@@ -501,6 +515,28 @@ Read from the Figma variables attached to the frames, not eyedropped. Use these 
 Two typefaces. **Plus Jakarta Sans** carries the brand and headings: Wordmark 19/700, Display XL 44/800, Display M 26/700, Display S 22/700, Heading L 18/700, Heading M 16/600, all on tight negative tracking (-1 to -2.5). **Inter** carries everything else: Body L 15/400 (line height 1.55), Body M 14/400, Body S 13/400, Strong L/M/S at 15/14/13 weight 600, Label L/M/S at 14/13/12 weight 500, Caption 11.5/400, and Overline 11/500 with `letter-spacing: 6`, which is what makes "STEP 1 OF 3" and "OCTOBER SUMMARY" read as overlines.
 
 The eight Category colors are the closed list the "Color" select on 19 and 21 should offer (assumption A40).
+
+**Spacing.** A 4px base scale, used for padding, gaps and layout. Eleven steps, each named for
+its value:
+
+| Token | Value | | Token | Value |
+|---|---|---|---|---|
+| `Space/2` | 2 px | | `Space/24` | 24 px |
+| `Space/4` | 4 px | | `Space/32` | 32 px |
+| `Space/8` | 8 px | | `Space/40` | 40 px |
+| `Space/12` | 12 px | | `Space/48` | 48 px |
+| `Space/16` | 16 px | | `Space/64` | 64 px |
+| `Space/20` | 20 px | | | |
+
+**Radius.** Corner radii for cards, inputs, buttons and pills:
+
+| Token | Value |
+|---|---|
+| `Radius/SM` | 8 px |
+| `Radius/MD` | 12 px |
+| `Radius/LG` | 16 px |
+| `Radius/XL` | 20 px |
+| `Radius/Full` | 999 px (pill) |
 
 ## 6. Assumptions log
 
