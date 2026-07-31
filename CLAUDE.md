@@ -44,11 +44,15 @@ Two consequences that trip people up:
   matters for ESLint especially, whose config and plugins resolve from the app's own
   `node_modules`.
 
-Node version comes from `.nvmrc` (currently **24**). CI reads that same file, so bump it
+Node version comes from `.nvmrc` (currently **26**). CI reads that same file, so bump it
 there and CI follows. Use `nvm use`, which reads `.nvmrc` and needs no version argument;
 avoid `nvm install --lts`, which installs whatever LTS happens to be current. The hard
 floor is **v20.9.0**, declared by `next` in its `engines` field, and all three
 `package.json` files now carry that same `engines` constraint so npm warns on a mismatch.
+
+`mise.toml` pins the same major a **second** time, as `node = "26"` under `[tools]`. mise
+does not read `.nvmrc`, so bumping the Node major means editing both files. It is pinned
+rather than `latest` precisely so a drift from CI cannot happen silently.
 
 ## Common commands
 
