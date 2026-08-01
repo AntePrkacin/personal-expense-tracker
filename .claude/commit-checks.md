@@ -1,6 +1,6 @@
 # Commit Pre-flight Checks
 <!-- AUTO-GENERATED - refresh with `/commit refresh-checks` -->
-<!-- Last updated: 2026-07-09 -->
+<!-- Last updated: 2026-08-01 -->
 
 This file is read by the `/commit` skill. It knows which apps exist, whether they
 depend on each other, and which lint/test commands to surface before a commit.
@@ -21,18 +21,18 @@ the app(s) whose files actually changed.
 
 ## App Registry
 
-| App        | Path        | Lint                 | Typecheck               | Unit Tests |
-|------------|-------------|----------------------|-------------------------|------------|
-| `backend`  | `backend/`  | ✅ `npm run lint`    | via `npm run build` (`tsc`) | ✅ `npm test` (Jest) |
-| `frontend` | `frontend/` | ✅ `npm run lint`    | via `npm run build` (`next build`) | ✅ `npm test` (Jest) |
+| App        | Path        | Lint             | Test       | E2E                   | Build (= typecheck) |
+|------------|-------------|------------------|------------|-----------------------|---------------------|
+| `backend`  | `backend/`  | ✅ `npm run lint` | ✅ `npm test` | ✅ `npm run test:e2e` | ✅ `npm run build`  |
+| `frontend` | `frontend/` | ✅ `npm run lint` | ✅ `npm test` | ⚠️ none                | ✅ `npm run build`  |
 
 Notes:
-- Backend has no standalone `typecheck` script - `npm run build` (`nest build`,
-  which runs `tsc`) is the typecheck gate.
-- Frontend has no standalone `typecheck` script - `npm run build` (`next build`)
-  type-checks the whole app.
-- `npm run lint` runs `eslint` via `eslint-config-next`, already wired in
-  `frontend/`.
+- Neither app has a standalone `typecheck` script - `npm run build` is the
+  typecheck gate (`nest build` → `tsc` for backend, `next build` for frontend).
+- Backend `npm run lint` already includes `--fix`. Frontend does not: use
+  `npm run lint -- --fix`.
+- Frontend has no e2e suite. That is the only gap in the registry.
+- Both suites use Jest, which runs once and exits. No watch-disabling flag needed.
 
 ---
 
@@ -48,6 +48,9 @@ cd backend && npm run build   # doubles as typecheck
 ```
 ```bash
 cd backend && npm test
+```
+```bash
+cd backend && npm run test:e2e
 ```
 
 ### `frontend` - `frontend/`
