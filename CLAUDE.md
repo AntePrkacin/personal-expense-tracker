@@ -280,6 +280,7 @@ matching phrases, not registered commands.
 | `repo-stack`      | This repo's stacked-branch wiring: the layers of truth, the worktree trap, the conventions. CLI mechanics live in the committed official `gh-stack` skill          |
 | `backend-nestjs`  | Passive reference library, 12 NestJS rules across 7 categories. Consulted when writing backend code                                                                |
 | `frontend-nextjs` | Passive reference library, 16 Next.js/React rules. Consulted when writing frontend code                                                                            |
+| `backend-drizzle` | Passive reference library for the persistence layer, pinned to Drizzle v1 RC. Exists because published Drizzle guidance targets v0.x and is wrong here             |
 
 **Agents** (delegated subtasks with their own context): `code-reviewer`, `debugger`,
 `test-automator`, `nestjs-specialist` and `nextjs-specialist` (these two fetch and
@@ -353,8 +354,13 @@ resolve correctly, which is why you should not try to lint one app from the othe
 **Backend tests are not run on commit.** The hook prints a reminder only, because they
 are slow. CI runs them on every PR, but run them locally before pushing backend changes.
 
-Prettier config is split: root and frontend use `printWidth: 100` with `singleQuote`;
-the backend has its own `backend/.prettierrc`.
+Prettier config is per app and there is **no root config at all**: the frontend sets
+`printWidth: 100` with `singleQuote` in its `package.json`, the backend has its own
+`backend/.prettierrc`. Anything outside those two directories - `CLAUDE.md`, `README.md`,
+`docs/`, `.claude/` - therefore gets Prettier's defaults, which means `printWidth: 80` and
+**double** quotes. Prose is unaffected because `proseWrap` defaults to `preserve`, but a
+fenced `ts` block in one of those files will be reformatted away from repo style. Keep
+short code samples in those files as inline spans, which Prettier leaves alone.
 
 ## CI
 

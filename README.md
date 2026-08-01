@@ -570,6 +570,7 @@ This repo ships [Claude Code](https://claude.com/claude-code) configuration in
 | `repo-jira`                          | Creates, estimates and transitions Jira issues over MCP                  |
 | `repo-review-prs`                    | Reviews open pull requests                                               |
 | `backend-nestjs` / `frontend-nextjs` | Rule libraries consulted automatically while writing code                |
+| `backend-drizzle`                    | Database schema and migration rules, pinned to the Drizzle v1 RC we use  |
 
 Invoke a skill by its full name (`/repo-dev-setup`), or just describe what you want:
 descriptions are matched automatically.
