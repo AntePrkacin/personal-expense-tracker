@@ -48,6 +48,16 @@ Does not exist. Create it with the first shared component.
 
 ## Operational
 
+### Unauthenticated registration creates real cloud databases
+
+In cloud mode, every `POST /api/users` provisions an actual Turso database, and the
+endpoint has no auth, so anyone with the URL can create them until a quota stops the
+group. Fine while the backend runs locally or in local mode; **not fine deployed in cloud
+mode before auth lands**. If that deployment ever needs to happen first, put rate
+limiting (`@nestjs/throttler` is the obvious fit) or a shared secret in front of
+registration. The endpoints are pre-auth scaffolding either way (see "Auth" above), so
+this note dissolves when the magic-link flow replaces them.
+
 ### Token rotation is manual
 
 By MVP decision every Turso token is created with **Expires: NEVER**: the control-plane
