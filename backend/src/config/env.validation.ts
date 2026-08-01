@@ -29,13 +29,12 @@ export const envValidationSchema = Joi.object({
   TURSO_CENTRAL_DB_URL: Joi.string(),
   TURSO_CENTRAL_DB_TOKEN: Joi.string(),
 
-  // Break-glass credentials for manual CLI/Studio access. Documented in
+  // Break-glass credential for manual CLI/Studio access. Documented in
   // .env.example; deliberately never read by the application.
-  TURSO_ADMIN_GROUP_TOKEN: Joi.string(),
-  TURSO_USERS_GROUP_TOKEN: Joi.string(),
+  TURSO_GROUP_TOKEN: Joi.string(),
 
-  // Turso group the per-user databases are created in.
-  TURSO_USERS_GROUP: Joi.string().default('decode-pet-users'),
+  // Turso group holding the central database and every per-user one.
+  TURSO_GROUP: Joi.string().default('decode-pet'),
 
   // How often a cloud-mode connection pushes and pulls, in seconds.
   TURSO_SYNC_INTERVAL_S: Joi.number().positive().default(60),

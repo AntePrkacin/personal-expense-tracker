@@ -157,14 +157,16 @@ only two files that know which mode is active.
 that person's database) exists because identity must resolve by email before the per-user
 database is known. Everything else about a person lives in **their own Turso database**,
 starting with a single-row `profile` table. Categories, transactions and insights arrive
-there later as ordinary migrations. In cloud mode the central database sits in the
-`decode-pet-admin` group and the user databases in `decode-pet-users`, created by the
-backend at registration.
+there later as ordinary migrations. In cloud mode the central database and every per-user
+one live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
+per-user ones itself at registration.
 
 **Tokens.** Creating databases and minting their tokens are control-plane operations that
-accept only the organization API token, so `TURSO_ORG_TOKEN` is used in exactly one place
-(`TursoPlatformService`) at provisioning time. Each user database is then reached with its
-own minted data-plane token, stored in the central row and never serialized into an API
+no data-plane token can perform, so `TURSO_ORG_TOKEN` is used in exactly one place
+(`TursoPlatformService`) at provisioning time. It does not have to be an organization-wide
+token: minting it scoped to the group with just `db:create`, `db:delete` and
+`db:mint-token` covers everything the service does. Each user database is then reached with
+its own minted data-plane token, stored in the central row and never serialized into an API
 response. By MVP decision every Turso token is created with **Expires: NEVER**: no refresh
 logic anywhere, rotation is a manual ops action.
 
@@ -206,18 +208,18 @@ Copy the templates, then fill in values. Both real files are gitignored.
 
 Backend variables:
 
-| Variable                                              | Default                 | Purpose                                                 |
-| ----------------------------------------------------- | ----------------------- | ------------------------------------------------------- |
-| `PORT`                                                | `3000`                  | API port                                                |
-| `FRONTEND_URL`                                        | `http://localhost:4200` | CORS origin                                             |
-| `DATABASE_DIR`                                        | `./databases`           | Local database files (gitignored)                       |
-| `TURSO_ORG`                                           | -                       | Organization slug. Cloud mode: set all four or none     |
-| `TURSO_ORG_TOKEN`                                     | -                       | Organization API token; control plane only              |
-| `TURSO_CENTRAL_DB_URL`                                | -                       | Central database URL                                    |
-| `TURSO_CENTRAL_DB_TOKEN`                              | -                       | Central database data-plane token                       |
-| `TURSO_ADMIN_GROUP_TOKEN` / `TURSO_USERS_GROUP_TOKEN` | -                       | Break-glass CLI/Studio access; the app never reads them |
-| `TURSO_USERS_GROUP`                                   | `decode-pet-users`      | Group the per-user databases are created in             |
-| `TURSO_SYNC_INTERVAL_S`                               | `60`                    | Cloud-mode push/pull interval                           |
+| Variable                 | Default                 | Purpose                                               |
+| ------------------------ | ----------------------- | ----------------------------------------------------- |
+| `PORT`                   | `3000`                  | API port                                              |
+| `FRONTEND_URL`           | `http://localhost:4200` | CORS origin                                           |
+| `DATABASE_DIR`           | `./databases`           | Local database files (gitignored)                     |
+| `TURSO_ORG`              | -                       | Organization slug. Cloud mode: set all four or none   |
+| `TURSO_ORG_TOKEN`        | -                       | Control-plane token; group-scoped is enough           |
+| `TURSO_CENTRAL_DB_URL`   | -                       | Central database URL                                  |
+| `TURSO_CENTRAL_DB_TOKEN` | -                       | Central database data-plane token                     |
+| `TURSO_GROUP_TOKEN`      | -                       | Break-glass CLI/Studio access; the app never reads it |
+| `TURSO_GROUP`            | `decode-pet`            | Group holding the central and all per-user databases  |
+| `TURSO_SYNC_INTERVAL_S`  | `60`                    | Cloud-mode push/pull interval                         |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
 

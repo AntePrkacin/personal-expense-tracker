@@ -33,7 +33,7 @@ export class TursoPlatformService {
   constructor(private readonly config: ConfigService) {}
 
   /**
-   * Creates one database for a user inside the users group.
+   * Creates one database for a user, in the same group as everything else.
    *
    * @returns the region-scoped hostname Turso assigned, which the caller must
    * persist: it cannot be reconstructed from the database name alone.
@@ -46,7 +46,7 @@ export class TursoPlatformService {
       '/databases',
       {
         name: dbName,
-        group: this.config.get<string>('TURSO_USERS_GROUP', 'decode-pet-users'),
+        group: this.config.get<string>('TURSO_GROUP', 'decode-pet'),
       },
     );
 

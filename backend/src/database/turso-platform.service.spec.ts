@@ -6,7 +6,7 @@ describe('TursoPlatformService', () => {
   const env: Record<string, string> = {
     TURSO_ORG: 'acme',
     TURSO_ORG_TOKEN: 'org-token',
-    TURSO_USERS_GROUP: 'decode-pet-users',
+    TURSO_GROUP: 'decode-pet',
   };
 
   const config = {
@@ -40,7 +40,7 @@ describe('TursoPlatformService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe('createUserDatabase', () => {
-    it('posts to the organization scoped endpoint with the users group', async () => {
+    it('posts to the organization scoped endpoint with the configured group', async () => {
       respond({
         database: {
           Name: 'expensa-user-1',
@@ -58,7 +58,7 @@ describe('TursoPlatformService', () => {
       expect(init.headers).toMatchObject({ Authorization: 'Bearer org-token' });
       expect(JSON.parse(init.body as string)).toEqual({
         name: 'expensa-user-1',
-        group: 'decode-pet-users',
+        group: 'decode-pet',
       });
       expect(result).toEqual({
         dbName: 'expensa-user-1',

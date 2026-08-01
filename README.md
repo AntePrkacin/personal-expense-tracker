@@ -384,19 +384,23 @@ Only needed if you want real cloud databases. One-time setup with the
 
 ```bash
 turso auth login
-turso group create decode-pet-admin        # holds the central database
-turso group create decode-pet-users        # holds one database per user
-turso db create expensa-app --group decode-pet-admin
+turso group create decode-pet                       # holds every database
+turso db create expensa-app --group decode-pet      # the central one
 
-turso auth api-tokens mint expensa         # -> TURSO_ORG_TOKEN
-turso db show expensa-app --url            # -> TURSO_CENTRAL_DB_URL
-turso db tokens create expensa-app         # -> TURSO_CENTRAL_DB_TOKEN
+turso db show expensa-app --url                     # -> TURSO_CENTRAL_DB_URL
+turso db tokens create expensa-app                  # -> TURSO_CENTRAL_DB_TOKEN
+
+# -> TURSO_ORG_TOKEN. Scoped to the group and to the three things the backend
+# actually does, rather than a token that can do anything in your org.
+turso auth api-tokens mint expensa-backend --group decode-pet \
+  --scope db:create --scope db:delete --scope db:mint-token
 ```
 
-Fill those into `backend/.env` along with `TURSO_ORG`, and uncomment them. It is all four
-or none: half-filled fails at boot rather than silently falling back. From then on the
-backend creates a Turso database per registered user in `decode-pet-users`, keeps a synced
-local copy under `DATABASE_DIR`, and tests still run against plain local files.
+Fill those into `backend/.env` along with `TURSO_ORG` (your org slug, from
+`turso org list`), and uncomment them. It is all four or none: half-filled fails at boot
+rather than silently falling back. From then on the backend creates a Turso database per
+registered user in the same group, keeps a synced local copy under `DATABASE_DIR`, and
+tests still run against plain local files.
 
 ## Git workflow
 
