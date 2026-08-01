@@ -193,9 +193,16 @@ which still deletes permanently as far as a client can tell.
 runtime cannot, and they cannot be transformed either (their napi loader uses
 `import.meta.url`). `backend/test/esm-environment.cjs` therefore injects a real Node
 `require`, and `test/esm-shims/` plus a `moduleNameMapper` entry in both jest configs
-route those three specifiers through it. Separately, `test/setup-e2e.ts` points
-`DATABASE_DIR` at a temp directory and deletes every `TURSO_*` variable, so e2e always
-runs local mode even on a machine with cloud credentials.
+route those three specifiers through it.
+
+**Keeping tests off the cloud takes two separate mechanisms, and both are load-bearing.**
+`test/setup-e2e.ts` points `DATABASE_DIR` at a temp directory and deletes every `TURSO_*`
+variable inherited from the shell. That alone is not enough: `ConfigModule` also reads
+`backend/.env` from disk and puts the deleted variables straight back, which pointed the
+whole e2e suite at live Turso Cloud and created real databases there. `AppModule` closes
+that hole with `ignoreEnvFile: process.env.NODE_ENV === 'test'` (Jest sets `NODE_ENV`
+itself). Remove either half and a developer with a filled-in `.env` runs the suite against
+production infrastructure.
 
 ## Environment variables
 

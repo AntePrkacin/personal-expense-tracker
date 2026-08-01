@@ -17,6 +17,13 @@ import { UsersModule } from './users/users.module';
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: envValidationSchema,
+      // Under test, read the environment only, never backend/.env. Jest sets
+      // NODE_ENV=test itself. Without this the e2e suite runs against whatever
+      // is in a developer's .env: test/setup-e2e.ts deletes the TURSO_*
+      // variables, but ConfigModule reads the file from disk and puts them
+      // straight back, so a filled-in .env silently pointed the tests at real
+      // Turso Cloud and created databases there.
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
     }),
     DatabaseModule,
     UsersModule,
