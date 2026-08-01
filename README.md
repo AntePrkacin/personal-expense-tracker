@@ -385,7 +385,9 @@ Only needed if you want real cloud databases. One-time setup with the
 ```bash
 turso auth login
 turso group create decode-pet                       # holds every database
-turso db create expensa-app --group decode-pet      # the central one
+
+# --tursodb is required, not optional. See the note below.
+turso db create expensa-app --group decode-pet --tursodb
 
 turso db show expensa-app --url                     # -> TURSO_CENTRAL_DB_URL
 turso db tokens create expensa-app                  # -> TURSO_CENTRAL_DB_TOKEN
@@ -398,9 +400,19 @@ turso auth api-tokens mint expensa-backend --group decode-pet \
 
 Fill those into `backend/.env` along with `TURSO_ORG` (your org slug, from
 `turso org list`), and uncomment them. It is all four or none: half-filled fails at boot
-rather than silently falling back. From then on the backend creates a Turso database per
+rather than silently falling back. From then on the backend creates a database per
 registered user in the same group, keeps a synced local copy under `DATABASE_DIR`, and
 tests still run against plain local files.
+
+**Why `--tursodb` matters.** It selects the Turso engine, a Rust rewrite of SQLite, instead
+of the older libSQL engine that Turso Cloud still creates by default. The local half of
+`@tursodatabase/sync` is a real Turso database, so the remote it replicates against has to
+be one too. Getting this wrong is quiet rather than loud: the app still starts and appears
+to work, and you find out later. **The engine is fixed when the database is created**, so
+the fix is always "delete it and make a new one", which stops being cheap the moment real
+data exists. Check an existing one with `turso db list`, whose `TYPE` column reads `Turso`
+rather than `SQLite`. The backend passes the equivalent flag itself for every per-user
+database it creates, so this only applies to the central one you make by hand.
 
 ## Git workflow
 

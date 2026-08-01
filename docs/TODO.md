@@ -53,6 +53,28 @@ the backend job fails at `npm install`, well before any test.
 Verified by pushing the branch and opening the PR. Nothing to do beforehand; this is a note
 so the failure is recognised rather than debugged from scratch.
 
+### Recreate the central database with the Turso engine
+
+Resolved and mostly done: cloud databases must use the Turso engine, not the libSQL one
+Turso Cloud creates by default, because the local half of `@tursodatabase/sync` is a real
+Turso database. `TursoPlatformService` now sends `use_tursodb: true` on every per-user
+create, pinned by a test.
+
+What is left is the **central** database, which is made by hand rather than by the backend.
+The existing `expensa-app` was created before this was understood and reports
+`engine: "libsql"`. The engine cannot be changed after creation, so it has to be deleted and
+recreated:
+
+```bash
+turso db create expensa-app --group decode-pet --tursodb
+turso db show expensa-app --url        # -> TURSO_CENTRAL_DB_URL (unchanged if same name)
+turso db tokens create expensa-app     # -> TURSO_CENTRAL_DB_TOKEN (a NEW database needs a new token)
+```
+
+Then update both values in `backend/.env`, delete `backend/databases/` so no local copy of
+the old database survives, and re-run the cloud smoke test. Safe to do while `users` has no
+rows; check with `select count(*) from users` first.
+
 ---
 
 ## Deferred by design
@@ -112,23 +134,43 @@ Per-user tokens live in the central `users.db_auth_token` column, so rotating th
 re-minting and updating the rows. No tooling exists for that yet; write it before it is
 needed urgently rather than during an incident.
 
-### The Turso CLI cannot address the per-user databases
+### The Turso CLI has a stale name cache, and it bites this project constantly
 
-With CLI v1.0.31, `turso db destroy expensa-user-<uuid> --yes` exits 0 and does nothing,
-and `turso db shell` on the same name reports "database not found". `turso db show` and
-`turso db list` handle it fine, so it is not straightforward name resolution. Cause unknown
-as of 2026-08-01.
+With CLI v1.0.31, `turso db shell expensa-user-<uuid>` reports "database not found" and
+`turso db destroy expensa-user-<uuid> --yes` exits 0 having done nothing, while `turso db
+show` and `turso db list` handle the identical name perfectly.
 
-The Platform REST API works correctly, and is what the backend itself uses:
+**Cause, confirmed on 2026-08-01.** The CLI caches the organization's database names in
+`~/.config/turso/settings.json` under `cache.database_names`, with a short TTL. `db shell`
+and `db destroy` resolve the name against that cache instead of the API. Any database
+created by something other than this CLI is therefore invisible to them until the cache
+expires. That is _every_ per-user database, since the backend creates them through the
+Platform API, which is why `expensa-app` and `jura` work (both created via the CLI) and
+`expensa-user-*` never does. Nothing to do with the name being long, which was the first
+guess.
 
-```bash
-TOKEN=$(grep '^TURSO_ORG_TOKEN=' backend/.env | cut -d= -f2-)
-curl -X DELETE "https://api.turso.tech/v1/organizations/<org>/databases/<name>" \
-  -H "Authorization: Bearer $TOKEN"
-```
+Note that `turso db list` does **not** refresh the cache, so the error message's advice to
+"List known databases using turso db list" does not help.
 
-The central database has a short name, so `turso db shell expensa-app "select ..."` works
-normally for inspecting the user directory. Worth retrying after a CLI upgrade.
+Three ways around it, best first:
+
+1. **Use the Turso MCP server.** It goes straight to the API and has no cache.
+   `read_database`, `evolve_schema` and `delete_database` all worked on a
+   freshly-created `expensa-user-<uuid>` in the same session where the CLI refused.
+2. **Expire the cache**, after which the CLI falls back to the API and works:
+   ```bash
+   python3 -c "import json;p='$HOME/.config/turso/settings.json';d=json.load(open(p));d['cache']['database_names']['expiration']=0;json.dump(d,open(p,'w'))"
+   ```
+3. **Use the Platform REST API directly**, which is what the backend does:
+   ```bash
+   TOKEN=$(grep '^TURSO_ORG_TOKEN=' backend/.env | cut -d= -f2-)
+   curl -X DELETE "https://api.turso.tech/v1/organizations/<org>/databases/<name>" \
+     -H "Authorization: Bearer $TOKEN"
+   ```
+
+Worth retesting after a CLI upgrade; this looks like a plain bug rather than a design
+decision. Inspecting the central directory is unaffected either way:
+`turso db shell expensa-app "select id, email from users;"`.
 
 ### Deployment must ship `backend/drizzle/`
 

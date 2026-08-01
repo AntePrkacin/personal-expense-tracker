@@ -59,11 +59,34 @@ describe('TursoPlatformService', () => {
       expect(JSON.parse(init.body as string)).toEqual({
         name: 'expensa-user-1',
         group: 'decode-pet',
+        use_tursodb: true,
       });
       expect(result).toEqual({
         dbName: 'expensa-user-1',
         hostname: 'expensa-user-1-acme.aws.turso.io',
       });
+    });
+
+    // Worth its own case rather than only the assertion above: dropping this
+    // flag is silent. The API accepts the request, the app runs, and the
+    // mistake only shows up as a libSQL database that @tursodatabase/sync
+    // should never have been pointed at - and the engine cannot be changed
+    // afterwards.
+    it('always requests the Turso engine, never the libSQL default', async () => {
+      respond({
+        database: {
+          Name: 'expensa-user-1',
+          Hostname: 'expensa-user-1-acme.aws.turso.io',
+        },
+      });
+
+      await service.createUserDatabase('expensa-user-1');
+
+      const [, init] = lastCall();
+      expect(JSON.parse(init.body as string)).toHaveProperty(
+        'use_tursodb',
+        true,
+      );
     });
 
     it('fails loudly when Turso returns no hostname', async () => {

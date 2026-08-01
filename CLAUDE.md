@@ -153,6 +153,19 @@ Both are the same engine and the same SQLite dialect, so one schema and one migr
 folder per scope serve both. `turso-client.factory.ts` and `UserDatabaseService` are the
 only two files that know which mode is active.
 
+**Every cloud database must use the Turso engine, never libSQL.** Turso Cloud still creates
+libSQL databases by default, but the local half of `@tursodatabase/sync` is a real Turso
+database, so the remote it replicates against has to be one as well. `TursoPlatformService`
+therefore sends `use_tursodb: true` on every create, and the central database has to be
+made with `turso db create ... --tursodb` by hand. Two things make this easy to get wrong:
+the field is **undocumented** in the public API reference (it comes from the CLI's own
+request struct, where `--tursodb` serializes as `use_tursodb`), and getting it wrong is
+**silent** - the API accepts the request and the app runs. Since the engine is fixed at
+creation, the only remedy is deleting the database and making a new one. Check with
+`turso db list`, whose `TYPE` column reads `Turso` rather than `SQLite`, or the `engine`
+field the Platform API returns. A dedicated test pins the flag in
+`turso-platform.service.spec.ts`.
+
 **Database per user.** A small **central** database (`users`: id, email, and a pointer to
 that person's database) exists because identity must resolve by email before the per-user
 database is known. Everything else about a person lives in **their own Turso database**,

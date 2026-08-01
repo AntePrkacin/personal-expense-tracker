@@ -35,6 +35,18 @@ export class TursoPlatformService {
   /**
    * Creates one database for a user, in the same group as everything else.
    *
+   * `use_tursodb` selects the Turso engine (the Rust rewrite of SQLite) rather
+   * than the libSQL default, and is required rather than preferred: the local
+   * side of `@tursodatabase/sync` is a real Turso database, so the remote it
+   * replicates against has to be one too. The field is undocumented in the
+   * public API reference - it comes from the CLI's own request struct, where
+   * `--tursodb` serializes as `use_tursodb` - and is verified against the live
+   * API, which reports `engine: "tursodb"` for databases created this way.
+   *
+   * The engine is fixed at creation. Getting this wrong is not a runtime error;
+   * it silently produces a database that cannot be migrated to the right engine
+   * later without recreating it.
+   *
    * @returns the region-scoped hostname Turso assigned, which the caller must
    * persist: it cannot be reconstructed from the database name alone.
    */
@@ -47,6 +59,7 @@ export class TursoPlatformService {
       {
         name: dbName,
         group: this.config.get<string>('TURSO_GROUP', 'decode-pet'),
+        use_tursodb: true,
       },
     );
 
