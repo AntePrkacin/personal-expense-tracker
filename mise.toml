@@ -117,9 +117,24 @@ run = [
   "cp -n .env.example .env.local" # -n prevents overwriting your existing .env.local
 ]
 
+# Drizzle ships its own agent skills inside drizzle-kit, version-matched to it.
+# Installed rather than committed so they cannot drift from the installed
+# drizzle-kit; the output is gitignored. Runs from the repo root, using the
+# drizzle-kit in backend/node_modules, because the skills belong to the repo
+# rather than to the backend app.
+[tasks."install:skills"]
+description = "Install Drizzle's agent skills from the installed drizzle-kit"
+wait_for = ["install:repo", "install:backend", "install:frontend"]
+run = "npm run skills"
+
 [tasks.install]
 description = "Install everything and setup the repository"
-depends = ["install:repo", "install:backend", "install:frontend"]
+depends = [
+  "install:repo",
+  "install:backend",
+  "install:frontend",
+  "install:skills"
+]
 
 # Generating migrations is the one database chore worth a shortcut. Applying them is not
 # a task at all: the app does that itself, at boot for the central database and on first

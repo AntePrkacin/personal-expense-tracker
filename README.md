@@ -165,6 +165,9 @@ cd backend && npm install && cp .env.example .env && cd ..
 
 # 3. Frontend
 cd frontend && npm install && cp .env.example .env.local && cd ..
+
+# 4. Optional, for Claude Code users: install Drizzle's own agent skills.
+npm run skills
 ```
 
 > **Why step 1 matters.** The root `package.json` holds only Husky, commitlint,
@@ -573,10 +576,37 @@ This repo ships [Claude Code](https://claude.com/claude-code) configuration in
 | `repo-jira`                          | Creates, estimates and transitions Jira issues over MCP                  |
 | `repo-review-prs`                    | Reviews open pull requests                                               |
 | `backend-nestjs` / `frontend-nextjs` | Rule libraries consulted automatically while writing code                |
-| `backend-drizzle`                    | Database schema and migration rules, pinned to the Drizzle v1 RC we use  |
+| `backend-drizzle`                    | How Drizzle and Turso are wired in this repo specifically                |
+| `drizzle-*` (8 skills)               | Drizzle's own, installed by `npm run skills`. Not committed, see below   |
 
 Invoke a skill by its full name (`/repo-dev-setup`), or just describe what you want:
 descriptions are matched automatically.
+
+### Drizzle's own skills and MCP server
+
+`drizzle-kit` ships eight agent skills and an MCP server, both version-matched to the
+drizzle-kit you have installed.
+
+```bash
+npm run skills     # installs the eight drizzle-* skills
+```
+
+They are **not committed**, deliberately. Being version-matched is the point, so a vendored
+copy would drift the moment drizzle-kit is bumped, and the installer symlinks
+`.claude/skills/drizzle*` into `.agents/`, which breaks on Windows without Developer Mode.
+Run the command instead; `mise run install` does it for you. The repo's own
+`backend-drizzle` skill stays committed and covers only this project's wiring, leaving the
+generic CLI to Drizzle's.
+
+For the MCP server, which exposes `generate`, `push`, `pull`, `check`, `export` and `up` as
+tools, copy the template and keep the `drizzle` entry:
+
+```bash
+cp .mcp.json.example .mcp.json
+```
+
+`.mcp.json` is gitignored, so this is per-developer. Nothing else in the repo depends on
+either being present.
 
 Two things to know about the setup:
 

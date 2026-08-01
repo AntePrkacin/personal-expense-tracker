@@ -278,17 +278,17 @@ description also matches plain requests, so "set me up locally" reaches `repo-de
 on its own. The short forms quoted inside the descriptions (`/dev-setup`, `/commit`) are
 matching phrases, not registered commands.
 
-| Skill             | What it does                                                                                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `repo-dev-setup`  | First-time local setup, both apps. Start here on a fresh clone                                                                                                     |
-| `repo-commit`     | Analyses changes, runs per-app lint/test, writes Conventional Commit messages, guards against committing to `main`                                                 |
-| `repo-secrets`    | Manages `.env` files from templates, explains where real secrets live                                                                                              |
-| `repo-jira`       | Creates/estimates/transitions Jira issues over MCP. Needs a Jira MCP server; see `.claude/skills/repo-jira/references/jira-access.md` for the two supported setups |
-| `repo-review-prs` | Fetches open PRs via `gh` and reviews unreviewed ones                                                                                                              |
-| `repo-stack`      | This repo's stacked-branch wiring: the layers of truth, the worktree trap, the conventions. CLI mechanics live in the committed official `gh-stack` skill          |
-| `backend-nestjs`  | Passive reference library, 12 NestJS rules across 7 categories. Consulted when writing backend code                                                                |
-| `frontend-nextjs` | Passive reference library, 16 Next.js/React rules. Consulted when writing frontend code                                                                            |
-| `backend-drizzle` | Passive reference library for the persistence layer, pinned to Drizzle v1 RC. Exists because published Drizzle guidance targets v0.x and is wrong here             |
+| Skill             | What it does                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `repo-dev-setup`  | First-time local setup, both apps. Start here on a fresh clone                                                                                                           |
+| `repo-commit`     | Analyses changes, runs per-app lint/test, writes Conventional Commit messages, guards against committing to `main`                                                       |
+| `repo-secrets`    | Manages `.env` files from templates, explains where real secrets live                                                                                                    |
+| `repo-jira`       | Creates/estimates/transitions Jira issues over MCP. Needs a Jira MCP server; see `.claude/skills/repo-jira/references/jira-access.md` for the two supported setups       |
+| `repo-review-prs` | Fetches open PRs via `gh` and reviews unreviewed ones                                                                                                                    |
+| `repo-stack`      | This repo's stacked-branch wiring: the layers of truth, the worktree trap, the conventions. CLI mechanics live in the committed official `gh-stack` skill                |
+| `backend-nestjs`  | Passive reference library, 12 NestJS rules across 7 categories. Consulted when writing backend code                                                                      |
+| `frontend-nextjs` | Passive reference library, 16 Next.js/React rules. Consulted when writing frontend code                                                                                  |
+| `backend-drizzle` | How Drizzle and Turso are wired in **this** repo: the two migration scopes, the database-per-user consequences, the Turso drivers. Deliberately not a drizzle-kit manual |
 
 **Agents** (delegated subtasks with their own context): `code-reviewer`, `debugger`,
 `test-automator`, `nestjs-specialist` and `nextjs-specialist` (these two fetch and
@@ -310,6 +310,23 @@ the skill name, or it only lists what is available). It is committed so everyone
 byte-identical copy and a fresh clone works with no extra step; refreshing it is a
 deliberate act - re-run the install and commit the diff. The repo's own `repo-stack`
 skill covers only this repo's stacked-branch wiring and defers the CLI to it.
+
+**Drizzle's own skills and MCP server are installed, not committed.** `drizzle-kit` bundles
+eight agent skills (`drizzle`, `drizzle-generate`, `drizzle-migrations`, `drizzle-push`,
+`drizzle-pull`, `drizzle-hints`, `drizzle-output-modes`, `drizzle-responses-and-errors`) and
+an MCP server, both version-matched to the installed drizzle-kit. `npm run skills` at the
+repo root installs the skills; `mise run install` includes it.
+
+They are gitignored on purpose. Version matching is the whole value, so a vendored copy
+drifts the moment drizzle-kit is bumped, and the installer symlinks `.claude/skills/drizzle*`
+into `.agents/`, which git checks out as plain text on Windows without Developer Mode. If
+`/drizzle-generate` and friends are missing, nobody has run the command yet. Because they
+cover the CLI thoroughly, the repo's own `backend-drizzle` skill covers only this project's
+wiring and defers the rest to them.
+
+The MCP server is `node backend/node_modules/drizzle-kit/bin.cjs mcp`, exposing `generate`,
+`push`, `pull`, `check`, `export` and `up` as tools. It is in `.mcp.json.example`; copy that
+to `.mcp.json`, which is gitignored and therefore per-developer.
 
 `.claude/commit-checks.md` is a generated cache read by `repo-commit`. Regenerate it
 with `/repo-commit refresh-checks` when it goes stale.

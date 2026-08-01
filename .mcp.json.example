@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "drizzle": {
+      "command": "node",
+      "args": ["backend/node_modules/drizzle-kit/bin.cjs", "mcp"]
+    },
     "mcp-atlassian": {
       "command": "uvx",
       "args": ["mcp-atlassian"],

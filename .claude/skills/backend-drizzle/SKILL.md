@@ -1,71 +1,51 @@
 ---
 name: backend-drizzle
-description: This skill should be used when the user asks to "add a table", "change the database schema", "write a migration", "generate migrations", "add a column", "query the database", "use drizzle", "run drizzle-kit", or asks about Drizzle ORM, drizzle-kit, migrations, or the Turso drivers in the backend. Passive reference library pinned to Drizzle v1.0.0-rc, whose API and migration layout differ from the v0.x guidance found almost everywhere online.
+description: This skill should be used when the user asks to "add a table", "change the database schema", "add a column", "query the database", or works on anything under backend/src/database. Covers how Drizzle and Turso are wired in THIS repo - two migration scopes, a database per user, and the Turso drivers. The generic drizzle-kit CLI is covered by the official drizzle-* skills instead.
 ---
 
 > **Tools used:** `Read` (schemas and drizzle configs), `Bash(npm run db:*)` (generate migrations).
 
-# Drizzle v1 RC in this repo
+# Drizzle and Turso in this repo
 
-The backend runs **`drizzle-orm@1.0.0-rc.4`** and **`drizzle-kit@1.0.0-rc.4`**, pinned by
-`backend/package-lock.json`.
+**Drizzle ships its own agent skills** (`drizzle`, `drizzle-generate`, `drizzle-migrations`,
+`drizzle-push`, `drizzle-pull`, `drizzle-hints`, `drizzle-output-modes`,
+`drizzle-responses-and-errors`), installed by `npm run skills` from the drizzle-kit in
+`backend/node_modules` and version-matched to it. **They own the drizzle-kit CLI**: command
+mechanics, config shape, output parsing, error codes. Prefer them for anything generic.
 
-**This is the whole reason the skill exists.** Almost every Drizzle tutorial, blog post and
-published AI skill targets v0.x, and v1 changed things that make that guidance not merely
-dated but actively wrong here. Check the version before trusting anything external, and
-prefer https://orm.drizzle.team/docs/v0-v1-changes over search results.
+This skill covers only what they cannot know: how this particular repo is wired.
 
-## What v1 changed that will bite you
+Versions are `drizzle-orm@1.0.0-rc.4` and `drizzle-kit@1.0.0-rc.4`. Published Drizzle
+tutorials and third-party AI skills target v0.x and get the ORM API wrong here, so check
+the version before trusting anything external. Two v1 changes bite most often: the config
+has **no `schema` option** (v1 uses `relations`), so there is no `db.query.users.findMany()`
+and queries go through `db.select().from(users)`; and a table's third argument returns an
+**array**, not an object.
 
-| Topic              | v0.x, as written everywhere                 | v1 RC, what this repo actually has              |
-| ------------------ | ------------------------------------------- | ----------------------------------------------- |
-| Migration folder   | `drizzle/0000_x.sql` + `meta/_journal.json` | `drizzle/<YYYYMMDDHHMMSS>_<slug>/migration.sql` |
-| Snapshots          | `drizzle/meta/0000_snapshot.json`           | `snapshot.json` inside each migration folder    |
-| `drizzle()` config | `drizzle(client, { schema })`               | no `schema` option at all; v1 uses `relations`  |
-| Table extra config | third arg returns an object                 | third arg returns an **array**                  |
-
-The journal change is not a soft deprecation. `readMigrationFiles` **throws** on sight of
-`meta/_journal.json`: _"We detected that you have old drizzle-kit migration folders."_ If
-you see that error, something generated migrations with a v0 drizzle-kit.
-
-Because `schema` is gone from the config, there is no `db.query.users.findMany()` here.
-Import the table and use the core builder: `db.select().from(users).where(...)`.
-
-## Layout
+## Two migration scopes, because there is a database per user
 
 ```text
 backend/
-  drizzle.central.config.ts   schema: src/database/central/schema.ts  -> out: drizzle/central
-  drizzle.user.config.ts      schema: src/database/user/schema.ts     -> out: drizzle/user
-  drizzle/central/  drizzle/user/    generated migrations, committed
+  drizzle.central.config.ts   src/database/central/schema.ts  ->  drizzle/central
+  drizzle.user.config.ts      src/database/user/schema.ts     ->  drizzle/user
 ```
 
-Two scopes, because this app is **database-per-user**: `central` is the user directory,
-`user` is one person's own database, instantiated N times. One schema file and one
-migrations folder each. See CLAUDE.md's Persistence section for why.
+`central` is the user directory, one database. `user` is one person's own database,
+instantiated once per registered user. One schema file and one migrations folder each,
+both committed. CLAUDE.md's Persistence section has the reasoning.
 
-## Changing the schema
+Consequences that do not apply to a normal single-database Drizzle project:
 
-```bash
-cd backend
-npm run db:generate          # both scopes; or db:generate:central / db:generate:user
-```
-
-Then **commit what it writes**. Points worth knowing:
-
-- Generation is idempotent. No schema change prints "No schema changes, nothing to
-  migrate" rather than emitting an empty migration.
-- Generated folder names get a random slug (`20260801124259_huge_annihilus`). Renaming the
-  folder before committing is safe and makes history readable; drizzle-kit finds the prior
-  snapshot by scanning directories, not by name.
-- Renaming **after** it has been applied anywhere is not safe: `__drizzle_migrations`
-  tracks applied migrations by folder name, so a rename re-runs the migration.
-- There is no `db:migrate` script, on purpose. Migrations are applied programmatically:
-  the central database by the `APP_DB` factory before Nest finishes booting, a user
-  database on first open. A CLI cannot migrate N user databases.
-
-Adding a migration under `drizzle/user/` upgrades **every existing user database** the next
-time each is opened. Write them accordingly.
+- **`npm run db:generate` covers both scopes.** Adding a table means deciding which scope it
+  belongs to first: identity-critical and needed before login goes central, everything about
+  a person goes in the user scope.
+- **A new migration under `drizzle/user/` upgrades every existing user database** the next
+  time each one is opened. Write them so they are safe to apply to live data.
+- **There is no `db:migrate` script, deliberately.** Migrations apply programmatically: the
+  central database by the `APP_DB` factory before Nest finishes booting, a user database on
+  first open. A CLI cannot migrate N user databases.
+- **Never rename a migration folder once it has been applied anywhere.**
+  `__drizzle_migrations` tracks applied migrations by folder name, so a rename re-runs it.
 
 ## Schema conventions
 
@@ -76,13 +56,10 @@ Follow the existing tables in `src/database/{central,user}/schema.ts`:
 - **Money** is integer minor units in `*_cents` columns. The API speaks major units and the
   service converts with `Math.round(v * 100)`. Never a float column.
 - **Instants** are `integer('x', { mode: 'timestamp_ms' })`, defaulted app-side with
-  `$defaultFn` and, for `updated_at`, `$onUpdateFn`. Calendar dates are `text`
-  `YYYY-MM-DD`.
+  `$defaultFn` and, for `updated_at`, `$onUpdateFn`. Calendar dates are `text` `YYYY-MM-DD`.
 - **Every table gets a nullable `deleted_at`**, and every read filters it with
   `isNull(table.deletedAt)`. Tombstones exist for future sync; the API still behaves as if
   deletion is permanent.
-- Table-level indexes go in the third argument **as an array**, not an object:
-  `(table) => [uniqueIndex('users_email_unique').on(table.email)]`.
 
 ## Drivers
 
