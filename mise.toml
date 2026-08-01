@@ -121,6 +121,14 @@ run = [
 description = "Install everything and setup the repository"
 depends = ["install:repo", "install:backend", "install:frontend"]
 
+# Generating migrations is the one database chore worth a shortcut. Applying them is not
+# a task at all: the app does that itself, at boot for the central database and on first
+# open for each user's, which is the only thing that works with a database per user.
+[tasks."db:generate"]
+description = "Generate Drizzle migrations for both database scopes"
+dir = "backend"
+run = "npm run db:generate"
+
 [tasks."dev:backend"]
 description = "Start backend development server"
 dir = "backend"

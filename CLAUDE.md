@@ -25,6 +25,8 @@ workspaces, turbo, or nx setup. The root `package.json` owns only repo-wide dev 
 
 ```text
 backend/          NestJS 11 API, port 3000, its own package.json + node_modules
+  drizzle/        Generated migrations, committed: central/ and user/
+  databases/      Local database files. Gitignored, recreated from the migrations
 frontend/         Next.js 16 + React 19, port 4200, its own package.json + node_modules
 docs/plans/       Implementation plans, one file per plan (see below)
 .claude/          Skills, agents and permissions for Claude Code (see below)
@@ -64,15 +66,17 @@ plan worth keeping there under that pattern rather than leaving it in the conver
 
 Backend, from `backend/`:
 
-| Command              | Purpose                                                   |
-| -------------------- | --------------------------------------------------------- |
-| `npm run start:dev`  | Nest in watch mode on :3000                               |
-| `npm run build`      | Compile to `dist/`. Doubles as the typecheck gate (`tsc`) |
-| `npm run lint`       | ESLint with `--fix`                                       |
-| `npm test`           | Jest unit tests (`*.spec.ts` under `src/`)                |
-| `npm run test:watch` | Same, in watch mode                                       |
-| `npm run test:e2e`   | Supertest e2e (`test/`, uses `test/jest-e2e.json`)        |
-| `npm run test:cov`   | Coverage                                                  |
+| Command                                        | Purpose                                                     |
+| ---------------------------------------------- | ----------------------------------------------------------- |
+| `npm run start:dev`                            | Nest in watch mode on :3000                                 |
+| `npm run build`                                | Compile to `dist/`. Doubles as the typecheck gate (`tsc`)   |
+| `npm run lint`                                 | ESLint with `--fix`                                         |
+| `npm test`                                     | Jest unit tests (`*.spec.ts` under `src/`)                  |
+| `npm run test:watch`                           | Same, in watch mode                                         |
+| `npm run test:e2e`                             | Supertest e2e (`test/`, uses `test/jest-e2e.json`)          |
+| `npm run test:cov`                             | Coverage                                                    |
+| `npm run db:generate`                          | drizzle-kit generate for both scopes; commit what it writes |
+| `npm run db:studio:central` / `db:studio:user` | Drizzle Studio over the local file                          |
 
 Frontend, from `frontend/`:
 
@@ -122,25 +126,116 @@ into `frontend/src/app/page.tsx`. Change a response shape and you must edit both
 intended fix is generating frontend types from an OpenAPI spec, but the backend does not
 expose one yet.
 
+**Global pipe and filter are DI providers, not `app.useGlobalPipes`.** `AppModule`
+registers `APP_PIPE` (a `ValidationPipe` with `whitelist`, `transform` and
+`forbidNonWhitelisted`) and `APP_FILTER` (`AllExceptionsFilter`). Doing it this way
+rather than in `main.ts` means the e2e suite, which boots `AppModule` directly, gets the
+same validation and the same error shape as production. Every failed request returns
+`{ statusCode, message, error, timestamp, path }`; unknown errors are logged in full
+server-side and reduced to a generic 500 outward.
+
+## Persistence
+
+**Drizzle ORM (v1 RC) over Turso's new engine, in two modes behind one seam.**
+
+- **Cloud mode**, when all four of `TURSO_ORG`, `TURSO_ORG_TOKEN`,
+  `TURSO_CENTRAL_DB_URL` and `TURSO_CENTRAL_DB_TOKEN` are set: `@tursodatabase/sync` with
+  the `drizzle-orm/tursodatabase-sync` driver. A local file kept in step with a Turso
+  Cloud database. The client has no timer of its own, so
+  `backend/src/database/turso-client.factory.ts` schedules `push()` then `pull()` every
+  `TURSO_SYNC_INTERVAL_S`.
+- **Local mode**, otherwise: `@tursodatabase/database` with
+  `drizzle-orm/tursodatabase/database`. A plain local file, nothing remote. CI, the e2e
+  suite and offline development all run here, which is why the backend still works with
+  no `.env` at all.
+
+Both are the same engine and the same SQLite dialect, so one schema and one migrations
+folder per scope serve both. `turso-client.factory.ts` and `UserDatabaseService` are the
+only two files that know which mode is active.
+
+**Database per user.** A small **central** database (`users`: id, email, and a pointer to
+that person's database) exists because identity must resolve by email before the per-user
+database is known. Everything else about a person lives in **their own Turso database**,
+starting with a single-row `profile` table. Categories, transactions and insights arrive
+there later as ordinary migrations. In cloud mode the central database sits in the
+`decode-pet-admin` group and the user databases in `decode-pet-users`, created by the
+backend at registration.
+
+**Tokens.** Creating databases and minting their tokens are control-plane operations that
+accept only the organization API token, so `TURSO_ORG_TOKEN` is used in exactly one place
+(`TursoPlatformService`) at provisioning time. Each user database is then reached with its
+own minted data-plane token, stored in the central row and never serialized into an API
+response. By MVP decision every Turso token is created with **Expires: NEVER**: no refresh
+logic anywhere, rotation is a manual ops action.
+
+**Migrations are committed and applied programmatically**, in
+`backend/drizzle/central/` and `backend/drizzle/user/`. Note the v1 RC layout: one
+directory per migration containing `migration.sql`, named `<YYYYMMDDHHMMSS>_<slug>`, with
+no `meta/_journal.json`. The central database is migrated by the `APP_DB` async factory
+before Nest finishes booting; a user database is migrated on first open, so adding a
+migration upgrades every existing user the next time they are touched. There is no
+`db:migrate` script, because N user databases cannot be migrated from a CLI. Consequence
+for deployment: `drizzle/` is resolved from `process.cwd()`, so a future Dockerfile must
+`COPY` it next to `dist/`.
+
+**Conventions worth knowing before writing a table.** Primary keys are UUIDv7 text
+(`src/common/ids.ts`). Money is integer minor units in `*_cents` columns; the API speaks
+major units and the service converts. Instants are `integer` epoch-ms
+(`{ mode: 'timestamp_ms' }`) set app-side with `$defaultFn`/`$onUpdateFn`; calendar dates
+will be `text` `YYYY-MM-DD`. Every table carries a nullable `deleted_at` for future sync
+and reads filter it with `isNull(deletedAt)` - the tombstone is invisible through the API,
+which still deletes permanently as far as a client can tell.
+
+**Two things the test setup exists to work around.** `@tursodatabase/database`,
+`@tursodatabase/sync` and `uuid` are ESM-only. Node loads them fine, but Jest's CommonJS
+runtime cannot, and they cannot be transformed either (their napi loader uses
+`import.meta.url`). `backend/test/esm-environment.cjs` therefore injects a real Node
+`require`, and `test/esm-shims/` plus a `moduleNameMapper` entry in both jest configs
+route those three specifiers through it. Separately, `test/setup-e2e.ts` points
+`DATABASE_DIR` at a temp directory and deletes every `TURSO_*` variable, so e2e always
+runs local mode even on a machine with cloud credentials.
+
 ## Environment variables
 
 Copy the templates, then fill in values. Both real files are gitignored.
 
-| App      | Template                | Real file             | Variables                                                                            |
-| -------- | ----------------------- | --------------------- | ------------------------------------------------------------------------------------ |
-| Backend  | `backend/.env.example`  | `backend/.env`        | `PORT` (default 3000), `FRONTEND_URL` (CORS origin, default `http://localhost:4200`) |
-| Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (default `http://localhost:3000`)                                      |
+| App      | Template                | Real file             | Variables                                       |
+| -------- | ----------------------- | --------------------- | ----------------------------------------------- |
+| Backend  | `backend/.env.example`  | `backend/.env`        | see the table below                             |
+| Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (default `http://localhost:3000`) |
+
+Backend variables:
+
+| Variable                                              | Default                 | Purpose                                                 |
+| ----------------------------------------------------- | ----------------------- | ------------------------------------------------------- |
+| `PORT`                                                | `3000`                  | API port                                                |
+| `FRONTEND_URL`                                        | `http://localhost:4200` | CORS origin                                             |
+| `DATABASE_DIR`                                        | `./databases`           | Local database files (gitignored)                       |
+| `TURSO_ORG`                                           | -                       | Organization slug. Cloud mode: set all four or none     |
+| `TURSO_ORG_TOKEN`                                     | -                       | Organization API token; control plane only              |
+| `TURSO_CENTRAL_DB_URL`                                | -                       | Central database URL                                    |
+| `TURSO_CENTRAL_DB_TOKEN`                              | -                       | Central database data-plane token                       |
+| `TURSO_ADMIN_GROUP_TOKEN` / `TURSO_USERS_GROUP_TOKEN` | -                       | Break-glass CLI/Studio access; the app never reads them |
+| `TURSO_USERS_GROUP`                                   | `decode-pet-users`      | Group the per-user databases are created in             |
+| `TURSO_SYNC_INTERVAL_S`                               | `60`                    | Cloud-mode push/pull interval                           |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`.
 
+The backend **does** validate its environment: `ConfigModule.forRoot` takes a
+`validationSchema` (Joi, `src/config/env.validation.ts`), so a typo fails at boot rather
+than at first use. The four cloud variables are tied together with `.and()`, making a
+half-filled `.env` an error instead of a silent fallback to local mode. drizzle-kit is the
+exception: it reads raw `process.env` and never passes through Joi, which is why the two
+`drizzle.*.config.ts` files repeat the `DATABASE_DIR` default themselves.
+
 **Never give a server-only secret a `NEXT_PUBLIC_` prefix.** `BACKEND_URL` deliberately
 has no prefix because it is read server-side only; a `NEXT_PUBLIC_` variable is inlined
 into the browser bundle and is therefore public forever.
 
-There is **no config validation**: `ConfigModule` is registered without a
-`validationSchema`, so a missing variable surfaces at first use rather than at boot.
+The four cloud variables are optional but paired: set all of them or none. Anything else
+fails at boot with a Joi message naming the missing one.
 
 ## What is in `.claude/`
 
@@ -264,12 +359,17 @@ something that is not there.
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
 - **Generated API types.** No OpenAPI spec, so `HelloResponse` is hand-mirrored between
-  the two apps as described under Architecture.
-- **Config validation.** No `validationSchema` on `ConfigModule`.
+  the two apps as described under Architecture. Swagger is deliberately deferred to this
+  same work rather than added on its own.
 - **`frontend/src/components/`.** Does not exist. Create it with your first shared
   component.
-- **A database.** Nothing is wired up. Pick your own persistence layer; that choice is
-  deliberately left to you.
+- **Auth.** `POST /api/users` and `GET /api/users/:id` are unauthenticated proof-of-stack
+  endpoints that exercise the two-database write and read path. They appear nowhere in the
+  tech spec's API surface and are expected to be reshaped or replaced by the magic-link
+  flow when it lands.
+- **The rest of the data model.** Only `users` (central) and `profile` (per user) exist.
+  Categories, transactions and insights arrive with their features, and starter-category
+  seeding belongs to onboarding.
 
 `backend/README.md` is the stock NestJS starter README. Ignore it as a source of truth
 for this project.
