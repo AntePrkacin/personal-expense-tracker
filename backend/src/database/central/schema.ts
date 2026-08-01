@@ -1,3 +1,4 @@
+import { isNull } from 'drizzle-orm';
 import {
   integer,
   sqliteTable,
@@ -55,7 +56,17 @@ export const users = sqliteTable(
     deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
   },
   (table) => [
-    uniqueIndex('users_email_unique').on(table.email),
+    // Partial: uniqueness holds over live rows only, so a soft-deleted user's
+    // email can register again. A full index would keep the tombstone
+    // answering 409 forever, for an account that appears not to exist.
+    // Renamed from users_email_unique when the where clause was added:
+    // drizzle-kit's sqlite differ only sees created and dropped indexes, so an
+    // in-place change to an existing name generates no migration at all.
+    uniqueIndex('users_email_live_unique')
+      .on(table.email)
+      .where(isNull(table.deletedAt)),
+    // Deliberately NOT partial: names derive from unique ids, so tombstones
+    // cannot collide anyway, and a duplicated pointer is always a bug.
     uniqueIndex('users_db_name_unique').on(table.dbName),
   ],
 );

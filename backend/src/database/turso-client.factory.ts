@@ -64,9 +64,23 @@ export async function openCloudDatabase(
 
   // The client syncs on demand, not on a timer of its own, so drive it here:
   // push local writes out first, then pull whatever else changed.
-  const sync = async (): Promise<void> => {
-    await client.push();
-    await client.pull();
+  //
+  // Coalesced: a caller arriving mid-sync shares the running one instead of
+  // racing a second push/pull against the same client, which is what a tick
+  // outlasting the interval would otherwise do. Writes landing after a shared
+  // run's push started are not lost, only deferred: the local file keeps them
+  // until the next run, or the first open after a restart, pushes them.
+  let inFlight: Promise<void> | null = null;
+  const sync = (): Promise<void> => {
+    inFlight ??= (async () => {
+      try {
+        await client.push();
+        await client.pull();
+      } finally {
+        inFlight = null;
+      }
+    })();
+    return inFlight;
   };
 
   // `connect()` already bootstrapped/pulled, so the first tick is a full

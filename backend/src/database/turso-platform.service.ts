@@ -7,6 +7,13 @@ import { ConfigService } from '@nestjs/config';
 
 const PLATFORM_API_BASE = 'https://api.turso.tech/v1/organizations';
 
+/**
+ * Bounds every control-plane call. Registration provisions synchronously, so a
+ * hung request here would otherwise stall it indefinitely with the client's
+ * connection held open. Generous: creating a database is slow on a cold group.
+ */
+const PLATFORM_API_TIMEOUT_MS = 30_000;
+
 interface CreateDatabaseResponse {
   database?: { Name?: string; Hostname?: string };
 }
@@ -129,6 +136,9 @@ export class TursoPlatformService {
 
     const response = await fetch(`${PLATFORM_API_BASE}/${org}${path}`, {
       method,
+      // A timeout rejects with a TimeoutError, which the global filter logs
+      // and reduces to a 500 like any other infrastructure failure.
+      signal: AbortSignal.timeout(PLATFORM_API_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${token}`,
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),

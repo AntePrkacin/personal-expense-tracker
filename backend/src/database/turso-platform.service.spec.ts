@@ -163,6 +163,15 @@ describe('TursoPlatformService', () => {
     });
   });
 
+  it('bounds every request with a timeout, so a hung call cannot stall registration', async () => {
+    respond({ jwt: 'db-token' });
+
+    await service.mintDbToken('expensa-user-1');
+
+    const [, init] = lastCall();
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it('turns an API error into a generic 500 rather than leaking the response', async () => {
     respond({ error: 'token xyz is invalid' }, { status: 401 });
 

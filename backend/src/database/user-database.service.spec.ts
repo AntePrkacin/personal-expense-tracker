@@ -183,6 +183,30 @@ describe('UserDatabaseService', () => {
     });
   });
 
+  it('waits for an in-flight open instead of tearing the database down around it', async () => {
+    // Without the wait, the open settles after the teardown and caches a live
+    // handle to a database that was just deleted.
+    let resolveOpen!: (handle: DatabaseHandle) => void;
+    openLocalMock.mockImplementation(
+      () =>
+        new Promise<DatabaseHandle>((resolve) => {
+          resolveOpen = resolve;
+        }),
+    );
+    const service = build();
+
+    const opening = service.getUserDb(USER_ID);
+    const deleting = service.deleteUserDb(USER_ID);
+
+    // Let the open reach the factory before releasing it.
+    await new Promise((resolve) => setImmediate(resolve));
+    resolveOpen(newHandle());
+    await Promise.all([opening, deleting]);
+
+    expect(closes).toHaveLength(1);
+    expect(closes[0]).toHaveBeenCalledTimes(1);
+  });
+
   it('closes every open connection on shutdown', async () => {
     const service = build();
     await service.getUserDb(USER_ID);

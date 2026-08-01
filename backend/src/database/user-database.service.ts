@@ -138,6 +138,16 @@ export class UserDatabaseService {
   async deleteUserDb(userId: string): Promise<void> {
     this.assertValidUserId(userId);
 
+    // An open still in flight would settle after the teardown below and cache
+    // a live handle to (in local mode, a fresh file of) the database this is
+    // deleting. Wait it out instead. getUserDb attached to the promise first,
+    // so by the time this resumes it has stored the handle in `connections`
+    // and the close below finds it. A failed open left nothing to close.
+    const inFlight = this.opening.get(userId);
+    if (inFlight) {
+      await inFlight.catch(() => undefined);
+    }
+
     const handle = this.connections.get(userId);
     this.connections.delete(userId);
     if (handle) {
