@@ -1,3 +1,6 @@
+// An internal path: drizzle-orm v1 RC exports no public name for the shared
+// async SQLite base the two drivers extend, so this specifier may move before
+// v1 final. If a drizzle bump breaks this import, that is why.
 import type { SQLiteAsyncDatabase } from 'drizzle-orm/sqlite-core/async/db';
 
 /**

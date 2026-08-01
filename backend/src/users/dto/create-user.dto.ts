@@ -2,12 +2,12 @@ import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsInt,
+  IsISO4217CurrencyCode,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
-  Length,
   Max,
   MaxLength,
   Min,
@@ -33,14 +33,24 @@ export class CreateUserDto {
   @IsEmail()
   email!: string;
 
+  // Uppercased first, so 'eur' passes and is stored as 'EUR'; the validator
+  // checks against the (uppercase) ISO 4217 list, not just "any 3 letters".
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
   @IsOptional()
-  @IsString()
-  @Length(3, 3)
+  @IsISO4217CurrencyCode()
   currency?: string;
 
-  /** Major units (e.g. 2000.50). Stored as integer cents. */
+  /**
+   * Major units (e.g. 2000.50). Stored as integer cents. The cap is not a
+   * product judgment: it keeps the cents conversion far inside JS safe-integer
+   * range while staying generous for zero-decimal currencies, whose budgets
+   * carry many digits.
+   */
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
+  @Max(1_000_000_000)
   monthlyBudget!: number;
 
   /** Capped at 28 so the day exists in every month. */

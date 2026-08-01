@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * Runs once per Jest worker, before any test file, via `setupFiles` in
- * jest-e2e.json.
+ * Runs before each e2e test file, via `setupFiles` in jest-e2e.json.
  *
  * Two jobs:
- * - point DATABASE_DIR at a fresh temp directory, so tests never touch the
- *   developer's `backend/databases/` and parallel workers cannot collide;
+ * - point DATABASE_DIR at a fresh temp directory per test file, so tests
+ *   never touch the developer's `backend/databases/` and test files cannot
+ *   collide, whether they run in parallel workers or share one;
  * - strip every TURSO_* variable inherited from the shell, so the suite runs
  *   in local mode against plain files: no network, no cloud credentials, no
  *   databases created in a real Turso organization.

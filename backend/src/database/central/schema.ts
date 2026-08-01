@@ -20,7 +20,12 @@ import {
 export const users = sqliteTable(
   'users',
   {
-    id: text('id').primaryKey(),
+    // SQLite's historic quirk lets a non-INTEGER primary key hold NULLs, and
+    // the Turso engine inherits it (verified). notNull() records the intent,
+    // but drizzle-kit's sqlite DDL generator currently emits no NOT NULL for
+    // a primary-key column, so the constraint is app-side (newId()) until a
+    // future drizzle-kit picks this up. See docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
 
     // Stored already lowercased and trimmed by the DTO. SQLite could enforce
     // this with `COLLATE NOCASE`, but Drizzle's column builder cannot express

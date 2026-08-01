@@ -130,6 +130,29 @@ describe('UsersController (e2e)', () => {
     );
   });
 
+  it('uppercases the currency and rejects codes outside ISO 4217', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/users')
+      .send({ ...validBody(nextEmail()), currency: 'eur' })
+      .expect(201);
+    expect(userBody(created).currency).toBe('EUR');
+
+    const response = await request(app.getHttpServer())
+      .post('/api/users')
+      .send({ ...validBody(nextEmail()), currency: 'ZZZ' })
+      .expect(400);
+    expect(errorBody(response).message).toEqual(
+      expect.arrayContaining([expect.stringContaining('currency')]),
+    );
+  });
+
+  it('rejects a budget beyond the safe-integer cap', async () => {
+    await request(app.getHttpServer())
+      .post('/api/users')
+      .send({ ...validBody(nextEmail()), monthlyBudget: 2_000_000_000_000 })
+      .expect(400);
+  });
+
   it('returns 400 for an unknown extra field (forbidNonWhitelisted)', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/users')

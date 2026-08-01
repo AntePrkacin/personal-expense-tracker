@@ -12,8 +12,10 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 export const profile = sqliteTable('profile', {
   // Single-row table. The id is the user's central `users.id` rather than a
   // second UUID for the same person, which keeps the cross-database
-  // correlation explicit and makes lookups unambiguous.
-  id: text('id').primaryKey(),
+  // correlation explicit and makes lookups unambiguous. notNull() records
+  // intent SQLite does not enforce for non-INTEGER primary keys; drizzle-kit
+  // currently emits no NOT NULL for it either - see docs/TODO.md.
+  id: text('id').primaryKey().notNull(),
 
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),

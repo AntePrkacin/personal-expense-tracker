@@ -104,6 +104,25 @@ Worth retesting after a CLI upgrade; this looks like a plain bug rather than a d
 decision. Inspecting the central directory is unaffected either way:
 `turso db shell expensa-app "select id, email from users;"`.
 
+### Text primary keys are nullable at the database level
+
+SQLite's historic quirk lets a non-INTEGER primary key hold NULL, and the Turso engine
+inherits it (verified with a direct insert). Both `id` columns carry `.notNull()` in the
+Drizzle schemas, but drizzle-kit's sqlite DDL generator emits no `NOT NULL` for a
+primary-key column, so the constraint exists only app-side: every id comes from `newId()`.
+Two limitations were confirmed in `drizzle-kit@1.0.0-rc.4` while trying to fix this
+properly:
+
+- the sqlite **differ only sees created and dropped entities**, so any in-place change to
+  an existing index or column (a new `where` clause, a new `NOT NULL`) generates
+  `no_changes`. The partial email index worked around it by renaming the index;
+- the sqlite **DDL generator drops `notNull` on primary-key columns** entirely, so even a
+  rename-style workaround cannot produce the constraint.
+
+The `.notNull()` stays in the schemas so a future drizzle-kit that fixes the generator
+picks it up on the next diff. If that lands, expect a table-recreate migration for both
+scopes; review it rather than being surprised by it.
+
 ### Deployment must ship `backend/drizzle/`
 
 Migration folders are resolved from `process.cwd()`, because `nest build` emits only
