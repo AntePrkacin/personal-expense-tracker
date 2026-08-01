@@ -60,9 +60,14 @@ export class UsersService {
     }
 
     const id = newId();
-    const provisioned = await this.userDatabases.provisionUserDb(id);
 
     try {
+      // Inside the compensated block: provisioning is two cloud calls, and a
+      // failure between them (database created, token not minted) must roll
+      // back like any other partial registration, or the database leaks with
+      // nothing referencing it - a retry uses a fresh id and never reclaims it.
+      const provisioned = await this.userDatabases.provisionUserDb(id);
+
       const [userRow] = await this.centralDb
         .insert(users)
         .values({
@@ -133,16 +138,19 @@ export class UsersService {
   }
 
   /**
-   * Undoes a partial registration: drops the user's database and removes the
-   * central row. Deleting by id is a no-op when the insert never landed, which
-   * is exactly the case this has to survive.
+   * Undoes a partial registration: removes the central row, then drops the
+   * user's database. The row goes first because the failure modes are not
+   * symmetric: a leftover database is invisible and only costs storage, while
+   * a leftover row keeps the email answering 409 forever. Deleting by id is a
+   * no-op when the insert never landed, which is exactly the case this has to
+   * survive.
    */
   private async rollback(id: string): Promise<void> {
     this.logger.error(`Registration failed for user ${id}; rolling back`);
 
     try {
-      await this.userDatabases.deleteUserDb(id);
       await this.centralDb.delete(users).where(eq(users.id, id));
+      await this.userDatabases.deleteUserDb(id);
     } catch (error) {
       // Nothing useful to do here: the original failure is about to be
       // rethrown and is the more informative one.

@@ -210,6 +210,36 @@ describe('UsersService', () => {
       expect(centralDelete).toHaveBeenCalledTimes(1);
     });
 
+    it('compensates when provisioning fails partway, instead of leaking the database', async () => {
+      // createUserDatabase succeeded, mintDbToken did not: the database exists
+      // but nothing references it, and a retry uses a fresh id.
+      centralSelect.mockReturnValue(queryChain([]));
+      centralDelete.mockReturnValue(queryChain([]));
+      provisionUserDb.mockRejectedValue(new Error('token minting failed'));
+
+      await expect(service.create({ ...dto })).rejects.toThrow(
+        'token minting failed',
+      );
+
+      expect(deleteUserDb).toHaveBeenCalledTimes(1);
+      expect(centralDelete).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes the central row before the database, so a failed teardown cannot block the email', async () => {
+      centralSelect.mockReturnValue(queryChain([]));
+      centralInsert.mockReturnValue(queryChain([userRow()]));
+      centralDelete.mockReturnValue(queryChain([]));
+      userInsert.mockReturnValue(queryChain(new Error('disk full')));
+      deleteUserDb.mockRejectedValue(new Error('turso is down'));
+
+      await expect(service.create({ ...dto })).rejects.toThrow('disk full');
+
+      expect(centralDelete).toHaveBeenCalledTimes(1);
+      expect(centralDelete.mock.invocationCallOrder[0]).toBeLessThan(
+        deleteUserDb.mock.invocationCallOrder[0],
+      );
+    });
+
     it('surfaces a lost unique-index race as 409 rather than 500', async () => {
       centralSelect.mockReturnValue(queryChain([]));
       centralInsert.mockReturnValue(
