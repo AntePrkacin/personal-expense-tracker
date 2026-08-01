@@ -3,11 +3,9 @@ import { InternalServerErrorException, Logger } from '@nestjs/common';
 import { TursoPlatformService } from './turso-platform.service';
 
 describe('TursoPlatformService', () => {
-  const env: Record<string, string> = {
-    TURSO_ORG: 'acme',
-    TURSO_ORG_TOKEN: 'org-token',
-    TURSO_GROUP: 'decode-pet',
-  };
+  // Rebuilt in beforeEach: one test deletes a key to exercise a fallback, and
+  // a shared object would leak that into everything after it.
+  let env: Record<string, string>;
 
   const config = {
     get: (key: string, fallback?: string) => env[key] ?? fallback,
@@ -28,6 +26,11 @@ describe('TursoPlatformService', () => {
   const lastCall = () => fetchMock.mock.calls[0] as [string, RequestInit];
 
   beforeEach(() => {
+    env = {
+      TURSO_ORG: 'acme',
+      TURSO_ORG_TOKEN: 'org-token',
+      TURSO_GROUP: 'decode-pet',
+    };
     service = new TursoPlatformService(config);
     fetchMock = jest.fn();
     global.fetch = fetchMock;
@@ -96,6 +99,24 @@ describe('TursoPlatformService', () => {
         service.createUserDatabase('expensa-user-1'),
       ).rejects.toThrow(InternalServerErrorException);
     });
+
+    it('falls back to the default group when TURSO_GROUP is unset', async () => {
+      delete env.TURSO_GROUP;
+      respond({
+        database: {
+          Name: 'expensa-user-1',
+          Hostname: 'expensa-user-1-acme.aws.turso.io',
+        },
+      });
+
+      await service.createUserDatabase('expensa-user-1');
+
+      const [, init] = lastCall();
+      expect(JSON.parse(init.body as string)).toHaveProperty(
+        'group',
+        'decode-pet',
+      );
+    });
   });
 
   describe('mintDbToken', () => {
@@ -111,6 +132,14 @@ describe('TursoPlatformService', () => {
         'https://api.turso.tech/v1/organizations/acme/databases/expensa-user-1/auth/tokens?authorization=full-access&expiration=never',
       );
       expect(init.method).toBe('POST');
+    });
+
+    it('fails loudly when Turso returns no token', async () => {
+      respond({});
+
+      await expect(service.mintDbToken('expensa-user-1')).rejects.toThrow(
+        InternalServerErrorException,
+      );
     });
   });
 
