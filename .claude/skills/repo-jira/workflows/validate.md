@@ -16,8 +16,8 @@ Below, tools are written as `connector-name` / `self-hosted-name` - use the one 
 
 The argument passed was: **`$ARGUMENTS`**
 
-- If the argument contains a ticket ID after `validate` (e.g. `validate DEMO-110`), use it directly.
-- Otherwise extract it from the current branch: `git branch --show-current` - the format is `{type}/DEMO-{number}-{slug}`, so take `DEMO-{number}`.
+- If the argument contains a ticket ID after `validate` (e.g. `validate PET-110`), use it directly.
+- Otherwise extract it from the current branch: `git branch --show-current` - the format is `{type}/PET-{number}-{slug}`, so take `PET-{number}`.
 - If neither yields a key, ask the user for the ticket ID.
 
 ## Step 2 - Load standards

@@ -159,7 +159,7 @@ whichever it finds.
 Separate from the two options above: the tools reach **the Jira instance your account can
 see**. Neither option grants access you do not already have.
 
-- Working on the shared `DEMO` project? You need an account on that Atlassian site.
+- Working on the shared `PET` project? You need an account on that Atlassian site (`decode.atlassian.net` for `PET` project).
 - Working on your own final project? Create a free Jira Cloud site, then update
   `.claude/jira-config.md` with your site URL and project key. The skill reads that file,
   so nothing else needs changing.
@@ -174,3 +174,4 @@ see**. Neither option grants access you do not already have.
 | Tools listed, but every call fails auth   | Option A: re-authorize the connector. Option B: token revoked or `JIRA_USERNAME` is not the account that owns the token.                                |
 | Tools work, but the ticket is "not found" | Your account cannot see that project. Confirm you can open the ticket in a browser first.                                                               |
 | Worked interactively, fails in a script   | Option A cannot be relied on headless. Use Option B for automation.                                                                                     |
+| A call hangs, then aborts after 300s      | Option A connector slowness against `decode.atlassian.net`, seen on `getJiraIssueTypeMetaWithFields` and `searchJiraIssuesUsingJql`. Not a bad request: use cached values from `.claude/jira-config.md`, or retry later. |

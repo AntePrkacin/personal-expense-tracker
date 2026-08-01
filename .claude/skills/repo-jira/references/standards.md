@@ -11,27 +11,30 @@ The skill auto-creates `.claude/jira-config.md` on first use by gathering inform
 **Template:**
 
 ```markdown
-# Jira Project Configuration - Decode Academy Demo
+# Jira Project Configuration - Personal Expense Tracker
 
 ## Project
 
 | Field | Value |
 |---|---|
-| **Jira Project Key** | `DEMO` |
-| **Project Name** | Decode Academy Demo |
-| **Site** | https://decode.atlassian.net |
+| **Jira Project Key** | `PET` |
+| **Project Name** | `[ACADEMY] Personal expanse tracker` |
+| **Jira URL** | `https://decode.atlassian.net` |
+| **Cloud ID** | `ca345cf6-281a-4912-83f4-2ae1566e6e34` |
+| **Project type** | Software, team-managed (next-gen) |
+| **Board** | `2329` |
 
 ## Story Points Field
 
 | Field ID | Name | Confirmed From |
 |---|---|---|
-| `customfield_XXXXX` | Story point estimate | DEMO-123 |
+| `customfield_XXXXX` | Story point estimate | PET-123 |
 
 ## Git Convention
 
 | Field | Value |
 |---|---|
-| **Branch format** | `{type}/DEMO-{number}-{slug}` |
+| **Branch format** | `{type}/PET-{number}-{slug}` |
 | **Main branch** | `main` |
 
 ## Phase Labels
@@ -48,12 +51,16 @@ The skill auto-creates `.claude/jira-config.md` on first use by gathering inform
 
 **Story-points field:** leave as `customfield_XXXXX` if unknown - the skill auto-discovers it and writes the confirmed value back to `.claude/jira-config.md`.
 
+**Project type matters.** `PET` is team-managed, so an epic is an issue's `parent`, the points
+field is named `Story point estimate`, and the Epic Link field does not exist. The live
+`.claude/jira-config.md` records the cloud ID and issue-type IDs; read it rather than re-probing.
+
 ---
 
 ## 1. Ticket hierarchy
 
 ```
-Project (DEMO)
+Project (PET)
 └── Epics (feature areas)
     └── Tasks (technical implementation work)
         └── Subtasks (granular items, 1-4 hours each)
@@ -62,7 +69,7 @@ Sprints (2-week time boxes) group work across epics.
 
 - **Epics** correspond to feature areas or deliverables.
 - **Tasks** are the primary work unit - there is no Stories layer.
-- Each task carries a technical-layer label (`BE` or `FE`) in both its summary and its Labels field.
+- Each task carries a technical-layer label (`BE`, `FE` or `FULL`) in both its summary and its Labels field.
 
 ---
 
@@ -76,12 +83,17 @@ The technical-layer label is ALL CAPS and prefixed to the summary.
 |---|---|---|
 | `BE` | Backend / NestJS API | `[BE] Add user lookup endpoint` |
 | `FE` | Frontend / Next.js app | `[FE] Build user profile card component` |
+| `FULL` | Fullstack - one deliverable spanning the NestJS API and the Next.js app | `[FULL] Add login-link verification and session handling` |
 | `DOCS` | Documentation | `[DOCS] Write onboarding guide` |
 | `QA` | Test planning / QA | `[QA] Write e2e test plan for user flow` |
 | `INFRA` | CI/CD, tooling, config | `[INFRA] Set up GitHub Actions lint workflow` |
 
 **Rules for a good summary:**
 - Start with the `[LAYER]` prefix; the matching label MUST also be added to the Labels field at creation time.
+- Reach for `FULL` only when the deliverable genuinely cannot be accepted from one side alone - 
+  an endpoint whose UI has no separate ticket, or a flow whose server rule and screen state must ship together. 
+  A task that merely *calls* an endpoint owned by another ticket is `FE`, not `FULL`. 
+  If a `FULL` task would exceed 8 points, split it into a `BE` and an `FE` task instead.
 - Use an imperative verb (`Add`, `Build`, `Fix`, `Refactor`).
 - Be specific about the deliverable, not the activity ("Add user lookup endpoint", not "Work on backend").
 - Keep it under ~80 characters.
@@ -101,7 +113,7 @@ The technical-layer label is ALL CAPS and prefixed to the summary.
 
 ## Technical Layer
 
-**Label:** [BE | FE | DOCS | QA | INFRA]
+**Label:** [BE | FE | FULL | DOCS | QA | INFRA]
 
 ## Acceptance Criteria
 
@@ -114,7 +126,7 @@ The technical-layer label is ALL CAPS and prefixed to the summary.
 
 ## Dependencies
 
-- Task: [DEMO-xxx]
+- Task: [PET-xxx]
 - External: [API access, content, credentials]
 
 ## Definition of Done
@@ -185,6 +197,7 @@ Every ticket carries at least a technical-layer label and a phase label.
 ### Technical-layer labels (mandatory, matches summary prefix)
 - `BE` - backend / NestJS
 - `FE` - frontend / Next.js
+- `FULL` - fullstack, one deliverable spanning backend and frontend
 - `DOCS` - documentation
 - `QA` - test planning
 - `INFRA` - CI/CD, tooling, config

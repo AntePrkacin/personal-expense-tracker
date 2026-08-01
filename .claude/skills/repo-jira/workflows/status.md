@@ -16,8 +16,8 @@ Below, tools are written as `connector-name` / `self-hosted-name` - use the one 
 
 The argument passed was: **`$ARGUMENTS`**
 
-- If the argument contains a ticket ID after `status` (e.g. `status DEMO-160`), use it directly.
-- Otherwise extract it from the current branch: `git branch --show-current`. The branch format is `{type}/DEMO-{number}-{slug}` - take `DEMO-{number}`.
+- If the argument contains a ticket ID after `status` (e.g. `status PET-160`), use it directly.
+- Otherwise extract it from the current branch: `git branch --show-current`. The branch format is `{type}/PET-{number}-{slug}` - take `PET-{number}`.
 - If neither yields a key, ask the user for the ticket ID.
 
 ## Step 2 - Fetch and summarise

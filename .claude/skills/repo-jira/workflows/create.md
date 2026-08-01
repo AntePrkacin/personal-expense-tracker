@@ -1,6 +1,6 @@
 > **Tools used:** `Read` (load standards + config), plus Jira create/update/link tools: `createJiraIssue` / `editJiraIssue` / `createIssueLink` (connector) or `jira_create_issue` / `jira_update_issue` / `jira_link_to_epic` (self-hosted).
 
-Act as a **Product Owner** creating and managing Jira tickets over MCP, project `DEMO`.
+Act as a **Product Owner** creating and managing Jira tickets over MCP, project `PET`.
 
 ## Step 1 - Preflight check
 
@@ -21,16 +21,22 @@ Try to read `.claude/jira-config.md`. If it exists, use it. If it does not exist
 ## Step 3 - Resolve project configuration
 
 ### 3.1 - Project key
-Default to `DEMO`. If `.claude/jira-config.md` is missing and no key is in the argument, confirm `DEMO` with the user.
+Default to `PET` (project `[ACADEMY] Personal expanse tracker`, cloud ID
+`ca345cf6-281a-4912-83f4-2ae1566e6e34`, **team-managed**). If `.claude/jira-config.md` is missing and no key is in the argument, confirm `PET` with the user.
 
 ### 3.2 - Discover the story-points field
 If not already known from config, auto-discover:
 
-1. **Connector:** call `getJiraIssueTypeMetaWithFields` for the project and the `Task` issue type with `requiredFieldsOnly: false`, then find the field whose name is `Story point estimate` or `Story Points` and read its `customfield_*` key.
+1. **Connector:** call `getJiraIssueTypeMetaWithFields` for the project and the `Task` issue type with `requiredFieldsOnly: false`, then find the field whose name is `Story point estimate` and read its `customfield_*` key.
    **Self-hosted:** call `jira_search_fields` with keyword `story points`.
 2. If that yields nothing, try `customfield_10432` first (team-managed), then `customfield_10117` (company-managed).
 3. Confirm by attempting to set the field on a test issue - use whichever succeeds.
 4. Write the discovered ID back to `.claude/jira-config.md` so later sessions skip this step.
+
+**Known failure mode on this site:** `getJiraIssueTypeMetaWithFields` has returned no response
+at all against `decode.atlassian.net` (aborted after 300s with no progress). If it hangs, do
+not retry it a third time - fall back to step 2, or read `fields: "*all"` off any existing
+`PET` issue, and note in `.claude/jira-config.md` which route confirmed the ID.
 
 ### 3.3 - Create or update `.claude/jira-config.md`
 After confirming the key and story-points field, **always write/update `.claude/jira-config.md`** using the template from `references/standards.md` (Setup section). This lets future sessions load config instantly.
@@ -80,12 +86,13 @@ When creating tasks:
 
    **Self-hosted:** call `jira_link_to_epic` with the task and epic keys.
 
-   **Connector:** there is no single link-to-epic call, and the right mechanism depends on the project type:
+   **Connector:** there is no single link-to-epic call. `PET` is **team-managed**, so the epic is
+   the issue's **parent**: pass `parent: "PET-1"` on `createJiraIssue`, or set it later with
+   `editJiraIssue`. The Epic Link custom field is the company-managed mechanism and does not
+   exist here - do not reach for it if a create fails, the cause is something else.
 
-   - *Team-managed project* - the epic is the issue's parent. Pass `parent: "DEMO-100"` on `createJiraIssue`, or set it later with `editJiraIssue`.
-   - *Company-managed project* - the epic is a custom field. Set the Epic Link field via `additional_fields`, e.g. `{"customfield_10014": "DEMO-100"}`.
-
-   If a `parent` value is rejected, you are most likely on a company-managed project - switch to the Epic Link field rather than retrying. `getJiraProjectIssueTypesMetadata` shows which issue types the project has, which helps identify the type.
+   On a different, company-managed project the epic would instead be a custom field set via
+   `additional_fields`, e.g. `{"customfield_10014": "KEY-100"}`.
 
 ## Step 5 - Confirm completion
 
