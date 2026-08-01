@@ -24,4 +24,6 @@ async function bootstrap() {
 
   await app.listen(config.get<number>('PORT', 3000));
 }
-bootstrap();
+// `void` marks the floating promise as deliberately unawaited: nothing follows
+// bootstrap, and a rejection here already terminates the process.
+void bootstrap();

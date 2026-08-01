@@ -50,8 +50,16 @@ Two consequences that trip people up:
 Node version comes from `.nvmrc` (currently **26**). CI reads that same file, so bump it
 there and CI follows. Use `nvm use`, which reads `.nvmrc` and needs no version argument;
 avoid `nvm install --lts`, which installs whatever LTS happens to be current. The hard
-floor is **v20.9.0**, declared by `next` in its `engines` field, and all three
-`package.json` files now carry that same `engines` constraint so npm warns on a mismatch.
+floor is **v22.12.0**, and all three `package.json` files carry it so npm warns on a
+mismatch.
+
+That floor is the **backend's**, not `next`'s: `next` still declares `>=20.9.0`, but the
+backend loads three ESM-only packages (`@tursodatabase/database`, `@tursodatabase/sync`,
+`uuid`) from CommonJS, which requires Node's `require()` of ESM. That landed unflagged in
+22.12 (and was backported to 20.19). The stated floor is the simple form rather than an
+exact `>=20.19.0 <21 || >=22.12.0`, which is accurate but unreadable for no gain given
+`.nvmrc` says 26. Below the floor the failure is a startup crash, `Cannot use import
+statement outside a module`, not a warning.
 
 `mise.toml` pins the same major a **second** time, as `node = "26"` under `[tools]`. mise
 does not read `.nvmrc`, so bumping the Node major means editing both files. It is pinned
@@ -370,6 +378,15 @@ short code samples in those files as inline spans, which Prettier leaves alone.
 - **backend**: lint, build, unit tests, e2e
 - **frontend**: lint, unit tests, build
 - **conventions**: commitlint over the PR's commit range
+
+The backend job covers the persistence layer without any Turso credentials: `test-e2e`
+runs in local mode against files in a temp directory (see the note under Persistence), and
+`npm ci` resolving the `@tursodatabase/*` native bindings on `ubuntu-latest` is itself the
+check that those platform binaries are available there. Both are confirmed working.
+
+Actions are pinned to `actions/checkout@v7` and `actions/setup-node@v7`. Older majors run
+on Node 20, which GitHub has deprecated: the runner forces them onto a newer runtime and
+annotates every job until they are upgraded.
 
 A repo-wide `prettier --check` step exists but is **intentionally commented out**: 55
 files predate the Prettier config and the step would fail immediately on a fresh clone.

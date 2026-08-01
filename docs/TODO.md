@@ -9,74 +9,6 @@ paragraph or two probably deserve their own plan in this directory.
 
 ---
 
-## Correctness
-
-### Raise the declared Node floor
-
-All three `package.json` files declare `"node": ">=20.9.0"`, inherited from what `next`
-declares. That number is now **wrong for the backend**, which loads three ESM-only
-packages (`@tursodatabase/database`, `@tursodatabase/sync`, `uuid`) from CommonJS. That
-relies on `require()` of ESM, which Node shipped unflagged in **22.12.0** and backported to
-**20.19.0**. On 20.9 through 20.18, or 22.0 through 22.11, the backend fails at startup
-with `Cannot use import statement outside a module`.
-
-Nothing is broken today: `.nvmrc` pins 26, and CI reads the same file. The damage is a
-newcomer trusting the documented floor, installing 20.9, and hitting a confusing runtime
-error that the `engines` check said nothing about.
-
-Change `engines.node` to `>=22.12.0` in all three `package.json` files. The simple form is
-worth preferring over an exact `>=20.19.0 <21 || >=22.12.0`, which is accurate but reads
-like a puzzle for no practical gain, since `.nvmrc` says 26.
-
-Then correct the prose in both places that state the old number:
-
-- `README.md`, under Prerequisites: "The hard floor is **v20.9.0**, which is what `next`
-  declares in `engines`."
-- `CLAUDE.md`, under Repository layout: "The hard floor is **v20.9.0**, declared by `next`
-  in its `engines` field."
-
-Both currently attribute the floor to `next`. After this change the binding constraint is
-the backend's, not the frontend's, so the explanation has to change too, not just the
-digits.
-
-Only Node 26 has actually been exercised here. If you want the lower bound confirmed rather
-than derived from the Node changelog, run the backend's tests under 22.12 and 22.11 and
-check that the second one fails.
-
-### Verify the native bindings install in CI
-
-`@tursodatabase/database` and `@tursodatabase/sync` ship platform-specific napi binaries
-through `optionalDependencies`. They install cleanly on this machine (linux-x64-gnu), but
-CI has never run any of the persistence work. If `ubuntu-latest` cannot resolve a binding,
-the backend job fails at `npm install`, well before any test.
-
-Verified by pushing the branch and opening the PR. Nothing to do beforehand; this is a note
-so the failure is recognised rather than debugged from scratch.
-
-### Recreate the central database with the Turso engine
-
-Resolved and mostly done: cloud databases must use the Turso engine, not the libSQL one
-Turso Cloud creates by default, because the local half of `@tursodatabase/sync` is a real
-Turso database. `TursoPlatformService` now sends `use_tursodb: true` on every per-user
-create, pinned by a test.
-
-What is left is the **central** database, which is made by hand rather than by the backend.
-The existing `expensa-app` was created before this was understood and reports
-`engine: "libsql"`. The engine cannot be changed after creation, so it has to be deleted and
-recreated:
-
-```bash
-turso db create expensa-app --group decode-pet --tursodb
-turso db show expensa-app --url        # -> TURSO_CENTRAL_DB_URL (unchanged if same name)
-turso db tokens create expensa-app     # -> TURSO_CENTRAL_DB_TOKEN (a NEW database needs a new token)
-```
-
-Then update both values in `backend/.env`, delete `backend/databases/` so no local copy of
-the old database survives, and re-run the cloud smoke test. Safe to do while `users` has no
-rows; check with `select count(*) from users` first.
-
----
-
 ## Deferred by design
 
 These were decided against deliberately. Reasons are recorded so the decision is not
@@ -203,7 +135,8 @@ than discovered.
 ## Housekeeping
 
 - **Branch name.** `feat/backend-db-bootstrap` does not follow the documented
-  `{type}/DEMO-{number}-{slug}` format. Flagged rather than renamed unprompted.
+  `{type}/DEMO-{number}-{slug}` format. Now pushed with PR #3 open against it, so renaming
+  would orphan the PR. Left alone deliberately; worth getting right on the next branch.
 - **Repo-wide `prettier --check` is commented out in CI.** 55 files predate the Prettier
   config and the step would fail on a fresh clone. To enable: run `npx prettier --write .`
   once, commit that, then uncomment the step in `.github/workflows/ci.yml`. Note that

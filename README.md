@@ -68,9 +68,12 @@ The backend also has a working persistence layer behind `POST /api/users` and
 | git     | any recent                                |                                                                                         |
 | mise    | optional                                  | Runs the repo-wide tasks below. Every task wraps plain npm commands, so you can skip it |
 
-The hard floor is **v20.9.0**, which is what `next` declares in `engines`. All three
-`package.json` files carry that constraint, so npm warns with `EBADENGINE` if you are below
-it.
+The hard floor is **v22.12.0**, set by the backend. It loads three ESM-only packages
+(`@tursodatabase/database`, `@tursodatabase/sync`, `uuid`) from CommonJS, which needs
+Node's `require()` of ESM, and that shipped unflagged in 22.12. Below it the backend does
+not start, it throws `Cannot use import statement outside a module`. All three
+`package.json` files carry that constraint, so npm warns with `EBADENGINE` if you are
+below it.
 
 **Check in a terminal you opened yourself**, not through an editor extension or an AI
 assistant:
