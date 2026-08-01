@@ -311,22 +311,32 @@ byte-identical copy and a fresh clone works with no extra step; refreshing it is
 deliberate act - re-run the install and commit the diff. The repo's own `repo-stack`
 skill covers only this repo's stacked-branch wiring and defers the CLI to it.
 
-**Drizzle's own skills and MCP server are installed, not committed.** `drizzle-kit` bundles
-eight agent skills (`drizzle`, `drizzle-generate`, `drizzle-migrations`, `drizzle-push`,
-`drizzle-pull`, `drizzle-hints`, `drizzle-output-modes`, `drizzle-responses-and-errors`) and
-an MCP server, both version-matched to the installed drizzle-kit. `npm run skills` at the
-repo root installs the skills; `mise run install` includes it.
+**Drizzle ships its own skills, and they are committed.** `drizzle-kit` bundles eight agent
+skills (`drizzle`, `drizzle-generate`, `drizzle-migrations`, `drizzle-push`, `drizzle-pull`,
+`drizzle-hints`, `drizzle-output-modes`, `drizzle-responses-and-errors`). `npm run skills`
+at the repo root extracts them from the drizzle-kit in `backend/node_modules` into
+`.agents/skills/`, and symlinks `.claude/skills/drizzle*` at them.
 
-They are gitignored on purpose. Version matching is the whole value, so a vendored copy
-drifts the moment drizzle-kit is bumped, and the installer symlinks `.claude/skills/drizzle*`
-into `.agents/`, which git checks out as plain text on Windows without Developer Mode. If
-`/drizzle-generate` and friends are missing, nobody has run the command yet. Because they
-cover the CLI thoroughly, the repo's own `backend-drizzle` skill covers only this project's
-wiring and defers the rest to them.
+Both the files and the symlinks are committed, for the same reason `backend/drizzle/`
+migrations are: they are generated, but everyone must have byte-identical copies, and a
+fresh clone should work with no extra step. Only `skills-lock.json` is gitignored, because
+it records the absolute path of whoever ran the installer.
 
-The MCP server is `node backend/node_modules/drizzle-kit/bin.cjs mcp`, exposing `generate`,
-`push`, `pull`, `check`, `export` and `up` as tools. It is in `.mcp.json.example`; copy that
-to `.mcp.json`, which is gitignored and therefore per-developer.
+**Refreshing them is a deliberate act, like regenerating migrations.** Bumping `drizzle-kit`
+does not update them; re-run `npm run skills` and commit the diff. You will be told when
+that is needed: the `drizzle` skill compares its own `metadata.revision` against
+`drizzle-kit skills version` from the _installed_ binary and prints a notice when the
+bundle is newer. That check is why committing them is safe - drift is surfaced rather than
+silent.
+
+Because those eight cover the CLI thoroughly, the repo's own `backend-drizzle` skill covers
+only this project's wiring and defers the rest to them.
+
+`drizzle-kit` also ships an **MCP server**, `node backend/node_modules/drizzle-kit/bin.cjs
+mcp`, exposing `generate`, `push`, `pull`, `check`, `export` and `up` as tools. It is in
+`.mcp.json.example`; copy that to `.mcp.json`, which is gitignored and therefore
+per-developer. Note that `push` applies schema changes directly to a database without
+writing a migration, which is the opposite of this repo's committed-migrations workflow.
 
 `.claude/commit-checks.md` is a generated cache read by `repo-commit`. Regenerate it
 with `/repo-commit refresh-checks` when it goes stale.

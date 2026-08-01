@@ -165,9 +165,6 @@ cd backend && npm install && cp .env.example .env && cd ..
 
 # 3. Frontend
 cd frontend && npm install && cp .env.example .env.local && cd ..
-
-# 4. Optional, for Claude Code users: install Drizzle's own agent skills.
-npm run skills
 ```
 
 > **Why step 1 matters.** The root `package.json` holds only Husky, commitlint,
@@ -299,6 +296,7 @@ three packages in order.
 | `mise run check-for-updates` | `ncu` in all three, showing what is outdated                         |
 | `mise run update`            | `ncu -u --target minor`, then install and update, in all three       |
 | `mise run db:generate`       | Generate Drizzle migrations for both database scopes                 |
+| `mise run skills`            | Refresh Drizzle's committed agent skills after a drizzle-kit bump    |
 
 Every task also has per-package variants when you want just one: `install:repo`,
 `install:backend`, `install:frontend`, `dev:backend`, `dev:frontend`, `update:repo`,
@@ -577,36 +575,40 @@ This repo ships [Claude Code](https://claude.com/claude-code) configuration in
 | `repo-review-prs`                    | Reviews open pull requests                                               |
 | `backend-nestjs` / `frontend-nextjs` | Rule libraries consulted automatically while writing code                |
 | `backend-drizzle`                    | How Drizzle and Turso are wired in this repo specifically                |
-| `drizzle-*` (8 skills)               | Drizzle's own, installed by `npm run skills`. Not committed, see below   |
+| `drizzle-*` (8 skills)               | Drizzle's own drizzle-kit skills, committed. Refreshed, see below        |
 
 Invoke a skill by its full name (`/repo-dev-setup`), or just describe what you want:
 descriptions are matched automatically.
 
 ### Drizzle's own skills and MCP server
 
-`drizzle-kit` ships eight agent skills and an MCP server, both version-matched to the
-drizzle-kit you have installed.
+`drizzle-kit` ships eight agent skills of its own, and they are **already committed** here,
+so a fresh clone has them with no extra step. You only need this command when refreshing
+them:
 
 ```bash
-npm run skills     # installs the eight drizzle-* skills
+npm run skills     # re-extract from the installed drizzle-kit, then commit the diff
 ```
 
-They are **not committed**, deliberately. Being version-matched is the point, so a vendored
-copy would drift the moment drizzle-kit is bumped, and the installer symlinks
-`.claude/skills/drizzle*` into `.agents/`, which breaks on Windows without Developer Mode.
-Run the command instead; `mise run install` does it for you. The repo's own
-`backend-drizzle` skill stays committed and covers only this project's wiring, leaving the
-generic CLI to Drizzle's.
+Refresh after bumping `drizzle-kit`, and treat it like regenerating a migration: run it,
+review the diff, commit it. You will be prompted when it matters, because one of the skills
+checks its own revision against the installed `drizzle-kit` and says so when it has fallen
+behind.
 
-For the MCP server, which exposes `generate`, `push`, `pull`, `check`, `export` and `up` as
-tools, copy the template and keep the `drizzle` entry:
+The repo's own `backend-drizzle` skill covers only this project's wiring (two migration
+scopes, a database per user, the Turso drivers) and leaves the generic CLI to Drizzle's.
+
+`drizzle-kit` also ships an MCP server exposing `generate`, `push`, `pull`, `check`,
+`export` and `up` as tools. It is in the MCP template, so copy that and keep the `drizzle`
+entry:
 
 ```bash
 cp .mcp.json.example .mcp.json
 ```
 
-`.mcp.json` is gitignored, so this is per-developer. Nothing else in the repo depends on
-either being present.
+`.mcp.json` is gitignored, so this part is per-developer and optional. One caution: `push`
+applies schema changes straight to a database without writing a migration file, which is
+the opposite of how this repo works. Prefer `npm run db:generate`.
 
 Two things to know about the setup:
 

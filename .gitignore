@@ -28,15 +28,12 @@ backend/databases/
 .mcp.json
 .claude/settings.local.json
 
-# Drizzle's own agent skills, installed by `npm run skills` from the drizzle-kit
-# in backend/node_modules. Generated rather than committed on purpose: they are
-# version-matched to the installed drizzle-kit, so a vendored copy would drift
-# the moment it is bumped. The installer also symlinks .claude/skills/drizzle*
-# into .agents/, and committed symlinks break on Windows without Developer Mode.
-.agents/
+# Bookkeeping written by `drizzle-kit skills`. The skills themselves ARE
+# committed, under .agents/skills/ with symlinks in .claude/skills/; only this
+# file is ignored, because it records the absolute path of whoever ran the
+# installer and so is meaningless on any other machine. It regenerates on every
+# run, so nothing is lost by ignoring it.
 skills-lock.json
-.claude/skills/drizzle
-.claude/skills/drizzle-*
 
 # Logs
 *.log
