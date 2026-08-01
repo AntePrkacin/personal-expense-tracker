@@ -1,6 +1,6 @@
 ---
 name: repo-commit
-description: This skill should be used when the user asks to "commit changes", "stage and commit", "create a git commit", "commit my work", "give me the commit plan", "plan the commits", "what should I commit", or says "/commit". Analyses changes, runs lint/tests on affected apps, shows a pre-flight test checklist, checks if multiple commits are needed, generates Conventional Commits messages with the DEMO ticket inferred from the branch, and presents them ready to run behind a confirmation gate.
+description: This skill should be used when the user asks to "commit changes", "stage and commit", "create a git commit", "commit my work", "give me the commit plan", "plan the commits", "what should I commit", or says "/commit". Analyses changes, runs lint/tests on affected apps, shows a pre-flight test checklist, checks if multiple commits are needed, generates Conventional Commits messages with the PET ticket inferred from the branch, and presents them ready to run behind a confirmation gate.
 argument-hint: "[refresh-checks]"
 allowed-tools: Bash(git:*), Bash(npm:*), Read
 ---
@@ -15,7 +15,7 @@ Prepare a git commit following the **Conventional Commits** standard, with pre-c
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.claude/commit-checks.md` | Auto-generated cache of both apps, their available scripts (lint/test/build), and pre-built per-app commands. Written by `refresh-checks`, read on every commit run. Regenerate with `/commit refresh-checks` if it's missing or stale (older than 7 days). |
 
-The Jira ticket for the commit message is inferred from the branch name (`{type}/DEMO-{number}-{slug}`) - see Step 9. No config file is required.
+The Jira ticket for the commit message is inferred from the branch name (`{type}/PET-{number}-{slug}`) - see Step 9. No config file is required.
 
 ## PRE-CONDITION - Branch guard (run before everything else)
 
@@ -28,7 +28,7 @@ Tell the user:
 > You're on `{branch}`. Committing directly to `{branch}` is not allowed.
 > Would you like to:
 >
-> 1. Create a new branch (provide a name or ticket and I'll format it per the branch convention `{type}/DEMO-{number}-{slug}`)
+> 1. Create a new branch (provide a name or ticket and I'll format it per the branch convention `{type}/PET-{number}-{slug}`)
 > 2. Switch to an existing branch
 
 Wait for the user to confirm they've switched. Only then continue to Step 0.
@@ -188,7 +188,7 @@ Use exactly one - must match what `commitlint` accepts:
 Follow this format strictly:
 
 ```
-<type>(<scope>): <subject> (DEMO-<number>)
+<type>(<scope>): <subject> (PET-<number>)
 ```
 
 ### Rules
@@ -196,19 +196,19 @@ Follow this format strictly:
 - **Single line only.** No body, no blank lines, no multi-line messages.
 - **Subject line:** max 50 characters, lowercase, no trailing period, imperative mood ("add", "fix", "update")
 - **Scope:** `backend` or `frontend`, inferred from file paths (see Step 7). Omit entirely - no empty `()` - if the change spans both apps or has no clear scope.
-- **Ticket:** infer from the current branch name `{type}/DEMO-{number}-{slug}` and append as `(DEMO-<number>)`. If no ticket can be determined from the branch, omit it - do not guess.
+- **Ticket:** infer from the current branch name `{type}/PET-{number}-{slug}` and append as `(PET-<number>)`. If no ticket can be determined from the branch, omit it - do not guess.
 - **Never** include `Co-Authored-By` or any AI attribution lines.
 - **Never** reference internal tooling, Claude, or auto-generation in the message.
 
 ### Examples
 
 ```
-feat(frontend): add UserProfileCard component (DEMO-160)
-fix(backend): handle missing id in user lookup (DEMO-355)
-test(backend): cover AppController error paths (DEMO-355)
+feat(frontend): add UserProfileCard component (PET-160)
+fix(backend): handle missing id in user lookup (PET-355)
+test(backend): cover AppController error paths (PET-355)
 chore: update dependencies
 docs: document e2e setup and OpenAPI workflow
-refactor(backend): extract user mapper into helper (DEMO-95)
+refactor(backend): extract user mapper into helper (PET-95)
 ```
 
 ## Step 10 - Present the result (confirmation gate)

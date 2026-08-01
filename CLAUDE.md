@@ -178,8 +178,8 @@ with `/repo-commit refresh-checks` when it goes stale.
 puts `git push` behind a confirmation prompt to give this rule a real barrier rather
 than just an instruction.
 
-Branch format: `{type}/DEMO-{number}-{slug}`, for example
-`feat/DEMO-160-user-profile-card`.
+Branch format: `{type}/PET-{number}-{slug}`, for example
+`feat/PET-160-user-profile-card`.
 
 **Conventional Commits are enforced** by a `commit-msg` hook running commitlint. The
 allowed types are restricted (see `commitlint.config.js`): `build`, `chore`, `ci`,
