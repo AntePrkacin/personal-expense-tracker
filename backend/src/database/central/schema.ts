@@ -1,10 +1,29 @@
 import { isNull } from 'drizzle-orm';
 import {
+  index,
   integer,
   sqliteTable,
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
+
+/**
+ * Everything the registration form collected, held until the email owner proves
+ * they own it. Written at registration, read once at verification, then set
+ * NULL - see the `onboardingPayload` column.
+ */
+export interface OnboardingPayload {
+  firstName: string;
+  lastName: string;
+  /** ISO 4217, already uppercased and defaulted by the DTO. */
+  currency: string;
+  /** MAJOR units, exactly as submitted. Converted to cents at the profile. */
+  monthlyBudget: number;
+  /** 1-28, already defaulted by the DTO. */
+  monthStartDay: number;
+  /** Starter category names the user picked; may be empty (A4 enforces none). */
+  categories: string[];
+}
 
 /**
  * Schema of the *central* database (the user directory), one row per user.
@@ -14,8 +33,6 @@ import {
  * the email and a pointer to the user's own database. Everything else about a
  * person (name, currency, budget, categories, transactions) lives in that
  * per-user database - see src/database/user/schema.ts.
- *
- * The LoginLink table for the magic-link flow lands here with the auth feature.
  */
 export const users = sqliteTable(
   'users',
@@ -37,16 +54,34 @@ export const users = sqliteTable(
     // name is always derivable from the id alone.
     dbName: text('db_name').notNull(),
 
-    // Cloud mode only. The exact hostname the Turso Platform API returned at
-    // creation. Hostnames are region-scoped (e.g.
+    // Cloud mode only, and NULL until the account is verified: registration
+    // deliberately provisions nothing, so an unauthenticated endpoint cannot
+    // create real cloud databases. The exact hostname the Turso Platform API
+    // returned at creation. Hostnames are region-scoped (e.g.
     // `expensa-user-x-acme.aws-eu-west-1.turso.io`), so this can NOT be
     // reconstructed from the name and must be persisted.
     dbUrl: text('db_url'),
 
-    // Cloud mode only. That one database's data-plane token, minted at
-    // provisioning. A server-side secret: never serialized into an API
-    // response (see UsersService's response mapping).
+    // Cloud mode only, NULL until verification for the same reason. That one
+    // database's data-plane token, minted at provisioning. A server-side
+    // secret: never serialized into an API response.
     dbAuthToken: text('db_auth_token'),
+
+    // A deliberate exception to "central holds only email and a pointer": the
+    // registration form is collected before the address is proven, and the
+    // profile it becomes lives in a database that does not exist yet.
+    //
+    // Transient. Written at registration with the DTO's defaults already
+    // applied (currency 'USD', monthStartDay 1) and `monthlyBudget` in MAJOR
+    // units exactly as submitted; read once when the login link is verified,
+    // which inserts the profile (converting to cents there) and sets this back
+    // to NULL. A non-NULL value therefore means "registered, never verified",
+    // which is what lets a resubmitted registration overwrite it.
+    //
+    // Do not read this as a licence to put profile data in central.
+    onboardingPayload: text('onboarding_payload', {
+      mode: 'json',
+    }).$type<OnboardingPayload>(),
 
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
       .notNull()
@@ -78,3 +113,61 @@ export const users = sqliteTable(
 
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
+
+/**
+ * One issued magic link. Central rather than per-user, because a link is
+ * consumed before we know - or, for an unverified account, before there even
+ * is - the user's own database.
+ *
+ * Nothing here can be replayed into a token: only the SHA-256 of the raw value
+ * is stored, and the raw value exists solely in the email that was sent. See
+ * LoginTokenService for why an unsalted single-round hash is the right choice
+ * for a 256-bit random secret.
+ */
+export const loginLinks = sqliteTable(
+  'login_links',
+  {
+    // Same primary-key caveat as `users.id`: notNull() records intent that
+    // drizzle-kit does not emit for a text primary key. See docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // Plain text, no references(): this schema declares no foreign keys
+    // anywhere and the Turso engine has PRAGMA foreign_keys off per connection
+    // by default, so a declared constraint would be decorative. The absence is
+    // a decision, not an oversight.
+    userId: text('user_id').notNull(),
+
+    // SHA-256 of the raw token, hex. This *is* the lookup key, so verification
+    // is an indexed read rather than a comparison against a stored secret.
+    tokenHash: text('token_hash').notNull(),
+
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+
+    // Two distinct invalidation columns rather than one, because A38 designs no
+    // screen for a rejected link: "why did this link stop working" has to be
+    // answerable from the row itself. `usedAt` means it was clicked and spent;
+    // `supersededAt` means a newer link was issued for the same user.
+    usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+    supersededAt: integer('superseded_at', { mode: 'timestamp_ms' }),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    // Every verification is a lookup by this column alone.
+    uniqueIndex('login_links_token_hash_unique').on(table.tokenHash),
+    // Issuing supersedes the user's prior live links, which is a write keyed on
+    // user_id and runs on every register and every resend.
+    index('login_links_user_id_idx').on(table.userId),
+  ],
+);
+
+export type LoginLinkRow = typeof loginLinks.$inferSelect;
+export type NewLoginLinkRow = typeof loginLinks.$inferInsert;
