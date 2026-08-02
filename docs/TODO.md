@@ -277,4 +277,16 @@ than discovered.
   `@ApiProperty({ minimum: 0, exclusiveMinimum: true })` to correct it; any future money
   field needs the same line. Check the generated `backend/openapi.json` when adding a DTO
   rather than assuming the derived constraints are faithful - `@ArrayMaxSize` is simply
-  dropped, for instance, which is a smaller version of the same thing.
+  dropped, for instance, which is a smaller version of the same thing. Two more live
+  gaps, both in the permissive direction, so a client that codes to the spec can still be
+  handed a 400: `RegisterDto.currency` is published as a bare string while
+  `@IsISO4217CurrencyCode()` enforces the ISO 4217 list, and `monthStartDay` is published
+  as `type: number` while `@IsInt()` rejects anything fractional. Neither has earned a
+  hand-written `@ApiProperty` correction yet; `currency` is the one a frontend developer
+  reading the generated `currency?: string` will trip over first.
+- **`GET /api/hello` documents a 500; the auth routes do not.** Every route can 500
+  through `AllExceptionsFilter`, so the asymmetry is arbitrary rather than meaningful:
+  the auth routes document exactly 202, 400 and 429, and `test/openapi.e2e-spec.ts` pins
+  that exact list. Decide one way when the next endpoint lands - either every operation
+  carries `@ApiErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR)` or none does - and
+  remember that widening the auth routes means updating the pinned test with them.
