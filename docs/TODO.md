@@ -40,6 +40,18 @@ failed send leaves the user with **zero** live links rather than the one they ha
 `issue()` supersedes the previous link before sending; "Resend link" (VER-2) is the only
 recovery, and it is the design's own answer (A36).
 
+**The wait behind the verify click is undesigned on purpose, and blank until measured.**
+A33/A19 design no loading state, and verify is one blocking POST: on a first verify the
+user who clicked the email link sits on a blank tab with only the browser's own loading
+affordances while provisioning runs (estimated seconds; a returning user's verify is
+effectively instant). A blank-and-brief wait after clicking a link is the normalized
+OAuth/SSO-redirect experience and needs no design if the number stays small. The frontend
+branch's first job is therefore to measure real cloud-mode provisioning latency, then
+choose: keep the plain page-load wait, or take a designed waiting state to the designer.
+A streamed "Signing you in..." shell is technically cheap (Suspense), but it is an
+in-page loading state, exactly what the design deliberately lacks, so that path is a
+design conversation before it is code.
+
 **Gmail threads every login link into one conversation, and only the newest works.**
 Observed on 2026-08-02 against a real inbox: four links sent to the same address collapsed
 into a single Gmail thread, because every message has an identical sender and subject
@@ -63,6 +75,27 @@ until someone looked at an actual inbox rather than at a send API returning
   richer return type. Weigh that against enumeration: the reason for the flat `null` is
   that the caller cannot learn anything, though here the holder of a real token is already
   the address owner, so the calculus differs.
+
+### Sliding session expiry, as an explicit extension endpoint
+
+The PET-14 design fixes session expiry at `SESSION_TTL_D` (30 days) and pins "validate
+performs no UPDATE" in a unit test, so the whoami path stays one indexed read. Sliding
+expiry inside `validate()` was rejected deliberately: it turns every authenticated read
+into a central-database write (sync and `updated_at` churn, contention on the in-process
+transaction chain), and it silently desyncs from the frontend's future cookie, whose
+Max-Age would still die at the original 30 days however far the row was extended.
+
+If monthly re-login ever becomes a real complaint, the design to reach for is an explicit
+`POST /api/auth/session/extend` behind `SessionGuard`, called by the frontend on its own
+policy - it already knows `expiresAt` from `GET /api/auth/session` - and answering with
+the new `expiresAt` so the caller re-sets the cookie's Max-Age in the same round trip;
+the two lifetimes then stay in sync by construction. The backend still enforces pacing
+server-side with one conditional `UPDATE ... RETURNING` (extend only when, say, under 25
+of the 30 days remain, so a hammering client produces zero-row updates rather than
+churn), plus an absolute cap keyed on the existing `created_at` (never past creation +
+90 days) so an extendable stolen token stays bounded. Rotating the token on extend is
+the stricter variant if that ever matters. Purely additive: same table, same token, same
+guard, no schema change.
 
 ### The rest of the data model
 
