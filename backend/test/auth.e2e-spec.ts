@@ -8,7 +8,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { LoginTokenService } from './../src/auth/login-token.service';
-import type { ErrorResponseBody } from './../src/common/filters/all-exceptions.filter';
+import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
 import { newId } from './../src/common/ids';
 import { loginLinks, users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
@@ -78,7 +78,7 @@ describe('AuthController (e2e)', () => {
   const databaseDir = process.env.DATABASE_DIR!;
 
   const errorBody = (response: request.Response) =>
-    response.body as ErrorResponseBody;
+    response.body as ErrorResponseDto;
 
   // A fresh address per test, so one test's rows and rate-limit bucket cannot
   // affect the next.

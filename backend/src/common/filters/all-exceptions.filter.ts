@@ -7,16 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-
-/** The single error shape every failed request returns. */
-export interface ErrorResponseBody {
-  statusCode: number;
-  /** String for most errors; an array for class-validator's field messages. */
-  message: string | string[];
-  error: string;
-  timestamp: string;
-  path: string;
-}
+import { ErrorResponseDto } from '../dto/error-response.dto';
 
 /**
  * Catches everything so clients get one predictable error shape.
@@ -36,7 +27,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const body: ErrorResponseBody =
+    const body: ErrorResponseDto =
       exception instanceof HttpException
         ? this.fromHttpException(exception, request.url)
         : this.fromUnknown(exception, request.url);
@@ -47,7 +38,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private fromHttpException(
     exception: HttpException,
     path: string,
-  ): ErrorResponseBody {
+  ): ErrorResponseDto {
     const statusCode = exception.getStatus();
     const payload = exception.getResponse();
 
@@ -72,7 +63,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
   }
 
-  private fromUnknown(exception: unknown, path: string): ErrorResponseBody {
+  private fromUnknown(exception: unknown, path: string): ErrorResponseDto {
     this.logger.error(
       `Unhandled exception on ${path}`,
       exception instanceof Error ? exception.stack : String(exception),

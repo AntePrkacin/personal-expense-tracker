@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -57,6 +58,11 @@ export class RegisterDto {
    * range while staying generous for zero-decimal currencies, whose budgets
    * carry many digits.
    */
+  // The bound is spelled out for the spec because the swagger plugin renders
+  // @IsPositive() as `minimum: 1`, which is right for an integer and wrong
+  // here: 0.50 is a valid budget. Everything else on this field it derives
+  // correctly, including the description above.
+  @ApiProperty({ minimum: 0, exclusiveMinimum: true })
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   @Max(1_000_000_000)
