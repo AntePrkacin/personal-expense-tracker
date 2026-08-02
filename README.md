@@ -339,8 +339,8 @@ The backend template also lists two blocks of commented-out variables, and you n
 neither. Leave the `TURSO_*` block commented and the backend stores everything in local
 files under `DATABASE_DIR` (see [Database](#database)). Leave `MAILPACE_API_TOKEN` and
 `MAIL_FROM` commented and login links are printed to the console instead of emailed (see
-[Sending real email](#sending-real-email-optional)). The remaining three -
-`LOGIN_LINK_TTL_M`, `AUTH_RATE_LIMIT`, `AUTH_RATE_TTL_S` - are tuning knobs with sensible
+[Sending real email](#sending-real-email-optional)). The remaining four -
+`LOGIN_LINK_TTL_M` and the three `AUTH_RATE_*` variables - are tuning knobs with sensible
 defaults.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`. Both are

@@ -182,16 +182,25 @@ indexed read and there is no secret comparison to time. bcrypt or argon2 would b
 here: they exist to slow brute force against low-entropy secrets. `consume()` is a single
 conditional `UPDATE ... RETURNING`, never a read followed by a write - the await between a
 check and a mark is exactly where two concurrent consumes of one token would both pass.
+`issue()` wraps its supersede-then-insert in one transaction for the same class of reason:
+as two standalone statements, two concurrent resends could interleave and leave both new
+links live. Those transactions are chained in-process, because the embedded driver refuses
+overlapping transactions rather than queueing them (see docs/TODO.md).
 Invalidation uses two distinct columns, `used_at` and `superseded_at`, because A38 designs
 no screen for a rejected link and "why did this link stop working" has to be answerable
 from the row.
 
-**The auth routes are rate-limited on IP _and_ submitted email.** Per-IP alone lets a
-botnet hammer one address; per-email alone lets one host walk a list. The tracker runs in a
-guard, which Nest executes _before_ pipes, so it normalizes the raw body itself rather than
-trusting the DTO transform - `src/common/normalize-email.ts` is shared by both for exactly
-that reason. `@nestjs/throttler` takes `ttl` in milliseconds, so the module converts
-`AUTH_RATE_TTL_S` with the library's `seconds()` helper; getting that wrong is silent.
+**The auth routes carry two independent rate limiters, per submitted email and per IP.**
+Deliberately two throttlers rather than one composite `ip:email` key: a composite key hands
+every new (IP, address) pair a fresh bucket, so it throttles only one host hammering one
+address and stops neither a botnet walking a single address nor one host walking a list.
+The per-email limiter caps mail sent to one inbox whoever asks; the per-IP one caps total
+submissions from one host, with a laxer default because a NAT can hide a classroom. The
+trackers run in a guard, which Nest executes _before_ pipes, so they normalize the raw body
+themselves rather than trusting the DTO transform - `src/common/normalize-email.ts` is
+shared for exactly that reason. `@nestjs/throttler` takes `ttl` in milliseconds, so the
+module converts `AUTH_RATE_TTL_S` with the library's `seconds()` helper; getting that wrong
+is silent.
 
 ## Persistence
 
@@ -312,8 +321,9 @@ Backend variables:
 | `MAIL_FROM`              | -                       | Sender address, on the DKIM-authorized domain         |
 | `MAIL_FROM_NAME`         | -                       | Sender display name; optional, unpaired               |
 | `LOGIN_LINK_TTL_M`       | `15`                    | Login-link lifetime, in minutes                       |
-| `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per IP+email                |
-| `AUTH_RATE_TTL_S`        | `900`                   | Length of that window, in seconds                     |
+| `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per submitted address       |
+| `AUTH_RATE_IP_LIMIT`     | `30`                    | Auth requests per window, per caller IP               |
+| `AUTH_RATE_TTL_S`        | `900`                   | Window length in seconds, shared by both limiters     |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
 

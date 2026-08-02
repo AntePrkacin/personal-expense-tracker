@@ -146,11 +146,12 @@ Give unverified rows an expiry and a sweep before this is deployed anywhere publ
 instance**: two instances give an attacker twice the budget. Same single-instance
 assumption as the migration lock below.
 
-Separately, the tracker keys on `req.ip`, which behind a reverse proxy or load balancer is
-the proxy's address unless Express `trust proxy` is set. Every caller would then share one
-bucket, which throttles everybody at once and protects nobody in particular. Set it when
-the deployment topology is known, not before - trusting the header without a proxy in front
-lets a client spoof its own key.
+Separately, the per-IP limiter (and the fallback key for bodies with no usable address)
+keys on `req.ip`, which behind a reverse proxy or load balancer is the proxy's address
+unless Express `trust proxy` is set. Every caller would then share one per-IP bucket, which
+throttles everybody at once and protects nobody in particular; the per-email limiter is
+unaffected either way. Set it when the deployment topology is known, not before - trusting
+the header without a proxy in front lets a client spoof its own key.
 
 ### Token rotation is manual
 
@@ -246,12 +247,19 @@ than discovered.
   opening the same user database for the first time could both run its migrations.
 - **Enumeration resistance is argued, not measured.** With the mail send floated off the
   request, every path through the two auth routes answers after at most one indexed read
-  and one insert into the local central database, so the timing difference should be
-  negligible. Nobody has profiled the residual. If this ever has to be more than
-  best-effort, it needs a measurement rather than an argument.
+  and one write into the local central database, so the timing difference should be
+  negligible. The weakest spot is `register` against a verified account, which answers
+  after the read alone - the only path that skips the write entirely, and therefore the
+  most distinguishable one. Nobody has profiled the residual. If this ever has to be more
+  than best-effort, it needs a measurement rather than an argument.
 - **Login links are never purged.** Used, superseded and expired rows accumulate in
   `login_links` forever. Harmless at this scale, and the same purge policy that covers
   tombstones can cover them.
+- **The embedded driver cannot overlap transactions.** One connection per database, and a
+  second `db.transaction()` while one is open fails with "cannot start a transaction
+  within a transaction" rather than queueing. `LoginTokenService.issue()` chains its own
+  transactions in-process; a second transactional call site would need the same care, or
+  a shared queue pushed down into the database layer.
 - **Soft deletes are never purged.** Every table carries `deleted_at` for future sync, and
   reads filter it, but nothing removes tombstones. A purge policy is deferred until the
   sync design needs one.
