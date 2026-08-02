@@ -8,32 +8,33 @@ Generated API types". Nothing here is implemented yet.
 
 The backend declares its response shapes and the frontend redeclares them by hand.
 `HelloResponse` lives in `backend/src/app.service.ts:7` and is copied into
-`frontend/src/app/page.tsx:3` with a comment naming the backend as source of truth.
-`UserResponse` (`backend/src/users/users.service.ts:23`) has no twin yet only because
-nothing on the frontend consumes `/api/users`.
+`frontend/src/app/page.tsx:3` with a comment naming the backend as source of truth. It is
+also the only response body the API has today: the two auth routes answer an empty 202 by
+design, so the hand-mirror is exactly one interface wide right now, which makes this the
+cheapest moment there will ever be to kill the pattern.
 
 The failure mode is not a type error, which is the whole problem. Rename `message` to
 `greeting` in `AppService` and the frontend still compiles: `res.json()` returns `any`, the
 annotation on `getHello` is an unchecked assertion, and the page renders an empty box. The
 duplicated `interface` buys autocomplete, not safety.
 
-**Why do this now, with only three endpoints.** Tech spec section 4 lists **19 operations**
+**Why do this now, with only three endpoints.** Tech spec section 4 lists **18 operations**
 (`register`, `requestLoginLink`, `verifyLoginLink`, `getProfile`,
 `updateProfileAndPreferences`, `getDashboardSummary`, `listTransactions`,
 `createTransaction`, `getTransaction`, `updateTransaction`, `deleteTransaction`,
 `listCategoriesWithStats`, `createCategory`, `updateCategory`, `deleteCategory`,
-`getAllocationSummary`, `getInsightSet`, `generateInsights`). Three exist. The durable part
-of this work is the wiring: the plugin, the spec-emitting script, the generator, the CI
-drift gate. The throwaway part is the annotations on `POST /api/users` and
-`GET /api/users/:id`, which `docs/TODO.md` already expects auth to reshape or delete. Doing
-the wiring while the frontend consumes exactly one endpoint means the blast radius is one
-file, and every one of those 19 operations then costs nothing extra. Doing it after means
-hand-mirroring 19 shapes first and retrofitting later.
+`getAllocationSummary`, `getInsightSet`, `generateInsights`). Two of them exist
+(`register`, `requestLoginLink`), plus `GET /api/hello`, which is in no spec at all. The
+durable part of this work is the wiring: the plugin, the spec-emitting script, the
+generator, the CI drift gate. Doing the wiring while the frontend consumes exactly one
+endpoint means the blast radius is one file, and every one of those 18 operations then
+costs nothing extra. Doing it after means hand-mirroring 18 shapes first and retrofitting
+later.
 
 ## Decisions
 
 - **Code-first, not spec-first.** The backend exists and is already the source of truth,
-  and `CreateUserDto` already carries the `class-validator` decorators a generator needs.
+  and `RegisterDto` already carries the `class-validator` decorators a generator needs.
   Hand-authoring OpenAPI YAML would add a second artifact with nothing enforcing that Nest
   matches it, and NestJS server-stub generation from a spec is poor. The spec becomes a
   build output, like `backend/drizzle/` migrations.
@@ -56,11 +57,16 @@ hand-mirroring 19 shapes first and retrofitting later.
 - **The uniform error shape gets into the spec too.** `AllExceptionsFilter` returns
   `{ statusCode, message, error, timestamp, path }` on every failure. A spec that describes
   only happy paths documents half the contract.
+- **The deliberate non-answers are contract too.** Both auth routes answer an empty 202
+  whatever the account state, and both sit behind the per-address and per-IP rate limiters,
+  so each documents exactly 202 (no content), 400, and 429. The identical-202 property is
+  the enumeration defense (REG-6, LOG-6), and the spec description should say so, or the
+  first reader to find it will "fix" it.
 
 **Non-goals.** No spec-first workflow. No generated HTTP client. No hand-written
-`@ApiProperty()` on fields where the CLI plugin can derive them. No treating the two
-`/api/users` routes as stable API worth polishing; annotate them enough to prove the
-pipeline and expect them to change.
+`@ApiProperty()` on fields where the CLI plugin can derive them. No new endpoints:
+`verifyLoginLink` and everything behind a session extend this spec when they land, at no
+extra cost, which is the point.
 
 ## Steps
 
@@ -85,38 +91,36 @@ Turn on the CLI plugin in `backend/nest-cli.json`, which today has only
     }
 
 The plugin reads the TypeScript AST at build time and derives schema properties, required
-vs optional, and the `class-validator` constraints, so `CreateUserDto` needs no new
-decorators at all. `introspectComments` turns the existing JSDoc on `monthlyBudget`
-("Major units (e.g. 2000.50). Stored as integer cents.") and `monthStartDay` ("Capped at 28
-so the day exists in every month.") into schema descriptions, which is free documentation
-already written.
+vs optional, and the `class-validator` constraints, so `RegisterDto` and
+`RequestLoginLinkDto` (`backend/src/auth/dto/`) need no new decorators at all.
+`introspectComments` turns the existing JSDoc on `monthlyBudget` ("Major units (e.g.
+2000.50). Stored as integer cents. ...") and `monthStartDay` ("Capped at 28 so the day
+exists in every month.") into schema descriptions, which is free documentation already
+written.
 
 ### 2. Responses must be classes, in `.dto.ts` files
 
-This is the crux and the reason Swagger alone was never worth adding. `HelloResponse` and
-`UserResponse` are `interface` declarations, which erase at compile time: there is no
-runtime object for the plugin or for `SwaggerModule` to read, so a spec generated today
-would describe request bodies and return `200 OK` with no schema at all.
+This is the crux and the reason Swagger alone was never worth adding. `HelloResponse` is
+an `interface` declaration, which erases at compile time: there is no runtime object for
+the plugin or for `SwaggerModule` to read, so a spec generated today would describe request
+bodies and return `200 OK` with no schema at all.
 
-Two changes, both small:
-
-- `backend/src/users/dto/user-response.dto.ts` exporting `class UserResponseDto` with the
-  eight current fields. `UsersService` and `UsersController` import it as their return type
-  instead of the local `UserResponse` interface.
-- `backend/src/dto/hello-response.dto.ts` (or alongside `app.service.ts`) exporting
-  `class HelloResponseDto`.
+One change, small: `backend/src/dto/hello-response.dto.ts` (or alongside `app.service.ts`)
+exporting `class HelloResponseDto`, which `AppService` and `AppController` use as their
+return type instead of the local interface.
 
 The `.dto.ts` suffix is load-bearing: the plugin only introspects files matching its
 `dtoFileNameSuffix` option, which defaults to `['.dto.ts', '.entity.ts']`. A response class
-left inside `users.service.ts` is invisible to it. Either use the suffix or extend the
-option; the suffix is cleaner and matches where `create-user.dto.ts` already lives.
+left inside `app.service.ts` is invisible to it. Either use the suffix or extend the
+option; the suffix is cleaner and matches where the auth DTOs already live.
 
-Then `@ApiResponse` (or the shorthand `@ApiOkResponse` / `@ApiCreatedResponse`) on each
-handler pointing at the class, plus the failure statuses the code actually throws: 409 on
-`POST /api/users` (duplicate email) with 400 from the global `ValidationPipe`, and on
-`GET /api/users/:id` both 404 (unknown or deleted id) and 400, because `ParseUUIDPipe`
-(`users.controller.ts`) rejects a malformed id before the handler runs. That second 400 is
-easy to miss precisely because no validation decorator declares it anywhere.
+Then `@ApiResponse` (or the shorthand `@ApiOkResponse`) on each handler, matching what the
+code actually returns: 200 with `HelloResponseDto` on `GET /api/hello`; on both auth routes
+a bodiless 202 (`@ApiResponse({ status: 202 })` with no type, matching the
+`@HttpCode(HttpStatus.ACCEPTED)` already on the handlers), 400 from the global
+`ValidationPipe`, and 429 from the two rate limiters. The 429 is easy to miss precisely
+because nothing on the handler declares it: it comes from the throttler guard, which runs
+before the pipes ever see the body.
 
 ### 3. An error DTO worth sharing
 
@@ -133,9 +137,10 @@ plugin derives plain types well but not `string | string[]`, so this field carri
 explicit `@ApiProperty({ oneOf: ... })`. Consistent with the non-goals above, which ban
 hand-written `@ApiProperty` only where the plugin can derive the type.
 
-Worth a tiny decorator helper (`@ApiErrorResponse(400, 404, 409)`) that stamps the same
-`content` block onto several statuses at once, rather than repeating `@ApiResponse` five
-times per handler. Keep it in `src/common/`.
+Worth a tiny decorator helper (`@ApiErrorResponse(400, 429)`) that stamps the same
+`content` block onto several statuses at once, rather than repeating `@ApiResponse` per
+status per handler; 404 and 409 join the list when endpoints that throw them land. Keep it
+in `src/common/`.
 
 ### 4. Emit the spec to disk, from the build output
 
@@ -143,7 +148,7 @@ Add `backend/src/openapi.ts`: create the app with
 `NestFactory.create(AppModule, { logger: false })`, call `app.setGlobalPrefix('api')`, build
 a `DocumentBuilder` document, `writeFileSync` it, `await app.close()`. Never `listen()`.
 
-Two traps here, both silent:
+Three traps here, all silent:
 
 - **`setGlobalPrefix('api')` must run before `SwaggerModule.createDocument`.** The document
   paths are read from the registered routes, so forgetting it produces a spec where every
@@ -156,10 +161,19 @@ Two traps here, both silent:
   rather than broken. Hence the script lives in `src/` and must **not** be added to the
   `exclude` list in `tsconfig.build.json` (unlike the two `drizzle.*.config.ts` entries
   already there).
+- **Booting `AppModule` boots the real persistence layer.** The `APP_DB` async factory
+  connects and migrates before Nest finishes assembling the app, and `NODE_ENV` is not
+  `test` here, so the `ignoreEnvFile` guard does not apply and `ConfigModule` reads
+  `backend/.env` from disk. With the four cloud variables filled in, generating the spec
+  would sync against live Turso just to write a JSON file. Do what `test/setup-e2e.ts`
+  already does for the same class of reason: before `NestFactory.create`, point
+  `DATABASE_DIR` at a temp directory and delete every `TURSO_*` variable from
+  `process.env`.
 
-Scripts in `backend/package.json`:
+Scripts in `backend/package.json`, split so CI can reuse the build it has already run:
 
-    "api:spec": "nest build && node dist/openapi.js"
+    "api:emit": "node dist/openapi.js",
+    "api:spec": "nest build && npm run api:emit"
 
 Write the document to `backend/openapi.json` and commit it.
 
@@ -199,12 +213,16 @@ CI, so nobody has to remember the two halves or their order.
 
 ### 7. Close the drift gate in CI
 
-In `.github/workflows/ci.yml`, add a step to the **backend** job after Build:
+In `.github/workflows/ci.yml`, add a step to the **backend** job after Build, calling
+`api:emit` rather than `api:spec` because the Build step has just run `nest build` with the
+plugin active and there is no reason to compile twice:
 
     - name: OpenAPI spec is up to date
       run: |
-        npm run api:spec
+        npm run api:emit
         git diff --exit-code --stat openapi.json
+
+The backend job already sets `working-directory: backend`, so the path needs no prefix.
 
 That catches a backend change that forgot to regenerate. The frontend half needs the
 generated types checked the same way, but the frontend job has no `backend/node_modules`,
@@ -239,19 +257,21 @@ Two edits:
 ### 9. Tests
 
 - Extend `backend/test/app.e2e-spec.ts` or add `test/openapi.e2e-spec.ts` asserting the
-  document has the three paths, that `/api/users` POST documents 201/400/409 and GET
-  404/400, and that `UserResponseDto` carries `monthlyBudget`. **This must be an e2e test against the built
+  document has the three paths keyed with the `/api` prefix, that both auth POSTs document
+  202/400/429 with a bodiless 202, that `RegisterDto`'s constraints survived (the
+  `maxLength: 100` name fields, `format: email`, the 1..28 bound on `monthStartDay`), and
+  that `HelloResponseDto` carries `message`. **This must be an e2e test against the built
   output, not a unit spec.** The plugin does not run under `ts-jest`, so a unit spec would
   see no metadata and fail for a reason that has nothing to do with the code being wrong.
   (Wiring the plugin into ts-jest `astTransformers` is possible if a unit spec is ever
   really wanted.)
-- Existing suites should be untouched. `app.e2e-spec.ts` and `users.e2e-spec.ts` assert
-  response bodies, not types, so converting the interfaces to classes cannot move them.
+- Existing suites should be untouched. `app.e2e-spec.ts` and `auth.e2e-spec.ts` assert
+  response bodies, not types, so converting the interface to a class cannot move them.
 - `frontend/src/app/page.test.tsx` mocks `fetch`, so it is unaffected by the type change.
   Worth confirming rather than assuming.
-- One assertion that a real failure body (e.g. the 400 from an invalid `POST /api/users`)
-  has exactly the keys `ErrorResponseDto` declares. That is the only thing keeping the
-  filter and its DTO in step; see the matching risk below.
+- One assertion that a real failure body (e.g. the 400 from an invalid
+  `POST /api/auth/register`) has exactly the keys `ErrorResponseDto` declares. That is the
+  only thing keeping the filter and its DTO in step; see the matching risk below.
 
 ### 10. Docs on landing
 
@@ -281,18 +301,19 @@ Conventional Commits are enforced, and step 2 is a refactor that stands on its o
 
 1. `cd backend && npm run lint && npm run build` (build is the typecheck gate).
 2. `npm run api:spec`, then read `backend/openapi.json` by hand and confirm: three paths,
-   each keyed **with** the `/api` prefix; `CreateUserDto` shows `maxLength: 100` on the name
+   each keyed **with** the `/api` prefix; `RegisterDto` shows `maxLength: 100` on the name
    fields, `format: email`, the 1..28 bound on `monthStartDay`, and the JSDoc as
-   descriptions; the 200/201 responses have real schemas rather than empty objects; 400,
-   404 and 409 reference the error shape, including the `ParseUUIDPipe` 400 on
-   `GET /api/users/:id`.
+   descriptions; the hello 200 has a real schema rather than an empty object; both 202s
+   are bodiless; 400 and 429 reference the error shape on both auth routes.
 3. `npm test && npm run test:e2e`.
-4. `npm run start:dev`, open `http://localhost:3000/api/docs`, and POST a user through the
-   UI. Confirm the 409 on a repeat matches what the spec claims.
+4. `npm run start:dev`, open `http://localhost:3000/api/docs`, and POST a registration
+   through the UI (local mode logs the link instead of mailing it). Confirm the 202 is
+   empty, then resubmit the same address until the per-address limiter trips and confirm
+   the 429 body matches what the spec claims.
 5. `cd frontend && npm run api:types && npm run build && npm test`. The build is the real
    check that the generated types are consumable.
 6. **Prove the gate works, which is the actual deliverable.** Rename a field in
-   `UserResponseDto`, run `npm run api:sync`, and confirm `git diff` is non-empty. Rename
+   `RegisterDto`, run `npm run api:sync`, and confirm `git diff` is non-empty. Rename
    `message` in `HelloResponseDto`, run `api:sync`, and confirm
    `cd frontend && npm run build` now **fails**. Revert both. If that second check does not
    fail, the pipeline is decorative and something in step 5 is wrong.
@@ -320,8 +341,10 @@ Conventional Commits are enforced, and step 2 is a refactor that stands on its o
   new `src/openapi.ts` each call `setGlobalPrefix('api')`. A shared constant or a small
   `configureApp(app)` helper used by all three would fix it properly and is arguably worth
   doing as part of step 4.
-- **Annotating endpoints that auth will delete.** Accepted and deliberate: the wiring is
-  what lasts, the annotations on the two `/api/users` routes are cheap and expected to go.
+- **The spec generator boots the real `AppModule`.** Cheap to mitigate (the env scrub in
+  step 4) but easy to reintroduce: anyone who later "simplifies" `openapi.ts` puts
+  `npm run api:spec` one filled-in `.env` away from syncing against live Turso just to
+  write a JSON file.
 - **`monthlyBudget` crosses the boundary as major units** while the column is
   `monthly_budget_cents`. The spec describes the API, so major units is correct, and the
   JSDoc-derived description is what stops a frontend developer from guessing wrong. Nothing
