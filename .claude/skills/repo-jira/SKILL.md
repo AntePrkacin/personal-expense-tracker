@@ -1,7 +1,7 @@
 ---
 name: repo-jira
-description: This skill should be used when the user asks to "create a Jira task", "break down a feature into tasks", "create a spike", "what's left on this ticket", "summarise the current ticket", "search issues", "log hours", "log my timesheet", "transition a ticket", "move to review", "validate a ticket", or says "/jira". Also auto-triggers when a DEMO-xxx ticket is mentioned, when the user asks "what's left", or when the user signals completion ("I'm done", "ready for QA"). Routes to the create / status / search / worklog / validate / help workflow based on arguments or conversation context.
-argument-hint: "[create tasks for X | status [DEMO-123] | search [query] | worklog | timesheet | transition [DEMO-123] | validate [DEMO-123] | help]"
+description: This skill should be used when the user asks to "create a Jira task", "break down a feature into tasks", "create a spike", "what's left on this ticket", "summarise the current ticket", "search issues", "log hours", "log my timesheet", "transition a ticket", "move to review", "validate a ticket", or says "/jira". Also auto-triggers when a PET-xxx ticket is mentioned, when the user asks "what's left", or when the user signals completion ("I'm done", "ready for QA"). Routes to the create / status / search / worklog / validate / help workflow based on arguments or conversation context.
+argument-hint: "[create tasks for X | status [PET-123] | search [query] | worklog | timesheet | transition [PET-123] | validate [PET-123] | help]"
 allowed-tools: Read, Bash(git:*), Skill, mcp__claude_ai_Atlassian__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian__getJiraIssue, mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian__createJiraIssue, mcp__claude_ai_Atlassian__editJiraIssue, mcp__claude_ai_Atlassian__addWorklogToJiraIssue, mcp__claude_ai_Atlassian__addCommentToJiraIssue, mcp__claude_ai_Atlassian__getTransitionsForJiraIssue, mcp__claude_ai_Atlassian__transitionJiraIssue, mcp__claude_ai_Atlassian__createIssueLink, mcp__claude_ai_Atlassian__getIssueLinkTypes, mcp__claude_ai_Atlassian__atlassianUserInfo, mcp__claude_ai_Atlassian__lookupJiraAccountId, mcp__claude_ai_Atlassian__getVisibleJiraProjects, mcp__claude_ai_Atlassian__getJiraProjectIssueTypesMetadata, mcp__claude_ai_Atlassian__getJiraIssueTypeMetaWithFields, mcp__mcp-atlassian__jira_get_issue, mcp__mcp-atlassian__jira_search, mcp__mcp-atlassian__jira_create_issue, mcp__mcp-atlassian__jira_update_issue, mcp__mcp-atlassian__jira_add_worklog, mcp__mcp-atlassian__jira_get_transitions, mcp__mcp-atlassian__jira_transition_issue, mcp__mcp-atlassian__jira_link_to_epic, mcp__mcp-atlassian__jira_get_agile_boards, mcp__mcp-atlassian__jira_get_sprints_from_board, mcp__mcp-atlassian__jira_get_user_profile, mcp__mcp-atlassian__jira_search_fields
 ---
 
@@ -13,7 +13,9 @@ This is a **routing skill**. Read `$ARGUMENTS` (and the conversation context), p
 
 ## Project config
 
-Project-specific settings (Jira project key `DEMO`, story-points field ID, branch format `{type}/DEMO-{number}-{slug}`) live in **`.claude/jira-config.md`**. Workflows read it; if it is missing, the `create` workflow gathers the values and writes it on first use.
+Project-specific settings (Jira project key `PET` on `decode.atlassian.net`, cloud ID, issue-type IDs, story-points field ID, branch format `{type}/PET-{number}-{slug}`) live in **`.claude/jira-config.md`**. Workflows read it; if it is missing, the `create` workflow gathers the values and writes it on first use.
+
+`PET` is a **team-managed** project. Epics are linked as `parent`, the points field is named `Story point estimate`, and there is no Epic Link field.
 
 ## Jira access - two supported setups
 
@@ -30,7 +32,8 @@ Jira is reached over MCP, and **two different servers can provide it**. This ski
 
 - **Setup A needs a `cloudId` on every call.** Fetch it once from `getAccessibleAtlassianResources` and reuse it for the session. Setup B takes the site URL from `.mcp.json`, so no `cloudId` is involved.
 - **Setup A has no board or sprint tools.** The active sprint cannot be discovered automatically; `worklog.md` documents the manual route. Setup B has `jira_get_agile_boards` and `jira_get_sprints_from_board`.
-- **Linking a task to an epic differs by project type on Setup A.** Team-managed projects use `parent`; company-managed use the Epic Link custom field via `additional_fields`. Setup B hides this behind `jira_link_to_epic`.
+- **Linking a task to an epic differs by project type on Setup A.** Team-managed projects use `parent`, which is the case for `PET`; company-managed use the Epic Link custom field via `additional_fields`. Setup B hides this behind `jira_link_to_epic`.
+- **Setup A can be slow against this site.** `getJiraIssueTypeMetaWithFields` and `searchJiraIssuesUsingJql` have both aborted after 300s with no response. Treat a hang as an outage, not a bad request: fall back to the values in `.claude/jira-config.md` instead of re-probing.
 - **Setup A writes Markdown natively** via `contentFormat: "markdown"`, which satisfies the Markdown rule in `references/standards.md` without extra effort.
 
 ---
@@ -41,12 +44,12 @@ These fire automatically based on conversation context - read the matched workfl
 
 | Conversation signal | Workflow |
 |---|---|
-| A `DEMO-xxx` ticket number is mentioned, or the user asks "what do I need to do", "what's left", or "what's on this ticket" | `status.md` |
+| A `PET-xxx` ticket number is mentioned, or the user asks "what do I need to do", "what's left", or "what's on this ticket" | `status.md` |
 | User says "I'm done", "finished", "mark as done", "close the ticket", "moving to review", "ready for review", "ready for QA", "opening a PR", "starting this", "in progress", "reopen" | `worklog.md` (transition section) |
 | User asks "how many hours", "what did I log", "show my timesheet", "hours today/this week" | `worklog.md` (timesheet section) |
-| User asks "log X hours on DEMO-xxx", "add worklog", "track time" | `worklog.md` (log-hours section) |
+| User asks "log X hours on PET-xxx", "add worklog", "track time" | `worklog.md` (log-hours section) |
 | User asks "search for tickets", "find issues", "show me tasks with label X", "what's in the sprint" | `search.md` |
-| User asks to "validate this ticket", "check if DEMO-xxx is correct" | `validate.md` |
+| User asks to "validate this ticket", "check if PET-xxx is correct" | `validate.md` |
 
 ---
 

@@ -58,7 +58,7 @@ When the user asks to log hours:
 
 **Self-hosted** - fully automatic:
 
-1. Call `jira_get_agile_boards` with the project key (`DEMO`) to get the board ID.
+1. Call `jira_get_agile_boards` with the project key (`PET`) to get the board ID - it is `2329`, already recorded in `.claude/jira-config.md`.
 2. Call `jira_get_sprints_from_board` with `state: "active"` to get the active sprint.
 3. Show the active sprint name and ask for confirmation.
 4. Update via `jira_update_issue`, setting the Sprint custom field to the sprint ID **as an integer** (confirm the field ID from `.claude/jira-config.md`).
@@ -94,7 +94,7 @@ Check `.claude/jira-config.md` for a stored email. If absent: on the connector c
 | Specific date | `worklogAuthor = "email" AND worklogDate = "YYYY-MM-DD"` |
 | This week | `worklogAuthor = "email" AND worklogDate >= startOfWeek() AND worklogDate <= endOfWeek()` |
 | Date range | `worklogAuthor = "email" AND worklogDate >= "YYYY-MM-DD" AND worklogDate <= "YYYY-MM-DD"` |
-| Specific project | append `AND project = DEMO` |
+| Specific project | append `AND project = PET` |
 
 **Step 3 - Filter by started date.**
 ⚠️ Jira returns all worklogs on matching issues, not just those in the requested period. After fetching, keep only entries whose `started` field falls within the requested range.

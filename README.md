@@ -330,10 +330,10 @@ rather than at startup.
 **Never commit or push directly to `main`.** Branch first:
 
 ```bash
-git switch -c feat/DEMO-123-short-description
+git switch -c feat/PET-123-short-description
 ```
 
-Branch format is `{type}/DEMO-{number}-{slug}`.
+Branch format is `{type}/PET-{number}-{slug}`.
 
 **Commit messages must follow Conventional Commits**, enforced by a `commit-msg` hook. If
 the message does not match, the commit is rejected.

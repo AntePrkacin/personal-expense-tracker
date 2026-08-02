@@ -85,7 +85,7 @@ git check-ignore backend/.env frontend/.env
 Both should be reported as ignored. If not, stop and fix `.gitignore` before doing anything else. Only the `.env.example` change should be staged and committed:
 
 ```
-chore(backend): document X_API_KEY in .env.example (DEMO-xxx)
+chore(backend): document X_API_KEY in .env.example (PET-xxx)
 ```
 
 ---

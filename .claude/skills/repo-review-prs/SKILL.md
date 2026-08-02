@@ -64,7 +64,7 @@ For each PR number, run the interactive review loop:
 
 1. **Load project context** - read root `CLAUDE.md`, and any scoped `CLAUDE.md` under `backend/` or `frontend/` that the changed files touch.
 2. **Fetch the PR** - `gh pr view <n>` and `gh pr diff <n>`. If the diff is empty, skip the PR and note it in the summary as "skipped - empty diff".
-3. **Enrich with Jira** - extract the `DEMO-<n>` key from the branch name (`{type}/DEMO-{number}-{slug}`) and fetch the ticket for acceptance-criteria context, via `getJiraIssue` (connector) or `jira_get_issue` (self-hosted). Skip silently if neither is available.
+3. **Enrich with Jira** - extract the `PET-<n>` key from the branch name (`{type}/PET-{number}-{slug}`) and fetch the ticket for acceptance-criteria context, via `getJiraIssue` (connector) or `jira_get_issue` (self-hosted). Skip silently if neither is available.
 4. **Analyse** against the evaluation criteria below.
 5. **De-duplicate** - read existing PR comments first; do not repeat a point already raised.
 6. **Post inline comments** via `gh api`. Use `REQUEST_CHANGES` for blockers, `COMMENT` for suggestions.
