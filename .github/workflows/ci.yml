@@ -75,6 +75,27 @@ jobs:
 
       - run: npm ci
 
+      # src/app/fonts.ts pulls Plus Jakarta Sans and Inter from Google Fonts at
+      # build time, so `npm run build` reaches the network. Restoring Next's
+      # cache lets repeat runs reuse the downloaded files instead of refetching,
+      # which removes the most likely source of an unrelated red build.
+      #
+      # Two honest limits: a first run on a new branch still fetches (the
+      # restore-keys fallback only helps once a lockfile-matching run has been
+      # cached), and `build-storybook` has its own fetch that this does not
+      # cover. Making both hermetic would mean moving to next/font/local with
+      # committed woff2 files.
+      #
+      # `path` is repo-relative: defaults.run.working-directory applies to `run`
+      # steps only, never to an action's inputs.
+      - name: Restore Next.js cache
+        uses: actions/cache@v6
+        with:
+          path: frontend/.next/cache
+          key: nextjs-${{ hashFiles('frontend/package-lock.json') }}-${{ hashFiles('frontend/src/**') }}
+          restore-keys: |
+            nextjs-${{ hashFiles('frontend/package-lock.json') }}-
+
       - name: Committed API types are up to date
         # The other half of the drift gate. The backend job proves the spec
         # still matches the code; this proves the types still match the spec,
@@ -103,6 +124,10 @@ jobs:
         # typechecking cannot: a broken framework option, a bad addon, or a CSS
         # import that no longer resolves - all of which otherwise stay silent
         # until someone opens Storybook locally.
+        #
+        # This fetches Google Fonts too, and the cache above does not cover it,
+        # so a fonts.googleapis.com blip can fail the job. next/font retries
+        # internally; a re-run is the fix, not a code change.
         run: npm run build-storybook
 
   # Repo-wide checks that belong to neither app.
