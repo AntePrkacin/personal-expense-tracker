@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { compile } from 'tailwindcss';
 
+import { COLOUR_GROUPS } from '@/stories/foundations/tokens';
+
 // Guards the Foundations design tokens (Figma "Foundations", node 5-2).
 //
-// Two layers, because either one alone leaves a real gap:
+// Three layers, because each one alone leaves a real gap:
 //
 //  1. Text assertions over globals.css catch a token whose *value* drifted from
 //     the design.
@@ -12,14 +14,41 @@ import { compile } from 'tailwindcss';
 //     that reads correctly but generates no CSS - a cleared namespace, a
 //     misspelled namespace, or a utility that silently vanished. Tailwind drops
 //     unknown candidates without warning, so nothing else would notice.
+//  3. Cross-file assertions catch the two couplings that span files and would
+//     otherwise fail silently at runtime: the font variable names shared with
+//     fonts.ts, and the token name list mirrored in the Storybook reference.
 //
 // A computed-style test is not an option: next/jest maps every .css import to
 // an empty object, so jsdom never receives a stylesheet.
 
 const globalsPath = path.join(__dirname, 'globals.css');
+const fontsPath = path.join(__dirname, 'fonts.ts');
 const raw = fs.readFileSync(globalsPath, 'utf8');
 // Collapse whitespace so assertions are indifferent to Prettier's formatting.
 const css = raw.replace(/\s+/g, ' ');
+
+/**
+ * Extracts an `@utility` body by matching braces rather than reading to the
+ * first `}`. Tailwind v4 permits nested rules inside a utility, so a `[^}]*`
+ * pattern would truncate at the inner brace the day someone adds `&:hover`,
+ * and fail with a misleading "missing font-size" instead of naming the cause.
+ */
+function utilityBlock(name: string): string | undefined {
+  const start = raw.search(new RegExp(`@utility\\s+${name}\\s*\\{`));
+  if (start === -1) return undefined;
+
+  let depth = 0;
+  for (let i = raw.indexOf('{', start); i < raw.length; i += 1) {
+    if (raw[i] === '{') depth += 1;
+    else if (raw[i] === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return raw.slice(raw.indexOf('{', start) + 1, i).replace(/\s+/g, ' ');
+      }
+    }
+  }
+  return undefined;
+}
 
 const COLOUR_TOKENS: [group: string, token: string, value: string][] = [
   ['Brand', 'brand-accent', '#4f46e5'],
@@ -125,7 +154,7 @@ describe('Foundations type styles', () => {
   it.each(TYPE_STYLES)(
     '%s is --font-%s at %s / %s, tracking %s, leading %s',
     (name, family, size, weight, tracking, leading) => {
-      const block = css.match(new RegExp(`@utility ${name} \\{([^}]*)\\}`))?.[1];
+      const block = utilityBlock(name);
       expect(block).toBeDefined();
       expect(block).toContain(`font-family: var(--font-${family});`);
       expect(block).toContain(`font-size: ${size};`);
@@ -137,7 +166,7 @@ describe('Foundations type styles', () => {
 
   it('splits the two typefaces the way the design does', () => {
     const family = (name: string) =>
-      css.match(new RegExp(`@utility ${name} \\{[^}]*font-family: var\\(--font-([a-z]+)\\)`))?.[1];
+      utilityBlock(name)?.match(/font-family: var\(--font-([a-z]+)\)/)?.[1];
 
     // Plus Jakarta Sans carries wordmark, display and heading.
     for (const name of ['text-wordmark', 'text-display-xxl', 'text-heading-l', 'text-heading-m']) {
@@ -148,6 +177,46 @@ describe('Foundations type styles', () => {
       expect(family(name)).toBe('sans');
     }
     expect(family('text-overline')).toBe('sans');
+  });
+});
+
+describe('cross-file couplings', () => {
+  // fonts.ts is read as source text rather than imported: next/jest stubs
+  // next/font, so an import would yield a mock and assert nothing.
+  const fontsSource = fs.readFileSync(fontsPath, 'utf8');
+
+  it('declares exactly the font variables that globals.css dereferences', () => {
+    const declaredInFonts = [...fontsSource.matchAll(/variable:\s*'(--font-[a-z-]+)'/g)]
+      .map((m) => m[1])
+      .sort();
+
+    // Everything globals.css reads but does not itself declare. --font-display
+    // and --font-sans are its own theme tokens, so they are excluded; what is
+    // left has to come from next/font.
+    const ownTokens = new Set([...raw.matchAll(/^\s*(--font-[a-z-]+):/gm)].map((m) => m[1]));
+    const consumedByCss = [
+      ...new Set([...raw.matchAll(/var\((--font-[a-z-]+)\)/g)].map((m) => m[1])),
+    ]
+      .filter((name) => !ownTokens.has(name))
+      .sort();
+
+    expect(declaredInFonts).toEqual(consumedByCss);
+    // Guards against both lists being empty, which would pass vacuously.
+    expect(declaredInFonts).toEqual(['--font-inter', '--font-plus-jakarta-sans']);
+  });
+
+  it('keeps the Storybook reference in step with the declared tokens', () => {
+    // The reference stories carry their own ordered list of token names so they
+    // can group and label them. Nothing else would notice a name drifting
+    // apart - a renamed token just renders an empty swatch nobody looks at.
+    const inStories = COLOUR_GROUPS.flatMap(({ tokens }) => tokens.map(({ name }) => name)).sort();
+    expect(inStories).toEqual(COLOUR_TOKENS.map(([, token]) => token).sort());
+  });
+
+  it('groups the Storybook reference the way the theme comments do', () => {
+    const groupsInStories = COLOUR_GROUPS.map(({ group }) => group);
+    const groupsInTheme = [...new Set(COLOUR_TOKENS.map(([group]) => group))];
+    expect(groupsInStories).toEqual(groupsInTheme);
   });
 });
 
