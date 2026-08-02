@@ -48,6 +48,14 @@ export const envValidationSchema = Joi.object({
   MAILPACE_API_TOKEN: Joi.string(),
   MAIL_FROM: Joi.string().email(),
 
+  // Display name shown as the sender, e.g. Spendifico <login@spendifico.eu>.
+  // Deliberately a separate variable rather than folding the name into
+  // MAIL_FROM: that stays `.email()`, which rejects the `Name <addr>` form, and
+  // keeping it a bare address is what makes "must be on the DKIM-authorized
+  // domain" a check anyone can make by eye. Optional and unpaired - without it
+  // the sender is just the address, which is the previous behaviour.
+  MAIL_FROM_NAME: Joi.string(),
+
   // How long an emailed login link stays valid, in minutes. A34 specifies a
   // short expiry; minutes, not days.
   LOGIN_LINK_TTL_M: Joi.number().positive().default(15),

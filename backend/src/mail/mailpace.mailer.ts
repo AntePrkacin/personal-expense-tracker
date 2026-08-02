@@ -50,9 +50,7 @@ export class MailPaceMailer implements Mailer {
           this.config.getOrThrow<string>('MAILPACE_API_TOKEN'),
       },
       body: JSON.stringify({
-        // Must be on a domain whose DKIM authorization MailPace has completed,
-        // or the API rejects the send outright.
-        from: this.config.getOrThrow<string>('MAIL_FROM'),
+        from: this.sender,
         to: message.to,
         subject: message.subject,
         htmlbody: message.htmlbody,
@@ -73,5 +71,27 @@ export class MailPaceMailer implements Mailer {
       );
       throw new Error('MailPace send failed');
     }
+  }
+
+  /**
+   * `Name <address>` when MAIL_FROM_NAME is set, otherwise the bare address.
+   *
+   * A display name matters more here than it looks: this is the one email the
+   * product has to be trusted enough to click, and a bare address in the
+   * sender column reads like machinery.
+   *
+   * The address must be on a domain whose DKIM authorization MailPace has
+   * completed, or the API rejects the send outright. The name is stripped of
+   * quotes and backslashes, which would otherwise break the display-name
+   * syntax MailPace parses.
+   */
+  private get sender(): string {
+    const address = this.config.getOrThrow<string>('MAIL_FROM');
+    const name = this.config
+      .get<string>('MAIL_FROM_NAME')
+      ?.replace(/["\\]/g, '')
+      .trim();
+
+    return name ? `"${name}" <${address}>` : address;
   }
 }

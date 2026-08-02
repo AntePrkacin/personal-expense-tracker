@@ -310,6 +310,7 @@ Backend variables:
 | `TURSO_SYNC_INTERVAL_S`  | `60`                    | Cloud-mode push/pull interval                         |
 | `MAILPACE_API_TOKEN`     | -                       | MailPace server token. Paired with `MAIL_FROM`        |
 | `MAIL_FROM`              | -                       | Sender address, on the DKIM-authorized domain         |
+| `MAIL_FROM_NAME`         | -                       | Sender display name; optional, unpaired               |
 | `LOGIN_LINK_TTL_M`       | `15`                    | Login-link lifetime, in minutes                       |
 | `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per IP+email                |
 | `AUTH_RATE_TTL_S`        | `900`                   | Length of that window, in seconds                     |

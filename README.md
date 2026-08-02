@@ -457,7 +457,14 @@ To send for real, use [MailPace](https://mailpace.com):
    ```text
    MAILPACE_API_TOKEN=your-server-token
    MAIL_FROM=login@spendifico.eu
+   MAIL_FROM_NAME=Spendifico
    ```
+
+`MAIL_FROM_NAME` is optional and gives the sender a display name, so the email arrives from
+`Spendifico <login@spendifico.eu>` rather than a bare address. It is a separate variable so
+`MAIL_FROM` stays a plain address: the `Name <addr>` form fails the schema's `.email()`
+check, and keeping it bare is what makes "must be on the DKIM-authorized domain" something
+you can verify at a glance.
 
 `MAIL_FROM` has to be an address on the domain you authorized. Set both or neither: a
 half-filled pair fails at boot, on purpose, because the alternative is a login email that

@@ -16,9 +16,12 @@ describe('MailPaceMailer', () => {
   let fetchMock: jest.Mock;
   let logError: jest.SpyInstance;
 
+  let fromName: string | undefined;
+
   const config = {
     getOrThrow: (key: string) =>
       key === 'MAILPACE_API_TOKEN' ? 'server-token' : 'hello@expensa.test',
+    get: (key: string) => (key === 'MAIL_FROM_NAME' ? fromName : undefined),
   } as unknown as ConfigService;
 
   const requestInit = () =>
@@ -27,6 +30,7 @@ describe('MailPaceMailer', () => {
     JSON.parse(requestInit().body as string) as Record<string, unknown>;
 
   beforeEach(() => {
+    fromName = undefined;
     fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     global.fetch = fetchMock;
 
@@ -64,6 +68,28 @@ describe('MailPaceMailer', () => {
       textbody: 'Log in',
       tags: ['login-link'],
     });
+  });
+
+  it('sends the bare address when no display name is configured', async () => {
+    await mailer.send(message);
+
+    expect(requestBody().from).toBe('hello@expensa.test');
+  });
+
+  it('sends `Name <address>` when MAIL_FROM_NAME is set', async () => {
+    fromName = 'Spendifico';
+
+    await mailer.send(message);
+
+    expect(requestBody().from).toBe('"Spendifico" <hello@expensa.test>');
+  });
+
+  it('strips quotes and backslashes that would break the display name', async () => {
+    fromName = 'Spend"ifi\\co';
+
+    await mailer.send(message);
+
+    expect(requestBody().from).toBe('"Spendifico" <hello@expensa.test>');
   });
 
   it('omits tags rather than sending an empty field', async () => {
