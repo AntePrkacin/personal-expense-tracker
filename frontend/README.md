@@ -22,14 +22,16 @@ Edit `src/app/page.tsx`; the page hot-reloads on save.
 
 ## Scripts
 
-| Command              | Purpose                                   |
-| -------------------- | ----------------------------------------- |
-| `npm run dev`        | Dev server on :4200                       |
-| `npm run build`      | Production build                          |
-| `npm start`          | Serve the production build on :4200       |
-| `npm run lint`       | ESLint (`eslint-config-next`)             |
-| `npm test`           | Unit tests (Jest + React Testing Library) |
-| `npm run test:watch` | Tests in watch mode                       |
+| Command                   | Purpose                                          |
+| ------------------------- | ------------------------------------------------ |
+| `npm run dev`             | Dev server on :4200                              |
+| `npm run build`           | Production build                                 |
+| `npm start`               | Serve the production build on :4200              |
+| `npm run lint`            | ESLint (`eslint-config-next` + Storybook)        |
+| `npm test`                | Unit tests (Jest + React Testing Library)        |
+| `npm run test:watch`      | Tests in watch mode                              |
+| `npm run storybook`       | Storybook on :6006 - the design system reference |
+| `npm run build-storybook` | Static Storybook build into `storybook-static/`  |
 
 ## Project Structure
 
@@ -42,11 +44,13 @@ src/
     globals.css     Tailwind entry + the design tokens
     globals.test.ts Guards the tokens against drift
     page.test.tsx   Example RTL test
+  stories/
+    foundations/    Storybook reference for colour, type, spacing, radius
 ```
 
 New routes are folders under `src/app/` with a `page.tsx`. Shared UI goes in
 `src/components/` (create it when you add your first shared component; it does
-not exist yet).
+not exist yet), with each component's stories colocated beside it.
 
 ## Design tokens
 
@@ -63,7 +67,8 @@ Two things about it are deliberate and will surprise you otherwise:
   usually a class that is not in the design.
 - **The spacing scale is Tailwind's**, not a redeclared Figma one, because the
   `--spacing` namespace also drives `w-*`, `h-*` and `size-*`. The mapping
-  (`Space/16` = 16px = `p-4`) is documented in `globals.css`.
+  (`Space/16` = 16px = `p-4`) is documented in `globals.css` and rendered by the
+  Spacing story.
 
 Type styles are `@utility` blocks rather than theme tokens, because a style has
 to carry its font-family and Tailwind's `--text-*` tokens cannot.

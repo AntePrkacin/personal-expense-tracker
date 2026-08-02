@@ -18,3 +18,4 @@ dist/
 .next/
 coverage/
 node_modules/
+storybook-static/

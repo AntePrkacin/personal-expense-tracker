@@ -92,15 +92,17 @@ Backend, from `backend/`:
 
 Frontend, from `frontend/`:
 
-| Command              | Purpose                                         |
-| -------------------- | ----------------------------------------------- |
-| `npm run dev`        | Next dev server on :4200                        |
-| `npm run build`      | Production build. Doubles as the typecheck gate |
-| `npm start`          | Serve the production build on :4200             |
-| `npm run lint`       | ESLint (`eslint-config-next`)                   |
-| `npm test`           | Jest + React Testing Library (jsdom)            |
-| `npm run test:watch` | Same, in watch mode                             |
-| `npm run api:types`  | Regenerate `src/types/api.d.ts` from the spec   |
+| Command                   | Purpose                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| `npm run dev`             | Next dev server on :4200                                  |
+| `npm run build`           | Production build. Doubles as the typecheck gate           |
+| `npm start`               | Serve the production build on :4200                       |
+| `npm run lint`            | ESLint (`eslint-config-next` + `eslint-plugin-storybook`) |
+| `npm test`                | Jest + React Testing Library (jsdom)                      |
+| `npm run test:watch`      | Same, in watch mode                                       |
+| `npm run api:types`       | Regenerate `src/types/api.d.ts` from the spec             |
+| `npm run storybook`       | Storybook on :6006, the design system reference           |
+| `npm run build-storybook` | Static Storybook build into `storybook-static/`           |
 
 From the repo root, `npm run api:sync` runs both halves in the right order. That is the
 command to use after touching anything a response or request body is made of; the two
@@ -430,13 +432,13 @@ Tailwind's built-in `rounded-full`; and clearing `--radius-*` also removes the b
 added. Note that Tailwind cannot make `dark:` a build error, so this rests on review.
 
 The two typefaces load through `next/font/google` in `frontend/src/app/fonts.ts`. That
-module is deliberately separate from `layout.tsx` so anything else that renders these
-styles can import the same loaders. The variable classes must land on `<html>`, which is
-where `:root` resolves.
+module exists separately from `layout.tsx` so `.storybook/preview.ts` can import the same
+loaders. The variable classes must land on `<html>`, which is where `:root` resolves.
 
 `npm test` runs `frontend/src/app/globals.test.ts`, which both asserts every documented
 value and compiles the stylesheet through Tailwind's own `compile()` to confirm each
-utility actually generates.
+utility actually generates. `npm run storybook` renders the whole system under
+**Foundations** for diffing against Figma.
 
 ## Environment variables
 
@@ -638,13 +640,18 @@ short code samples in those files as inline spans, which Prettier leaves alone.
 `main`:
 
 - **backend**: lint, build, OpenAPI spec is fresh, unit tests, e2e
-- **frontend**: generated API types are fresh, lint, unit tests, build
+- **frontend**: generated API types are fresh, lint, unit tests, build, build-storybook
 - **conventions**: commitlint over the PR's commit range
 
 The two freshness steps are the drift gate described under Architecture. Both regenerate
 a committed artifact and fail on a non-empty `git diff`. Note where each one lives: the
 frontend half runs in the frontend job because `openapi-typescript` only reads the
 committed JSON and needs no `backend/node_modules`.
+
+The frontend's `build-storybook` step is not redundant with `build`: `tsconfig.json`
+includes `.storybook/**` and the story files, so `next build` already typechecks them.
+The extra step catches what typechecking cannot, such as a broken framework option or a
+CSS import that no longer resolves.
 
 The backend job covers the persistence layer without any Turso credentials: `test-e2e`
 runs in local mode against files in a temp directory (see the note under Persistence), and
@@ -671,7 +678,8 @@ something that is not there.
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
 - **`frontend/src/components/`.** Does not exist. Create it with your first shared
-  component.
+  component, and colocate that component's `*.stories.tsx` beside it. The design tokens
+  it will consume **do** exist, see Design tokens above.
 - **The frontend half of the access flow.** The backend is complete - verify provisions and
   returns a session, and `GET /api/auth/session` answers who a bearer is - but nothing on
   the frontend calls either: no verify page, no session cookie, no dashboard. The session

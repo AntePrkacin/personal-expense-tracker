@@ -12,7 +12,9 @@
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "api:types": "openapi-typescript ../backend/openapi.json -o src/types/api.d.ts"
+    "api:types": "openapi-typescript ../backend/openapi.json -o src/types/api.d.ts",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "prettier": {
     "printWidth": 100,
@@ -24,6 +26,8 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@storybook/addon-docs": "^10.5.5",
+    "@storybook/nextjs-vite": "^10.5.5",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.10.0",
@@ -35,11 +39,14 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "eslint-plugin-storybook": "^10.5.5",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "openapi-typescript": "^7.13.0",
+    "storybook": "^10.5.5",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^8.2.0"
   }
 }

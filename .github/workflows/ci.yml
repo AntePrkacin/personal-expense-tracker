@@ -97,6 +97,14 @@ jobs:
         # http://localhost:3000 and the fetch only runs at request time.
         run: npm run build
 
+      - name: Build Storybook
+        # `next build` already type-checks .storybook/* and the story files,
+        # because tsconfig.json includes them. This step exists to catch what
+        # typechecking cannot: a broken framework option, a bad addon, or a CSS
+        # import that no longer resolves - all of which otherwise stay silent
+        # until someone opens Storybook locally.
+        run: npm run build-storybook
+
   # Repo-wide checks that belong to neither app.
   conventions:
     name: conventions
