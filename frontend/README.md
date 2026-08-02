@@ -44,13 +44,35 @@ src/
     globals.css     Tailwind entry + the design tokens
     globals.test.ts Guards the tokens against drift
     page.test.tsx   Example RTL test
+  components/
+    ui/             Design-system primitives, mirroring the Figma Components page
+  lib/
+    format.ts       Currency formatting
   stories/
     foundations/    Storybook reference for colour, type, spacing, radius
 ```
 
-New routes are folders under `src/app/` with a `page.tsx`. Shared UI goes in
-`src/components/` (create it when you add your first shared component; it does
-not exist yet), with each component's stories colocated beside it.
+New routes are folders under `src/app/` with a `page.tsx`.
+
+Shared UI is split by role. Design-system primitives (`Tag`, `ProgressBar`,
+`Stat`, `SectionHeader`, `ListRow`) live in `src/components/ui/`. Components
+that only make sense for one feature go in `src/components/` beside it, or next
+to the route that uses them. Each component's `*.test.tsx` and `*.stories.tsx`
+sit **beside it**, not in separate `__tests__/` or `stories/` trees: colocation
+is what makes an untested component visible at a glance and keeps a rename or a
+deletion to one folder.
+
+Files stay flat inside `ui/`. Give a component its own folder only once it has
+private sub-parts that nothing else imports.
+
+One rule there is easy to get wrong: a variant class must be a complete literal
+string in a lookup map (see `TAG_TONES` in `ui/Tag.tsx`). Tailwind scans these
+files as text, so an interpolated `bg-category-${n}` is found by nobody and
+generates no CSS, silently. `src/components/ui/utilities.test.ts` compiles every
+mapped class and fails if one produces nothing.
+
+The Storybook section is called **Components** even though the folder is `ui/`,
+because that is the name of the Figma page these are diffed against.
 
 ## Design tokens
 

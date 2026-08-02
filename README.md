@@ -273,8 +273,9 @@ CLAUDE.md                 Deeper architecture notes (also read by Claude Code)
 
 New backend features go in their own module folder under `backend/src/`. New frontend
 routes are folders under `frontend/src/app/` containing a `page.tsx`. Shared components
-go in `frontend/src/components/`, which does not exist yet: create it with your first
-one.
+go in `frontend/src/components/`, with the design-system primitives under
+`frontend/src/components/ui/` and each one's tests and Storybook stories colocated beside
+it. See `frontend/README.md` for the conventions there.
 
 ## Commands
 

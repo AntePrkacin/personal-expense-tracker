@@ -440,6 +440,48 @@ value and compiles the stylesheet through Tailwind's own `compile()` to confirm 
 utility actually generates. `npm run storybook` renders the whole system under
 **Foundations** for diffing against Figma.
 
+## Shared components
+
+`frontend/src/components/ui/` holds the design-system primitives, mirroring the Figma
+**Components** page. `Tag`, `ProgressBar`, `Stat`, `SectionHeader` and `ListRow` exist;
+buttons and form fields do not yet. `npm run storybook` renders them under **Components**.
+
+**Shared UI is split by role, not by file type.** `components/ui/` is the primitive layer,
+the vocabulary every screen draws from. Components that only make sense for one feature go
+in `components/` beside it, or next to the route that uses them. Nothing has earned a
+feature folder yet, so `ui/` is currently the only child.
+
+The Storybook section is still called **Components** while the folder is `ui/`. That
+mismatch is deliberate: `ui/` says where the code lives, **Components** is the Figma page
+name, and the stories exist to be diffed against it.
+
+Five conventions, all of which existing files demonstrate:
+
+- **Tests and stories are colocated**, `Tag.tsx` next to `Tag.test.tsx` and
+  `Tag.stories.tsx`. Do not "tidy" them into `__tests__/` or `stories/` trees. Parallel
+  trees make a rename touch three directories, and they hide the one signal worth having
+  at a glance: a component with no test file beside it.
+- **Files are flat inside `ui/`**, not a folder per component. Alphabetical sort already
+  groups a component with its satellites, and it keeps imports at `@/components/ui/Tag`
+  rather than a stuttering `.../Tag/Tag` or nine files all named `index.tsx`. Promote one
+  component to its own folder when it first needs private sub-parts; a mixed directory is
+  fine. There is no barrel `index.ts` and adding one is not an improvement.
+- **Variant classes come from a `Record<Variant, string>` holding complete literal class
+  strings** (`TAG_TONES`, `CATEGORY_TILE`), interpolated into a template literal. This is
+  not style preference. Tailwind's scanner reads these files as raw text, so a class built
+  by interpolation (`bg-category-${n}`) is found by nobody and compiles to nothing, with
+  no build error and no failing test. There are no `clsx` / `cva` style dependencies and
+  none are needed.
+- **`src/components/ui/utilities.test.ts` compiles every one of those classes** through
+  Tailwind and fails if any generates no CSS. It is what makes the point above enforceable
+  rather than a rule people remember. Add new class maps to it.
+- **Components stay Server Components.** None of them carry `'use client'`, because none
+  has state or handlers. Only add the directive when a component genuinely needs the client.
+
+Money is formatted through `frontend/src/lib/format.ts`. Amounts are stored as positive
+magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN rather than the
+hyphen `Intl.NumberFormat` emits, matching the design.
+
 ## Environment variables
 
 Copy the templates, then fill in values. Both real files are gitignored.
@@ -677,9 +719,6 @@ something that is not there.
   `NEXT_PUBLIC_`. Related: `@google/genai` was once present in `frontend/node_modules`
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
-- **`frontend/src/components/`.** Does not exist. Create it with your first shared
-  component, and colocate that component's `*.stories.tsx` beside it. The design tokens
-  it will consume **do** exist, see Design tokens above.
 - **The frontend half of the access flow.** The backend is complete - verify provisions and
   returns a session, and `GET /api/auth/session` answers who a bearer is - but nothing on
   the frontend calls either: no verify page, no session cookie, no dashboard. The session
