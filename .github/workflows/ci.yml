@@ -42,6 +42,16 @@ jobs:
       - name: Build (also the typecheck gate - there is no separate tsc script)
         run: npm run build
 
+      - name: Committed OpenAPI spec is up to date
+        # api:emit, not api:spec: Build has just run `nest build` with the
+        # swagger plugin active, and there is no reason to compile twice.
+        # A committed generated artifact rots silently unless something looks,
+        # and a stale spec means the frontend types describe an API that no
+        # longer exists. Regenerate with `npm run api:sync` from the repo root.
+        run: |
+          npm run api:emit
+          git diff --exit-code --stat openapi.json
+
       - name: Unit tests
         run: npm test
 
@@ -64,6 +74,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
+
+      - name: Committed API types are up to date
+        # The other half of the drift gate. The backend job proves the spec
+        # still matches the code; this proves the types still match the spec,
+        # and the two together are what make the committed artifacts
+        # trustworthy. It runs here rather than in the backend job because
+        # openapi-typescript only reads the committed JSON - no
+        # backend/node_modules required.
+        run: |
+          npm run api:types
+          git diff --exit-code --stat src/types/api.d.ts
 
       - name: Lint
         run: npm run lint
