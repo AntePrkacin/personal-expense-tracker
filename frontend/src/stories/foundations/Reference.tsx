@@ -18,6 +18,11 @@ import { useCallback, useSyncExternalStore } from 'react';
  * through useSyncExternalStore. Reading it in an effect and calling setState
  * would work too, but only by triggering a second render pass for every swatch.
  * Nothing mutates the tokens at runtime, hence the no-op subscribe.
+ *
+ * One consequence of that no-op: if you edit a token value while a story is
+ * open, Vite swaps the stylesheet but nothing re-runs the snapshot, so the hex
+ * label keeps the old value until the next render. Navigate away and back, or
+ * reload, to see it update.
  */
 function useTokenValue(property: string) {
   const subscribe = useCallback(() => () => {}, []);

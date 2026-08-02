@@ -84,10 +84,16 @@
   --radius-xl: 20px;
 }
 
-/* Font families are declared `inline` so that var(--font-plus-jakarta-sans)
-   resolves where the utility is used rather than being frozen against :root.
-   `static` keeps the variable itself declared on :root so anything reading
-   --font-display directly still works. */
+/* `inline` makes the `font-display` / `font-sans` utilities inline the whole
+   var() chain, so those two resolve wherever they are applied. `static` keeps
+   --font-display and --font-sans declared on :root as well, for anything
+   reading them directly.
+
+   It does NOT make the variables' location free. The 19 type styles below
+   reference var(--font-display), which is declared on :root, so its inner
+   var(--font-plus-jakarta-sans) is substituted at computed-value time against
+   :root. Move the next/font classes off <html> and every type style's
+   font-family becomes invalid and falls back, `inline` notwithstanding. */
 @theme static inline {
   --font-display: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -124,9 +130,9 @@
    --text-* token; a font-family pairing is silently dropped.
 
    Figma expresses tracking as a percentage, which maps to em. Line height is
-   Figma "auto" on every style except Body/L (155%), which maps to `normal`.
-   Every style states all five properties so that applying one fully replaces
-   another rather than inheriting stray tracking or leading.
+   Figma "auto" everywhere, which maps to `normal`; Body/L is the one exception,
+   at 155%. Every style states all five properties so that applying one fully
+   replaces another rather than inheriting stray tracking or leading.
 
    @utility must stay at the top level of the file — nesting it throws.
    --------------------------------------------------------------------------- */

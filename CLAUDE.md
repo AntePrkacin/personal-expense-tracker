@@ -693,7 +693,6 @@ something that is not there.
   summary. Its starter colors are the real ones from Figma frame 03, read per chip from the
   design's variable bindings; note the palette has eight colors for ten chips, so two
   repeat and color alone cannot identify a category.
-  component. The design tokens it will consume **do** exist, see Design tokens above.
 
 `backend/README.md` is the stock NestJS starter README. Ignore it as a source of truth
 for this project.

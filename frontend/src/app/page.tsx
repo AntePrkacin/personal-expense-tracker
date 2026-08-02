@@ -29,6 +29,12 @@ export default async function Home() {
     message = 'Could not reach the API. Is the backend running on port 3000?';
   }
 
+  // This scaffold page has no Figma design, so it is styled from the
+  // Foundations tokens alone. Two things the pre-token version did are
+  // deliberately not reproduced: the heading's responsive step-up
+  // (`text-4xl sm:text-5xl`), because the design specifies no breakpoints and
+  // the type scale has no responsive variants; and `font-mono` on the API
+  // message, because a monospace face is not part of the design system.
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-24 text-center">
       <span className="text-label-m rounded-full border border-border-default bg-surface-card px-3 py-1 text-text-secondary">
