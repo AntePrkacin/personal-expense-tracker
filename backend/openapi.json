@@ -1,0 +1,262 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/hello": {
+      "get": {
+        "operationId": "AppController_getHello",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelloResponseDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected failure. Logged in full server-side and reduced to this generic body outward.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A greeting, and the proof that the two apps can talk.",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "description": "An address that already exists is sent a link instead of being duplicated. If that account was never verified, these onboarding values overwrite the stashed ones.",
+        "operationId": "AuthController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted. The body is always empty and the response is byte-for-byte identical whether or not an account exists for the submitted address - that is the enumeration defense (REG-6, LOG-6), not an unfinished response."
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Refused by the throttler guard, which runs before the request body is ever validated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create an account and send its login link.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/login-link": {
+      "post": {
+        "description": "An unknown address creates nothing and is sent nothing; only the response is identical. Every login link therefore belongs to a real user.",
+        "operationId": "AuthController_requestLoginLink",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestLoginLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted. The body is always empty and the response is byte-for-byte identical whether or not an account exists for the submitted address - that is the enumeration defense (REG-6, LOG-6), not an unfinished response."
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Refused by the throttler guard, which runs before the request body is ever validated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a login link to an existing account.",
+        "tags": [
+          "auth"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Expensa API",
+    "description": "The HTTP contract of the Expensa backend.\n\nGenerated from the NestJS code at build time, committed as `backend/openapi.json`, and\nthe only source of the frontend response types in `frontend/src/types/api.d.ts`.\nDo not edit either by hand: run `npm run api:sync` from the repo root.",
+    "version": "0.1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "HelloResponseDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "ErrorResponseDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "String for most errors; an array for class-validator's field messages.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "statusCode": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "statusCode",
+          "error",
+          "timestamp",
+          "path"
+        ]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "monthlyBudget": {
+            "type": "number",
+            "description": "Major units (e.g. 2000.50). Stored as integer cents. The cap is not a\nproduct judgment: it keeps the cents conversion far inside JS safe-integer\nrange while staying generous for zero-decimal currencies, whose budgets\ncarry many digits.",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "firstName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "monthStartDay": {
+            "type": "number",
+            "description": "Capped at 28 so the day exists in every month.",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "categories": {
+            "type": "array",
+            "description": "The starter chips picked on screen 03, by name.\n\nRequired but allowed to be empty: A4 records that no minimum is enforced,\nand a user who deselects everything is making a valid choice. Required\nrather than optional so a frontend that stops sending the field fails\nloudly instead of silently seeding nothing.",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "Groceries",
+                "Dining out",
+                "Transport",
+                "Shopping",
+                "Housing",
+                "Health",
+                "Entertainment",
+                "Bills",
+                "Subscriptions",
+                "Other"
+              ]
+            }
+          }
+        },
+        "required": [
+          "monthlyBudget",
+          "firstName",
+          "lastName",
+          "email",
+          "categories"
+        ]
+      },
+      "RequestLoginLinkDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      }
+    }
+  }
+}

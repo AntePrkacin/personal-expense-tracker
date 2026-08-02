@@ -21,6 +21,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "api:spec": "nest build && npm run api:emit",
+    "api:emit": "node dist/openapi.js",
     "db:generate": "npm run db:generate:central && npm run db:generate:user",
     "db:generate:central": "drizzle-kit generate --config=drizzle.central.config.ts",
     "db:generate:user": "drizzle-kit generate --config=drizzle.user.config.ts",

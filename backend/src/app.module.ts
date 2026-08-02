@@ -18,13 +18,17 @@ import { UsersModule } from './users/users.module';
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: envValidationSchema,
-      // Under test, read the environment only, never backend/.env. Jest sets
-      // NODE_ENV=test itself. Without this the e2e suite runs against whatever
-      // is in a developer's .env: test/setup-e2e.ts deletes the TURSO_*
-      // variables, but ConfigModule reads the file from disk and puts them
-      // straight back, so a filled-in .env silently pointed the tests at real
-      // Turso Cloud and created databases there.
-      ignoreEnvFile: process.env.NODE_ENV === 'test',
+      // Under test, and while generating the OpenAPI spec, read the
+      // environment only - never backend/.env. Both boot the real AppModule
+      // and neither has any business touching Turso Cloud. Scrubbing the
+      // TURSO_* variables out of process.env is not enough on its own:
+      // ConfigModule reads the file from disk and dotenv puts every deleted
+      // key straight back, which is how the e2e suite once ran against live
+      // Turso Cloud and created databases there. Jest sets NODE_ENV=test
+      // itself; src/openapi.env.ts sets OPENAPI_EMIT before this module is
+      // ever loaded.
+      ignoreEnvFile:
+        process.env.NODE_ENV === 'test' || process.env.OPENAPI_EMIT === '1',
     }),
     DatabaseModule,
     UsersModule,
