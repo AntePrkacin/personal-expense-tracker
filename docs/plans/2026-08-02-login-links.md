@@ -25,8 +25,9 @@ longer create real cloud databases, which closes the pre-auth cost exposure in
 Platform API calls, which is what made AC3 leak account existence through response latency
 even with identical bodies; and A19 designs no loading state for "Finish setup", so a
 register that blocks on cloud provisioning is a spinner-shaped hole in a screen with no
-spinner. The schema already permits the NULL state because local mode uses it, so nothing
-widens. Recorded on PET-13 as a comment, because a literal read of AC1 says an account
+spinner. The schema already permits the NULL state because local mode uses it, though that
+state is `db_url` and `db_auth_token` only: `db_name` is notNull, derives from the id
+alone, and register still sets it. Nothing widens. Recorded on PET-13 as a comment, because a literal read of AC1 says an account
 exists holding the profile at register-success and under this ordering the `profile` row
 does not exist yet, only the central row holding the same values.
 
@@ -74,9 +75,16 @@ a session-scoped `getProfile()` in PET-14; the write is replaced here.
   check. Per-IP alone lets a botnet hammer one address; per-email alone lets one host walk
   a list. Running it first keeps the throttled response identical regardless of whether the
   account exists.
-- **Mail send failure never fails the request.** The account is already created and the
-  design's own recovery path is "Resend link" (VER-2). A 500 here would tell the client
-  registration failed when it succeeded. Log at error level, return the same 202.
+- **The response never waits on the mail send.** Token issue and send are floated, not
+  awaited, with a `.catch` that logs at error level; the handler answers 202 once the
+  lookup (and, for a new registration, the insert) is done. That buys two things at once.
+  A send failure never fails the request: the account is already created and the design's
+  own recovery path is "Resend link" (VER-2), so a 500 would tell the client registration
+  failed when it succeeded. And it closes the timing hole an awaited send would open: on
+  request-link a known address would otherwise cost a token insert plus an HTTPS round
+  trip to MailPace while an unknown one costs a single indexed read, a difference of
+  hundreds of milliseconds and trivially measurable, against REG-6/LOG-6's whole point.
+  With nothing awaited past the lookup, both paths answer on database time.
 
 ## Steps
 
@@ -92,9 +100,13 @@ oversight.
 
 **`users`** gains `onboardingPayload`, nullable, `text({ mode: 'json' }).$type<...>()`
 holding `{ firstName, lastName, currency, monthlyBudget, monthStartDay, categories }`.
-Transient: written at registration, read once at verification, then set NULL. It is a
-deliberate exception to "central holds only email and a pointer" and the column comment must
-say what empties it, or the next reader will treat profile data in central as the pattern.
+Transient: written at registration, read once at verification, then set NULL. Stored with
+the DTO defaults already applied (`currency` `'USD'`, `monthStartDay` 1) and
+`monthlyBudget` in major units exactly as submitted, so PET-14 inserts it verbatim except
+for the cents conversion at the profile boundary. It is a deliberate exception to "central
+holds only email and a pointer" and the column comment must say the units, where defaults
+were applied, and what empties it, or the next reader will treat profile data in central
+as the pattern.
 
 `npm run db:generate`, commit what it writes. Note the drizzle-kit RC limitation already
 recorded in `docs/TODO.md`: the sqlite differ only sees created and dropped entities, so
@@ -122,10 +134,14 @@ A `seedStarterCategories(userDb, names)` helper ships here and is *called* from 
 - `issue(userId)`: supersede every live token for that user (`superseded_at = now` where
   `used_at IS NULL AND superseded_at IS NULL`), insert a new row, return the raw token. The
   raw value exists only in this return; nothing persists or logs it.
-- `consume(rawToken)`: look up by hash, reject when `used_at` or `superseded_at` is set or
-  `expires_at` has passed, otherwise mark used and return the `userId`. Written here even
-  though PET-14 calls it, because the invalidation rules it enforces are AC4 and AC5 and
-  belong with the tests that prove them.
+- `consume(rawToken)`: one conditional update, never check-then-mark - `UPDATE login_links
+  SET used_at = now WHERE token_hash = ? AND used_at IS NULL AND superseded_at IS NULL AND
+  expires_at > now`, with zero affected rows meaning rejection and the updated row's
+  `userId` returned via `.returning()`. A read followed by a write would let two
+  concurrent consumes of the same token both pass the check during the await between them
+  and both succeed; the conditional update is what makes single use atomic rather than
+  probabilistic. Written here even though PET-14 calls it, because the invalidation rules
+  it enforces are AC4 and AC5 and belong with the tests that prove them.
 - Expiry from `LOGIN_LINK_TTL_M`, default 15. A34 says minutes, not days.
 
 ### 4. Mail (`src/mail/`)
@@ -153,10 +169,18 @@ A `seedStarterCategories(userDb, names)` helper ships here and is *called* from 
   `@ArrayMaxSize(10)`, no minimum, because A4 says none is enforced).
 - `POST /api/auth/login-link` takes `RequestLoginLinkDto`: the same normalized email field.
 
-`AuthService.register(dto)`: look up the email; if a live user exists, issue a token and
-send, creating nothing; otherwise insert the central row with the payload, then issue and
-send. The unique-index race is now a benign convergence rather than a 409, so catching it
-falls through to the issue-and-send path.
+`AuthService.register(dto)`: look up the email. A new address inserts the central row with
+the payload and `dbName: userDbName(id)` (the column is notNull even though `db_url` and
+`db_auth_token` wait for PET-14), then issues and sends. An existing address whose
+`onboardingPayload` is still non-NULL (registered, never verified) gets the payload
+**overwritten** with this dto before issuing: the realistic case is someone who lost the
+first email and resubmitted the form, possibly with corrected values, and they must verify
+into the profile they last saw. The overwrite is safe because a payload only becomes a
+profile when the email owner clicks the link, and it turns the squatting case into a fix,
+since a genuine owner's registration replaces a squatter's payload. An existing verified
+address (payload NULL) gets a token and nothing else changes. The unique-index race is now
+a benign convergence rather than a 409, so catching it falls through to the issue-and-send
+path.
 
 `AuthService.requestLoginLink(email)`: look up; if absent, return; otherwise issue and send.
 
@@ -176,6 +200,19 @@ storage, so this assumes a single instance, consistent with the migration-lock n
 in `docs/TODO.md`; add it there. **Open item:** behind a reverse proxy `req.ip` needs
 `trust proxy` set or every request shares one key.
 
+Three traps to write down before they get written in:
+
+- `@nestjs/throttler` v5+ takes `ttl` in **milliseconds**. `AUTH_RATE_TTL_S` is seconds,
+  so the module config converts with the library's `seconds()` helper; getting this wrong
+  is silent and turns the 900-second window into 900 ms.
+- Guards run before pipes, so the tracker sees the raw body, not the DTO after its
+  transforms. It must trim and lowercase the email itself and tolerate a missing or
+  non-string value, or `Foo@x.com` and `foo@x.com` get separate buckets and the per-email
+  half of the defense evaporates.
+- The default throttler key incorporates the route, so register and login-link each get
+  their own bucket of 5 rather than sharing one. Accepted: a legitimate journey can touch
+  both endpoints inside one window.
+
 ### 7. Config (`src/config/env.validation.ts`)
 
 Add `MAILPACE_API_TOKEN` and `MAIL_FROM` (`.email()`), optional and tied together with
@@ -186,22 +223,30 @@ in its existing commented style, including the note that the MailPace domain nee
 DKIM authorization and that `MAIL_FROM` must be on that domain.
 
 `test/setup-e2e.ts` must delete `MAILPACE_API_TOKEN` and `MAIL_FROM` alongside `TURSO_*`,
-for the same reason: `ConfigModule` would otherwise read them back out of `backend/.env`
-and a developer with a filled-in file would send real email from the test suite.
+and they need their own explicit deletes because the existing loop matches on the
+`TURSO_` prefix. This covers the shell half of the existing two-mechanism guard: variables
+exported in the developer's shell would otherwise reach the suite and send real email. The
+file half is already closed - `AppModule` sets `ignoreEnvFile` under `NODE_ENV=test`, so
+`backend/.env` is never read during tests.
 
 ### 8. Tests
 
 Unit: `login-token.service.spec.ts` (raw token never stored, hash is; expiry from config;
-issuing supersedes prior; consume rejects used, expired and superseded, and is itself single
-use), `auth.service.spec.ts` (new email inserts one row and sends once; existing email
-inserts nothing and sends once; unknown email on request-link inserts nothing and sends
-nothing; a send failure is logged and swallowed), `mailpace.mailer.spec.ts` (mock `fetch`:
+issuing supersedes prior; consume rejects used, expired and superseded; two concurrent
+consumes of one token with exactly one succeeding, which pins the conditional update
+rather than luck), `auth.service.spec.ts` (new email inserts one row and sends once;
+existing unverified email overwrites the stashed payload, inserts nothing and sends once;
+existing verified email changes nothing and sends once; unknown email on request-link
+inserts nothing and sends nothing; a send failure is logged and swallowed; the returned
+promise does not wait on the mailer), `mailpace.mailer.spec.ts` (mock `fetch`:
 URL, `MailPace-Server-Token` header, body shape, timeout wired, error body logged but not
 thrown outward).
 
 E2e: `test/auth.e2e-spec.ts` replaces `test/users.e2e-spec.ts`, which tested the two deleted
 routes. A `MemoryMailer` test double via `overrideProvider(MAILER)` makes "exactly one email
-sent" assertable. Cases: register new address; register an address that already exists,
+sent" assertable. Because the send is floated off the request, the double also exposes a
+quiescence promise the suite awaits before asserting, or "exactly one" races the floated
+work. Cases: register new address; register an address that already exists,
 asserting the status and body are identical to the first, with no second row; request-link
 for an unknown address, identical again and nothing sent; a reissue superseding the prior
 token, checked against the central database directly; the throttle returning 429; 400 for a
@@ -256,8 +301,15 @@ is now PET-14's; add the single-instance throttler assumption.
   an expiry before this is deployed anywhere public.
 - **The throttler is in-memory**, so the limit is per instance.
 - **`req.ip` behind a proxy** collapses every caller to one key unless `trust proxy` is set.
-- **Timing is equalized, not measured.** Both paths now do one indexed read plus at most one
-  insert and one HTTP send, but nobody has profiled them. If enumeration resistance ever has
-  to be more than best-effort, this needs a measurement rather than an argument.
+- **Timing is equalized, not measured.** With the send floated, every path answers after at
+  most one indexed read and one insert into the local central database, but nobody has
+  profiled the residual difference. If enumeration resistance ever has to be more than
+  best-effort, this needs a measurement rather than an argument.
 - **A send failure still strands the user** on screen 24 with only Resend. That is the
-  design's own answer (A36) and is accepted, not solved.
+  design's own answer (A36) and is accepted, not solved. Note it is strictly worse than the
+  pre-request state: `issue()` supersedes the prior token before the send, so a failed send
+  leaves zero live links where there was one. Resend recovers that too.
+- **The token travels in a query string**, so it lands in server access logs, browser
+  history and potentially `Referer` headers. That is the accepted norm for magic links and
+  the 15-minute single-use token bounds it, but it leaves PET-14 a constraint: the verify
+  page must load no third-party resources and must consume the token immediately.
