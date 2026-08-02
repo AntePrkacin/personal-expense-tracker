@@ -21,6 +21,13 @@ interface ValidatedEnv {
   TURSO_GROUP: string;
   TURSO_GROUP_TOKEN?: string;
   TURSO_SYNC_INTERVAL_S: number;
+  MAILPACE_API_TOKEN?: string;
+  MAIL_FROM?: string;
+  MAIL_FROM_NAME?: string;
+  LOGIN_LINK_TTL_M: number;
+  AUTH_RATE_LIMIT: number;
+  AUTH_RATE_IP_LIMIT: number;
+  AUTH_RATE_TTL_S: number;
 }
 
 describe('envValidationSchema', () => {
@@ -53,6 +60,10 @@ describe('envValidationSchema', () => {
         DATABASE_DIR: './databases',
         TURSO_GROUP: 'decode-pet',
         TURSO_SYNC_INTERVAL_S: 60,
+        LOGIN_LINK_TTL_M: 15,
+        AUTH_RATE_LIMIT: 5,
+        AUTH_RATE_IP_LIMIT: 30,
+        AUTH_RATE_TTL_S: 900,
       });
     });
 
@@ -97,6 +108,41 @@ describe('envValidationSchema', () => {
     });
   });
 
+  describe('the mail pair is all-or-none', () => {
+    // Half-set would mean a real login email silently never leaves, which is
+    // why the two are tied with `.and()` while unset-both is a supported mode.
+    it('accepts both together', () => {
+      expect(
+        validate({
+          MAILPACE_API_TOKEN: 'server-token',
+          MAIL_FROM: 'login@spendifico.eu',
+        }).error,
+      ).toBeUndefined();
+    });
+
+    it('rejects the token without the sender, and the reverse', () => {
+      expect(
+        validate({ MAILPACE_API_TOKEN: 'server-token' }).error,
+      ).toBeDefined();
+      expect(
+        validate({ MAIL_FROM: 'login@spendifico.eu' }).error,
+      ).toBeDefined();
+    });
+
+    it('rejects a MAIL_FROM that is not a bare address', () => {
+      expect(
+        validate({
+          MAILPACE_API_TOKEN: 'server-token',
+          MAIL_FROM: 'Spendifico <login@spendifico.eu>',
+        }).error,
+      ).toBeDefined();
+    });
+
+    it('leaves MAIL_FROM_NAME unpaired', () => {
+      expect(validate({ MAIL_FROM_NAME: 'Spendifico' }).error).toBeUndefined();
+    });
+  });
+
   describe('value constraints', () => {
     it('coerces a numeric PORT from its string form', () => {
       expect(validate({ PORT: '4000' }).value.PORT).toBe(4000);
@@ -112,6 +158,12 @@ describe('envValidationSchema', () => {
 
     it('rejects a non-positive sync interval', () => {
       expect(validate({ TURSO_SYNC_INTERVAL_S: '0' }).error).toBeDefined();
+    });
+
+    it('rejects fractional and non-positive rate limits', () => {
+      expect(validate({ AUTH_RATE_LIMIT: '2.5' }).error).toBeDefined();
+      expect(validate({ AUTH_RATE_IP_LIMIT: '0' }).error).toBeDefined();
+      expect(validate({ AUTH_RATE_TTL_S: '90.5' }).error).toBeDefined();
     });
   });
 });

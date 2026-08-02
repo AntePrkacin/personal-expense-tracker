@@ -25,11 +25,13 @@ import { RequestLoginLinkDto } from './dto/request-login-link.dto';
  * it would cost usability and buy nothing.
  *
  * The throttle sits on the controller rather than globally: these are the only
- * unauthenticated routes that send mail. It is keyed on IP *and* address (see
- * AuthModule) and runs ahead of the directory lookup, so a throttled response
- * is identical whether or not the account exists. Note that Nest's default key
- * includes the handler, so the two routes get one bucket each rather than
- * sharing one - accepted, since a legitimate journey can touch both.
+ * unauthenticated routes that send mail. Two independent limiters apply, one
+ * per submitted address and one per caller IP (see AuthModule for why they are
+ * not one composite key), and both run ahead of the directory lookup, so a
+ * throttled response is identical whether or not the account exists. Note that
+ * Nest's default key includes the handler, so the two routes get their own
+ * buckets rather than sharing them - accepted, since a legitimate journey can
+ * touch both.
  */
 @Controller('auth')
 @UseGuards(ThrottlerGuard)

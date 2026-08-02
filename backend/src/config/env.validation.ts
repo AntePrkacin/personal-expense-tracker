@@ -60,11 +60,15 @@ export const envValidationSchema = Joi.object({
   // short expiry; minutes, not days.
   LOGIN_LINK_TTL_M: Joi.number().positive().default(15),
 
-  // Rate limit on the two auth routes, per IP and submitted address. Exposed as
-  // configuration mainly so the e2e suite can trip the limit without waiting
-  // out the real window.
-  AUTH_RATE_LIMIT: Joi.number().positive().default(5),
-  AUTH_RATE_TTL_S: Joi.number().positive().default(900),
+  // Rate limits on the two auth routes: two independent limiters, one keyed on
+  // the submitted address (whoever asks, from wherever) and one on the caller's
+  // IP (whatever it types). A request is refused when either bucket is over.
+  // The per-IP default is laxer because one NAT can hide a whole classroom.
+  // Exposed as configuration mainly so the e2e suite can trip the limits
+  // without waiting out the real window.
+  AUTH_RATE_LIMIT: Joi.number().integer().positive().default(5),
+  AUTH_RATE_IP_LIMIT: Joi.number().integer().positive().default(30),
+  AUTH_RATE_TTL_S: Joi.number().integer().positive().default(900),
 })
   .and(
     'TURSO_ORG',

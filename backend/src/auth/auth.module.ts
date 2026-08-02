@@ -8,28 +8,48 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { LoginTokenService } from './login-token.service';
 
-const DEFAULT_RATE_LIMIT = 5;
+const DEFAULT_EMAIL_RATE_LIMIT = 5;
+const DEFAULT_IP_RATE_LIMIT = 30;
 const DEFAULT_RATE_TTL_S = 900;
 
 /**
- * Throttle bucket key: one caller hammering one address.
+ * Two throttlers, deliberately NOT one composite `ip:email` key.
  *
- * Both halves are needed. Per-IP alone lets a botnet walk a single address;
- * per-email alone lets one host walk a list of addresses.
+ * A composite key hands every new (IP, address) pair a fresh bucket, so it
+ * throttles only the intersection - one host hammering one address - and stops
+ * neither attack that matters here. A botnet walking a single address arrives
+ * from a new IP each time; one host walking a list submits a new address each
+ * time. Both sail through a composite key with a full budget per request.
  *
- * This runs in a guard, which Nest executes *before* pipes, so `req.body` is
+ * So the two dimensions are limited independently, and a request is refused
+ * when either bucket is over:
+ *
+ * - per-address: caps the mail one inbox can be sent, whoever asks from
+ *   wherever;
+ * - per-IP: caps total submissions from one host, whatever it types. Laxer by
+ *   default, because a NAT can put a whole classroom behind one address.
+ *
+ * Both run in the guard, which Nest executes *before* pipes, so `req.body` is
  * the raw parsed JSON and not the validated DTO - hence normalizing the address
- * here rather than trusting the transform, and tolerating a body with no
- * `email` at all (that request is about to 400, but it still needs a key).
+ * here rather than trusting the transform. Nest's default key also includes the
+ * handler and the throttler name, so each route gets its own pair of buckets.
  *
  * Known limitation: behind a reverse proxy `req.ip` is the proxy's address
- * unless Express `trust proxy` is set, which would collapse every caller into
- * one bucket. See docs/TODO.md.
+ * unless Express `trust proxy` is set, which would collapse the per-IP buckets
+ * (the per-address ones are unaffected). See docs/TODO.md.
  */
-function trackByIpAndEmail(req: Record<string, unknown>): string {
-  const ip = typeof req.ip === 'string' ? req.ip : '';
+export function trackByIp(req: Record<string, unknown>): string {
+  return typeof req.ip === 'string' ? req.ip : '';
+}
+
+/**
+ * The submitted address, normalized so casing cannot split the bucket. A body
+ * with no usable address (about to 400, but still needing a key) falls back to
+ * the caller's IP, so garbage requests cost only their sender.
+ */
+export function trackByEmail(req: Record<string, unknown>): string {
   const body = req.body as { email?: unknown } | undefined;
-  return `${ip}:${normalizeEmail(body?.email) ?? ''}`;
+  return normalizeEmail(body?.email) ?? `no-email:${trackByIp(req)}`;
 }
 
 /**
@@ -47,20 +67,37 @@ function trackByIpAndEmail(req: Record<string, unknown>): string {
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        throttlers: [
-          {
-            limit: config.get<number>('AUTH_RATE_LIMIT', DEFAULT_RATE_LIMIT),
-            // v5+ takes ttl in MILLISECONDS. AUTH_RATE_TTL_S is seconds, and
-            // getting this conversion wrong is silent: the window would become
-            // 900ms instead of 900s and the limit would never be reached.
-            ttl: seconds(
-              config.get<number>('AUTH_RATE_TTL_S', DEFAULT_RATE_TTL_S),
-            ),
-          },
-        ],
-        getTracker: trackByIpAndEmail,
-      }),
+      useFactory: (config: ConfigService) => {
+        // v5+ takes ttl in MILLISECONDS. AUTH_RATE_TTL_S is seconds, and
+        // getting this conversion wrong is silent: the window would become
+        // 900ms instead of 900s and the limit would never be reached.
+        const ttl = seconds(
+          config.get<number>('AUTH_RATE_TTL_S', DEFAULT_RATE_TTL_S),
+        );
+
+        return {
+          throttlers: [
+            {
+              name: 'email',
+              limit: config.get<number>(
+                'AUTH_RATE_LIMIT',
+                DEFAULT_EMAIL_RATE_LIMIT,
+              ),
+              ttl,
+              getTracker: trackByEmail,
+            },
+            {
+              name: 'ip',
+              limit: config.get<number>(
+                'AUTH_RATE_IP_LIMIT',
+                DEFAULT_IP_RATE_LIMIT,
+              ),
+              ttl,
+              getTracker: trackByIp,
+            },
+          ],
+        };
+      },
     }),
   ],
   controllers: [AuthController],

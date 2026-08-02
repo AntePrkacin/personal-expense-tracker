@@ -47,5 +47,15 @@ delete process.env.MAIL_FROM;
  */
 process.env.AUTH_RATE_LIMIT = '3';
 
+/**
+ * Park the per-IP limiter out of the way. Every supertest request arrives from
+ * 127.0.0.1, so the whole suite shares one IP bucket per route; left at its
+ * default of 30 it would start answering 429 partway through the file, long
+ * before any test that means to trip the per-email limiter. The per-IP
+ * dimension is unit-tested instead (auth.module.spec.ts), because e2e cannot
+ * vary the caller's address.
+ */
+process.env.AUTH_RATE_IP_LIMIT = '1000';
+
 /** Exported so suites can clean the directory up in `afterAll`. */
 export const E2E_DATABASE_DIR = dir;
