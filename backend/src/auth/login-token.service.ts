@@ -28,6 +28,17 @@ const DEFAULT_TTL_MINUTES = 15;
  */
 @Injectable()
 export class LoginTokenService {
+  /**
+   * Chains issue() transactions end to end. The embedded Turso driver runs one
+   * connection per database and refuses overlapping transactions outright
+   * ("cannot start a transaction within a transaction"), so two concurrent
+   * resends would crash rather than merely interleave. In-process chaining is
+   * enough: a single backend instance is this repo's standing assumption
+   * (docs/TODO.md), and the queue only ever holds a handful of sub-millisecond
+   * writes.
+   */
+  private issueQueue: Promise<unknown> = Promise.resolve();
+
   constructor(
     @Inject(APP_DB) private readonly centralDb: CentralDatabase,
     private readonly config: ConfigService,
@@ -37,33 +48,50 @@ export class LoginTokenService {
    * Mints a link token for a user, invalidating any still-live one first: only
    * the newest link ever works, so a resend cannot leave two valid doors open.
    *
+   * The supersede and the insert share one transaction, because as two
+   * standalone statements a pair of concurrent issues could interleave
+   * supersede-supersede-insert-insert and leave BOTH new links live - a
+   * double-clicked "Resend link" would break the invariant above. The
+   * issueQueue serializes the transactions themselves (see its comment), so
+   * the later issue's supersede runs after the earlier one's insert and
+   * catches it. The transaction also means a failed insert rolls the
+   * supersede back with it, rather than leaving the user with zero live
+   * links.
+   *
    * @returns the raw token. This is the only place it exists - it is never
    * persisted, returned by an endpoint, or logged.
    */
   async issue(userId: string): Promise<string> {
     const now = new Date();
-
-    await this.centralDb
-      .update(loginLinks)
-      .set({ supersededAt: now })
-      .where(
-        and(
-          eq(loginLinks.userId, userId),
-          isNull(loginLinks.usedAt),
-          isNull(loginLinks.supersededAt),
-          isNull(loginLinks.deletedAt),
-        ),
-      );
-
     const rawToken = randomBytes(TOKEN_BYTES).toString('base64url');
 
-    await this.centralDb.insert(loginLinks).values({
-      id: newId(),
-      userId,
-      tokenHash: hashToken(rawToken),
-      expiresAt: new Date(now.getTime() + this.ttlMinutes * 60_000),
-    });
+    const issued = this.issueQueue.then(() =>
+      this.centralDb.transaction(async (tx) => {
+        await tx
+          .update(loginLinks)
+          .set({ supersededAt: now })
+          .where(
+            and(
+              eq(loginLinks.userId, userId),
+              isNull(loginLinks.usedAt),
+              isNull(loginLinks.supersededAt),
+              isNull(loginLinks.deletedAt),
+            ),
+          );
 
+        await tx.insert(loginLinks).values({
+          id: newId(),
+          userId,
+          tokenHash: hashToken(rawToken),
+          expiresAt: new Date(now.getTime() + this.ttlMinutes * 60_000),
+        });
+      }),
+    );
+
+    // The next issue must wait for this one, but not inherit its failure.
+    this.issueQueue = issued.catch(() => undefined);
+
+    await issued;
     return rawToken;
   }
 

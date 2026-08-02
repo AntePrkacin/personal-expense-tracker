@@ -11,17 +11,23 @@ describe('LoginTokenService', () => {
   let select: jest.Mock;
   let insert: jest.Mock;
   let update: jest.Mock;
+  let transaction: jest.Mock;
   let configGet: jest.Mock;
 
   beforeEach(() => {
     select = jest.fn();
     insert = jest.fn();
     update = jest.fn();
+    // The callback receives a tx wired to the same mocks, so assertions on
+    // update/insert see the statements regardless of the transaction wrapper.
+    transaction = jest.fn((run: (tx: unknown) => Promise<unknown>) =>
+      run({ insert, update }),
+    );
     // Mirrors ConfigService.get(key, defaultValue).
     configGet = jest.fn((_key: string, fallback: unknown) => fallback);
 
     service = new LoginTokenService(
-      { select, insert, update } as never,
+      { select, insert, update, transaction } as never,
       {
         get: configGet,
       } as unknown as ConfigService,
@@ -101,6 +107,18 @@ describe('LoginTokenService', () => {
       expect(update.mock.invocationCallOrder[0]).toBeLessThan(
         insert.mock.invocationCallOrder[0],
       );
+    });
+
+    it('runs the supersede and the insert in one transaction', async () => {
+      insert.mockReturnValue(queryChain([]));
+
+      await service.issue('user-id');
+
+      // Two standalone statements would let concurrent issues interleave and
+      // leave two live links; the wrapper is what makes the invariant hold.
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(insert).toHaveBeenCalledTimes(1);
     });
   });
 
