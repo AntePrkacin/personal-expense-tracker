@@ -56,8 +56,11 @@ them first.
 If the backend is not running, the page says so instead of crashing, which is a useful
 thing to notice: the frontend handles the failure rather than pretending it cannot happen.
 
-The backend also has a working persistence layer behind `POST /api/users` and
-`GET /api/users/:id`, with no setup needed. See [Database](#database).
+The backend also has a working persistence layer and the passwordless entry flow behind
+`POST /api/auth/register` and `POST /api/auth/login-link`, with no setup needed. Both
+answer an empty `202` and, with no mail credentials configured, print the login link to the
+backend's console for you to open. See [Database](#database) and
+[Sending real email](#sending-real-email-optional).
 
 ## Prerequisites
 
@@ -228,14 +231,16 @@ correct, not a broken server. See "Gotchas" below.
 backend/                  NestJS 11 API on :3000
   src/
     main.ts               Bootstrap: global 'api' prefix, CORS, port, shutdown hooks
-    app.module.ts         Root module: ConfigModule, DatabaseModule, global pipe + filter
+    app.module.ts         Root module: ConfigModule, DatabaseModule, AuthModule, pipe + filter
     app.controller.ts     GET /api/hello
     app.service.ts        Business logic + the HelloResponse contract
     app.controller.spec.ts
-    common/               ids, the global exception filter
+    auth/                 POST /api/auth/register, /api/auth/login-link; login tokens
+    common/               ids, email normalization, the global exception filter
     config/               Joi schema validating the environment at boot
     database/             Drizzle + Turso: schemas, client factory, per-user databases
-    users/                POST /api/users, GET /api/users/:id
+    mail/                 Mailer seam: logs by default, MailPace over HTTP when configured
+    users/                Central directory reads and writes (no controller)
   drizzle/                Generated migrations, committed: central/ and user/
   databases/              Local database files. Gitignored; migrations recreate them
   test/                   Supertest e2e specs
@@ -330,9 +335,13 @@ Two things about `audit` that will otherwise confuse you:
 | Backend  | `backend/.env.example`  | `backend/.env`        | `PORT` (3000), `FRONTEND_URL` (`http://localhost:4200`), `DATABASE_DIR` (`./databases`) |
 | Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (`http://localhost:3000`)                                                 |
 
-The backend template also lists a block of commented-out `TURSO_*` variables. You do not
-need them: leave them commented and the backend stores everything in local files under
-`DATABASE_DIR`. See [Database](#database) below.
+The backend template also lists two blocks of commented-out variables, and you need
+neither. Leave the `TURSO_*` block commented and the backend stores everything in local
+files under `DATABASE_DIR` (see [Database](#database)). Leave `MAILPACE_API_TOKEN` and
+`MAIL_FROM` commented and login links are printed to the console instead of emailed (see
+[Sending real email](#sending-real-email-optional)). The remaining three -
+`LOGIN_LINK_TTL_M`, `AUTH_RATE_LIMIT`, `AUTH_RATE_TTL_S` - are tuning knobs with sensible
+defaults.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`. Both are
 gitignored and must never be committed. Only the `.env.example` templates are.
@@ -361,11 +370,16 @@ always safe: the next start rebuilds it.
 ```bash
 cd backend && npm run start:dev
 
-curl -X POST http://localhost:3000/api/users \
+curl -i -X POST http://localhost:3000/api/auth/register \
   -H 'content-type: application/json' \
-  -d '{"firstName":"Marko","lastName":"Kovac","email":"marko@email.com","monthlyBudget":2000}'
-# 201, and backend/databases/ now holds app.db plus one file for this user
+  -d '{"firstName":"Marko","lastName":"Kovac","email":"marko@email.com","monthlyBudget":2000,"categories":["Groceries"]}'
+# 202 with an empty body, backend/databases/app.db now holds the row and the
+# issued link, and the terminal running the backend prints the login link
 ```
+
+Note what is _not_ created: no file for this user yet. Registration writes only the central
+row and stashes the onboarding values on it; the user's own database is created when the
+emailed link is verified, so an unauthenticated endpoint can never provision one.
 
 ### Changing the schema
 
@@ -417,6 +431,86 @@ the fix is always "delete it and make a new one", which stops being cheap the mo
 data exists. Check an existing one with `turso db list`, whose `TYPE` column reads `Turso`
 rather than `SQLite`. The backend passes the equivalent flag itself for every per-user
 database it creates, so this only applies to the central one you make by hand.
+
+## Sending real email (optional)
+
+Access to the app is passwordless: you submit an email address and the backend sends a
+single-use login link. **For local development there is nothing to set up.** With
+`MAILPACE_API_TOKEN` unset, the backend logs the email instead of sending it, so a
+registration prints something like this in the backend terminal and you open the link
+yourself:
+
+```text
+[LogMailer] Email not sent (no MAILPACE_API_TOKEN): to=marko@email.com subject="Your Expensa login link"
+[LogMailer] Link: http://localhost:4200/auth/verify?token=...
+```
+
+That is also what CI and the e2e suite use, so no test can send mail to a real person.
+
+To send for real, use [MailPace](https://mailpace.com):
+
+1. Add your domain and complete the DKIM authorization it walks you through. Until that
+   is done every send is rejected.
+2. Create a server and copy its API token.
+3. Uncomment both variables in `backend/.env`:
+
+   ```text
+   MAILPACE_API_TOKEN=your-server-token
+   MAIL_FROM=login@spendifico.eu
+   ```
+
+`MAIL_FROM` has to be an address on the domain you authorized. Set both or neither: a
+half-filled pair fails at boot, on purpose, because the alternative is a login email that
+silently never leaves. That is also why both lines stay commented in `.env.example`, which
+`cp .env.example .env` copies verbatim - uncommenting only `MAIL_FROM` would leave a fresh
+clone unable to start.
+
+It is called over plain HTTPS rather than SMTP, and with `fetch` rather than their SDK.
+Outbound SMTP is blocked or throttled by most hosts (port 25 permanently on GCP, and
+587/465 are not guaranteed either), while HTTPS on 443 always works. See
+`backend/src/mail/mailpace.mailer.ts`, which is short.
+
+### Smoke-testing a real send
+
+**Send to `spendifico@gmail.com`.** That is the project's official inbox and the address
+every MailPace smoke has been run against. Do not use a personal address: the messages are
+the point of the test, so they have to land somewhere anyone on the project can check.
+
+It is also the other end of the sender. This project's `MAIL_FROM` is
+`login@spendifico.eu`, and everything delivered to that address is forwarded to
+`spendifico@gmail.com`, so the same inbox holds both what the app sends and anything
+replied to it. The sender is recorded (commented out) in `backend/.env.example`.
+
+Run the backend against a throwaway database rather than your normal one, so a test
+registration never lands in the real user directory. `NODE_ENV=test` makes `AppModule`
+ignore `backend/.env` entirely, which is why the credentials are passed in explicitly
+here:
+
+```bash
+cd backend && npm run build
+
+NODE_ENV=test DATABASE_DIR=$(mktemp -d) PORT=3111 \
+  FRONTEND_URL=http://localhost:4200 \
+  MAILPACE_API_TOKEN=... MAIL_FROM=... \
+  node dist/main
+```
+
+Then, in another terminal:
+
+```bash
+curl -i -X POST http://localhost:3111/api/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"firstName":"Marko","lastName":"Kovac","email":"spendifico@gmail.com","monthlyBudget":2000,"categories":["Groceries"]}'
+```
+
+Expect `202` with an empty body, and one email within a few seconds. Send the same request
+again and a second link arrives while the first stops working: that is "Resend link"
+(VER-2), and only the newest link is ever valid.
+
+Worth doing at least once whenever this path changes, because it catches what a mocked
+spec cannot. The `Accept: application/json` header is the standing example - Node's `fetch`
+defaults to `*/*` and MailPace answers that with a `406` blaming the body and the
+Content-Type, both of which are fine.
 
 ## Git workflow
 
@@ -644,9 +738,10 @@ for the two supported setups and their trade-offs.
 
 Things this boilerplate deliberately does not decide for you:
 
-- **Auth.** Not present. NestJS guards are the place for it; see the `backend-nestjs`
-  rules. Until it lands, `POST /api/users` and `GET /api/users/:id` are unauthenticated
-  scaffolding that exists to prove the database layer works end to end.
+- **Sessions.** Half present. `POST /api/auth/register` and `POST /api/auth/login-link`
+  issue single-use login links, but nothing consumes one yet: there is no verify route, no
+  session and no guard, so every endpoint is still unauthenticated. NestJS guards are the
+  place for it; see the `backend-nestjs` rules.
 - **Shared types between the apps.** Right now `HelloResponse` is declared in
   `backend/src/app.service.ts` and copied by hand into `frontend/src/app/page.tsx`.
   Changing the response shape means editing both. Generating types from an OpenAPI spec is

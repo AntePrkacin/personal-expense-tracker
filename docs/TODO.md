@@ -17,28 +17,55 @@ relitigated by accident.
 ### OpenAPI spec, generated frontend types, and Swagger
 
 `HelloResponse` is declared in `backend/src/app.service.ts` and copied by hand into
-`frontend/src/app/page.tsx`. `UserResponse` will have the same problem the moment the
-frontend consumes it. Swagger was deliberately not added on its own, because installing it
-without generating frontend types from the resulting spec solves the smaller half of the
-problem and makes the duplication look addressed. Do both together.
+`frontend/src/app/page.tsx`. The auth routes dodge this by returning nothing at all, but
+the first endpoint with a real response body brings it straight back. Swagger was
+deliberately not added on its own, because installing it without generating frontend types
+from the resulting spec solves the smaller half of the problem and makes the duplication
+look addressed. Do both together.
 
-### Auth, and the users endpoints it replaces
+### Link verification and sessions
 
-`POST /api/users` and `GET /api/users/:id` are unauthenticated proof-of-stack scaffolding.
-They appear nowhere in the tech spec's API surface, which specifies `register(...)` carrying
-the onboarding category selection, a magic-link flow, and a session-scoped `getProfile()`.
-Expect to reshape or delete both endpoints rather than protect them as they stand.
+The issuing half of the magic-link flow has landed: `POST /api/auth/register` and
+`POST /api/auth/login-link` create accounts and send links, and `LoginTokenService.consume()`
+is written and tested. Nothing consumes a link yet - there is no verify route, no session,
+no guard, and therefore no authenticated endpoint. The proof-of-stack `POST /api/users` and
+`GET /api/users/:id` are deleted; the read is replaced by a session-scoped `getProfile()`
+with that work.
+
+Verification also owns everything registration deliberately does not do: provisioning the
+user's Turso database, inserting the profile from `users.onboarding_payload` (converting
+`monthlyBudget` to cents at that boundary), calling `seedStarterCategories`, and clearing
+the payload. `UserDatabaseService.deleteUserDb` is kept for its failure path.
 
 `TursoPlatformService` documents but does not implement `mintUserDbToken(dbName, expiry)`,
-the short-expiry variant needed to hand a browser a token it can sync with directly. It
-belongs with auth, which is what makes "which user is asking" answerable.
+the short-expiry variant needed to hand a browser a token it can sync with directly. That
+is now verification's, since it is what makes "which user is asking" answerable.
+
+Two constraints the verify page inherits. The token travels in a **query string**, so it
+lands in server access logs, browser history and potentially a `Referer` header - the
+accepted norm for magic links, bounded by the short single-use window, but it means that
+page must load no third-party resources and must consume the token immediately. And a
+failed send leaves the user with **zero** live links rather than the one they had, because
+`issue()` supersedes the previous link before sending; "Resend link" (VER-2) is the only
+recovery, and it is the design's own answer (A36).
 
 ### The rest of the data model
 
-Only `users` (central) and `profile` (per user) exist. `categories`, `transactions` and
-`insights` arrive with their own features as ordinary migrations under
-`backend/drizzle/user/`, and starter-category seeding belongs to onboarding, not to
-registration.
+`users` and `login_links` (central) and `profile` and `categories` (per user) exist.
+`transactions` and `insights` arrive with their own features as ordinary migrations under
+`backend/drizzle/user/`. `categories` has its table and a `STARTER_CATEGORIES` constant but
+no CRUD, no per-category stats and no allocation summary.
+
+Starter category colors are the real ones, read per chip from the design's variable
+bindings in Figma frame 03 (node 43:705) and checked against a render. Two open design
+questions remain, both for the designer rather than for code:
+
+- **The palette has eight colors for ten chips**, so Subscriptions reuses Transport's blue
+  and Other reuses Bills' orange. Colour therefore cannot identify a category on its own,
+  which constrains any later legend, chart or filter that wants to key on it.
+- **A7's conflict sits on the same seam.** The starter set includes Bills and
+  Subscriptions, which never reappear, while later screens show Health and Other - and the
+  duplicated colors are exactly on those chips. All ten are seeded until it is resolved.
 
 ### `frontend/src/components/`
 
@@ -48,15 +75,26 @@ Does not exist. Create it with the first shared component.
 
 ## Operational
 
-### Unauthenticated registration creates real cloud databases
+### Unverified registrations accumulate, and hold their address
 
-In cloud mode, every `POST /api/users` provisions an actual Turso database, and the
-endpoint has no auth, so anyone with the URL can create them until a quota stops the
-group. Fine while the backend runs locally or in local mode; **not fine deployed in cloud
-mode before auth lands**. If that deployment ever needs to happen first, put rate
-limiting (`@nestjs/throttler` is the obvious fit) or a shared secret in front of
-registration. The endpoints are pre-auth scaffolding either way (see "Auth" above), so
-this note dissolves when the magic-link flow replaces them.
+Registering no longer costs a database, but it still writes a central row that holds the
+email against the partial unique index. Nobody has to prove the address is theirs to do it,
+so anyone can register an address they do not own and rows pile up for accounts that will
+never be verified. The squatting itself is self-healing - a genuine owner's registration
+overwrites the stashed payload, and only they can click the link - but the rows are not.
+Give unverified rows an expiry and a sweep before this is deployed anywhere public.
+
+### The auth throttler is in-memory, and blind behind a proxy
+
+`@nestjs/throttler` uses its default in-memory storage, so the limit is **per backend
+instance**: two instances give an attacker twice the budget. Same single-instance
+assumption as the migration lock below.
+
+Separately, the tracker keys on `req.ip`, which behind a reverse proxy or load balancer is
+the proxy's address unless Express `trust proxy` is set. Every caller would then share one
+bucket, which throttles everybody at once and protects nobody in particular. Set it when
+the deployment topology is known, not before - trusting the header without a proxy in front
+lets a client spoof its own key.
 
 ### Token rotation is manual
 
@@ -150,6 +188,14 @@ than discovered.
   in a `Map` with no eviction. An LRU with an idle timeout is the obvious next step.
 - **No cross-process migration lock.** A single backend instance is assumed. Two instances
   opening the same user database for the first time could both run its migrations.
+- **Enumeration resistance is argued, not measured.** With the mail send floated off the
+  request, every path through the two auth routes answers after at most one indexed read
+  and one insert into the local central database, so the timing difference should be
+  negligible. Nobody has profiled the residual. If this ever has to be more than
+  best-effort, it needs a measurement rather than an argument.
+- **Login links are never purged.** Used, superseded and expired rows accumulate in
+  `login_links` forever. Harmless at this scale, and the same purge policy that covers
+  tombstones can cover them.
 - **Soft deletes are never purged.** Every table carries `deleted_at` for future sync, and
   reads filter it, but nothing removes tombstones. A purge policy is deferred until the
   sync design needs one.
@@ -163,9 +209,6 @@ than discovered.
 
 ## Housekeeping
 
-- **Branch name.** `feat/backend-db-bootstrap` does not follow the documented
-  `{type}/DEMO-{number}-{slug}` format. Now pushed with PR #3 open against it, so renaming
-  would orphan the PR. Left alone deliberately; worth getting right on the next branch.
 - **Repo-wide `prettier --check` is commented out in CI.** 55 files predate the Prettier
   config and the step would fail on a fresh clone. To enable: run `npx prettier --write .`
   once, commit that, then uncomment the step in `.github/workflows/ci.yml`. Note that

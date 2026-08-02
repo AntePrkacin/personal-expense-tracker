@@ -142,6 +142,57 @@ same validation and the same error shape as production. Every failed request ret
 `{ statusCode, message, error, timestamp, path }`; unknown errors are logged in full
 server-side and reduced to a generic 500 outward.
 
+**Access is passwordless, and both entry points answer identically.** `POST
+/api/auth/register` and `POST /api/auth/login-link` both return an **empty 202**, always.
+The design has no password field anywhere (A31) and specifies that neither screen may
+reveal whether an account exists (REG-6, LOG-6, A35), so an empty body is the cheapest way
+to be byte-for-byte identical. Validation failures are still 400: a malformed address is a
+fact about the input, not about the account.
+
+Registering an address that already exists sends a link instead of creating a duplicate.
+If that account was never verified, the newly submitted onboarding values **overwrite** the
+stashed ones - the realistic case is someone who lost the first email and resubmitted,
+possibly with corrections, and they must verify into the profile they last saw. Submitting
+an unknown address to `login-link` creates nothing and sends nothing; only the response is
+identical. Mailing strangers because they were typed into a form is worse than the
+enumeration it would defend against, so **every `login_links` row references a real user**.
+
+**Nothing past the directory lookup is awaited.** Issuing the token and sending the mail
+are floated with a `.catch` that logs, and the handler answers 202 as soon as the lookup
+(and, for a new registration, the insert) is done. That is load-bearing twice over. A send
+failure cannot fail a request whose account really was created - the design's own recovery
+is "Resend link" (VER-2). And it closes the timing hole: an awaited send would make a known
+address cost an insert plus an HTTPS round trip while an unknown one costs one indexed
+read, a difference of hundreds of milliseconds against the whole point of REG-6/LOG-6.
+Anything added to these handlers has to preserve that.
+
+**Registration provisions no database.** The central row is written with `db_url` and
+`db_auth_token` NULL and the onboarding payload stashed in `users.onboarding_payload`; the
+user's own Turso database is created when the emailed link is verified, which is the first
+moment anyone has proved the address is theirs. Three reasons: an unauthenticated endpoint
+can no longer create real cloud databases, which removes the pre-auth cost exposure rather
+than mitigating it; register stops making two sequential Platform API calls, which is what
+made the response latency leak account existence; and A19 designs no loading state for
+"Finish setup", so a register that blocks on cloud provisioning would be a spinner-shaped
+hole in a screen with no spinner.
+
+**Login tokens are looked up by hash, never compared.** `randomBytes(32).toString('base64url')`
+is 256 bits of entropy and the SHA-256 of it is the stored key, so verification is an
+indexed read and there is no secret comparison to time. bcrypt or argon2 would be wrong
+here: they exist to slow brute force against low-entropy secrets. `consume()` is a single
+conditional `UPDATE ... RETURNING`, never a read followed by a write - the await between a
+check and a mark is exactly where two concurrent consumes of one token would both pass.
+Invalidation uses two distinct columns, `used_at` and `superseded_at`, because A38 designs
+no screen for a rejected link and "why did this link stop working" has to be answerable
+from the row.
+
+**The auth routes are rate-limited on IP _and_ submitted email.** Per-IP alone lets a
+botnet hammer one address; per-email alone lets one host walk a list. The tracker runs in a
+guard, which Nest executes _before_ pipes, so it normalizes the raw body itself rather than
+trusting the DTO transform - `src/common/normalize-email.ts` is shared by both for exactly
+that reason. `@nestjs/throttler` takes `ttl` in milliseconds, so the module converts
+`AUTH_RATE_TTL_S` with the library's `seconds()` helper; getting that wrong is silent.
+
 ## Persistence
 
 **Drizzle ORM (v1 RC) over Turso's new engine, in two modes behind one seam.**
@@ -177,10 +228,19 @@ field the Platform API returns. A dedicated test pins the flag in
 **Database per user.** A small **central** database (`users`: id, email, and a pointer to
 that person's database) exists because identity must resolve by email before the per-user
 database is known. Everything else about a person lives in **their own Turso database**,
-starting with a single-row `profile` table. Categories, transactions and insights arrive
-there later as ordinary migrations. In cloud mode the central database and every per-user
-one live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
-per-user ones itself at registration.
+holding `profile` (single row) and `categories`. Transactions and insights arrive there
+later as ordinary migrations. In cloud mode the central database and every per-user one
+live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
+per-user ones itself, at **verification** rather than registration - see the access flow
+under Architecture.
+
+Central carries two deliberate exceptions to "email and a pointer". `login_links` is there
+because a link is consumed before we know - or, for an unverified account, before there
+even is - the user's own database. `users.onboarding_payload` is there because the
+registration form is collected before the address is proven and the profile it becomes
+lives in a database that does not exist yet; it is transient, written at registration and
+set NULL by verification, and it holds `monthlyBudget` in **major** units with the DTO
+defaults already applied. Neither is a licence to put more profile data in central.
 
 **Tokens.** Creating databases and minting their tokens are control-plane operations that
 no data-plane token can perform, so `TURSO_ORG_TOKEN` is used in exactly one place
@@ -248,6 +308,11 @@ Backend variables:
 | `TURSO_GROUP_TOKEN`      | -                       | Break-glass CLI/Studio access; the app never reads it |
 | `TURSO_GROUP`            | `decode-pet`            | Group holding the central and all per-user databases  |
 | `TURSO_SYNC_INTERVAL_S`  | `60`                    | Cloud-mode push/pull interval                         |
+| `MAILPACE_API_TOKEN`     | -                       | MailPace server token. Paired with `MAIL_FROM`        |
+| `MAIL_FROM`              | -                       | Sender address, on the DKIM-authorized domain         |
+| `LOGIN_LINK_TTL_M`       | `15`                    | Login-link lifetime, in minutes                       |
+| `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per IP+email                |
+| `AUTH_RATE_TTL_S`        | `900`                   | Length of that window, in seconds                     |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
 
@@ -265,7 +330,21 @@ has no prefix because it is read server-side only; a `NEXT_PUBLIC_` variable is 
 into the browser bundle and is therefore public forever.
 
 The four cloud variables are optional but paired: set all of them or none. Anything else
-fails at boot with a Joi message naming the missing one.
+fails at boot with a Joi message naming the missing one. `MAILPACE_API_TOKEN` and
+`MAIL_FROM` are paired the same way, for a sharper reason: unset means "log the link
+instead of sending it", which is a supported mode, but half-set would mean a real login
+email silently never leaves. Both therefore stay **commented** in `.env.example`, value
+and all: that file is copied verbatim by `cp .env.example .env`, so uncommenting only
+`MAIL_FROM` would leave a fresh clone unable to start.
+
+**Smoke-test mail goes to `spendifico@gmail.com`, never a personal address.** That is the
+project's official inbox, and it is also where `login@spendifico.eu` - this project's
+`MAIL_FROM` - forwards, so one inbox holds both what the app sends and any reply. The
+procedure, including running the backend against a throwaway database so a test
+registration never reaches the real user directory, is in README.md under Sending real
+email. Run it whenever the mail path changes: it catches what a mocked spec cannot, the
+standing example being the `Accept: application/json` header that MailPace requires and
+Node's `fetch` does not send.
 
 ## What is in `.claude/`
 
@@ -435,13 +514,20 @@ something that is not there.
   same work rather than added on its own.
 - **`frontend/src/components/`.** Does not exist. Create it with your first shared
   component.
-- **Auth.** `POST /api/users` and `GET /api/users/:id` are unauthenticated proof-of-stack
-  endpoints that exercise the two-database write and read path. They appear nowhere in the
-  tech spec's API surface and are expected to be reshaped or replaced by the magic-link
-  flow when it lands.
-- **The rest of the data model.** Only `users` (central) and `profile` (per user) exist.
-  Categories, transactions and insights arrive with their features, and starter-category
-  seeding belongs to onboarding.
+- **Link verification and sessions.** `POST /api/auth/register` and
+  `POST /api/auth/login-link` exist and issue links; nothing consumes them yet.
+  `LoginTokenService.consume()` is written and tested, but there is no `verifyLoginLink`
+  route, no session, no guard, and therefore no authenticated endpoint at all. That work
+  also owns provisioning the user's database, inserting the profile from
+  `users.onboarding_payload`, calling `seedStarterCategories`, and clearing the payload.
+  The old proof-of-stack routes `POST /api/users` and `GET /api/users/:id` are **gone**;
+  the read is replaced by a session-scoped `getProfile()` with that work.
+- **The rest of the data model.** Only `users` and `login_links` (central) and `profile`
+  and `categories` (per user) exist. Transactions and insights arrive with their features.
+  `categories` has a table and a starter set but no CRUD, no stats and no allocation
+  summary. Its starter colors are the real ones from Figma frame 03, read per chip from the
+  design's variable bindings; note the palette has eight colors for ten chips, so two
+  repeat and color alone cannot identify a category.
 
 `backend/README.md` is the stock NestJS starter README. Ignore it as a source of truth
 for this project.
