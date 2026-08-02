@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { access, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -217,6 +217,20 @@ describe('AuthController (e2e)', () => {
       );
     });
 
+    it('rejects a registration with no categories field at all', async () => {
+      // The field is required rather than optional precisely so a frontend
+      // that stops sending it fails loudly instead of silently seeding
+      // nothing - this pins that contract.
+      const body: Record<string, unknown> = { ...registration(nextEmail()) };
+      delete body.categories;
+
+      const response = await post('register', body).expect(400);
+
+      expect(errorBody(response).message).toEqual(
+        expect.arrayContaining([expect.stringContaining('categories')]),
+      );
+    });
+
     it('rejects a category outside the starter set', async () => {
       const response = await post('register', {
         ...registration(nextEmail()),
@@ -294,6 +308,8 @@ describe('AuthController (e2e)', () => {
     });
   });
 
+  // Every 429 in here comes from the per-email limiter: the per-IP one is
+  // parked at 1000 by setup-e2e.ts, since the whole suite shares 127.0.0.1.
   describe('rate limiting', () => {
     it('returns 429 once the limit is reached, for a known address', async () => {
       const email = nextEmail();
@@ -382,6 +398,35 @@ describe('AuthController (e2e)', () => {
       ]);
 
       expect(results.filter((id) => id !== null)).toEqual([userId]);
+    });
+
+    it('leaves exactly one live link when two issues race', async () => {
+      // Without the transaction inside issue(), the two supersedes can both
+      // run before either insert, leaving BOTH new links live.
+      const userId = newId();
+      const [first, second] = await Promise.all([
+        loginTokens.issue(userId),
+        loginTokens.issue(userId),
+      ]);
+
+      const live = await centralDb
+        .select()
+        .from(loginLinks)
+        .where(
+          and(
+            eq(loginLinks.userId, userId),
+            isNull(loginLinks.usedAt),
+            isNull(loginLinks.supersededAt),
+          ),
+        );
+      expect(live).toHaveLength(1);
+
+      // And the surviving link is the only consumable one, whichever won.
+      const consumed = await Promise.all([
+        loginTokens.consume(first),
+        loginTokens.consume(second),
+      ]);
+      expect(consumed.filter((id) => id !== null)).toEqual([userId]);
     });
   });
 });
