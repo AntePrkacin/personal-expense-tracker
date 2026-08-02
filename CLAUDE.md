@@ -27,7 +27,9 @@ workspaces, turbo, or nx setup. The root `package.json` owns only repo-wide dev 
 backend/          NestJS 11 API, port 3000, its own package.json + node_modules
   drizzle/        Generated migrations, committed: central/ and user/
   databases/      Local database files. Gitignored, recreated from the migrations
+  openapi.json    Generated API contract, committed. `npm run api:sync`, never by hand
 frontend/         Next.js 16 + React 19, port 4200, its own package.json + node_modules
+  src/types/api.d.ts  Generated from that spec, committed. Same rule
 docs/plans/       Implementation plans, one file per plan (see below)
 .claude/          Skills, agents and permissions for Claude Code (see below)
 .github/workflows/ci.yml
@@ -85,6 +87,8 @@ Backend, from `backend/`:
 | `npm run test:cov`                             | Coverage                                                    |
 | `npm run db:generate`                          | drizzle-kit generate for both scopes; commit what it writes |
 | `npm run db:studio:central` / `db:studio:user` | Drizzle Studio over the local file                          |
+| `npm run api:spec`                             | Build, then write `openapi.json`; commit what it writes     |
+| `npm run api:emit`                             | The write half alone, reusing `dist/`. What CI runs         |
 
 Frontend, from `frontend/`:
 
@@ -96,6 +100,11 @@ Frontend, from `frontend/`:
 | `npm run lint`       | ESLint (`eslint-config-next`)                   |
 | `npm test`           | Jest + React Testing Library (jsdom)            |
 | `npm run test:watch` | Same, in watch mode                             |
+| `npm run api:types`  | Regenerate `src/types/api.d.ts` from the spec   |
+
+From the repo root, `npm run api:sync` runs both halves in the right order. That is the
+command to use after touching anything a response or request body is made of; the two
+per-app scripts exist for CI, which has already built one side or the other.
 
 Single test in either app: `npm test -- page` filters by path,
 `npm test -- -t "greeting"` filters by test name.
@@ -128,11 +137,39 @@ is registered in `backend/src/app.module.ts`, so it reads `backend/.env` at star
 through `ConfigService`, as `main.ts` does, rather than scattering `process.env` through
 the code.
 
-**API response contract is hand-mirrored, and that is a known wart.** `HelloResponse`
-is declared in `backend/src/app.service.ts` (the source of truth) and copied by hand
-into `frontend/src/app/page.tsx`. Change a response shape and you must edit both. The
-intended fix is generating frontend types from an OpenAPI spec, but the backend does not
-expose one yet.
+**One HTTP contract, generated, and the frontend types come out of it.** The backend is
+the source of truth and nothing restates it. `nest build` runs `@nestjs/swagger`'s CLI
+plugin, `npm run api:spec` writes `backend/openapi.json` from the app's own routes, and
+`npm run api:types` turns that into `frontend/src/types/api.d.ts`; `npm run api:sync` at
+the root does both. `page.tsx` reads its response type out of `paths['/api/hello']` rather
+than declaring one. Both artifacts are **generated but committed**, for the same reason
+`backend/drizzle/` and `.agents/skills/` are: everyone needs byte-identical copies and a
+fresh clone must work with no extra step. It also keeps `cd frontend && npm run build`
+working with no backend running, which is what lets the two CI jobs stay independent.
+
+Four things about that pipeline that are easy to get wrong, all of which fail **quietly**:
+
+- **Response shapes must be classes in `.dto.ts` files.** An interface erases at compile
+  time, leaving nothing to hang metadata on, and the plugin only introspects files
+  matching its `dtoFileNameSuffix` (default `['.dto.ts', '.entity.ts']`). Break either and
+  the spec still generates - the response is just described as `{}`.
+- **The generator runs against `dist/`, never `ts-node`.** The plugin is a compile-time
+  transformer wired through `nest build`. `test/openapi.e2e-spec.ts` therefore asserts
+  against the committed JSON rather than building a document in-process.
+- **`setGlobalPrefix` must run before the document is built**, or every path loses its
+  `/api` and the generated types point at URLs that 404. `API_PREFIX` in
+  `src/common/api-prefix.ts` is shared by `main.ts`, `src/openapi.ts` and the e2e suite.
+- **Generating the spec boots the real `AppModule`**, persistence and all.
+  `src/openapi.env.ts` scrubs `TURSO_*` and sets `OPENAPI_EMIT`, which makes `AppModule`
+  skip `backend/.env` - without the second half dotenv puts every scrubbed variable
+  straight back, and writing a JSON file would sync against live Turso.
+
+**Drift is a CI failure, in two halves.** The backend job regenerates the spec and fails
+on a diff; the frontend job does the same for `api.d.ts`. Together they prove the spec
+matches the code and the types match the spec. A committed generated artifact rots
+silently otherwise, which is the exact failure this pipeline exists to kill.
+
+Swagger UI is served at `http://localhost:3000/api/docs` from the same document.
 
 **Global pipe and filter are DI providers, not `app.useGlobalPipes`.** `AppModule`
 registers `APP_PIPE` (a `ValidationPipe` with `whitelist`, `transform` and
@@ -492,9 +529,14 @@ short code samples in those files as inline spans, which Prettier leaves alone.
 `.github/workflows/ci.yml` runs three jobs in parallel on every PR and on pushes to
 `main`:
 
-- **backend**: lint, build, unit tests, e2e
-- **frontend**: lint, unit tests, build
+- **backend**: lint, build, OpenAPI spec is fresh, unit tests, e2e
+- **frontend**: generated API types are fresh, lint, unit tests, build
 - **conventions**: commitlint over the PR's commit range
+
+The two freshness steps are the drift gate described under Architecture. Both regenerate
+a committed artifact and fail on a non-empty `git diff`. Note where each one lives: the
+frontend half runs in the frontend job because `openapi-typescript` only reads the
+committed JSON and needs no `backend/node_modules`.
 
 The backend job covers the persistence layer without any Turso credentials: `test-e2e`
 runs in local mode against files in a temp directory (see the note under Persistence), and
@@ -520,9 +562,6 @@ something that is not there.
   `NEXT_PUBLIC_`. Related: `@google/genai` was once present in `frontend/node_modules`
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
-- **Generated API types.** No OpenAPI spec, so `HelloResponse` is hand-mirrored between
-  the two apps as described under Architecture. Swagger is deliberately deferred to this
-  same work rather than added on its own.
 - **`frontend/src/components/`.** Does not exist. Create it with your first shared
   component.
 - **Link verification and sessions.** `POST /api/auth/register` and

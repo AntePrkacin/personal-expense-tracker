@@ -14,15 +14,6 @@ paragraph or two probably deserve their own plan in this directory.
 These were decided against deliberately. Reasons are recorded so the decision is not
 relitigated by accident.
 
-### OpenAPI spec, generated frontend types, and Swagger
-
-`HelloResponse` is declared in `backend/src/app.service.ts` and copied by hand into
-`frontend/src/app/page.tsx`. The auth routes dodge this by returning nothing at all, but
-the first endpoint with a real response body brings it straight back. Swagger was
-deliberately not added on its own, because installing it without generating frontend types
-from the resulting spec solves the smaller half of the problem and makes the duplication
-look addressed. Do both together.
-
 ### Link verification and sessions
 
 The issuing half of the magic-link flow has landed: `POST /api/auth/register` and
@@ -98,9 +89,10 @@ not uniform - one part of it is a data migration wearing a find-and-replace cost
 
 **Safe to change with a find and replace.** User-facing copy: the email subject and body
 (`src/mail/login-link.template.ts`, currently "Your Expensa login link" and "Log in to
-Expensa"), the frontend `<title>`, README prose, and the wording throughout
-`docs/project-management/`. `SYNC_CLIENT_NAME` (`expensa-backend`) is sent to Turso for
-observability only and nothing keys on it.
+Expensa"), the frontend `<title>`, the OpenAPI document title in `src/openapi.document.ts`
+(run `npm run api:sync` after, or CI's drift gate fails), README prose, and the wording
+throughout `docs/project-management/`. `SYNC_CLIENT_NAME` (`expensa-backend`) is sent to
+Turso for observability only and nothing keys on it.
 
 **Not safe: `USER_DB_NAME_PREFIX` in `src/database/database.constants.ts`.** That prefix
 feeds `userDbName(id)`, which derives both the remote Turso database name and the local
@@ -279,3 +271,10 @@ than discovered.
   `.lintstagedrc.js` only formats files under `backend/` and `frontend/`, so root-level
   Markdown such as this file is not covered by the pre-commit hook and has to be formatted
   by hand.
+- **The swagger plugin renders `@IsPositive()` as `minimum: 1`.** Right for an integer,
+  wrong for anything with decimals, and it publishes a constraint the API does not
+  actually enforce. `RegisterDto.monthlyBudget` carries an explicit
+  `@ApiProperty({ minimum: 0, exclusiveMinimum: true })` to correct it; any future money
+  field needs the same line. Check the generated `backend/openapi.json` when adding a DTO
+  rather than assuming the derived constraints are faithful - `@ArrayMaxSize` is simply
+  dropped, for instance, which is a smaller version of the same thing.

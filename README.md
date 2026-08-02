@@ -225,24 +225,32 @@ curl http://localhost:3000/api/hello
 Note the `/api` part. `http://localhost:3000/` on its own returns **404**, and that is
 correct, not a broken server. See "Gotchas" below.
 
+Or browse the whole API at **http://localhost:3000/api/docs**, which is Swagger UI over
+the same contract the frontend types are generated from. You can send requests from
+there: with no `MAILPACE_API_TOKEN` set, a registration logs its login link to the
+backend terminal instead of mailing it.
+
 ## Project structure
 
 ```text
 backend/                  NestJS 11 API on :3000
   src/
-    main.ts               Bootstrap: global 'api' prefix, CORS, port, shutdown hooks
+    main.ts               Bootstrap: global 'api' prefix, CORS, Swagger UI, port, shutdown hooks
     app.module.ts         Root module: ConfigModule, DatabaseModule, AuthModule, pipe + filter
     app.controller.ts     GET /api/hello
-    app.service.ts        Business logic + the HelloResponse contract
+    app.service.ts        Business logic
     app.controller.spec.ts
+    openapi.ts            Writes openapi.json. Run it via `npm run api:spec`, never ts-node
+    dto/                  Response shapes. Classes, not interfaces - see CLAUDE.md
     auth/                 POST /api/auth/register, /api/auth/login-link; login tokens
-    common/               ids, email normalization, the global exception filter
+    common/               ids, email normalization, the global exception filter, the error DTO
     config/               Joi schema validating the environment at boot
     database/             Drizzle + Turso: schemas, client factory, per-user databases
     mail/                 Mailer seam: logs by default, MailPace over HTTP when configured
     users/                Central directory reads and writes (no controller)
   drizzle/                Generated migrations, committed: central/ and user/
   databases/              Local database files. Gitignored; migrations recreate them
+  openapi.json            The API contract. Generated and committed; never edit by hand
   test/                   Supertest e2e specs
   .env.example
 
@@ -252,6 +260,7 @@ frontend/                 Next.js 16 (App Router) + React 19 on :4200
     page.tsx              Home route, async Server Component, fetches the API
     page.test.tsx         React Testing Library example
     globals.css           Tailwind v4 entry
+  src/types/api.d.ts      Generated from backend/openapi.json. Committed; never edit
   .env.example
 
 .claude/                  Claude Code skills, agents and permissions
@@ -281,6 +290,14 @@ Run these from inside the app directory, never from the repo root.
 | Coverage            | `npm run test:cov`          | not set up               |
 | Generate migrations | `npm run db:generate`       | n/a                      |
 | Browse the database | `npm run db:studio:central` | n/a                      |
+| Regenerate the API  | `npm run api:spec`          | `npm run api:types`      |
+
+That last row is the one exception to "never from the repo root". Run
+**`npm run api:sync`** there instead and it does both halves, in the order that works.
+Do that after changing any request or response shape. It writes two files,
+`backend/openapi.json` and `frontend/src/types/api.d.ts`, both of which are committed and
+neither of which is editable by hand - CI regenerates them and fails if your commit did
+not.
 
 Both apps use Jest, so `npm test` runs once and exits. To filter:
 `npm test -- page` by path, `npm test -- -t "greeting"` by test name.
@@ -301,6 +318,7 @@ three packages in order.
 | `mise run check-for-updates` | `ncu` in all three, showing what is outdated                         |
 | `mise run update`            | `ncu -u --target minor`, then install and update, in all three       |
 | `mise run db:generate`       | Generate Drizzle migrations for both database scopes                 |
+| `mise run api:sync`          | Regenerate the OpenAPI spec, then the frontend types from it         |
 | `mise run skills`            | Refresh Drizzle's committed agent skills after a drizzle-kit bump    |
 
 Every task also has per-package variants when you want just one: `install:repo`,
@@ -650,13 +668,18 @@ forbids committing to `main`, the normal flow is: branch, commit, push, `gh pr c
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs three jobs in parallel on
 every pull request and on pushes to `main`:
 
-| Job           | Steps                                  |
-| ------------- | -------------------------------------- |
-| `backend`     | lint, build, unit tests, e2e           |
-| `frontend`    | lint, unit tests, build                |
-| `conventions` | commitlint over every commit in the PR |
+| Job           | Steps                                       |
+| ------------- | ------------------------------------------- |
+| `backend`     | lint, build, spec is fresh, unit tests, e2e |
+| `frontend`    | types are fresh, lint, unit tests, build    |
+| `conventions` | commitlint over every commit in the PR      |
 
 The Node version comes from `.nvmrc`, so bump it there and CI follows.
+
+The two "is fresh" steps regenerate a committed generated file and fail on any diff:
+`backend/openapi.json` in one job, `frontend/src/types/api.d.ts` in the other. Together
+they prove the spec still matches the backend and the types still match the spec. If
+either fails, `npm run api:sync` from the repo root is the fix.
 
 A repo-wide `prettier --check` step exists but is commented out: 55 files predate the
 Prettier config and it would fail on a fresh clone. To turn it on, run
@@ -740,6 +763,8 @@ for the two supported setups and their trade-offs.
 | `mise: command not found` after installing it             | You skipped the shell activation line. See [Installing mise](#installing-mise-optional)                                                              |
 | `mise run audit` lists vulnerabilities but still succeeds | Deliberate: it is a report, not a gate. See [Auditing and updating dependencies](#auditing-and-updating-dependencies)                                |
 | mise gives you a different Node major than CI             | `mise.toml` and `.nvmrc` both pin the major and must be bumped together. mise does not read `.nvmrc`, so the two are independent                     |
+| CI fails on "OpenAPI spec is up to date"                  | You changed a request or response shape without regenerating. Run `npm run api:sync` from the repo root and commit both files it writes              |
+| The spec has a response of `{}`                           | The shape is an `interface`, or its class is not in a `*.dto.ts` file. Both make the generator's plugin skip it, and neither is an error             |
 
 ## Where to go from here
 
@@ -749,10 +774,12 @@ Things this boilerplate deliberately does not decide for you:
   issue single-use login links, but nothing consumes one yet: there is no verify route, no
   session and no guard, so every endpoint is still unauthenticated. NestJS guards are the
   place for it; see the `backend-nestjs` rules.
-- **Shared types between the apps.** Right now `HelloResponse` is declared in
-  `backend/src/app.service.ts` and copied by hand into `frontend/src/app/page.tsx`.
-  Changing the response shape means editing both. Generating types from an OpenAPI spec is
-  the better answer once you have real endpoints.
+- **A generated HTTP client.** Types are shared, and that part is decided: response shapes
+  come out of `backend/openapi.json` (see Commands above), so `page.tsx` derives its type
+  rather than restating it. What is left open is whether the calls themselves get wrapped.
+  A generated client would fight Next.js caching, since `page.tsx` passes `cache` and
+  `next` options straight to `fetch`; `openapi-fetch` is the upgrade worth considering,
+  because it delegates to global `fetch` and passes `RequestInit` through untouched.
 - **A chat feature.** There is no `/api/chat` route yet, and the env template ships no
   model-provider key. Add the variable your provider needs when you build the route,
   server-side only.
