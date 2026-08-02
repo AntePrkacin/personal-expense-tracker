@@ -11,7 +11,8 @@
     "start": "next start -p 4200",
     "lint": "eslint",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "api:types": "openapi-typescript ../backend/openapi.json -o src/types/api.d.ts"
   },
   "prettier": {
     "printWidth": 100,
@@ -36,6 +37,7 @@
     "eslint-config-next": "16.2.12",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5"

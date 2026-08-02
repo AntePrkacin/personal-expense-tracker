@@ -1,8 +1,9 @@
-// Same shape the backend returns from GET /api/hello (backend is the source
-// of truth for this contract - see backend/src/app.service.ts).
-interface HelloResponse {
-  message: string;
-}
+import type { paths } from '@/types/api';
+
+// Read out of the generated spec rather than restated here. Renaming this
+// field in the backend now breaks the build instead of quietly rendering an
+// empty box. Regenerate with `npm run api:sync` from the repo root.
+type HelloResponse = paths['/api/hello']['get']['responses'][200]['content']['application/json'];
 
 async function getHello(): Promise<HelloResponse> {
   const baseUrl = process.env.BACKEND_URL ?? 'http://localhost:3000';
