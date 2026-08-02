@@ -49,6 +49,30 @@ failed send leaves the user with **zero** live links rather than the one they ha
 `issue()` supersedes the previous link before sending; "Resend link" (VER-2) is the only
 recovery, and it is the design's own answer (A36).
 
+**Gmail threads every login link into one conversation, and only the newest works.**
+Observed on 2026-08-02 against a real inbox: four links sent to the same address collapsed
+into a single Gmail thread, because every message has an identical sender and subject
+("Your Expensa login link"). After a resend the user therefore opens one conversation
+holding several visually indistinguishable emails, of which exactly one is valid - and
+Gmail's "trimmed content" collapsing can hide the newest below a fold. Clicking the wrong
+one is the likely outcome, not an edge case, and A38 designs no screen for a rejected
+link, so today that is a dead end with no explanation.
+
+This is the invalidation behaving as specified, not a bug in it, and it was invisible
+until someone looked at an actual inbox rather than at a send API returning
+`{"status":"queued"}`. Two ways out, and they are not exclusive:
+
+- **Cheap.** Make each message its own thread by varying the subject - appending a short
+  local time is the usual trick. Costs a slightly uglier subject line.
+- **Proper, and PET-14's.** Have the verify page distinguish "superseded" from the other
+  rejections and say so: "this link was replaced by a newer one, check your inbox for the
+  most recent email." The schema already supports it - `superseded_at` and `used_at` are
+  separate columns precisely so the cases stay distinguishable - but `consume()`
+  deliberately returns a bare `null` for all four rejections, so telling them apart needs a
+  richer return type. Weigh that against enumeration: the reason for the flat `null` is
+  that the caller cannot learn anything, though here the holder of a real token is already
+  the address owner, so the calculus differs.
+
 ### The rest of the data model
 
 `users` and `login_links` (central) and `profile` and `categories` (per user) exist.
@@ -66,6 +90,38 @@ questions remain, both for the designer rather than for code:
 - **A7's conflict sits on the same seam.** The starter set includes Bills and
   Subscriptions, which never reappear, while later screens show Health and Other - and the
   duplicated colors are exactly on those chips. All ten are seeded until it is resolved.
+
+### Renaming the product from Expensa to Spendifico
+
+Decided on 2026-08-02: the product becomes **Spendifico**. Not done yet, and the rename is
+not uniform - one part of it is a data migration wearing a find-and-replace costume.
+
+**Safe to change with a find and replace.** User-facing copy: the email subject and body
+(`src/mail/login-link.template.ts`, currently "Your Expensa login link" and "Log in to
+Expensa"), the frontend `<title>`, README prose, and the wording throughout
+`docs/project-management/`. `SYNC_CLIENT_NAME` (`expensa-backend`) is sent to Turso for
+observability only and nothing keys on it.
+
+**Not safe: `USER_DB_NAME_PREFIX` in `src/database/database.constants.ts`.** That prefix
+feeds `userDbName(id)`, which derives both the remote Turso database name and the local
+file path, and the result is persisted in `users.db_name`. Change the prefix and every
+existing user's derived name stops matching both their central row and the database that
+actually exists: `getUserDb` opens or creates the wrong file, and `deleteUserDb` - which
+derives the name from the id on purpose, because its caller may have no row to read -
+targets a database that is not there. Nothing errors loudly; people simply lose their data.
+
+If it has to change, the prefix stops being derivable and `db_name` becomes the source of
+truth: read it from the central row wherever a name is needed, and let the constant apply
+to new users only. That is a real change to `UserDatabaseService`, not a rename, and it is
+worth deciding whether the infrastructure naming needs to follow the brand at all.
+
+The central database (`expensa-app`) is created by hand per the README, so renaming it
+means creating a new one and moving the directory into it.
+
+**Meanwhile the sender and the copy disagree.** `MAIL_FROM_NAME` is already `Spendifico`,
+so the login email arrives from "Spendifico" while its subject and body still say Expensa.
+Accepted deliberately until the rename lands, but it is the one email a stranger has to
+trust enough to click, so it should not sit that way for long.
 
 ### `frontend/src/components/`
 
