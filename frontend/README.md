@@ -36,15 +36,44 @@ Edit `src/app/page.tsx`; the page hot-reloads on save.
 ```text
 src/
   app/
-    layout.tsx     Root layout (html/body, metadata)
-    page.tsx       Home route ('/')
-    globals.css    Tailwind entry + theme tokens
-    page.test.tsx  Example RTL test
+    layout.tsx      Root layout (html/body, fonts, metadata)
+    page.tsx        Home route ('/')
+    fonts.ts        next/font loaders for the two Foundations typefaces
+    globals.css     Tailwind entry + the design tokens
+    globals.test.ts Guards the tokens against drift
+    page.test.tsx   Example RTL test
 ```
 
 New routes are folders under `src/app/` with a `page.tsx`. Shared UI goes in
 `src/components/` (create it when you add your first shared component; it does
 not exist yet).
+
+## Design tokens
+
+`src/app/globals.css` is the single source of truth for the design system, and
+mirrors the Figma **Foundations** page. Read it before styling anything.
+
+Two things about it are deliberate and will surprise you otherwise:
+
+- **Tailwind's own palette and type scale are cleared** (`--color-*: initial`,
+  `--text-*: initial`). `text-red-600`, `bg-zinc-100` and `text-4xl` do not
+  exist and generate no CSS at all. Use the Foundations tokens - `text-body-m`,
+  `bg-status-danger-soft`, `text-text-secondary` - or add a token to the theme.
+  Tailwind drops unknown utilities silently, so a class that "does nothing" is
+  usually a class that is not in the design.
+- **The spacing scale is Tailwind's**, not a redeclared Figma one, because the
+  `--spacing` namespace also drives `w-*`, `h-*` and `size-*`. The mapping
+  (`Space/16` = 16px = `p-4`) is documented in `globals.css`.
+
+Type styles are `@utility` blocks rather than theme tokens, because a style has
+to carry its font-family and Tailwind's `--text-*` tokens cannot.
+
+Only light mode is designed. There is no dark theme, and `dark:` variants should
+not be added.
+
+`npm test` runs `globals.test.ts`, which asserts every documented value is
+present _and_ compiles the stylesheet through Tailwind to confirm each utility
+actually generates - the failure mode a plain text assertion cannot see.
 
 Data access that talks to the backend should live in a small typed module, and
 the types it uses are generated rather than written. `src/types/api.d.ts` comes

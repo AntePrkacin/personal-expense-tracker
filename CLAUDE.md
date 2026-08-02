@@ -396,6 +396,48 @@ that hole with `ignoreEnvFile: process.env.NODE_ENV === 'test'` (Jest sets `NODE
 itself). Remove either half and a developer with a filled-in `.env` runs the suite against
 production infrastructure.
 
+## Design tokens
+
+`frontend/src/app/globals.css` is the single source of truth for the design system and
+mirrors the Figma **Foundations** page. Tailwind v4 is configured CSS-first, so there is
+no `tailwind.config` to look for. Read the stylesheet before styling anything.
+
+**Tailwind's own palette and type scale are cleared** (`--color-*: initial`,
+`--text-*: initial`). This is the load-bearing decision: `text-red-600`, `bg-zinc-100`
+and `text-4xl` genuinely do not exist and generate no CSS. Because Tailwind drops
+unknown utilities silently rather than erroring, a class that appears to do nothing is
+usually a class that is not in the design. Use the tokens (`text-body-m`,
+`bg-status-danger-soft`, `text-text-secondary`) or add one to the theme.
+
+Colour tokens are group-prefixed to match the Figma groups: `brand-*`, `surface-*`,
+`text-*`, `border-*`, `status-*`, `category-*`. This is why you write
+`text-text-primary` and `border-border-default`; the stutter is deliberate.
+
+**The 19 type styles are `@utility` blocks, not `--text-*` tokens**, because a type
+style has to carry its font-family and the compiler only accepts `--line-height`,
+`--letter-spacing` and `--font-weight` as paired suffixes on a `--text-*` token.
+
+**The spacing scale is Tailwind's, not a redeclared Figma one.** The `--spacing`
+namespace also drives `w-*`, `h-*`, `size-*`, `inset-*` and `translate-*`, so overriding
+it would silently delete every sizing key not explicitly listed. The Figma mapping
+(`Space/16` = 16px = `p-4`) is documented in `globals.css`.
+
+Two smaller traps. `--radius-full` is ignored by the compiler, so Radius/Full is
+Tailwind's built-in `rounded-full`; and clearing `--radius-*` also removes the bare
+`rounded` utility, so use `rounded-md` explicitly.
+
+**Only light mode is designed.** No dark theme ships, and `dark:` variants should not be
+added. Note that Tailwind cannot make `dark:` a build error, so this rests on review.
+
+The two typefaces load through `next/font/google` in `frontend/src/app/fonts.ts`. That
+module is deliberately separate from `layout.tsx` so anything else that renders these
+styles can import the same loaders. The variable classes must land on `<html>`, which is
+where `:root` resolves.
+
+`npm test` runs `frontend/src/app/globals.test.ts`, which both asserts every documented
+value and compiles the stylesheet through Tailwind's own `compile()` to confirm each
+utility actually generates.
+
 ## Environment variables
 
 Copy the templates, then fill in values. Both real files are gitignored.
@@ -643,6 +685,7 @@ something that is not there.
   summary. Its starter colors are the real ones from Figma frame 03, read per chip from the
   design's variable bindings; note the palette has eight colors for ten chips, so two
   repeat and color alone cannot identify a category.
+  component. The design tokens it will consume **do** exist, see Design tokens above.
 
 `backend/README.md` is the stock NestJS starter README. Ignore it as a source of truth
 for this project.

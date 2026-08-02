@@ -31,20 +31,18 @@ export default async function Home() {
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-24 text-center">
-      <span className="rounded-full border border-black/10 px-3 py-1 text-sm font-medium text-zinc-600 dark:border-white/15 dark:text-zinc-400">
+      <span className="text-label-m rounded-full border border-border-default bg-surface-card px-3 py-1 text-text-secondary">
         Decode Academy Demo
       </span>
-      <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-        Frontend + Backend connected 🎉
-      </h1>
-      <p className="max-w-md text-lg text-zinc-600 dark:text-zinc-400">
+      <h1 className="text-display-l max-w-2xl">Frontend + Backend connected 🎉</h1>
+      <p className="text-body-l max-w-md text-text-secondary">
         {reachable ? 'Message fetched from the NestJS API:' : 'Backend unreachable:'}
       </p>
       <p
-        className={`max-w-md rounded-lg border px-4 py-3 font-mono text-base ${
+        className={`text-body-m max-w-md rounded-lg border px-4 py-3 ${
           reachable
-            ? 'border-black/10 bg-black/5 dark:border-white/15 dark:bg-white/10'
-            : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+            ? 'border-border-default bg-surface-card text-text-primary'
+            : 'border-status-danger bg-status-danger-soft text-status-danger-text'
         }`}
       >
         {message}
