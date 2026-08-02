@@ -38,12 +38,33 @@ export const envValidationSchema = Joi.object({
 
   // How often a cloud-mode connection pushes and pulls, in seconds.
   TURSO_SYNC_INTERVAL_S: Joi.number().positive().default(60),
-}).and(
-  'TURSO_ORG',
-  'TURSO_ORG_TOKEN',
-  'TURSO_CENTRAL_DB_URL',
-  'TURSO_CENTRAL_DB_TOKEN',
-);
+
+  // Outbound mail, over MailPace's HTTP API. Paired with `.and()` for the same
+  // reason the Turso four are: unset means "log the link instead of sending
+  // it", which is a supported mode, but half-set means a real login email
+  // silently never leaves - the worst possible failure for this flow.
+  // MAIL_FROM must be on a domain whose DKIM authorization MailPace has
+  // completed, or every send is rejected.
+  MAILPACE_API_TOKEN: Joi.string(),
+  MAIL_FROM: Joi.string().email(),
+
+  // How long an emailed login link stays valid, in minutes. A34 specifies a
+  // short expiry; minutes, not days.
+  LOGIN_LINK_TTL_M: Joi.number().positive().default(15),
+
+  // Rate limit on the two auth routes, per IP and submitted address. Exposed as
+  // configuration mainly so the e2e suite can trip the limit without waiting
+  // out the real window.
+  AUTH_RATE_LIMIT: Joi.number().positive().default(5),
+  AUTH_RATE_TTL_S: Joi.number().positive().default(900),
+})
+  .and(
+    'TURSO_ORG',
+    'TURSO_ORG_TOKEN',
+    'TURSO_CENTRAL_DB_URL',
+    'TURSO_CENTRAL_DB_TOKEN',
+  )
+  .and('MAILPACE_API_TOKEN', 'MAIL_FROM');
 
 /** The four variables that together switch cloud mode on. */
 export const CLOUD_MODE_KEYS = [

@@ -9,9 +9,10 @@ import { join } from 'node:path';
  * - point DATABASE_DIR at a fresh temp directory per test file, so tests
  *   never touch the developer's `backend/databases/` and test files cannot
  *   collide, whether they run in parallel workers or share one;
- * - strip every TURSO_* variable inherited from the shell, so the suite runs
- *   in local mode against plain files: no network, no cloud credentials, no
- *   databases created in a real Turso organization.
+ * - strip every TURSO_* variable inherited from the shell, plus the two mail
+ *   ones, so the suite runs in local mode against plain files: no network, no
+ *   cloud credentials, no databases created in a real Turso organization, and
+ *   no real login emails sent to whatever addresses the tests invent.
  *
  * This file alone is NOT enough for the second guarantee, and relying on it
  * was a real bug: ConfigModule also reads backend/.env from disk, which put
@@ -28,6 +29,23 @@ for (const key of Object.keys(process.env)) {
     delete process.env[key];
   }
 }
+
+// Named explicitly: they share no prefix with each other or with TURSO_, so the
+// loop above does not reach them. Without MAILPACE_API_TOKEN, MailModule wires
+// LogMailer and there is no transport that could reach the network.
+delete process.env.MAILPACE_API_TOKEN;
+delete process.env.MAIL_FROM;
+
+/**
+ * A rate limit small enough for a test to reach in a few requests.
+ *
+ * It has to be set *here* rather than in a suite's `beforeAll`.
+ * `ConfigModule.forRoot()` is evaluated inside AppModule's `imports` array,
+ * which runs when app.module.ts is imported - before any hook. Setting it later
+ * is silently too late: the app keeps the default and the throttle test waits
+ * for a 429 that needs five more requests.
+ */
+process.env.AUTH_RATE_LIMIT = '3';
 
 /** Exported so suites can clean the directory up in `afterAll`. */
 export const E2E_DATABASE_DIR = dir;
