@@ -7,6 +7,7 @@ import { CATEGORY_TILE } from './categoryColour';
 import { FIELD_CONTROL_BASE, FIELD_CONTROL_BORDER, FIELD_CONTROL_SURFACE } from './Field';
 import { INPUT_VARIANTS } from './Input';
 import { SELECT_CONTROL } from './Select';
+import { NAV_ITEM_ICON, NAV_ITEM_LABEL, NAV_ITEM_SURFACE } from './Sidebar';
 import { TAG_TONES } from './Tag';
 
 // Proves every utility these components rely on actually generates CSS.
@@ -31,12 +32,16 @@ const HARDCODED = [
   // type styles
   'text-label-s',
   'text-label-m',
+  'text-label-l',
   'text-display-s',
   'text-heading-m',
   'text-strong-s',
   'text-strong-m',
   'text-body-s',
   'text-body-m',
+  'text-caption',
+  'text-overline',
+  'text-wordmark',
   // colours outside the tone and category maps
   'text-text-primary',
   'text-text-secondary',
@@ -47,34 +52,69 @@ const HARDCODED = [
   'bg-brand-accent',
   'bg-status-danger',
   'bg-transparent',
+  // the dark-surface tokens, which only the sidebar uses
+  'bg-surface-ink',
+  'bg-surface-ink-elevated',
+  'text-text-on-dark',
+  'text-text-on-dark-subtle',
   // radius, whose namespace is cleared: `rounded` on its own does not exist
   'rounded-md',
   'rounded-full',
+  // Off the Foundations scale, which offers only 8 and 12. Figma bound the
+  // sidebar's logo tile and nav pills to a raw 10px rather than a radius
+  // variable, so this is a literal. It compiles without a token lookup, so no
+  // token change can break it; it is here to be found when the designer resolves
+  // the gap.
+  'rounded-[10px]',
   // sizing and spacing, which share the --spacing namespace
   'size-1.5',
   'size-4',
   'size-5',
+  'size-8.5',
+  'size-9',
   'size-10',
   'h-1.25',
   'h-2',
   'h-full',
   'w-2.5',
+  'w-65',
   'w-full',
   'gap-0.5',
+  'gap-1',
   'gap-1.25',
   'gap-1.5',
   'gap-1.75',
   'gap-2',
+  'gap-2.75',
+  'gap-3',
   'gap-3.5',
+  'gap-5.5',
+  'gap-px',
   'px-2.5',
+  'px-3',
+  'px-5',
   'py-1',
+  'py-2.75',
   'py-3',
+  'pt-1',
+  'pt-3',
+  'pt-7',
+  'pb-0.5',
+  'pb-2',
+  'pb-6',
+  'pl-2',
+  'pl-3',
   'min-w-0',
   'right-3.5',
   'left-4',
   'top-1/2',
   '-translate-y-1/2',
   // layout and text handling the components depend on
+  'flex',
+  'flex-col',
+  'items-center',
+  'justify-center',
+  'justify-between',
   'shrink-0',
   'flex-1',
   'truncate',
@@ -86,11 +126,14 @@ const HARDCODED = [
   'relative',
   'absolute',
   'pointer-events-none',
-  // interaction states, which only the form and action components have
+  // interaction states, which only the form, action and navigation components have
   'outline-none',
   'focus-visible:outline-2',
   'focus-visible:outline-offset-2',
   'focus-visible:outline-brand-accent',
+  // White rather than the accent, and only in the sidebar: brand-accent on
+  // surface-ink is too dark to read as a focus ring.
+  'focus-visible:outline-white',
   'disabled:cursor-not-allowed',
   'disabled:opacity-60',
   'disabled:text-text-tertiary',
@@ -117,6 +160,18 @@ const FIELD_CLASSES = [
 const INPUT_VARIANT_CLASSES = Object.values(INPUT_VARIANTS).flatMap(split);
 
 /**
+ * The sidebar's three state maps.
+ *
+ * Three rather than one because the row fill, the label colour and the glyph
+ * colour are separate properties that do not move together: the active item draws
+ * an accent glyph against a white label. Each is a single class today, but split
+ * anyway so the map keeps working when one of them stops being.
+ */
+const NAV_ITEM_CLASSES = [NAV_ITEM_SURFACE, NAV_ITEM_LABEL, NAV_ITEM_ICON].flatMap((map) =>
+  Object.values(map).flatMap(split),
+);
+
+/**
  * Classes used only by the stories, to frame a component against a card.
  *
  * Worth guarding for the same reason as the components: Storybook is where
@@ -135,11 +190,17 @@ const STORY_CHROME = [
   'p-8',
   'px-7',
   'py-6',
-  'gap-3',
   'gap-4',
   'gap-5',
   'gap-12',
+  // The sidebar's own decorator: a fixed-height frame, because justify-between
+  // needs a constrained height to put the footer at the bottom.
+  'h-[1024px]',
+  'bg-surface-canvas',
 ];
+
+// `gap-3` used to live in STORY_CHROME. The sidebar's nav items hard-code it, so
+// it moved to HARDCODED above; it is still guarded either way.
 
 const EXPECTED = [
   ...Object.values(TAG_TONES).flatMap(({ pill, dot }) => [...pill.split(' '), dot]),
@@ -148,6 +209,7 @@ const EXPECTED = [
   ...FIELD_CLASSES,
   ...INPUT_VARIANT_CLASSES,
   ...SELECT_CONTROL.split(' '),
+  ...NAV_ITEM_CLASSES,
   ...HARDCODED,
   ...STORY_CHROME,
 ];
@@ -239,11 +301,16 @@ describe('component utilities compile', () => {
     expect(Object.keys(FIELD_CONTROL_SURFACE)).toHaveLength(2);
     expect(Object.keys(FIELD_CONTROL_BORDER)).toHaveLength(2);
     expect(Object.keys(INPUT_VARIANTS)).toHaveLength(2);
+    expect(Object.keys(NAV_ITEM_SURFACE)).toHaveLength(2);
+    expect(Object.keys(NAV_ITEM_LABEL)).toHaveLength(2);
+    expect(Object.keys(NAV_ITEM_ICON)).toHaveLength(2);
     expect(EXPECTED).toContain('bg-category-8-pink');
     expect(EXPECTED).toContain('text-brand-accent-pressed');
     expect(EXPECTED).toContain('text-status-danger-text');
     expect(EXPECTED).toContain('focus-within:border-[1.5px]');
     expect(EXPECTED).toContain('appearance-none');
+    expect(EXPECTED).toContain('bg-surface-ink-raised');
+    expect(EXPECTED).toContain('text-text-on-dark-subtle');
   });
 
   it('guards the two constants that are bare strings rather than maps', () => {
