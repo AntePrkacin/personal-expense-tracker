@@ -48,7 +48,11 @@ describe('AuthController (e2e)', () => {
     categories: ['Groceries', 'Transport'],
   });
 
-  const post = (path: string, body: unknown) =>
+  // `object`, not `unknown`: supertest's own `.send()` takes `string | object`,
+  // and `unknown` only type-checks here because neither gate that runs on this
+  // file is strict about it - `nest build` excludes test/ and ts-jest lets it
+  // through. A plain `npx tsc --noEmit` does not.
+  const post = (path: string, body: object) =>
     request(app.getHttpServer()).post(`/api/auth/${path}`).send(body);
 
   const liveUsers = (email: string) =>

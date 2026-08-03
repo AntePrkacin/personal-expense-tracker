@@ -66,7 +66,9 @@ describe('Verification and sessions (e2e)', () => {
     categories: ['Transport', 'Groceries'],
   });
 
-  const post = (path: string, body: unknown) =>
+  // See the note on the same helper in auth.e2e-spec.ts for why this is
+  // `object` rather than `unknown`.
+  const post = (path: string, body: object) =>
     request(app.getHttpServer()).post(`/api/auth/${path}`).send(body);
 
   const getSession = (bearer?: string) => {
