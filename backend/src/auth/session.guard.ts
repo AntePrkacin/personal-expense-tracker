@@ -4,7 +4,9 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
+import { IS_PUBLIC_KEY } from './public.decorator';
 import { SessionService, type SessionPrincipal } from './session.service';
 
 /** An authenticated request, once this guard has let it through. */
@@ -16,14 +18,18 @@ export interface AuthenticatedRequest extends Request {
  * Turns `Authorization: Bearer <token>` into a `SessionPrincipal` on the
  * request, or refuses the request.
  *
- * **Applied per route with `@UseGuards(SessionGuard)`, not globally as an
- * `APP_GUARD`.** Exactly one endpoint is guarded today, so a global guard would
- * mean decorating four public routes with `@Public()` in order to protect one.
- * The switch point is when guarded routes become the majority (PET-45's profile
- * and preferences): flip to `APP_GUARD`, add a `@Public()` decorator, and mark
- * hello, register, login-link and verify with it. Until then this is the
- * cheaper direction to be wrong in - a forgotten `@UseGuards` leaves an
- * endpoint open, but there is only one to forget.
+ * **Registered globally as an `APP_GUARD` in AppModule**, so every route is
+ * guarded unless it carries `@Public()`. It arrived here per-route, back when
+ * one endpoint was guarded and marking four public ones to protect it would
+ * have been absurd; the transaction endpoints tipped the balance, and this is
+ * now the direction that fails safely. A forgotten `@Public()` 401s a public
+ * route loudly on the first request, where a forgotten `@UseGuards` used to
+ * leave an endpoint silently open for anyone to find.
+ *
+ * The public check is first and is a pure metadata read - no header parsed, no
+ * body touched, no database hit - which is what lets it sit ahead of the
+ * controller-level `ThrottlerGuard` without changing what the rate-limit
+ * trackers see.
  *
  * Distinct messages per failure are fine here, unlike everywhere in the
  * register/login flow: a session token is the caller's own credential, so
@@ -32,9 +38,23 @@ export interface AuthenticatedRequest extends Request {
  */
 @Injectable()
 export class SessionGuard implements CanActivate {
-  constructor(private readonly sessions: SessionService) {}
+  constructor(
+    private readonly sessions: SessionService,
+    private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Handler first, then the controller, so a class-level mark can be
+    // overridden on a single route.
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const token = bearerToken(request.headers.authorization);
 

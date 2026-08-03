@@ -1,9 +1,10 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_PIPE } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { SessionGuard } from './auth/session.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
@@ -49,6 +50,13 @@ import { UsersModule } from './users/users.module';
       }),
     },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    // Same reason as the two above, plus one of its own: registering the guard
+    // here makes authentication the default and `@Public()` the exception, so
+    // the failure direction is fail-closed. Forgetting to mark a public route
+    // 401s it loudly on the first request; forgetting `@UseGuards` on a private
+    // one used to leave it open with nothing to notice. SessionGuard's
+    // dependencies resolve because AuthModule exports SessionService.
+    { provide: APP_GUARD, useClass: SessionGuard },
   ],
 })
 export class AppModule {}

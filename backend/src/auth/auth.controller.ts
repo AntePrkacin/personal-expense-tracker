@@ -7,6 +7,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Public } from './public.decorator';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -23,7 +24,6 @@ import { RequestLoginLinkDto } from './dto/request-login-link.dto';
 import { SessionResponseDto } from './dto/session-response.dto';
 import { VerifyLoginLinkDto } from './dto/verify-login-link.dto';
 import { VerifyResponseDto } from './dto/verify-response.dto';
-import { SessionGuard } from './session.guard';
 import type { SessionPrincipal } from './session.service';
 import { VerificationService } from './verification.service';
 
@@ -91,6 +91,7 @@ export class AuthController {
 
   /** Screen 22, "Finish setup" (REG-4). */
   @Post('register')
+  @Public()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Create an account and send its login link.',
@@ -105,6 +106,7 @@ export class AuthController {
 
   /** Screen 23, "Log in" (LOG-3), and screen 24, "Resend link" (VER-2). */
   @Post('login-link')
+  @Public()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Send a login link to an existing account.',
@@ -119,6 +121,9 @@ export class AuthController {
 
   /** Screen 25, the landing point of the emailed link (VER-1). */
   @Post('verify')
+  // The credential is in the body, not a session: this is how a caller who has
+  // none gets one, so it has to stay open.
+  @Public()
   // 200, not 201: a session is not a URL-addressable resource, and there is no
   // Location to give.
   @HttpCode(HttpStatus.OK)
@@ -148,7 +153,8 @@ export class AuthController {
 
   /** Who the bearer belongs to. The frontend calls this on navigation. */
   @Get('session')
-  @UseGuards(SessionGuard)
+  // No @UseGuards: SessionGuard is global now, and this route simply declines
+  // to be @Public().
   @SkipThrottle({ email: true, ip: true })
   @ApiBearerAuth()
   @ApiOperation({
