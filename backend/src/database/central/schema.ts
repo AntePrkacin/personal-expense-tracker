@@ -171,3 +171,61 @@ export const loginLinks = sqliteTable(
 
 export type LoginLinkRow = typeof loginLinks.$inferSelect;
 export type NewLoginLinkRow = typeof loginLinks.$inferInsert;
+
+/**
+ * One logged-in session. Central for the same reason `login_links` is: the
+ * bearer is validated before anything knows which per-user database to open,
+ * and the join back to `users` for the caller's email happens right here.
+ *
+ * Opaque server-side sessions rather than a stateless JWT, deliberately. A JWT
+ * would need a signing secret - breaking the "starts with no .env at all"
+ * invariant unless it defaulted to something, which is worse - and would give
+ * up revocation, which is the one thing a 30-day credential really needs.
+ */
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    // Same primary-key caveat as `users.id`: notNull() records intent that
+    // drizzle-kit does not emit for a text primary key. See docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // Plain text, no references(), like every other id in this schema; see the
+    // note on `login_links.user_id` for why the absence is a decision.
+    userId: text('user_id').notNull(),
+
+    // SHA-256 of the raw session token, hex - the same scheme as a login link,
+    // and for the same reasons. See LoginTokenService's class comment: this is
+    // the lookup key, not a secret to compare, so validating a bearer is one
+    // indexed read with nothing timing-sensitive in it.
+    tokenHash: text('token_hash').notNull(),
+
+    // Fixed at issue and never extended: expiry is absolute, not sliding, so
+    // an authenticated read stays a read. A34 asks for a normal persistent
+    // session, and re-login costs one email click.
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+
+    // Soft delete as everywhere else, but here the tombstone carries a second
+    // job: setting it *is* revocation. A39 designs no logout, so killing a
+    // session is currently an ops action against this column.
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    // Every authenticated request is a lookup by this column alone.
+    uniqueIndex('sessions_token_hash_unique').on(table.tokenHash),
+    // Revoking every session of one user is the ops operation this serves;
+    // concurrent sessions per user are legitimate (one per device), so this is
+    // deliberately not unique.
+    index('sessions_user_id_idx').on(table.userId),
+  ],
+);
+
+export type SessionRow = typeof sessions.$inferSelect;
+export type NewSessionRow = typeof sessions.$inferInsert;
