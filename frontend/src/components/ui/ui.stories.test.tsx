@@ -1,9 +1,12 @@
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
+import * as Button from './Button.stories';
+import * as Input from './Input.stories';
 import * as ListRow from './ListRow.stories';
 import * as ProgressBar from './ProgressBar.stories';
 import * as SectionHeader from './SectionHeader.stories';
+import * as Select from './Select.stories';
 import * as Stat from './Stat.stories';
 import * as Tag from './Tag.stories';
 
@@ -38,6 +41,9 @@ const MODULES: [name: string, module: StoryModule][] = [
   ['Stat', Stat as StoryModule],
   ['SectionHeader', SectionHeader as StoryModule],
   ['ListRow', ListRow as StoryModule],
+  ['Button', Button as StoryModule],
+  ['Input', Input as StoryModule],
+  ['Select', Select as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {
