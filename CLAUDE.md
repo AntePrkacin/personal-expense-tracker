@@ -26,6 +26,7 @@ workspaces, turbo, or nx setup. The root `package.json` owns only repo-wide dev 
 ```text
 backend/          NestJS 11 API, port 3000, its own package.json + node_modules
 frontend/         Next.js 16 + React 19, port 4200, its own package.json + node_modules
+docs/plans/       Implementation plans, one file per plan (see below)
 .claude/          Skills, agents and permissions for Claude Code (see below)
 .github/workflows/ci.yml
 .husky/           pre-commit and commit-msg hooks
@@ -53,6 +54,11 @@ floor is **v20.9.0**, declared by `next` in its `engines` field, and all three
 `mise.toml` pins the same major a **second** time, as `node = "26"` under `[tools]`. mise
 does not read `.nvmrc`, so bumping the Node major means editing both files. It is pinned
 rather than `latest` precisely so a drift from CI cannot happen silently.
+
+**Implementation plans live in `docs/plans/`**, one Markdown file per plan, named
+`YYYY-MM-DD_PET-{number}_{slug}.md` (date the plan was written, the Jira ticket it
+serves, then a short slug), for example `2026-08-02_PET-13_login-links.md`. Save any
+plan worth keeping there under that pattern rather than leaving it in the conversation.
 
 ## Common commands
 
