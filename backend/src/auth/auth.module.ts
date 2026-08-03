@@ -7,6 +7,8 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { LoginTokenService } from './login-token.service';
+import { SessionGuard } from './session.guard';
+import { SessionService } from './session.service';
 
 const DEFAULT_EMAIL_RATE_LIMIT = 5;
 const DEFAULT_IP_RATE_LIMIT = 30;
@@ -59,6 +61,10 @@ export function trackByEmail(req: Record<string, unknown>): string {
  * only two routes that need it - `AuthController` carries the guard - and
  * because the limits are exposed as configuration so the e2e suite can trip
  * them without waiting out a fifteen-minute window.
+ *
+ * `SessionService` and `SessionGuard` are exported so a future feature module
+ * only has to import AuthModule to protect its routes. `DatabaseModule` is
+ * @Global, so nothing here imports it for `APP_DB` or `UserDatabaseService`.
  */
 @Module({
   imports: [
@@ -101,6 +107,7 @@ export function trackByEmail(req: Record<string, unknown>): string {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, LoginTokenService],
+  providers: [AuthService, LoginTokenService, SessionService, SessionGuard],
+  exports: [SessionService, SessionGuard],
 })
 export class AuthModule {}

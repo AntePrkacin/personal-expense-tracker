@@ -25,6 +25,7 @@ interface ValidatedEnv {
   MAIL_FROM?: string;
   MAIL_FROM_NAME?: string;
   LOGIN_LINK_TTL_M: number;
+  SESSION_TTL_D: number;
   AUTH_RATE_LIMIT: number;
   AUTH_RATE_IP_LIMIT: number;
   AUTH_RATE_TTL_S: number;
@@ -61,6 +62,7 @@ describe('envValidationSchema', () => {
         TURSO_GROUP: 'decode-pet',
         TURSO_SYNC_INTERVAL_S: 60,
         LOGIN_LINK_TTL_M: 15,
+        SESSION_TTL_D: 30,
         AUTH_RATE_LIMIT: 5,
         AUTH_RATE_IP_LIMIT: 30,
         AUTH_RATE_TTL_S: 900,
@@ -158,6 +160,13 @@ describe('envValidationSchema', () => {
 
     it('rejects a non-positive sync interval', () => {
       expect(validate({ TURSO_SYNC_INTERVAL_S: '0' }).error).toBeDefined();
+    });
+
+    it('rejects a fractional or non-positive session lifetime', () => {
+      // Days, and whole ones: half a day of session is nobody's intent, and a
+      // zero would expire every session at the moment it was issued.
+      expect(validate({ SESSION_TTL_D: '0' }).error).toBeDefined();
+      expect(validate({ SESSION_TTL_D: '2.5' }).error).toBeDefined();
     });
 
     it('rejects fractional and non-positive rate limits', () => {

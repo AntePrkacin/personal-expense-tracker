@@ -60,6 +60,11 @@ export const envValidationSchema = Joi.object({
   // short expiry; minutes, not days.
   LOGIN_LINK_TTL_M: Joi.number().positive().default(15),
 
+  // How long a session lasts, in days. Fixed expiry, not sliding: extending it
+  // on every authenticated read would turn each one into a write against the
+  // central database, and A34 asks only for a normal persistent session.
+  SESSION_TTL_D: Joi.number().integer().positive().default(30),
+
   // Rate limits on the two auth routes: two independent limiters, one keyed on
   // the submitted address (whoever asks, from wherever) and one on the caller's
   // IP (whatever it types). A request is refused when either bucket is over.
