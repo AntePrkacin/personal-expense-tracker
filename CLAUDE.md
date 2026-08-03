@@ -92,15 +92,17 @@ Backend, from `backend/`:
 
 Frontend, from `frontend/`:
 
-| Command              | Purpose                                         |
-| -------------------- | ----------------------------------------------- |
-| `npm run dev`        | Next dev server on :4200                        |
-| `npm run build`      | Production build. Doubles as the typecheck gate |
-| `npm start`          | Serve the production build on :4200             |
-| `npm run lint`       | ESLint (`eslint-config-next`)                   |
-| `npm test`           | Jest + React Testing Library (jsdom)            |
-| `npm run test:watch` | Same, in watch mode                             |
-| `npm run api:types`  | Regenerate `src/types/api.d.ts` from the spec   |
+| Command                   | Purpose                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| `npm run dev`             | Next dev server on :4200                                  |
+| `npm run build`           | Production build. Doubles as the typecheck gate           |
+| `npm start`               | Serve the production build on :4200                       |
+| `npm run lint`            | ESLint (`eslint-config-next` + `eslint-plugin-storybook`) |
+| `npm test`                | Jest + React Testing Library (jsdom)                      |
+| `npm run test:watch`      | Same, in watch mode                                       |
+| `npm run api:types`       | Regenerate `src/types/api.d.ts` from the spec             |
+| `npm run storybook`       | Storybook on :6006, the design system reference           |
+| `npm run build-storybook` | Static Storybook build into `storybook-static/`           |
 
 From the repo root, `npm run api:sync` runs both halves in the right order. That is the
 command to use after touching anything a response or request body is made of; the two
@@ -396,6 +398,138 @@ that hole with `ignoreEnvFile: process.env.NODE_ENV === 'test'` (Jest sets `NODE
 itself). Remove either half and a developer with a filled-in `.env` runs the suite against
 production infrastructure.
 
+## Design tokens
+
+`frontend/src/app/globals.css` is the single source of truth for the design system and
+mirrors the Figma **Foundations** page. Tailwind v4 is configured CSS-first, so there is
+no `tailwind.config` to look for. Read the stylesheet before styling anything.
+
+**Tailwind's own palette and type scale are cleared** (`--color-*: initial`,
+`--text-*: initial`). This is the load-bearing decision: `text-red-600`, `bg-zinc-100`
+and `text-4xl` genuinely do not exist and generate no CSS. Because Tailwind drops
+unknown utilities silently rather than erroring, a class that appears to do nothing is
+usually a class that is not in the design. Use the tokens (`text-body-m`,
+`bg-status-danger-soft`, `text-text-secondary`) or add one to the theme.
+
+Colour tokens are group-prefixed to match the Figma groups: `brand-*`, `surface-*`,
+`text-*`, `border-*`, `status-*`, `category-*`. This is why you write
+`text-text-primary` and `border-border-default`; the stutter is deliberate.
+
+**The 19 type styles are `@utility` blocks, not `--text-*` tokens**, because a type
+style has to carry its font-family and the compiler only accepts `--line-height`,
+`--letter-spacing` and `--font-weight` as paired suffixes on a `--text-*` token.
+
+**The spacing scale is Tailwind's, not a redeclared Figma one.** The `--spacing`
+namespace also drives `w-*`, `h-*`, `size-*`, `inset-*` and `translate-*`, so overriding
+it would silently delete every sizing key not explicitly listed. The Figma mapping
+(`Space/16` = 16px = `p-4`) is documented in `globals.css`.
+
+Two smaller traps. `--radius-full` is ignored by the compiler, so Radius/Full is
+Tailwind's built-in `rounded-full`; and clearing `--radius-*` also removes the bare
+`rounded` utility, so use `rounded-md` explicitly.
+
+**Only light mode is designed.** No dark theme ships, and `dark:` variants should not be
+added. Note that Tailwind cannot make `dark:` a build error, so this rests on review.
+
+The two typefaces load through `next/font/google` in `frontend/src/app/fonts.ts`. That
+module exists separately from `layout.tsx` so `.storybook/preview.ts` can import the same
+loaders. The variable classes must land on `<html>`, which is where `:root` resolves.
+
+`npm test` runs `frontend/src/app/globals.test.ts`, which both asserts every documented
+value and compiles the stylesheet through Tailwind's own `compile()` to confirm each
+utility actually generates. `npm run storybook` renders the whole system under
+**Foundations** for diffing against Figma.
+
+## Shared components
+
+`frontend/src/components/ui/` holds the design-system primitives, mirroring the Figma
+**Components** page. Every tile on that page now has a component: `Button`, `Input`,
+`Select`, `Tag`, `ProgressBar`, `Stat`, `SectionHeader` and `ListRow`. `npm run storybook`
+renders them under **Components**. The Sidebar is the one tile still missing, and it belongs
+to the app-shell ticket rather than here.
+
+**Shared UI is split by role, not by file type.** `components/ui/` is the primitive layer,
+the vocabulary every screen draws from. Components that only make sense for one feature go
+in `components/` beside it, or next to the route that uses them. Nothing has earned a
+feature folder yet, so `ui/` is currently the only child.
+
+The Storybook section is still called **Components** while the folder is `ui/`. That
+mismatch is deliberate: `ui/` says where the code lives, **Components** is the Figma page
+name, and the stories exist to be diffed against it.
+
+Five conventions, all of which existing files demonstrate:
+
+- **Tests and stories are colocated**, `Tag.tsx` next to `Tag.test.tsx` and
+  `Tag.stories.tsx`. Do not "tidy" them into `__tests__/` or `stories/` trees. Parallel
+  trees make a rename touch three directories, and they hide the one signal worth having
+  at a glance: a component with no test file beside it.
+- **Files are flat inside `ui/`**, not a folder per component. Alphabetical sort already
+  groups a component with its satellites, and it keeps imports at `@/components/ui/Tag`
+  rather than a stuttering `.../Tag/Tag` or nine files all named `index.tsx`. Promote one
+  component to its own folder when it first needs private sub-parts; a mixed directory is
+  fine. There is no barrel `index.ts` and adding one is not an improvement.
+- **Variant classes come from a `Record<Variant, string>` holding complete literal class
+  strings** (`TAG_TONES`, `CATEGORY_TILE`, `BUTTON_VARIANTS`, `INPUT_VARIANTS`,
+  `FIELD_CONTROL_BORDER`), interpolated into a template literal. This is
+  not style preference. Tailwind's scanner reads these files as raw text, so a class built
+  by interpolation (`bg-category-${n}`) is found by nobody and compiles to nothing, with
+  no build error and no failing test. There are no `clsx` / `cva` style dependencies and
+  none are needed.
+- **`src/components/ui/utilities.test.ts` compiles every one of those classes** through
+  Tailwind and fails if any generates no CSS. It is what makes the point above enforceable
+  rather than a rule people remember. Add new class maps to it.
+- **Components stay Server Components.** None of them carry `'use client'`, because none
+  holds state. `Button`, `Input` and `Select` accept handler props without it: a client
+  component that imports one pulls it into the client bundle on its own, and only a Server
+  Component trying to pass a function would break. Only add the directive when a component
+  genuinely needs the client itself.
+
+**Form fields go through `ui/Field.tsx`.** `Input` and `Select` are both built on it, and
+it owns the label, the inline validation message, and the `aria-invalid` /
+`aria-describedby` wiring between them. Build a new control on it rather than repeating the
+pattern; that is what keeps every form in the app reporting errors identically. Two things
+about it look like friction and are not: `id` is a **required** prop, because `useId()` is a
+hook and generating one would force `'use client'` onto the whole field layer; and each
+state-dependent colour comes from its own `Record` (`FIELD_CONTROL_SURFACE` for the fill,
+`FIELD_CONTROL_BORDER` for the border) rather than being appended conditionally, because
+`border-border-strong` and `border-status-danger` have equal specificity, so emitting both
+makes the winner depend on stylesheet order. Classes carrying a variant prefix
+(`focus-within:`, `disabled:`) are exempt, since the extra pseudo-class settles it.
+
+**Padding sits on the control, never on the bordered box.** Both `Input` and `Select` put it
+on the `<input>` / `<select>`, and `Input`'s `$` prefix and `Select`'s chevron are absolutely
+positioned over the control with `pointer-events-none`. A padded box turns its own 14-16px
+band into a dead zone where a click places no caret and opens no list.
+
+**Five details of the form components have no Figma counterpart.** They were chosen, not
+read, so do not "correct" them without asking the designer:
+
+- **The inline error pattern** - red border plus one line of `text-body-s
+text-status-danger-text`, no icon. Assumption A29 records that no form error visual exists
+  anywhere in the file.
+- **The disabled button dimming** (`disabled:opacity-60`). Frame 15 draws the in-flight
+  "Generating..." button identically to a resting secondary one, so the design says only the
+  label changes (A26). A control that looks enabled while it is not is a defect, hence the
+  addition.
+- **The disabled field fill** (`bg-surface-muted` plus `text-text-tertiary`). No disabled
+  field is drawn anywhere in the file, and it cannot simply be left out: author styles beat
+  the user agent's own disabled treatment, so an undecorated disabled field is
+  pixel-identical to an editable one.
+- **The forced-colors focus outline** on the field box. Windows High Contrast forces every
+  border colour to one system colour, so the designed accent border cannot signal focus
+  there. The outline is scoped to `forced-colors:` alone, so normal rendering still matches
+  Figma exactly.
+- **The currency field at rest.** The 1.5px `brand-accent` border is treated as the _focus_
+  style, which is what the ticket and spec BUD-3 assert, but Figma only ever draws it on the
+  currency amount field and never draws that field unfocused. Its 1px resting border is
+  inferred from the plain Input tile. Focus also keeps that accent border on an _invalid_
+  field rather than holding the red: invalidity is still carried by the message and by
+  `aria-invalid`, and a 0.5px width change is too little focus signal to see.
+
+Money is formatted through `frontend/src/lib/format.ts`. Amounts are stored as positive
+magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN rather than the
+hyphen `Intl.NumberFormat` emits, matching the design.
+
 ## Environment variables
 
 Copy the templates, then fill in values. Both real files are gitignored.
@@ -596,13 +730,18 @@ short code samples in those files as inline spans, which Prettier leaves alone.
 `main`:
 
 - **backend**: lint, build, OpenAPI spec is fresh, unit tests, e2e
-- **frontend**: generated API types are fresh, lint, unit tests, build
+- **frontend**: generated API types are fresh, lint, unit tests, build, build-storybook
 - **conventions**: commitlint over the PR's commit range
 
 The two freshness steps are the drift gate described under Architecture. Both regenerate
 a committed artifact and fail on a non-empty `git diff`. Note where each one lives: the
 frontend half runs in the frontend job because `openapi-typescript` only reads the
 committed JSON and needs no `backend/node_modules`.
+
+The frontend's `build-storybook` step is not redundant with `build`: `tsconfig.json`
+includes `.storybook/**` and the story files, so `next build` already typechecks them.
+The extra step catches what typechecking cannot, such as a broken framework option or a
+CSS import that no longer resolves.
 
 The backend job covers the persistence layer without any Turso credentials: `test-e2e`
 runs in local mode against files in a temp directory (see the note under Persistence), and
@@ -628,8 +767,6 @@ something that is not there.
   `NEXT_PUBLIC_`. Related: `@google/genai` was once present in `frontend/node_modules`
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
-- **`frontend/src/components/`.** Does not exist. Create it with your first shared
-  component.
 - **The frontend half of the access flow.** The backend is complete - verify provisions and
   returns a session, and `GET /api/auth/session` answers who a bearer is - but nothing on
   the frontend calls either: no verify page, no session cookie, no dashboard. The session

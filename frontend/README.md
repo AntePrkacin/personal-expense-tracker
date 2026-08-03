@@ -22,29 +22,92 @@ Edit `src/app/page.tsx`; the page hot-reloads on save.
 
 ## Scripts
 
-| Command              | Purpose                                   |
-| -------------------- | ----------------------------------------- |
-| `npm run dev`        | Dev server on :4200                       |
-| `npm run build`      | Production build                          |
-| `npm start`          | Serve the production build on :4200       |
-| `npm run lint`       | ESLint (`eslint-config-next`)             |
-| `npm test`           | Unit tests (Jest + React Testing Library) |
-| `npm run test:watch` | Tests in watch mode                       |
+| Command                   | Purpose                                          |
+| ------------------------- | ------------------------------------------------ |
+| `npm run dev`             | Dev server on :4200                              |
+| `npm run build`           | Production build                                 |
+| `npm start`               | Serve the production build on :4200              |
+| `npm run lint`            | ESLint (`eslint-config-next` + Storybook)        |
+| `npm test`                | Unit tests (Jest + React Testing Library)        |
+| `npm run test:watch`      | Tests in watch mode                              |
+| `npm run storybook`       | Storybook on :6006 - the design system reference |
+| `npm run build-storybook` | Static Storybook build into `storybook-static/`  |
 
 ## Project Structure
 
 ```text
 src/
   app/
-    layout.tsx     Root layout (html/body, metadata)
-    page.tsx       Home route ('/')
-    globals.css    Tailwind entry + theme tokens
-    page.test.tsx  Example RTL test
+    layout.tsx      Root layout (html/body, fonts, metadata)
+    page.tsx        Home route ('/')
+    fonts.ts        next/font loaders for the two Foundations typefaces
+    globals.css     Tailwind entry + the design tokens
+    globals.test.ts Guards the tokens against drift
+    page.test.tsx   Example RTL test
+  components/
+    ui/             Design-system primitives, mirroring the Figma Components page
+  lib/
+    format.ts       Currency formatting
+  stories/
+    foundations/    Storybook reference for colour, type, spacing, radius
 ```
 
-New routes are folders under `src/app/` with a `page.tsx`. Shared UI goes in
-`src/components/` (create it when you add your first shared component; it does
-not exist yet).
+New routes are folders under `src/app/` with a `page.tsx`.
+
+Shared UI is split by role. Design-system primitives (`Button`, `Input`,
+`Select`, `Tag`, `ProgressBar`, `Stat`, `SectionHeader`, `ListRow`) live in
+`src/components/ui/`. Components
+that only make sense for one feature go in `src/components/` beside it, or next
+to the route that uses them. Each component's `*.test.tsx` and `*.stories.tsx`
+sit **beside it**, not in separate `__tests__/` or `stories/` trees: colocation
+is what makes an untested component visible at a glance and keeps a rename or a
+deletion to one folder.
+
+Files stay flat inside `ui/`. Give a component its own folder only once it has
+private sub-parts that nothing else imports.
+
+One rule there is easy to get wrong: a variant class must be a complete literal
+string in a lookup map (see `TAG_TONES` in `ui/Tag.tsx`). Tailwind scans these
+files as text, so an interpolated `bg-category-${n}` is found by nobody and
+generates no CSS, silently. `src/components/ui/utilities.test.ts` compiles every
+mapped class and fails if one produces nothing.
+
+The Storybook section is called **Components** even though the folder is `ui/`,
+because that is the name of the Figma page these are diffed against.
+
+`Input` and `Select` are both built out of `ui/Field.tsx`, which owns the label,
+the inline validation message and the ARIA wiring between them. Use it for any new
+control rather than repeating the pattern, so every form in the app keeps reporting
+errors the same way. `Field` requires an `id`: `useId()` is a hook, so generating
+one would force `'use client'` onto every field in the app.
+
+## Design tokens
+
+`src/app/globals.css` is the single source of truth for the design system, and
+mirrors the Figma **Foundations** page. Read it before styling anything.
+
+Two things about it are deliberate and will surprise you otherwise:
+
+- **Tailwind's own palette and type scale are cleared** (`--color-*: initial`,
+  `--text-*: initial`). `text-red-600`, `bg-zinc-100` and `text-4xl` do not
+  exist and generate no CSS at all. Use the Foundations tokens - `text-body-m`,
+  `bg-status-danger-soft`, `text-text-secondary` - or add a token to the theme.
+  Tailwind drops unknown utilities silently, so a class that "does nothing" is
+  usually a class that is not in the design.
+- **The spacing scale is Tailwind's**, not a redeclared Figma one, because the
+  `--spacing` namespace also drives `w-*`, `h-*` and `size-*`. The mapping
+  (`Space/16` = 16px = `p-4`) is documented in `globals.css` and rendered by the
+  Spacing story.
+
+Type styles are `@utility` blocks rather than theme tokens, because a style has
+to carry its font-family and Tailwind's `--text-*` tokens cannot.
+
+Only light mode is designed. There is no dark theme, and `dark:` variants should
+not be added.
+
+`npm test` runs `globals.test.ts`, which asserts every documented value is
+present _and_ compiles the stylesheet through Tailwind to confirm each utility
+actually generates - the failure mode a plain text assertion cannot see.
 
 Data access that talks to the backend should live in a small typed module, and
 the types it uses are generated rather than written. `src/types/api.d.ts` comes
