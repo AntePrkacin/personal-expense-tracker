@@ -14,29 +14,23 @@ paragraph or two probably deserve their own plan in this directory.
 These were decided against deliberately. Reasons are recorded so the decision is not
 relitigated by accident.
 
-### Link verification and sessions
+### The frontend half of verification: the verify page, the cookie, the dashboard
 
-The issuing half of the magic-link flow has landed: `POST /api/auth/register` and
-`POST /api/auth/login-link` create accounts and send links, and `LoginTokenService.consume()`
-is written and tested. Nothing consumes a link yet - there is no verify route, no session,
-no guard, and therefore no authenticated endpoint. The proof-of-stack `POST /api/users` and
-`GET /api/users/:id` are deleted; the read is replaced by a session-scoped `getProfile()`
-with that work.
+The backend is done: `POST /api/auth/verify` spends a link, provisions the account and
+returns a session, and `GET /api/auth/session` answers who the bearer is. Nothing on the
+frontend calls either yet - there is no verify page, no session cookie, and no dashboard to
+land on. The session-scoped `getProfile()` that replaces the deleted proof-of-stack
+`GET /api/users/:id` is PET-45's, not this.
 
-Verification also owns everything registration deliberately does not do: provisioning the
-user's Turso database, inserting the profile from `users.onboarding_payload` (converting
-`monthlyBudget` to cents at that boundary), calling `seedStarterCategories`, and clearing
-the payload. `UserDatabaseService.deleteUserDb` is kept for its failure path.
+Three constraints that work inherits.
 
-`TursoPlatformService` documents but does not implement `mintUserDbToken(dbName, expiry)`,
-the short-expiry variant needed to hand a browser a token it can sync with directly. That
-is now verification's, since it is what makes "which user is asking" answerable.
+The token travels in a **query string**, so it lands in browser history and potentially a
+`Referer` header - the accepted norm for magic links, bounded by the short single-use
+window, but it means the verify page must load no third-party resources and must consume
+the token immediately. (It no longer reaches backend access logs: verify takes the token in
+a POST body.)
 
-Two constraints the verify page inherits. The token travels in a **query string**, so it
-lands in server access logs, browser history and potentially a `Referer` header - the
-accepted norm for magic links, bounded by the short single-use window, but it means that
-page must load no third-party resources and must consume the token immediately. And a
-failed send leaves the user with **zero** live links rather than the one they had, because
+A failed send leaves the user with **zero** live links rather than the one they had, because
 `issue()` supersedes the previous link before sending; "Resend link" (VER-2) is the only
 recovery, and it is the design's own answer (A36).
 
@@ -52,34 +46,18 @@ A streamed "Signing you in..." shell is technically cheap (Suspense), but it is 
 in-page loading state, exactly what the design deliberately lacks, so that path is a
 design conversation before it is code.
 
-**Gmail threads every login link into one conversation, and only the newest works.**
-Observed on 2026-08-02 against a real inbox: four links sent to the same address collapsed
-into a single Gmail thread, because every message has an identical sender and subject
-("Your Expensa login link"). After a resend the user therefore opens one conversation
-holding several visually indistinguishable emails, of which exactly one is valid - and
-Gmail's "trimmed content" collapsing can hide the newest below a fold. Clicking the wrong
-one is the likely outcome, not an edge case, and A38 designs no screen for a rejected
-link, so today that is a dead end with no explanation.
+### Handing a browser a token to sync with directly
 
-This is the invalidation behaving as specified, not a bug in it, and it was invisible
-until someone looked at an actual inbox rather than at a send API returning
-`{"status":"queued"}`. Two ways out, and they are not exclusive:
-
-- **Cheap.** Make each message its own thread by varying the subject - appending a short
-  local time is the usual trick. Costs a slightly uglier subject line.
-- **Proper, and PET-14's.** Have the verify page distinguish "superseded" from the other
-  rejections and say so: "this link was replaced by a newer one, check your inbox for the
-  most recent email." The schema already supports it - `superseded_at` and `used_at` are
-  separate columns precisely so the cases stay distinguishable - but `consume()`
-  deliberately returns a bare `null` for all four rejections, so telling them apart needs a
-  richer return type. Weigh that against enumeration: the reason for the flat `null` is
-  that the caller cannot learn anything, though here the holder of a real token is already
-  the address owner, so the calculus differs.
+`TursoPlatformService` documents but does not implement `mintUserDbToken(dbName, expiry)`,
+the short-expiry variant of `mintDbToken` needed to let a client sync against its own Turso
+database instead of going through this backend. Nothing needs it today - the access flow is
+finished and never wanted it, because every read is served with the user's server-side
+token - so it stays a documented signature until a client actually syncs.
 
 ### Sliding session expiry, as an explicit extension endpoint
 
-The PET-14 design fixes session expiry at `SESSION_TTL_D` (30 days) and pins "validate
-performs no UPDATE" in a unit test, so the whoami path stays one indexed read. Sliding
+Sessions fix their expiry at `SESSION_TTL_D` (30 days) and a unit test pins "validate
+performs no UPDATE", so the whoami path stays one indexed read. Sliding
 expiry inside `validate()` was rejected deliberately: it turns every authenticated read
 into a central-database write (sync and `updated_at` churn, contention on the in-process
 transaction chain), and it silently desyncs from the frontend's future cookie, whose
@@ -164,6 +142,66 @@ so anyone can register an address they do not own and rows pile up for accounts 
 never be verified. The squatting itself is self-healing - a genuine owner's registration
 overwrites the stashed payload, and only they can click the link - but the rows are not.
 Give unverified rows an expiry and a sweep before this is deployed anywhere public.
+
+### Gmail still threads the login emails
+
+Observed on 2026-08-02 against a real inbox: four links to the same address collapsed into
+one Gmail thread, because every message has an identical sender and subject. The user
+therefore opens one conversation holding several indistinguishable emails, of which exactly
+one works. That is the invalidation behaving as specified, and the sharp edge is now
+answerable rather than a dead end: verify returns **409** for a superseded link, distinct
+from the 401 every other dead token gets, so the verify page can say "this link was replaced
+by a newer one, open the most recent email". If inbox confusion persists anyway, varying the
+subject - appending a short local time is the usual trick - remains available, and costs
+only a slightly uglier subject line.
+
+### In cloud mode the remote is a schema behind, briefly
+
+Observed on 2026-08-03 while smoke-testing verification against Turso Cloud: reading the
+central database remotely moments after boot failed with `no such column:
+onboarding_payload`, then succeeded a minute later with no intervening deploy.
+
+That is the embedded replica working as designed rather than a migration failure.
+Migrations are applied to the **local** replica at boot, and `turso-client.factory.ts`
+pushes on the `TURSO_SYNC_INTERVAL_S` beat (60s by default), so for up to one interval the
+cloud copy legitimately lacks both the new DDL and any rows written since. The app is
+unaffected - it reads and writes its own replica - but anything looking at the remote is:
+the Turso MCP, the CLI, Studio, and any dashboard. Worth knowing before someone debugs a
+phantom "migration did not run" for a minute, and worth remembering when a deploy is
+verified by querying the cloud database directly.
+
+### Revoking a session is a manual tombstone
+
+A39 designs no logout, so there is no endpoint that ends a session. A stolen or unwanted
+bearer lives until its `expires_at`, and the only way to kill it sooner is to set
+`sessions.deleted_at` by hand - `validate()` filters on it, so the next request with that
+token answers 401. `sessions_user_id_idx` exists to make "revoke everything this person
+has" one statement. Write the tooling before an incident needs it, not during one.
+
+### A verify that fails twice can orphan a cloud database
+
+Verification creates the user's database and persists the pointer to it inside one
+compensated block: if either step fails, it deletes the database and rethrows. If that
+delete _also_ fails, a cloud database exists that no row points at, the central row's
+`db_url` stays NULL, and every later verification of that account 500s on the name
+collision. The failure is logged in full by `VerificationService`, naming the database.
+
+The fix is manual and one step: delete `expensa-user-<id>` through the Turso MCP server or
+the Platform API - never the CLI, for the name-cache reason below. The next resent link then
+provisions cleanly.
+
+### Two verifies of one account can overlap, across a resend
+
+`consume()` makes each _link_ single-use, but nothing serializes verification per
+_account_: while a first verify is still provisioning (a window of seconds), a resend plus
+a click on the new link starts a second verify against the same half-built account. In
+cloud mode the second create then collides on the database name and its compensation
+deletes the database out from under the first; in local mode both can pass the seed's
+empty check and duplicate the starter categories. Reaching it takes a user who resends and
+clicks while the first click has not answered yet, so it is accepted at this scale - the
+same single-instance reasoning as the throttler and the migration lock. If it ever bites,
+the shape of the fix is a per-user in-process queue around provisioning, which is the
+`issueQueue` pattern `LoginTokenService` already uses.
 
 ### The auth throttler is in-memory, and blind behind a proxy
 
@@ -277,9 +315,10 @@ than discovered.
   after the read alone - the only path that skips the write entirely, and therefore the
   most distinguishable one. Nobody has profiled the residual. If this ever has to be more
   than best-effort, it needs a measurement rather than an argument.
-- **Login links are never purged.** Used, superseded and expired rows accumulate in
-  `login_links` forever. Harmless at this scale, and the same purge policy that covers
-  tombstones can cover them.
+- **Login links and sessions are never purged.** Used, superseded and expired rows
+  accumulate in `login_links` forever, and so do expired and revoked rows in `sessions` -
+  one per login per device, none of which anything removes. Harmless at this scale, and the
+  same purge policy that covers tombstones can cover both.
 - **The embedded driver cannot overlap transactions.** One connection per database, and a
   second `db.transaction()` while one is open fails with "cannot start a transaction
   within a transaction" rather than queueing. `LoginTokenService.issue()` chains its own
@@ -288,8 +327,10 @@ than discovered.
 - **Soft deletes are never purged.** Every table carries `deleted_at` for future sync, and
   reads filter it, but nothing removes tombstones. A purge policy is deferred until the
   sync design needs one.
-- **`Math.round(v * 100)`** assumes two-decimal currencies. Fine for USD and EUR, wrong for
-  JPY (zero decimals) and KWD (three).
+- **`toCents()` assumes two-decimal currencies.** `src/common/money.ts` is
+  `Math.round(v * 100)`: fine for USD and EUR, wrong for JPY (zero decimals) and KWD
+  (three). The API accepts any ISO 4217 code, so fixing it means a per-currency exponent
+  table rather than a change at that one call site.
 - **Offline conflict policy is undecided.** The schema is shaped for last-write-wins
   (UUIDv7 keys, epoch-ms timestamps, tombstones), but no client syncs yet and clock skew is
   unaddressed.
@@ -317,9 +358,8 @@ than discovered.
   as `type: number` while `@IsInt()` rejects anything fractional. Neither has earned a
   hand-written `@ApiProperty` correction yet; `currency` is the one a frontend developer
   reading the generated `currency?: string` will trip over first.
-- **`GET /api/hello` documents a 500; the auth routes do not.** Every route can 500
-  through `AllExceptionsFilter`, so the asymmetry is arbitrary rather than meaningful:
-  the auth routes document exactly 202, 400 and 429, and `test/openapi.e2e-spec.ts` pins
-  that exact list. Decide one way when the next endpoint lands - either every operation
-  carries `@ApiErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR)` or none does - and
-  remember that widening the auth routes means updating the pinned test with them.
+- **No operation documents a 500, deliberately.** Resolved with PET-14: every route can 500
+  through `AllExceptionsFilter`, so per-operation documentation restated the same
+  non-actionable fact everywhere and widened every generated response union. The document
+  description says it once instead, and `test/openapi.e2e-spec.ts` pins that no operation
+  declares a 500. Keep new endpoints consistent with that.

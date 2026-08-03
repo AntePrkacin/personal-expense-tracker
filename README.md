@@ -56,10 +56,11 @@ them first.
 If the backend is not running, the page says so instead of crashing, which is a useful
 thing to notice: the frontend handles the failure rather than pretending it cannot happen.
 
-The backend also has a working persistence layer and the passwordless entry flow behind
-`POST /api/auth/register` and `POST /api/auth/login-link`, with no setup needed. Both
-answer an empty `202` and, with no mail credentials configured, print the login link to the
-backend's console for you to open. See [Database](#database) and
+The backend also has a working persistence layer and the whole passwordless entry flow, with
+no setup needed: `POST /api/auth/register` and `POST /api/auth/login-link` answer an empty
+`202` and, with no mail credentials configured, print the login link to the backend's console
+for you to open, and `POST /api/auth/verify` turns that link into a session that
+`GET /api/auth/session` will answer for. See [Database](#database) and
 [Sending real email](#sending-real-email-optional).
 
 ## Prerequisites
@@ -242,7 +243,7 @@ backend/                  NestJS 11 API on :3000
     app.controller.spec.ts
     openapi.ts            Writes openapi.json. Run it via `npm run api:spec`, never ts-node
     dto/                  Response shapes. Classes, not interfaces - see CLAUDE.md
-    auth/                 POST /api/auth/register, /api/auth/login-link; login tokens
+    auth/                 The passwordless flow: register, login-link, verify, session
     common/               ids, email normalization, the global exception filter, the error DTO
     config/               Joi schema validating the environment at boot
     database/             Drizzle + Turso: schemas, client factory, per-user databases
@@ -357,9 +358,9 @@ The backend template also lists two blocks of commented-out variables, and you n
 neither. Leave the `TURSO_*` block commented and the backend stores everything in local
 files under `DATABASE_DIR` (see [Database](#database)). Leave `MAILPACE_API_TOKEN` and
 `MAIL_FROM` commented and login links are printed to the console instead of emailed (see
-[Sending real email](#sending-real-email-optional)). The remaining four -
-`LOGIN_LINK_TTL_M` and the three `AUTH_RATE_*` variables - are tuning knobs with sensible
-defaults.
+[Sending real email](#sending-real-email-optional)). The remaining five -
+`LOGIN_LINK_TTL_M`, `SESSION_TTL_D` and the three `AUTH_RATE_*` variables - are tuning knobs
+with sensible defaults.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`. Both are
 gitignored and must never be committed. Only the `.env.example` templates are.
@@ -398,6 +399,25 @@ curl -i -X POST http://localhost:3000/api/auth/register \
 Note what is _not_ created: no file for this user yet. Registration writes only the central
 row and stashes the onboarding values on it; the user's own database is created when the
 emailed link is verified, so an unauthenticated endpoint can never provision one.
+
+Verifying is what completes the account. Copy the `token=` value out of the printed link:
+
+```bash
+curl -i -X POST http://localhost:3000/api/auth/verify \
+  -H 'content-type: application/json' \
+  -d '{"token":"<the token from the link>"}'
+# 200 {"token":"<session>","expiresAt":"..."}, and backend/databases/users/ now holds
+# this person's own database, with their profile and picked categories in it
+
+curl -i http://localhost:3000/api/auth/session \
+  -H 'authorization: Bearer <session>'
+# 200 {"userId":"...","email":"...","expiresAt":"..."}
+```
+
+Spending the same link twice answers `401`, and a link that a newer one replaced answers
+`409` - request two links and verify the older one to see it. Inspect either database with
+`npm run db:studio:central` or `npm run db:studio:user`; the profile stores money in cents,
+so a budget of 2000.50 reads as `200050`.
 
 ### Changing the schema
 
@@ -530,7 +550,11 @@ curl -i -X POST http://localhost:3111/api/auth/register \
 
 Expect `202` with an empty body, and one email within a few seconds. Send the same request
 again and a second link arrives while the first stops working: that is "Resend link"
-(VER-2), and only the newest link is ever valid.
+(VER-2), and only the newest link is ever valid - clicking the older one's token now answers
+`409` rather than a flat rejection, which is what lets a frontend say "open the most recent
+email". Finish the round trip by verifying the newest token against port 3111 as under
+[Database](#database); the throwaway `DATABASE_DIR` gets the user's database, so the real one
+stays untouched.
 
 Worth doing at least once whenever this path changes, because it catches what a mocked
 spec cannot. The `Accept: application/json` header is the standing example - Node's `fetch`
@@ -770,10 +794,11 @@ for the two supported setups and their trade-offs.
 
 Things this boilerplate deliberately does not decide for you:
 
-- **Sessions.** Half present. `POST /api/auth/register` and `POST /api/auth/login-link`
-  issue single-use login links, but nothing consumes one yet: there is no verify route, no
-  session and no guard, so every endpoint is still unauthenticated. NestJS guards are the
-  place for it; see the `backend-nestjs` rules.
+- **Sessions on the frontend.** The backend half is done: verifying a link returns an opaque
+  30-day bearer token, and `GET /api/auth/session` answers who it belongs to behind
+  `SessionGuard`. Nothing on the frontend uses it yet - no verify page, and no cookie. The
+  session token belongs in an httpOnly first-party cookie the Next.js server sets and
+  forwards; it must never reach client-side JavaScript.
 - **A generated HTTP client.** Types are shared, and that part is decided: response shapes
   come out of `backend/openapi.json` (see Commands above), so `page.tsx` derives its type
   rather than restating it. What is left open is whether the calls themselves get wrapped.

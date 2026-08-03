@@ -169,6 +169,16 @@ on a diff; the frontend job does the same for `api.d.ts`. Together they prove th
 matches the code and the types match the spec. A committed generated artifact rots
 silently otherwise, which is the exact failure this pipeline exists to kill.
 
+**No operation documents a 500.** Every route can answer 500 through the global filter, so
+documenting it per operation restates one non-actionable fact everywhere and widens every
+generated response union; the document description in `src/openapi.document.ts` says it once
+instead, and `test/openapi.e2e-spec.ts` pins that nothing declares it. Bearer auth is
+declared with `addSecurity('bearer', ...)` rather than the `addBearerAuth()` helper, which
+cannot be talked out of publishing `bearerFormat: 'JWT'` - these are opaque tokens, so that
+would be a lie. The declaration and a bare `@ApiBearerAuth()` are two halves that fail
+silently apart: miss either and the guarded operation looks public in both the spec and the
+generated types.
+
 Swagger UI is served at `http://localhost:3000/api/docs` from the same document.
 
 **Global pipe and filter are DI providers, not `app.useGlobalPipes`.** `AppModule`
@@ -227,6 +237,52 @@ Invalidation uses two distinct columns, `used_at` and `superseded_at`, because A
 no screen for a rejected link and "why did this link stop working" has to be answerable
 from the row.
 
+**Verifying a link is one blocking call, and it is what provisions the account.** `POST
+/api/auth/verify` takes the token in the **body** (a POST from the frontend's route handler,
+so a live credential never reaches backend access logs) and does everything in order:
+`consume()` first because it *is* the authentication, then the directory read, then - only if
+`users.onboarding_payload` is still set - provision the Turso database, persist the pointer,
+open and migrate it, insert the profile, seed the picked categories, and clear the payload
+**strictly last**, because while it is set it is both the profile's source data and the "this
+may be unfinished" marker. Then a session, then the response. Nothing here is floated, unlike
+`AuthService`: the caller holds a token that was emailed to the address owner, so there is no
+enumeration timing to defend, and the response must not claim a session that provisioning
+failed to earn.
+
+Money crosses from major units to cents at exactly one place, `toCents()` from
+`src/common/money.ts` called in `VerificationService` - the schema comments promise the
+conversion happens at the profile boundary, and transactions will reuse the same function.
+
+**A resent link completes a half-provisioned account.** A mid-flight failure answers 500 with
+the link already burned, and "Resend link" (VER-2, A36) is the designed recovery - so every
+step is written to resume rather than crash or duplicate: provisioning is skipped when
+`db_url` is already set, the profile insert is `onConflictDoNothing`, the seed is skipped when
+any category row exists, and a cleared payload simply makes the next verify a returning
+user's. Provision-and-persist is the one compensated pair (its catch deletes the database and
+rethrows); everything after the pointer is persisted is forward-only, because deleting then
+would strand a row that resume logic never re-provisions.
+
+**401 for a dead link, 409 for a replaced one.** `consume()` returns a classified result, and
+the diagnostic read behind it runs only when the conditional UPDATE matched nothing, so the
+success path stays one statement. Disclosing "superseded" is safe: it is returned only to
+somebody holding a token that really was emailed to the account owner, random probes see the
+generic answer, and it carries no user id. It exists because Gmail threads identical login
+mails, which makes clicking the older of two links ordinary rather than exotic.
+
+**Sessions are opaque hashed bearers with a fixed lifetime.** A central `sessions` row stores
+the SHA-256 of a 256-bit random token (the `login_links` scheme, sharing its `hashToken`), and
+`validate()` is one indexed join back to `users` that performs no write - expiry is absolute,
+not sliding, so an authenticated read stays a read. `SESSION_TTL_D` is 30 days; there are no
+cookies here (the frontend owns that), no refresh, and no logout by design (A39), so
+revocation means tombstoning the row. Concurrent sessions per user are legitimate, one per
+device. `GET /api/auth/session` returns only `{ userId, email, expiresAt }`, because that is
+all central knows.
+
+**`SessionGuard` is applied per route, not as an `APP_GUARD`.** With one guarded endpoint, a
+global guard would mean marking four routes `@Public()` to protect one. The switch point:
+when guarded routes become the majority (PET-45's profile work), flip to `APP_GUARD` plus a
+`@Public()` decorator on hello, register, login-link and verify.
+
 **The auth routes carry two independent rate limiters, per submitted email and per IP.**
 Deliberately two throttlers rather than one composite `ip:email` key: a composite key hands
 every new (IP, address) pair a fresh bucket, so it throttles only one host hammering one
@@ -238,6 +294,13 @@ themselves rather than trusting the DTO transform - `src/common/normalize-email.
 shared for exactly that reason. `@nestjs/throttler` takes `ttl` in milliseconds, so the
 module converts `AUTH_RATE_TTL_S` with the library's `seconds()` helper; getting that wrong
 is silent.
+
+The guard sits on the controller, so the two newer routes opt out by name: verify skips the
+email limiter (it has no address to key on, and the tracker's `no-email:<ip>` fallback would
+put every caller in one narrow bucket) and session skips both (a whoami the frontend calls on
+navigation, where one NAT would exhaust the per-IP budget for a whole classroom). **A bare
+`@SkipThrottle()` means `{ default: true }`, and no throttler here is named `default`, so it
+skips nothing at all - silently.** The named form is mandatory.
 
 ## Persistence
 
@@ -280,13 +343,15 @@ live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend create
 per-user ones itself, at **verification** rather than registration - see the access flow
 under Architecture.
 
-Central carries two deliberate exceptions to "email and a pointer". `login_links` is there
+Central carries three deliberate exceptions to "email and a pointer". `login_links` is there
 because a link is consumed before we know - or, for an unverified account, before there
-even is - the user's own database. `users.onboarding_payload` is there because the
-registration form is collected before the address is proven and the profile it becomes
-lives in a database that does not exist yet; it is transient, written at registration and
-set NULL by verification, and it holds `monthlyBudget` in **major** units with the DTO
-defaults already applied. Neither is a licence to put more profile data in central.
+even is - the user's own database, and `sessions` for the same reason one step later: a
+bearer is validated before anything knows which database to open. `users.onboarding_payload`
+is there because the registration form is collected before the address is proven and the
+profile it becomes lives in a database that does not exist yet; it is transient, written at
+registration and set NULL by verification, and it holds `monthlyBudget` in **major** units
+with the DTO defaults already applied. None of them is a licence to put more profile data in
+central.
 
 **Tokens.** Creating databases and minting their tokens are control-plane operations that
 no data-plane token can perform, so `TURSO_ORG_TOKEN` is used in exactly one place
@@ -358,6 +423,7 @@ Backend variables:
 | `MAIL_FROM`              | -                       | Sender address, on the DKIM-authorized domain         |
 | `MAIL_FROM_NAME`         | -                       | Sender display name; optional, unpaired               |
 | `LOGIN_LINK_TTL_M`       | `15`                    | Login-link lifetime, in minutes                       |
+| `SESSION_TTL_D`          | `30`                    | Session lifetime in days; fixed expiry, not sliding   |
 | `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per submitted address       |
 | `AUTH_RATE_IP_LIMIT`     | `30`                    | Auth requests per window, per caller IP               |
 | `AUTH_RATE_TTL_S`        | `900`                   | Window length in seconds, shared by both limiters     |
@@ -564,16 +630,15 @@ something that is not there.
   properly rather than relying on a leftover install.
 - **`frontend/src/components/`.** Does not exist. Create it with your first shared
   component.
-- **Link verification and sessions.** `POST /api/auth/register` and
-  `POST /api/auth/login-link` exist and issue links; nothing consumes them yet.
-  `LoginTokenService.consume()` is written and tested, but there is no `verifyLoginLink`
-  route, no session, no guard, and therefore no authenticated endpoint at all. That work
-  also owns provisioning the user's database, inserting the profile from
-  `users.onboarding_payload`, calling `seedStarterCategories`, and clearing the payload.
-  The old proof-of-stack routes `POST /api/users` and `GET /api/users/:id` are **gone**;
-  the read is replaced by a session-scoped `getProfile()` with that work.
-- **The rest of the data model.** Only `users` and `login_links` (central) and `profile`
-  and `categories` (per user) exist. Transactions and insights arrive with their features.
+- **The frontend half of the access flow.** The backend is complete - verify provisions and
+  returns a session, and `GET /api/auth/session` answers who a bearer is - but nothing on
+  the frontend calls either: no verify page, no session cookie, no dashboard. The session
+  cookie is the frontend's own httpOnly first-party one, forwarded server-side; the backend
+  reads no cookies. The old proof-of-stack routes `POST /api/users` and `GET /api/users/:id`
+  are **gone**, and the read's replacement is a session-scoped `getProfile()` with
+  preferences, which is PET-45's rather than done.
+- **The rest of the data model.** Only `users`, `login_links` and `sessions` (central) and
+  `profile` and `categories` (per user) exist. Transactions and insights arrive with their features.
   `categories` has a table and a starter set but no CRUD, no stats and no allocation
   summary. Its starter colors are the real ones from Figma frame 03, read per chip from the
   design's variable bindings; note the palette has eight colors for ten chips, so two
