@@ -34,6 +34,7 @@ Jira is reached over MCP, and **two different servers can provide it**. This ski
 - **Setup A has no board or sprint tools.** The active sprint cannot be discovered automatically; `worklog.md` documents the manual route. Setup B has `jira_get_agile_boards` and `jira_get_sprints_from_board`.
 - **Linking a task to an epic differs by project type on Setup A.** Team-managed projects use `parent`, which is the case for `PET`; company-managed use the Epic Link custom field via `additional_fields`. Setup B hides this behind `jira_link_to_epic`.
 - **Setup A can be slow against this site.** `getJiraIssueTypeMetaWithFields` and `searchJiraIssuesUsingJql` have both aborted after 300s with no response. Treat a hang as an outage, not a bad request: fall back to the values in `.claude/jira-config.md` instead of re-probing.
+- **Because of that slowness, delegate Jira MCP calls to a background subagent whenever there is other work to run alongside them** (reading `docs/`, the git log, config files). A hung call then costs only the subagent, and the main thread keeps moving; fold the subagent's results in when they arrive, or fall back to repo records if it times out. This delegates only the Jira *calls* - the chosen workflow file is still read and followed inline. Skip the subagent only when a single quick lookup gates everything else and nothing could usefully run in parallel.
 - **Setup A writes Markdown natively** via `contentFormat: "markdown"`, which satisfies the Markdown rule in `references/standards.md` without extra effort.
 
 ---
