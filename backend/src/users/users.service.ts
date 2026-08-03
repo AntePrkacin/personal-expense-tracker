@@ -19,6 +19,24 @@ export interface CentralUser {
 }
 
 /**
+ * What verification needs of a row it has already authenticated: the address to
+ * put in the session principal, the payload to turn into a profile, and whether
+ * a database has been provisioned yet.
+ *
+ * A second interface rather than widening `CentralUser`, because `dbAuthToken`
+ * is deliberately absent: verification never needs the token itself - opening
+ * the database is `UserDatabaseService`'s job - and a secret that is not fetched
+ * cannot be leaked into a log line or a response.
+ */
+export interface VerifiableUser {
+  id: string;
+  email: string;
+  /** Non-null means a database was already provisioned for this row. */
+  dbUrl: string | null;
+  onboardingPayload: OnboardingPayload | null;
+}
+
+/**
  * Reads and writes of the central `users` table. Nothing here touches a
  * per-user database.
  *
@@ -42,6 +60,28 @@ export class UsersService {
       })
       .from(users)
       .where(and(eq(users.email, email), isNull(users.deletedAt)))
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  /**
+   * The live row for an id, as verification needs it.
+   *
+   * Soft-deleted rows are invisible here like everywhere else, which is what
+   * lets verification answer a deleted account's link with the same 401 as an
+   * invalid token rather than disclosing the deletion.
+   */
+  async findById(id: string): Promise<VerifiableUser | null> {
+    const [row] = await this.centralDb
+      .select({
+        id: users.id,
+        email: users.email,
+        dbUrl: users.dbUrl,
+        onboardingPayload: users.onboardingPayload,
+      })
+      .from(users)
+      .where(and(eq(users.id, id), isNull(users.deletedAt)))
       .limit(1);
 
     return row ?? null;
@@ -85,6 +125,43 @@ export class UsersService {
     await this.centralDb
       .update(users)
       .set({ onboardingPayload: payload })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+  }
+
+  /**
+   * Records the database verification just provisioned for this user.
+   *
+   * Only the two nullable pointer columns: `dbName` was written at registration
+   * and derives from the id, so there is nothing to update about it. Both values
+   * are null in local mode, which is the correct pointer for a file the name
+   * alone locates.
+   *
+   * A non-null `dbUrl` afterwards is also what makes a retried verification skip
+   * provisioning instead of colliding on the remote name - see
+   * VerificationService.
+   */
+  async persistProvisionedDb(
+    userId: string,
+    pointer: { dbUrl: string | null; dbAuthToken: string | null },
+  ): Promise<void> {
+    await this.centralDb
+      .update(users)
+      .set({ dbUrl: pointer.dbUrl, dbAuthToken: pointer.dbAuthToken })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+  }
+
+  /**
+   * Drops the stashed onboarding payload, which is what marks an account
+   * verified.
+   *
+   * Called last in verification on purpose: while it is set, the payload is both
+   * the profile's source data and the "provisioning may be unfinished" marker,
+   * so clearing it early would lose the source with nothing having consumed it.
+   */
+  async clearOnboardingPayload(userId: string): Promise<void> {
+    await this.centralDb
+      .update(users)
+      .set({ onboardingPayload: null })
       .where(and(eq(users.id, userId), isNull(users.deletedAt)));
   }
 }

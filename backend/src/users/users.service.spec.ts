@@ -45,6 +45,45 @@ describe('UsersService', () => {
     });
   });
 
+  describe('findById', () => {
+    it('returns what verification needs, and never the db token', async () => {
+      const chain = queryChain([
+        {
+          id: 'user-id',
+          email: 'marko@email.com',
+          dbUrl: null,
+          onboardingPayload: payload,
+        },
+      ]);
+      select.mockReturnValue(chain);
+
+      await expect(service.findById('user-id')).resolves.toEqual({
+        id: 'user-id',
+        email: 'marko@email.com',
+        dbUrl: null,
+        onboardingPayload: payload,
+      });
+
+      // A secret that is never fetched cannot end up in a log line.
+      const [projection] = select.mock.calls[0] as [Record<string, unknown>];
+      expect(Object.keys(projection).sort()).toEqual([
+        'dbUrl',
+        'email',
+        'id',
+        'onboardingPayload',
+      ]);
+      expect(toSql(argsOf(chain, 'where')[0])).toContain(
+        '"deleted_at" is null',
+      );
+    });
+
+    it('returns null when there is no live row', async () => {
+      select.mockReturnValue(queryChain([]));
+
+      await expect(service.findById('user-id')).resolves.toBeNull();
+    });
+  });
+
   describe('createPending', () => {
     it('writes the derived db_name but provisions nothing', async () => {
       const chain = queryChain([]);
@@ -74,6 +113,57 @@ describe('UsersService', () => {
       await service.stashOnboardingPayload('user-id', payload);
 
       expect(argsOf(chain, 'set')[0]).toEqual({ onboardingPayload: payload });
+      expect(toSql(argsOf(chain, 'where')[0])).toContain(
+        '"deleted_at" is null',
+      );
+    });
+  });
+
+  describe('persistProvisionedDb', () => {
+    it('sets exactly the two pointer columns, on a live row', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.persistProvisionedDb('user-id', {
+        dbUrl: 'expensa-user-x-acme.aws-eu-west-1.turso.io',
+        dbAuthToken: 'db-token',
+      });
+
+      // dbName is not among them: it was written at registration and derives
+      // from the id, so there is nothing to update about it.
+      expect(argsOf(chain, 'set')[0]).toEqual({
+        dbUrl: 'expensa-user-x-acme.aws-eu-west-1.turso.io',
+        dbAuthToken: 'db-token',
+      });
+      expect(toSql(argsOf(chain, 'where')[0])).toContain(
+        '"deleted_at" is null',
+      );
+    });
+
+    it('writes the nulls local mode provisions', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.persistProvisionedDb('user-id', {
+        dbUrl: null,
+        dbAuthToken: null,
+      });
+
+      expect(argsOf(chain, 'set')[0]).toEqual({
+        dbUrl: null,
+        dbAuthToken: null,
+      });
+    });
+  });
+
+  describe('clearOnboardingPayload', () => {
+    it('nulls the payload, which is what marks the account verified', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.clearOnboardingPayload('user-id');
+
+      expect(argsOf(chain, 'set')[0]).toEqual({ onboardingPayload: null });
       expect(toSql(argsOf(chain, 'where')[0])).toContain(
         '"deleted_at" is null',
       );
