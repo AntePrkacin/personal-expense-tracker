@@ -54,8 +54,9 @@ src/
 
 New routes are folders under `src/app/` with a `page.tsx`.
 
-Shared UI is split by role. Design-system primitives (`Tag`, `ProgressBar`,
-`Stat`, `SectionHeader`, `ListRow`) live in `src/components/ui/`. Components
+Shared UI is split by role. Design-system primitives (`Button`, `Input`,
+`Select`, `Tag`, `ProgressBar`, `Stat`, `SectionHeader`, `ListRow`) live in
+`src/components/ui/`. Components
 that only make sense for one feature go in `src/components/` beside it, or next
 to the route that uses them. Each component's `*.test.tsx` and `*.stories.tsx`
 sit **beside it**, not in separate `__tests__/` or `stories/` trees: colocation
@@ -73,6 +74,12 @@ mapped class and fails if one produces nothing.
 
 The Storybook section is called **Components** even though the folder is `ui/`,
 because that is the name of the Figma page these are diffed against.
+
+`Input` and `Select` are both built out of `ui/Field.tsx`, which owns the label,
+the inline validation message and the ARIA wiring between them. Use it for any new
+control rather than repeating the pattern, so every form in the app keeps reporting
+errors the same way. `Field` requires an `id`: `useId()` is a hook, so generating
+one would force `'use client'` onto every field in the app.
 
 ## Design tokens
 

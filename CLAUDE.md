@@ -443,8 +443,10 @@ utility actually generates. `npm run storybook` renders the whole system under
 ## Shared components
 
 `frontend/src/components/ui/` holds the design-system primitives, mirroring the Figma
-**Components** page. `Tag`, `ProgressBar`, `Stat`, `SectionHeader` and `ListRow` exist;
-buttons and form fields do not yet. `npm run storybook` renders them under **Components**.
+**Components** page. Every tile on that page now has a component: `Button`, `Input`,
+`Select`, `Tag`, `ProgressBar`, `Stat`, `SectionHeader` and `ListRow`. `npm run storybook`
+renders them under **Components**. The Sidebar is the one tile still missing, and it belongs
+to the app-shell ticket rather than here.
 
 **Shared UI is split by role, not by file type.** `components/ui/` is the primitive layer,
 the vocabulary every screen draws from. Components that only make sense for one feature go
@@ -467,7 +469,8 @@ Five conventions, all of which existing files demonstrate:
   component to its own folder when it first needs private sub-parts; a mixed directory is
   fine. There is no barrel `index.ts` and adding one is not an improvement.
 - **Variant classes come from a `Record<Variant, string>` holding complete literal class
-  strings** (`TAG_TONES`, `CATEGORY_TILE`), interpolated into a template literal. This is
+  strings** (`TAG_TONES`, `CATEGORY_TILE`, `BUTTON_VARIANTS`, `INPUT_VARIANTS`,
+  `FIELD_CONTROL_BORDER`), interpolated into a template literal. This is
   not style preference. Tailwind's scanner reads these files as raw text, so a class built
   by interpolation (`bg-category-${n}`) is found by nobody and compiles to nothing, with
   no build error and no failing test. There are no `clsx` / `cva` style dependencies and
@@ -476,7 +479,52 @@ Five conventions, all of which existing files demonstrate:
   Tailwind and fails if any generates no CSS. It is what makes the point above enforceable
   rather than a rule people remember. Add new class maps to it.
 - **Components stay Server Components.** None of them carry `'use client'`, because none
-  has state or handlers. Only add the directive when a component genuinely needs the client.
+  holds state. `Button`, `Input` and `Select` accept handler props without it: a client
+  component that imports one pulls it into the client bundle on its own, and only a Server
+  Component trying to pass a function would break. Only add the directive when a component
+  genuinely needs the client itself.
+
+**Form fields go through `ui/Field.tsx`.** `Input` and `Select` are both built on it, and
+it owns the label, the inline validation message, and the `aria-invalid` /
+`aria-describedby` wiring between them. Build a new control on it rather than repeating the
+pattern; that is what keeps every form in the app reporting errors identically. Two things
+about it look like friction and are not: `id` is a **required** prop, because `useId()` is a
+hook and generating one would force `'use client'` onto the whole field layer; and each
+state-dependent colour comes from its own `Record` (`FIELD_CONTROL_SURFACE` for the fill,
+`FIELD_CONTROL_BORDER` for the border) rather than being appended conditionally, because
+`border-border-strong` and `border-status-danger` have equal specificity, so emitting both
+makes the winner depend on stylesheet order. Classes carrying a variant prefix
+(`focus-within:`, `disabled:`) are exempt, since the extra pseudo-class settles it.
+
+**Padding sits on the control, never on the bordered box.** Both `Input` and `Select` put it
+on the `<input>` / `<select>`, and `Input`'s `$` prefix and `Select`'s chevron are absolutely
+positioned over the control with `pointer-events-none`. A padded box turns its own 14-16px
+band into a dead zone where a click places no caret and opens no list.
+
+**Five details of the form components have no Figma counterpart.** They were chosen, not
+read, so do not "correct" them without asking the designer:
+
+- **The inline error pattern** - red border plus one line of `text-body-s
+text-status-danger-text`, no icon. Assumption A29 records that no form error visual exists
+  anywhere in the file.
+- **The disabled button dimming** (`disabled:opacity-60`). Frame 15 draws the in-flight
+  "Generating..." button identically to a resting secondary one, so the design says only the
+  label changes (A26). A control that looks enabled while it is not is a defect, hence the
+  addition.
+- **The disabled field fill** (`bg-surface-muted` plus `text-text-tertiary`). No disabled
+  field is drawn anywhere in the file, and it cannot simply be left out: author styles beat
+  the user agent's own disabled treatment, so an undecorated disabled field is
+  pixel-identical to an editable one.
+- **The forced-colors focus outline** on the field box. Windows High Contrast forces every
+  border colour to one system colour, so the designed accent border cannot signal focus
+  there. The outline is scoped to `forced-colors:` alone, so normal rendering still matches
+  Figma exactly.
+- **The currency field at rest.** The 1.5px `brand-accent` border is treated as the _focus_
+  style, which is what the ticket and spec BUD-3 assert, but Figma only ever draws it on the
+  currency amount field and never draws that field unfocused. Its 1px resting border is
+  inferred from the plain Input tile. Focus also keeps that accent border on an _invalid_
+  field rather than holding the red: invalidity is still carried by the message and by
+  `aria-invalid`, and a 0.5px width change is too little focus signal to see.
 
 Money is formatted through `frontend/src/lib/format.ts`. Amounts are stored as positive
 magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN rather than the
