@@ -22,6 +22,13 @@ frontend calls either yet - there is no verify page, no session cookie, and no d
 land on. The session-scoped `getProfile()` that replaces the deleted proof-of-stack
 `GET /api/users/:id` is PET-45's, not this.
 
+**The sidebar is built and waiting on both halves.** PET-18 landed `ui/Sidebar.tsx` with its
+footer taking `firstName`, `lastName` and `email` as required props, deliberately with no
+fetch of its own and no sample defaults. Feeding it needs PET-45's profile read reached with
+the cookie this item describes, and mounting it needs PET-19's `(app)` shell. Until then the
+component is only reachable in Storybook, and its four nav links point at routes that do not
+exist.
+
 Three constraints that work inherits.
 
 The token travels in a **query string**, so it lands in browser history and potentially a
@@ -121,14 +128,28 @@ worth deciding whether the infrastructure naming needs to follow the brand at al
 The central database (`expensa-app`) is created by hand per the README, so renaming it
 means creating a new one and moving the directory into it.
 
-**Meanwhile the sender and the copy disagree.** `MAIL_FROM_NAME` is already `Spendifico`,
-so the login email arrives from "Spendifico" while its subject and body still say Expensa.
-Accepted deliberately until the rename lands, but it is the one email a stranger has to
-trust enough to click, so it should not sit that way for long.
+**The frontend half is done.** PET-18 took it: `ui/Sidebar.tsx` renders the wordmark as
+"Spendifico" and `src/app/layout.tsx` carries it as the `<title>`. A test pins the wordmark
+so the divergence from the Figma file cannot be half-reverted. Nothing else in `frontend/`
+mentions either name.
 
-### `frontend/src/components/`
+**The backend copy has not moved, so the sender and the copy still disagree.**
+`MAIL_FROM_NAME` is already `Spendifico`, so the login email arrives from "Spendifico" while
+its subject and body still say Expensa (`src/mail/login-link.template.ts`), as does the
+OpenAPI document title. That is the remaining safe half: change both, then run
+`npm run api:sync` or CI's drift gate fails. It is the one email a stranger has to trust
+enough to click, so it should not sit that way for long.
 
-Does not exist. Create it with the first shared component.
+### The sidebar's nav pills use a radius that is not on the scale
+
+Figma bound the logo tile and the four nav pills to a raw **10px** corner rather than to a
+radius variable, and Foundations offers only `Radius/SM` (8) and `Radius/MD` (12).
+`ui/Sidebar.tsx` therefore uses a literal `rounded-[10px]`, which matches the design exactly
+and is registered in `utilities.test.ts` so it is findable.
+
+Worth a designer answer: either 10 joins the scale as a token, or these two corners snap to
+8 or 12. Nothing breaks either way, since a literal compiles without a token lookup, so this
+is a consistency question rather than a bug.
 
 ---
 
@@ -358,6 +379,11 @@ than discovered.
   as `type: number` while `@IsInt()` rejects anything fractional. Neither has earned a
   hand-written `@ApiProperty` correction yet; `currency` is the one a frontend developer
   reading the generated `currency?: string` will trip over first.
+- **The four oldest plan files do not match the documented naming pattern.** CLAUDE.md
+  specifies `YYYY-MM-DD_PET-{number}_{slug}.md`, and `2026-08-03_PET-18_app-sidebar.md`
+  follows it, but the four that predate the convention are `YYYY-MM-DD-{slug}.md` with no
+  ticket number. Renaming them is a one-line `git mv` each; the reason to bother is that the
+  ticket number is the only thing tying a plan to its Jira issue.
 - **No operation documents a 500, deliberately.** Resolved with PET-14: every route can 500
   through `AllExceptionsFilter`, so per-operation documentation restated the same
   non-actionable fact everywhere and widened every generated response union. The document
