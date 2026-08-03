@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AppService } from './app.service';
+import { Public } from './auth/public.decorator';
 import { HelloResponseDto } from './dto/hello-response.dto';
 
 @ApiTags('meta')
@@ -10,6 +11,7 @@ export class AppController {
 
   // With the global 'api' prefix (see main.ts), this is GET /api/hello.
   @Get('hello')
+  @Public()
   @ApiOperation({
     summary: 'A greeting, and the proof that the two apps can talk.',
   })

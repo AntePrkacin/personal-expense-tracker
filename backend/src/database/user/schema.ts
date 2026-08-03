@@ -1,13 +1,13 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 /**
  * Schema of a *per-user* database. Every user gets their own Turso database, so
  * this schema is instantiated once per person and its migrations run on first
  * open of each file (see UserDatabaseService).
  *
- * `profile` and `categories` exist so far. `transactions` and `insights` arrive
- * with their own features as ordinary later migrations - adding a migration
- * here upgrades every existing user database the next time it opens.
+ * `profile`, `categories` and `transactions` exist so far. `insights` arrives
+ * with its own feature as an ordinary later migration - adding a migration here
+ * upgrades every existing user database the next time it opens.
  */
 export const profile = sqliteTable('profile', {
   // Single-row table. The id is the user's central `users.id` rather than a
@@ -84,3 +84,72 @@ export const categories = sqliteTable('categories', {
 
 export type CategoryRow = typeof categories.$inferSelect;
 export type NewCategoryRow = typeof categories.$inferInsert;
+
+/**
+ * A single spend, the only thing this app really records. Everything the UI
+ * shows on top of it - dashboard cards, trend buckets, the donut, per-category
+ * totals, the allocation summary - is computed on read from these rows and
+ * never stored, so this table is the whole write surface of the feature.
+ *
+ * That "never stored" rule is why there is no month column, and why there must
+ * not be one. Month attribution is `date` read against the profile's
+ * `monthStartDay` at query time, which means a backdated transaction lands in
+ * the month it belongs to and a later change to `monthStartDay` re-buckets
+ * history correctly. A stored month would be a second source of truth that goes
+ * stale on both counts.
+ */
+export const transactions = sqliteTable(
+  'transactions',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md. Ids are
+    // caller-supplied newId() rather than $defaultFn, matching every other
+    // table in both scopes.
+    id: text('id').primaryKey().notNull(),
+
+    merchant: text('merchant').notNull(),
+
+    // No .references(): the schema is FK-less throughout, so reads already have
+    // to tolerate a dangling id. The service checks the category exists before
+    // it writes, which is what turns an unknown id into a 404 instead of a row
+    // pointing at nothing.
+    categoryId: text('category_id').notNull(),
+
+    // Minor units like every other money column. The API speaks major units and
+    // TransactionsService converts at the boundary, through money.ts and
+    // nowhere else.
+    amountCents: integer('amount_cents').notNull(),
+
+    // Calendar date, `YYYY-MM-DD`, stored and returned verbatim. Deliberately
+    // text and never a timestamp: this is the day the user says the money was
+    // spent, not an instant, and round-tripping it through a Date would shift
+    // it across timezones.
+    date: text('date').notNull(),
+
+    note: text('note'),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+
+    // Tombstone. The API deletes permanently as far as any client can tell, but
+    // the row survives so a future offline sync cannot resurrect it under a
+    // delete-update conflict. Every read filters on isNull(deletedAt).
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object. Both indexes ship
+  // in this first migration on purpose: the month-window and per-category scans
+  // that need them are already specified, and adding one later would re-open
+  // and re-migrate every user database for nothing.
+  (table) => [
+    index('transactions_date_idx').on(table.date),
+    index('transactions_category_id_idx').on(table.categoryId),
+  ],
+);
+
+export type TransactionRow = typeof transactions.$inferSelect;
+export type NewTransactionRow = typeof transactions.$inferInsert;

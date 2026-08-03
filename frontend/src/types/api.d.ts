@@ -101,6 +101,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a transaction.
+         * @description `amount` is in major units (12.50, not 1250) and must be positive. `date` is a calendar date, `YYYY-MM-DD`, stored verbatim - backdating is supported and puts the transaction in the month that date falls in. **404** means the `categoryId` in the body names no category of yours.
+         */
+        post: operations["TransactionsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transactions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a transaction.
+         * @description Permanent as far as this API is concerned: the transaction stops existing through every endpoint. Deleting one twice is a **404**, and **404** here always means the id in the URL.
+         */
+        delete: operations["TransactionsController_remove"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a transaction.
+         * @description Send only the fields to change: an absent field is left alone, and `note` accepts null to clear it. An empty body is a **400**, because it would record an edit that changed nothing. **404** means either the id in the URL or a `categoryId` in the body names nothing of yours.
+         */
+        patch: operations["TransactionsController_update"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -170,6 +214,69 @@ export interface components {
             email: string;
             /** @description ISO 8601, the same instant verification returned. */
             expiresAt: string;
+        };
+        CreateTransactionDto: {
+            /**
+             * @description Major units (e.g. 12.50), stored as integer cents. Positive: this app
+             *     records spending, and direction is not a per-row choice.
+             */
+            amount: number;
+            /**
+             * Format: date
+             * @description The calendar day the money was spent, `YYYY-MM-DD`. Stored verbatim.
+             *
+             *     Backdating is ordinary and supported: the month a transaction belongs to is
+             *     derived from this at read time, so a date in a past month lands in that
+             *     month rather than the one it was entered in.
+             * @example 2026-08-03
+             */
+            date: string;
+            merchant: string;
+            /**
+             * Format: uuid
+             * @description An existing category of this user's. An unknown id is a 404, not a 400.
+             */
+            categoryId: string;
+            note?: string;
+        };
+        TransactionResponseDto: {
+            id: string;
+            merchant: string;
+            categoryId: string;
+            /** @description Major units (e.g. 12.5). Stored as integer cents; converted on the way out. */
+            amount: number;
+            /** @description `YYYY-MM-DD`, exactly the string that was stored. */
+            date: string;
+            /** @description Null when the transaction has no note, never absent. */
+            note: string | null;
+            /** @description ISO 8601. */
+            createdAt: string;
+            /**
+             * @description ISO 8601. Within a millisecond of `createdAt` until the first edit, not
+             *     necessarily equal to it: the two columns default from independent `new Date()`
+             *     calls, so an insert can straddle a millisecond boundary. Do not use equality
+             *     of the two to mean "never edited".
+             */
+            updatedAt: string;
+        };
+        UpdateTransactionDto: {
+            /** @description Major units, as on create. */
+            amount?: number;
+            /**
+             * Format: date
+             * @description `YYYY-MM-DD`, as on create. Inline regex for the `pattern` lift.
+             * @example 2026-08-03
+             */
+            date?: string;
+            /**
+             * @description The one nullable field, and so the one that keeps `@IsOptional()`: null is
+             *     a meaningful value here rather than a mistake, and it means "clear the
+             *     note".
+             */
+            note?: string | null;
+            merchant?: string;
+            /** Format: uuid */
+            categoryId?: string;
         };
     };
     responses: never;
@@ -357,6 +464,155 @@ export interface operations {
             };
             /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TransactionsController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTransactionDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TransactionsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TransactionsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTransactionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

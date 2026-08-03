@@ -242,7 +242,7 @@ from the row.
 **Verifying a link is one blocking call, and it is what provisions the account.** `POST
 /api/auth/verify` takes the token in the **body** (a POST from the frontend's route handler,
 so a live credential never reaches backend access logs) and does everything in order:
-`consume()` first because it *is* the authentication, then the directory read, then - only if
+`consume()` first because it _is_ the authentication, then the directory read, then - only if
 `users.onboarding_payload` is still set - provision the Turso database, persist the pointer,
 open and migrate it, insert the profile, seed the picked categories, and clear the payload
 **strictly last**, because while it is set it is both the profile's source data and the "this
@@ -251,9 +251,52 @@ may be unfinished" marker. Then a session, then the response. Nothing here is fl
 enumeration timing to defend, and the response must not claim a session that provisioning
 failed to earn.
 
-Money crosses from major units to cents at exactly one place, `toCents()` from
-`src/common/money.ts` called in `VerificationService` - the schema comments promise the
-conversion happens at the profile boundary, and transactions will reuse the same function.
+Money crosses units in `src/common/money.ts` and nowhere else: `toCents()` on the way in,
+`fromCents()` on the way out. Two callers so far, `VerificationService` for the profile and
+`TransactionsService` for amounts, which is what the schema comments mean by the conversion
+happening at the service boundary. A third place doing its own arithmetic is a bug.
+
+**Transaction writes are the whole write surface of the spend feature, and nothing they
+touch is derived.** `POST /api/transactions` (201), `PATCH /api/transactions/:id` (200) and
+`DELETE /api/transactions/:id` (204) live in `src/transactions/`; reads are PET-28's. Every
+aggregate the UI shows - dashboard cards, trend buckets, the donut, per-category totals, the
+allocation summary - is computed on read and **never stored**, so there is deliberately no
+month column: month attribution is the `date` string read against the profile's
+`monthStartDay` at query time, which is what makes a backdated transaction land in its own
+month and a changed `monthStartDay` re-bucket history correctly.
+
+Four things about that contract are easy to get wrong:
+
+- **A `PATCH` is tri-state**: an absent field is unchanged, `null` clears (only `note` is
+  nullable), a value sets. `UpdateTransactionDto` is hand-written rather than
+  `PartialType(CreateTransactionDto)` for one reason: `@IsOptional()` skips validation for
+  `null` as well as `undefined`, so `{"merchant": null}` would pass every check and reach a
+  NOT NULL column as a 500. Each field uses `@ValidateIf((_, v) => v !== undefined)`
+  instead; `note` alone keeps `@IsOptional()`, because there null is the point.
+- **An empty `PATCH` body is a 400**, thrown before the user database is even opened - a
+  bare UPDATE would still bump `updated_at` through `$onUpdateFn` and record an edit that
+  changed nothing. For the same reason the service never sets `updatedAt` by hand: drizzle
+  v1's `buildUpdateSet` applies `$onUpdateFn` columns itself.
+- **404 means two different resources**, the transaction in the URL and a `categoryId` sent
+  in a body, so each `@ApiOperation` description says which. An unknown category is a 404
+  rather than a 400, which keeps 400 meaning "the shape was rejected".
+- **The date regex must stay an inline literal.** The swagger plugin lifts only inline
+  regex into `pattern` and silently drops a named constant, so `@Matches(/^\d{4}-\d{2}-\d{2}$/)`
+  is written out at both DTOs. `@IsDateString({ strict: true })` beside it is what rejects
+  `2026-02-30`, which a regex cannot know is not a day. Nothing in the write path calls
+  `new Date(dto.date)` - that would shift the day across timezones.
+
+Cross-user isolation is structural, not a filter: every method opens the caller's own
+database, so another user's transaction id simply does not exist there and the ordinary 404
+covers it. There is no `user_id` column to forget. Deletes tombstone (`deleted_at`) and
+`PATCH` guards on `deleted_at IS NULL`, so a deleted transaction cannot be edited back to
+life; the row survives only so a future offline sync cannot resurrect it under a
+delete-update conflict.
+
+Four fields the transaction detail mock shows are **deliberately not accepted**: time,
+payment method, status and account (DET-8, A20). No form captures them and no column stores
+them, so `forbidNonWhitelisted` answers 400 rather than dropping them silently and letting a
+frontend believe they were saved.
 
 **A resent link completes a half-provisioned account.** A mid-flight failure answers 500 with
 the link already burned, and "Resend link" (VER-2, A36) is the designed recovery - so every
@@ -280,10 +323,16 @@ revocation means tombstoning the row. Concurrent sessions per user are legitimat
 device. `GET /api/auth/session` returns only `{ userId, email, expiresAt }`, because that is
 all central knows.
 
-**`SessionGuard` is applied per route, not as an `APP_GUARD`.** With one guarded endpoint, a
-global guard would mean marking four routes `@Public()` to protect one. The switch point:
-when guarded routes become the majority (PET-45's profile work), flip to `APP_GUARD` plus a
-`@Public()` decorator on hello, register, login-link and verify.
+**`SessionGuard` is an `APP_GUARD`, so every route is guarded unless it says otherwise.**
+It arrived per-route, back when one endpoint was guarded and marking four public ones to
+protect it would have been absurd; the transaction endpoints tipped the balance and PET-27
+made the flip. Exactly four routes carry `@Public()` (`src/auth/public.decorator.ts`):
+hello, register, login-link and verify. **Note the failure direction reversed**, which is
+the real reason to prefer this: a forgotten `@Public()` 401s a public route loudly on the
+first request, where a forgotten `@UseGuards` used to leave an endpoint silently open. The
+guard's public check is a pure metadata read - no header, no body, no query - so it sits
+ahead of the controller-level `ThrottlerGuard` without changing what the rate-limit
+trackers see. Guards are invisible to OpenAPI, so the flip was a zero-diff `api:sync`.
 
 **The auth routes carry two independent rate limiters, per submitted email and per IP.**
 Deliberately two throttlers rather than one composite `ip:email` key: a composite key hands
@@ -339,8 +388,8 @@ field the Platform API returns. A dedicated test pins the flag in
 **Database per user.** A small **central** database (`users`: id, email, and a pointer to
 that person's database) exists because identity must resolve by email before the per-user
 database is known. Everything else about a person lives in **their own Turso database**,
-holding `profile` (single row) and `categories`. Transactions and insights arrive there
-later as ordinary migrations. In cloud mode the central database and every per-user one
+holding `profile` (single row), `categories` and `transactions`. Insights arrive there
+later as an ordinary migration. In cloud mode the central database and every per-user one
 live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
 per-user ones itself, at **verification** rather than registration - see the access flow
 under Architecture.
@@ -816,8 +865,10 @@ something that is not there.
   exist yet. Its footer props (`firstName`, `lastName`, `email`) also have no data source:
   that needs PET-45's profile read reached with PET-52's session cookie. The one route that
   exists is `/`, still the scaffold greeting page.
-- **The rest of the data model.** Only `users`, `login_links` and `sessions` (central) and
-  `profile` and `categories` (per user) exist. Transactions and insights arrive with their features.
+- **The rest of the data model.** `users`, `login_links` and `sessions` (central) and
+  `profile`, `categories` and `transactions` (per user) exist. Insights arrives with its
+  feature. `transactions` has the three write endpoints and **no reads at all** - the list,
+  the month windows and every aggregate are PET-28's and the dashboard tickets'.
   `categories` has a table and a starter set but no CRUD, no stats and no allocation
   summary. Its starter colors are the real ones from Figma frame 03, read per chip from the
   design's variable bindings; note the palette has eight colors for ten chips, so two

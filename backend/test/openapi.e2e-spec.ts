@@ -68,6 +68,8 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/auth/session`,
       `/${API_PREFIX}/auth/verify`,
       `/${API_PREFIX}/hello`,
+      `/${API_PREFIX}/transactions`,
+      `/${API_PREFIX}/transactions/{id}`,
     ]);
   });
 
@@ -215,6 +217,135 @@ describe('openapi.json', () => {
       expect(spec.components.securitySchemes?.bearer).not.toHaveProperty(
         'bearerFormat',
       );
+    });
+  });
+
+  describe('the transaction write endpoints', () => {
+    const collection = () => spec.paths[`/${API_PREFIX}/transactions`];
+    const item = () => spec.paths[`/${API_PREFIX}/transactions/{id}`];
+
+    it('declares exactly the three writes, and no reads yet', () => {
+      // Reads are PET-28's. If a GET appears here before that ticket, something
+      // was added without its aggregates being thought through.
+      expect(Object.keys(collection())).toEqual(['post']);
+      expect(Object.keys(item()).sort()).toEqual(['delete', 'patch']);
+    });
+
+    it.each([
+      ['create', () => collection().post, ['201', '400', '401', '404']],
+      ['update', () => item().patch, ['200', '400', '401', '404']],
+      ['delete', () => item().delete, ['204', '400', '401', '404']],
+    ])('documents %s with exactly its own statuses', (_name, op, codes) => {
+      expect(Object.keys(op().responses).sort()).toEqual(codes);
+
+      // 400 is reachable on all three: the two with a body validate it, and
+      // delete still has a ParseUUIDPipe on the id.
+      for (const status of ['400', '401', '404']) {
+        expect(
+          op().responses[status].content?.['application/json'].schema?.$ref,
+        ).toBe(ERROR_REF);
+      }
+    });
+
+    it('requires the bearer on every one of them', () => {
+      // Class-level `@ApiBearerAuth()`, so this is really pinning that the
+      // decorator has not been lost from the controller as a whole.
+      for (const op of [collection().post, item().patch, item().delete]) {
+        expect(op.security).toEqual([{ bearer: [] }]);
+      }
+    });
+
+    it('returns the transaction from create and update, and nothing from delete', () => {
+      const ref = '#/components/schemas/TransactionResponseDto';
+
+      expect(
+        collection().post.responses['201'].content?.['application/json'].schema
+          ?.$ref,
+      ).toBe(ref);
+      expect(
+        item().patch.responses['200'].content?.['application/json'].schema
+          ?.$ref,
+      ).toBe(ref);
+      // 204 means 204: no body to describe.
+      expect(item().delete.responses['204'].content).toBeUndefined();
+    });
+
+    it('says which resource each 404 names', () => {
+      // Two different resources behind one status - the transaction in the URL
+      // and the categoryId in the body - so the prose has to disambiguate.
+      expect(collection().post.description).toMatch(/categoryId/);
+      expect(item().patch.description).toMatch(/categoryId/);
+      expect(item().delete.description).toMatch(/id in the URL/);
+    });
+
+    it('spells the amount bound out rather than letting @IsPositive lie', () => {
+      // The trap this pins: the plugin renders @IsPositive() as `minimum: 1`,
+      // which is right for an integer and wrong for money - it would forbid
+      // every amount under a unit. Both DTOs carry the explicit override.
+      for (const name of ['CreateTransactionDto', 'UpdateTransactionDto']) {
+        const amount = schema(name).properties!.amount;
+
+        expect(amount).toMatchObject({
+          type: 'number',
+          minimum: 0,
+          exclusiveMinimum: true,
+          maximum: 1_000_000_000,
+        });
+        expect(amount).not.toMatchObject({ minimum: 1 });
+      }
+    });
+
+    it('publishes the date as a pattern-constrained calendar date', () => {
+      // The pattern only survives because the regex is an inline literal in the
+      // DTO; hoisting it to a named const drops it from here silently.
+      for (const name of ['CreateTransactionDto', 'UpdateTransactionDto']) {
+        expect(schema(name).properties!.date).toMatchObject({
+          type: 'string',
+          pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+          format: 'date',
+        });
+      }
+    });
+
+    it('makes create require the four real fields and update require none', () => {
+      expect(schema('CreateTransactionDto').required!.slice().sort()).toEqual([
+        'amount',
+        'categoryId',
+        'date',
+        'merchant',
+      ]);
+      // PATCH semantics: every field optional, or an absent one would be a 400
+      // instead of "leave it alone".
+      expect(schema('UpdateTransactionDto').required).toBeUndefined();
+    });
+
+    it('publishes note as nullable on update, where null means clear', () => {
+      expect(schema('UpdateTransactionDto').properties!.note).toMatchObject({
+        type: 'string',
+        nullable: true,
+      });
+    });
+
+    it('always answers all eight response fields', () => {
+      // Including note: null rather than an absent key, so a client never has to
+      // tell "no note" from "field missing".
+      expect(schema('TransactionResponseDto').required).toEqual([
+        'id',
+        'merchant',
+        'categoryId',
+        'amount',
+        'date',
+        'note',
+        'createdAt',
+        'updatedAt',
+      ]);
+      expect(schema('TransactionResponseDto').properties!.note).toMatchObject({
+        nullable: true,
+      });
+      // Major units on the way out, matching the way in.
+      expect(
+        schema('TransactionResponseDto').properties!.amount.description,
+      ).toMatch(/major units/i);
     });
   });
 

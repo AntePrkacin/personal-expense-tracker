@@ -84,10 +84,17 @@ guard, no schema change.
 
 ### The rest of the data model
 
-`users` and `login_links` (central) and `profile` and `categories` (per user) exist.
-`transactions` and `insights` arrive with their own features as ordinary migrations under
-`backend/drizzle/user/`. `categories` has its table and a `STARTER_CATEGORIES` constant but
-no CRUD, no per-category stats and no allocation summary.
+`users`, `login_links` and `sessions` (central) and `profile`, `categories` and
+`transactions` (per user) exist. `insights` arrives with its own feature as an ordinary
+migration under `backend/drizzle/user/`. `categories` has its table and a
+`STARTER_CATEGORIES` constant but no CRUD, no per-category stats and no allocation summary.
+
+`transactions` has its three write endpoints (PET-27) and **no reads whatsoever**. The list,
+the month windows, the trend buckets, the donut and every card are PET-28's and the
+dashboard tickets', and all of them are computed on read - the table carries no month column
+and no stored aggregate on purpose, so nothing can go stale. A read implementing them needs
+the profile's `monthStartDay` to attribute a `date` to a month; both indexes it will want
+(`date`, `category_id`) already ship in the first migration.
 
 Starter category colors are the real ones, read per chip from the design's variable
 bindings in Figma frame 03 (node 43:705) and checked against a render. Two open design
@@ -99,6 +106,25 @@ questions remain, both for the designer rather than for code:
 - **A7's conflict sits on the same seam.** The starter set includes Bills and
   Subscriptions, which never reappear, while later screens show Health and Other - and the
   duplicated colors are exactly on those chips. All ten are seeded until it is resolved.
+
+### The transaction detail fields no form captures (A20)
+
+The transaction detail mock (DET-8) shows **time, payment method, status and account**
+alongside the fields that are really stored. No form anywhere in the design captures any of
+them, and no screen lets a user set one, so PET-27 gave them no columns and
+`CreateTransactionDto` no properties.
+
+The consequence is deliberate and worth knowing before building the reads: because
+`forbidNonWhitelisted` is on, sending one of those keys is a **400**, not a silently dropped
+field. That is the safer direction - a dropped field would let a frontend believe it saved
+something - but it does mean a client that codes from the detail mock rather than from the
+generated types will get a rejection.
+
+**PET-28 and PET-34 must answer them as empty or defaulted rather than hunting for a
+column.** Two ways out when the designer is available: either the mock's values are
+illustrative and the detail view drops them, or a form has to capture them and they earn
+columns in a later migration. Until then A20 stands, and nothing should infer a payment
+method from anything.
 
 ### Renaming the product from Expensa to Spendifico
 
@@ -347,11 +373,20 @@ than discovered.
   a shared queue pushed down into the database layer.
 - **Soft deletes are never purged.** Every table carries `deleted_at` for future sync, and
   reads filter it, but nothing removes tombstones. A purge policy is deferred until the
-  sync design needs one.
-- **`toCents()` assumes two-decimal currencies.** `src/common/money.ts` is
-  `Math.round(v * 100)`: fine for USD and EUR, wrong for JPY (zero decimals) and KWD
-  (three). The API accepts any ISO 4217 code, so fixing it means a per-currency exponent
-  table rather than a change at that one call site.
+  sync design needs one. `transactions` is the first table a user can actually delete from
+  through the API, so it is where this stops being theoretical: `DELETE
+/api/transactions/:id` answers 204 and the row stays. PET-27's AC3 said "no soft-delete
+  record"; that wording was re-derived from the delete dialog's copy without the sync
+  consideration, and a hard delete risks row resurrection under delete-update conflicts once
+  devices hold replicas. The tombstone is invisible through every endpoint, which is what
+  "permanently" means to a client.
+- **`toCents()` and `fromCents()` assume two-decimal currencies.** `src/common/money.ts` is
+  `Math.round(v * 100)` and `v / 100`: fine for USD and EUR, wrong for JPY (zero decimals)
+  and KWD (three). The API accepts any ISO 4217 code, so fixing it means a per-currency
+  exponent table rather than a change at those two call sites. Note the blast radius grew
+  with PET-27: it was one profile field written once at verification, and it is now every
+  transaction amount in both directions, so a wrong exponent would misreport every number
+  the dashboard shows rather than just a budget.
 - **Offline conflict policy is undecided.** The schema is shaped for last-write-wins
   (UUIDv7 keys, epoch-ms timestamps, tombstones), but no client syncs yet and clock skew is
   unaddressed.
@@ -369,8 +404,10 @@ than discovered.
 - **The swagger plugin renders `@IsPositive()` as `minimum: 1`.** Right for an integer,
   wrong for anything with decimals, and it publishes a constraint the API does not
   actually enforce. `RegisterDto.monthlyBudget` carries an explicit
-  `@ApiProperty({ minimum: 0, exclusiveMinimum: true })` to correct it; any future money
-  field needs the same line. Check the generated `backend/openapi.json` when adding a DTO
+  `@ApiProperty({ minimum: 0, exclusiveMinimum: true })` to correct it, and PET-27 added the
+  second and third compliant fields, `amount` on both `CreateTransactionDto` and
+  `UpdateTransactionDto`; any future money field needs the same line, and
+  `test/openapi.e2e-spec.ts` now pins all three against a regression. Check the generated `backend/openapi.json` when adding a DTO
   rather than assuming the derived constraints are faithful - `@ArrayMaxSize` is simply
   dropped, for instance, which is a smaller version of the same thing. Two more live
   gaps, both in the permissive direction, so a client that codes to the spec can still be
@@ -378,12 +415,28 @@ than discovered.
   `@IsISO4217CurrencyCode()` enforces the ISO 4217 list, and `monthStartDay` is published
   as `type: number` while `@IsInt()` rejects anything fractional. Neither has earned a
   hand-written `@ApiProperty` correction yet; `currency` is the one a frontend developer
-  reading the generated `currency?: string` will trip over first.
+  reading the generated `currency?: string` will trip over first. A third gap is cosmetic
+  rather than permissive: `TransactionResponseDto.createdAt`/`updatedAt` are ISO 8601
+  instants but publish as bare `type: string` with no `format: 'date-time'`, because the
+  plugin cannot read that out of a doc comment. Harmless today - the generated TypeScript
+  type is `string` either way - but if PET-28's read DTOs want the published contract to
+  say what the string is, each instant field needs an explicit
+  `@ApiProperty({ format: 'date-time' })`.
 - **The four oldest plan files do not match the documented naming pattern.** CLAUDE.md
   specifies `YYYY-MM-DD_PET-{number}_{slug}.md`, and `2026-08-03_PET-18_app-sidebar.md`
   follows it, but the four that predate the convention are `YYYY-MM-DD-{slug}.md` with no
   ticket number. Renaming them is a one-line `git mv` each; the reason to bother is that the
   ticket number is the only thing tying a plan to its Jira issue.
+- **`created_at` and `updated_at` can differ by a millisecond on insert.** Every table
+  defaults the two from independent `$defaultFn(() => new Date())` calls, so an insert that
+  straddles a millisecond boundary writes two different values - observed on a local
+  transaction create as `.824Z` against `.825Z`. Harmless in itself, but it means
+  `updatedAt === createdAt` is **not** a sound test for "never edited", and any code or test
+  tempted to use it needs a tolerance instead. PET-27's e2e originally asserted equality and
+  passed only by luck; it now asserts a sub-50ms window. Making them genuinely identical
+  would mean the service passing one timestamp explicitly into both columns, which fights
+  `$onUpdateFn` and deviates from the schema-level default every other table uses - not worth
+  it unless something real needs exact equality.
 - **No operation documents a 500, deliberately.** Resolved with PET-14: every route can 500
   through `AllExceptionsFilter`, so per-operation documentation restated the same
   non-actionable fact everywhere and widened every generated response union. The document
