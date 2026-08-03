@@ -17,3 +17,19 @@
 export function toCents(major: number): number {
   return Math.round(major * 100);
 }
+
+/**
+ * The inverse, for the way back out: minor units to the major ones the API
+ * speaks.
+ *
+ * No rounding needed and none wanted. Dividing an integer by 100 is exact to
+ * the nearest double, and JSON.stringify prints the shortest decimal that
+ * round-trips, so 402 leaves as `4.02` rather than `4.0200000000000005`. A
+ * `toFixed(2)` here would be worse than useless: it returns a string, which
+ * would silently turn every amount in the API into one.
+ *
+ * Carries the same hundredths assumption as `toCents`, and the same caveat.
+ */
+export function fromCents(minor: number): number {
+  return minor / 100;
+}
