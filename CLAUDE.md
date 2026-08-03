@@ -492,10 +492,10 @@ utility actually generates. `npm run storybook` renders the whole system under
 ## Shared components
 
 `frontend/src/components/ui/` holds the design-system primitives, mirroring the Figma
-**Components** page. Every tile on that page now has a component: `Button`, `Input`,
-`Select`, `Tag`, `ProgressBar`, `Stat`, `SectionHeader` and `ListRow`. `npm run storybook`
-renders them under **Components**. The Sidebar is the one tile still missing, and it belongs
-to the app-shell ticket rather than here.
+**Components** page. **Every tile on that page now has a component**: `Button`, `Input`,
+`Select`, `Tag`, `ProgressBar`, `Stat`, `SectionHeader`, `ListRow` and `Sidebar`.
+`npm run storybook` renders them under **Components**. The library is complete; a new
+component from here on is a feature's own, not a tile.
 
 **Shared UI is split by role, not by file type.** `components/ui/` is the primitive layer,
 the vocabulary every screen draws from. Components that only make sense for one feature go
@@ -575,9 +575,44 @@ text-status-danger-text`, no icon. Assumption A29 records that no form error vis
   field rather than holding the red: invalidity is still carried by the message and by
   `aria-invalid`, and a 0.5px width change is too little focus signal to see.
 
-Money is formatted through `frontend/src/lib/format.ts`. Amounts are stored as positive
-magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN rather than the
-hyphen `Intl.NumberFormat` emits, matching the design.
+**`ui/Sidebar.tsx` takes its active item as a prop, and that has a consequence for whoever
+mounts it.** `active` is one of four keys matching the Figma variant property, not a
+`usePathname()` call, which is what keeps the component a Server Component like the rest of
+`ui/`. But an App Router layout cannot read the pathname on the server, so the `(app)` shell
+needs a thin `'use client'` wrapper that calls `usePathname()` and passes `active` down;
+reading it inside the sidebar instead would force `'use client'` onto the whole component and
+break `ui.stories.test.tsx`, which renders every story under Jest with no router in context.
+The four hrefs (`/dashboard`, `/transactions`, `/insights`, `/settings`) are declared in that
+file's `NAV_SECTIONS` and are the contract the routing ticket has to match.
+
+It is also the **first and only consumer of the six dark-surface tokens** (`surface-ink`,
+`-ink-raised`, `-ink-elevated`, `text-on-dark`, `-on-dark-subtle`), which had shipped unused
+since the Foundations work. `text-on-dark-muted` is now the one Foundations colour with no
+consumer at all.
+
+**Four more details have no Figma counterpart**, on top of the five form ones above:
+
+- **The sidebar's white focus ring** (`focus-visible:outline-white`), where every other
+  component uses `focus-visible:outline-brand-accent`. No sidebar focus state is drawn, and
+  the accent on `surface-ink` is too dark to read as one.
+- **The truncating footer name and email.** Figma clips inside a fixed 260px column because
+  it only ever draws the short sample address; `min-w-0` plus `truncate` is the honest
+  equivalent, the same pattern `ListRow` uses for a long merchant name.
+- **`rounded-[10px]` on the logo tile and the nav pills**, the one place a literal beats a
+  token. Figma bound that corner to a raw 10px rather than a radius variable, and the scale
+  offers only 8 and 12. Worth a designer answer; until then the literal matches the design.
+- **The wordmark reads "Spendifico", not Figma's "Expensa".** The rename was decided on
+  2026-08-02 and this is its most visible string. See `docs/TODO.md` for which halves of the
+  rename are safe and which one is a data migration wearing a find-and-replace costume.
+
+`frontend/src/lib/format.ts` owns display formatting, in two halves. Money: amounts are
+stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
+rather than the hyphen `Intl.NumberFormat` emits, matching the design. Names: `initials()`
+and `shortName()` derive the sidebar footer's "MK" and "Marko K." from the two stored name
+fields. Both are derived and never stored (SET-2), and SET-6 requires the sidebar footer and
+the Settings avatar to agree, which is why one shared function is the point rather than a
+convenience. Both take the first character with `Array.from(name)[0]` rather than
+`charAt(0)`, which would split an astral-plane character into a lone surrogate.
 
 ## Environment variables
 
@@ -823,6 +858,13 @@ something that is not there.
   reads no cookies. The old proof-of-stack routes `POST /api/users` and `GET /api/users/:id`
   are **gone**, and the read's replacement is a session-scoped `getProfile()` with
   preferences, which is PET-45's rather than done.
+- **The app shell, and therefore anything that renders the sidebar.** `ui/Sidebar.tsx` is
+  built, tested and in Storybook, but **nothing mounts it**: there is no `(app)` route group,
+  no `/dashboard`, `/transactions`, `/insights` or `/settings` route, and no page header, all
+  of which are PET-19's. Its four nav links are therefore live links to routes that do not
+  exist yet. Its footer props (`firstName`, `lastName`, `email`) also have no data source:
+  that needs PET-45's profile read reached with PET-52's session cookie. The one route that
+  exists is `/`, still the scaffold greeting page.
 - **The rest of the data model.** `users`, `login_links` and `sessions` (central) and
   `profile`, `categories` and `transactions` (per user) exist. Insights arrives with its
   feature. `transactions` has the three write endpoints and **no reads at all** - the list,

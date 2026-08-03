@@ -7,6 +7,7 @@ import * as ListRow from './ListRow.stories';
 import * as ProgressBar from './ProgressBar.stories';
 import * as SectionHeader from './SectionHeader.stories';
 import * as Select from './Select.stories';
+import * as Sidebar from './Sidebar.stories';
 import * as Stat from './Stat.stories';
 import * as Tag from './Tag.stories';
 
@@ -44,6 +45,7 @@ const MODULES: [name: string, module: StoryModule][] = [
   ['Button', Button as StoryModule],
   ['Input', Input as StoryModule],
   ['Select', Select as StoryModule],
+  ['Sidebar', Sidebar as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {
