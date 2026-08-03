@@ -154,6 +154,7 @@ matching phrases, not registered commands.
 | `repo-secrets`    | Manages `.env` files from templates, explains where real secrets live                                                                                              |
 | `repo-jira`       | Creates/estimates/transitions Jira issues over MCP. Needs a Jira MCP server; see `.claude/skills/repo-jira/references/jira-access.md` for the two supported setups |
 | `repo-review-prs` | Fetches open PRs via `gh` and reviews unreviewed ones                                                                                                              |
+| `repo-stack`      | This repo's stacked-branch wiring: the layers of truth, the worktree trap, the conventions. CLI mechanics live in the committed official `gh-stack` skill          |
 | `backend-nestjs`  | Passive reference library, 12 NestJS rules across 7 categories. Consulted when writing backend code                                                                |
 | `frontend-nextjs` | Passive reference library, 16 Next.js/React rules. Consulted when writing frontend code                                                                            |
 
@@ -169,6 +170,15 @@ you see the diff before it lands. Every decision in that file is explained in
 `.claude/SETTINGS.md`, because JSON cannot hold comments. Personal preferences belong in
 `.claude/settings.local.json`, which is gitignored.
 
+**The `gh stack` CLI ships an official agent skill, and it is committed.**
+`.claude/skills/gh-stack/` comes from
+`gh skill install github/gh-stack gh-stack --agent claude-code --scope project`
+(`gh skill` is a preview feature of the GitHub CLI; the command needs both the repo and
+the skill name, or it only lists what is available). It is committed so everyone has a
+byte-identical copy and a fresh clone works with no extra step; refreshing it is a
+deliberate act - re-run the install and commit the diff. The repo's own `repo-stack`
+skill covers only this repo's stacked-branch wiring and defers the CLI to it.
+
 `.claude/commit-checks.md` is a generated cache read by `repo-commit`. Regenerate it
 with `/repo-commit refresh-checks` when it goes stale.
 
@@ -180,6 +190,33 @@ than just an instruction.
 
 Branch format: `{type}/PET-{number}-{slug}`, for example
 `feat/PET-160-user-profile-card`.
+
+**Branches are stacked, and never manually rebased.** This repo uses GitHub's stacked
+branches feature routinely: a feature branch is often cut from an unmerged parent branch
+rather than from `main` (`feat/PET-14-link-verification-and-sessions` on top of
+`feat/PET-50-api-openapi-typegen`, for example), so the parent's PR merges first and
+GitHub retargets and restacks the child itself. Before proposing any rebase, retarget or
+merge, check what the branch actually sits on: `gh pr view <branch> --json baseRefName`
+names the PR's base, and a base other than `main` means a stacked branch. Do not suggest
+`git rebase --onto main` for one; open its PR against the parent and let GitHub do the
+restack. New work that depends on an unmerged branch is cut from that branch's tip, not
+from `main`.
+
+The tooling for it is the `gh stack` extension (`github/gh-stack`), installed per
+developer with `gh extension install github/gh-stack` - like the root `npm install`, a
+fresh clone does not carry it. Note the layers of truth. On GitHub a stack is a
+first-class object: a stacked PR's REST payload carries a `stack` field with the stack
+number, size and the PR's position (`gh api "repos/{owner}/{repo}/pulls/<n>" --jq
+.stack`; an empty result means that PR is stacked only through its base branch, which
+GitHub still retargets on merge). The extension's local tracking is a separate, optional
+layer, so `gh stack view` can say a branch "is not part of a stack" that very much is in
+one on GitHub; adopt an existing GitHub stack with `gh stack checkout <stack-number>`,
+and reserve `gh stack init` for branches not yet stacked anywhere. Finally, the worktree
+trap: `sync` and `rebase` rewrite every branch in the stack, git refuses to move a
+branch checked out in another worktree, and this repo routinely parks stack branches in
+`.claude/worktrees/*` - detach the other checkouts before a cascade rebase. The
+official `gh-stack` skill (committed at `.claude/skills/gh-stack/`) is the CLI manual;
+the repo's own `repo-stack` skill covers the wiring above.
 
 **Conventional Commits are enforced** by a `commit-msg` hook running commitlint. The
 allowed types are restricted (see `commitlint.config.js`): `build`, `chore`, `ci`,
