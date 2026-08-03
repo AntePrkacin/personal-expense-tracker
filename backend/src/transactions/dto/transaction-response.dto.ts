@@ -25,6 +25,11 @@ export class TransactionResponseDto {
   /** ISO 8601. */
   createdAt!: string;
 
-  /** ISO 8601. Equal to `createdAt` until the first edit. */
+  /**
+   * ISO 8601. Within a millisecond of `createdAt` until the first edit, not
+   * necessarily equal to it: the two columns default from independent `new Date()`
+   * calls, so an insert can straddle a millisecond boundary. Do not use equality
+   * of the two to mean "never edited".
+   */
   updatedAt!: string;
 }

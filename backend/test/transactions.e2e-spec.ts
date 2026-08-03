@@ -222,8 +222,15 @@ describe('Transaction writes (e2e)', () => {
         createdAt: expect.any(String) as string,
         updatedAt: expect.any(String) as string,
       });
-      // Untouched, so the two timestamps are the same instant.
-      expect(body(response).updatedAt).toBe(body(response).createdAt);
+      // Effectively the same instant, but NOT asserted equal. The two columns
+      // carry independent `$defaultFn(() => new Date())` calls, so an insert that
+      // straddles a millisecond boundary legitimately produces a 1ms gap - a real
+      // local run showed .824Z against .825Z. Equality here would be a test that
+      // passes by luck.
+      const createdMs = Date.parse(body(response).createdAt);
+      const updatedMs = Date.parse(body(response).updatedAt);
+      expect(updatedMs).toBeGreaterThanOrEqual(createdMs);
+      expect(updatedMs - createdMs).toBeLessThan(50);
 
       // Cents in the column, majors in the API - the whole point of money.ts.
       const row = await storedRow(body(response).id);
@@ -428,13 +435,17 @@ describe('Transaction writes (e2e)', () => {
 
     it('400s an empty body, which would record an edit that changed nothing', async () => {
       const created = await seed();
+      const before = (await storedRow(created.id)).updatedAt.getTime();
+      // Enough of a gap that an UPDATE slipping through would move the timestamp
+      // measurably, rather than landing back on the same millisecond.
+      await new Promise((resolve) => setTimeout(resolve, 5));
 
       await patch(bearer, created.id, {}).expect(400);
 
       // Proof it was refused before the UPDATE: $onUpdateFn would otherwise have
-      // moved updatedAt on its own.
-      const row = await storedRow(created.id);
-      expect(row.updatedAt.getTime()).toBe(row.createdAt.getTime());
+      // moved updatedAt on its own. Compared against its own earlier value rather
+      // than against createdAt, which is only within a millisecond of it.
+      expect((await storedRow(created.id)).updatedAt.getTime()).toBe(before);
     });
 
     it('404s an unknown id and 400s a malformed one', async () => {

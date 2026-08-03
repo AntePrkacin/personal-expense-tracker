@@ -395,6 +395,16 @@ than discovered.
   as `type: number` while `@IsInt()` rejects anything fractional. Neither has earned a
   hand-written `@ApiProperty` correction yet; `currency` is the one a frontend developer
   reading the generated `currency?: string` will trip over first.
+- **`created_at` and `updated_at` can differ by a millisecond on insert.** Every table
+  defaults the two from independent `$defaultFn(() => new Date())` calls, so an insert that
+  straddles a millisecond boundary writes two different values - observed on a local
+  transaction create as `.824Z` against `.825Z`. Harmless in itself, but it means
+  `updatedAt === createdAt` is **not** a sound test for "never edited", and any code or test
+  tempted to use it needs a tolerance instead. PET-27's e2e originally asserted equality and
+  passed only by luck; it now asserts a sub-50ms window. Making them genuinely identical
+  would mean the service passing one timestamp explicitly into both columns, which fights
+  `$onUpdateFn` and deviates from the schema-level default every other table uses - not worth
+  it unless something real needs exact equality.
 - **No operation documents a 500, deliberately.** Resolved with PET-14: every route can 500
   through `AllExceptionsFilter`, so per-operation documentation restated the same
   non-actionable fact everywhere and widened every generated response union. The document
