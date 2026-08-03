@@ -394,7 +394,13 @@ than discovered.
   `@IsISO4217CurrencyCode()` enforces the ISO 4217 list, and `monthStartDay` is published
   as `type: number` while `@IsInt()` rejects anything fractional. Neither has earned a
   hand-written `@ApiProperty` correction yet; `currency` is the one a frontend developer
-  reading the generated `currency?: string` will trip over first.
+  reading the generated `currency?: string` will trip over first. A third gap is cosmetic
+  rather than permissive: `TransactionResponseDto.createdAt`/`updatedAt` are ISO 8601
+  instants but publish as bare `type: string` with no `format: 'date-time'`, because the
+  plugin cannot read that out of a doc comment. Harmless today - the generated TypeScript
+  type is `string` either way - but if PET-28's read DTOs want the published contract to
+  say what the string is, each instant field needs an explicit
+  `@ApiProperty({ format: 'date-time' })`.
 - **`created_at` and `updated_at` can differ by a millisecond on insert.** Every table
   defaults the two from independent `$defaultFn(() => new Date())` calls, so an insert that
   straddles a millisecond boundary writes two different values - observed on a local
