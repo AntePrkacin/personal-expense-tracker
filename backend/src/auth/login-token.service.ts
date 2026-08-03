@@ -14,6 +14,20 @@ const TOKEN_BYTES = 32;
 const DEFAULT_TTL_MINUTES = 15;
 
 /**
+ * What spending a token produced.
+ *
+ * Three outcomes rather than a nullable user id, because one rejection is worth
+ * telling apart: `'superseded'` means a newer link exists, which is the one
+ * failure the user can act on ("open the most recent email") - and it is the
+ * failure Gmail's threading of identical login mails makes easy to hit.
+ * Everything else collapses into `'invalid'`, which shares one screen.
+ */
+export type ConsumeResult =
+  | { status: 'consumed'; userId: string }
+  | { status: 'superseded' }
+  | { status: 'invalid' };
+
+/**
  * Issues and consumes the single-use tokens behind the login links.
  *
  * The stored value is the SHA-256 of the raw token, and it is the *lookup key*
@@ -105,19 +119,34 @@ export class LoginTokenService {
    * database evaluate the conditions as part of the write makes it atomic:
    * whichever statement runs second matches zero rows.
    *
-   * @returns the user the token belonged to, or null if it was unknown, already
-   * used, superseded or expired. The caller cannot tell which, and does not
-   * need to - the four cases share one screen.
+   * On a miss - and only then - one extra SELECT asks the row why, so a caller
+   * holding a superseded link can be told to open the newer email instead of
+   * being sent back to "request a new link". That read is diagnostic prose, not
+   * a check-then-act: the UPDATE above has already decided the outcome, so a
+   * concurrent winner setting `usedAt` between the two merely turns this
+   * caller's answer into `'invalid'`, which is exactly right for the loser of
+   * that race.
+   *
+   * Disclosing "superseded" opens no enumeration channel. It is returned only
+   * for a row whose hash matched, i.e. to somebody holding a token that was
+   * actually emailed to the account owner; a random probe sees `'invalid'` like
+   * everything else. And it deliberately carries no user id: a dead token
+   * authenticates nobody.
+   *
+   * @returns `'consumed'` with the user the token belonged to, `'superseded'`
+   * if a newer link replaced it, or `'invalid'` if it was unknown, already
+   * used, or merely expired.
    */
-  async consume(rawToken: string): Promise<string | null> {
+  async consume(rawToken: string): Promise<ConsumeResult> {
     const now = new Date();
+    const tokenHash = hashToken(rawToken);
 
     const [row] = await this.centralDb
       .update(loginLinks)
       .set({ usedAt: now })
       .where(
         and(
-          eq(loginLinks.tokenHash, hashToken(rawToken)),
+          eq(loginLinks.tokenHash, tokenHash),
           isNull(loginLinks.usedAt),
           isNull(loginLinks.supersededAt),
           gt(loginLinks.expiresAt, now),
@@ -126,7 +155,43 @@ export class LoginTokenService {
       )
       .returning({ userId: loginLinks.userId });
 
-    return row?.userId ?? null;
+    if (row) {
+      return { status: 'consumed', userId: row.userId };
+    }
+
+    return this.classifyMiss(tokenHash);
+  }
+
+  /**
+   * Why the conditional UPDATE matched nothing. Runs on the miss path only, so
+   * the hot path stays exactly one statement.
+   *
+   * `usedAt` and `supersededAt` are mutually exclusive by construction -
+   * `issue()` supersedes only unused rows and `consume()` spends only
+   * non-superseded ones - so a set `supersededAt` with `usedAt` still null is
+   * unambiguous. Expiry is not consulted: a link that was superseded and then
+   * expired still means "a newer link was issued", which is the more useful
+   * thing to say. If that newer one has expired too, clicking it yields the
+   * generic 401 and the request-a-new-link path, so the advice degrades
+   * gracefully rather than dead-ending.
+   */
+  private async classifyMiss(tokenHash: string): Promise<ConsumeResult> {
+    const [row] = await this.centralDb
+      .select({
+        usedAt: loginLinks.usedAt,
+        supersededAt: loginLinks.supersededAt,
+      })
+      .from(loginLinks)
+      .where(
+        and(eq(loginLinks.tokenHash, tokenHash), isNull(loginLinks.deletedAt)),
+      )
+      .limit(1);
+
+    if (row && row.supersededAt !== null && row.usedAt === null) {
+      return { status: 'superseded' };
+    }
+
+    return { status: 'invalid' };
   }
 
   /**
@@ -138,7 +203,12 @@ export class LoginTokenService {
   }
 }
 
-/** Hex SHA-256. See the class comment for why this is the whole scheme. */
-function hashToken(rawToken: string): string {
+/**
+ * Hex SHA-256. See the class comment for why this is the whole scheme.
+ *
+ * Exported so SessionService hashes its bearer tokens the same way rather than
+ * defining a second answer to "how does a token become a lookup key".
+ */
+export function hashToken(rawToken: string): string {
   return createHash('sha256').update(rawToken).digest('hex');
 }
