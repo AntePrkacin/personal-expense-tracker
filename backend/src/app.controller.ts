@@ -1,7 +1,6 @@
-import { Controller, Get, HttpStatus } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AppService } from './app.service';
-import { ApiErrorResponse } from './common/decorators/api-error-response.decorator';
 import { HelloResponseDto } from './dto/hello-response.dto';
 
 @ApiTags('meta')
@@ -14,8 +13,11 @@ export class AppController {
   @ApiOperation({
     summary: 'A greeting, and the proof that the two apps can talk.',
   })
+  // No 500 here, and none on any other operation: every route can answer 500
+  // through the global filter, so documenting it per operation restates the
+  // same non-actionable fact everywhere and widens every generated response
+  // union. The document description says it once instead.
   @ApiOkResponse({ type: HelloResponseDto })
-  @ApiErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR)
   getHello(): HelloResponseDto {
     return this.appService.getHello();
   }

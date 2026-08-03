@@ -27,6 +27,10 @@ export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
         'Generated from the NestJS code at build time, committed as `backend/openapi.json`, and',
         'the only source of the frontend response types in `frontend/src/types/api.d.ts`.',
         'Do not edit either by hand: run `npm run api:sync` from the repo root.',
+        '',
+        'Every operation can additionally answer **500** with `ErrorResponseDto`, via the global',
+        'exception filter. It is stated once here rather than per operation: it is the same',
+        'non-actionable fact everywhere, and repeating it would widen every generated response type.',
       ].join('\n'),
     )
     .setVersion('0.1.0')
