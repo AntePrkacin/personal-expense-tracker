@@ -139,6 +139,13 @@ description = "Generate Drizzle migrations for both database scopes"
 dir = "backend"
 run = "npm run db:generate"
 
+# The other committed generated artifact, and the other thing CI fails on when it
+# goes stale. Both halves in one task because their order matters: the frontend
+# types are read out of the spec the backend half writes.
+[tasks."api:sync"]
+description = "Regenerate the OpenAPI spec and the frontend types from it"
+run = "npm run api:sync"
+
 [tasks."dev:backend"]
 description = "Start backend development server"
 dir = "backend"

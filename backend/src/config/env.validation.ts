@@ -38,12 +38,50 @@ export const envValidationSchema = Joi.object({
 
   // How often a cloud-mode connection pushes and pulls, in seconds.
   TURSO_SYNC_INTERVAL_S: Joi.number().positive().default(60),
-}).and(
-  'TURSO_ORG',
-  'TURSO_ORG_TOKEN',
-  'TURSO_CENTRAL_DB_URL',
-  'TURSO_CENTRAL_DB_TOKEN',
-);
+
+  // Outbound mail, over MailPace's HTTP API. Paired with `.and()` for the same
+  // reason the Turso four are: unset means "log the link instead of sending
+  // it", which is a supported mode, but half-set means a real login email
+  // silently never leaves - the worst possible failure for this flow.
+  // MAIL_FROM must be on a domain whose DKIM authorization MailPace has
+  // completed, or every send is rejected.
+  MAILPACE_API_TOKEN: Joi.string(),
+  MAIL_FROM: Joi.string().email(),
+
+  // Display name shown as the sender, e.g. Spendifico <login@spendifico.eu>.
+  // Deliberately a separate variable rather than folding the name into
+  // MAIL_FROM: that stays `.email()`, which rejects the `Name <addr>` form, and
+  // keeping it a bare address is what makes "must be on the DKIM-authorized
+  // domain" a check anyone can make by eye. Optional and unpaired - without it
+  // the sender is just the address, which is the previous behaviour.
+  MAIL_FROM_NAME: Joi.string(),
+
+  // How long an emailed login link stays valid, in minutes. A34 specifies a
+  // short expiry; minutes, not days.
+  LOGIN_LINK_TTL_M: Joi.number().positive().default(15),
+
+  // How long a session lasts, in days. Fixed expiry, not sliding: extending it
+  // on every authenticated read would turn each one into a write against the
+  // central database, and A34 asks only for a normal persistent session.
+  SESSION_TTL_D: Joi.number().integer().positive().default(30),
+
+  // Rate limits on the two auth routes: two independent limiters, one keyed on
+  // the submitted address (whoever asks, from wherever) and one on the caller's
+  // IP (whatever it types). A request is refused when either bucket is over.
+  // The per-IP default is laxer because one NAT can hide a whole classroom.
+  // Exposed as configuration mainly so the e2e suite can trip the limits
+  // without waiting out the real window.
+  AUTH_RATE_LIMIT: Joi.number().integer().positive().default(5),
+  AUTH_RATE_IP_LIMIT: Joi.number().integer().positive().default(30),
+  AUTH_RATE_TTL_S: Joi.number().integer().positive().default(900),
+})
+  .and(
+    'TURSO_ORG',
+    'TURSO_ORG_TOKEN',
+    'TURSO_CENTRAL_DB_URL',
+    'TURSO_CENTRAL_DB_TOKEN',
+  )
+  .and('MAILPACE_API_TOKEN', 'MAIL_FROM');
 
 /** The four variables that together switch cloud mode on. */
 export const CLOUD_MODE_KEYS = [

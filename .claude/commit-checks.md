@@ -10,12 +10,16 @@ depend on each other, and which lint/test commands to surface before a commit.
 ## Dependency Note
 
 `backend/` and `frontend/` are **independent** npm projects - neither imports the
-other's source. A change in one app does not require re-testing the other. The
-only cross-app coupling is the HTTP contract: `HelloResponse` is declared in
-`backend/src/app.service.ts` and hand-mirrored in `frontend/src/app/page.tsx`, so
-when the backend changes a response shape the frontend copy must be updated by
-hand. That is a follow-up task, not a test dependency. Surface checks only for
-the app(s) whose files actually changed.
+other's source. A change in one app does not require re-testing the other, so
+surface checks only for the app(s) whose files actually changed.
+
+The one cross-app coupling is the HTTP contract, and it is generated rather than
+hand-mirrored. A backend change to any request or response shape means running
+**`npm run api:sync`** from the repo root and committing both generated files,
+`backend/openapi.json` and `frontend/src/types/api.d.ts`. This is not a follow-up
+task: CI regenerates both and fails the commit on a diff. If a commit touches
+`backend/src/**/*.dto.ts` or a controller's `@ApiResponse` decorators and neither
+generated file is staged, say so before committing.
 
 ---
 

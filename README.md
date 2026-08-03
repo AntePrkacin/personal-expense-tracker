@@ -56,8 +56,12 @@ them first.
 If the backend is not running, the page says so instead of crashing, which is a useful
 thing to notice: the frontend handles the failure rather than pretending it cannot happen.
 
-The backend also has a working persistence layer behind `POST /api/users` and
-`GET /api/users/:id`, with no setup needed. See [Database](#database).
+The backend also has a working persistence layer and the whole passwordless entry flow, with
+no setup needed: `POST /api/auth/register` and `POST /api/auth/login-link` answer an empty
+`202` and, with no mail credentials configured, print the login link to the backend's console
+for you to open, and `POST /api/auth/verify` turns that link into a session that
+`GET /api/auth/session` will answer for. See [Database](#database) and
+[Sending real email](#sending-real-email-optional).
 
 ## Prerequisites
 
@@ -222,22 +226,32 @@ curl http://localhost:3000/api/hello
 Note the `/api` part. `http://localhost:3000/` on its own returns **404**, and that is
 correct, not a broken server. See "Gotchas" below.
 
+Or browse the whole API at **http://localhost:3000/api/docs**, which is Swagger UI over
+the same contract the frontend types are generated from. You can send requests from
+there: with no `MAILPACE_API_TOKEN` set, a registration logs its login link to the
+backend terminal instead of mailing it.
+
 ## Project structure
 
 ```text
 backend/                  NestJS 11 API on :3000
   src/
-    main.ts               Bootstrap: global 'api' prefix, CORS, port, shutdown hooks
-    app.module.ts         Root module: ConfigModule, DatabaseModule, global pipe + filter
+    main.ts               Bootstrap: global 'api' prefix, CORS, Swagger UI, port, shutdown hooks
+    app.module.ts         Root module: ConfigModule, DatabaseModule, AuthModule, pipe + filter
     app.controller.ts     GET /api/hello
-    app.service.ts        Business logic + the HelloResponse contract
+    app.service.ts        Business logic
     app.controller.spec.ts
-    common/               ids, the global exception filter
+    openapi.ts            Writes openapi.json. Run it via `npm run api:spec`, never ts-node
+    dto/                  Response shapes. Classes, not interfaces - see CLAUDE.md
+    auth/                 The passwordless flow: register, login-link, verify, session
+    common/               ids, email normalization, the global exception filter, the error DTO
     config/               Joi schema validating the environment at boot
     database/             Drizzle + Turso: schemas, client factory, per-user databases
-    users/                POST /api/users, GET /api/users/:id
+    mail/                 Mailer seam: logs by default, MailPace over HTTP when configured
+    users/                Central directory reads and writes (no controller)
   drizzle/                Generated migrations, committed: central/ and user/
   databases/              Local database files. Gitignored; migrations recreate them
+  openapi.json            The API contract. Generated and committed; never edit by hand
   test/                   Supertest e2e specs
   .env.example
 
@@ -247,6 +261,7 @@ frontend/                 Next.js 16 (App Router) + React 19 on :4200
     page.tsx              Home route, async Server Component, fetches the API
     page.test.tsx         React Testing Library example
     globals.css           Tailwind v4 entry
+  src/types/api.d.ts      Generated from backend/openapi.json. Committed; never edit
   .env.example
 
 .claude/                  Claude Code skills, agents and permissions
@@ -276,6 +291,14 @@ Run these from inside the app directory, never from the repo root.
 | Coverage            | `npm run test:cov`          | not set up               |
 | Generate migrations | `npm run db:generate`       | n/a                      |
 | Browse the database | `npm run db:studio:central` | n/a                      |
+| Regenerate the API  | `npm run api:spec`          | `npm run api:types`      |
+
+That last row is the one exception to "never from the repo root". Run
+**`npm run api:sync`** there instead and it does both halves, in the order that works.
+Do that after changing any request or response shape. It writes two files,
+`backend/openapi.json` and `frontend/src/types/api.d.ts`, both of which are committed and
+neither of which is editable by hand - CI regenerates them and fails if your commit did
+not.
 
 Both apps use Jest, so `npm test` runs once and exits. To filter:
 `npm test -- page` by path, `npm test -- -t "greeting"` by test name.
@@ -296,6 +319,7 @@ three packages in order.
 | `mise run check-for-updates` | `ncu` in all three, showing what is outdated                         |
 | `mise run update`            | `ncu -u --target minor`, then install and update, in all three       |
 | `mise run db:generate`       | Generate Drizzle migrations for both database scopes                 |
+| `mise run api:sync`          | Regenerate the OpenAPI spec, then the frontend types from it         |
 | `mise run skills`            | Refresh Drizzle's committed agent skills after a drizzle-kit bump    |
 
 Every task also has per-package variants when you want just one: `install:repo`,
@@ -330,9 +354,13 @@ Two things about `audit` that will otherwise confuse you:
 | Backend  | `backend/.env.example`  | `backend/.env`        | `PORT` (3000), `FRONTEND_URL` (`http://localhost:4200`), `DATABASE_DIR` (`./databases`) |
 | Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (`http://localhost:3000`)                                                 |
 
-The backend template also lists a block of commented-out `TURSO_*` variables. You do not
-need them: leave them commented and the backend stores everything in local files under
-`DATABASE_DIR`. See [Database](#database) below.
+The backend template also lists two blocks of commented-out variables, and you need
+neither. Leave the `TURSO_*` block commented and the backend stores everything in local
+files under `DATABASE_DIR` (see [Database](#database)). Leave `MAILPACE_API_TOKEN` and
+`MAIL_FROM` commented and login links are printed to the console instead of emailed (see
+[Sending real email](#sending-real-email-optional)). The remaining five -
+`LOGIN_LINK_TTL_M`, `SESSION_TTL_D` and the three `AUTH_RATE_*` variables - are tuning knobs
+with sensible defaults.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`. Both are
 gitignored and must never be committed. Only the `.env.example` templates are.
@@ -361,11 +389,35 @@ always safe: the next start rebuilds it.
 ```bash
 cd backend && npm run start:dev
 
-curl -X POST http://localhost:3000/api/users \
+curl -i -X POST http://localhost:3000/api/auth/register \
   -H 'content-type: application/json' \
-  -d '{"firstName":"Marko","lastName":"Kovac","email":"marko@email.com","monthlyBudget":2000}'
-# 201, and backend/databases/ now holds app.db plus one file for this user
+  -d '{"firstName":"Marko","lastName":"Kovac","email":"marko@email.com","monthlyBudget":2000,"categories":["Groceries"]}'
+# 202 with an empty body, backend/databases/app.db now holds the row and the
+# issued link, and the terminal running the backend prints the login link
 ```
+
+Note what is _not_ created: no file for this user yet. Registration writes only the central
+row and stashes the onboarding values on it; the user's own database is created when the
+emailed link is verified, so an unauthenticated endpoint can never provision one.
+
+Verifying is what completes the account. Copy the `token=` value out of the printed link:
+
+```bash
+curl -i -X POST http://localhost:3000/api/auth/verify \
+  -H 'content-type: application/json' \
+  -d '{"token":"<the token from the link>"}'
+# 200 {"token":"<session>","expiresAt":"..."}, and backend/databases/users/ now holds
+# this person's own database, with their profile and picked categories in it
+
+curl -i http://localhost:3000/api/auth/session \
+  -H 'authorization: Bearer <session>'
+# 200 {"userId":"...","email":"...","expiresAt":"..."}
+```
+
+Spending the same link twice answers `401`, and a link that a newer one replaced answers
+`409` - request two links and verify the older one to see it. Inspect either database with
+`npm run db:studio:central` or `npm run db:studio:user`; the profile stores money in cents,
+so a budget of 2000.50 reads as `200050`.
 
 ### Changing the schema
 
@@ -417,6 +469,97 @@ the fix is always "delete it and make a new one", which stops being cheap the mo
 data exists. Check an existing one with `turso db list`, whose `TYPE` column reads `Turso`
 rather than `SQLite`. The backend passes the equivalent flag itself for every per-user
 database it creates, so this only applies to the central one you make by hand.
+
+## Sending real email (optional)
+
+Access to the app is passwordless: you submit an email address and the backend sends a
+single-use login link. **For local development there is nothing to set up.** With
+`MAILPACE_API_TOKEN` unset, the backend logs the email instead of sending it, so a
+registration prints something like this in the backend terminal and you open the link
+yourself:
+
+```text
+[LogMailer] Email not sent (no MAILPACE_API_TOKEN): to=marko@email.com subject="Your Expensa login link"
+[LogMailer] Link: http://localhost:4200/auth/verify?token=...
+```
+
+That is also what CI and the e2e suite use, so no test can send mail to a real person.
+
+To send for real, use [MailPace](https://mailpace.com):
+
+1. Add your domain and complete the DKIM authorization it walks you through. Until that
+   is done every send is rejected.
+2. Create a server and copy its API token.
+3. Uncomment both variables in `backend/.env`:
+
+   ```text
+   MAILPACE_API_TOKEN=your-server-token
+   MAIL_FROM=login@spendifico.eu
+   MAIL_FROM_NAME=Spendifico
+   ```
+
+`MAIL_FROM_NAME` is optional and gives the sender a display name, so the email arrives from
+`Spendifico <login@spendifico.eu>` rather than a bare address. It is a separate variable so
+`MAIL_FROM` stays a plain address: the `Name <addr>` form fails the schema's `.email()`
+check, and keeping it bare is what makes "must be on the DKIM-authorized domain" something
+you can verify at a glance.
+
+`MAIL_FROM` has to be an address on the domain you authorized. Set both or neither: a
+half-filled pair fails at boot, on purpose, because the alternative is a login email that
+silently never leaves. That is also why both lines stay commented in `.env.example`, which
+`cp .env.example .env` copies verbatim - uncommenting only `MAIL_FROM` would leave a fresh
+clone unable to start.
+
+It is called over plain HTTPS rather than SMTP, and with `fetch` rather than their SDK.
+Outbound SMTP is blocked or throttled by most hosts (port 25 permanently on GCP, and
+587/465 are not guaranteed either), while HTTPS on 443 always works. See
+`backend/src/mail/mailpace.mailer.ts`, which is short.
+
+### Smoke-testing a real send
+
+**Send to `spendifico@gmail.com`.** That is the project's official inbox and the address
+every MailPace smoke has been run against. Do not use a personal address: the messages are
+the point of the test, so they have to land somewhere anyone on the project can check.
+
+It is also the other end of the sender. This project's `MAIL_FROM` is
+`login@spendifico.eu`, and everything delivered to that address is forwarded to
+`spendifico@gmail.com`, so the same inbox holds both what the app sends and anything
+replied to it. The sender is recorded (commented out) in `backend/.env.example`.
+
+Run the backend against a throwaway database rather than your normal one, so a test
+registration never lands in the real user directory. `NODE_ENV=test` makes `AppModule`
+ignore `backend/.env` entirely, which is why the credentials are passed in explicitly
+here:
+
+```bash
+cd backend && npm run build
+
+NODE_ENV=test DATABASE_DIR=$(mktemp -d) PORT=3111 \
+  FRONTEND_URL=http://localhost:4200 \
+  MAILPACE_API_TOKEN=... MAIL_FROM=... \
+  node dist/main
+```
+
+Then, in another terminal:
+
+```bash
+curl -i -X POST http://localhost:3111/api/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"firstName":"Marko","lastName":"Kovac","email":"spendifico@gmail.com","monthlyBudget":2000,"categories":["Groceries"]}'
+```
+
+Expect `202` with an empty body, and one email within a few seconds. Send the same request
+again and a second link arrives while the first stops working: that is "Resend link"
+(VER-2), and only the newest link is ever valid - clicking the older one's token now answers
+`409` rather than a flat rejection, which is what lets a frontend say "open the most recent
+email". Finish the round trip by verifying the newest token against port 3111 as under
+[Database](#database); the throwaway `DATABASE_DIR` gets the user's database, so the real one
+stays untouched.
+
+Worth doing at least once whenever this path changes, because it catches what a mocked
+spec cannot. The `Accept: application/json` header is the standing example - Node's `fetch`
+defaults to `*/*` and MailPace answers that with a `406` blaming the body and the
+Content-Type, both of which are fine.
 
 ## Git workflow
 
@@ -549,13 +692,18 @@ forbids committing to `main`, the normal flow is: branch, commit, push, `gh pr c
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs three jobs in parallel on
 every pull request and on pushes to `main`:
 
-| Job           | Steps                                  |
-| ------------- | -------------------------------------- |
-| `backend`     | lint, build, unit tests, e2e           |
-| `frontend`    | lint, unit tests, build                |
-| `conventions` | commitlint over every commit in the PR |
+| Job           | Steps                                       |
+| ------------- | ------------------------------------------- |
+| `backend`     | lint, build, spec is fresh, unit tests, e2e |
+| `frontend`    | types are fresh, lint, unit tests, build    |
+| `conventions` | commitlint over every commit in the PR      |
 
 The Node version comes from `.nvmrc`, so bump it there and CI follows.
+
+The two "is fresh" steps regenerate a committed generated file and fail on any diff:
+`backend/openapi.json` in one job, `frontend/src/types/api.d.ts` in the other. Together
+they prove the spec still matches the backend and the types still match the spec. If
+either fails, `npm run api:sync` from the repo root is the fix.
 
 A repo-wide `prettier --check` step exists but is commented out: 55 files predate the
 Prettier config and it would fail on a fresh clone. To turn it on, run
@@ -639,18 +787,24 @@ for the two supported setups and their trade-offs.
 | `mise: command not found` after installing it             | You skipped the shell activation line. See [Installing mise](#installing-mise-optional)                                                              |
 | `mise run audit` lists vulnerabilities but still succeeds | Deliberate: it is a report, not a gate. See [Auditing and updating dependencies](#auditing-and-updating-dependencies)                                |
 | mise gives you a different Node major than CI             | `mise.toml` and `.nvmrc` both pin the major and must be bumped together. mise does not read `.nvmrc`, so the two are independent                     |
+| CI fails on "OpenAPI spec is up to date"                  | You changed a request or response shape without regenerating. Run `npm run api:sync` from the repo root and commit both files it writes              |
+| The spec has a response of `{}`                           | The shape is an `interface`, or its class is not in a `*.dto.ts` file. Both make the generator's plugin skip it, and neither is an error             |
 
 ## Where to go from here
 
 Things this boilerplate deliberately does not decide for you:
 
-- **Auth.** Not present. NestJS guards are the place for it; see the `backend-nestjs`
-  rules. Until it lands, `POST /api/users` and `GET /api/users/:id` are unauthenticated
-  scaffolding that exists to prove the database layer works end to end.
-- **Shared types between the apps.** Right now `HelloResponse` is declared in
-  `backend/src/app.service.ts` and copied by hand into `frontend/src/app/page.tsx`.
-  Changing the response shape means editing both. Generating types from an OpenAPI spec is
-  the better answer once you have real endpoints.
+- **Sessions on the frontend.** The backend half is done: verifying a link returns an opaque
+  30-day bearer token, and `GET /api/auth/session` answers who it belongs to behind
+  `SessionGuard`. Nothing on the frontend uses it yet - no verify page, and no cookie. The
+  session token belongs in an httpOnly first-party cookie the Next.js server sets and
+  forwards; it must never reach client-side JavaScript.
+- **A generated HTTP client.** Types are shared, and that part is decided: response shapes
+  come out of `backend/openapi.json` (see Commands above), so `page.tsx` derives its type
+  rather than restating it. What is left open is whether the calls themselves get wrapped.
+  A generated client would fight Next.js caching, since `page.tsx` passes `cache` and
+  `next` options straight to `fetch`; `openapi-fetch` is the upgrade worth considering,
+  because it delegates to global `fetch` and passes `RequestInit` through untouched.
 - **A chat feature.** There is no `/api/chat` route yet, and the env template ships no
   model-provider key. Add the variable your provider needs when you build the route,
   server-side only.

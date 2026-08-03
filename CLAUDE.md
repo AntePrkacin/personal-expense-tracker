@@ -27,7 +27,9 @@ workspaces, turbo, or nx setup. The root `package.json` owns only repo-wide dev 
 backend/          NestJS 11 API, port 3000, its own package.json + node_modules
   drizzle/        Generated migrations, committed: central/ and user/
   databases/      Local database files. Gitignored, recreated from the migrations
+  openapi.json    Generated API contract, committed. `npm run api:sync`, never by hand
 frontend/         Next.js 16 + React 19, port 4200, its own package.json + node_modules
+  src/types/api.d.ts  Generated from that spec, committed. Same rule
 docs/plans/       Implementation plans, one file per plan (see below)
 .claude/          Skills, agents and permissions for Claude Code (see below)
 .github/workflows/ci.yml
@@ -85,6 +87,8 @@ Backend, from `backend/`:
 | `npm run test:cov`                             | Coverage                                                    |
 | `npm run db:generate`                          | drizzle-kit generate for both scopes; commit what it writes |
 | `npm run db:studio:central` / `db:studio:user` | Drizzle Studio over the local file                          |
+| `npm run api:spec`                             | Build, then write `openapi.json`; commit what it writes     |
+| `npm run api:emit`                             | The write half alone, reusing `dist/`. What CI runs         |
 
 Frontend, from `frontend/`:
 
@@ -96,6 +100,11 @@ Frontend, from `frontend/`:
 | `npm run lint`       | ESLint (`eslint-config-next`)                   |
 | `npm test`           | Jest + React Testing Library (jsdom)            |
 | `npm run test:watch` | Same, in watch mode                             |
+| `npm run api:types`  | Regenerate `src/types/api.d.ts` from the spec   |
+
+From the repo root, `npm run api:sync` runs both halves in the right order. That is the
+command to use after touching anything a response or request body is made of; the two
+per-app scripts exist for CI, which has already built one side or the other.
 
 Single test in either app: `npm test -- page` filters by path,
 `npm test -- -t "greeting"` filters by test name.
@@ -128,11 +137,49 @@ is registered in `backend/src/app.module.ts`, so it reads `backend/.env` at star
 through `ConfigService`, as `main.ts` does, rather than scattering `process.env` through
 the code.
 
-**API response contract is hand-mirrored, and that is a known wart.** `HelloResponse`
-is declared in `backend/src/app.service.ts` (the source of truth) and copied by hand
-into `frontend/src/app/page.tsx`. Change a response shape and you must edit both. The
-intended fix is generating frontend types from an OpenAPI spec, but the backend does not
-expose one yet.
+**One HTTP contract, generated, and the frontend types come out of it.** The backend is
+the source of truth and nothing restates it. `nest build` runs `@nestjs/swagger`'s CLI
+plugin, `npm run api:spec` writes `backend/openapi.json` from the app's own routes, and
+`npm run api:types` turns that into `frontend/src/types/api.d.ts`; `npm run api:sync` at
+the root does both. `page.tsx` reads its response type out of `paths['/api/hello']` rather
+than declaring one. Both artifacts are **generated but committed**, for the same reason
+`backend/drizzle/` and `.agents/skills/` are: everyone needs byte-identical copies and a
+fresh clone must work with no extra step. It also keeps `cd frontend && npm run build`
+working with no backend running, which is what lets the two CI jobs stay independent.
+
+Four things about that pipeline that are easy to get wrong, all of which fail **quietly**:
+
+- **Response shapes must be classes in `.dto.ts` files.** An interface erases at compile
+  time, leaving nothing to hang metadata on, and the plugin only introspects files
+  matching its `dtoFileNameSuffix` (default `['.dto.ts', '.entity.ts']`). Break either and
+  the spec still generates - the response is just described as `{}`.
+- **The generator runs against `dist/`, never `ts-node`.** The plugin is a compile-time
+  transformer wired through `nest build`. `test/openapi.e2e-spec.ts` therefore asserts
+  against the committed JSON rather than building a document in-process.
+- **`setGlobalPrefix` must run before the document is built**, or every path loses its
+  `/api` and the generated types point at URLs that 404. `API_PREFIX` in
+  `src/common/api-prefix.ts` is shared by `main.ts`, `src/openapi.ts` and the e2e suite.
+- **Generating the spec boots the real `AppModule`**, persistence and all.
+  `src/openapi.env.ts` scrubs `TURSO_*` and sets `OPENAPI_EMIT`, which makes `AppModule`
+  skip `backend/.env` - without the second half dotenv puts every scrubbed variable
+  straight back, and writing a JSON file would sync against live Turso.
+
+**Drift is a CI failure, in two halves.** The backend job regenerates the spec and fails
+on a diff; the frontend job does the same for `api.d.ts`. Together they prove the spec
+matches the code and the types match the spec. A committed generated artifact rots
+silently otherwise, which is the exact failure this pipeline exists to kill.
+
+**No operation documents a 500.** Every route can answer 500 through the global filter, so
+documenting it per operation restates one non-actionable fact everywhere and widens every
+generated response union; the document description in `src/openapi.document.ts` says it once
+instead, and `test/openapi.e2e-spec.ts` pins that nothing declares it. Bearer auth is
+declared with `addSecurity('bearer', ...)` rather than the `addBearerAuth()` helper, which
+cannot be talked out of publishing `bearerFormat: 'JWT'` - these are opaque tokens, so that
+would be a lie. The declaration and a bare `@ApiBearerAuth()` are two halves that fail
+silently apart: miss either and the guarded operation looks public in both the spec and the
+generated types.
+
+Swagger UI is served at `http://localhost:3000/api/docs` from the same document.
 
 **Global pipe and filter are DI providers, not `app.useGlobalPipes`.** `AppModule`
 registers `APP_PIPE` (a `ValidationPipe` with `whitelist`, `transform` and
@@ -141,6 +188,119 @@ rather than in `main.ts` means the e2e suite, which boots `AppModule` directly, 
 same validation and the same error shape as production. Every failed request returns
 `{ statusCode, message, error, timestamp, path }`; unknown errors are logged in full
 server-side and reduced to a generic 500 outward.
+
+**Access is passwordless, and both entry points answer identically.** `POST
+/api/auth/register` and `POST /api/auth/login-link` both return an **empty 202**, always.
+The design has no password field anywhere (A31) and specifies that neither screen may
+reveal whether an account exists (REG-6, LOG-6, A35), so an empty body is the cheapest way
+to be byte-for-byte identical. Validation failures are still 400: a malformed address is a
+fact about the input, not about the account.
+
+Registering an address that already exists sends a link instead of creating a duplicate.
+If that account was never verified, the newly submitted onboarding values **overwrite** the
+stashed ones - the realistic case is someone who lost the first email and resubmitted,
+possibly with corrections, and they must verify into the profile they last saw. Submitting
+an unknown address to `login-link` creates nothing and sends nothing; only the response is
+identical. Mailing strangers because they were typed into a form is worse than the
+enumeration it would defend against, so **every `login_links` row references a real user**.
+
+**Nothing past the directory lookup is awaited.** Issuing the token and sending the mail
+are floated with a `.catch` that logs, and the handler answers 202 as soon as the lookup
+(and, for a new registration, the insert) is done. That is load-bearing twice over. A send
+failure cannot fail a request whose account really was created - the design's own recovery
+is "Resend link" (VER-2). And it closes the timing hole: an awaited send would make a known
+address cost an insert plus an HTTPS round trip while an unknown one costs one indexed
+read, a difference of hundreds of milliseconds against the whole point of REG-6/LOG-6.
+Anything added to these handlers has to preserve that.
+
+**Registration provisions no database.** The central row is written with `db_url` and
+`db_auth_token` NULL and the onboarding payload stashed in `users.onboarding_payload`; the
+user's own Turso database is created when the emailed link is verified, which is the first
+moment anyone has proved the address is theirs. Three reasons: an unauthenticated endpoint
+can no longer create real cloud databases, which removes the pre-auth cost exposure rather
+than mitigating it; register stops making two sequential Platform API calls, which is what
+made the response latency leak account existence; and A19 designs no loading state for
+"Finish setup", so a register that blocks on cloud provisioning would be a spinner-shaped
+hole in a screen with no spinner.
+
+**Login tokens are looked up by hash, never compared.** `randomBytes(32).toString('base64url')`
+is 256 bits of entropy and the SHA-256 of it is the stored key, so verification is an
+indexed read and there is no secret comparison to time. bcrypt or argon2 would be wrong
+here: they exist to slow brute force against low-entropy secrets. `consume()` is a single
+conditional `UPDATE ... RETURNING`, never a read followed by a write - the await between a
+check and a mark is exactly where two concurrent consumes of one token would both pass.
+`issue()` wraps its supersede-then-insert in one transaction for the same class of reason:
+as two standalone statements, two concurrent resends could interleave and leave both new
+links live. Those transactions are chained in-process, because the embedded driver refuses
+overlapping transactions rather than queueing them (see docs/TODO.md).
+Invalidation uses two distinct columns, `used_at` and `superseded_at`, because A38 designs
+no screen for a rejected link and "why did this link stop working" has to be answerable
+from the row.
+
+**Verifying a link is one blocking call, and it is what provisions the account.** `POST
+/api/auth/verify` takes the token in the **body** (a POST from the frontend's route handler,
+so a live credential never reaches backend access logs) and does everything in order:
+`consume()` first because it *is* the authentication, then the directory read, then - only if
+`users.onboarding_payload` is still set - provision the Turso database, persist the pointer,
+open and migrate it, insert the profile, seed the picked categories, and clear the payload
+**strictly last**, because while it is set it is both the profile's source data and the "this
+may be unfinished" marker. Then a session, then the response. Nothing here is floated, unlike
+`AuthService`: the caller holds a token that was emailed to the address owner, so there is no
+enumeration timing to defend, and the response must not claim a session that provisioning
+failed to earn.
+
+Money crosses from major units to cents at exactly one place, `toCents()` from
+`src/common/money.ts` called in `VerificationService` - the schema comments promise the
+conversion happens at the profile boundary, and transactions will reuse the same function.
+
+**A resent link completes a half-provisioned account.** A mid-flight failure answers 500 with
+the link already burned, and "Resend link" (VER-2, A36) is the designed recovery - so every
+step is written to resume rather than crash or duplicate: provisioning is skipped when
+`db_url` is already set, the profile insert is `onConflictDoNothing`, the seed is skipped when
+any category row exists, and a cleared payload simply makes the next verify a returning
+user's. Provision-and-persist is the one compensated pair (its catch deletes the database and
+rethrows); everything after the pointer is persisted is forward-only, because deleting then
+would strand a row that resume logic never re-provisions.
+
+**401 for a dead link, 409 for a replaced one.** `consume()` returns a classified result, and
+the diagnostic read behind it runs only when the conditional UPDATE matched nothing, so the
+success path stays one statement. Disclosing "superseded" is safe: it is returned only to
+somebody holding a token that really was emailed to the account owner, random probes see the
+generic answer, and it carries no user id. It exists because Gmail threads identical login
+mails, which makes clicking the older of two links ordinary rather than exotic.
+
+**Sessions are opaque hashed bearers with a fixed lifetime.** A central `sessions` row stores
+the SHA-256 of a 256-bit random token (the `login_links` scheme, sharing its `hashToken`), and
+`validate()` is one indexed join back to `users` that performs no write - expiry is absolute,
+not sliding, so an authenticated read stays a read. `SESSION_TTL_D` is 30 days; there are no
+cookies here (the frontend owns that), no refresh, and no logout by design (A39), so
+revocation means tombstoning the row. Concurrent sessions per user are legitimate, one per
+device. `GET /api/auth/session` returns only `{ userId, email, expiresAt }`, because that is
+all central knows.
+
+**`SessionGuard` is applied per route, not as an `APP_GUARD`.** With one guarded endpoint, a
+global guard would mean marking four routes `@Public()` to protect one. The switch point:
+when guarded routes become the majority (PET-45's profile work), flip to `APP_GUARD` plus a
+`@Public()` decorator on hello, register, login-link and verify.
+
+**The auth routes carry two independent rate limiters, per submitted email and per IP.**
+Deliberately two throttlers rather than one composite `ip:email` key: a composite key hands
+every new (IP, address) pair a fresh bucket, so it throttles only one host hammering one
+address and stops neither a botnet walking a single address nor one host walking a list.
+The per-email limiter caps mail sent to one inbox whoever asks; the per-IP one caps total
+submissions from one host, with a laxer default because a NAT can hide a classroom. The
+trackers run in a guard, which Nest executes _before_ pipes, so they normalize the raw body
+themselves rather than trusting the DTO transform - `src/common/normalize-email.ts` is
+shared for exactly that reason. `@nestjs/throttler` takes `ttl` in milliseconds, so the
+module converts `AUTH_RATE_TTL_S` with the library's `seconds()` helper; getting that wrong
+is silent.
+
+The guard sits on the controller, so the two newer routes opt out by name: verify skips the
+email limiter (it has no address to key on, and the tracker's `no-email:<ip>` fallback would
+put every caller in one narrow bucket) and session skips both (a whoami the frontend calls on
+navigation, where one NAT would exhaust the per-IP budget for a whole classroom). **A bare
+`@SkipThrottle()` means `{ default: true }`, and no throttler here is named `default`, so it
+skips nothing at all - silently.** The named form is mandatory.
 
 ## Persistence
 
@@ -177,10 +337,21 @@ field the Platform API returns. A dedicated test pins the flag in
 **Database per user.** A small **central** database (`users`: id, email, and a pointer to
 that person's database) exists because identity must resolve by email before the per-user
 database is known. Everything else about a person lives in **their own Turso database**,
-starting with a single-row `profile` table. Categories, transactions and insights arrive
-there later as ordinary migrations. In cloud mode the central database and every per-user
-one live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
-per-user ones itself at registration.
+holding `profile` (single row) and `categories`. Transactions and insights arrive there
+later as ordinary migrations. In cloud mode the central database and every per-user one
+live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
+per-user ones itself, at **verification** rather than registration - see the access flow
+under Architecture.
+
+Central carries three deliberate exceptions to "email and a pointer". `login_links` is there
+because a link is consumed before we know - or, for an unverified account, before there
+even is - the user's own database, and `sessions` for the same reason one step later: a
+bearer is validated before anything knows which database to open. `users.onboarding_payload`
+is there because the registration form is collected before the address is proven and the
+profile it becomes lives in a database that does not exist yet; it is transient, written at
+registration and set NULL by verification, and it holds `monthlyBudget` in **major** units
+with the DTO defaults already applied. None of them is a licence to put more profile data in
+central.
 
 **Tokens.** Creating databases and minting their tokens are control-plane operations that
 no data-plane token can perform, so `TURSO_ORG_TOKEN` is used in exactly one place
@@ -248,6 +419,14 @@ Backend variables:
 | `TURSO_GROUP_TOKEN`      | -                       | Break-glass CLI/Studio access; the app never reads it |
 | `TURSO_GROUP`            | `decode-pet`            | Group holding the central and all per-user databases  |
 | `TURSO_SYNC_INTERVAL_S`  | `60`                    | Cloud-mode push/pull interval                         |
+| `MAILPACE_API_TOKEN`     | -                       | MailPace server token. Paired with `MAIL_FROM`        |
+| `MAIL_FROM`              | -                       | Sender address, on the DKIM-authorized domain         |
+| `MAIL_FROM_NAME`         | -                       | Sender display name; optional, unpaired               |
+| `LOGIN_LINK_TTL_M`       | `15`                    | Login-link lifetime, in minutes                       |
+| `SESSION_TTL_D`          | `30`                    | Session lifetime in days; fixed expiry, not sliding   |
+| `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per submitted address       |
+| `AUTH_RATE_IP_LIMIT`     | `30`                    | Auth requests per window, per caller IP               |
+| `AUTH_RATE_TTL_S`        | `900`                   | Window length in seconds, shared by both limiters     |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
 
@@ -265,7 +444,21 @@ has no prefix because it is read server-side only; a `NEXT_PUBLIC_` variable is 
 into the browser bundle and is therefore public forever.
 
 The four cloud variables are optional but paired: set all of them or none. Anything else
-fails at boot with a Joi message naming the missing one.
+fails at boot with a Joi message naming the missing one. `MAILPACE_API_TOKEN` and
+`MAIL_FROM` are paired the same way, for a sharper reason: unset means "log the link
+instead of sending it", which is a supported mode, but half-set would mean a real login
+email silently never leaves. Both therefore stay **commented** in `.env.example`, value
+and all: that file is copied verbatim by `cp .env.example .env`, so uncommenting only
+`MAIL_FROM` would leave a fresh clone unable to start.
+
+**Smoke-test mail goes to `spendifico@gmail.com`, never a personal address.** That is the
+project's official inbox, and it is also where `login@spendifico.eu` - this project's
+`MAIL_FROM` - forwards, so one inbox holds both what the app sends and any reply. The
+procedure, including running the backend against a throwaway database so a test
+registration never reaches the real user directory, is in README.md under Sending real
+email. Run it whenever the mail path changes: it catches what a mocked spec cannot, the
+standing example being the `Accept: application/json` header that MailPace requires and
+Node's `fetch` does not send.
 
 ## What is in `.claude/`
 
@@ -402,9 +595,14 @@ short code samples in those files as inline spans, which Prettier leaves alone.
 `.github/workflows/ci.yml` runs three jobs in parallel on every PR and on pushes to
 `main`:
 
-- **backend**: lint, build, unit tests, e2e
-- **frontend**: lint, unit tests, build
+- **backend**: lint, build, OpenAPI spec is fresh, unit tests, e2e
+- **frontend**: generated API types are fresh, lint, unit tests, build
 - **conventions**: commitlint over the PR's commit range
+
+The two freshness steps are the drift gate described under Architecture. Both regenerate
+a committed artifact and fail on a non-empty `git diff`. Note where each one lives: the
+frontend half runs in the frontend job because `openapi-typescript` only reads the
+committed JSON and needs no `backend/node_modules`.
 
 The backend job covers the persistence layer without any Turso credentials: `test-e2e`
 runs in local mode against files in a temp directory (see the note under Persistence), and
@@ -430,18 +628,21 @@ something that is not there.
   `NEXT_PUBLIC_`. Related: `@google/genai` was once present in `frontend/node_modules`
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
-- **Generated API types.** No OpenAPI spec, so `HelloResponse` is hand-mirrored between
-  the two apps as described under Architecture. Swagger is deliberately deferred to this
-  same work rather than added on its own.
 - **`frontend/src/components/`.** Does not exist. Create it with your first shared
   component.
-- **Auth.** `POST /api/users` and `GET /api/users/:id` are unauthenticated proof-of-stack
-  endpoints that exercise the two-database write and read path. They appear nowhere in the
-  tech spec's API surface and are expected to be reshaped or replaced by the magic-link
-  flow when it lands.
-- **The rest of the data model.** Only `users` (central) and `profile` (per user) exist.
-  Categories, transactions and insights arrive with their features, and starter-category
-  seeding belongs to onboarding.
+- **The frontend half of the access flow.** The backend is complete - verify provisions and
+  returns a session, and `GET /api/auth/session` answers who a bearer is - but nothing on
+  the frontend calls either: no verify page, no session cookie, no dashboard. The session
+  cookie is the frontend's own httpOnly first-party one, forwarded server-side; the backend
+  reads no cookies. The old proof-of-stack routes `POST /api/users` and `GET /api/users/:id`
+  are **gone**, and the read's replacement is a session-scoped `getProfile()` with
+  preferences, which is PET-45's rather than done.
+- **The rest of the data model.** Only `users`, `login_links` and `sessions` (central) and
+  `profile` and `categories` (per user) exist. Transactions and insights arrive with their features.
+  `categories` has a table and a starter set but no CRUD, no stats and no allocation
+  summary. Its starter colors are the real ones from Figma frame 03, read per chip from the
+  design's variable bindings; note the palette has eight colors for ten chips, so two
+  repeat and color alone cannot identify a category.
 
 `backend/README.md` is the stock NestJS starter README. Ignore it as a source of truth
 for this project.

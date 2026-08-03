@@ -1,0 +1,420 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/hello": {
+      "get": {
+        "operationId": "AppController_getHello",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelloResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A greeting, and the proof that the two apps can talk.",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "description": "An address that already exists is sent a link instead of being duplicated. If that account was never verified, these onboarding values overwrite the stashed ones.",
+        "operationId": "AuthController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted. The body is always empty and the response is byte-for-byte identical whether or not an account exists for the submitted address - that is the enumeration defense (REG-6, LOG-6), not an unfinished response."
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Refused by the throttler guard, which runs before the request body is ever validated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create an account and send its login link.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/login-link": {
+      "post": {
+        "description": "An unknown address creates nothing and is sent nothing; only the response is identical. Every login link therefore belongs to a real user.",
+        "operationId": "AuthController_requestLoginLink",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestLoginLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted. The body is always empty and the response is byte-for-byte identical whether or not an account exists for the submitted address - that is the enumeration defense (REG-6, LOG-6), not an unfinished response."
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Refused by the throttler guard, which runs before the request body is ever validated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a login link to an existing account.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/verify": {
+      "post": {
+        "description": "First verification of an account also provisions its database, writes the profile the registration form described, and seeds the picked starter categories; a returning user just gets a session. **409** is the one actionable rejection: the link was replaced by a newer one, so the most recent email is the one to open. Every other dead token - unknown, expired, already spent, or belonging to a deleted account - is a 401.",
+        "operationId": "AuthController_verify",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyLoginLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Refused by the throttler guard, which runs before the request body is ever validated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Spend a login link and start a session.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/session": {
+      "get": {
+        "description": "The central directory holds an email and a database pointer, so that is all this answers. Names, currency and budget live in the profile, which is its own endpoint.",
+        "operationId": "AuthController_getSession",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The identity behind a session token.",
+        "tags": [
+          "auth"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Expensa API",
+    "description": "The HTTP contract of the Expensa backend.\n\nGenerated from the NestJS code at build time, committed as `backend/openapi.json`, and\nthe only source of the frontend response types in `frontend/src/types/api.d.ts`.\nDo not edit either by hand: run `npm run api:sync` from the repo root.\n\nEvery operation can additionally answer **500** with `ErrorResponseDto`, via the global\nexception filter. It is stated once here rather than per operation: it is the same\nnon-actionable fact everywhere, and repeating it would widen every generated response type.",
+    "version": "0.1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The raw session token returned by POST /api/auth/verify. Opaque: 256 random bits, base64url, looked up by hash server-side."
+      }
+    },
+    "schemas": {
+      "HelloResponseDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "monthlyBudget": {
+            "type": "number",
+            "description": "Major units (e.g. 2000.50). Stored as integer cents. The cap is not a\nproduct judgment: it keeps the cents conversion far inside JS safe-integer\nrange while staying generous for zero-decimal currencies, whose budgets\ncarry many digits.",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "firstName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "monthStartDay": {
+            "type": "number",
+            "description": "Capped at 28 so the day exists in every month.",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "categories": {
+            "type": "array",
+            "description": "The starter chips picked on screen 03, by name.\n\nRequired but allowed to be empty: A4 records that no minimum is enforced,\nand a user who deselects everything is making a valid choice. Required\nrather than optional so a frontend that stops sending the field fails\nloudly instead of silently seeding nothing.",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "Groceries",
+                "Dining out",
+                "Transport",
+                "Shopping",
+                "Housing",
+                "Health",
+                "Entertainment",
+                "Bills",
+                "Subscriptions",
+                "Other"
+              ]
+            }
+          }
+        },
+        "required": [
+          "monthlyBudget",
+          "firstName",
+          "lastName",
+          "email",
+          "categories"
+        ]
+      },
+      "ErrorResponseDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "String for most errors; an array for class-validator's field messages.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "statusCode": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "statusCode",
+          "error",
+          "timestamp",
+          "path"
+        ]
+      },
+      "RequestLoginLinkDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "VerifyLoginLinkDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The raw token, exactly as it arrived in the link. 43 characters in practice\n(256 bits, base64url); the bound is loose enough not to encode that here\nwhile still keeping a megabyte body from ever reaching a hash function.",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "VerifyResponseDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The raw session token, to be sent back as `Authorization: Bearer <token>`.\n\nThe only place it ever appears in a response - the server keeps its hash.\nThe frontend puts it in an httpOnly, first-party cookie and forwards it\nserver-side; it must never reach client-side JavaScript."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "ISO 8601. Fixed at issue: using the session does not extend it."
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ]
+      },
+      "SessionResponseDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "ISO 8601, the same instant verification returned."
+          }
+        },
+        "required": [
+          "userId",
+          "email",
+          "expiresAt"
+        ]
+      }
+    }
+  }
+}

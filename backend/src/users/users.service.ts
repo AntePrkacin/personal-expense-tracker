@@ -1,187 +1,167 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
 import { newId } from '../common/ids';
+import type { OnboardingPayload } from '../database/central/schema';
 import { users } from '../database/central/schema';
-import { APP_DB } from '../database/database.constants';
+import { APP_DB, userDbName } from '../database/database.constants';
 import type { CentralDatabase } from '../database/database.types';
-import { profile } from '../database/user/schema';
-import { UserDatabaseService } from '../database/user-database.service';
-import { CreateUserDto } from './dto/create-user.dto';
 
 /**
- * What the API returns for a user: identity from the central database merged
- * with the profile from the user's own database. The database pointer columns
- * (`dbName`, `dbUrl`, `dbAuthToken`) never appear here - `dbAuthToken` in
- * particular is a credential.
+ * A row of the central directory, reduced to what the access flow needs.
+ *
+ * `onboardingPayload` doubles as the verification state: non-null means
+ * registered but never verified, null means verified (or, before this branch,
+ * created by an older code path).
  */
-export interface UserResponse {
+export interface CentralUser {
   id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  currency: string;
-  monthlyBudget: number;
-  monthStartDay: number;
-  createdAt: string;
+  onboardingPayload: OnboardingPayload | null;
 }
 
+/**
+ * What verification needs of a row it has already authenticated: the address to
+ * put in the session principal, the payload to turn into a profile, and whether
+ * a database has been provisioned yet.
+ *
+ * A second interface rather than widening `CentralUser`, because `dbAuthToken`
+ * is deliberately absent: verification never needs the token itself - opening
+ * the database is `UserDatabaseService`'s job - and a secret that is not fetched
+ * cannot be leaked into a log line or a response.
+ */
+export interface VerifiableUser {
+  id: string;
+  email: string;
+  /** Non-null means a database was already provisioned for this row. */
+  dbUrl: string | null;
+  onboardingPayload: OnboardingPayload | null;
+}
+
+/**
+ * Reads and writes of the central `users` table. Nothing here touches a
+ * per-user database.
+ *
+ * That is the whole point of the current design: registration no longer
+ * provisions anything, so it is a single insert into a single database. The
+ * cross-database compensation this service used to carry had nothing left to
+ * compensate and is gone with it - the user's own database is created when the
+ * emailed link is verified, which is also the first moment anyone has proved
+ * the address is theirs.
+ */
 @Injectable()
 export class UsersService {
-  private readonly logger = new Logger(UsersService.name);
+  constructor(@Inject(APP_DB) private readonly centralDb: CentralDatabase) {}
 
-  constructor(
-    @Inject(APP_DB) private readonly centralDb: CentralDatabase,
-    private readonly userDatabases: UserDatabaseService,
-  ) {}
-
-  /**
-   * Registers a user: one row in the central directory, one database of their
-   * own, one profile row inside it.
-   *
-   * Those three writes span two databases, so no single transaction covers
-   * them. Failure is handled by compensation instead (see `rollback`), which
-   * leaves a client retry able to converge with no orphans.
-   */
-  async create(dto: CreateUserDto): Promise<UserResponse> {
-    const [existing] = await this.centralDb
-      .select({ id: users.id })
+  /** @returns the live row for an address, or null if there is none. */
+  async findByEmail(email: string): Promise<CentralUser | null> {
+    const [row] = await this.centralDb
+      .select({
+        id: users.id,
+        onboardingPayload: users.onboardingPayload,
+      })
       .from(users)
-      .where(and(eq(users.email, dto.email), isNull(users.deletedAt)))
+      .where(and(eq(users.email, email), isNull(users.deletedAt)))
       .limit(1);
 
-    if (existing) {
-      throw new ConflictException('Email already registered');
-    }
-
-    const id = newId();
-
-    try {
-      // Inside the compensated block: provisioning is two cloud calls, and a
-      // failure between them (database created, token not minted) must roll
-      // back like any other partial registration, or the database leaks with
-      // nothing referencing it - a retry uses a fresh id and never reclaims it.
-      const provisioned = await this.userDatabases.provisionUserDb(id);
-
-      const [userRow] = await this.centralDb
-        .insert(users)
-        .values({
-          id,
-          email: dto.email,
-          dbName: provisioned.dbName,
-          dbUrl: provisioned.dbUrl,
-          dbAuthToken: provisioned.dbAuthToken,
-        })
-        .returning();
-
-      // First open runs the user-scope migrations, creating `profile`.
-      const userDb = await this.userDatabases.getUserDb(id);
-
-      const [profileRow] = await userDb
-        .insert(profile)
-        .values({
-          id,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          currency: dto.currency ?? 'USD',
-          monthlyBudgetCents: toCents(dto.monthlyBudget),
-          monthStartDay: dto.monthStartDay ?? 1,
-        })
-        .returning();
-
-      return toResponse(userRow, profileRow);
-    } catch (error) {
-      await this.rollback(id);
-
-      // The duplicate check above is not atomic, so a registration can still
-      // lose the race and trip the unique index. Surface that as the
-      // documented 409 rather than letting it become a generic 500.
-      if (isUniqueEmailViolation(error)) {
-        throw new ConflictException('Email already registered');
-      }
-      throw error;
-    }
+    return row ?? null;
   }
 
   /**
-   * Reads one user. Touches both databases, which makes it the smallest thing
-   * that proves the whole two-database stack works.
+   * The live row for an id, as verification needs it.
+   *
+   * Soft-deleted rows are invisible here like everywhere else, which is what
+   * lets verification answer a deleted account's link with the same 401 as an
+   * invalid token rather than disclosing the deletion.
    */
-  async findById(id: string): Promise<UserResponse> {
-    const [userRow] = await this.centralDb
-      .select()
+  async findById(id: string): Promise<VerifiableUser | null> {
+    const [row] = await this.centralDb
+      .select({
+        id: users.id,
+        email: users.email,
+        dbUrl: users.dbUrl,
+        onboardingPayload: users.onboardingPayload,
+      })
       .from(users)
       .where(and(eq(users.id, id), isNull(users.deletedAt)))
       .limit(1);
 
-    if (!userRow) {
-      throw new NotFoundException('User not found');
-    }
-
-    const userDb = await this.userDatabases.getUserDb(id);
-    const [profileRow] = await userDb
-      .select()
-      .from(profile)
-      .where(and(eq(profile.id, id), isNull(profile.deletedAt)))
-      .limit(1);
-
-    if (!profileRow) {
-      throw new NotFoundException('User not found');
-    }
-
-    return toResponse(userRow, profileRow);
+    return row ?? null;
   }
 
   /**
-   * Undoes a partial registration: removes the central row, then drops the
-   * user's database. The row goes first because the failure modes are not
-   * symmetric: a leftover database is invisible and only costs storage, while
-   * a leftover row keeps the email answering 409 forever. Deleting by id is a
-   * no-op when the insert never landed, which is exactly the case this has to
-   * survive.
+   * Creates an unverified account: the directory row plus the onboarding
+   * payload it will become a profile from.
+   *
+   * `dbName` is set even though `dbUrl` and `dbAuthToken` stay null, because
+   * the column is notNull and the name derives from the id alone - there is
+   * nothing to wait for. The two nullable columns are filled at verification.
+   *
+   * @returns the new user's id.
    */
-  private async rollback(id: string): Promise<void> {
-    this.logger.error(`Registration failed for user ${id}; rolling back`);
+  async createPending(
+    email: string,
+    payload: OnboardingPayload,
+  ): Promise<string> {
+    const id = newId();
 
-    try {
-      await this.centralDb.delete(users).where(eq(users.id, id));
-      await this.userDatabases.deleteUserDb(id);
-    } catch (error) {
-      // Nothing useful to do here: the original failure is about to be
-      // rethrown and is the more informative one.
-      this.logger.error(`Rollback for user ${id} failed: ${String(error)}`);
-    }
+    await this.centralDb.insert(users).values({
+      id,
+      email,
+      dbName: userDbName(id),
+      onboardingPayload: payload,
+    });
+
+    return id;
   }
-}
 
-/** Money is stored in minor units; the API speaks major units. */
-function toCents(majorUnits: number): number {
-  return Math.round(majorUnits * 100);
-}
+  /**
+   * Replaces the stashed onboarding payload of an account that has not been
+   * verified yet. See AuthService.register for why overwriting is the right
+   * behavior rather than an error.
+   */
+  async stashOnboardingPayload(
+    userId: string,
+    payload: OnboardingPayload,
+  ): Promise<void> {
+    await this.centralDb
+      .update(users)
+      .set({ onboardingPayload: payload })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+  }
 
-function toResponse(
-  userRow: typeof users.$inferSelect,
-  profileRow: typeof profile.$inferSelect,
-): UserResponse {
-  return {
-    id: userRow.id,
-    email: userRow.email,
-    firstName: profileRow.firstName,
-    lastName: profileRow.lastName,
-    currency: profileRow.currency,
-    monthlyBudget: profileRow.monthlyBudgetCents / 100,
-    monthStartDay: profileRow.monthStartDay,
-    createdAt: userRow.createdAt.toISOString(),
-  };
-}
+  /**
+   * Records the database verification just provisioned for this user.
+   *
+   * Only the two nullable pointer columns: `dbName` was written at registration
+   * and derives from the id, so there is nothing to update about it. Both values
+   * are null in local mode, which is the correct pointer for a file the name
+   * alone locates.
+   *
+   * A non-null `dbUrl` afterwards is also what makes a retried verification skip
+   * provisioning instead of colliding on the remote name - see
+   * VerificationService.
+   */
+  async persistProvisionedDb(
+    userId: string,
+    pointer: { dbUrl: string | null; dbAuthToken: string | null },
+  ): Promise<void> {
+    await this.centralDb
+      .update(users)
+      .set({ dbUrl: pointer.dbUrl, dbAuthToken: pointer.dbAuthToken })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+  }
 
-/** SQLite reports this as `UNIQUE constraint failed: users.email`. */
-function isUniqueEmailViolation(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /unique/i.test(message) && /email/i.test(message);
+  /**
+   * Drops the stashed onboarding payload, which is what marks an account
+   * verified.
+   *
+   * Called last in verification on purpose: while it is set, the payload is both
+   * the profile's source data and the "provisioning may be unfinished" marker,
+   * so clearing it early would lose the source with nothing having consumed it.
+   */
+  async clearOnboardingPayload(userId: string): Promise<void> {
+    await this.centralDb
+      .update(users)
+      .set({ onboardingPayload: null })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+  }
 }

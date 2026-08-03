@@ -4,10 +4,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  AllExceptionsFilter,
-  type ErrorResponseBody,
-} from './all-exceptions.filter';
+import type { ErrorResponseDto } from '../dto/error-response.dto';
+import { AllExceptionsFilter } from './all-exceptions.filter';
 
 /** `expect.any` is typed `any`; naming it keeps the typed literals below clean. */
 const anyString = expect.any(String) as string;
@@ -18,8 +16,8 @@ describe('AllExceptionsFilter', () => {
   let json: jest.Mock;
   let host: ArgumentsHost;
 
-  const captured = (): ErrorResponseBody =>
-    (json.mock.calls as ErrorResponseBody[][])[0][0];
+  const captured = (): ErrorResponseDto =>
+    (json.mock.calls as ErrorResponseDto[][])[0][0];
 
   beforeEach(() => {
     filter = new AllExceptionsFilter();

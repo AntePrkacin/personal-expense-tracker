@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { API_PREFIX } from './../src/common/api-prefix';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -13,9 +14,9 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    // Mirror the global 'api' prefix configured in main.ts so e2e routes
-    // match production (GET /api/hello).
-    app.setGlobalPrefix('api');
+    // Mirror the global prefix configured in main.ts so e2e routes match
+    // production (GET /api/hello).
+    app.setGlobalPrefix(API_PREFIX);
     await app.init();
   });
 

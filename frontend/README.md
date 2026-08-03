@@ -46,11 +46,13 @@ New routes are folders under `src/app/` with a `page.tsx`. Shared UI goes in
 `src/components/` (create it when you add your first shared component; it does
 not exist yet).
 
-Data access that talks to the backend should live in a small typed module. Today
-the response shape is hand-mirrored: `HelloResponse` is declared in
-`backend/src/app.service.ts` and copied into `src/app/page.tsx`, so a backend
-change has to be applied here by hand. Generating these types from an OpenAPI
-spec would remove that duplication, but the backend does not expose one yet.
+Data access that talks to the backend should live in a small typed module, and
+the types it uses are generated rather than written. `src/types/api.d.ts` comes
+from `backend/openapi.json` via `npm run api:types` (or `npm run api:sync` from
+the repo root, which regenerates both). It is committed and must never be edited
+by hand; CI regenerates it and fails on a diff. Read a shape out of it the way
+`src/app/page.tsx` does, indexing `paths` by route and status, rather than
+restating it locally.
 
 ## Deploy on Vercel
 
