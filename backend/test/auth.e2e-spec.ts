@@ -13,7 +13,8 @@ import { newId } from './../src/common/ids';
 import { loginLinks, users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
-import { MAILER, type Mailer, type MailMessage } from './../src/mail/mailer';
+import { MAILER } from './../src/mail/mailer';
+import { MemoryMailer } from './memory-mailer';
 
 /**
  * Set by setup-e2e.ts, which is the only place early enough to be read - see
@@ -21,54 +22,8 @@ import { MAILER, type Mailer, type MailMessage } from './../src/mail/mailer';
  */
 const RATE_LIMIT = Number(process.env.AUTH_RATE_LIMIT);
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
-
-/**
- * Collects what would have been sent, and lets a test wait for it.
- *
- * The waiting is the point. AuthService deliberately does not await the send -
- * that is what keeps a known and an unknown address answering in the same time
- * - so by the time the HTTP response arrives the email has usually not been
- * handed over yet. Asserting "exactly one email" without waiting would race the
- * floated work and pass or fail on machine speed.
- */
-class MemoryMailer implements Mailer {
-  readonly sent: MailMessage[] = [];
-
-  send(message: MailMessage): Promise<void> {
-    this.sent.push(message);
-    return Promise.resolve();
-  }
-
-  to(email: string): MailMessage[] {
-    return this.sent.filter((message) => message.to === email);
-  }
-
-  /** Resolves once `email` has received `count` messages, or throws. */
-  async waitFor(email: string, count: number, timeoutMs = 2000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (this.to(email).length < count) {
-      if (Date.now() > deadline) {
-        throw new Error(
-          `timed out waiting for ${count} email(s) to ${email}, saw ${this.to(email).length}`,
-        );
-      }
-      await sleep(5);
-    }
-  }
-
-  /**
-   * For the negative case. Nothing can be waited *for*, so this waits out the
-   * window in which a send would have happened and then lets the caller assert
-   * that none did.
-   */
-  quiesce(): Promise<unknown> {
-    return sleep(100);
-  }
-}
 
 describe('AuthController (e2e)', () => {
   let app: INestApplication<App>;
@@ -364,28 +319,56 @@ describe('AuthController (e2e)', () => {
       const userId = newId();
       const rawToken = await loginTokens.issue(userId);
 
-      await expect(loginTokens.consume(rawToken)).resolves.toBe(userId);
-      await expect(loginTokens.consume(rawToken)).resolves.toBeNull();
+      await expect(loginTokens.consume(rawToken)).resolves.toEqual({
+        status: 'consumed',
+        userId,
+      });
+      // Spent, not superseded: the diagnostic read tells the two apart from the
+      // row itself, which is what the 401-versus-409 split rests on.
+      await expect(loginTokens.consume(rawToken)).resolves.toEqual({
+        status: 'invalid',
+      });
     });
 
-    it('rejects a token that a later issue superseded', async () => {
+    it('rejects a token that a later issue superseded, and says so', async () => {
       const userId = newId();
       const first = await loginTokens.issue(userId);
       const second = await loginTokens.issue(userId);
 
-      await expect(loginTokens.consume(first)).resolves.toBeNull();
-      await expect(loginTokens.consume(second)).resolves.toBe(userId);
+      await expect(loginTokens.consume(first)).resolves.toEqual({
+        status: 'superseded',
+      });
+      await expect(loginTokens.consume(second)).resolves.toEqual({
+        status: 'consumed',
+        userId,
+      });
     });
 
     it('rejects an expired token', async () => {
       const userId = newId();
       await seedExpired(userId, 'expired-token');
 
-      await expect(loginTokens.consume('expired-token')).resolves.toBeNull();
+      await expect(loginTokens.consume('expired-token')).resolves.toEqual({
+        status: 'invalid',
+      });
     });
 
     it('rejects an unknown token', async () => {
-      await expect(loginTokens.consume('never-issued')).resolves.toBeNull();
+      await expect(loginTokens.consume('never-issued')).resolves.toEqual({
+        status: 'invalid',
+      });
+    });
+
+    it('reports superseded even for a link that also expired', async () => {
+      // Both conditions at once, which the diagnostic read deliberately answers
+      // with "a newer link exists" rather than the generic rejection.
+      const userId = newId();
+      await seedExpired(userId, 'stale-and-superseded');
+      await loginTokens.issue(userId);
+
+      await expect(
+        loginTokens.consume('stale-and-superseded'),
+      ).resolves.toEqual({ status: 'superseded' });
     });
 
     it('lets only one of two concurrent consumes through', async () => {
@@ -397,7 +380,9 @@ describe('AuthController (e2e)', () => {
         loginTokens.consume(rawToken),
       ]);
 
-      expect(results.filter((id) => id !== null)).toEqual([userId]);
+      expect(results.filter((result) => result.status === 'consumed')).toEqual([
+        { status: 'consumed', userId },
+      ]);
     });
 
     it('leaves exactly one live link when two issues race', async () => {
@@ -426,7 +411,9 @@ describe('AuthController (e2e)', () => {
         loginTokens.consume(first),
         loginTokens.consume(second),
       ]);
-      expect(consumed.filter((id) => id !== null)).toEqual([userId]);
+      expect(consumed.filter((result) => result.status === 'consumed')).toEqual(
+        [{ status: 'consumed', userId }],
+      );
     });
   });
 });

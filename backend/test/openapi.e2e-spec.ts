@@ -31,8 +31,10 @@ interface SpecResponse {
 
 interface SpecOperation {
   summary?: string;
+  description?: string;
   responses: Record<string, SpecResponse>;
   requestBody?: { content: Record<string, { schema: { $ref: string } }> };
+  security?: Record<string, string[]>[];
 }
 
 interface SpecSchema {
@@ -44,7 +46,10 @@ interface SpecSchema {
 interface Spec {
   openapi: string;
   paths: Record<string, Record<string, SpecOperation>>;
-  components: { schemas: Record<string, SpecSchema> };
+  components: {
+    schemas: Record<string, SpecSchema>;
+    securitySchemes?: Record<string, Record<string, unknown>>;
+  };
 }
 
 const spec = JSON.parse(
@@ -60,6 +65,8 @@ describe('openapi.json', () => {
     expect(Object.keys(spec.paths).sort()).toEqual([
       `/${API_PREFIX}/auth/login-link`,
       `/${API_PREFIX}/auth/register`,
+      `/${API_PREFIX}/auth/session`,
+      `/${API_PREFIX}/auth/verify`,
       `/${API_PREFIX}/hello`,
     ]);
   });
@@ -76,6 +83,20 @@ describe('openapi.json', () => {
       type: 'string',
     });
     expect(schema('HelloResponseDto').required).toEqual(['message']);
+  });
+
+  it('documents no 500 anywhere, on hello least of all', () => {
+    // The resolved policy: every operation can answer 500 through the global
+    // filter, so the document says it once in its description instead of
+    // widening every generated response union with the same dead fact. Hello was
+    // the arbitrary outlier that made the inconsistency visible.
+    expect(
+      Object.keys(spec.paths[`/${API_PREFIX}/hello`].get.responses),
+    ).toEqual(['200']);
+    const declared = Object.values(spec.paths)
+      .flatMap((path) => Object.values(path))
+      .flatMap((operation) => Object.keys(operation.responses));
+    expect(declared).not.toContain('500');
   });
 
   describe.each(['register', 'login-link'])('POST /api/auth/%s', (route) => {
@@ -109,6 +130,103 @@ describe('openapi.json', () => {
         '429',
       ]);
     });
+  });
+
+  describe('POST /api/auth/verify', () => {
+    const operation = () => spec.paths[`/${API_PREFIX}/auth/verify`].post;
+
+    it('returns a session token and its expiry', () => {
+      expect(
+        operation().responses['200'].content?.['application/json'].schema?.$ref,
+      ).toBe('#/components/schemas/VerifyResponseDto');
+      // The silent-`{}` trap again: this is the only thing that would notice
+      // VerifyResponseDto becoming an interface or moving out of a .dto.ts file.
+      expect(schema('VerifyResponseDto').properties?.token).toMatchObject({
+        type: 'string',
+      });
+      expect(schema('VerifyResponseDto').required).toEqual([
+        'token',
+        'expiresAt',
+      ]);
+    });
+
+    it('documents both rejections with the shared error shape', () => {
+      // 409 is the interesting one: it is what lets the frontend say "open the
+      // most recent email" instead of sending the user back to request another.
+      for (const status of ['400', '401', '409', '429']) {
+        expect(
+          operation().responses[status].content?.['application/json'].schema
+            ?.$ref,
+        ).toBe(ERROR_REF);
+      }
+      expect(operation().description).toMatch(/409/);
+    });
+
+    it('declares no other responses', () => {
+      expect(Object.keys(operation().responses).sort()).toEqual([
+        '200',
+        '400',
+        '401',
+        '409',
+        '429',
+      ]);
+    });
+
+    it('needs no bearer of its own', () => {
+      // The emailed token IS the credential here, and it arrives in the body.
+      expect(operation().security).toBeUndefined();
+    });
+  });
+
+  describe('GET /api/auth/session', () => {
+    const operation = () => spec.paths[`/${API_PREFIX}/auth/session`].get;
+
+    it('answers the three fields central can answer', () => {
+      expect(
+        operation().responses['200'].content?.['application/json'].schema?.$ref,
+      ).toBe('#/components/schemas/SessionResponseDto');
+      expect(schema('SessionResponseDto').required).toEqual([
+        'userId',
+        'email',
+        'expiresAt',
+      ]);
+    });
+
+    it('declares only 200 and 401', () => {
+      // No 429 on purpose: both throttlers are skipped, because the frontend
+      // calls this on navigation and one NAT shares one IP bucket.
+      expect(Object.keys(operation().responses).sort()).toEqual(['200', '401']);
+      expect(
+        operation().responses['401'].content?.['application/json'].schema?.$ref,
+      ).toBe(ERROR_REF);
+    });
+
+    it('publishes the bearer requirement, and an honest scheme for it', () => {
+      // Two halves that fail silently apart: `@ApiBearerAuth()` names a scheme
+      // and `addSecurity` declares it. Miss either and the operation looks
+      // public in both the spec and the generated frontend types.
+      expect(operation().security).toEqual([{ bearer: [] }]);
+      expect(spec.components.securitySchemes?.bearer).toMatchObject({
+        type: 'http',
+        scheme: 'bearer',
+      });
+      // Not JWT: these are opaque database-backed tokens, and Nest's
+      // addBearerAuth helper would have claimed otherwise.
+      expect(spec.components.securitySchemes?.bearer).not.toHaveProperty(
+        'bearerFormat',
+      );
+    });
+  });
+
+  it("carries VerifyLoginLinkDto's bound on the token", () => {
+    // The bound is what keeps a megabyte body from ever reaching a hash
+    // function, so it belongs in the published contract rather than only in the
+    // validator.
+    expect(schema('VerifyLoginLinkDto').properties?.token).toMatchObject({
+      type: 'string',
+      maxLength: 128,
+    });
+    expect(schema('VerifyLoginLinkDto').required).toEqual(['token']);
   });
 
   it("carries RegisterDto's validation constraints", () => {
