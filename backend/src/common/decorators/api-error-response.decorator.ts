@@ -11,6 +11,8 @@ import { ErrorResponseDto } from '../dto/error-response.dto';
 const DESCRIPTIONS: Partial<Record<HttpStatus, string>> = {
   [HttpStatus.BAD_REQUEST]:
     'Validation failed. `message` is the array of field errors produced by the global ValidationPipe.',
+  [HttpStatus.UNAUTHORIZED]:
+    'Not authenticated. The bearer credential is missing, invalid, expired or already spent.',
   [HttpStatus.NOT_FOUND]: 'No such resource.',
   [HttpStatus.CONFLICT]: 'The request conflicts with the current state.',
   [HttpStatus.TOO_MANY_REQUESTS]:

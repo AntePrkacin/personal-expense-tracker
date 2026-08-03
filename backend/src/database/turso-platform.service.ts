@@ -118,8 +118,12 @@ export class TursoPlatformService {
 
   /**
    * Not implemented yet: the short-expiry variant of {@link mintDbToken}, for
-   * handing a browser a token it can sync with directly. It arrives with the
-   * auth feature, which is what makes "which user is asking" answerable.
+   * handing a browser a token it can sync with directly.
+   *
+   * It belongs to that browser-direct-sync feature, not to the access flow:
+   * sessions and verification are done and never needed it, because every read
+   * goes through this backend with the user's server-side token. Nothing will
+   * call this until a client syncs with Turso itself (docs/TODO.md).
    *
    *     mintUserDbToken(dbName: string, expiry: string): Promise<string>
    *     // POST /databases/{dbName}/auth/tokens?authorization=full-access&expiration=<expiry>

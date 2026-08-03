@@ -9,6 +9,7 @@ import { AuthService } from './auth.service';
 import { LoginTokenService } from './login-token.service';
 import { SessionGuard } from './session.guard';
 import { SessionService } from './session.service';
+import { VerificationService } from './verification.service';
 
 const DEFAULT_EMAIL_RATE_LIMIT = 5;
 const DEFAULT_IP_RATE_LIMIT = 30;
@@ -55,12 +56,13 @@ export function trackByEmail(req: Record<string, unknown>): string {
 }
 
 /**
- * The passwordless access flow: register, and request a login link.
+ * The passwordless access flow: register, request a login link, verify one, and
+ * answer "who am I" for the session it created.
  *
  * ThrottlerModule is configured here rather than globally because these are the
- * only two routes that need it - `AuthController` carries the guard - and
- * because the limits are exposed as configuration so the e2e suite can trip
- * them without waiting out a fifteen-minute window.
+ * only routes that need it - `AuthController` carries the guard, with named
+ * skips per route - and because the limits are exposed as configuration so the
+ * e2e suite can trip them without waiting out a fifteen-minute window.
  *
  * `SessionService` and `SessionGuard` are exported so a future feature module
  * only has to import AuthModule to protect its routes. `DatabaseModule` is
@@ -107,7 +109,13 @@ export function trackByEmail(req: Record<string, unknown>): string {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, LoginTokenService, SessionService, SessionGuard],
+  providers: [
+    AuthService,
+    LoginTokenService,
+    SessionService,
+    SessionGuard,
+    VerificationService,
+  ],
   exports: [SessionService, SessionGuard],
 })
 export class AuthModule {}

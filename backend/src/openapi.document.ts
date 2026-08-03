@@ -34,6 +34,22 @@ export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
       ].join('\n'),
     )
     .setVersion('0.1.0')
+    // Without this the guarded operations describe no authentication at all,
+    // silently: `@ApiBearerAuth()` names a scheme, and an undeclared name is
+    // dropped rather than reported. The default name `bearer` is what the bare
+    // decorator refers to, so the two have to stay paired.
+    //
+    // `addSecurity` rather than the `addBearerAuth` helper, which spreads its
+    // options over a hardcoded `bearerFormat: 'JWT'` and therefore cannot be
+    // talked out of publishing it. These are opaque database-backed tokens with
+    // nothing for a client to parse, so that format would be a lie. The name
+    // `bearer` is what a bare `@ApiBearerAuth()` refers to: keep them paired.
+    .addSecurity('bearer', {
+      type: 'http',
+      scheme: 'bearer',
+      description:
+        'The raw session token returned by POST /api/auth/verify. Opaque: 256 random bits, base64url, looked up by hash server-side.',
+    })
     .build();
 
   return SwaggerModule.createDocument(app, config);

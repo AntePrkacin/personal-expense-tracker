@@ -61,20 +61,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Spend a login link and start a session.
+         * @description First verification of an account also provisions its database, writes the profile the registration form described, and seeds the picked starter categories; a returning user just gets a session. **409** is the one actionable rejection: the link was replaced by a newer one, so the most recent email is the one to open. Every other dead token - unknown, expired, already spent, or belonging to a deleted account - is a 401.
+         */
+        post: operations["AuthController_verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The identity behind a session token.
+         * @description The central directory holds an email and a database pointer, so that is all this answers. Names, currency and budget live in the profile, which is its own endpoint.
+         */
+        get: operations["AuthController_getSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         HelloResponseDto: {
             message: string;
-        };
-        ErrorResponseDto: {
-            /** @description String for most errors; an array for class-validator's field messages. */
-            message: string | string[];
-            statusCode: number;
-            error: string;
-            timestamp: string;
-            path: string;
         };
         RegisterDto: {
             /**
@@ -101,9 +133,43 @@ export interface components {
              */
             categories: ("Groceries" | "Dining out" | "Transport" | "Shopping" | "Housing" | "Health" | "Entertainment" | "Bills" | "Subscriptions" | "Other")[];
         };
+        ErrorResponseDto: {
+            /** @description String for most errors; an array for class-validator's field messages. */
+            message: string | string[];
+            statusCode: number;
+            error: string;
+            timestamp: string;
+            path: string;
+        };
         RequestLoginLinkDto: {
             /** Format: email */
             email: string;
+        };
+        VerifyLoginLinkDto: {
+            /**
+             * @description The raw token, exactly as it arrived in the link. 43 characters in practice
+             *     (256 bits, base64url); the bound is loose enough not to encode that here
+             *     while still keeping a megabyte body from ever reaching a hash function.
+             */
+            token: string;
+        };
+        VerifyResponseDto: {
+            /**
+             * @description The raw session token, to be sent back as `Authorization: Bearer <token>`.
+             *
+             *     The only place it ever appears in a response - the server keeps its hash.
+             *     The frontend puts it in an httpOnly, first-party cookie and forwards it
+             *     server-side; it must never reach client-side JavaScript.
+             */
+            token: string;
+            /** @description ISO 8601. Fixed at issue: using the session does not extend it. */
+            expiresAt: string;
+        };
+        SessionResponseDto: {
+            userId: string;
+            email: string;
+            /** @description ISO 8601, the same instant verification returned. */
+            expiresAt: string;
         };
     };
     responses: never;
@@ -129,15 +195,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HelloResponseDto"];
-                };
-            };
-            /** @description Unexpected failure. Logged in full server-side and reduced to this generic body outward. */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseDto"];
                 };
             };
         };
@@ -213,6 +270,93 @@ export interface operations {
             };
             /** @description Rate limited. Refused by the throttler guard, which runs before the request body is ever validated. */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AuthController_verify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyLoginLinkDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The request conflicts with the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Rate limited. Refused by the throttler guard, which runs before the request body is ever validated. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AuthController_getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
