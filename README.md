@@ -39,8 +39,8 @@ so this stays safe.
 
 ## What works today
 
-Exactly one thing, on purpose, so you can see the whole path from browser to API without
-reading a lot of code:
+One end-to-end path from browser to API, on purpose, so you can see the whole thing
+without reading a lot of code:
 
 ```text
 browser  ->  Next.js page (:4200)  ->  fetch on the server  ->  NestJS (:3000)
@@ -56,6 +56,9 @@ them first.
 If the backend is not running, the page says so instead of crashing, which is a useful
 thing to notice: the frontend handles the failure rather than pretending it cannot happen.
 
+The backend also has a working persistence layer behind `POST /api/users` and
+`GET /api/users/:id`, with no setup needed. See [Database](#database).
+
 ## Prerequisites
 
 | Tool    | Version                                   | Note                                                                                    |
@@ -65,9 +68,12 @@ thing to notice: the frontend handles the failure rather than pretending it cann
 | git     | any recent                                |                                                                                         |
 | mise    | optional                                  | Runs the repo-wide tasks below. Every task wraps plain npm commands, so you can skip it |
 
-The hard floor is **v20.9.0**, which is what `next` declares in `engines`. All three
-`package.json` files carry that constraint, so npm warns with `EBADENGINE` if you are below
-it.
+The hard floor is **v22.12.0**, set by the backend. It loads three ESM-only packages
+(`@tursodatabase/database`, `@tursodatabase/sync`, `uuid`) from CommonJS, which needs
+Node's `require()` of ESM, and that shipped unflagged in 22.12. Below it the backend does
+not start, it throws `Cannot use import statement outside a module`. All three
+`package.json` files carry that constraint, so npm warns with `EBADENGINE` if you are
+below it.
 
 **Check in a terminal you opened yourself**, not through an editor extension or an AI
 assistant:
@@ -221,11 +227,17 @@ correct, not a broken server. See "Gotchas" below.
 ```text
 backend/                  NestJS 11 API on :3000
   src/
-    main.ts               Bootstrap: global 'api' prefix, CORS, port
-    app.module.ts         Root module, registers ConfigModule
+    main.ts               Bootstrap: global 'api' prefix, CORS, port, shutdown hooks
+    app.module.ts         Root module: ConfigModule, DatabaseModule, global pipe + filter
     app.controller.ts     GET /api/hello
     app.service.ts        Business logic + the HelloResponse contract
     app.controller.spec.ts
+    common/               ids, the global exception filter
+    config/               Joi schema validating the environment at boot
+    database/             Drizzle + Turso: schemas, client factory, per-user databases
+    users/                POST /api/users, GET /api/users/:id
+  drizzle/                Generated migrations, committed: central/ and user/
+  databases/              Local database files. Gitignored; migrations recreate them
   test/                   Supertest e2e specs
   .env.example
 
@@ -253,15 +265,17 @@ one.
 
 Run these from inside the app directory, never from the repo root.
 
-|                     | Backend (`cd backend`) | Frontend (`cd frontend`) |
-| ------------------- | ---------------------- | ------------------------ |
-| Dev server          | `npm run start:dev`    | `npm run dev`            |
-| Production build    | `npm run build`        | `npm run build`          |
-| Lint                | `npm run lint`         | `npm run lint`           |
-| Unit tests          | `npm test`             | `npm test`               |
-| Tests in watch mode | `npm run test:watch`   | `npm run test:watch`     |
-| E2E tests           | `npm run test:e2e`     | not set up               |
-| Coverage            | `npm run test:cov`     | not set up               |
+|                     | Backend (`cd backend`)      | Frontend (`cd frontend`) |
+| ------------------- | --------------------------- | ------------------------ |
+| Dev server          | `npm run start:dev`         | `npm run dev`            |
+| Production build    | `npm run build`             | `npm run build`          |
+| Lint                | `npm run lint`              | `npm run lint`           |
+| Unit tests          | `npm test`                  | `npm test`               |
+| Tests in watch mode | `npm run test:watch`        | `npm run test:watch`     |
+| E2E tests           | `npm run test:e2e`          | not set up               |
+| Coverage            | `npm run test:cov`          | not set up               |
+| Generate migrations | `npm run db:generate`       | n/a                      |
+| Browse the database | `npm run db:studio:central` | n/a                      |
 
 Both apps use Jest, so `npm test` runs once and exits. To filter:
 `npm test -- page` by path, `npm test -- -t "greeting"` by test name.
@@ -281,6 +295,8 @@ three packages in order.
 | `mise run audit`             | `npm audit` in all three packages                                    |
 | `mise run check-for-updates` | `ncu` in all three, showing what is outdated                         |
 | `mise run update`            | `ncu -u --target minor`, then install and update, in all three       |
+| `mise run db:generate`       | Generate Drizzle migrations for both database scopes                 |
+| `mise run skills`            | Refresh Drizzle's committed agent skills after a drizzle-kit bump    |
 
 Every task also has per-package variants when you want just one: `install:repo`,
 `install:backend`, `install:frontend`, `dev:backend`, `dev:frontend`, `update:repo`,
@@ -309,10 +325,14 @@ Two things about `audit` that will otherwise confuse you:
 
 ## Environment variables
 
-| App      | Template                | Your local file       | Variables                                                            |
-| -------- | ----------------------- | --------------------- | -------------------------------------------------------------------- |
-| Backend  | `backend/.env.example`  | `backend/.env`        | `PORT` (3000), `FRONTEND_URL` (CORS origin, `http://localhost:4200`) |
-| Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (`http://localhost:3000`)                              |
+| App      | Template                | Your local file       | Variables                                                                               |
+| -------- | ----------------------- | --------------------- | --------------------------------------------------------------------------------------- |
+| Backend  | `backend/.env.example`  | `backend/.env`        | `PORT` (3000), `FRONTEND_URL` (`http://localhost:4200`), `DATABASE_DIR` (`./databases`) |
+| Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (`http://localhost:3000`)                                                 |
+
+The backend template also lists a block of commented-out `TURSO_*` variables. You do not
+need them: leave them commented and the backend stores everything in local files under
+`DATABASE_DIR`. See [Database](#database) below.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`. Both are
 gitignored and must never be committed. Only the `.env.example` templates are.
@@ -322,8 +342,81 @@ into the JavaScript sent to the browser, so it is public forever. `BACKEND_URL` 
 such prefix because it is read on the server. Never put a secret behind
 `NEXT_PUBLIC_`.
 
-There is no config validation yet, so a missing variable fails when it is first used
-rather than at startup.
+The backend validates its environment at startup with a Joi schema
+(`backend/src/config/env.validation.ts`), so a typo fails immediately with a message
+naming the variable, rather than surfacing as an odd error later.
+
+## Database
+
+The backend persists to SQLite through [Drizzle ORM](https://orm.drizzle.team) on
+[Turso](https://turso.tech)'s engine, and each user gets a database of their own. A small
+central database holds the user directory (email plus a pointer to that person's
+database); everything else about a person lives in their database.
+
+**For local development there is nothing to set up.** With no `TURSO_*` variables the
+backend writes plain files under `backend/databases/`, creates them on first run and
+applies the committed migrations itself. That directory is gitignored, so deleting it is
+always safe: the next start rebuilds it.
+
+```bash
+cd backend && npm run start:dev
+
+curl -X POST http://localhost:3000/api/users \
+  -H 'content-type: application/json' \
+  -d '{"firstName":"Marko","lastName":"Kovac","email":"marko@email.com","monthlyBudget":2000}'
+# 201, and backend/databases/ now holds app.db plus one file for this user
+```
+
+### Changing the schema
+
+Edit `backend/src/database/central/schema.ts` (the user directory) or
+`backend/src/database/user/schema.ts` (one person's data), then:
+
+```bash
+cd backend && npm run db:generate
+```
+
+That writes a new migration under `backend/drizzle/`. **Commit it.** There is no
+`db:migrate` command on purpose: the app applies migrations itself, the central database
+at startup and each user's database the first time it is opened, which is the only thing
+that works when there are N of them.
+
+### Connecting it to Turso Cloud (optional)
+
+Only needed if you want real cloud databases. One-time setup with the
+[Turso CLI](https://docs.turso.tech/cli/introduction):
+
+```bash
+turso auth login
+turso group create decode-pet                       # holds every database
+
+# --tursodb is required, not optional. See the note below.
+turso db create expensa-app --group decode-pet --tursodb
+
+turso db show expensa-app --url                     # -> TURSO_CENTRAL_DB_URL
+turso db tokens create expensa-app                  # -> TURSO_CENTRAL_DB_TOKEN
+
+# -> TURSO_ORG_TOKEN. Scoped to the group and to the three things the backend
+# actually does, rather than a token that can do anything in your org.
+turso auth api-tokens mint expensa-backend --group decode-pet \
+  --scope db:create --scope db:delete --scope db:mint-token
+```
+
+Fill those into `backend/.env` along with `TURSO_ORG` (your org slug, from
+`turso org list`), and uncomment them. It is all four or none: half-filled fails at boot
+rather than silently falling back. From then on the backend creates a database per
+registered user in the same group, keeps a synced local copy under `DATABASE_DIR`, and
+tests still run against plain local files.
+
+**Why `--tursodb` matters.** It selects the Turso engine, a Rust rewrite of SQLite, instead
+of the older libSQL engine that Turso Cloud still creates by default. The local half of
+`@tursodatabase/sync` is a real Turso database, so the remote it replicates against has to
+be one too. Getting this wrong is quiet rather than loud: the app still starts and appears
+to work, and you find out later. **The engine is fixed when the database is created**, so
+the fix is always "delete it and make a new one", which stops being cheap the moment real
+data exists. Check an existing one with `turso db list`, whose `TYPE` column reads `Turso`
+rather than `SQLite`. The backend passes the equivalent flag itself for every per-user
+database it creates, so this only applies to the central one you make by hand.
 
 ## Git workflow
 
@@ -481,9 +574,41 @@ This repo ships [Claude Code](https://claude.com/claude-code) configuration in
 | `repo-jira`                          | Creates, estimates and transitions Jira issues over MCP                  |
 | `repo-review-prs`                    | Reviews open pull requests                                               |
 | `backend-nestjs` / `frontend-nextjs` | Rule libraries consulted automatically while writing code                |
+| `backend-drizzle`                    | How Drizzle and Turso are wired in this repo specifically                |
+| `drizzle-*` (8 skills)               | Drizzle's own drizzle-kit skills, committed. Refreshed, see below        |
 
 Invoke a skill by its full name (`/repo-dev-setup`), or just describe what you want:
 descriptions are matched automatically.
+
+### Drizzle's own skills and MCP server
+
+`drizzle-kit` ships eight agent skills of its own, and they are **already committed** here,
+so a fresh clone has them with no extra step. You only need this command when refreshing
+them:
+
+```bash
+npm run skills     # re-extract from the installed drizzle-kit, then commit the diff
+```
+
+Refresh after bumping `drizzle-kit`, and treat it like regenerating a migration: run it,
+review the diff, commit it. You will be prompted when it matters, because one of the skills
+checks its own revision against the installed `drizzle-kit` and says so when it has fallen
+behind.
+
+The repo's own `backend-drizzle` skill covers only this project's wiring (two migration
+scopes, a database per user, the Turso drivers) and leaves the generic CLI to Drizzle's.
+
+`drizzle-kit` also ships an MCP server exposing `generate`, `push`, `pull`, `check`,
+`export` and `up` as tools. It is in the MCP template, so copy that and keep the `drizzle`
+entry:
+
+```bash
+cp .mcp.json.example .mcp.json
+```
+
+`.mcp.json` is gitignored, so this part is per-developer and optional. One caution: `push`
+applies schema changes straight to a database without writing a migration file, which is
+the opposite of how this repo works. Prefer `npm run db:generate`.
 
 Two things to know about the setup:
 
@@ -519,10 +644,9 @@ for the two supported setups and their trade-offs.
 
 Things this boilerplate deliberately does not decide for you:
 
-- **A database.** Nothing is wired up. Pick your own (Prisma or TypeORM with Postgres is
-  a reasonable default) and add a `docker-compose.yml` if you want it containerised.
 - **Auth.** Not present. NestJS guards are the place for it; see the `backend-nestjs`
-  rules.
+  rules. Until it lands, `POST /api/users` and `GET /api/users/:id` are unauthenticated
+  scaffolding that exists to prove the database layer works end to end.
 - **Shared types between the apps.** Right now `HelloResponse` is declared in
   `backend/src/app.service.ts` and copied by hand into `frontend/src/app/page.tsx`.
   Changing the response shape means editing both. Generating types from an OpenAPI spec is

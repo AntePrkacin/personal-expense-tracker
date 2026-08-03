@@ -1,8 +1,14 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
-  "testEnvironment": "node",
+  "testEnvironment": "<rootDir>/esm-environment.cjs",
   "testRegex": ".e2e-spec.ts$",
+  "setupFiles": ["<rootDir>/setup-e2e.ts"],
+  "moduleNameMapper": {
+    "^@tursodatabase/database$": "<rootDir>/esm-shims/tursodatabase-database.ts",
+    "^@tursodatabase/sync$": "<rootDir>/esm-shims/tursodatabase-sync.ts",
+    "^uuid$": "<rootDir>/esm-shims/uuid.ts"
+  },
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   }

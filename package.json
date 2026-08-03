@@ -4,10 +4,11 @@
   "private": true,
   "description": "Repo-level dev tooling (Husky hooks, commitlint, lint-staged, Prettier). The backend/ and frontend/ apps keep their own package.json - this root does not manage them.",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "skills": "node backend/node_modules/drizzle-kit/bin.cjs skills"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

@@ -18,6 +18,12 @@ async function bootstrap() {
     origin: config.get<string>('FRONTEND_URL', 'http://localhost:4200'),
   });
 
+  // Lets DatabaseModule's onApplicationShutdown run on SIGINT/SIGTERM, so
+  // database connections are flushed and closed instead of dropped.
+  app.enableShutdownHooks();
+
   await app.listen(config.get<number>('PORT', 3000));
 }
-bootstrap();
+// `void` marks the floating promise as deliberately unawaited: nothing follows
+// bootstrap, and a rejection here already terminates the process.
+void bootstrap();

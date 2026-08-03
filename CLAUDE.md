@@ -25,6 +25,8 @@ workspaces, turbo, or nx setup. The root `package.json` owns only repo-wide dev 
 
 ```text
 backend/          NestJS 11 API, port 3000, its own package.json + node_modules
+  drizzle/        Generated migrations, committed: central/ and user/
+  databases/      Local database files. Gitignored, recreated from the migrations
 frontend/         Next.js 16 + React 19, port 4200, its own package.json + node_modules
 docs/plans/       Implementation plans, one file per plan (see below)
 .claude/          Skills, agents and permissions for Claude Code (see below)
@@ -48,8 +50,16 @@ Two consequences that trip people up:
 Node version comes from `.nvmrc` (currently **26**). CI reads that same file, so bump it
 there and CI follows. Use `nvm use`, which reads `.nvmrc` and needs no version argument;
 avoid `nvm install --lts`, which installs whatever LTS happens to be current. The hard
-floor is **v20.9.0**, declared by `next` in its `engines` field, and all three
-`package.json` files now carry that same `engines` constraint so npm warns on a mismatch.
+floor is **v22.12.0**, and all three `package.json` files carry it so npm warns on a
+mismatch.
+
+That floor is the **backend's**, not `next`'s: `next` still declares `>=20.9.0`, but the
+backend loads three ESM-only packages (`@tursodatabase/database`, `@tursodatabase/sync`,
+`uuid`) from CommonJS, which requires Node's `require()` of ESM. That landed unflagged in
+22.12 (and was backported to 20.19). The stated floor is the simple form rather than an
+exact `>=20.19.0 <21 || >=22.12.0`, which is accurate but unreadable for no gain given
+`.nvmrc` says 26. Below the floor the failure is a startup crash, `Cannot use import
+statement outside a module`, not a warning.
 
 `mise.toml` pins the same major a **second** time, as `node = "26"` under `[tools]`. mise
 does not read `.nvmrc`, so bumping the Node major means editing both files. It is pinned
@@ -64,15 +74,17 @@ plan worth keeping there under that pattern rather than leaving it in the conver
 
 Backend, from `backend/`:
 
-| Command              | Purpose                                                   |
-| -------------------- | --------------------------------------------------------- |
-| `npm run start:dev`  | Nest in watch mode on :3000                               |
-| `npm run build`      | Compile to `dist/`. Doubles as the typecheck gate (`tsc`) |
-| `npm run lint`       | ESLint with `--fix`                                       |
-| `npm test`           | Jest unit tests (`*.spec.ts` under `src/`)                |
-| `npm run test:watch` | Same, in watch mode                                       |
-| `npm run test:e2e`   | Supertest e2e (`test/`, uses `test/jest-e2e.json`)        |
-| `npm run test:cov`   | Coverage                                                  |
+| Command                                        | Purpose                                                     |
+| ---------------------------------------------- | ----------------------------------------------------------- |
+| `npm run start:dev`                            | Nest in watch mode on :3000                                 |
+| `npm run build`                                | Compile to `dist/`. Doubles as the typecheck gate (`tsc`)   |
+| `npm run lint`                                 | ESLint with `--fix`                                         |
+| `npm test`                                     | Jest unit tests (`*.spec.ts` under `src/`)                  |
+| `npm run test:watch`                           | Same, in watch mode                                         |
+| `npm run test:e2e`                             | Supertest e2e (`test/`, uses `test/jest-e2e.json`)          |
+| `npm run test:cov`                             | Coverage                                                    |
+| `npm run db:generate`                          | drizzle-kit generate for both scopes; commit what it writes |
+| `npm run db:studio:central` / `db:studio:user` | Drizzle Studio over the local file                          |
 
 Frontend, from `frontend/`:
 
@@ -122,25 +134,138 @@ into `frontend/src/app/page.tsx`. Change a response shape and you must edit both
 intended fix is generating frontend types from an OpenAPI spec, but the backend does not
 expose one yet.
 
+**Global pipe and filter are DI providers, not `app.useGlobalPipes`.** `AppModule`
+registers `APP_PIPE` (a `ValidationPipe` with `whitelist`, `transform` and
+`forbidNonWhitelisted`) and `APP_FILTER` (`AllExceptionsFilter`). Doing it this way
+rather than in `main.ts` means the e2e suite, which boots `AppModule` directly, gets the
+same validation and the same error shape as production. Every failed request returns
+`{ statusCode, message, error, timestamp, path }`; unknown errors are logged in full
+server-side and reduced to a generic 500 outward.
+
+## Persistence
+
+**Drizzle ORM (v1 RC) over Turso's new engine, in two modes behind one seam.**
+
+- **Cloud mode**, when all four of `TURSO_ORG`, `TURSO_ORG_TOKEN`,
+  `TURSO_CENTRAL_DB_URL` and `TURSO_CENTRAL_DB_TOKEN` are set: `@tursodatabase/sync` with
+  the `drizzle-orm/tursodatabase-sync` driver. A local file kept in step with a Turso
+  Cloud database. The client has no timer of its own, so
+  `backend/src/database/turso-client.factory.ts` schedules `push()` then `pull()` every
+  `TURSO_SYNC_INTERVAL_S`.
+- **Local mode**, otherwise: `@tursodatabase/database` with
+  `drizzle-orm/tursodatabase/database`. A plain local file, nothing remote. CI, the e2e
+  suite and offline development all run here, which is why the backend still works with
+  no `.env` at all.
+
+Both are the same engine and the same SQLite dialect, so one schema and one migrations
+folder per scope serve both. `turso-client.factory.ts` and `UserDatabaseService` are the
+only two files that know which mode is active.
+
+**Every cloud database must use the Turso engine, never libSQL.** Turso Cloud still creates
+libSQL databases by default, but the local half of `@tursodatabase/sync` is a real Turso
+database, so the remote it replicates against has to be one as well. `TursoPlatformService`
+therefore sends `use_tursodb: true` on every create, and the central database has to be
+made with `turso db create ... --tursodb` by hand. Two things make this easy to get wrong:
+the field is **undocumented** in the public API reference (it comes from the CLI's own
+request struct, where `--tursodb` serializes as `use_tursodb`), and getting it wrong is
+**silent** - the API accepts the request and the app runs. Since the engine is fixed at
+creation, the only remedy is deleting the database and making a new one. Check with
+`turso db list`, whose `TYPE` column reads `Turso` rather than `SQLite`, or the `engine`
+field the Platform API returns. A dedicated test pins the flag in
+`turso-platform.service.spec.ts`.
+
+**Database per user.** A small **central** database (`users`: id, email, and a pointer to
+that person's database) exists because identity must resolve by email before the per-user
+database is known. Everything else about a person lives in **their own Turso database**,
+starting with a single-row `profile` table. Categories, transactions and insights arrive
+there later as ordinary migrations. In cloud mode the central database and every per-user
+one live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
+per-user ones itself at registration.
+
+**Tokens.** Creating databases and minting their tokens are control-plane operations that
+no data-plane token can perform, so `TURSO_ORG_TOKEN` is used in exactly one place
+(`TursoPlatformService`) at provisioning time. It does not have to be an organization-wide
+token: minting it scoped to the group with just `db:create`, `db:delete` and
+`db:mint-token` covers everything the service does. Each user database is then reached with
+its own minted data-plane token, stored in the central row and never serialized into an API
+response. By MVP decision every Turso token is created with **Expires: NEVER**: no refresh
+logic anywhere, rotation is a manual ops action.
+
+**Migrations are committed and applied programmatically**, in
+`backend/drizzle/central/` and `backend/drizzle/user/`. Note the v1 RC layout: one
+directory per migration containing `migration.sql`, named `<YYYYMMDDHHMMSS>_<slug>`, with
+no `meta/_journal.json`. The central database is migrated by the `APP_DB` async factory
+before Nest finishes booting; a user database is migrated on first open, so adding a
+migration upgrades every existing user the next time they are touched. There is no
+`db:migrate` script, because N user databases cannot be migrated from a CLI. Consequence
+for deployment: `drizzle/` is resolved from `process.cwd()`, so a future Dockerfile must
+`COPY` it next to `dist/`.
+
+**Conventions worth knowing before writing a table.** Primary keys are UUIDv7 text
+(`src/common/ids.ts`). Money is integer minor units in `*_cents` columns; the API speaks
+major units and the service converts. Instants are `integer` epoch-ms
+(`{ mode: 'timestamp_ms' }`) set app-side with `$defaultFn`/`$onUpdateFn`; calendar dates
+will be `text` `YYYY-MM-DD`. Every table carries a nullable `deleted_at` for future sync
+and reads filter it with `isNull(deletedAt)` - the tombstone is invisible through the API,
+which still deletes permanently as far as a client can tell.
+
+**Two things the test setup exists to work around.** `@tursodatabase/database`,
+`@tursodatabase/sync` and `uuid` are ESM-only. Node loads them fine, but Jest's CommonJS
+runtime cannot, and they cannot be transformed either (their napi loader uses
+`import.meta.url`). `backend/test/esm-environment.cjs` therefore injects a real Node
+`require`, and `test/esm-shims/` plus a `moduleNameMapper` entry in both jest configs
+route those three specifiers through it.
+
+**Keeping tests off the cloud takes two separate mechanisms, and both are load-bearing.**
+`test/setup-e2e.ts` points `DATABASE_DIR` at a temp directory and deletes every `TURSO_*`
+variable inherited from the shell. That alone is not enough: `ConfigModule` also reads
+`backend/.env` from disk and puts the deleted variables straight back, which pointed the
+whole e2e suite at live Turso Cloud and created real databases there. `AppModule` closes
+that hole with `ignoreEnvFile: process.env.NODE_ENV === 'test'` (Jest sets `NODE_ENV`
+itself). Remove either half and a developer with a filled-in `.env` runs the suite against
+production infrastructure.
+
 ## Environment variables
 
 Copy the templates, then fill in values. Both real files are gitignored.
 
-| App      | Template                | Real file             | Variables                                                                            |
-| -------- | ----------------------- | --------------------- | ------------------------------------------------------------------------------------ |
-| Backend  | `backend/.env.example`  | `backend/.env`        | `PORT` (default 3000), `FRONTEND_URL` (CORS origin, default `http://localhost:4200`) |
-| Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (default `http://localhost:3000`)                                      |
+| App      | Template                | Real file             | Variables                                       |
+| -------- | ----------------------- | --------------------- | ----------------------------------------------- |
+| Backend  | `backend/.env.example`  | `backend/.env`        | see the table below                             |
+| Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (default `http://localhost:3000`) |
+
+Backend variables:
+
+| Variable                 | Default                 | Purpose                                               |
+| ------------------------ | ----------------------- | ----------------------------------------------------- |
+| `PORT`                   | `3000`                  | API port                                              |
+| `FRONTEND_URL`           | `http://localhost:4200` | CORS origin                                           |
+| `DATABASE_DIR`           | `./databases`           | Local database files (gitignored)                     |
+| `TURSO_ORG`              | -                       | Organization slug. Cloud mode: set all four or none   |
+| `TURSO_ORG_TOKEN`        | -                       | Control-plane token; group-scoped is enough           |
+| `TURSO_CENTRAL_DB_URL`   | -                       | Central database URL                                  |
+| `TURSO_CENTRAL_DB_TOKEN` | -                       | Central database data-plane token                     |
+| `TURSO_GROUP_TOKEN`      | -                       | Break-glass CLI/Studio access; the app never reads it |
+| `TURSO_GROUP`            | `decode-pet`            | Group holding the central and all per-user databases  |
+| `TURSO_SYNC_INTERVAL_S`  | `60`                    | Cloud-mode push/pull interval                         |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`.
 
+The backend **does** validate its environment: `ConfigModule.forRoot` takes a
+`validationSchema` (Joi, `src/config/env.validation.ts`), so a typo fails at boot rather
+than at first use. The four cloud variables are tied together with `.and()`, making a
+half-filled `.env` an error instead of a silent fallback to local mode. drizzle-kit is the
+exception: it reads raw `process.env` and never passes through Joi, which is why the two
+`drizzle.*.config.ts` files repeat the `DATABASE_DIR` default themselves.
+
 **Never give a server-only secret a `NEXT_PUBLIC_` prefix.** `BACKEND_URL` deliberately
 has no prefix because it is read server-side only; a `NEXT_PUBLIC_` variable is inlined
 into the browser bundle and is therefore public forever.
 
-There is **no config validation**: `ConfigModule` is registered without a
-`validationSchema`, so a missing variable surfaces at first use rather than at boot.
+The four cloud variables are optional but paired: set all of them or none. Anything else
+fails at boot with a Joi message naming the missing one.
 
 ## What is in `.claude/`
 
@@ -153,16 +278,17 @@ description also matches plain requests, so "set me up locally" reaches `repo-de
 on its own. The short forms quoted inside the descriptions (`/dev-setup`, `/commit`) are
 matching phrases, not registered commands.
 
-| Skill             | What it does                                                                                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `repo-dev-setup`  | First-time local setup, both apps. Start here on a fresh clone                                                                                                     |
-| `repo-commit`     | Analyses changes, runs per-app lint/test, writes Conventional Commit messages, guards against committing to `main`                                                 |
-| `repo-secrets`    | Manages `.env` files from templates, explains where real secrets live                                                                                              |
-| `repo-jira`       | Creates/estimates/transitions Jira issues over MCP. Needs a Jira MCP server; see `.claude/skills/repo-jira/references/jira-access.md` for the two supported setups |
-| `repo-review-prs` | Fetches open PRs via `gh` and reviews unreviewed ones                                                                                                              |
-| `repo-stack`      | This repo's stacked-branch wiring: the layers of truth, the worktree trap, the conventions. CLI mechanics live in the committed official `gh-stack` skill          |
-| `backend-nestjs`  | Passive reference library, 12 NestJS rules across 7 categories. Consulted when writing backend code                                                                |
-| `frontend-nextjs` | Passive reference library, 16 Next.js/React rules. Consulted when writing frontend code                                                                            |
+| Skill             | What it does                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `repo-dev-setup`  | First-time local setup, both apps. Start here on a fresh clone                                                                                                           |
+| `repo-commit`     | Analyses changes, runs per-app lint/test, writes Conventional Commit messages, guards against committing to `main`                                                       |
+| `repo-secrets`    | Manages `.env` files from templates, explains where real secrets live                                                                                                    |
+| `repo-jira`       | Creates/estimates/transitions Jira issues over MCP. Needs a Jira MCP server; see `.claude/skills/repo-jira/references/jira-access.md` for the two supported setups       |
+| `repo-review-prs` | Fetches open PRs via `gh` and reviews unreviewed ones                                                                                                                    |
+| `repo-stack`      | This repo's stacked-branch wiring: the layers of truth, the worktree trap, the conventions. CLI mechanics live in the committed official `gh-stack` skill                |
+| `backend-nestjs`  | Passive reference library, 12 NestJS rules across 7 categories. Consulted when writing backend code                                                                      |
+| `frontend-nextjs` | Passive reference library, 16 Next.js/React rules. Consulted when writing frontend code                                                                                  |
+| `backend-drizzle` | How Drizzle and Turso are wired in **this** repo: the two migration scopes, the database-per-user consequences, the Turso drivers. Deliberately not a drizzle-kit manual |
 
 **Agents** (delegated subtasks with their own context): `code-reviewer`, `debugger`,
 `test-automator`, `nestjs-specialist` and `nextjs-specialist` (these two fetch and
@@ -184,6 +310,33 @@ the skill name, or it only lists what is available). It is committed so everyone
 byte-identical copy and a fresh clone works with no extra step; refreshing it is a
 deliberate act - re-run the install and commit the diff. The repo's own `repo-stack`
 skill covers only this repo's stacked-branch wiring and defers the CLI to it.
+
+**Drizzle ships its own skills, and they are committed.** `drizzle-kit` bundles eight agent
+skills (`drizzle`, `drizzle-generate`, `drizzle-migrations`, `drizzle-push`, `drizzle-pull`,
+`drizzle-hints`, `drizzle-output-modes`, `drizzle-responses-and-errors`). `npm run skills`
+at the repo root extracts them from the drizzle-kit in `backend/node_modules` into
+`.agents/skills/`, and symlinks `.claude/skills/drizzle*` at them.
+
+Both the files and the symlinks are committed, for the same reason `backend/drizzle/`
+migrations are: they are generated, but everyone must have byte-identical copies, and a
+fresh clone should work with no extra step. Only `skills-lock.json` is gitignored, because
+it records the absolute path of whoever ran the installer.
+
+**Refreshing them is a deliberate act, like regenerating migrations.** Bumping `drizzle-kit`
+does not update them; re-run `npm run skills` and commit the diff. You will be told when
+that is needed: the `drizzle` skill compares its own `metadata.revision` against
+`drizzle-kit skills version` from the _installed_ binary and prints a notice when the
+bundle is newer. That check is why committing them is safe - drift is surfaced rather than
+silent.
+
+Because those eight cover the CLI thoroughly, the repo's own `backend-drizzle` skill covers
+only this project's wiring and defers the rest to them.
+
+`drizzle-kit` also ships an **MCP server**, `node backend/node_modules/drizzle-kit/bin.cjs
+mcp`, exposing `generate`, `push`, `pull`, `check`, `export` and `up` as tools. It is in
+`.mcp.json.example`; copy that to `.mcp.json`, which is gitignored and therefore
+per-developer. Note that `push` applies schema changes directly to a database without
+writing a migration, which is the opposite of this repo's committed-migrations workflow.
 
 `.claude/commit-checks.md` is a generated cache read by `repo-commit`. Regenerate it
 with `/repo-commit refresh-checks` when it goes stale.
@@ -236,8 +389,13 @@ resolve correctly, which is why you should not try to lint one app from the othe
 **Backend tests are not run on commit.** The hook prints a reminder only, because they
 are slow. CI runs them on every PR, but run them locally before pushing backend changes.
 
-Prettier config is split: root and frontend use `printWidth: 100` with `singleQuote`;
-the backend has its own `backend/.prettierrc`.
+Prettier config is per app and there is **no root config at all**: the frontend sets
+`printWidth: 100` with `singleQuote` in its `package.json`, the backend has its own
+`backend/.prettierrc`. Anything outside those two directories - `CLAUDE.md`, `README.md`,
+`docs/`, `.claude/` - therefore gets Prettier's defaults, which means `printWidth: 80` and
+**double** quotes. Prose is unaffected because `proseWrap` defaults to `preserve`, but a
+fenced `ts` block in one of those files will be reformatted away from repo style. Keep
+short code samples in those files as inline spans, which Prettier leaves alone.
 
 ## CI
 
@@ -247,6 +405,15 @@ the backend has its own `backend/.prettierrc`.
 - **backend**: lint, build, unit tests, e2e
 - **frontend**: lint, unit tests, build
 - **conventions**: commitlint over the PR's commit range
+
+The backend job covers the persistence layer without any Turso credentials: `test-e2e`
+runs in local mode against files in a temp directory (see the note under Persistence), and
+`npm ci` resolving the `@tursodatabase/*` native bindings on `ubuntu-latest` is itself the
+check that those platform binaries are available there. Both are confirmed working.
+
+Actions are pinned to `actions/checkout@v7` and `actions/setup-node@v7`. Older majors run
+on Node 20, which GitHub has deprecated: the runner forces them onto a newer runtime and
+annotates every job until they are upgraded.
 
 A repo-wide `prettier --check` step exists but is **intentionally commented out**: 55
 files predate the Prettier config and the step would fail immediately on a fresh clone.
@@ -264,12 +431,17 @@ something that is not there.
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
 - **Generated API types.** No OpenAPI spec, so `HelloResponse` is hand-mirrored between
-  the two apps as described under Architecture.
-- **Config validation.** No `validationSchema` on `ConfigModule`.
+  the two apps as described under Architecture. Swagger is deliberately deferred to this
+  same work rather than added on its own.
 - **`frontend/src/components/`.** Does not exist. Create it with your first shared
   component.
-- **A database.** Nothing is wired up. Pick your own persistence layer; that choice is
-  deliberately left to you.
+- **Auth.** `POST /api/users` and `GET /api/users/:id` are unauthenticated proof-of-stack
+  endpoints that exercise the two-database write and read path. They appear nowhere in the
+  tech spec's API surface and are expected to be reshaped or replaced by the magic-link
+  flow when it lands.
+- **The rest of the data model.** Only `users` (central) and `profile` (per user) exist.
+  Categories, transactions and insights arrive with their features, and starter-category
+  seeding belongs to onboarding.
 
 `backend/README.md` is the stock NestJS starter README. Ignore it as a source of truth
 for this project.

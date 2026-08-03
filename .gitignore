@@ -20,9 +20,20 @@ Thumbs.db
 .env
 .env.local
 
+# Local database files (SQLite/Turso). The committed migrations under
+# backend/drizzle/ recreate them; nothing here is a source of truth.
+backend/databases/
+
 # Local / secret config — commit only the *.example variants
 .mcp.json
 .claude/settings.local.json
+
+# Bookkeeping written by `drizzle-kit skills`. The skills themselves ARE
+# committed, under .agents/skills/ with symlinks in .claude/skills/; only this
+# file is ignored, because it records the absolute path of whoever ran the
+# installer and so is meaningless on any other machine. It regenerates on every
+# run, so nothing is lost by ignoring it.
+skills-lock.json
 
 # Logs
 *.log
