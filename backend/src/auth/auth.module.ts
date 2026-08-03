@@ -7,7 +7,6 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { LoginTokenService } from './login-token.service';
-import { SessionGuard } from './session.guard';
 import { SessionService } from './session.service';
 import { VerificationService } from './verification.service';
 
@@ -64,9 +63,11 @@ export function trackByEmail(req: Record<string, unknown>): string {
  * skips per route - and because the limits are exposed as configuration so the
  * e2e suite can trip them without waiting out a fifteen-minute window.
  *
- * `SessionService` and `SessionGuard` are exported so a future feature module
- * only has to import AuthModule to protect its routes. `DatabaseModule` is
- * @Global, so nothing here imports it for `APP_DB` or `UserDatabaseService`.
+ * `SessionService` is exported because AppModule's `APP_GUARD` registration of
+ * `SessionGuard` resolves it from here. The guard itself is deliberately not a
+ * provider of this module: it is global now, so a feature module protects its
+ * routes by doing nothing at all. `DatabaseModule` is @Global, so nothing here
+ * imports it for `APP_DB` or `UserDatabaseService`.
  */
 @Module({
   imports: [
@@ -113,9 +114,8 @@ export function trackByEmail(req: Record<string, unknown>): string {
     AuthService,
     LoginTokenService,
     SessionService,
-    SessionGuard,
     VerificationService,
   ],
-  exports: [SessionService, SessionGuard],
+  exports: [SessionService],
 })
 export class AuthModule {}
