@@ -217,6 +217,17 @@ case. So this needs a designer answer alongside PET-45's read, not only the valu
 The same two functions also hard-code the `en-US` locale, matching `formatCurrency`. When
 onboarding's chosen currency is finally threaded through, the locale should follow it.
 
+**They also read the server's timezone, not the reader's.** The pages call `new Date()` in a
+Server Component, so on the first or last day of a month a server in UTC and a user in UTC-5
+disagree about which month it is, and the overline names the wrong one for that user. There is
+nowhere to fix it today: no user timezone is stored, and the design has no field for one, which
+is why this sits here with the two above rather than in a code comment. The three are one
+change when somebody makes it, since all three want the same missing profile data.
+
+Note the tests are not exposed to this. `format.test.ts` builds every fixture with the
+local-time `Date` constructor rather than an ISO string, and says why: `new Date('2025-10-08')`
+parses as UTC, so west of Greenwich a date on the 1st formats as the month before.
+
 ### Figma's page header is 2px shorter on two of the four screens
 
 Bottom padding is 20px on 04 Dashboard and 14 AI Insights, and 18px on 06 Transactions and 17

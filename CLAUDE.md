@@ -649,8 +649,22 @@ the Tailwind compile harness was worse than one list covering both folders.
 reason.** `Sidebar` takes `active` as a prop so it can stay a Server Component, and an App
 Router layout cannot read the pathname on the server, so something has to call
 `usePathname()`. It matches by **prefix with a trailing-slash boundary**, so
-`/transactions/abc` keeps Transactions lit while `/settings-import` does not light Settings,
-and it falls back rather than throwing on no match: `active` has no "none" variant by design.
+`/transactions/abc` keeps Transactions lit while `/settings-import` does not light Settings.
+
+Two details of it are testability decisions rather than style, and both were review findings:
+
+- **`matchItem()` returns `SidebarItem | undefined` and the caller supplies the fallback.**
+  With `?? 'dashboard'` inside the function, `matchItem('/dashboard') === 'dashboard'` could
+  not fail - a completely broken lookup returns `'dashboard'` too - so the app's landing route
+  was the one case with no real coverage. The fallback now lives in `SidebarNav`, where a
+  separate test covers it.
+- **`SIDEBAR_HREFS` in `ui/Sidebar.tsx` is the single declaration of the four routes.** It is
+  exported for the same reason `SIDEBAR_ITEMS` is. Those hrefs previously existed as four
+  hand-written copies (the component, its test, `SidebarNav`, its test), each asserting itself
+  against itself, so none could notice a divergence. The fifth copy is the one code cannot
+  hold: the route directories on disk. `SidebarNav.test.tsx` therefore checks with `fs` that
+  every href has a `page.tsx` behind it, because renaming a folder is otherwise invisible to
+  the whole suite while the link 404s.
 
 **The header owns the overline, the title and a slot - nothing else.** Each route passes its
 own action, because all four differ: Dashboard a month select plus primary "Add transaction",
@@ -672,9 +686,21 @@ search filters a list that does not exist until PET-28. Neither is a `<select>`,
 
 **`export const dynamic = 'force-dynamic'` on the layout is load-bearing today.** The pages
 read `new Date()` for the overline; without it Next prerenders them and every screen shows
-whatever month the build ran in, a bug that only appears a month after deploying. `npm run
-build` is where to check: all four routes must print `ƒ`, not `○`. PET-52's `cookies()` read
-makes the segment dynamic on its own, at which point the line becomes redundant.
+whatever month the build ran in, a bug that only appears a month after deploying. PET-52's
+`cookies()` read makes the segment dynamic on its own, at which point the line becomes
+redundant and should be deleted rather than left as a claim about nothing.
+
+`(app)/layout.test.tsx` asserts both that export and that `requireSession()` is called, because
+the layout is three lines long and every one of them fails silently when deleted. The session
+call is the sharper of the two: it is a documented no-op today, so without the assertion the
+call site could be dropped with the suite green, and PET-52's deferral would quietly become an
+omission.
+
+**Two Jest traps come from the parentheses in `(app)`, and both report as something else.**
+`jest.mock('@/lib/session')` from inside that directory fails with `Cannot find module`, because
+Jest's resolver mishandles the parens when applying the `@/` alias mapping - a plain `import`
+through the same alias works, which is what makes it confusing. Use a relative specifier in
+`jest.mock` there. The same character broke the pre-commit hook; see Git workflow.
 
 **`/` is a bare `redirect('/dashboard')`.** No frame in the design corresponds to it: VER-4
 lands both a new and a returning account on the Dashboard, and a signed-out visitor belongs

@@ -344,6 +344,37 @@ Three, all found by running the thing rather than by rereading the plan.
   touched anything. The guard's header comment was widened to say it now covers `app/(app)/`
   too, rather than a fourth copy of the compile harness being added next to the shell.
 
+## Review findings, and what they changed
+
+Four findings came out of reviewing the PR, all about drift resistance rather than delivered
+behaviour, and all fixed on the branch. Each fix was mutation-tested: the mutation named below
+was applied, the new assertion confirmed failing, and the mutation reverted.
+
+- **Nothing tested `(app)/layout.tsx`.** Deleting either `export const dynamic` or
+  `await requireSession()` left the whole suite green. The second is the sharper one: it is a
+  no-op today, so the call site could have vanished and PET-52's deferral would have become an
+  omission. `layout.test.tsx` now pins both.
+- **`activeItem('/dashboard')` could not fail.** Step 3 of this plan asked for a "prefix-map",
+  and the obvious implementation put the `?? 'dashboard'` fallback inside the function - which
+  meant a completely broken lookup still returned `'dashboard'`, so the app's landing route was
+  the one case with no real coverage. Split into `matchItem()` returning `undefined` plus a
+  fallback at the call site, with the fallback covered separately.
+- **The four hrefs had become four hand-written copies.** Step 3 said to "keep the href-to-key
+  table in one array so it cannot drift from `Sidebar`'s `NAV_SECTIONS`", and one array per file
+  is exactly what that produced: the component, its test, `SidebarNav` and its test each held a
+  copy and each asserted its own against itself. `SIDEBAR_HREFS` is now exported from
+  `ui/Sidebar.tsx` as the single declaration. The copy code cannot hold is the route folders on
+  disk, so `SidebarNav.test.tsx` checks with `fs` that every href has a `page.tsx` behind it.
+- **The period reads the server's timezone**, so near a month boundary it can name the wrong
+  month for a user in another offset. Nowhere to fix it yet - no user timezone is stored -
+  so it joined `monthStartDay` and the hard-coded locale in `docs/TODO.md`. All three want the
+  same missing profile data and are one change when somebody makes it.
+
+One incidental find while writing the layout test: `jest.mock('@/lib/session')` fails from
+inside `(app)/` with `Cannot find module`, because Jest's resolver mishandles the parentheses
+when applying the alias mapping, though a plain `import` through the same alias is fine. That is
+the second thing the route group's name broke, after the pre-commit hook.
+
 ## Commits
 
 Branch `feat/PET-19-app-shell-and-page-header`, cut from `main` (PET-18 merged at `33a0281`).
