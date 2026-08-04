@@ -144,6 +144,29 @@ describe('parseDraft, the picked categories', () => {
     expect(parseDraft(raw).categories).toEqual(expected);
   });
 
+  it.each([
+    ['an empty slot', null],
+    ['unparseable json', 'not json'],
+    ['json that is not an object', '[]'],
+  ])('hands %s its own array rather than the shared default', (_label, raw) => {
+    // Every one of these takes an early return, and each used to return EMPTY_DRAFT
+    // itself. That was harmless while both fields were strings; `categories` is an
+    // array, so a caller doing the ordinary thing - `.sort()` or `.push()` while
+    // building the register body - would have mutated the module's own default and
+    // every later fallback would carry the leftovers. Asserted by identity, because
+    // an equality check passes either way.
+    const first = parseDraft(raw);
+    const second = parseDraft(raw);
+
+    expect(first.categories).not.toBe(EMPTY_DRAFT.categories);
+    expect(first.categories).not.toBe(second.categories);
+
+    first.categories.push('Groceries');
+
+    expect(EMPTY_DRAFT.categories).toEqual([]);
+    expect(second.categories).toEqual([]);
+  });
+
   it('keeps an empty selection empty rather than filling it in', () => {
     // The direction that matters for AC3. A4 enforces no minimum, so deselecting
     // every chip is a choice - and a default applied here would silently undo it

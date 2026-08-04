@@ -62,12 +62,33 @@ export type SetupDraft = {
   categories: StarterCategoryName[];
 };
 
-/** Nothing picked, no budget typed, and the one currency the design offers. */
+/**
+ * Nothing picked, no budget typed, and the one currency the design offers.
+ *
+ * The canonical shape, for tests and for anything that wants to name the default.
+ * **Do not return it from `parseDraft`** - use `emptyDraft()` below, and read its
+ * note for why the distinction is load-bearing now that a field is mutable.
+ */
 export const EMPTY_DRAFT: SetupDraft = {
   currency: DEFAULT_CURRENCY,
   budget: '',
   categories: [],
 };
+
+/**
+ * A fresh empty draft, never the shared one.
+ *
+ * `parseDraft` used to return `EMPTY_DRAFT` itself, which was harmless while every
+ * field was a string: two callers holding the same object could not affect each
+ * other. `categories` is an **array**, so they can. Handing out the shared instance
+ * means `draft.categories.sort()` or `.push()` - both ordinary things to write when
+ * building the register body - would mutate the module's own default, and every
+ * later draft that fell back to it would come back carrying somebody else's
+ * selection. Nothing does that today; the point is that nothing can.
+ */
+function emptyDraft(): SetupDraft {
+  return { ...EMPTY_DRAFT, categories: [] };
+}
 
 export function serializeDraft(draft: SetupDraft): string {
   return JSON.stringify(draft);
@@ -137,17 +158,17 @@ function readCategories(source: Record<string, unknown>): StarterCategoryName[] 
  * `readCategories` above records.
  */
 export function parseDraft(raw: string | null): SetupDraft {
-  if (raw === null) return EMPTY_DRAFT;
+  if (raw === null) return emptyDraft();
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return EMPTY_DRAFT;
+    return emptyDraft();
   }
 
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return EMPTY_DRAFT;
+    return emptyDraft();
   }
 
   const source = parsed as Record<string, unknown>;
