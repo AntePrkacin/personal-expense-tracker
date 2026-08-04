@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { envValidationSchema } from './env.validation';
 
 /**
@@ -32,6 +35,33 @@ interface ValidatedEnv {
 }
 
 describe('envValidationSchema', () => {
+  // The schema is the single source of truth for which variables exist. This
+  // derives the list from it rather than restating it, because a restated copy
+  // is exactly what went wrong: a skill claimed the backend read "exactly two"
+  // variables for days while it read eighteen.
+  it('is documented by .env.example, key for key', () => {
+    const template = readFileSync(
+      join(__dirname, '..', '..', '.env.example'),
+      'utf8',
+    );
+    // Commented-out entries count: the paired cloud and mail blocks ship
+    // commented on purpose, because .env.example is copied verbatim.
+    const templated = new Set(
+      [...template.matchAll(/^#?\s*([A-Z][A-Z0-9_]*)=/gm)].map((m) => m[1]),
+    );
+    // `describe()` is typed loosely, so narrow it rather than passing `any` on.
+    const description = envValidationSchema.describe() as {
+      keys?: Record<string, unknown>;
+    };
+    const declared = new Set(Object.keys(description.keys ?? {}));
+    // NODE_ENV is set by Nest and by Jest, never written into .env, so it is
+    // validated without being templated. It is the only such exception.
+    declared.delete('NODE_ENV');
+
+    expect([...declared].filter((k) => !templated.has(k))).toEqual([]);
+    expect([...templated].filter((k) => !declared.has(k))).toEqual([]);
+  });
+
   // Mirrors how ConfigModule calls Joi: process.env carries hundreds of
   // unrelated keys, so unknown ones must pass through.
   const validate = (env: Record<string, string>) => {
