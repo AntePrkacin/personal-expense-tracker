@@ -75,8 +75,24 @@ rather than `latest` precisely so a drift from CI cannot happen silently.
 
 **Implementation plans live in `docs/plans/`**, one Markdown file per plan, named
 `YYYY-MM-DD_PET-{number}_{slug}.md` (date the plan was written, the Jira ticket it
-serves, then a short slug), for example `2026-08-02_PET-13_login-links.md`. Save any
-plan worth keeping there under that pattern rather than leaving it in the conversation.
+serves, then a short slug), for example `2026-08-02_PET-13_login-links.md`. **Plan into
+that file, never only into the conversation.** Anything worth calling a plan is written
+there before implementation starts, so it is reviewed as a diff and the reasoning
+outlives the session that produced it.
+
+**Every plan enumerates the tasks it will carry out**, as an explicit checklist of the
+steps in the order they will be done, not just the design narrative that justifies them.
+That list is the plan's contract: it is what the todo list during implementation tracks
+(see Working conventions) and what tells a reviewer up front how much is coming.
+
+A finished plan then ships the same way every time, which is what makes the folder a
+history rather than a scratchpad: commit it **alone** (`docs: ...`, no scope), as the
+branch's first commit, push, and open a **draft** PR against its base with a real
+description - what the ticket is, a design summary linking the plan doc, and **that same
+task checklist copied into the PR body** so its state is readable on GitHub without
+opening the plan - assigned to its author (`--assignee @me`). The draft PR is what makes
+work in progress visible before there is any code to look at; tick the boxes there as
+commits land.
 
 ## Common commands
 
@@ -401,6 +417,15 @@ later as an ordinary migration. In cloud mode the central database and every per
 live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
 per-user ones itself, at **verification** rather than registration - see the access flow
 under Architecture.
+
+**The Turso CLI cannot address a per-user database, and fails silently at it.** `turso db
+shell` and `turso db destroy` resolve names against a local name cache in
+`~/.config/turso/settings.json`, not the API, so every `spendifico-user-<uuid>` database -
+created by the backend through the Platform API - is invisible to them: `db shell` says
+"database not found" and `db destroy` exits 0 having deleted nothing. `db show` and `db
+list` hit the API and work on the same name. Use the Turso MCP server (`plugin:turso`)
+instead, which has no cache; `docs/TODO.md` has the full write-up and the cache-expiry
+workaround. The central database has a short CLI-created name, so the CLI is fine there.
 
 Central carries three deliberate exceptions to "email and a pointer". `login_links` is there
 because a link is consumed before we know - or, for an unverified account, before there
@@ -862,6 +887,61 @@ writing a migration, which is the opposite of this repo's committed-migrations w
 `.claude/commit-checks.md` is a generated cache read by `repo-commit`. Regenerate it
 with `/repo-commit refresh-checks` when it goes stale.
 
+## Working conventions
+
+How work is carried out here, as distinct from what the code does. Each of these was
+learned by getting it wrong once.
+
+**Larger tasks run as a visible todo list.** Anything past a one-step change is laid out
+as steps before it starts, and the list is updated as each one lands, so where the work
+currently stands is readable without asking. When the task came from a plan in
+`docs/plans/`, the todo list is that plan's checklist rather than a fresh invention.
+Working silently and presenting everything at the end hides the one window where a wrong
+assumption is still cheap to correct.
+
+**Show the work, then ask, before committing.** `.claude/settings.json` deliberately
+leaves `Edit` and `Write` un-approved so every file change is seen as a diff before it
+lands, and committing holds to the same bargain: summarize what changed, run the gates,
+then wait for approval. An approved plan authorizes a commit's _content_, not the moment
+of committing, and pushing needs its own approval on top of that. Where a commit split is
+not obvious, offer the options rather than picking silently - and see Git workflow for
+which way to lean.
+
+**Explain a state-changing command before running it.** Anything touching system state or
+starting a long-lived background process gets described in plain text first - what it
+does, why, what it affects - so the permission prompt arrives after the explanation
+rather than instead of it. Ordinary repo-local reads, builds and tests need no ceremony.
+
+**A search that is evidence of an absence has to reach dotfiles.** Use whatever search
+tool you like - this is about one trap in the answer, not about the tool. When the point
+of a sweep is that something is gone (a rename, a secret audit, "is this string anywhere"),
+the result is only as trustworthy as its coverage, and an under-reporting sweep is
+indistinguishable from a clean one. During the Expensa to Spendifico rename a plain
+`rg -in expensa` reported nothing under `backend/` while `backend/.env.example` carried
+four hits, in the one file a fresh clone copies verbatim - ripgrep skips dotfiles and
+dot-directories unless told otherwise, so the sweep form is
+`rg -in --hidden PAT -g '!node_modules' -g '!.git/**' -g '!.env'`: exclude `.git/**` or it
+walks every packed object, and `.env` so real secrets are not read back into the
+transcript. `grep -r` traverses dotfiles by default and needs the exclusions instead.
+Either way, say which flags a sweep used when reporting that something is absent.
+
+**Keep personal data out of the repo.** No real names or personal email addresses in
+source, tests, fixtures, docs, commit messages or example payloads. This is a
+public-facing teaching boilerplate, so anything committed is effectively published.
+Fixture data uses the tech spec's own persona, Marko Kovač / `marko@email.com`, which is
+already the convention everywhere; anything needing a genuinely deliverable address uses
+`spendifico@gmail.com` (see Environment variables). Note that git commit author metadata
+carries a real name and address on every commit by default - a separate, pre-existing
+exposure worth raising rather than quietly rewriting history over.
+
+**A ticket's acceptance criteria are amendable.** When an AC conflicts with a repo
+convention or a sounder design, weigh the engineering trade-off and recommend the better
+option, saying plainly that the ticket can be changed; "the ticket says so" settles
+nothing by itself, because whoever owns the ticket can amend it. That is how
+`transactions` came to tombstone: PET-27's AC said no soft-delete record, and the
+offline-sync roadmap outranked it. Anything touching that roadmap deserves the same
+treatment, since database-per-user exists for it.
+
 ## Git workflow
 
 **HARD RULE: never commit or push directly to `main`.** Branch first. `settings.json`
@@ -871,16 +951,34 @@ than just an instruction.
 Branch format: `{type}/PET-{number}-{slug}`, for example
 `feat/PET-160-user-profile-card`.
 
-**Branches are stacked, and never manually rebased.** This repo uses GitHub's stacked
-branches feature routinely: a feature branch is often cut from an unmerged parent branch
-rather than from `main` (`feat/PET-14-link-verification-and-sessions` on top of
+**Verify the branch in the same breath as the commit.** The branch checked out earlier in
+a session is a snapshot, not a guarantee: on 2026-08-04 a commit meant for
+`feat/PET-45-profile-read` landed on local `main` because HEAD had moved during a
+plan-mode session, straight through the hard rule above. Read `git branch --show-current`
+immediately before `git commit`, and read the `[branch sha]` line the commit prints back.
+Recovery, if it happens anyway, is `git branch -f <feature> <sha>` and then
+`git reset --hard origin/main` with main checked out.
+
+**The first push of a branch is `git push -u origin <branch>`.** A bare
+`git push origin <branch>` leaves the local branch with no upstream, which costs
+`git status`, `git pull` and every later bare `git push` their reference point. Repair an
+already-pushed branch with `git branch --set-upstream-to=origin/<branch>`.
+
+**Stacked branches are not manually rebased. Ordinary branches are nobody's business but
+yours.** This repo uses GitHub's stacked branches feature routinely: a feature branch is
+often cut from an unmerged parent branch rather than from `main`
+(`feat/PET-14-link-verification-and-sessions` on top of
 `feat/PET-50-api-openapi-typegen`, for example), so the parent's PR merges first and
-GitHub retargets and restacks the child itself. Before proposing any rebase, retarget or
-merge, check what the branch actually sits on: `gh pr view <branch> --json baseRefName`
-names the PR's base, and a base other than `main` means a stacked branch. Do not suggest
-`git rebase --onto main` for one; open its PR against the parent and let GitHub do the
-restack. New work that depends on an unmerged branch is cut from that branch's tip, not
-from `main`.
+GitHub retargets and restacks the child itself. A manual `git rebase` there is redundant
+and rewrites history the stack tooling is tracking, so open the PR against the parent, let
+GitHub do the restack, and use `gh stack rebase`/`sync` when a restack really is needed.
+New work that depends on an unmerged branch is cut from that branch's tip, not from
+`main`.
+
+**That restriction is about stacks only**, and it is the reason to check before assuming:
+`gh pr view <branch> --json baseRefName` names the PR's base, and a base other than `main`
+means a stacked branch. A plain branch off `main` is normal git - rebase it, squash it,
+force-push it as you like.
 
 The tooling for it is the `gh stack` extension (`github/gh-stack`), installed per
 developer with `gh extension install github/gh-stack` - like the root `npm install`, a
@@ -897,6 +995,13 @@ branch checked out in another worktree, and this repo routinely parks stack bran
 `.claude/worktrees/*` - detach the other checkouts before a cascade rebase. The
 official `gh-stack` skill (committed at `.claude/skills/gh-stack/`) is the CLI manual;
 the repo's own `repo-stack` skill covers the wiring above.
+
+**Use the fewest commits that make sense, not one per task.** A plan's checklist is a list
+of tasks, not a list of commits: implementing six planned steps is free to land as one
+commit. Split only when a genuine reason exists - unrelated concerns in one working tree,
+or both apps changed for different reasons - which is the same test the `repo-commit`
+skill applies. The plan doc itself is the one standing exception, committed alone as the
+branch's first commit so the draft PR can exist before any code does.
 
 **Conventional Commits are enforced** by a `commit-msg` hook running commitlint. The
 allowed types are restricted (see `commitlint.config.js`): `build`, `chore`, `ci`,

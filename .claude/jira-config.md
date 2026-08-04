@@ -51,9 +51,22 @@ custom field - that is the company-managed mechanism and will be rejected here.
 
 ## Priority values
 
-This project rejects `Highest` and `Lowest`. Confirmed valid: `High` (id `2`) and `Medium`
-(id `3`), matching the four-level scheme in `references/standards.md` section 8: **Blocker,
-High, Medium, Low**. Map to those four names only.
+Four levels, all four in use: `1` Critical (top of the scale, blocker icon), `2` High, `3`
+Medium, `4` Low. That matches the scheme in `references/standards.md` section 8, whose
+**Blocker** is this project's Critical.
+
+**Write priority with the id object form only:** `{"priority": {"id": "2"}}`. Both
+`{"priority": "High"}` and `{"priority": {"name": "High"}}` fail on this site with
+`Specify the Priority (id or name) in the string format`, whatever the value - so a failed
+call proves nothing about whether that priority exists. This file previously claimed the
+project rejects `Highest` and `Lowest` and that only High and Medium are valid; that was a
+format error misread as a rejected value. Corrected 2026-08-04 (Critical was accepted on
+PET-50, and Low is in use on six issues).
+
+**Never infer "unset" from a missing key.** An explicit `fields` list on
+`searchJiraIssuesUsingJql` replaces the tool's default set rather than adding to it, so
+omitting `priority` there makes every issue read as null. Either omit `fields` entirely or
+include every field you intend to reason about.
 
 ## Notes
 
