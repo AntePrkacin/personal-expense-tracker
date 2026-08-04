@@ -265,12 +265,13 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Four of the six access screens.** Welcome at `/` and Setup step 1 at `/setup` exist (see
-  "The access screens" in `frontend/src/app/CLAUDE.md`). Setup step 2, Register, Log in and
-  Check your email are PET-10 to PET-12, so `/setup/categories` and `/login` **404 until they
-  land** - which means onboarding currently dead-ends at step 1's "Continue". The verify page
-  that consumes an emailed link is PET-52's, along with filling in `hasSession()` so `/` can
-  send a signed-in visitor to the Dashboard instead of showing everyone the pitch.
+- **Three of the six access screens.** Welcome at `/`, Setup step 1 at `/setup` and Setup step 2
+  at `/setup/categories` exist (see "The access screens" in `frontend/src/app/CLAUDE.md`).
+  Register, Log in and Check your email are PET-11 and PET-12, so `/setup/register` and `/login`
+  **404 until they land** - which means onboarding currently dead-ends at step 2's "Continue".
+  The verify page that consumes an emailed link is PET-52's, along with filling in
+  `hasSession()` so `/` can send a signed-in visitor to the Dashboard instead of showing
+  everyone the pitch.
 - **The `/api/chat` route handler.** No route handler exists, and the env template deliberately
   declares no model-provider key. Add whichever variable your provider needs when you build the
   route, server-side only and never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once
