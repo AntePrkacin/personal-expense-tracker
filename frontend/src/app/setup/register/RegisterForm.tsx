@@ -5,15 +5,10 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { isEmailValid } from '@/lib/email';
 import { ACCESS_ROUTES } from '@/lib/routes';
 
-import {
-  isBudgetValid,
-  isEmailValid,
-  isNameValid,
-  type SetupDraft,
-  toRegisterBody,
-} from '../draft';
+import { isBudgetValid, isNameValid, type SetupDraft, toRegisterBody } from '../draft';
 import { useSetupDraft } from '../SetupDraftProvider';
 import type { RegisterResult } from './actions';
 
@@ -129,13 +124,17 @@ export function RegisterForm({ register }: RegisterFormProps) {
       return;
     }
 
-    // Freeze what is on screen, then clear. Read the address off the body rather
-    // than the draft, because the body holds the trimmed value that was actually
-    // submitted. `pending` deliberately stays true: the account exists now, so the
-    // button must not offer a second registration while the next route loads.
+    // Nothing about the address travels here: the action stashed it in an httpOnly
+    // cookie, which is what keeps it out of the server's request log, and screen 24
+    // reads it back with `cookies()`. So this is a bare path.
+    //
+    // Freeze what is on screen before clearing. clearDraft re-renders this form
+    // synchronously while the push takes a moment, so the card would otherwise empty
+    // itself in front of the user. `pending` deliberately stays true too: the account
+    // exists now, so the button must not offer a second registration.
     setShown({ firstName: draft.firstName, lastName: draft.lastName, email: draft.email });
     clearDraft();
-    router.push(`${ACCESS_ROUTES.checkEmail}?email=${encodeURIComponent(body.email)}`);
+    router.push(ACCESS_ROUTES.checkEmail);
   }
 
   return (

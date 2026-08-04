@@ -234,9 +234,15 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
     });
   });
 
-  it('opens Check your email with the address it submitted', async () => {
-    // VER-1 interpolates the address into the body copy, and the draft is cleared by
-    // the time that screen renders, so the query string is how it travels.
+  it('opens Check your email on a clean path, carrying no address', async () => {
+    // VER-1 interpolates the address and the draft is cleared by the time that screen
+    // renders, so something has to carry it - but **not the URL**. PET-12 moved it into
+    // an httpOnly cookie the action sets, because Next's request log and any proxy in
+    // front of it record the full path including the query string, so an address here
+    // would be written into the server's logs on every registration.
+    //
+    // Asserted as an exact string rather than a prefix: a `?email=` that came back
+    // would satisfy `toContain('/check-email')` and defeat the whole point.
     const user = userEvent.setup();
     seed(FILLED);
     renderForm();
@@ -244,19 +250,22 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
     await user.click(finishButton());
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
-    expect(mockPush).toHaveBeenCalledWith('/check-email?email=marko%40email.com');
+    expect(mockPush).toHaveBeenCalledWith('/check-email');
   });
 
-  it('encodes an address that needs it', async () => {
+  it('carries no address for an address that would have needed encoding', async () => {
+    // This replaces an assertion about percent-encoding `marko+tag@email.com`, which
+    // had nothing left to test once the query string went away. What is worth keeping
+    // is the inverse: the address that most obviously *would* have shown up in a URL
+    // does not show up in one.
     const user = userEvent.setup();
     seed({ ...FILLED, email: 'marko+tag@email.com' });
     renderForm();
 
     await user.click(finishButton());
 
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith('/check-email?email=marko%2Btag%40email.com'),
-    );
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/check-email'));
+    expect(mockPush.mock.calls[0][0]).not.toContain('marko');
   });
 
   it('submits what was typed rather than what was seeded', async () => {

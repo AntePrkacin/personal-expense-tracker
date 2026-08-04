@@ -2,7 +2,6 @@ import {
   DEFAULT_CURRENCY,
   EMPTY_DRAFT,
   isBudgetValid,
-  isEmailValid,
   isNameValid,
   parseDraft,
   SETUP_DRAFT_KEY,
@@ -272,37 +271,8 @@ describe('isNameValid', () => {
   });
 });
 
-describe('isEmailValid', () => {
-  it.each([
-    'marko@email.com',
-    'marko.kovac@email.co.uk',
-    'marko+tag@email.com',
-    '  marko@email.com  ',
-  ])('accepts %s', (email) => {
-    expect(isEmailValid(email)).toBe(true);
-  });
-
-  it.each([
-    ['an untouched field', ''],
-    ['no at sign', 'marko.email.com'],
-    ['nothing before the at', '@email.com'],
-    ['nothing after the at', 'marko@'],
-    ['no dot in the domain', 'marko@email'],
-    ['two at signs', 'marko@@email.com'],
-    ['an inner space', 'marko kovac@email.com'],
-  ])('rejects %s', (_label, email) => {
-    expect(isEmailValid(email)).toBe(false);
-  });
-
-  it('is looser than the backend and that is the known gap', () => {
-    // A trailing dot is a valid-looking address this rule accepts and validator.js
-    // rejects, so it reaches the backend and comes back a 400 rendered as the
-    // form-level message. Pinned so the gap is a documented behaviour rather than a
-    // surprise: closing it means a validation dependency or a copy of validator.js's
-    // expression that rots silently.
-    expect(isEmailValid('marko@email.com.')).toBe(true);
-  });
-});
+// `isEmailValid`'s cases moved to src/lib/email.test.ts with the rule itself, when
+// PET-12 gave 23 Log in an email field outside `/setup`. They are unchanged there.
 
 describe('toRegisterBody', () => {
   const draft: SetupDraft = {

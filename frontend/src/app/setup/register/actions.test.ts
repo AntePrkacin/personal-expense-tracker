@@ -1,10 +1,24 @@
+import { setPendingEmail } from '../../../lib/pendingEmail';
 import type { components } from '@/types/api';
 
 import { registerAccount } from './actions';
 
-// The repo's first test of a backend call, so what it pins is the request shape as
-// much as the return value: this is the only place the URL, the method and the
-// serialized body are asserted at all.
+// What this action adds on top of lib/backend.ts: the cookie, and only on a success.
+// The request shape - the URL, the method, the serialized body, `cache: 'no-store'` -
+// moved to lib/backend.test.ts with the fetch itself, so it is asserted once for both
+// callers rather than twice.
+//
+// **The mock is not optional.** Without it every case below reaching the 202 path
+// throws "`cookies` was called outside a request scope", because there is no request
+// scope under Jest - which is how six of this suite's cases failed the moment the
+// action started stashing.
+//
+// A relative specifier, because `jest.mock` cannot resolve the `@/` alias from any
+// directory - see the note in frontend/src/app/CLAUDE.md. It intercepts the aliased
+// import inside actions.ts all the same, since Jest keys its registry on the resolved
+// path and SWC rewrote the alias at transform time. The accompanying import above
+// names the same relative specifier, which is the other half of that rule.
+jest.mock('../../../lib/pendingEmail', () => ({ setPendingEmail: jest.fn() }));
 
 const BODY: components['schemas']['RegisterDto'] = {
   firstName: 'Marko',
@@ -18,7 +32,7 @@ const BODY: components['schemas']['RegisterDto'] = {
 const originalFetch = global.fetch;
 const originalBackendUrl = process.env.BACKEND_URL;
 
-/** A response with only the one field the action reads. */
+/** A response with only the one field the helper reads. */
 function respondWith(status: number) {
   const fetchMock = jest.fn().mockResolvedValue({ status });
   global.fetch = fetchMock as unknown as typeof fetch;
@@ -26,6 +40,7 @@ function respondWith(status: number) {
 }
 
 beforeEach(() => {
+  jest.clearAllMocks();
   process.env.BACKEND_URL = 'http://backend.test';
 });
 
@@ -36,53 +51,20 @@ afterEach(() => {
 
 describe('registerAccount', () => {
   it('posts the body to the register endpoint', async () => {
+    // The path, which is this action's own and the one thing about the request it
+    // still chooses.
     const fetchMock = respondWith(202);
 
     await registerAccount(BODY);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith('http://backend.test/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(BODY),
-      cache: 'no-store',
-    });
-  });
-
-  it('reads BACKEND_URL rather than hard-coding a host', async () => {
-    // The variable is server-side only and has no NEXT_PUBLIC_ prefix, which is what
-    // keeps it out of the browser bundle. A literal here would work in dev and break
-    // everywhere else.
-    process.env.BACKEND_URL = 'https://api.example.test';
-    const fetchMock = respondWith(202);
-
-    await registerAccount(BODY);
-
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.test/api/auth/register');
-  });
-
-  it('never sends the request from the client, so cache is no-store', async () => {
-    // Not a caching micro-optimisation: a POST Next decided to cache would silently
-    // swallow a second registration attempt.
-    const fetchMock = respondWith(202);
-
-    await registerAccount(BODY);
-
-    expect(fetchMock.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
+    expect(fetchMock.mock.calls[0][0]).toBe('http://backend.test/api/auth/register');
   });
 
   it('reports success on 202', async () => {
     respondWith(202);
 
     expect(await registerAccount(BODY)).toEqual({ ok: true });
-  });
-
-  it.each([200, 201, 204, 302])('treats %s as a failure, not a near-miss', async (status) => {
-    // 202 is the documented success and the only one. Accepting any 2xx would let a
-    // backend change that stops accepting the request read as one that still does.
-    respondWith(status);
-
-    expect(await registerAccount(BODY)).toEqual({ ok: false, status });
   });
 
   it.each([
@@ -96,8 +78,6 @@ describe('registerAccount', () => {
   });
 
   it('reports a failure with no status when the backend is unreachable', async () => {
-    // The case a running-backend walkthrough never shows. Left to throw, this reaches
-    // the client as an opaque server-action digest with nothing the screen can use.
     const fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'));
     global.fetch = fetchMock as unknown as typeof fetch;
 
@@ -106,7 +86,7 @@ describe('registerAccount', () => {
 
   it('does not distinguish a duplicate address from a new one', async () => {
     // REG-6 and A35: the backend answers 202 with an empty body either way, so this
-    // function cannot tell them apart and must not try. Pinned so nobody adds a
+    // function cannot tell them apart and must not try. Pinned so nobody adds an
     // "already registered" branch that would leak whether an account exists.
     respondWith(202);
 
@@ -114,5 +94,50 @@ describe('registerAccount', () => {
     const second = await registerAccount(BODY);
 
     expect(first).toEqual(second);
+  });
+
+  describe('the address it hands to screen 24', () => {
+    it('stashes the submitted address on a success', async () => {
+      // The whole of PET-12's Option A from this side: nothing travels in the URL, so
+      // if this call is dropped screen 24 silently shows its no-address fallback while
+      // every other assertion here stays green.
+      respondWith(202);
+
+      await registerAccount(BODY);
+
+      expect(setPendingEmail).toHaveBeenCalledTimes(1);
+      expect(setPendingEmail).toHaveBeenCalledWith('marko@email.com');
+    });
+
+    it('takes the address off the body, which is already trimmed', async () => {
+      // `toRegisterBody` is the one place the three text fields are trimmed, so the
+      // body is the trimmed value and the draft is not. Stashing what was typed would
+      // put a padded address into screen 24's copy.
+      respondWith(202);
+
+      await registerAccount({ ...BODY, email: 'marko+tag@email.com' });
+
+      expect(setPendingEmail).toHaveBeenCalledWith('marko+tag@email.com');
+    });
+
+    it.each([400, 429, 500])('stashes nothing on %s', async (status) => {
+      // No account was created and no link was sent, and the form stays put and shows
+      // its failure line - so a stashed address would outlive a submission that never
+      // happened, and a later reload of /check-email would claim a link is waiting.
+      respondWith(status);
+
+      await registerAccount(BODY);
+
+      expect(setPendingEmail).not.toHaveBeenCalled();
+    });
+
+    it('stashes nothing when the backend is unreachable', async () => {
+      const fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'));
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      await registerAccount(BODY);
+
+      expect(setPendingEmail).not.toHaveBeenCalled();
+    });
   });
 });

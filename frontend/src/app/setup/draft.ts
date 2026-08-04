@@ -218,18 +218,11 @@ export function isNameValid(name: string): boolean {
   return name.trim() !== '';
 }
 
-/**
- * One `@`, a dot in the domain, no whitespace.
- *
- * Deliberately looser than `RegisterDto`'s `@IsEmail()`, which is validator.js and
- * is the authority. Matching it would mean either a validation dependency for one
- * field or a copy of its expression that rots silently, so the addresses this
- * accepts and the backend rejects land on the form-level message instead of the
- * inline one - which is the trade PET-11's plan records.
- */
-export function isEmailValid(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
+// `isEmailValid` used to sit here, beside the other two rules, and moved to
+// `lib/email.ts` when PET-12 gave 23 Log in an email field of its own. That screen
+// is deliberately outside `/setup` and holds no draft, so importing this module for
+// one regular expression would couple the returning-user flow to onboarding. The
+// two rules above stay, because both describe fields only onboarding collects.
 
 /**
  * The draft as the register request body (REG-4, A32).
