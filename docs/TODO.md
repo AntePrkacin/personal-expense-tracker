@@ -232,7 +232,12 @@ spanning 15 Aug to 14 Sep has no single month name, and the design draws no labe
 case. So this needs a designer answer alongside PET-45's read, not only the value.
 
 The same two functions also hard-code the `en-US` locale, matching `formatCurrency`. When
-onboarding's chosen currency is finally threaded through, the locale should follow it.
+onboarding's chosen currency is finally threaded through, the locale should follow it. PET-9
+added a third consumer of that decision: `formatAmountInput` hard-codes the comma as its group
+separator, and `Input variant="currency"` hard-codes the `$`. All of them move together or not
+at all, and the visible symptom today is that a European-formatted paste (`2.000,50`) reads as
+`2.00` in the budget field - pinned in `format.test.ts` rather than fixed, because fixing it
+means knowing the user's locale.
 
 **They also read the server's timezone, not the reader's.** The pages call `new Date()` in a
 Server Component, so on the first or last day of a month a server in UTC and a user in UTC-5
@@ -244,52 +249,6 @@ change when somebody makes it, since all three want the same missing profile dat
 Note the tests are not exposed to this. `format.test.ts` builds every fixture with the
 local-time `Date` constructor rather than an ISO string, and says why: `new Date('2025-10-08')`
 parses as UTC, so west of Greenwich a date on the 1st formats as the month before.
-
-### The onboarding route shape is PET-9's to settle
-
-PET-8 points "Get started" at `/setup`, which is deliberately correct under either reading:
-if the three setup steps share one route it _is_ that route, and if each gets its own it is
-step one's. `ACCESS_ROUTES` in `frontend/src/lib/routes.ts` is the single declaration, so
-whichever PET-9 picks, that string does not move.
-
-The trade-off, recorded so PET-9 decides with it in front of them rather than defaulting:
-
-**One route** holding all three steps as rendered screens is simplest. The draft (currency,
-budget, chips) lives in one client component's state and never crosses a route boundary, so
-"Back keeps my values" is free. The cost is that the **browser's** Back button exits
-onboarding entirely and discards everything typed - you cannot fix that inside the one-route
-design without pushing history entries by hand, which is reinventing routing badly.
-
-**Three routes** under a shared `'use client'` layout give step-by-step Back and preserve the
-draft anyway: App Router keeps a layout's state across navigation between its own children,
-so `/setup` to `/setup/categories` does not lose it. A refresh is also less destructive, and
-a step is linkable for QA diffing against its Figma frame.
-
-What tips it is that all three tickets carry an explicit "Back keeps my values" acceptance
-criterion (PET-9 AC5, PET-10 AC4, PET-11 AC5), which says back-navigation is a first-class
-path through this flow rather than an edge case. A32 (nothing persisted server side until
-"Finish setup") holds either way.
-
-### Foundations declares no shadow tokens, and the access screens need two
-
-The Welcome panel's sample budget card and its two floating chips are the first shadows in
-the repo: `0px 24px 50px rgba(0,0,0,0.35)` and `0px 10px 24px rgba(0,0,0,0.25)`, written as
-arbitrary literals in `frontend/src/app/DecorativePanel.tsx` because `globals.css` has no
-`--shadow-*` namespace to reach for.
-
-Question for the designer or a Foundations ticket: do `--shadow-card` and `--shadow-chip`
-join the theme? This will recur immediately rather than eventually - frames 02, 03, 22, 23
-and 24 are all cards on a canvas, and the dashboard's own cards almost certainly carry a
-shadow too, so PET-9 hits it next.
-
-**Two notes for whoever adds the tokens.** The literals are deliberately absent from
-`components/ui/utilities.test.ts`, on the same reasoning that excludes `w-[520px]`: they
-compile without a token lookup, so no token change can break them. But there is a second
-reason worth knowing before adding them - that file's `selector()` escapes only `.`, `:`,
-`/`, `[` and `]`, while Tailwind writes these as
-`.shadow-\[0px_10px_24px_0px_rgba\(0\,0\,0\,0\.25\)\]`, so a shadow candidate reports
-"generates no CSS" for a class that generates perfectly. The fix is one character class:
-`[.:/[\]().,#]`. The same gap applies to any `bg-[#abc123]`-style raw colour.
 
 ### The Welcome panel's circles are filled with an unbound hex
 
@@ -321,6 +280,13 @@ app shows cents at all - and the answer probably differs by context, since a tra
 $24.50 clearly needs them while a $2,000 budget clearly does not. Recorded now because it is
 cheap to note and annoying to rediscover mid-ticket.
 
+**PET-9 did not resolve this**, and it is worth being clear why, because it added a function
+that looks like it might have. `formatAmountInput` is the budget field as it is being typed
+into: it truncates rather than rounds, keeps a trailing `.` so a half-typed value survives, and
+emits no symbol at all. So the two still disagree - the field shows `2,000` while
+`formatCurrency(2000)` is `$2,000.00` - and the dashboard's budget card still needs the answer
+above.
+
 ### The frontend is desktop-only, and Welcome is the first genuinely public page
 
 There is not one responsive utility in `frontend/src` - no `sm:`, `md:` or `lg:` anywhere -
@@ -343,6 +309,69 @@ plausible reason for the two screens to be shorter exists.
 
 Cheap to confirm and cheap to change if the answer is no; recorded so nobody re-derives it
 from a screenshot.
+
+### The onboarding draft is per tab, and four things follow from that
+
+PET-9 holds the draft in sessionStorage under one key, read through `useSyncExternalStore`.
+Four consequences, none of them bugs, all of them things a reader would otherwise discover:
+
+A **new tab** at `/setup` starts empty, because sessionStorage is per tab. That is the point -
+a shared machine must not offer the next person a half-finished registration carrying somebody
+else's name and email - but it does mean "open in new tab" loses the draft.
+
+A **hard refresh keeps it**, which is more than PET-9 AC5 asks for and is a side effect rather
+than a designed behaviour. Nothing depends on it.
+
+The write is **best effort**: a `QuotaExceededError` or Safari's historical private-mode throw
+is swallowed, and the in-memory cache is updated before the write is attempted, so the field
+still shows what was typed. Persisting degrades; the form does not.
+
+**Nothing clears the draft.** Back must not, because AC5 forbids it, and no reset control is
+designed anywhere. So an abandoned onboarding shows stale values in that tab until it closes.
+PET-11 should clear it on a successful register, which is the only natural moment.
+
+### The budget field's caret has two rough edges, and jsdom cannot see either
+
+Both are pinned by tests in `frontend/src/lib/format.test.ts` so they are documented rather
+than rediscovered, and both need a deliberate keystroke sequence.
+
+Typing a leading `0` in front of an existing number drops the zero correctly but advances the
+caret past the first digit. And erasing the leading digit of `2,000` yields `0` rather than
+`000`, because the leading-zero collapse fires on the cleaned string - numerically right, and
+startling enough to read as "one backspace cleared the field". Backspacing a separator is the
+mildest of the three: the formatter reinstates it, so only the caret moves. The fix for all
+three is a separator-aware `keydown` handler, which was out of PET-9's scope.
+
+Sharper than any of them, for whoever changes this code: **the caret's final position is not
+observable under jsdom.** React saves and restores a selection around its own controlled-input
+commit, and `user-event` keeps its own cursor bookkeeping on top, so an assertion on
+`selectionStart` passes identically with the restore deleted from `BudgetForm` - which an
+earlier version of that test did. The suite therefore asserts that `setSelectionRange` was
+called with the computed offset, and the visible behaviour is a Storybook or manual check. A
+real browser test (Playwright, or Storybook's own test runner) is what would close this
+properly, and nothing in the repo runs one yet.
+
+### `/setup` is not gated on a session
+
+`/` sends a signed-in visitor to the Dashboard and the `(app)` shell gates itself, but `/setup`
+deliberately does neither. PET-9 had no session to read - both `lib/session.ts` seams are still
+stubs - and a third call site would have been a claim it could not test.
+
+So a signed-in user can reach onboarding by typed URL and re-run it. Harmless today, because
+nothing is persisted until step 3 and the account already exists; worth a decision when PET-52
+makes a session readable. The cheapest answer is the same `hasSession()` branch `app/page.tsx`
+already uses.
+
+### A29's inline error pattern is now live rather than illustrative
+
+`ui/Field`'s red-border-plus-one-line treatment shipped with PET-17 but nothing rendered it in
+a real flow - only `Input.stories.tsx`'s `WithError` story. PET-9's budget validation is the
+first live use, with the string `Enter an amount greater than 0.` taken verbatim from that
+story and from `Field`'s own doc comment rather than invented.
+
+That raises the priority of the designer sign-off A29 already owed. The pattern is now what
+users see, and every remaining form ticket (PET-10 through PET-12, Settings, the transaction
+forms) will copy it.
 
 ---
 
@@ -645,7 +674,11 @@ than discovered.
   title-prefix `RegExp`, returning nothing and registering the three `describe` blocks, so each
   suite shrinks to an import, a `MODULES` literal and one call. Lifting three existing suites
   was out of scope for the ticket that added the fourth; do it before a fifth section appears,
-  which PET-9 onward will not need but a future "Modals" section would.
+  which PET-9 onward will not need but a future "Modals" section would. Still four after PET-9,
+  as predicted: it added a module to `screens.stories.test.tsx` rather than a section. Whoever
+  lifts the helper should carry over two behaviours that copy has now had to document - it
+  applies no `decorators`, so anything a story needs must live in its `render`, and a screen
+  reaching `useRouter` needs `next/navigation` mocked in the suite.
 - **The `@/` alias does not work inside `jest.mock()`, and it is not the route group's
   parentheses.** `jest.mock('@/lib/session')` fails with "Cannot find module" from anywhere,
   which PET-8 reproduced from `src/app/` and `src/lib/` with no parentheses in the path. The
