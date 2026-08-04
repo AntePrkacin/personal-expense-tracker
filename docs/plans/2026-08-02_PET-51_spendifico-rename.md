@@ -232,11 +232,18 @@ describes the per-user naming, so the prefix appears there as prose.
    second run is the CI gate failing early.
 4. From `frontend/`: `npm test` and `npm run build`. `Sidebar.test.tsx` still pins the
    wordmark and still asserts no "Expensa" in the sidebar.
-5. `rg -in expensa -g '!node_modules'` and confirm every surviving hit is either in
-   `docs/plans/` or `docs/reviews/` (dated records), or is one of the deliberate Figma
-   references: the tech spec's caveat line, the retitled `docs/TODO.md` section, and the
-   three frontend comments pointing at it. Nothing under `backend/src/` should match at all.
-   This is the actual completeness check for a rename.
+5. `rg -in --hidden expensa -g '!node_modules' -g '!.git/**' -g '!.env'` and confirm every
+   surviving hit is either in `docs/plans/` or `docs/reviews/` (dated records), or is one of
+   the deliberate Figma references: the tech spec's caveat line, the retitled `docs/TODO.md`
+   section, and the three frontend comments pointing at it. Nothing under `backend/src/`
+   should match at all. This is the actual completeness check for a rename.
+
+   **`--hidden` is not optional.** Without it ripgrep skips dotfiles silently, which hides
+   `backend/.env.example` - the one file a fresh clone copies verbatim, and the only place
+   the hand-made resource names are documented outside README.md. The first run of this
+   ticket reported "zero hits under backend/" with that file carrying four. Exclude `.env`
+   rather than letting the hidden sweep read your real secrets back at you, and exclude
+   `.git/**` or the sweep walks every packed object.
 6. Cloud, and the part no test can show: run the resource steps above, then start the backend
    with the four `TURSO_*` variables filled in and confirm it opens and syncs the new central
    database under the new `spendifico-backend` client name. If the remote keys any per-client

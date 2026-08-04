@@ -49,9 +49,9 @@ export const users = sqliteTable(
     // it, so normalization is the DTO's job and this index is the backstop.
     email: text('email').notNull(),
 
-    // Turso database name, always `spendifico-user-<id>` - in local mode too, so a
-    // row provisioned offline stays valid after switching to cloud, and so the
-    // name is always derivable from the id alone.
+    // Turso database name, always `spendifico-user-<id>` - in local mode too,
+    // so a row provisioned offline stays valid after switching to cloud, and so
+    // the name is always derivable from the id alone.
     dbName: text('db_name').notNull(),
 
     // Cloud mode only, and NULL until the account is verified: registration

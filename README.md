@@ -474,6 +474,19 @@ data exists. Check an existing one with `turso db list`, whose `TYPE` column rea
 rather than `SQLite`. The backend passes the equivalent flag itself for every per-user
 database it creates, so this only applies to the central one you make by hand.
 
+**If your `.env` predates the Spendifico rename (PET-51), clear your local state first:**
+
+```bash
+rm -rf backend/databases
+```
+
+The rename replaced the central database and the per-user name prefix, so those files are
+synced replicas of a remote that no longer exists, pointed at by a URL that no longer
+resolves. Leaving them is the bad kind of wrong: nothing errors on startup, you simply have
+a local copy that can never reconcile with its remote. The directory is gitignored and
+rebuilt from the migrations, so deleting it costs nothing but your local dev account, which
+you re-create by registering again.
+
 ## Sending real email (optional)
 
 Access to the app is passwordless: you submit an email address and the backend sends a
