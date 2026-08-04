@@ -29,3 +29,19 @@ Symptom first. If something here sends you to another guide, the fix lives there
 | git still asks for a password on push | You answered "No" to the credential-helper prompt. Re-run `gh auth login` and answer Yes   |
 | Two accounts, wrong one is used       | `gh auth switch`                                                                           |
 
+## Deploying to Fly.io
+
+Fixes are in [Deployment](deployment.md); this table only maps the symptom.
+
+| Symptom                                                       | Cause                                                                                                                                              |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fly machine list` shows two machines                         | A deploy ran without `--ha=false`, which defaults to true. Two replica sets is a correctness failure, not a cost surprise. Destroy the spare        |
+| The shutdown log opens but never closes                       | The flush was cut off and writes are being lost on every restart. `kill_timeout` is too low, or you passed `--timeout` to `fly machine stop`        |
+| A migration error naming `drizzle/`, but the app booted fine  | `drizzle/` is missing from the image. It is resolved from `process.cwd()`, so it must sit beside `dist/`. Check `fly ssh console --command "ls /app/drizzle"` |
+| `EACCES` on `mkdir /data/databases` at boot                   | A non-root `USER` was added to the Dockerfile without a `chown`. Fly mounts volumes root-owned                                                      |
+| Every auth request 429s, from every caller                    | `TRUST_PROXY_HOPS` is 0 behind the proxy, so all callers share one bucket and the per-IP limit became global                                        |
+| The app crash-loops right after a `fly secrets unset`         | You unset half a validated pair. `MAILPACE_API_TOKEN` needs `MAIL_FROM`, and the four `TURSO_*` are all-or-none                                     |
+| The machine stays stopped after `fly machine stop`            | `auto_start_machines` is false on purpose, so traffic will not wake it. Run `fly machine start`                                                     |
+| `fly config show` errors with "no machines configured"        | It reads from a running machine, so it cannot work on an app that has never deployed                                                                |
+| The deployed API rejects the frontend's browser request        | `FRONTEND_URL` allows exactly one CORS origin, and no Vercel preview URL will ever match it                                                        |
+

@@ -391,6 +391,31 @@ That raises the priority of the designer sign-off A29 already owed. The pattern 
 users see, and every remaining form ticket (PET-10 through PET-12, Settings, the transaction
 forms) will copy it.
 
+### The Fly MCP server is declined; the flyctl workflow becomes a repo skill instead
+
+`flyctl` ships an experimental MCP server behind `fly mcp server --claude`, evaluated on
+2026-08-04 while PET-53 was being set up. Probed over stdio it identifies as `FlyMCP 🚀 0.4.77`
+and exposes 60 tools: `fly-apps-*`, `fly-machine-*` (19 of them), `fly-volumes-*`,
+`fly-secrets-*`, `fly-certs-*`, `fly-ips-*`, `fly-orgs-*`, `fly-platform-*`, plus `fly-status`
+and `fly-logs`.
+
+Declined, for three reasons. It has no `fly deploy` and no `fly launch` tool, so the deploy
+itself goes through `flyctl` in a shell either way, and `scale`, `config`, `proxy`, `ssh` and
+`mpg` are absent too. Sixty tool schemas would enter every request's context to buy only the
+reads that remain. And it flattens the permission surface: `fly-apps-destroy`,
+`fly-orgs-delete` and `fly-volumes-destroy` arrive as ordinary tool calls, whereas
+`Bash(flyctl status:*)` in `.claude/settings.json` can allowlist the safe reads on their own.
+
+This is the exact inverse of the Turso CLI entry under `## Operational`, and worth holding both
+in mind together: there the CLI is broken and the MCP server is the way through, here the CLI is
+complete and the MCP server is the partial one. "Is there an MCP server" is not the question;
+"which of the two is whole" is. Fly publishes no official skill either, and the `flyio-pack`
+results that surface in a search are third-party and unvetted.
+
+**Queued:** a repo skill wrapping `flyctl` via Bash, written once PET-53's deploy actually works
+and there is a real sequence to encode. Writing it earlier would invent the workflow rather than
+record it.
+
 ---
 
 - **A generated HTTP client is not decided.** Types are shared and that part is settled:
@@ -472,18 +497,16 @@ same single-instance reasoning as the throttler and the migration lock. If it ev
 the shape of the fix is a per-user in-process queue around provisioning, which is the
 `issueQueue` pattern `LoginTokenService` already uses.
 
-### The auth throttler is in-memory, and blind behind a proxy
+### The auth throttler is in-memory
 
 `@nestjs/throttler` uses its default in-memory storage, so the limit is **per backend
 instance**: two instances give an attacker twice the budget. Same single-instance
-assumption as the migration lock below.
+assumption as the migration lock below, and one more reason the deployment runs exactly one
+machine.
 
-Separately, the per-IP limiter (and the fallback key for bodies with no usable address)
-keys on `req.ip`, which behind a reverse proxy or load balancer is the proxy's address
-unless Express `trust proxy` is set. Every caller would then share one per-IP bucket, which
-throttles everybody at once and protects nobody in particular; the per-email limiter is
-unaffected either way. Set it when the deployment topology is known, not before - trusting
-the header without a proxy in front lets a client spoof its own key.
+The proxy half of this entry is resolved: `TRUST_PROXY_HOPS` now tells Express how many
+hops to trust, and the Fly deployment sets it. See `docs/guides/configuration.md` for the
+value and `backend/CLAUDE.md` for why it is a hop count rather than a boolean.
 
 ### Token rotation is manual
 
@@ -560,12 +583,6 @@ The `.notNull()` stays in the schemas so a future drizzle-kit that fixes the gen
 picks it up on the next diff. If that lands, expect a table-recreate migration for both
 scopes; review it rather than being surprised by it.
 
-### Deployment must ship `backend/drizzle/`
-
-Migration folders are resolved from `process.cwd()`, because `nest build` emits only
-JavaScript into `dist/` and leaves the SQL behind. Any future Dockerfile has to `COPY` the
-`drizzle/` directory next to `dist/`, or the app boots and fails to migrate.
-
 ### Changing an email address leaves three loose ends, all accepted
 
 `PATCH /api/profile` moves the login identifier, and PET-45 took three residuals knowingly
@@ -592,6 +609,24 @@ session quietly moving the login identifier is a notification to the previous ad
 there is none: the change answers 200 and only the new address ever hears about it. A39
 designs no logout and no security-alert mail, so adding one is a product decision before it
 is a code one.
+
+### Nothing verifies the `Dockerfile` or `fly.toml` after they were written
+
+This repo is otherwise strict about drift, with two CI jobs whose only purpose is failing on a
+stale generated artifact - yet CI never builds the image and never runs `fly config validate`,
+so both files can rot silently until the next manual deploy discovers it. A build step, or even
+just the validate, would match how the rest of the repo treats this class of problem. It belongs
+with the CI deploy job, PET-55, because that job has to build the image anyway.
+
+### The Swagger UI is public on the deployed API
+
+`SwaggerModule.setup` registers its routes on the HTTP adapter rather than as Nest controllers,
+so the global `SessionGuard` never sees them and `/api/docs` needs no bearer. That was harmless
+while the only reader was a developer on localhost; it is a deliberate exposure now that
+`https://spendifico-api.fly.dev/api/docs` answers 200 to anyone. It leaks no data, only the shape
+of the API, and it is genuinely useful to the frontend - but it should be a decision rather than
+something discovered. Gating it would mean serving the document behind a route that the guard does
+cover, or not serving it in production at all.
 
 ---
 

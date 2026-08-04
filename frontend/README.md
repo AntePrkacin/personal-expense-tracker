@@ -69,3 +69,8 @@ This is a multi-app repo, so Vercel must build only this folder:
 Every push to a connected branch then gets a preview deployment, and merges to the production
 branch promote automatically. The NestJS backend is **not** deployed to Vercel; it ships
 separately.
+
+`vercel.json` in this directory pins the function region to `lhr1` to match where the backend
+runs, because the default is Washington and would put a transatlantic round trip on every
+server-side fetch. [Deployment](../docs/guides/deployment.md) has the reasoning and the backend
+half.

@@ -39,12 +39,30 @@ test/                 Supertest e2e specs
 
 A new feature is a new folder under `src/` with its own module.
 
+`Dockerfile`, `.dockerignore` and `fly.toml` also live here, because this directory is the
+build context and the Fly app root.
+
+## Deploy on Fly.io
+
+Deployed as the Fly app `spendifico-api` in region `lhr`, on **one** machine with a volume
+mounted at `/data`. From this directory:
+
+```sh
+fly deploy --remote-only --ha=false
+```
+
+`--ha=false` is not optional: `fly deploy --ha` defaults to true, and a second machine would be
+a second replica set holding its own unpushed writes. The full runbook, including first-time
+setup and how to verify a deploy, is in [Deployment](../docs/guides/deployment.md); why one
+instance and why the long kill timeout is in [`CLAUDE.md`](CLAUDE.md).
+
 ## Guides
 
 - [Commands](../docs/guides/commands.md) - every script here, and what it is for
 - [Configuration](../docs/guides/configuration.md) - every environment variable
 - [Database](../docs/guides/database.md) - local files, schema changes, Turso Cloud
 - [Sending real email](../docs/guides/email.md) - MailPace setup and the smoke test
+- [Deployment](../docs/guides/deployment.md) - Fly.io, and the two Vercel settings
 - [Troubleshooting](../docs/guides/troubleshooting.md)
 
 Why it is built the way it is - why registration provisions no database, why login tokens are
