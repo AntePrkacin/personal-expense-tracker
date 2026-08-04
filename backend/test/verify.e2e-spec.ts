@@ -194,11 +194,17 @@ describe('Verification and sessions (e2e)', () => {
         monthStartDay: 15,
       });
 
-      // Canonical order and the real Figma colors, not the submission order.
+      // Sorted by name here, so this pins the set and the real Figma colors
+      // rather than the insert order - canonical order is the unit test's job.
+      // Uncategorized is seeded for everybody and offered to nobody, and its
+      // neutral is deliberately not from the eight-color category palette.
       expect(seeded.map((row) => [row.name, row.color])).toEqual([
         ['Groceries', '#57B368'],
         ['Transport', '#3F8EE6'],
+        ['Uncategorized', '#98A0AE'],
       ]);
+      expect(seeded.filter((row) => row.isFallback)).toHaveLength(1);
+      expect(seeded.find((row) => row.isFallback)?.name).toBe('Uncategorized');
 
       // Verified: the payload is gone, and in local mode the cloud pointer stays
       // null while dbName is untouched.
@@ -286,7 +292,9 @@ describe('Verification and sessions (e2e)', () => {
 
       const { profiles, categories: seeded } = await userRows(user.id);
       expect(profiles).toHaveLength(1);
-      expect(seeded).toHaveLength(2);
+      // The two picked chips plus the fallback, and a second verify re-seeds
+      // none of them.
+      expect(seeded).toHaveLength(3);
       expect((await liveUser(email)).onboardingPayload).toBeNull();
     });
 
@@ -321,7 +329,11 @@ describe('Verification and sessions (e2e)', () => {
 
       const { profiles, categories: seeded } = await userRows(user.id);
       expect(profiles).toHaveLength(1);
-      expect(seeded).toHaveLength(0);
+      // Picking nothing used to leave the table empty. It cannot now: deleting
+      // a category reassigns its transactions to the fallback, so every
+      // database gets one whether or not any chip was chosen.
+      expect(seeded.map((row) => row.name)).toEqual(['Uncategorized']);
+      expect(seeded[0].isFallback).toBe(true);
     });
 
     it('is exempt from the per-address limiter', async () => {

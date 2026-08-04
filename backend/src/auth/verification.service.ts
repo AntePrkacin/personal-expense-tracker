@@ -190,13 +190,15 @@ export class VerificationService {
   }
 
   /**
-   * Seeds the picked starter categories, unless this database already has some.
+   * Seeds the fallback category plus whichever starter categories were picked,
+   * unless this database already has some.
    *
    * "Any row exists" is a safe skip condition because the seed is a single
    * multi-row INSERT and therefore atomic: a previous attempt either wrote all
-   * of them or none. Selecting none is a valid choice (A4), which inserts
-   * nothing and leaves the table empty - so a retry re-runs a no-op rather than
-   * skipping anything real.
+   * of them or none. It got stronger when the fallback arrived - the seed now
+   * always writes at least that row, so an empty table unambiguously means the
+   * seed has not run, where it used to also be what picking no chips left
+   * behind (A4).
    */
   private async seedCategories(
     userDb: UserDatabase,

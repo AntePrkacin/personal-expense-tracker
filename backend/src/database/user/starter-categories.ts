@@ -46,19 +46,44 @@ export const STARTER_CATEGORY_NAMES: StarterCategoryName[] =
   STARTER_CATEGORIES.map((category) => category.name);
 
 /**
- * Creates the starter categories the user picked during onboarding, in the
- * canonical order above rather than the order they were submitted in.
+ * The fallback category, seeded for everybody and offered to nobody.
+ *
+ * Deliberately **not** in `STARTER_CATEGORIES`: that constant is the onboarding
+ * chip list, and this row must never appear there. It is also deliberately not
+ * the "Other" chip, which stays an ordinary category anyone can rename or
+ * delete - one row cannot be both a user's free choice and a system invariant,
+ * and A7 already records that "Other" sits on a contested seam in the designs.
+ *
+ * Its color is not from the eight-color category palette. `#98A0AE` is the
+ * design system's `--color-text-tertiary`, a neutral that reads as muted next to
+ * the saturated category colors and stays visible on both the white card and the
+ * canvas. Do not "fix" it to a palette color.
+ */
+export const FALLBACK_CATEGORY = {
+  name: 'Uncategorized',
+  color: '#98A0AE',
+} as const;
+
+/**
+ * Creates the fallback category plus whichever starter categories the user
+ * picked during onboarding, in the canonical order above rather than the order
+ * they were submitted in.
  *
  * Called from verification, not from registration: the user database does not
- * exist until the email owner clicks their link. Selecting none is a valid
- * choice (A4 enforces no minimum), and inserts nothing.
+ * exist until the email owner clicks their link.
+ *
+ * **The fallback is inserted whether or not anything was picked.** Selecting no
+ * chips is a valid choice (A4 enforces no minimum) and used to leave the table
+ * empty; it no longer can, because every database needs the reassignment target
+ * that deleting a category depends on. Note what that means for the caller's
+ * skip condition: after provisioning, `categories` is never empty.
  */
 export async function seedStarterCategories(
   userDb: UserDatabase,
   names: readonly string[],
 ): Promise<void> {
   const selected = new Set(names);
-  const rows = STARTER_CATEGORIES.filter((category) =>
+  const picked = STARTER_CATEGORIES.filter((category) =>
     selected.has(category.name),
   ).map((category) => ({
     id: newId(),
@@ -66,9 +91,15 @@ export async function seedStarterCategories(
     color: category.color,
   }));
 
-  if (rows.length === 0) {
-    return;
-  }
-
-  await userDb.insert(categories).values(rows);
+  // One INSERT, so the whole seed stays atomic and the caller's "any row exists"
+  // skip condition keeps meaning "a previous attempt finished".
+  await userDb.insert(categories).values([
+    {
+      id: newId(),
+      name: FALLBACK_CATEGORY.name,
+      color: FALLBACK_CATEGORY.color,
+      isFallback: true,
+    },
+    ...picked,
+  ]);
 }

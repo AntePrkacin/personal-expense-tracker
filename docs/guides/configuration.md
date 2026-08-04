@@ -19,6 +19,7 @@ Backend variables:
 | ------------------------ | ----------------------- | ----------------------------------------------------- |
 | `PORT`                   | `3000`                  | API port                                              |
 | `FRONTEND_URL`           | `http://localhost:4200` | CORS origin                                           |
+| `APP_TIMEZONE`           | `Europe/Zagreb`         | IANA zone the budgeting period resolves in            |
 | `DATABASE_DIR`           | `./databases`           | Local database files (gitignored)                     |
 | `TURSO_ORG`              | -                       | Organization slug. Cloud mode: set all four or none   |
 | `TURSO_ORG_TOKEN`        | -                       | Control-plane token; group-scoped is enough           |

@@ -1,4 +1,11 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 /**
  * Schema of a *per-user* database. Every user gets their own Turso database, so
@@ -47,40 +54,62 @@ export type NewProfileRow = typeof profile.$inferInsert;
 /**
  * Spending categories, one row per category per user.
  *
- * Only the table lands with the access flow, because onboarding has to seed the
- * starter set the moment a profile is created (see starter-categories.ts). CRUD,
- * per-category stats and the budget allocation summary belong to the categories
- * feature and are deliberately absent here.
+ * Exactly one row per database is the **fallback**, `is_fallback = 1`. It is
+ * seeded as `Uncategorized` at provisioning, its name cannot be changed and it
+ * cannot be deleted, because deleting any other category reassigns that
+ * category's transactions to it (PET-35, CED-9, A41).
  */
-export const categories = sqliteTable('categories', {
-  // Same primary-key caveat as everywhere else; see docs/TODO.md.
-  id: text('id').primaryKey().notNull(),
+export const categories = sqliteTable(
+  'categories',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
 
-  name: text('name').notNull(),
+    name: text('name').notNull(),
 
-  // Hex, `#RRGGBB`. Purely presentational, so it is not constrained here: the
-  // categories feature validates the format at its DTO.
-  color: text('color').notNull(),
+    // Hex, `#RRGGBB`. Purely presentational, so it is not constrained here: the
+    // categories feature validates the format at its DTO.
+    color: text('color').notNull(),
 
-  // Optional per-category spending cap, in minor units like every other money
-  // column. NULL means uncapped, which is not the same as a cap of zero.
-  monthlyCapCents: integer('monthly_cap_cents'),
+    // Optional per-category spending cap, in minor units like every other money
+    // column. NULL means uncapped, which is not the same as a cap of zero: the
+    // API accepts a category with no cap and rejects a cap of zero, and an
+    // uncapped category reports `status: "uncapped"` with no percentage.
+    monthlyCapCents: integer('monthly_cap_cents'),
 
-  // Optional icon name from the frontend's own set; the backend never resolves
-  // it to an asset.
-  icon: text('icon'),
+    // Optional icon name from the frontend's own set; the backend never resolves
+    // it to an asset.
+    icon: text('icon'),
 
-  note: text('note'),
+    note: text('note'),
 
-  createdAt: integer('created_at', { mode: 'timestamp_ms' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-    .notNull()
-    .$defaultFn(() => new Date())
-    .$onUpdateFn(() => new Date()),
-  deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
-});
+    // The undeletable reassignment target. A marker column rather than a match
+    // on `name = 'Uncategorized'`, because the name would be a reserved word
+    // POST has to block and it is circular anyway: refusing the rename requires
+    // already knowing the row is special. The partial unique index below is what
+    // enforces "at most one"; "at least one" is provisioning's job.
+    isFallback: integer('is_fallback', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object. Partial, so it
+  // constrains only the fallback row and leaves every ordinary category free.
+  (table) => [
+    uniqueIndex('categories_fallback_idx')
+      .on(table.isFallback)
+      .where(sql`${table.isFallback} = 1`),
+  ],
+);
 
 export type CategoryRow = typeof categories.$inferSelect;
 export type NewCategoryRow = typeof categories.$inferInsert;
