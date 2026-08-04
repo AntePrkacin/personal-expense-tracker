@@ -451,7 +451,10 @@ turso db tokens create spendifico-app                  # -> TURSO_CENTRAL_DB_TOK
 
 # -> TURSO_ORG_TOKEN. Scoped to the group and to the three things the backend
 # actually does, rather than a token that can do anything in your org.
-turso auth api-tokens mint spendifico-backend --group decode-pet \
+# --org is mandatory whenever --group is given; without it the CLI (v1.0.31)
+# refuses with "Error: --group requires --org" rather than assuming the current
+# org. Your slug is the one `turso org list` marks as current.
+turso auth api-tokens mint spendifico-backend --org <your-org-slug> --group decode-pet \
   --scope db:create --scope db:delete --scope db:mint-token
 ```
 
