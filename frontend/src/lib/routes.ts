@@ -56,7 +56,14 @@ export const ACCESS_ROUTES = {
    * three steps share the one layout that holds the draft.
    */
   setupRegister: '/setup/register',
-  /** 23 Log in (PET-12, WEL-3, A2). The only route into the returning-user flow. */
+  /**
+   * 23 Log in (PET-12, WEL-3, A2). The only route into the returning-user flow.
+   *
+   * LOG-5 designs exactly one way in, Welcome's "I already have an account", and
+   * screen 24 links here when it has no address left to resend to. Deliberately not
+   * gated on a session: a third call into `lib/session.ts`'s stubs would be a claim
+   * nothing can test, which is the same call `/setup` makes.
+   */
   login: '/login',
   /**
    * 24 Check your email (PET-12, REG-4, LOG-3). Where both entry points end.
@@ -65,8 +72,12 @@ export const ACCESS_ROUTES = {
    * in too, so it does not belong to onboarding and must not sit inside the draft
    * provider - by the time it renders, PET-11 has cleared the draft anyway.
    *
-   * The submitted address arrives as an `email` query parameter, which is what VER-1
-   * interpolates into the body copy. It 404s until PET-12 builds it.
+   * **Nothing about the address travels in this path**, and that is the point rather
+   * than an omission. PET-11 pushed `?email=<encoded>` here, which put a user's email
+   * address into Next's own request log and any proxy log upstream on every
+   * registration; PET-12 replaced it with a short-lived httpOnly cookie
+   * (`lib/pendingEmail.ts`) that this route reads with `cookies()`. So this key is the
+   * whole URL, and a caller appending anything to it is reintroducing that leak.
    */
   checkEmail: '/check-email',
 } as const;

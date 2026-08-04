@@ -10,6 +10,7 @@ import { SELECT_CONTROL } from './Select';
 import { NAV_ITEM_ICON, NAV_ITEM_LABEL, NAV_ITEM_SURFACE } from './Sidebar';
 import { TAG_TONES } from './Tag';
 // Outside this folder, like the shell's maps: see the note on coverage above.
+import { RESEND_MESSAGE } from '../../app/check-email/ResendLink';
 import { CHIP_LABEL, CHIP_SURFACE } from '../../app/setup/categories/CategoryChip';
 import { STEP_DOT, STEP_WIDTH } from '../../app/setup/SetupShell';
 
@@ -17,11 +18,12 @@ import { STEP_DOT, STEP_WIDTH } from '../../app/setup/SetupShell';
 // on actually generates CSS.
 //
 // It covers app/(app)/, the Welcome screen (app/WelcomeScreen.tsx,
-// app/DecorativePanel.tsx, components/LogoLockup.tsx) and app/setup/ as well as
-// this folder, despite living here. A parallel guard next to each would mean a
-// third and fourth copy of the compile harness below, and the note at the end of
-// this comment says to lift it into a helper before that happens - so until
-// somebody does, one list is better than four.
+// app/DecorativePanel.tsx, components/LogoLockup.tsx), components/AccessCard.tsx,
+// app/setup/, app/login/ and app/check-email/ as well as this folder, despite
+// living here. A parallel guard next to each would mean a third and fourth copy of
+// the compile harness below, and the note at the end of this comment says to lift
+// it into a helper before that happens - so until somebody does, one list is
+// better than four.
 //
 // The colocated *.test.tsx files assert that a component applies the *expected*
 // class. Only this file catches the other failure: a class that is spelled
@@ -105,6 +107,11 @@ const HARDCODED = [
   // chip carries the same width in both of its states. An arbitrary value by
   // necessity rather than by choice, which is why it sits with the two radii above.
   'border-[1.5px]',
+  // The access card's own border, hard-coded in components/AccessCard.tsx. It used
+  // to sit in STORY_CHROME below, which was already loose - a story chrome class is
+  // one only a decorator draws - and became wrong outright once a shared component
+  // carried it on all five access frames.
+  'border-border-default',
   // sizing and spacing, which share the --spacing namespace
   'size-1.5',
   'size-2.5',
@@ -251,6 +258,11 @@ const HARDCODED = [
   'items-baseline',
   'justify-center',
   'justify-between',
+  // Frame 24's footer, which is the one access card with a single control: node
+  // 134:1155 sits flush to the 440px content box's right edge, and `justify-between`
+  // would put a lone child at the start instead. Every other access footer has two
+  // children and takes `justify-between`.
+  'justify-end',
   'shrink-0',
   'flex-1',
   'truncate',
@@ -347,6 +359,15 @@ const STEP_WIDTH_CLASSES = Object.values(STEP_WIDTH).flatMap(split);
 const CHIP_CLASSES = [CHIP_SURFACE, CHIP_LABEL].flatMap((map) => Object.values(map).flatMap(split));
 
 /**
+ * Screen 24's resend outcome line, in the three tones it takes.
+ *
+ * Two of the three are the same string, because a failure and a throttled failure differ
+ * in what they say rather than in how they look - so this guards two distinct treatments
+ * across three keys, and the duplication is the point rather than an oversight.
+ */
+const RESEND_MESSAGE_CLASSES = Object.values(RESEND_MESSAGE).flatMap(split);
+
+/**
  * Classes used only by the stories, to frame a component against a card.
  *
  * Worth guarding for the same reason as the components: Storybook is where
@@ -357,7 +378,6 @@ const CHIP_CLASSES = [CHIP_SURFACE, CHIP_LABEL].flatMap((map) => Object.values(m
  * with no token lookup, so there is nothing about them a token change could break.
  */
 const STORY_CHROME = [
-  'border-border-default',
   'divide-border-subtle',
   'divide-y',
   'p-8',
@@ -376,7 +396,10 @@ const STORY_CHROME = [
 // `gap-3` used to live in STORY_CHROME. The sidebar's nav items hard-code it, so
 // it moved to HARDCODED above; it is still guarded either way. `bg-surface-card`,
 // `rounded-xl` and `gap-5` went the same way when the Welcome screen hard-coded all
-// three - the card, its radius, and the pitch block's stacking gap.
+// three - the card, its radius, and the pitch block's stacking gap. And
+// `border-border-default` followed them when components/AccessCard.tsx took over the
+// card box: three of the four classes on that one element were already in HARDCODED,
+// so its border being the outlier here was the anomaly.
 
 const EXPECTED = [
   ...Object.values(TAG_TONES).flatMap(({ pill, dot }) => [...pill.split(' '), dot]),
@@ -389,6 +412,7 @@ const EXPECTED = [
   ...STEP_DOT_CLASSES,
   ...STEP_WIDTH_CLASSES,
   ...CHIP_CLASSES,
+  ...RESEND_MESSAGE_CLASSES,
   ...HARDCODED,
   ...STORY_CHROME,
 ];

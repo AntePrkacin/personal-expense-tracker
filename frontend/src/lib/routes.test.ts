@@ -11,18 +11,33 @@ import { ACCESS_ROUTES } from './routes';
 // invisible to every other assertion in the suite - the link 404s with everything
 // green.
 //
-// What makes it writable is that some routes are built and some are not, so the
-// check has to *classify* rather than iterate. A blanket sweep over
-// Object.values(ACCESS_ROUTES) would fail on /login, and asserting that /login is
-// absent would be a test somebody has to delete the moment PET-12 lands.
+// It classifies rather than iterates, and **the structure stays even though PENDING is
+// now empty.** Every access route is built as of PET-12, so a blanket sweep over
+// Object.values(ACCESS_ROUTES) would pass today - and would then quietly accept the
+// next declared-but-unbuilt route, which is exactly the state /login and /check-email
+// were in for four tickets. Keeping both lists means adding a route still forces a
+// decision about which one it belongs in.
 
 type RouteKey = keyof typeof ACCESS_ROUTES;
 
-/** Routes with a page behind them today. */
-const BUILT = ['setup', 'setupCategories', 'setupRegister'] as const satisfies readonly RouteKey[];
+/** Routes with a page behind them today, which is now all of them. */
+const BUILT = [
+  'setup',
+  'setupCategories',
+  'setupRegister',
+  'login',
+  'checkEmail',
+] as const satisfies readonly RouteKey[];
 
-/** Routes declared for a screen nobody has built yet. */
-const PENDING = ['login', 'checkEmail'] as const satisfies readonly RouteKey[];
+/**
+ * Routes declared for a screen nobody has built yet.
+ *
+ * Empty, and deliberately kept: PET-10, PET-11 and PET-12 each *moved* a key out of
+ * here rather than deleting a test, and the next declared route needs somewhere to go.
+ * Note nothing iterates it - `it.each([])` is an error in Jest - so it appears only in
+ * the classification assertion below, which is where it does its work.
+ */
+const PENDING = [] as const satisfies readonly RouteKey[];
 
 /**
  * Every onboarding step after the first, derived rather than listed.
@@ -40,8 +55,8 @@ describe('ACCESS_ROUTES', () => {
     // The assertion that keeps the two lists honest. Adding a route to routes.ts
     // now fails here until somebody says which list it belongs in, so a new
     // route cannot quietly escape the page.tsx check below by not appearing in
-    // either. This is the case that makes PET-10 and PET-12 *move* a key rather
-    // than delete a test.
+    // either. This is the case that made PET-10, PET-11 and PET-12 each *move* a
+    // key rather than delete a test.
     expect([...BUILT, ...PENDING].sort()).toEqual(Object.keys(ACCESS_ROUTES).sort());
   });
 
