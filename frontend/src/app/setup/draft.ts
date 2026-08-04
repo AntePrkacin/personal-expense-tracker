@@ -1,4 +1,5 @@
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
+import type { components } from '@/types/api';
 
 import { STARTER_CATEGORIES, type StarterCategoryName } from './starterCategories';
 
@@ -60,6 +61,18 @@ export type SetupDraft = {
    * user who deselects everything has made a choice (CAT-4, AC3).
    */
   categories: StarterCategoryName[];
+  /**
+   * Screen 22's three fields (REG-2), held here rather than in the register form's
+   * own state.
+   *
+   * PET-11 AC5 sends the user back to step 2 and forward again, which unmounts the
+   * register route, so component state cannot survive it. Untrimmed, exactly as
+   * typed: trimming on read would fight a controlled input the moment somebody
+   * types a space between two words. `toRegisterBody` trims at the boundary.
+   */
+  firstName: string;
+  lastName: string;
+  email: string;
 };
 
 /**
@@ -73,6 +86,9 @@ export const EMPTY_DRAFT: SetupDraft = {
   currency: DEFAULT_CURRENCY,
   budget: '',
   categories: [],
+  firstName: '',
+  lastName: '',
+  email: '',
 };
 
 /**
@@ -176,6 +192,9 @@ export function parseDraft(raw: string | null): SetupDraft {
     currency: readString(source, 'currency', DEFAULT_CURRENCY),
     budget: formatAmountInput(readString(source, 'budget', '')),
     categories: readCategories(source),
+    firstName: readString(source, 'firstName', ''),
+    lastName: readString(source, 'lastName', ''),
+    email: readString(source, 'email', ''),
   };
 }
 
@@ -192,4 +211,46 @@ export function parseDraft(raw: string | null): SetupDraft {
  */
 export function isBudgetValid(budget: string): boolean {
   return parseAmountInput(budget) > 0;
+}
+
+/** Whether a name field is filled (REG-2), matching the DTO's `@IsNotEmpty()`. */
+export function isNameValid(name: string): boolean {
+  return name.trim() !== '';
+}
+
+/**
+ * One `@`, a dot in the domain, no whitespace.
+ *
+ * Deliberately looser than `RegisterDto`'s `@IsEmail()`, which is validator.js and
+ * is the authority. Matching it would mean either a validation dependency for one
+ * field or a copy of its expression that rots silently, so the addresses this
+ * accepts and the backend rejects land on the form-level message instead of the
+ * inline one - which is the trade PET-11's plan records.
+ */
+export function isEmailValid(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+/**
+ * The draft as the register request body (REG-4, A32).
+ *
+ * The one boundary where `budget` stops being a display string and becomes a
+ * number, and the one place the three text fields are trimmed.
+ *
+ * The email is **not** lowercased. `RegisterDto` carries
+ * `@Transform(normalizeEmail)`, so normalisation has an owner; doing it here too
+ * would be a second authority that can drift from it.
+ *
+ * `monthStartDay` is omitted rather than defaulted: onboarding never asks for it,
+ * and the backend applies its own default.
+ */
+export function toRegisterBody(draft: SetupDraft): components['schemas']['RegisterDto'] {
+  return {
+    firstName: draft.firstName.trim(),
+    lastName: draft.lastName.trim(),
+    email: draft.email.trim(),
+    currency: draft.currency,
+    monthlyBudget: parseAmountInput(draft.budget),
+    categories: draft.categories,
+  };
 }

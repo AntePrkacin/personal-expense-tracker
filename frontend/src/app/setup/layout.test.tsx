@@ -119,6 +119,9 @@ describe('patchDraft', () => {
       currency: 'EUR',
       budget: '2,000',
       categories: [],
+      firstName: '',
+      lastName: '',
+      email: '',
     });
   });
 
@@ -162,6 +165,80 @@ describe('patchDraft', () => {
       'Groceries',
       'Bills',
     ]);
+  });
+});
+
+describe('clearDraft', () => {
+  /** Exposes all three members, so a clear and a later patch can both be driven. */
+  function DraftClearer() {
+    const { draft, patchDraft, clearDraft } = useSetupDraft();
+    return (
+      <>
+        <p>
+          {draft.budget} / {draft.firstName}
+        </p>
+        <button onClick={() => patchDraft({ budget: '2,000', firstName: 'Marko' })}>fill</button>
+        <button onClick={() => patchDraft({ firstName: 'Marko' })}>set name</button>
+        <button onClick={clearDraft}>clear</button>
+      </>
+    );
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it('empties the slot and every field rendering from it', async () => {
+    // Step 3 calls this once, after a 202. Both halves matter: the storage write is
+    // what stops an abandoned registration outliving the flow, and the re-render is
+    // what a bare sessionStorage.removeItem at the call site would not have done.
+    const user = userEvent.setup();
+    render(
+      <SetupLayout>
+        <DraftClearer />
+      </SetupLayout>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'fill' }));
+    expect(screen.getByText('2,000 / Marko')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'clear' }));
+
+    expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
+    expect(screen.getByText('/')).toBeInTheDocument();
+  });
+
+  it('leaves a later patch starting from empty rather than from a stale snapshot', async () => {
+    // The cache-invalidation half, and the reason clearDraft cannot live outside the
+    // provider. Clear the key without updating `cache.current` and getSnapshot keeps
+    // answering the old JSON, so this patch would merge onto the cleared budget and
+    // bring it back.
+    const user = userEvent.setup();
+    render(
+      <SetupLayout>
+        <DraftClearer />
+      </SetupLayout>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'fill' }));
+    await user.click(screen.getByRole('button', { name: 'clear' }));
+    await user.click(screen.getByRole('button', { name: 'set name' }));
+
+    expect(screen.getByText('/ Marko')).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(SETUP_DRAFT_KEY)!).budget).toBe('');
+  });
+
+  it('is safe on an already-empty slot', async () => {
+    const user = userEvent.setup();
+    render(
+      <SetupLayout>
+        <DraftClearer />
+      </SetupLayout>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'clear' }));
+
+    expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
   });
 });
 

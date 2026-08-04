@@ -59,6 +59,15 @@ type SetupDraftValue = {
   draft: SetupDraft;
   /** Merges a partial change, or the result of an updater. Never replaces the whole draft. */
   patchDraft: (patch: DraftPatch) => void;
+  /**
+   * Discards the whole draft. Step 3 calls it once, after a successful register.
+   *
+   * It has to live here rather than as a `sessionStorage.removeItem` at the call
+   * site, for the reason `getSnapshot` records: the cache is only invalidated by a
+   * write through this provider, so clearing the key from outside would empty
+   * storage while every field kept rendering the old values.
+   */
+  clearDraft: () => void;
 };
 
 const SetupDraftContext = createContext<SetupDraftValue | null>(null);
@@ -112,10 +121,10 @@ export function SetupDraftProvider({ children }: { children: React.ReactNode }) 
   // Cached, so repeated calls in one render return the identical string. React
   // compares snapshots by identity and would otherwise re-render without end.
   //
-  // The cache is only invalidated by patchDraft, so it goes stale if anything else
-  // clears the key mid-session. Nothing does - this provider is the sole writer,
-  // and sessionStorage fires no event for same-tab writes anyway, which is why
-  // subscribe has no storage listener to attach.
+  // The cache is only invalidated by patchDraft and clearDraft, so it goes stale if
+  // anything else touches the key mid-session. Nothing does - this provider is the
+  // sole writer, and sessionStorage fires no event for same-tab writes anyway,
+  // which is why subscribe has no storage listener to attach.
   const getSnapshot = useCallback(() => {
     cache.current ??= { raw: readStoredDraft() };
     return cache.current.raw;
@@ -126,6 +135,13 @@ export function SetupDraftProvider({ children }: { children: React.ReactNode }) 
   const raw = useSyncExternalStore(subscribe, getSnapshot, () => null);
 
   const draft = useMemo(() => parseDraft(raw), [raw]);
+
+  // Nullable because the Set is created by the first subscribe. In practice
+  // useSyncExternalStore has always subscribed by the time a user event can fire,
+  // so this coalesce is for the type rather than for a real path.
+  const notify = useCallback(() => {
+    for (const listener of listeners.current ?? []) listener();
+  }, []);
 
   const patchDraft = useCallback(
     (patch: DraftPatch) => {
@@ -147,15 +163,23 @@ export function SetupDraftProvider({ children }: { children: React.ReactNode }) 
         // Best effort. AC5 is what suffers, and only for this tab.
       }
 
-      // Nullable because the Set is created by the first subscribe. In practice
-      // useSyncExternalStore has always subscribed by the time a user event can
-      // fire, so this coalesce is for the type rather than for a real path.
-      for (const listener of listeners.current ?? []) listener();
+      notify();
     },
-    [getSnapshot],
+    [getSnapshot, notify],
   );
 
-  const value = useMemo(() => ({ draft, patchDraft }), [draft, patchDraft]);
+  // Same cache-before-write order as patchDraft, and for the same reason.
+  const clearDraft = useCallback(() => {
+    cache.current = { raw: null };
+    try {
+      sessionStorage.removeItem(SETUP_DRAFT_KEY);
+    } catch {
+      // Best effort, exactly as the write is.
+    }
+    notify();
+  }, [notify]);
+
+  const value = useMemo(() => ({ draft, patchDraft, clearDraft }), [draft, patchDraft, clearDraft]);
 
   return <SetupDraftContext.Provider value={value}>{children}</SetupDraftContext.Provider>;
 }

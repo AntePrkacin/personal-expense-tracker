@@ -305,6 +305,9 @@ describe('AC4: Back keeps both steps values', () => {
       currency: 'USD',
       budget: '1,500.25',
       categories: ['Shopping'],
+      firstName: '',
+      lastName: '',
+      email: '',
     });
   });
 

@@ -2,14 +2,27 @@ import {
   DEFAULT_CURRENCY,
   EMPTY_DRAFT,
   isBudgetValid,
+  isEmailValid,
+  isNameValid,
   parseDraft,
   SETUP_DRAFT_KEY,
   serializeDraft,
   type SetupDraft,
+  toRegisterBody,
 } from './draft';
 
 // No jsdom is needed here, which is the point of keeping draft.ts free of React:
 // every assertion below is over plain data.
+
+/**
+ * An expected draft, spelled out only where it differs from empty.
+ *
+ * Six fields now, and most of these cases are about one of them, so the literal
+ * would be four lines of noise per assertion.
+ */
+function expected(partial: Partial<SetupDraft>): SetupDraft {
+  return { ...EMPTY_DRAFT, categories: [], ...partial };
+}
 
 describe('SETUP_DRAFT_KEY', () => {
   it('is the namespaced key, pinned as a literal', () => {
@@ -30,14 +43,28 @@ describe('EMPTY_DRAFT', () => {
     // that mock illustrates the selected state, and the product decision is that
     // the user picks. Pinned here rather than in the screen, because this is where
     // a default would have to live for step 3 to submit what step 2 displayed.
-    expect(EMPTY_DRAFT).toEqual({ currency: 'USD', budget: '', categories: [] });
+    expect(EMPTY_DRAFT).toEqual({
+      currency: 'USD',
+      budget: '',
+      categories: [],
+      firstName: '',
+      lastName: '',
+      email: '',
+    });
     expect(DEFAULT_CURRENCY).toBe('USD');
   });
 
-  it('carries exactly the three fields onboarding collects before an account exists', () => {
-    // A fourth field would be data nothing submits: RegisterDto takes these three
-    // plus the two names and the email step 3 asks for.
-    expect(Object.keys(EMPTY_DRAFT).sort()).toEqual(['budget', 'categories', 'currency']);
+  it('carries exactly the six fields onboarding collects before an account exists', () => {
+    // A seventh field would be data nothing submits. These six are the whole of
+    // RegisterDto bar monthStartDay, which onboarding never asks for.
+    expect(Object.keys(EMPTY_DRAFT).sort()).toEqual([
+      'budget',
+      'categories',
+      'currency',
+      'email',
+      'firstName',
+      'lastName',
+    ]);
   });
 });
 
@@ -47,6 +74,9 @@ describe('parseDraft', () => {
       currency: 'USD',
       budget: '2,000',
       categories: ['Groceries', 'Transport'],
+      firstName: 'Marko',
+      lastName: 'Kovač',
+      email: 'marko@email.com',
     };
     expect(parseDraft(serializeDraft(draft))).toEqual(draft);
   });
@@ -76,11 +106,9 @@ describe('parseDraft', () => {
 
   it('falls back per field rather than discarding the whole draft', () => {
     // A budget worth keeping is kept even though the currency is unusable.
-    expect(parseDraft('{"currency":null,"budget":"2,000"}')).toEqual({
-      currency: DEFAULT_CURRENCY,
-      budget: '2,000',
-      categories: [],
-    });
+    expect(parseDraft('{"currency":null,"budget":"2,000"}')).toEqual(
+      expected({ currency: DEFAULT_CURRENCY, budget: '2,000' }),
+    );
   });
 
   it.each([
@@ -112,11 +140,29 @@ describe('parseDraft', () => {
     // Forward compatibility, and it cut both ways: a payload written before
     // `categories` existed still loads, and one written by a later version that
     // adds a fourth field does not break this one.
-    expect(parseDraft('{"currency":"USD","budget":"2,000","monthStartDay":5}')).toEqual({
-      currency: 'USD',
-      budget: '2,000',
-      categories: [],
-    });
+    expect(parseDraft('{"currency":"USD","budget":"2,000","monthStartDay":5}')).toEqual(
+      expected({ currency: 'USD', budget: '2,000' }),
+    );
+  });
+});
+
+describe('parseDraft, the register fields', () => {
+  it.each([
+    ['a field that was never written', '{}', ''],
+    ['a value that is not a string', '{"firstName":5}', ''],
+    ['a name as typed', '{"firstName":"Marko"}', 'Marko'],
+    ['whitespace exactly as typed', '{"firstName":"Marko "}', 'Marko '],
+  ])('reads %s', (_label, raw, value) => {
+    // Untrimmed on purpose, unlike the budget. Trimming here would delete the space
+    // the moment somebody typed one between two words, and the boundary that needs a
+    // trimmed value is toRegisterBody.
+    expect(parseDraft(raw).firstName).toBe(value);
+  });
+
+  it('reads all three independently', () => {
+    expect(parseDraft('{"lastName":"Kovač","email":"marko@email.com"}')).toEqual(
+      expected({ lastName: 'Kovač', email: 'marko@email.com' }),
+    );
   });
 });
 
@@ -200,5 +246,122 @@ describe('isBudgetValid', () => {
     // A5 designs none. The backend's own cap is its business to enforce, and a
     // second limit here would be a number nobody decided.
     expect(isBudgetValid('999,999,999,999')).toBe(true);
+  });
+});
+
+describe('isNameValid', () => {
+  it.each(['Marko', 'Kovač', 'de la Cruz', 'X'])('accepts %s', (name) => {
+    expect(isNameValid(name)).toBe(true);
+  });
+
+  it.each([
+    ['an untouched field', ''],
+    ['spaces only', '   '],
+    ['a tab', '\t'],
+  ])('rejects %s', (_label, name) => {
+    // REG-2 makes both names required, and the DTO's @IsNotEmpty() runs after its
+    // own trim, so a field holding only spaces is a 400 rather than a name.
+    expect(isNameValid(name)).toBe(false);
+  });
+
+  it('has no upper bound, unlike the DTO', () => {
+    // @MaxLength(100) is not mirrored here. No maxlength is drawn in the frame, and
+    // a 101-character name lands on the form-level message instead of an inline one
+    // - the trade docs/TODO.md records.
+    expect(isNameValid('a'.repeat(200))).toBe(true);
+  });
+});
+
+describe('isEmailValid', () => {
+  it.each([
+    'marko@email.com',
+    'marko.kovac@email.co.uk',
+    'marko+tag@email.com',
+    '  marko@email.com  ',
+  ])('accepts %s', (email) => {
+    expect(isEmailValid(email)).toBe(true);
+  });
+
+  it.each([
+    ['an untouched field', ''],
+    ['no at sign', 'marko.email.com'],
+    ['nothing before the at', '@email.com'],
+    ['nothing after the at', 'marko@'],
+    ['no dot in the domain', 'marko@email'],
+    ['two at signs', 'marko@@email.com'],
+    ['an inner space', 'marko kovac@email.com'],
+  ])('rejects %s', (_label, email) => {
+    expect(isEmailValid(email)).toBe(false);
+  });
+
+  it('is looser than the backend and that is the known gap', () => {
+    // A trailing dot is a valid-looking address this rule accepts and validator.js
+    // rejects, so it reaches the backend and comes back a 400 rendered as the
+    // form-level message. Pinned so the gap is a documented behaviour rather than a
+    // surprise: closing it means a validation dependency or a copy of validator.js's
+    // expression that rots silently.
+    expect(isEmailValid('marko@email.com.')).toBe(true);
+  });
+});
+
+describe('toRegisterBody', () => {
+  const draft: SetupDraft = {
+    currency: 'USD',
+    budget: '2,000.50',
+    categories: ['Groceries', 'Transport'],
+    firstName: 'Marko',
+    lastName: 'Kovač',
+    email: 'marko@email.com',
+  };
+
+  it('converts the budget to the major units the DTO takes', () => {
+    // The one boundary where the display string stops being a string. draft.ts holds
+    // '2,000.50' because no number can represent '2000.' mid-type; RegisterDto takes
+    // 2000.5 and stores it as cents.
+    expect(toRegisterBody(draft).monthlyBudget).toBe(2000.5);
+  });
+
+  it('carries every value the two earlier steps collected', () => {
+    // AC4 in one assertion: the request is the whole draft, not just this screen's
+    // half of it.
+    expect(toRegisterBody(draft)).toEqual({
+      firstName: 'Marko',
+      lastName: 'Kovač',
+      email: 'marko@email.com',
+      currency: 'USD',
+      monthlyBudget: 2000.5,
+      categories: ['Groceries', 'Transport'],
+    });
+  });
+
+  it('trims the three text fields', () => {
+    const body = toRegisterBody({
+      ...draft,
+      firstName: ' Marko ',
+      lastName: ' Kovač ',
+      email: '  marko@email.com  ',
+    });
+
+    expect(body.firstName).toBe('Marko');
+    expect(body.lastName).toBe('Kovač');
+    expect(body.email).toBe('marko@email.com');
+  });
+
+  it('does not lowercase the email', () => {
+    // RegisterDto carries @Transform(normalizeEmail), so normalisation has an owner.
+    // Doing it here as well would be a second authority that can drift from it.
+    expect(toRegisterBody({ ...draft, email: 'Marko@Email.com' }).email).toBe('Marko@Email.com');
+  });
+
+  it('omits monthStartDay rather than defaulting it', () => {
+    // Onboarding never asks for it and the backend applies its own default, so a
+    // value here would be one nobody chose.
+    expect('monthStartDay' in toRegisterBody(draft)).toBe(false);
+  });
+
+  it('keeps an empty selection empty', () => {
+    // A4 enforces no minimum, and the DTO requires the key while allowing it to be
+    // empty - so this has to be [] rather than absent.
+    expect(toRegisterBody({ ...draft, categories: [] }).categories).toEqual([]);
   });
 });
