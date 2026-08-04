@@ -1,9 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { render, screen } from '@testing-library/react';
 import { usePathname } from 'next/navigation';
 
-import { SIDEBAR_ITEMS } from '@/components/ui/Sidebar';
+import { SIDEBAR_HREFS, SIDEBAR_ITEMS } from '@/components/ui/Sidebar';
 
-import { activeItem, SidebarNav } from './SidebarNav';
+import { matchItem, SidebarNav } from './SidebarNav';
 
 // jsdom has no App Router, so usePathname() throws without this. Mocking it is
 // also the only way to drive the component through all four states.
@@ -15,47 +17,72 @@ const mockPathname = (pathname: string) => {
 
 const PROFILE = { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' };
 
-const ROUTES = [
-  ['/dashboard', 'dashboard', 'Dashboard'],
-  ['/transactions', 'transactions', 'Transactions'],
-  ['/insights', 'insights', 'Insights'],
-  ['/settings', 'settings', 'Settings'],
-] as const;
+// The labels are the only thing this file states for itself. The keys come from
+// SIDEBAR_ITEMS and the paths from SIDEBAR_HREFS, both Sidebar's own, so no
+// assertion below can pass against a table that disagrees with the links it is
+// checking. Restating the hrefs here is what made an earlier version of this file
+// unable to notice a divergence.
+const LABELS: Record<(typeof SIDEBAR_ITEMS)[number], string> = {
+  dashboard: 'Dashboard',
+  transactions: 'Transactions',
+  insights: 'Insights',
+  settings: 'Settings',
+};
 
-describe('activeItem', () => {
-  it('covers every sidebar item', () => {
-    // Guards the table below: dropping a row would shrink the it.each and still
-    // pass. SIDEBAR_ITEMS is Sidebar's own list, so this also catches a fifth
-    // view being added there without a route here.
-    expect(ROUTES.map(([, key]) => key)).toEqual([...SIDEBAR_ITEMS]);
+const CASES = SIDEBAR_ITEMS.map((key) => [key, SIDEBAR_HREFS[key], LABELS[key]] as const);
+
+describe('matchItem', () => {
+  it('has a case for every sidebar item', () => {
+    // Guards the table above: a shrunken list still passes an it.each over it.
+    expect(CASES).toHaveLength(SIDEBAR_ITEMS.length);
+    expect(CASES.map(([key]) => key)).toEqual([...SIDEBAR_ITEMS]);
   });
 
-  it.each(ROUTES)('maps %s to %s', (pathname, key) => {
-    expect(activeItem(pathname)).toBe(key);
+  it.each(CASES)('matches %s at %s', (key, href) => {
+    // Falsifiable for all four, including dashboard. matchItem returns undefined
+    // rather than defaulting, so a broken lookup fails here instead of returning
+    // the value this assertion happens to expect - which is exactly how the
+    // landing route ended up untested before.
+    expect(matchItem(href)).toBe(key);
   });
 
-  it('keeps the section lit on a nested route', () => {
+  it.each(CASES)('keeps %s lit on a nested route', (key, href) => {
     // A transaction detail view is still Transactions. Equality matching would
     // silently unhighlight the whole sidebar here.
-    expect(activeItem('/transactions/abc')).toBe('transactions');
+    expect(matchItem(`${href}/abc`)).toBe(key);
   });
 
-  it('does not match a route that merely starts with the same characters', () => {
-    // Why the prefix check requires the trailing slash. Without it
-    // /settings-import would light Settings.
-    expect(activeItem('/settings-import')).toBe('dashboard');
+  it.each(CASES)('does not match a path merely prefixed by %s', (_key, href) => {
+    // Why the boundary check needs the trailing slash: without it
+    // `/settings-import` matches `/settings`. Asserted for all four rather than
+    // just the one that prompted it, since the bug is in the comparison and not
+    // in any single route.
+    expect(matchItem(`${href}-archive`)).toBeUndefined();
   });
 
-  it('falls back rather than throwing on an unknown path', () => {
-    // Unreachable from inside the group, but a crashed layout is a worse answer
-    // than a wrong highlight, and `active` has no "none" value by design.
-    expect(activeItem('/nowhere')).toBe('dashboard');
+  it('matches nothing outside the four views', () => {
+    expect(matchItem('/nowhere')).toBeUndefined();
+    expect(matchItem('/')).toBeUndefined();
+  });
+});
+
+describe('the route folders behind those hrefs', () => {
+  // The one copy of the contract that no other test can reach. SIDEBAR_HREFS is
+  // now the single declaration in code, but a route only exists if there is a
+  // directory with a page.tsx in it, and renaming one is invisible to every
+  // assertion above: the link would 404 with the whole suite green.
+  it.each(CASES)('%s has a page at app/(app)%s', (_key, href) => {
+    // __dirname is app/(app)/, and href starts with a slash, so this resolves to
+    // the route segment directly.
+    const page = path.join(__dirname, href, 'page.tsx');
+
+    expect(fs.existsSync(page)).toBe(true);
   });
 });
 
 describe('SidebarNav', () => {
-  it.each(ROUTES)('marks %s as the current page', (pathname, _key, label) => {
-    mockPathname(pathname);
+  it.each(CASES)('marks %s as the current page', (_key, href, label) => {
+    mockPathname(href);
     render(<SidebarNav {...PROFILE} />);
 
     // aria-current, not the highlight class: this is the machine-readable half
@@ -63,8 +90,8 @@ describe('SidebarNav', () => {
     expect(screen.getByRole('link', { name: label })).toHaveAttribute('aria-current', 'page');
   });
 
-  it.each(ROUTES)('marks nothing else current on %s', (pathname, _key, label) => {
-    mockPathname(pathname);
+  it.each(CASES)('marks nothing else current on %s', (_key, href, label) => {
+    mockPathname(href);
     render(<SidebarNav {...PROFILE} />);
 
     const current = screen
@@ -73,6 +100,25 @@ describe('SidebarNav', () => {
 
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveAccessibleName(label);
+  });
+
+  it.each(CASES)('points the %s link at %s', (_key, href, label) => {
+    mockPathname('/dashboard');
+    render(<SidebarNav {...PROFILE} />);
+
+    // Ties the rendered link back to the same map matchItem reads, so the
+    // highlight and the destination cannot drift apart.
+    expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', href);
+  });
+
+  it('falls back to the dashboard on an unmatched pathname', () => {
+    // The fallback lives in this component rather than in matchItem, so this is
+    // where it has to be covered. Unreachable in the app, but a crashed layout
+    // would be a worse answer than a wrong highlight.
+    mockPathname('/nowhere');
+    render(<SidebarNav {...PROFILE} />);
+
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('passes the profile through to the footer', () => {

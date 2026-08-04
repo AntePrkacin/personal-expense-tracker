@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 
-import { Sidebar, type SidebarItem } from '@/components/ui/Sidebar';
+import { SIDEBAR_HREFS, SIDEBAR_ITEMS, Sidebar, type SidebarItem } from '@/components/ui/Sidebar';
 
 // The (app) shell's mount point for ui/Sidebar, and the one client component in
 // the shell.
@@ -20,33 +20,40 @@ import { Sidebar, type SidebarItem } from '@/components/ui/Sidebar';
 // Component layout.
 
 /**
- * Pathname prefix to sidebar key.
+ * Which view a pathname belongs to, or `undefined` for one that matches none.
  *
- * The hrefs are Sidebar's own, declared in its NAV_SECTIONS, and this is the
- * other half of that contract: the routes under app/(app)/ have to match both.
+ * The hrefs are not restated here: `SIDEBAR_HREFS` is Sidebar's own declaration
+ * and the only one in the app, so this cannot disagree with the links it is
+ * highlighting.
  *
  * Matched by prefix rather than equality, so a nested route keeps its section
- * lit - `/transactions/abc` is still Transactions. Ordered longest-first is
- * unnecessary here because no href is a prefix of another, but the boundary
- * check (`/` after the href) is not: without it `/settings-import` would light
- * Settings.
+ * lit - `/transactions/abc` is still Transactions. Ordering is irrelevant because
+ * no href is a prefix of another, but the boundary check (a `/` after the href)
+ * is not: without it `/settings-import` would light Settings.
+ *
+ * **Returning `undefined` rather than defaulting here is deliberate, and it is a
+ * testability decision.** With the fallback inside this function, the assertion
+ * `matchItem('/dashboard') === 'dashboard'` could never fail - a completely
+ * broken lookup returns `'dashboard'` too - which silently made the landing
+ * route the one case with no real coverage. The caller defaults instead, so every
+ * key here has to be genuinely matched.
  */
-const ROUTES: readonly { href: string; key: SidebarItem }[] = [
-  { href: '/dashboard', key: 'dashboard' },
-  { href: '/transactions', key: 'transactions' },
-  { href: '/insights', key: 'insights' },
-  { href: '/settings', key: 'settings' },
-];
-
-export function activeItem(pathname: string): SidebarItem {
-  const match = ROUTES.find(({ href }) => pathname === href || pathname.startsWith(`${href}/`));
-
-  // Unreachable from inside the group, since every route below (app)/ is one of
-  // the four. Falling back rather than throwing because a highlight is not worth
-  // a crashed layout, and `active` has no "none" value by design - the Figma
-  // component set draws no such variant.
-  return match?.key ?? 'dashboard';
+export function matchItem(pathname: string): SidebarItem | undefined {
+  return SIDEBAR_ITEMS.find((key) => {
+    const href = SIDEBAR_HREFS[key];
+    return pathname === href || pathname.startsWith(`${href}/`);
+  });
 }
+
+/**
+ * What an unmatched pathname falls back to.
+ *
+ * Unreachable from inside the group, since every route below `(app)/` is one of
+ * the four. Falling back rather than throwing because a highlight is not worth a
+ * crashed layout, and `active` has no "none" value by design - the Figma
+ * component set draws no such variant.
+ */
+const FALLBACK_ITEM: SidebarItem = 'dashboard';
 
 type SidebarNavProps = {
   firstName: string;
@@ -55,7 +62,7 @@ type SidebarNavProps = {
 };
 
 export function SidebarNav({ firstName, lastName, email }: SidebarNavProps) {
-  const active = activeItem(usePathname());
+  const active = matchItem(usePathname()) ?? FALLBACK_ITEM;
 
   return (
     // Sidebar is `h-full` and pins its footer with justify-between, so it needs

@@ -4,6 +4,7 @@ import {
   NAV_ITEM_ICON,
   NAV_ITEM_LABEL,
   NAV_ITEM_SURFACE,
+  SIDEBAR_HREFS,
   SIDEBAR_ITEMS,
   Sidebar,
   type SidebarItem,
@@ -24,12 +25,17 @@ const LABELS: Record<SidebarItem, string> = {
   settings: 'Settings',
 };
 
-const HREFS: Record<SidebarItem, string> = {
-  dashboard: '/dashboard',
-  transactions: '/transactions',
-  insights: '/insights',
-  settings: '/settings',
-};
+/**
+ * The destinations, read from the component's own map rather than restated.
+ *
+ * This was a hand-written copy, which made it a second declaration of a contract
+ * that also has to satisfy the `(app)` shell and the route folders on disk. It
+ * asserted itself against itself and could not notice a divergence, so it now
+ * reads `SIDEBAR_HREFS`. What the assertion below still proves is that every item
+ * renders *its own* href rather than sharing or transposing one, which is the
+ * failure a single shared map can still have.
+ */
+const HREFS = SIDEBAR_HREFS;
 
 /**
  * A profile that is not the designed sample.

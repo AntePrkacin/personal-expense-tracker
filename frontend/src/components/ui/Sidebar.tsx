@@ -29,6 +29,26 @@ export const SIDEBAR_ITEMS = ['dashboard', 'transactions', 'insights', 'settings
 
 export type SidebarItem = (typeof SIDEBAR_ITEMS)[number];
 
+/**
+ * Where each item goes. The single declaration of the four routes.
+ *
+ * Exported for the same reason as SIDEBAR_ITEMS, and it has to be: these hrefs
+ * have no Figma counterpart, so they are a contract between this component, the
+ * `(app)` shell that maps a pathname back to a key, the route folders under
+ * `app/(app)/`, and the tests for all three. Every one of those was a separate
+ * hand-written copy until they were collapsed into this, and nothing had caught
+ * a divergence because each test asserted its own copy against itself.
+ *
+ * A `Record` keyed by `SidebarItem` rather than a list, so adding a fifth view
+ * to SIDEBAR_ITEMS is a type error here until it has somewhere to go.
+ */
+export const SIDEBAR_HREFS: Record<SidebarItem, string> = {
+  dashboard: '/dashboard',
+  transactions: '/transactions',
+  insights: '/insights',
+  settings: '/settings',
+};
+
 type NavState = 'active' | 'inactive';
 
 /**
@@ -129,37 +149,31 @@ function SettingsGlyph() {
  * Declared once here rather than spelled out in the markup, so the headings and
  * the items cannot drift apart from the tests that assert them.
  *
- * The hrefs have no Figma counterpart - Figma has no concept of a destination -
- * and are the contract PET-19 has to match when it creates the routes. Until it
- * does, all four are dead links.
+ * The destination is read from SIDEBAR_HREFS rather than written out per item,
+ * so this file states each route exactly once. Everything else about an item -
+ * its label and its glyph - is genuinely local to the navigation.
  */
 const NAV_SECTIONS = [
   {
     heading: 'MENU',
     items: [
-      { key: 'dashboard', label: 'Dashboard', href: '/dashboard', Glyph: DashboardGlyph },
-      {
-        key: 'transactions',
-        label: 'Transactions',
-        href: '/transactions',
-        Glyph: TransactionsGlyph,
-      },
+      { key: 'dashboard', label: 'Dashboard', Glyph: DashboardGlyph },
+      { key: 'transactions', label: 'Transactions', Glyph: TransactionsGlyph },
     ],
   },
   {
     heading: 'ASSISTANT',
-    items: [{ key: 'insights', label: 'Insights', href: '/insights', Glyph: InsightsGlyph }],
+    items: [{ key: 'insights', label: 'Insights', Glyph: InsightsGlyph }],
   },
   {
     heading: 'ACCOUNT',
-    items: [{ key: 'settings', label: 'Settings', href: '/settings', Glyph: SettingsGlyph }],
+    items: [{ key: 'settings', label: 'Settings', Glyph: SettingsGlyph }],
   },
 ] as const satisfies readonly {
   heading: string;
   items: readonly {
     key: SidebarItem;
     label: string;
-    href: string;
     Glyph: () => React.ReactElement;
   }[];
 }[];
@@ -228,8 +242,9 @@ export function Sidebar({ active, firstName, lastName, email }: SidebarProps) {
                   {heading}
                 </p>
                 <ul aria-labelledby={headingId} className="flex flex-col gap-1">
-                  {items.map(({ key, label, href, Glyph }) => {
+                  {items.map(({ key, label, Glyph }) => {
                     const state: NavState = key === active ? 'active' : 'inactive';
+                    const href = SIDEBAR_HREFS[key];
 
                     return (
                       <li key={key}>
