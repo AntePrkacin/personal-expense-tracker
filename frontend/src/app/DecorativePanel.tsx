@@ -68,16 +68,12 @@ function SampleBudgetCard() {
     // left 100, top 300, width 360. px-6.5 is the designed 26px, and pt-6/pb-6.5
     // the 24/26 split Figma draws rather than an even pad.
     //
-    // The shadow is an arbitrary literal because Foundations declares no shadow
-    // tokens and nothing else in the repo uses a shadow utility - this and the
-    // chip below are the first two. It is deliberately absent from
-    // ui/utilities.test.ts: it compiles to literal CSS with no token lookup, the
-    // same exclusion `w-[520px]` already has there, and that file's `selector()`
-    // escapes only . : / [ ] so a candidate containing parens and commas would
-    // report "generates no CSS" for a class that generates fine. See docs/TODO.md
-    // for the token question and the one-line fix if a later ticket wants these
-    // listed.
-    <div className="bg-surface-card absolute top-75 left-25 flex w-90 flex-col gap-3.5 rounded-xl px-6.5 pt-6 pb-6.5 shadow-[0px_24px_50px_0px_rgba(0,0,0,0.35)]">
+    // shadow-panel, not shadow-card: this card sits on the dark panel, where the
+    // designed elevation is far deeper (0 24px 50px at 35%) than the one a card on
+    // the light canvas carries. PET-9 added both tokens to globals.css and moved
+    // these two literals onto them, so ui/utilities.test.ts now guards them like
+    // any other class.
+    <div className="bg-surface-card absolute top-75 left-25 flex w-90 flex-col gap-3.5 rounded-xl px-6.5 pt-6 pb-6.5 shadow-panel">
       <div className="flex items-center justify-between">
         {/* A <p>, not an <h2>. It is fabricated and outside the document outline.
             aria-hidden keeps it out of the heading rotor either way, but a heading
@@ -112,10 +108,10 @@ function SampleBudgetCard() {
 
 function SampleChip({ label, amount, colour, position }: (typeof SAMPLE_CHIPS)[number]) {
   return (
-    // gap-2.25 is 9px, and pl-3/pr-3.5 the asymmetric 12/14 Figma draws. The
-    // shadow is the second arbitrary literal; see the note on the card above.
+    // gap-2.25 is 9px, and pl-3/pr-3.5 the asymmetric 12/14 Figma draws. The chip
+    // carries its own shallower token; see the note on the card above.
     <div
-      className={`bg-surface-card absolute flex items-center gap-2.25 rounded-full py-2.5 pr-3.5 pl-3 shadow-[0px_10px_24px_0px_rgba(0,0,0,0.25)] ${position}`}
+      className={`bg-surface-card absolute flex items-center gap-2.25 rounded-full py-2.5 pr-3.5 pl-3 shadow-chip ${position}`}
     >
       <span className={`size-2.5 shrink-0 rounded-full ${CATEGORY_TILE[colour]}`} />
       <p className="text-strong-s text-text-primary">{label}</p>

@@ -90,10 +90,12 @@ sees verbatim. Use a relative specifier, and have the accompanying `import` name
 (The parentheses _did_ break the pre-commit hook, which is a real and separate trap; see
 `docs/CONTRIBUTING.md`.)
 
-**`/` is a bare `redirect('/dashboard')`.** No frame in the design corresponds to it: VER-4
-lands both a new and a returning account on the Dashboard, and a signed-out visitor belongs
-in the access flow, which the shell's own session check sends them to. It is here rather than
-in a middleware matcher so the rule has one home.
+**`/` branches on a session**, and the rule lives in `app/page.tsx` rather than in a
+middleware matcher so it has one home. VER-4 lands both a new and a returning account on the
+Dashboard, and a signed-out visitor belongs in the access flow. The full description is under
+The access screens below, which is where the screen it renders is documented. (This paragraph
+used to say `/` was a bare `redirect('/dashboard')`, which was PET-19's version of the route
+and stopped being true when PET-8 put Welcome behind the gate.)
 
 **`lib/session.ts` holds two stubs, and they are PET-19's and PET-8's deferrals.**
 `requireSession()` is called once, by the `(app)` layout, and lets every request through, so
@@ -121,7 +123,7 @@ component.
 ## The access screens
 
 The six frames outside the shell (01 Welcome, 02 and 03 Setup, 22 Register, 23 Log in, 24
-Check your email). **One of them is built**: Welcome, at `/`.
+Check your email). **Two of them are built**: Welcome at `/`, and Setup step 1 at `/setup`.
 
 **`/` is the front door and its one job is choosing which door.** `app/page.tsx` awaits
 `hasSession()`; a signed-out visitor gets `<WelcomeScreen />` and a signed-in one is redirected
@@ -143,16 +145,24 @@ today - do not copy it here by reflex.
 out to: `/setup` and `/login`. Same single-declaration reasoning as `SIDEBAR_HREFS`, and the
 two sets must not restate each other - app routes stay in `ui/Sidebar.tsx`, access routes here.
 Welcome is deliberately absent, because it is served at `/` and there is no path to declare.
-Both destinations **404 today**, which is as far as a frontend-only ticket reaches: the href is
-the contract WEL-2 and WEL-3 describe, and an inert control would fail both outright while
-hiding it. `/setup` is chosen so it is correct however PET-9 shapes onboarding - one route for
-all three steps, or the first of three - so the string does not move either way; docs/TODO.md
-records that trade-off.
+`/setup` now answers; `/setup/categories` and `/login` **404 today**, which is as far as a
+frontend-only ticket reaches: the href is the contract its criterion describes, and an inert
+control would fail that criterion outright while hiding it. `lib/routes.test.ts` asserts with
+`fs` that every built route has a `page.tsx` behind it, the way `SidebarNav.test.tsx` does for
+the four app routes; it classifies each key as built or pending rather than sweeping them all,
+so adding a route forces a decision instead of silently escaping the check.
 
-**There is no `(access)` route group and no shared layout, on purpose.** Welcome is
-architecturally the odd one out: a two-column split with a left-aligned logo, where 02, 03 and
-22 are centred cards with a step indicator. A group whose one member shares nothing with the
-rest carries no decision. PET-9 is the ticket that discovers whether a shared layout exists.
+**There is no `(access)` route group, and Welcome is still the odd one out.** It is a
+two-column split with a left-aligned logo, where 02, 03 and 22 are centred cards with a step
+indicator, so a group whose one member shares nothing with the rest would carry no decision.
+
+**PET-9 answered the shared-layout question, and the answer is "yes, but not as a layout".**
+Frames 02, 03 and 22 draw identical chrome - the centred column, the lockup, the three-dot
+indicator, the card - varying only in which dot is filled and the column width (520 / 600 /
+520). That chrome is `app/setup/SetupShell.tsx`, a Server Component taking `step`, **not** a
+route layout: the active step differs per route, and an App Router layout cannot read the
+pathname on the server, which is the same trap `ui/Sidebar`'s `active` prop was built around.
+A layout would have to become a client component just to know which dot to fill.
 
 **The right half of Welcome is `aria-hidden`, and that is load-bearing.**
 `app/DecorativePanel.tsx` is a dark panel with two accent washes, a sample budget card and two
@@ -164,17 +174,127 @@ does **not** remove focusable descendants from the tab order, so the screen's te
 the subtree contains none; and it is a plain `div`, never an `<aside>`, because an
 `aria-hidden` landmark is self-contradictory.
 
+**Onboarding is three nested routes under one layout**: `/setup` (02, step 1),
+`/setup/categories` (03, step 2, PET-10) and `/setup/register` (22, step 3, PET-11). PET-9
+settled that. The alternative - one route rendering all three steps from client state - is
+simpler and keeps the draft inside one component, but the browser's own Back button then
+exits onboarding and discards everything typed, and you cannot fix that without pushing
+history entries by hand. All three tickets carry an explicit "Back keeps my values" criterion
+(PET-9 AC5, PET-10 AC4, PET-11 AC5), so back-navigation is a first-class path here rather than
+an edge case.
+
+**`app/setup/layout.tsx`'s only job is holding the draft**, and it stays a Server Component:
+`SetupDraftProvider` carries the `'use client'` boundary, so the layout and all three step
+pages stay off the client bundle. React preserves the provider element across navigation
+between a layout's own children either way, so nothing about AC5 depends on which file holds
+the directive. Same rule as `SidebarNav` - push the boundary into the smallest wrapper.
+
+**The draft lives in sessionStorage, read through `useSyncExternalStore`.** Per tab, cleared
+when the tab closes, and it never leaves the browser, so A32 (nothing persisted server side
+until "Finish setup") holds literally. Three things about it are load-bearing. It is
+sessionStorage rather than layout state because AC5's round trip out to Welcome and back
+**unmounts the layout**, so no in-memory option can satisfy it. It is `useSyncExternalStore`
+rather than a mount effect for the reason `stories/foundations/Reference.tsx` already records
+about the stylesheet, plus two sharper ones: `react-hooks/set-state-in-effect` rejects the
+effect version and this repo carries no eslint-disable comments, and the hook is
+hydration-correct by construction where a `typeof window` guard in a `useState` initialiser
+would make the client's first render disagree with the server HTML about a controlled input's
+value. And the snapshot is the raw JSON **string**, not the parsed draft, because an uncached
+snapshot that parsed JSON would return a fresh object on every call and re-render forever.
+
+`app/setup/draft.ts` holds the shape and is deliberately React-free, so PET-11 can build the
+register body without a client boundary. Two details it records: `budget` is the **display**
+string (`'2,000'`), because AC5 needs the field to come back showing what was typed and no
+number represents `'2000.'` mid-type - the conversion happens once, at the boundary, when step
+3 builds its request. And `parseDraft` is **total**, because sessionStorage is writable from
+that tab's devtools console and a throw in the read would white-screen onboarding.
+
+**`parseDraft` also re-canonicalises the budget rather than trusting it**, which is not
+belt-and-braces. Returning the stored string verbatim let a value no field could have produced
+render straight into a controlled input and pass `isBudgetValid`: a stored `'2.000,50'` - a
+European paste, or an older formatter - read back as `2.0005`, four decimals, which
+`RegisterDto`'s `@IsNumber({ maxDecimalPlaces: 2 })` rejects. The screen would have shown a
+plausible number, validated it, and handed step 3 a guaranteed 400 with no error state designed
+for that (A29). Running the value through `formatAmountInput` on read means everything this
+module hands out is something the field could have produced, and idempotence is what makes that
+free for the normal case. The currency is only type-checked, not checked against the option
+list, which `docs/TODO.md` records as A6's to settle.
+
+**This is the repo's first stateful form, so its conventions are new.** `app/setup/BudgetForm.tsx`
+is a real `<form noValidate onSubmit>` with a `type="submit"` button, not an `onClick`: Enter in
+the budget field has to submit, and an `onClick`-only button leaves it dead on a two-field card.
+Three details of that fail silently if missed - `preventDefault()` (a form with no `action` GETs
+the current URL and reloads, and because the draft is in sessionStorage it comes back filled in,
+so the defect reads as a flicker), `noValidate` (without it the browser's own bubble fires and
+the designed inline message never renders), and `required` kept on both fields for the semantics
+with no asterisk, per A12. Validation runs on submit only and clears on the next change to the
+field.
+
+**Continue is a `<button>` and Back is a `<Link>`, which is deliberately the opposite of
+Welcome's rule** that both exits are links because both change the page location. Continue
+cannot be one: its navigation is conditional on validation, and an anchor cannot be blocked.
+That single fact is the only reason `BudgetForm` is a client component. Back uses a literal
+`href="/"`, because `ACCESS_ROUTES` declares no entry for Welcome by design.
+
+**The budget field's caret is restored by hand, and `ui/Input` needed no new prop for it.**
+`onChange`'s `event.currentTarget` is already the node, so the handler writes the formatted
+value and the caret onto it directly. Two things are worth knowing before touching it. It works
+only because `formatAmountInput` is idempotent - `lib/format.test.ts` pins that property for
+exactly this reason. And React _does_ restore a selection around its own controlled-input
+commit, so this is not the difference between "caret preserved" and "caret at the end": React
+restores the raw offset, which is wrong precisely when the reformat inserts a separator to the
+left of the caret, leaving `2,00|0` instead of `2,000|`. **jsdom cannot observe the outcome
+either way** - React's restore plus user-event's own cursor bookkeeping make a `selectionStart`
+assertion pass with the restore deleted, which an earlier version of the test did. The suite
+therefore asserts that `setSelectionRange` was called with the computed offset, and the visible
+behaviour is a Storybook or manual check. docs/TODO.md records the gap.
+
+**The step indicator is `aria-hidden`.** The card's own overline states "STEP 1 OF 3" in text,
+so three unlabelled shapes carry nothing a reader is missing - unhidden they announce as three
+empty generics. Same call `ui/Input` makes on its `$` prefix. `SetupShell.tsx` records the two
+rejected alternatives so nobody "improves" it into one: a second `role="progressbar"`
+(restating the overline, and `ui/ProgressBar` is the repo's one progressbar), and an `<ol>` with
+`aria-current="step"` (the textbook pattern, but it invents list semantics and three step names
+the design never draws). The `aria-hidden` footgun applies here as it does on Welcome, so the
+test pins that the subtree contains nothing focusable.
+
+**`/setup` is deliberately not gated on a session.** `/` redirects a signed-in visitor and the
+`(app)` shell gates itself, but this route does neither: PET-9 has no session to read, and a
+third call into the `lib/session.ts` stubs would be a claim it cannot test. Whether onboarding
+stays reachable with a live session is PET-52's.
+
 **Storybook gains a third section, `Screens/`.** Named after the Figma page the frames live on,
 exactly as `Components` and `Foundations` are. It needs its own story smoke test
 (`app/screens.stories.test.tsx`) because each of those suites asserts its own title prefix,
 which is the one thing each exists to make unambiguous - that is now the fourth copy of the
-same harness, and docs/TODO.md records the helper it should become.
+same harness, and docs/TODO.md records the helper it should become. PET-9 added a module to it
+rather than a fifth section, exactly as that item predicted.
 
-`app/WelcomeScreen.tsx`, `app/DecorativePanel.tsx` and `components/LogoLockup.tsx` are all
-covered by `components/ui/utilities.test.ts`, which guards their hard-coded classes alongside
-`ui/`'s and the shell's. **The two box shadows are deliberately excluded** - they are the first
-in the repo, Foundations has no shadow tokens, and that file's `selector()` cannot escape their
-parens and commas. Both facts are in docs/TODO.md.
+Two things about that harness bite anyone adding a screen story. **It builds each story from
+`render` or `meta.component` and never applies the meta's `decorators`**, so a provider in a
+decorator works in Storybook and throws under Jest - which is how `Screens/02 Setup` first
+failed. Keep whatever the screen needs inside `render`. And a screen that reaches `useRouter`
+needs `next/navigation` mocked in that suite, which is the **opposite** call
+`(app)/shell.stories.test.tsx` records for `SidebarNav`: that one must not get a story at all,
+because it is a wrapper whose only job is reading the pathname, while 02 Setup is a whole frame
+worth diffing against Figma. The two notes are halves of one decision.
+
+**A story whose screen calls a router hook also needs
+`parameters: { nextjs: { appDirectory: true } }`, and no gate in CI will tell you.**
+`next/navigation` throws `invariant expected app router to be mounted` outside a router, and
+that parameter is what makes `@storybook/nextjs-vite` mount its mock one. Both gates miss it
+from opposite directions: `build-storybook` bundles stories without ever running one, and
+`screens.stories.test.tsx` renders the module under Jest with `next/navigation` already mocked.
+So the story threw in the browser with a green suite and a green build, and only opening
+Storybook found it. **Open the story after adding one** - that is what the Verification section
+of every plan means by eyeballing it.
+
+`app/WelcomeScreen.tsx`, `app/DecorativePanel.tsx`, `app/setup/` and
+`components/LogoLockup.tsx` are all covered by `components/ui/utilities.test.ts`, which guards
+their hard-coded classes alongside `ui/`'s and the shell's. That now includes the box shadows,
+which PET-9 turned into Foundations tokens (`frontend/CLAUDE.md` owns them) and which had been
+excluded for two reasons that are both gone: there was no token to check them against, and
+that file's `selector()` could not escape their parens and commas.
 
 ## Not built here
 

@@ -48,9 +48,10 @@ type Story = StoryObj<typeof WelcomeScreen>;
  *
  * Things worth checking here rather than in a test, because next/jest gives jsdom no
  * stylesheet and none of them is visible to an assertion: the cedi glyph really
- * renders from Plus Jakarta Sans rather than a fallback, the two shadows (the first
- * in the repo, with no token to check them against), the 460px heading and 430px
- * intro line breaks, and the em dash in "on plan — all in one".
+ * renders from Plus Jakarta Sans rather than a fallback, the two shadows (now
+ * `shadow-panel` and `shadow-chip`, so this frame is the visual check that PET-9's
+ * retro-fit onto tokens changed nothing), the 460px heading and 430px intro line
+ * breaks, and the em dash in "on plan — all in one".
  */
 export const Welcome: Story = {};
 

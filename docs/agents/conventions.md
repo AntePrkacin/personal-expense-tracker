@@ -40,6 +40,7 @@ set" instead.
 | Stacked-branch mechanics | `.claude/skills/repo-stack/SKILL.md` and the committed `gh-stack` skill | pointer, including from `docs/CONTRIBUTING.md` |
 | Migration scopes, schema conventions, drivers | `backend/src/database/CLAUDE.md` | pointer |
 | Design tokens and component conventions | `frontend/CLAUDE.md` | pointer |
+| Routes, layouts, the session gate, the screens | `frontend/src/app/CLAUDE.md` | pointer |
 | The HTTP contract and its generated artifacts | `docs/agents/api-contract.md` | pointer |
 | Skills, subagents, MCP | `docs/agents/claude-tooling.md`; permissions stay in `.claude/SETTINGS.md` | pointer |
 | Why something is deferred | `docs/TODO.md` | pointer; each area guide's `## Not built here` carries only the warning |

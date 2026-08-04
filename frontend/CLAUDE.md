@@ -47,6 +47,17 @@ Two smaller traps. `--radius-full` is ignored by the compiler, so Radius/Full is
 Tailwind's built-in `rounded-full`; and clearing `--radius-*` also removes the bare
 `rounded` utility, so use `rounded-md` explicitly.
 
+**Foundations declares three shadows, and they are the one group with no Figma swatch behind
+them.** `--shadow-card` is the centred card every access frame and every dashboard card draws;
+`--shadow-panel` and `--shadow-chip` are Welcome's decorative panel, which shipped them as
+arbitrary literals before PET-9 gave them names. All four shadow namespaces are cleared -
+`--shadow-*`, `--inset-shadow-*`, `--drop-shadow-*` and `--text-shadow-*` - for the same reason
+the palette is, so `shadow-lg` and `drop-shadow-md` generate nothing. Bare `shadow` disappears
+with the namespace exactly as bare `rounded` does; `shadow-none` is the one survivor, because it
+is a static utility rather than a token lookup. `globals.test.ts` pins each of those. Note the
+card's value is a raw fill in the frame rather than a bound variable, one row up from the
+unbound circle colour in `docs/TODO.md`.
+
 **Only light mode is designed.** No dark theme ships, and `dark:` variants should not be
 added. Note that Tailwind cannot make `dark:` a build error, so this rests on review.
 
@@ -197,7 +208,7 @@ consumer at all.
   so the design file is the only holdout left; `docs/TODO.md` records that, and the one
   constraint the rename leaves on any future change to the per-user database naming.
 
-`frontend/src/lib/format.ts` owns display formatting, in three halves. Money: amounts are
+`frontend/src/lib/format.ts` owns display formatting, in four parts. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
 rather than the hyphen `Intl.NumberFormat` emits, matching the design. Names: `initials()`
 and `shortName()` derive the sidebar footer's "MK" and "Marko K." from the two stored name
@@ -208,7 +219,19 @@ convenience. Both take the first character with `Array.from(name)[0]` rather tha
 `monthOverline()` and `monthLabel()` give the page header its "October 2025" and "October",
 shared because Dashboard and Transactions draw the identical overline. Both use the calendar
 month and therefore ignore the profile's `monthStartDay`, which A9 says defines the period -
-that value is PET-45's, and the display is correct for its default of 1.
+that value is PET-45's, and the display is correct for its default of 1. Amount input:
+`formatAmountInput()`, `parseAmountInput()` and `amountCaret()` are the currency field as it is
+being typed into, and they are deliberately **not** `formatCurrency`. That one goes through
+`Intl`, which forces two decimals, rounds, drops a trailing separator and emits a symbol -
+every one of which is wrong mid-keystroke, where a user typing `24.` would watch it become
+`$24.00` under the caret. So none of the three touches `Number` on the way out, the fraction is
+truncated rather than rounded, and the `$` belongs to `Input variant="currency"` instead of to
+the string. `formatAmountInput` is **idempotent**, which the controlled input in
+`app/setup/BudgetForm.tsx` depends on rather than merely benefits from.
+
+All four parts hard-code `en-US` and its separators. When the currency chosen during onboarding
+is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
+that, and PET-9 made the amount input its third consumer.
 
 ## The screens
 
@@ -242,11 +265,12 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Five of the six access screens.** Welcome exists at `/` (see "The access screens"). Setup
-  steps 1 and 2, Register, Log in and Check your email are PET-9 to PET-12, and the two links
-  Welcome offers - `/setup` and `/login` - **404 until they land**. The verify page that
-  consumes an emailed link is PET-52's, along with filling in `hasSession()` so `/` can send a
-  signed-in visitor to the Dashboard instead of showing everyone the pitch.
+- **Four of the six access screens.** Welcome at `/` and Setup step 1 at `/setup` exist (see
+  "The access screens" in `frontend/src/app/CLAUDE.md`). Setup step 2, Register, Log in and
+  Check your email are PET-10 to PET-12, so `/setup/categories` and `/login` **404 until they
+  land** - which means onboarding currently dead-ends at step 1's "Continue". The verify page
+  that consumes an emailed link is PET-52's, along with filling in `hasSession()` so `/` can
+  send a signed-in visitor to the Dashboard instead of showing everyone the pitch.
 - **The `/api/chat` route handler.** No route handler exists, and the env template deliberately
   declares no model-provider key. Add whichever variable your provider needs when you build the
   route, server-side only and never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once

@@ -1,10 +1,12 @@
-// Display formatting: money, the two forms a stored name takes on screen, and
-// the two forms the current period takes in the page header.
+// Display formatting: money, the two forms a stored name takes on screen, the
+// two forms the current period takes in the page header, and the amount field
+// as it is being typed into.
 //
-// All three are here for the same reason. Transactions are stored as positive
+// All four are here for the same reason. Transactions are stored as positive
 // magnitudes and rendered as negative amounts, a profile stores two names while
-// the UI shows initials and a shortened form, and the header shows a month that
-// nothing stores at all. None of them is a property of the data, so they live
+// the UI shows initials and a shortened form, the header shows a month that
+// nothing stores at all, and a half-typed budget is a display string before it
+// is ever a number. None of them is a property of the data, so they live
 // here, once, instead of in every screen that shows them.
 
 /**
@@ -114,4 +116,115 @@ export function monthOverline(date: Date): string {
 /** The month select's label, e.g. `"October"`. */
 export function monthLabel(date: Date): string {
   return MONTH_ONLY.format(date);
+}
+
+// The amount field as it is being typed into (02 Setup's "Monthly budget", and
+// later every Amount field). Three functions: the display string, the number
+// behind it, and where the caret belongs after reformatting.
+//
+// This is deliberately NOT formatCurrency, and the difference is not stylistic.
+// formatCurrency goes through Intl, which forces two decimals, rounds, drops a
+// trailing separator and emits a currency symbol. Every one of those is wrong
+// mid-keystroke: a user typing "24." would watch it become "$24.00" under the
+// caret. So none of this touches `Number` on the way out, and the `$` belongs to
+// `Input variant="currency"` rather than to the string.
+//
+// The group separator is hard-coded, matching CURRENCY and the two DateTimeFormats
+// above. When the onboarding currency is finally stored and threaded through,
+// this follows it along with them.
+
+/** Digits and the decimal point: the characters a caret can meaningfully sit between. */
+const SIGNIFICANT = /[0-9.]/;
+
+/** How many significant characters `text` holds. */
+function countSignificant(text: string): number {
+  let count = 0;
+  for (const char of text) if (SIGNIFICANT.test(char)) count += 1;
+  return count;
+}
+
+/**
+ * The display form of a partly-typed amount, e.g. `'2000.5'` -> `'2,000.5'`.
+ *
+ * Everything that is not a digit or a decimal point is dropped, including the
+ * separators it just emitted, so this is **idempotent**: formatting its own
+ * output is a no-op. `amountCaret` and the controlled input in
+ * `app/setup/BudgetForm.tsx` both depend on that, because the caret is restored
+ * by making the DOM value equal the prop before React compares them.
+ *
+ * A sign is dropped too. A budget is a magnitude, which is what the backend's
+ * `@IsPositive` on `RegisterDto.monthlyBudget` says as well.
+ *
+ * The fraction is **truncated** to two digits rather than rounded, which is what
+ * makes a third decimal keystroke a no-op instead of a value that changes under
+ * the user: typing `5` onto `2,000.55` yields the raw `2000.555`, which formats
+ * straight back to `2,000.55`. Two digits is `@IsNumber({ maxDecimalPlaces: 2 })`
+ * on the same field.
+ *
+ * A trailing `.` survives, because `'24.'` is a real intermediate state and
+ * deleting the point the user just typed is the most infuriating possible
+ * behaviour. `'.5'` keeps its missing leading zero for the same reason:
+ * inserting a significant character mid-keystroke is exactly the caret bug this
+ * function exists to avoid, and `parseAmountInput('.5')` is `0.5` regardless.
+ */
+export function formatAmountInput(raw: string): string {
+  const [integer = '', ...rest] = raw.replace(/[^0-9.]/g, '').split('.');
+
+  // Only the first point counts, so '1.2.3' is '1.23' rather than rejected.
+  const hasPoint = rest.length > 0;
+  const fraction = rest.join('').slice(0, 2);
+
+  // '007' -> '7', while a lone '0' survives: AC3's zero case has to stay
+  // reachable, and so does the '0' in '0.50'.
+  const digits = integer.replace(/^0+(?=\d)/, '');
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  return hasPoint ? `${grouped}.${fraction}` : grouped;
+}
+
+/**
+ * The number a display string stands for, e.g. `'2,000.50'` -> `2000.5`, or
+ * `NaN` when it holds no number at all.
+ *
+ * `NaN` rather than `0` for an empty field, because those are different answers:
+ * `isBudgetValid` in `app/setup/draft.ts` has to reject `''` and `'0'` alike but
+ * for different reasons, and a caller that cannot tell them apart would treat an
+ * untouched field as a deliberate zero.
+ *
+ * The digit test is what makes that work: `Number('')` is `0` and `Number('.')`
+ * is `NaN`, so leaning on `Number` alone would answer `0` for a field nobody has
+ * typed in.
+ */
+export function parseAmountInput(value: string): number {
+  const bare = value.replace(/,/g, '');
+  return /\d/.test(bare) ? Number(bare) : NaN;
+}
+
+/**
+ * Where the caret belongs in `formatted`, given where it sat in `raw`.
+ *
+ * Counts the significant characters before the old caret and returns the index
+ * just after that many of them in the new string, so an inserted or removed
+ * group separator does not drag the caret with it. Without this, typing into the
+ * middle of `2,000` sends the caret to the end on every keystroke, because
+ * React's controlled-input commit reassigns `value` and the browser then
+ * collapses the selection.
+ *
+ * Correct as long as `formatAmountInput` only ever *drops* significant
+ * characters and never inserts or reorders them, which is true, and the clamp
+ * covers the dropping.
+ */
+export function amountCaret(raw: string, caret: number, formatted: string): number {
+  const from = Math.max(0, Math.min(caret, raw.length));
+  const wanted = Math.min(countSignificant(raw.slice(0, from)), countSignificant(formatted));
+  if (wanted === 0) return 0;
+
+  let seen = 0;
+  for (let index = 0; index < formatted.length; index += 1) {
+    if (SIGNIFICANT.test(formatted[index]!)) {
+      seen += 1;
+      if (seen === wanted) return index + 1;
+    }
+  }
+  return formatted.length;
 }

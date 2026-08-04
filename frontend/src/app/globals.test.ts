@@ -96,6 +96,15 @@ const RADIUS_TOKENS: [token: string, value: string][] = [
   ['xl', '20px'],
 ];
 
+// Foundations draws no shadow swatches, so unlike every other table here these
+// are read off the frames that use them rather than from a variable: card from
+// 02's centred card (42:709), panel and chip from Welcome's decorative panel.
+const SHADOW_TOKENS: [token: string, value: string][] = [
+  ['card', '0 12px 32px rgba(13, 18, 31, 0.06)'],
+  ['panel', '0 24px 50px rgba(0, 0, 0, 0.35)'],
+  ['chip', '0 10px 24px rgba(0, 0, 0, 0.25)'],
+];
+
 // [utility, family token, size, weight, tracking, leading]
 const TYPE_STYLES: [string, string, string, string, string, string][] = [
   ['text-display-xxl', 'display', '64px', '800', '-0.03em', 'normal'],
@@ -143,6 +152,29 @@ describe('Foundations radius scale', () => {
   it('does not declare --radius-full, which the compiler ignores', () => {
     expect(raw).not.toMatch(/--radius-full:/);
   });
+});
+
+describe('Foundations shadows', () => {
+  it.each(SHADOW_TOKENS)('Shadow/%s is %s', (token, value) => {
+    expect(css).toContain(`--shadow-${token}: ${value};`);
+  });
+
+  it('declares exactly these three shadows and nothing else', () => {
+    // The negative lookahead keeps the three sibling namespaces out, so their
+    // `initial` resets are not counted as declarations.
+    const declared = [...raw.matchAll(/^\s*--shadow-(?!\*)([a-z0-9-]+):/gm)].map((m) => m[1]);
+    expect(declared.sort()).toEqual(SHADOW_TOKENS.map(([token]) => token).sort());
+  });
+
+  // All four namespaces are cleared, not just --shadow-*. Miss one and
+  // `drop-shadow-md` or `text-shadow-lg` still compiles, which is the same
+  // silent drift clearing --color-* exists to prevent.
+  it.each(['--shadow-*', '--inset-shadow-*', '--drop-shadow-*', '--text-shadow-*'])(
+    '%s is cleared',
+    (namespace) => {
+      expect(css).toContain(`${namespace}: initial;`);
+    },
+  );
 });
 
 describe('Foundations type styles', () => {
@@ -246,6 +278,9 @@ describe('compiled output', () => {
     // radius, including the built-in pill
     ...RADIUS_TOKENS.map(([token]) => `rounded-${token}`),
     'rounded-full',
+    // the three shadows, plus the static utility that survives the reset
+    ...SHADOW_TOKENS.map(([token]) => `shadow-${token}`),
+    'shadow-none',
     // every type style
     ...TYPE_STYLES.map(([name]) => name),
     // both families
@@ -288,9 +323,44 @@ describe('compiled output', () => {
     'text-4xl',
     'rounded-2xl',
     'rounded-3xl',
+    // Tailwind's own elevation scale, across all four cleared namespaces. The
+    // bare `shadow` matters most: it is the one a developer reaches for from
+    // memory, and it disappears with the namespace exactly as bare `rounded`
+    // does.
+    'shadow',
+    'shadow-sm',
+    'shadow-md',
+    'shadow-lg',
+    'shadow-2xl',
+    'shadow-inner',
+    'inset-shadow-sm',
+    'drop-shadow-md',
+    'drop-shadow-lg',
+    'text-shadow-md',
   ];
 
   const selector = (candidate: string) => `.${candidate.replace(/\./g, '\\.')}`;
+
+  /**
+   * Whether `candidate` generated a rule of its own, rather than merely
+   * appearing as the prefix of one that did.
+   *
+   * A plain `toContain` cannot express the FORBIDDEN half once one token is a
+   * prefix of another: `.shadow-card` contains the substring `.shadow`, so
+   * asserting that bare `shadow` generates nothing would fail against a
+   * stylesheet that is entirely correct. Requiring a CSS boundary after the
+   * class name is what separates the two. Same helper, same reason, as
+   * components/ui/utilities.test.ts.
+   */
+  const BOUNDARY = /[\s,{:>~+)\]]/;
+  const generates = (candidate: string) => {
+    const sel = selector(candidate);
+    for (let at = compiled.indexOf(sel); at !== -1; at = compiled.indexOf(sel, at + 1)) {
+      const next = compiled[at + sel.length];
+      if (next !== undefined && BOUNDARY.test(next)) return true;
+    }
+    return false;
+  };
 
   beforeAll(async () => {
     const compiler = await compile(raw, {
@@ -310,11 +380,11 @@ describe('compiled output', () => {
   });
 
   it.each(EXPECTED)('%s generates CSS', (candidate) => {
-    expect(compiled).toContain(selector(candidate));
+    expect(generates(candidate)).toBe(true);
   });
 
   it.each(FORBIDDEN)('%s generates nothing', (candidate) => {
-    expect(compiled).not.toContain(selector(candidate));
+    expect(generates(candidate)).toBe(false);
   });
 
   it('puts every colour token on :root, even the ones nothing uses yet', () => {
@@ -322,6 +392,12 @@ describe('compiled output', () => {
     // unused tokens entirely - including from anything reading them from JS.
     for (const [, token, value] of COLOUR_TOKENS) {
       expect(compiled).toContain(`--color-${token}: ${value};`);
+    }
+  });
+
+  it('puts every shadow token on :root as well', () => {
+    for (const [token, value] of SHADOW_TOKENS) {
+      expect(compiled).toContain(`--shadow-${token}: ${value};`);
     }
   });
 

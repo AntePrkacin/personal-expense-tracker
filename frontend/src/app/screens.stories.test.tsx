@@ -1,7 +1,19 @@
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
+import * as SetupBudgetScreen from './setup/SetupBudgetScreen.stories';
 import * as WelcomeScreen from './WelcomeScreen.stories';
+
+// 02 Setup reaches useRouter through BudgetForm, and jsdom has no App Router, so
+// rendering its stories here needs the mock below.
+//
+// Note this is the **opposite** call from (app)/shell.stories.test.tsx, which
+// records that SidebarNav must not get a story at all because there is no router
+// in context under Jest. The difference is what the story is for: SidebarNav is a
+// wrapper whose only job is reading the pathname, while 02 Setup is a whole frame
+// to diff against Figma. So here the router is mocked rather than the story
+// skipped. The two notes are halves of one decision.
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 // Smoke-tests the Screens section's stories, the same job
 // src/components/ui/ui.stories.test.tsx does for Components,
@@ -27,6 +39,7 @@ type StoryModule = Record<string, unknown> & { default: Meta };
 
 const MODULES: [name: string, module: StoryModule][] = [
   ['WelcomeScreen', WelcomeScreen as StoryModule],
+  ['SetupBudgetScreen', SetupBudgetScreen as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

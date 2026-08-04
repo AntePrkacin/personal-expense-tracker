@@ -29,9 +29,9 @@ the team tooling is real rather than illustrative.
 
 The two halves are each substantially built and **currently do not talk to each other at all**.
 The backend has the whole access flow, the transaction write endpoints and the profile read and
-update; the frontend has the
-design system, the app shell with its four routed views, and the first of the six access screens
-(01 Welcome, at `/`). What is missing between them is the session cookie (PET-52), which every
+update; the frontend has the design system, the app shell with its four routed views, and the
+first two of the six access screens (01 Welcome at `/`, and 02 Setup step 1 at `/setup`). What is
+missing between them is the session cookie (PET-52), which every
 authenticated read needs. PET-19 deleted the scaffold greeting page that fetched
 `GET /api/hello`, and it had been the only wire between them, so every screen renders real
 markup over placeholder data.
