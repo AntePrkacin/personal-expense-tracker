@@ -152,7 +152,7 @@ on the `<input>` / `<select>`, and `Input`'s `$` prefix and `Select`'s chevron a
 positioned over the control with `pointer-events-none`. A padded box turns its own 14-16px
 band into a dead zone where a click places no caret and opens no list.
 
-**Five details of the form components have no Figma counterpart.** They were chosen, not
+**Six details of the form components have no Figma counterpart.** They were chosen, not
 read, so do not "correct" them without asking the designer:
 
 - **The inline error pattern** - red border plus one line of `text-body-s
@@ -176,6 +176,15 @@ text-status-danger-text`, no icon. Assumption A29 records that no form error vis
   inferred from the plain Input tile. Focus also keeps that accent border on an _invalid_
   field rather than holding the red: invalidity is still carried by the message and by
   `aria-invalid`, and a 0.5px width change is too little focus signal to see.
+
+- **The pointer cursor** (`cursor-pointer` in `BUTTON_BASE`). A design file has no cursors to
+  read, and this one is not the browser's default either: Tailwind's preflight sets only
+  `appearance: button` on a `<button>`, and the user agent draws an arrow, so every button in
+  the app read as unclickable on hover until PET-10 added it. It lives in the shared base
+  rather than the `<button>` branch, because the anchor and button renderings must not differ
+  under the cursor even though an anchor gets the pointer natively. `disabled:` still wins
+  through its pseudo-class. The one control that must _not_ inherit this is a deliberately
+  inert one - the header's month and search pills are `div`s, so they do not.
 
 **`ui/Sidebar.tsx` takes its active item as a prop, and that has a consequence for whoever
 mounts it.** `active` is one of four keys matching the Figma variant property, not a
@@ -265,10 +274,11 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Three of the six access screens.** Welcome at `/`, Setup step 1 at `/setup` and Setup step 2
-  at `/setup/categories` exist (see "The access screens" in `frontend/src/app/CLAUDE.md`).
-  Register, Log in and Check your email are PET-11 and PET-12, so `/setup/register` and `/login`
-  **404 until they land** - which means onboarding currently dead-ends at step 2's "Continue".
+- **Three of the six access screens**, meaning the three that are missing: Register, Log in and
+  Check your email are PET-11 and PET-12, so `/setup/register` and `/login` **404 until they
+  land** - which means onboarding currently dead-ends at step 2's "Continue". Welcome at `/`,
+  Setup step 1 at `/setup` and Setup step 2 at `/setup/categories` do exist (see "The access
+  screens" in `frontend/src/app/CLAUDE.md`), which is why the count reads the same either way.
   The verify page that consumes an emailed link is PET-52's, along with filling in
   `hasSession()` so `/` can send a signed-in visitor to the Dashboard instead of showing
   everyone the pitch.

@@ -1,4 +1,4 @@
-import { type CategoryColour } from '@/components/ui/categoryColour';
+import type { CategoryColour } from '@/components/ui/categoryColour';
 import type { components } from '@/types/api';
 
 // The ten starter chips onboarding offers on screen 03 (CAT-2), paired with the

@@ -312,18 +312,10 @@ no `aria-pressed`, `aria-checked` or `type="checkbox"` anywhere in `frontend/src
 The ARIA toggle-button pattern, which is also what the design draws: a chip that presses. Space
 and Enter both activate it, each chip is one ordinary tab stop, and the colour dot and the
 checkmark are both `aria-hidden` because `aria-pressed` already carries the state - the same
-call `ui/Tag`'s dot and `ui/Input`'s `$` prefix make. The rejected alternative is recorded in
-that file the way `SetupShell` records its two: a visually hidden `<input type="checkbox">` per
-chip inside a `<fieldset>`, declined because the legend would duplicate the screen's own `h1`,
-Enter does not toggle a checkbox, and a hidden input buys nothing where there is no form.
-
-Two things about the chip's appearance are decisions rather than readings. It carries
-`border-[1.5px]` in **both** states where the frame draws 1px unselected: the chip is
-auto-sized, so a border that thickened on selection would make it a pixel wider and taller and
-nudge or rewrap the whole row under the pointer, and `Field.tsx`'s note about the half pixel
-eating into the padding holds only for a full-width control. And the checkmark is stroked
-`text-brand-accent` rather than `currentColor`, because Figma strokes it with Brand/Accent while
-the label beside it is Brand/Accent Pressed - the same pair the active step dot warns about.
+call `ui/Tag`'s dot and `ui/Input`'s `$` prefix make. That file records the rejected
+`<input type="checkbox">` alternative, and two appearance decisions with no Figma counterpart:
+`border-[1.5px]` in both states, and the checkmark stroked `text-brand-accent` rather than
+`currentColor`.
 
 **The three onboarding cards differ only in width, and `STEP_WIDTH` is where that lives.** Frame
 03 is 600px against 02's and 22's 520. PET-9 hard-coded `w-130` with a note saying PET-10 either
@@ -374,7 +366,7 @@ only: they are `CategoryColour` keys, so no hex value enters the frontend.
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
-alongside this file whenever the work is in a route: five of the six access screens, the
+alongside this file whenever the work is in a route: three of the six access screens, the
 shell's content and its authentication, and any call to the backend at all. That list is the
 single home, so nothing is restated here.
 

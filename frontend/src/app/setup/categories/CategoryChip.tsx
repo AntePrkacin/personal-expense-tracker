@@ -2,41 +2,22 @@ import { CATEGORY_TILE, type CategoryColour } from '@/components/ui/categoryColo
 
 // One starter category chip on screen 03 (node 43:720), which toggles.
 //
-// **It is a real `button` carrying `aria-pressed`**, which is the ARIA
-// toggle-button pattern and is what the design draws: a chip that presses. Space
-// and Enter both activate it, it is one ordinary tab stop, and the pressed state is
-// announced without inventing copy the design never draws. The repo had no toggle
-// control at all before this, so this is the precedent the category screens inherit.
-//
-// The alternative, recorded here the way SetupShell.tsx records its two so nobody
-// "improves" this into one: a visually hidden `input type="checkbox"` per chip
-// inside a `fieldset`, which announces as "checkbox, checked" and reads more
-// naturally as "pick several from a set". It was declined because the legend would
-// duplicate the screen's own h1, Enter does not toggle a checkbox, and a hidden
-// input buys nothing here - there is no form on this screen and nothing submits.
-// Reach for it if a designer or QA asks for it.
-//
-// No `'use client'`. This holds no state; `onToggle` comes from CategoryPicker,
-// which is the client component, and importing this from there is what pulls it
-// into the client bundle. Same call every component in `components/ui/` makes.
-//
-// Not in `components/ui/` either: that folder mirrors the nine Figma Components
-// tiles and is complete, so a new component from here on is a feature's own. And
-// `ui/Tag` is not reusable as one despite the resemblance - see CHIP_SURFACE below.
+// The rejected alternative, recorded so nobody "improves" this into one: a visually
+// hidden `input type="checkbox"` per chip inside a `fieldset`. Declined because the
+// legend would duplicate the screen's own h1, Enter does not toggle a checkbox, and
+// a hidden input buys nothing where there is no form. Reach for it if a designer or
+// QA asks.
 
 /**
  * The chip's fill and border, per state.
  *
- * Two maps rather than one string with conditional pieces, per the rule
- * `ui/Field.tsx` records: `border-border-strong` and `border-brand-accent` have
- * equal specificity, so a component emitting both would let stylesheet order pick
- * the winner. Complete literal class strings, because Tailwind's scanner reads this
- * file as raw text and an interpolated class is found by nobody.
+ * Two maps rather than one conditional string, per `ui/Field.tsx`'s rule:
+ * `border-border-strong` and `border-brand-accent` have equal specificity, so a
+ * component emitting both would let stylesheet order pick the winner.
  *
- * The selected pair is byte-identical to `TAG_TONES.indigo`, and that is a
- * coincidence rather than a reason to reuse `ui/Tag`: Tag is a non-interactive
- * `span` at a different radius, padding, type style and dot size, and its five
- * tones are *status* tones, which a category is not.
+ * The selected pair is byte-identical to `TAG_TONES.indigo` by coincidence, not as a
+ * reason to reuse `ui/Tag`: Tag is a non-interactive `span` at a different radius,
+ * padding, type style and dot size, and its tones are *status* tones.
  */
 export const CHIP_SURFACE: Record<'on' | 'off', string> = {
   on: 'bg-brand-accent-soft border-brand-accent',
@@ -52,28 +33,15 @@ export const CHIP_LABEL: Record<'on' | 'off', string> = {
 /**
  * Everything both states share.
  *
- * `inline-flex` rather than `flex`, the call `ui/Tag` records: Figma auto-layout
- * hugs its contents, and a block-level chip would stretch to fill the wrap
- * container.
+ * **`border-[1.5px]` in both states is the one deviation from the frame**, where the
+ * unselected chip draws 1px. The chip is auto-sized rather than `w-full`, so a border
+ * that thickens on selection makes it a pixel wider and taller and nudges - or
+ * rewraps - the whole row under the pointer. Half a pixel of border is invisible; a
+ * row that jumps when you click it is not.
  *
- * **`border-[1.5px]` in both states is the one deviation from the frame**, where
- * the unselected chip draws 1px. Box sizing is `border-box`, but the chip is
- * auto-sized rather than `w-full`, so a border that thickens on selection makes the
- * chip a pixel wider and taller and nudges - or rewraps - the whole row under the
- * pointer. Half a pixel of border is invisible; a row that jumps when you click it
- * is not. `Field.tsx`'s note that the extra half pixel "eats into the padding
- * rather than resizing the field" is about a full-width control and does not apply
- * here. Same class of deliberate deviation as the five `ui/` form details
- * `frontend/CLAUDE.md` lists.
- *
- * The focus ring is the one every other component uses, and it is why `SetupShell`
- * deliberately omits `overflow-hidden` on the card: ten of these sit inside it.
- *
- * `cursor-pointer` for the reason `BUTTON_BASE` records: a `<button>` gets an arrow
- * from the user agent, and preflight does not change it. It matters more here than
- * on an ordinary button, because a chip is the one control on this screen and it
- * does not look like a button otherwise - CAT-1 tells the user to "tap to toggle",
- * so the cursor is the only thing that says the pills are what to tap.
+ * `cursor-pointer` for the reason `BUTTON_BASE` records, and it matters more here: a
+ * chip does not look like a button, and CAT-1 says "tap to toggle", so the cursor is
+ * what identifies the pills as the thing to tap.
  */
 const CHIP_BASE =
   'text-label-l focus-visible:outline-brand-accent inline-flex cursor-pointer items-center ' +
@@ -83,18 +51,13 @@ const CHIP_BASE =
 /**
  * The checkmark a selected chip shows (node 43:723).
  *
- * The path is the exported vector translated to its own bounding box: 8.5x6 with a
- * 2-wide round-capped stroke, so half the stroke falls outside the viewBox at every
- * end and `overflow-visible` is what stops the tips and the elbow rendering shorn
- * flat. That is the same trap `ui/Select`'s and `ui/ListRow`'s glyphs document.
+ * The path is the exported vector translated to its own 8.5x6 bounding box, so half
+ * of the 2-wide round-capped stroke falls outside the viewBox and `overflow-visible`
+ * is what stops the tips and the elbow rendering shorn flat - the trap `ui/Select`'s
+ * and `ui/ListRow`'s glyphs document.
  *
- * `text-brand-accent`, not `currentColor`: Figma strokes this with Brand/Accent
- * while the label beside it is Brand/Accent Pressed, so inheriting would quietly
- * darken it. The two are 60px apart on the frame and easy to conflate - the same
- * pair `SetupShell`'s active dot warns about.
- *
- * `aria-hidden`, because `aria-pressed` on the button already carries the state.
- * Private to this file, following `Chevron()` inside `ui/Select.tsx`.
+ * `text-brand-accent`, not `currentColor`: Figma strokes this with Brand/Accent while
+ * the label beside it is Brand/Accent Pressed, so inheriting would quietly darken it.
  */
 function CheckGlyph() {
   return (
@@ -128,10 +91,8 @@ export function CategoryChip({ label, colour, selected, onToggle }: CategoryChip
       onClick={onToggle}
       className={`${CHIP_BASE} ${CHIP_SURFACE[state]} ${CHIP_LABEL[state]}`}
     >
-      {/* Hidden, because the palette has eight colours for ten chips: two of them
-          repeat, so the dot cannot identify a category even to a reader who can
-          see it. The name is always spelled out beside it, which is the same
-          argument `ui/Tag` makes about its own dot. */}
+      {/* Hidden because two of the ten colours repeat, so the dot cannot identify a
+          category even to a reader who can see it. The name always sits beside it. */}
       <span
         aria-hidden="true"
         className={`size-2.75 shrink-0 rounded-full ${CATEGORY_TILE[colour]}`}

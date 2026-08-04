@@ -24,6 +24,17 @@ const BUILT = ['setup', 'setupCategories'] as const satisfies readonly RouteKey[
 /** Routes declared for a screen nobody has built yet. */
 const PENDING = ['setupRegister', 'login'] as const satisfies readonly RouteKey[];
 
+/**
+ * Every onboarding step after the first, derived rather than listed.
+ *
+ * A hand-written list would have to be edited for a step this file has not seen,
+ * which is the opposite of what the assertion using it is for. `setup` itself is
+ * excluded because it is the parent rather than a child of one.
+ */
+const NESTED_SETUP_KEYS = (Object.keys(ACCESS_ROUTES) as RouteKey[]).filter(
+  (key) => key !== 'setup' && ACCESS_ROUTES[key].startsWith(ACCESS_ROUTES.setup),
+);
+
 describe('ACCESS_ROUTES', () => {
   it('classifies every declared route as built or pending', () => {
     // The assertion that keeps the two lists honest. Adding a route to routes.ts
@@ -42,23 +53,30 @@ describe('ACCESS_ROUTES', () => {
     expect(fs.existsSync(page)).toBe(true);
   });
 
-  it.each(['setupCategories', 'setupRegister'] as const)(
-    'nests onboarding %s under step 1s route',
-    (key) => {
-      // The structural claim behind PET-9's route-shape decision, and the one thing
-      // a page.tsx check cannot make: steps 2 and 3 have to be *children* of /setup
-      // for the draft provider in app/setup/layout.tsx to stay mounted across the
-      // move. Flatten either to /setup-categories and "Back keeps my values" breaks
-      // while every route still resolves.
-      expect(ACCESS_ROUTES[key].startsWith(`${ACCESS_ROUTES.setup}/`)).toBe(true);
-    },
-  );
-
   it('gives every route an absolute path', () => {
     // A relative href resolves against whatever screen rendered it, so "/setup"
     // from a step-2 page would land on /setup/categories/setup.
     for (const href of Object.values(ACCESS_ROUTES)) {
       expect(href.startsWith('/')).toBe(true);
     }
+  });
+});
+
+describe('the onboarding route shape', () => {
+  it('finds the nested steps to check', () => {
+    // Guards the it.each below: an empty list iterates nothing and passes.
+    expect(NESTED_SETUP_KEYS.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(NESTED_SETUP_KEYS)('nests %s under step 1s route', (key) => {
+    // The structural claim behind PET-9's route-shape decision, and the one thing a
+    // page.tsx check cannot make: every step after the first has to be a *child* of
+    // /setup for the draft provider in app/setup/layout.tsx to stay mounted across
+    // the move. Flatten one to /setup-categories and "Back keeps my values" breaks
+    // while every route still resolves.
+    //
+    // The trailing slash is what makes this stricter than the filter that built the
+    // list: `/setup-categories` starts with `/setup` but is a sibling, not a child.
+    expect(ACCESS_ROUTES[key].startsWith(`${ACCESS_ROUTES.setup}/`)).toBe(true);
   });
 });

@@ -22,8 +22,14 @@ describe('the chip state maps', () => {
     // Guards the it.each blocks below, and the split itself: fill and label are
     // separate maps because border-border-strong and border-brand-accent have equal
     // specificity, so a single string emitting both would let stylesheet order pick.
-    expect(Object.keys(CHIP_SURFACE)).toEqual(['on', 'off']);
-    expect(Object.keys(CHIP_LABEL)).toEqual(['on', 'off']);
+    //
+    // Membership and count rather than a key array, which would also pin insertion
+    // order and fail on a reorder that changes nothing.
+    for (const map of [CHIP_SURFACE, CHIP_LABEL]) {
+      expect(Object.keys(map)).toHaveLength(2);
+      expect(map).toHaveProperty('on');
+      expect(map).toHaveProperty('off');
+    }
   });
 
   it('tints the selected chip and types it in the pressed accent', () => {
