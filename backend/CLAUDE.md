@@ -145,11 +145,29 @@ skips nothing at all - silently.** The named form is mandatory.
 ## Backend conventions
 
 Money crosses units in `src/common/money.ts` and nowhere else: `toCents()` on the way in,
-`fromCents()` on the way out. Three callers so far - `VerificationService` for the budget
+`fromCents()` on the way out. Four callers so far - `VerificationService` for the budget
 the onboarding payload carries, `ProfileService` for the same budget on every read and
-update, and `TransactionsService` for amounts - which is what the schema comments mean by
-the conversion happening at the service boundary. A fourth place doing its own arithmetic
-is a bug.
+update, `TransactionsService` for amounts, and `CategoriesService` for caps and derived
+totals - which is what the schema comments mean by the conversion happening at the service
+boundary. A fifth place doing its own arithmetic is a bug.
+
+**Every month-scoped figure resolves its period through `src/common/month-window.ts`, and
+nothing else computes one.** `monthWindow(monthStartDay, today)` returns `YYYY-MM-DD` bounds
+that are inclusive at the start and **exclusive** at the end, so a query reads `date >= start
+and date < end`: text compared against the text column the schema stores, served as a range
+scan by `transactions_date_idx`, with no last-day-of-month arithmetic anywhere. Nothing in the
+file constructs a `Date`, because round-tripping a calendar date through one shifts it across
+timezones - the same reason `transactions.date` is text.
+
+`today` is a parameter rather than a clock read, which is what lets specs pin month-boundary
+behaviour without faking timers, and it is formatted by `todayIn()` against **`APP_TIMEZONE`**
+rather than UTC. UTC is wrong for everybody: just after local midnight on the boundary day a
+transaction falls into the previous period, so the whole screen shows the wrong month for a
+few hours, twice a month. One configured zone is right for every user this project has and
+honest about not solving the general case; the per-user fix is in `docs/TODO.md`. The profile
+constrains `monthStartDay` to 1-28 precisely so every month has the day and there is no
+clamping case - anything outside that range throws, because it is a programming error rather
+than input.
 
 ## Transaction writes
 
@@ -194,6 +212,69 @@ Four fields the transaction detail mock shows are **deliberately not accepted**:
 payment method, status and account (DET-8, A20). No form captures them and no column stores
 them, so `forbidNonWhitelisted` answers 400 rather than dropping them silently and letting a
 frontend believe they were saved.
+
+## Category endpoints
+
+**One `Uncategorized` category exists per account, and it is a system row rather than a
+chip.** `GET /api/categories`, `POST`, `PATCH /:id` and `DELETE /:id` live in
+`src/categories/`. The ticket named the "Other" onboarding chip as the fallback every
+deletion reassigns to; that would have made one row serve both as a user's free choice and as
+a system invariant, so the roles were split. "Other" stays an ordinary chip anyone can rename
+or delete, and `Uncategorized` is seeded at provisioning, offered on no screen, and never part
+of `STARTER_CATEGORIES`.
+
+It is found by an `is_fallback` column, not by its name. The flag is still needed even though
+the name is immutable, because refusing the rename requires already knowing the row is
+special - matching the string would also make "Uncategorized" a reserved word `POST` has to
+block. A partial unique index (`where is_fallback = 1`) enforces "at most one"; provisioning
+is what guarantees "at least one", and **no code repairs a database that predates the
+migration** - every account that existed was a test account and was re-provisioned by hand.
+
+Its color, `#98A0AE`, is the design system's `--color-text-tertiary` rather than one of the
+eight category colors. White was chosen first and reversed: since this is the category the
+transaction form preselects, it is likely to hold the largest donut slice, and white would
+have rendered that slice, the legend swatch and the list dot as nothing.
+
+Five things about the rest of it are easy to get wrong:
+
+- **A cap is optional, and `0` is not how you say "no cap".** The ticket originally required
+  one above zero, which would have made uncapped categories a legacy artifact the API could
+  never produce again - every onboarding chip and the fallback arrive without one. Users are
+  not forced to budget per category, so an absent cap is a first-class choice. A cap of
+  exactly `0` is still a 400: it means "spend nothing here", which puts the category Over on
+  its first transaction and is almost always an empty form field coerced to a number.
+
+- **The status band is decided on stored cents, never on `percentUsed`.** Read literally the
+  design's four bands leave a hole between 99% and 100% (CTG-5, A23). Comparing integers
+  closes it with no judgement call and makes display rounding unable to move a category
+  between bands - so a card can legitimately read 100% and say Near, which PET-36 has to
+  round down for. Uncapped is the fifth band, with a null cap, percent, remaining and over.
+
+- **The date predicates belong in the JOIN condition, not the WHERE clause.** The stats read
+  is one grouped LEFT JOIN from `categories` to `transactions`. Moved into WHERE, the window
+  bounds would filter out the category rows themselves, silently hiding every category that
+  happened to have no spend this period.
+
+- **The allocation summary ships inside the list response**, because frame 13 draws it as the
+  header of the screen the cards are on. It is the one figure there that is time-independent -
+  caps are monthly by definition, so no window enters into it. `unallocated` is returned
+  **unclamped** and goes negative when caps exceed the budget (A43).
+
+- **Delete is two ordered statements, not a `db.transaction()`.** Both tables are user-scope
+  so a transaction is genuinely available, and it is refused for the reason under Access and
+  sessions: the embedded driver refuses overlapping transactions, so a second call site means
+  two quick deletes on one database collide. Reassign first, tombstone second - a failure in
+  between leaves the transactions on `Uncategorized` and the category live but empty, which is
+  visible and fixed by retrying, where the reverse strands rows pointing at a tombstone. The
+  reassignment deliberately sweeps **tombstoned** transactions too, so the offline-sync record
+  carries no dangling category id.
+
+Renaming or deleting the fallback is a **409**, not a 403: the request is well-formed and the
+caller is entitled to make it, it just conflicts with an invariant of the resource. Everything
+else about that row - cap, color, icon, note - is editable.
+
+The month window itself is `src/common/month-window.ts`, shared with PET-28 and PET-20 and
+described under Backend conventions.
 
 ## Profile and preferences
 
@@ -292,10 +373,6 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Categories have no endpoints.** The table and a starter set exist; there is no CRUD, no
-  month stats and no allocation summary. The starter colors are the real ones from Figma frame
-  03, read per chip from the design's variable bindings, and the palette has eight colors for
-  ten chips, so two repeat and color alone cannot identify a category.
 - **Insights has no table.** It arrives with its feature, as an ordinary user-scope migration.
 - **Transaction reads.** `transactions` has the three write endpoints above and **no reads at
   all**. The list, the month windows and every aggregate the designs show are PET-28's and the

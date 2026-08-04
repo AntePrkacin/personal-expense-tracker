@@ -169,6 +169,54 @@ export interface paths {
         patch: operations["TransactionsController_update"];
         trace?: never;
     };
+    "/api/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your categories with this period’s progress, and the allocation summary.
+         * @description One call serves the whole screen. Money is in major units. `spent` and `transactionCount` cover the current budgeting period, which starts on your profile’s `monthStartDay` rather than the 1st. An uncapped category reports `status: "uncapped"` with a null cap, percent, remaining and over - a cap is optional, so this is ordinary rather than exceptional. `allocation.unallocated` can be negative when caps exceed the budget.
+         */
+        get: operations["CategoriesController_list"];
+        put?: never;
+        /**
+         * Add a category.
+         * @description `monthlyCap` is optional: omit it for a category with no limit. A cap of **0 or less is a 400** - it means "spend nothing here", which is not the same as no limit and is almost always an empty field rather than an intent.
+         */
+        post: operations["CategoriesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a category, keeping its transactions.
+         * @description The transactions are **not** deleted: they move to `Uncategorized`, which is why that category exists. **409** means you tried to delete `Uncategorized` itself.
+         */
+        delete: operations["CategoriesController_remove"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a category.
+         * @description Send only the fields to change. An absent field is left alone; `monthlyCap` and `note` also accept `null`, which clears them - clearing a cap makes the category uncapped. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and note are all editable.
+         */
+        patch: operations["CategoriesController_update"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -340,6 +388,74 @@ export interface components {
             merchant?: string;
             /** Format: uuid */
             categoryId?: string;
+        };
+        CategoryResponseDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Groceries */
+            name: string;
+            /**
+             * @description Hex, `#RRGGBB`.
+             * @example #57B368
+             */
+            color: string;
+            icon: string | null;
+            note: string | null;
+            /** @description True for the one `Uncategorized` category every account has. It cannot be deleted or renamed, deleting any other category moves its transactions here, and the transaction form preselects it. */
+            isFallback: boolean;
+            /** @description Major units. Null means uncapped, which is not a cap of 0. */
+            monthlyCap: number | null;
+            /** @description Major units spent in this category during the current period. */
+            spent: number;
+            /** @description Transactions counted in `spent`. */
+            transactionCount: number;
+            /** @description Percentage of the cap used, unrounded. Null when uncapped. Round it for display; the status is decided on cents, so rounding cannot disagree with it. */
+            percentUsed: number | null;
+            /** @description Major units still available. Null when uncapped or already over; `over` carries the excess instead. */
+            remaining: number | null;
+            /** @description Major units spent beyond the cap. Null unless the status is `over`. */
+            over: number | null;
+            /**
+             * @description Decided on cents, not on `percentUsed`. `uncapped` when there is no cap.
+             * @enum {string}
+             */
+            status: "on_track" | "near" | "full" | "over" | "uncapped";
+        };
+        AllocationResponseDto: {
+            /** @description Major units, from your profile. */
+            monthlyBudget: number;
+            /** @description Major units. The sum of every live category cap; uncapped categories contribute nothing, so this can sit well below the budget for someone who caps little. */
+            allocated: number;
+            /** @description Major units, `monthlyBudget - allocated`. **Can be negative**: nothing prevents caps from exceeding the budget (A43), and the figure is returned unclamped so the excess is recoverable. */
+            unallocated: number;
+        };
+        CategoriesResponseDto: {
+            /** @description Live categories, ordered by name. */
+            categories: components["schemas"]["CategoryResponseDto"][];
+            allocation: components["schemas"]["AllocationResponseDto"];
+        };
+        CreateCategoryDto: {
+            /**
+             * @description Hex, `#RRGGBB`. The eight category colors come from Figma frame 03.
+             * @example #57B368
+             */
+            color: string;
+            /** @description Major units (e.g. 400.00), stored as integer cents. Omit for no cap. */
+            monthlyCap?: number;
+            name: string;
+            /** @description A name from the frontend's own icon set. Never resolved to an asset here. */
+            icon?: string;
+            /** @description Captured, but surfaces on no screen today (CED-4, A42). */
+            note?: string;
+        };
+        UpdateCategoryDto: {
+            /** @example #57B368 */
+            color?: string;
+            /** @description Major units. `null` clears the cap, leaving the category uncapped. */
+            monthlyCap?: number | null;
+            icon?: string | null;
+            note?: string | null;
+            name?: string;
         };
     };
     responses: never;
@@ -754,6 +870,182 @@ export interface operations {
             };
             /** @description No such resource. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriesResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The request conflicts with the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCategoryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The request conflicts with the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

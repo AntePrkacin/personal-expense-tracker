@@ -67,6 +67,8 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/auth/register`,
       `/${API_PREFIX}/auth/session`,
       `/${API_PREFIX}/auth/verify`,
+      `/${API_PREFIX}/categories`,
+      `/${API_PREFIX}/categories/{id}`,
       `/${API_PREFIX}/hello`,
       `/${API_PREFIX}/profile`,
       `/${API_PREFIX}/transactions`,

@@ -532,6 +532,245 @@
           "transactions"
         ]
       }
+    },
+    "/api/categories": {
+      "get": {
+        "description": "One call serves the whole screen. Money is in major units. `spent` and `transactionCount` cover the current budgeting period, which starts on your profile’s `monthStartDay` rather than the 1st. An uncapped category reports `status: \"uncapped\"` with a null cap, percent, remaining and over - a cap is optional, so this is ordinary rather than exceptional. `allocation.unallocated` can be negative when caps exceed the budget.",
+        "operationId": "CategoriesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoriesResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your categories with this period’s progress, and the allocation summary.",
+        "tags": [
+          "categories"
+        ]
+      },
+      "post": {
+        "description": "`monthlyCap` is optional: omit it for a category with no limit. A cap of **0 or less is a 400** - it means \"spend nothing here\", which is not the same as no limit and is almost always an empty field rather than an intent.",
+        "operationId": "CategoriesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCategoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a category.",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/api/categories/{id}": {
+      "patch": {
+        "description": "Send only the fields to change. An absent field is left alone; `monthlyCap` and `note` also accept `null`, which clears them - clearing a cap makes the category uncapped. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and note are all editable.",
+        "operationId": "CategoriesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCategoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change a category.",
+        "tags": [
+          "categories"
+        ]
+      },
+      "delete": {
+        "description": "The transactions are **not** deleted: they move to `Uncategorized`, which is why that category exists. **409** means you tried to delete `Uncategorized` itself.",
+        "operationId": "CategoriesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a category, keeping its transactions.",
+        "tags": [
+          "categories"
+        ]
+      }
     }
   },
   "info": {
@@ -910,6 +1149,199 @@
           "categoryId": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "CategoryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Groceries"
+          },
+          "color": {
+            "type": "string",
+            "example": "#57B368",
+            "description": "Hex, `#RRGGBB`."
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "isFallback": {
+            "type": "boolean",
+            "description": "True for the one `Uncategorized` category every account has. It cannot be deleted or renamed, deleting any other category moves its transactions here, and the transaction form preselects it."
+          },
+          "monthlyCap": {
+            "type": "number",
+            "nullable": true,
+            "description": "Major units. Null means uncapped, which is not a cap of 0."
+          },
+          "spent": {
+            "type": "number",
+            "description": "Major units spent in this category during the current period."
+          },
+          "transactionCount": {
+            "type": "number",
+            "description": "Transactions counted in `spent`."
+          },
+          "percentUsed": {
+            "type": "number",
+            "nullable": true,
+            "description": "Percentage of the cap used, unrounded. Null when uncapped. Round it for display; the status is decided on cents, so rounding cannot disagree with it."
+          },
+          "remaining": {
+            "type": "number",
+            "nullable": true,
+            "description": "Major units still available. Null when uncapped or already over; `over` carries the excess instead."
+          },
+          "over": {
+            "type": "number",
+            "nullable": true,
+            "description": "Major units spent beyond the cap. Null unless the status is `over`."
+          },
+          "status": {
+            "enum": [
+              "on_track",
+              "near",
+              "full",
+              "over",
+              "uncapped"
+            ],
+            "type": "string",
+            "description": "Decided on cents, not on `percentUsed`. `uncapped` when there is no cap."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "icon",
+          "note",
+          "isFallback",
+          "monthlyCap",
+          "spent",
+          "transactionCount",
+          "percentUsed",
+          "remaining",
+          "over",
+          "status"
+        ]
+      },
+      "AllocationResponseDto": {
+        "type": "object",
+        "properties": {
+          "monthlyBudget": {
+            "type": "number",
+            "description": "Major units, from your profile."
+          },
+          "allocated": {
+            "type": "number",
+            "description": "Major units. The sum of every live category cap; uncapped categories contribute nothing, so this can sit well below the budget for someone who caps little."
+          },
+          "unallocated": {
+            "type": "number",
+            "description": "Major units, `monthlyBudget - allocated`. **Can be negative**: nothing prevents caps from exceeding the budget (A43), and the figure is returned unclamped so the excess is recoverable."
+          }
+        },
+        "required": [
+          "monthlyBudget",
+          "allocated",
+          "unallocated"
+        ]
+      },
+      "CategoriesResponseDto": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "description": "Live categories, ordered by name.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryResponseDto"
+            }
+          },
+          "allocation": {
+            "$ref": "#/components/schemas/AllocationResponseDto"
+          }
+        },
+        "required": [
+          "categories",
+          "allocation"
+        ]
+      },
+      "CreateCategoryDto": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string",
+            "description": "Hex, `#RRGGBB`. The eight category colors come from Figma frame 03.",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "example": "#57B368"
+          },
+          "monthlyCap": {
+            "type": "number",
+            "description": "Major units (e.g. 400.00), stored as integer cents. Omit for no cap.",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "icon": {
+            "type": "string",
+            "description": "A name from the frontend's own icon set. Never resolved to an asset here.",
+            "maxLength": 60
+          },
+          "note": {
+            "type": "string",
+            "description": "Captured, but surfaces on no screen today (CED-4, A42).",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "color",
+          "name"
+        ]
+      },
+      "UpdateCategoryDto": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "example": "#57B368"
+          },
+          "monthlyCap": {
+            "type": "number",
+            "nullable": true,
+            "description": "Major units. `null` clears the cap, leaving the category uncapped.",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 60
           }
         }
       }

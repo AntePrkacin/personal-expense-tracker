@@ -28,10 +28,10 @@ browse in Storybook on **6006**. The repo is also a Decode Academy final project
 the team tooling is real rather than illustrative.
 
 The two halves are each substantially built and **currently do not talk to each other at all**.
-The backend has the whole access flow, the transaction write endpoints and the profile read and
-update; the frontend has the design system, the app shell with its four routed views, and the
-first three of the six access screens (01 Welcome at `/`, 02 Setup step 1 at `/setup`, and 03
-Setup step 2 at `/setup/categories`). What is
+The backend has the whole access flow, the transaction write endpoints, the profile read and
+update, and the category endpoints with their month stats; the frontend has the design system,
+the app shell with its four routed views, and the first three of the six access screens (01
+Welcome at `/`, 02 Setup step 1 at `/setup`, and 03 Setup step 2 at `/setup/categories`). What is
 missing between them is the session cookie (PET-52), which every
 authenticated read needs. PET-19 deleted the scaffold greeting page that fetched
 `GET /api/hello`, and it had been the only wire between them, so every screen renders real
@@ -128,6 +128,8 @@ read the file before you write the change, not after.
 | touch `backend/src/auth/`, a guard, or a rate limiter               | `backend/CLAUDE.md`, Access and sessions |
 | add or change a transaction endpoint                                | `backend/CLAUDE.md`, Transaction writes |
 | add or change a profile or preferences endpoint                     | `backend/CLAUDE.md`, Profile and preferences |
+| add or change a category endpoint, or touch the fallback category   | `backend/CLAUDE.md`, Category endpoints |
+| compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
 | add or change anything in `frontend/src/components/`                | `frontend/CLAUDE.md`, Shared components |
