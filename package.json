@@ -9,7 +9,8 @@
   "scripts": {
     "prepare": "husky",
     "skills": "node backend/node_modules/drizzle-kit/bin.cjs skills",
-    "api:sync": "npm --prefix backend run api:spec && npm --prefix frontend run api:types"
+    "api:sync": "npm --prefix backend run api:spec && npm --prefix frontend run api:types",
+    "docs:check": "sh scripts/docs-check.sh"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

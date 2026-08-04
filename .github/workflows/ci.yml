@@ -158,6 +158,13 @@ jobs:
           --to ${{ github.event.pull_request.head.sha }}
           --verbose
 
+      - name: Documentation facts are single-sourced
+        # Every assertion in this script corresponds to a fact that was once
+        # stated in two places and where one copy silently went wrong: the Node
+        # major, the engines floor, and the backend's environment variables. It
+        # is POSIX sh, git and grep only, so it needs nothing installed.
+        run: npm run docs:check
+
       # A repo-wide Prettier gate is deliberately NOT enabled yet: existing
       # files predate the Prettier config and would fail immediately. Run
       # `npx prettier --list-different .` for the current set. To enable it, run
