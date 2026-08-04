@@ -1,12 +1,19 @@
 import { render, screen } from '@testing-library/react';
 
 // Relative rather than the `@/lib/session` alias every other file uses, and it
-// has to be: `jest.mock('@/lib/session')` from inside this directory fails with
-// "Cannot find module", because Jest's resolver mishandles the parentheses of the
-// `(app)` route group when it applies the alias mapping. A plain `import` through
-// the alias works fine, which is what makes the failure confusing. The relative
-// path resolves to the same module, and Jest's registry keys on the resolved
-// path, so this still intercepts layout.tsx's own aliased import.
+// has to be: `jest.mock('@/lib/session')` fails with "Cannot find module". A plain
+// `import` through the alias works fine, which is what makes the failure confusing.
+//
+// This comment used to blame the parentheses of the `(app)` route group. It is not
+// them: PET-8 reproduced the identical failure from `src/app/` and `src/lib/`, with
+// no parentheses anywhere in the path. The resolved Jest config carries no
+// moduleNameMapper entry for `@/*` and a null modulePaths, so the alias is simply
+// unresolvable from `jest.mock`. Plain imports work because SWC rewrites aliased
+// specifiers at transform time from tsconfig `paths`, while `jest.mock`'s argument
+// is a runtime string the resolver sees verbatim.
+//
+// The relative path resolves to the same module, and Jest's registry keys on the
+// resolved path, so this still intercepts layout.tsx's own aliased import.
 import { requireSession } from '../../lib/session';
 
 import AppLayout, { dynamic } from './layout';
