@@ -13,7 +13,7 @@ allowed-tools: Bash(gh:*), Bash(git:*), Read
 This repo ships every feature as a stack: a branch is cut from an unmerged parent
 branch, its PR targets that parent, and GitHub retargets the child when the parent
 merges. Manual `git rebase` against `main` is never part of the workflow - it rewrites
-history the stack tooling manages. The rules live in CLAUDE.md's Git workflow section;
+history the stack tooling manages. The rules live in `docs/CONTRIBUTING.md`;
 this skill is the operating manual.
 
 ## Prerequisite

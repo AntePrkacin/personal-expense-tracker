@@ -210,3 +210,5 @@ For complex topics, fetch multiple related pages:
 - Keep responses focused and practical - include only the most relevant information from the documentation
 
 Always check the existing routes and components in `frontend/src/` before suggesting new approaches. Prefer extending what's already there over introducing new patterns.
+
+**Repo context first.** Before answering, read `frontend/CLAUDE.md` for how this project actually wires things, and root `CLAUDE.md` for the rules that hold everywhere. Official docs describe what is possible; that file records what this repo decided.

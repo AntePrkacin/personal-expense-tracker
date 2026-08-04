@@ -26,9 +26,9 @@ Run:
 gh auth status
 ```
 
-If the command is not found, stop and tell the user: "The `gh` CLI is not installed. See the 'GitHub CLI (`gh`)' section in `README.md` for install and login steps."
+If the command is not found, stop and tell the user: "The `gh` CLI is not installed. See `docs/guides/installation.md` for install and login steps."
 
-If it runs but exits non-zero, stop and tell the user: "`gh` is installed but not authenticated - run `gh auth login` and try again. `README.md` lists the prompts and the answers you want."
+If it runs but exits non-zero, stop and tell the user: "`gh` is installed but not authenticated - run `gh auth login` and try again. `docs/guides/installation.md` lists the prompts and the answers you want."
 
 Do not attempt the review without `gh`; every later step depends on it.
 
@@ -62,7 +62,7 @@ Stop cleanly if the user says no.
 
 For each PR number, run the interactive review loop:
 
-1. **Load project context** - read root `CLAUDE.md`, and any scoped `CLAUDE.md` under `backend/` or `frontend/` that the changed files touch.
+1. **Load project context** - read root `CLAUDE.md`, the scoped `CLAUDE.md` under `backend/` or `frontend/` for every app the diff touches, and any `docs/agents/` guide the root pointer table names for the change at hand.
 2. **Fetch the PR** - `gh pr view <n>` and `gh pr diff <n>`. If the diff is empty, skip the PR and note it in the summary as "skipped - empty diff".
 3. **Enrich with Jira** - extract the `PET-<n>` key from the branch name (`{type}/PET-{number}-{slug}`) and fetch the ticket for acceptance-criteria context, via `getJiraIssue` (connector) or `jira_get_issue` (self-hosted). Skip silently if neither is available.
 4. **Analyse** against the evaluation criteria below.
@@ -77,7 +77,7 @@ Review each PR against, in priority order:
 | Dimension         | What to check                                                                                                                           |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **Correctness**   | Logic bugs, unhandled edge cases, wrong error handling, race conditions                                                                 |
-| **Contract**      | Backend is the source of truth for the HTTP contract; frontend must consume generated types, not redefine shapes (see root `CLAUDE.md`) |
+| **Contract**      | Backend is the source of truth for the HTTP contract; frontend must consume generated types, not redefine shapes (see `docs/agents/api-contract.md`) |
 | **Security**      | Untyped external input reaching inward, missing validation at the boundary, leaked secrets, injection                                   |
 | **Architecture**  | KISS / DRY / YAGNI, module boundaries, enums over repeated string literals                                                              |
 | **Test coverage** | New endpoints/components without tests, missing edge-case tests                                                                         |

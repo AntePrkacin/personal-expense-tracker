@@ -158,8 +158,9 @@ jobs:
           --to ${{ github.event.pull_request.head.sha }}
           --verbose
 
-      # A repo-wide Prettier gate is deliberately NOT enabled yet: 55 existing
+      # A repo-wide Prettier gate is deliberately NOT enabled yet: existing
       # files predate the Prettier config and would fail immediately. Run
+      # `npx prettier --list-different .` for the current set. To enable it, run
       # `npx prettier --write .` once, commit that, then uncomment this:
       #
       # - name: Formatting matches Prettier

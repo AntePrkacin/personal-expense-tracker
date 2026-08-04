@@ -1,5 +1,5 @@
 {
-  "name": "decode-academy-demo",
+  "name": "spendifico",
   "version": "0.0.0",
   "private": true,
   "description": "Repo-level dev tooling (Husky hooks, commitlint, lint-staged, Prettier). The backend/ and frontend/ apps keep their own package.json - this root does not manage them.",

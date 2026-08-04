@@ -2,7 +2,7 @@ import { envValidationSchema } from './env.validation';
 
 /**
  * These are not schema-shape tests for their own sake. Two properties here are
- * promised in README and CLAUDE.md and relied on elsewhere:
+ * promised in docs/guides/configuration.md and relied on elsewhere:
  *
  * - the backend boots with no .env at all, which is what lets CI, the e2e suite
  *   and a fresh clone work without configuration;

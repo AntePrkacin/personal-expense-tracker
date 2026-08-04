@@ -1,13 +1,13 @@
 ---
 name: repo-dev-setup
-description: This skill should be used when the user asks to "set up the project", "onboard me", "get me running locally", "set up local dev", "how do I run the app", "configure my environment", "install dependencies", or says "/dev-setup", or on a first-time clone. Guides through full first-time local setup for the Decode Academy Demo repo (backend + frontend).
+description: This skill should be used when the user asks to "set up the project", "onboard me", "get me running locally", "set up local dev", "how do I run the app", "configure my environment", "install dependencies", or says "/dev-setup", or on a first-time clone. Guides through full first-time local setup for the Spendifico repo (backend + frontend).
 argument-hint: "[app - backend | frontend | omit for full stack]"
 allowed-tools: Read, Bash(node:*), Bash(npm:*), Bash(curl:*), Bash(git:*), Bash(which:*), Bash(command:*), Bash(uname:*)
 ---
 
 > **Tools used:** `Read` (check `.nvmrc` and `.env` files), `Bash(node:*)`/`Bash(npm:*)` (version checks, installs), `Bash(which:*)`/`Bash(command:*)`/`Bash(uname:*)` (locate the toolchain, detect the OS), `Bash(curl:*)` (verify a server the user started), `Bash(git:*)` (version and hook state).
 
-Walk the user through setting up their local development environment for the Decode Academy Demo repo.
+Walk the user through setting up their local development environment for the Spendifico repo.
 
 This is a **multi-app repository**: two independent npm projects in one git repo - `backend/` (NestJS 11, port 3000) and `frontend/` (Next.js 16, port 4200). There are **three** `package.json` files and each is installed separately. The root one is not a workspace manager; it holds only the repo-wide git-hook tooling, but installing it is **mandatory**, not optional (see Step 3).
 
@@ -69,11 +69,14 @@ own check returned. Go to Step 2.
 
 Version requirements once Node is present:
 
-- Match `.nvmrc` (currently **24**). CI reads that same file.
-- The hard floor is **v20.9.0**, which `next` declares in `engines`; NestJS 11 asks for
-  `>= 20`. All three `package.json` files carry that constraint, so npm warns with
-  `EBADENGINE` on a mismatch. Compare against v20.9.0, never against a bare "v20".
-- npm **v10+**, which ships with any acceptable Node.
+- Match `.nvmrc`, which is the single home for the Node major. CI reads that same file, and
+  `mise.toml` pins it a second time because mise cannot read `.nvmrc`.
+- The hard floor is the one in `engines.node` in all three `package.json` files, so npm warns
+  with `EBADENGINE` on a mismatch. It is the **backend's** floor, not `next`'s: the backend
+  loads three ESM-only packages from CommonJS, which needs Node's `require()` of ESM. Below it
+  the failure is a startup crash, not a warning. Compare against the full version, never
+  against a bare major.
+- Nothing in this repo pins npm: there is no `engines.npm`, so do not assert a version.
 
 If Node is present but the version is wrong, ask the user to run `nvm use` in their own
 terminal. It reads `.nvmrc` and takes no version argument. Do **not** suggest
@@ -180,14 +183,7 @@ Steps 1 to 3 always apply, whichever path is taken.
 
    `.env` is read at startup by `ConfigModule.forRoot()` in `src/app.module.ts`, and values are consumed through `ConfigService` in `src/main.ts`. It is gitignored and must never be committed. The app also runs without it, on the defaults below.
 
-3. Read `backend/.env` and flag any variables that are missing or still set to placeholder values. The backend currently reads exactly two:
-
-   | Variable       | Default if unset        | Purpose                             |
-   | -------------- | ----------------------- | ----------------------------------- |
-   | `PORT`         | `3000`                  | Port the API listens on             |
-   | `FRONTEND_URL` | `http://localhost:4200` | CORS origin for client-side fetches |
-
-   Anything set in the shell environment overrides `.env`.
+3. Read `backend/.env` and flag any variables that are missing or still set to placeholder values. The variable list, every default and which values are paired is in `docs/guides/configuration.md`, which is their single home - read it rather than restating them here, because a copy in this file has already gone wrong once. Anything set in the shell environment overrides `.env`.
 
    > Real secrets (API keys, tokens) never live in the repo - they come from the team secret manager and are pasted into `.env` locally. See the `repo-secrets` skill.
 
