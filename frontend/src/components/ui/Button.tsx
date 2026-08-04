@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 // Button (Figma "Components", node 12:14).
 //
 // The action control for every screen and modal: "Get started", "Continue",
@@ -38,6 +40,25 @@ export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
 };
 
 /**
+ * Everything both renderings share, extracted so neither restates it.
+ *
+ * The `disabled:` pair stays here rather than moving to the button branch: an
+ * anchor is never disabled, so the two utilities simply never match on one, and
+ * one base string beats a third constant plus a conditional.
+ *
+ * The focus-visible outline is not in the design - no focus state is drawn for
+ * buttons anywhere in the file - but a keyboard user needs one, and an outline is
+ * the right tool because, unlike a border or a ring, it never affects layout.
+ *
+ * Exported so utilities.test.ts can compile it, the way FIELD_CONTROL_BASE and
+ * SELECT_CONTROL already are.
+ */
+export const BUTTON_BASE =
+  'text-strong-m focus-visible:outline-brand-accent inline-flex items-center justify-center ' +
+  'gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'disabled:cursor-not-allowed disabled:opacity-60';
+
+/**
  * The trash glyph on "Delete transaction" / "Delete category", traced from the
  * Figma export (node 29:529) and re-pointed at `currentColor` so it inherits the
  * variant's text colour instead of hard-coding the red.
@@ -59,56 +80,86 @@ function TrashGlyph() {
   );
 }
 
-type ButtonProps = {
+type ButtonOwnProps = {
   /** The Figma "Label" property. Required: nothing in the design is icon-only. */
   label: string;
   variant?: ButtonVariant;
-  /**
-   * Defaults to `button`, not `submit`.
-   *
-   * HTML defaults a bare <button> to `submit`, so a "Cancel" inside a modal form
-   * would post it. Opting in is the safer direction; the forms that want a
-   * submit say so.
-   */
-  type?: 'button' | 'submit' | 'reset';
-  /**
-   * For in-flight actions: "Regenerate" reads "Generating..." while insights run
-   * (15, assumption A26).
-   *
-   * Note that frame 15 draws that button identically to a resting secondary one -
-   * no dimming, no spinner - so the `disabled:opacity-60` in the base string is
-   * ours, not the design's. A control that looks enabled while it is not is a
-   * defect, and the designer still owes an answer here.
-   */
-  disabled?: boolean;
   /** A leading glyph, e.g. `<TrashGlyph />` on the delete text buttons. */
   icon?: React.ReactNode;
-  onClick?: () => void;
 };
 
-export function Button({
-  label,
-  variant = 'primary',
-  type = 'button',
-  disabled,
-  icon,
-  onClick,
-}: ButtonProps) {
+/**
+ * An exclusive union: a Button either navigates or acts, never both.
+ *
+ * The `never`s are what make it exclusive, and they are load-bearing rather than
+ * pedantic. An anchor has no `type` and no `disabled` - author styles cannot
+ * disable a link, so `<Button href disabled>` would render something that looks
+ * dimmed and still navigates - and a link that also ran a handler would need
+ * 'use client' and has no counterpart anywhere in the design. Spelling the
+ * conflict into the type makes `npm run build`, which is this repo's typecheck
+ * gate, reject it rather than leaving it for review; that is the same call
+ * ProgressBar's `label`/`labelledBy` union makes.
+ */
+type ButtonProps = ButtonOwnProps &
+  (
+    | {
+        /**
+         * Where a navigating action goes, e.g. "Get started" on 01 Welcome
+         * (WEL-2). Figma draws these with its own Button component, so they are
+         * this component's job rather than a second link-shaped one.
+         */
+        href: string;
+        type?: never;
+        disabled?: never;
+        onClick?: never;
+      }
+    | {
+        href?: never;
+        /**
+         * Defaults to `button`, not `submit`.
+         *
+         * HTML defaults a bare <button> to `submit`, so a "Cancel" inside a modal
+         * form would post it. Opting in is the safer direction; the forms that
+         * want a submit say so.
+         */
+        type?: 'button' | 'submit' | 'reset';
+        /**
+         * For in-flight actions: "Regenerate" reads "Generating..." while
+         * insights run (15, assumption A26).
+         *
+         * Note that frame 15 draws that button identically to a resting secondary
+         * one - no dimming, no spinner - so the `disabled:opacity-60` in
+         * BUTTON_BASE is ours, not the design's. A control that looks enabled
+         * while it is not is a defect, and the designer still owes an answer here.
+         */
+        disabled?: boolean;
+        onClick?: () => void;
+      }
+  );
+
+export function Button({ label, variant = 'primary', icon, ...rest }: ButtonProps) {
+  // No 'use client'. This has no state, and a client component that imports it
+  // pulls it into the client bundle on its own. Only a Server Component trying
+  // to pass `onClick` would break, which is a caller error either way.
+  const className = `${BUTTON_BASE} ${BUTTON_VARIANTS[variant]}`;
+
+  // next/link rather than a bare <a>, matching ui/Sidebar: it is what gives
+  // client-side navigation and prefetching. A wrapped <button> would be the
+  // alternative and is invalid HTML - <button> inside <a> is nested interactive
+  // content - so the element itself has to change.
+  if (rest.href !== undefined) {
+    return (
+      <Link href={rest.href} className={className}>
+        {icon}
+        {label}
+      </Link>
+    );
+  }
+
+  const { type = 'button', disabled, onClick } = rest;
+
   return (
-    // No 'use client'. This has no state, and a client component that imports it
-    // pulls it into the client bundle on its own. Only a Server Component trying
-    // to pass `onClick` would break, which is a caller error either way.
-    //
-    // The focus-visible outline is not in the design - no focus state is drawn
-    // for buttons anywhere in the file - but a keyboard user needs one, and an
-    // outline is the right tool because, unlike a border or a ring, it never
-    // affects layout.
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className={`text-strong-m focus-visible:outline-brand-accent inline-flex items-center justify-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${BUTTON_VARIANTS[variant]}`}
-    >
+    <button type={type} disabled={disabled} onClick={onClick} className={className}>
       {icon}
       {label}
     </button>
