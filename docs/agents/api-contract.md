@@ -17,21 +17,22 @@ server. The e2e test re-applies the same prefix manually to match production, so
 change the prefix you must change it in both places.
 
 **Frontend to backend data flow: server-side, and currently nonexistent.** No file in
-`frontend/src` fetches the backend any more. PET-19 replaced the scaffold greeting page
-with a redirect, and it was the only caller. The shape the first real read has to take is
-still fixed, though: an **async Server Component** (or a route handler) fetching at request
+`frontend/src` fetches the backend any more. PET-19 deleted the scaffold greeting page, which
+was the only caller; `/` is now the Welcome screen behind a session gate whose read is still a
+stub (PET-52). The shape the first real read has to take is still fixed, though: an
+**async Server Component** (or a route handler) fetching at request
 time with `cache: 'no-store'`, so the session cookie never leaves the server and no CORS is
 involved. CORS is enabled on the backend anyway (`main.ts`), for the case of genuinely
 client-side fetches, allowing origin `FRONTEND_URL`.
 
 ## One contract, generated, and the frontend types come out of it
 
-**One HTTP contract, generated, and the frontend types come out of it.** The backend is
-the source of truth and nothing restates it. `nest build` runs `@nestjs/swagger`'s CLI
+The backend is the source of truth and nothing restates it. `nest build` runs `@nestjs/swagger`'s CLI
 plugin, `npm run api:spec` writes `backend/openapi.json` from the app's own routes, and
 `npm run api:types` turns that into `frontend/src/types/api.d.ts`; `npm run api:sync` at
-the root does both. `page.tsx` reads its response type out of `paths['/api/hello']` rather
-than declaring one. Both artifacts are **generated but committed**, for the same reason
+the root does both. A caller reads its response type out of `paths[<route>][<method>]` rather
+than declaring one - the scaffold `page.tsx` demonstrated that until PET-19 deleted it, so the
+first real read re-establishes the pattern. Both artifacts are **generated but committed**, for the same reason
 `backend/drizzle/` and `.agents/skills/` are: everyone needs byte-identical copies and a
 fresh clone must work with no extra step. It also keeps `cd frontend && npm run build`
 working with no backend running, which is what lets the two CI jobs stay independent.
@@ -55,13 +56,11 @@ Four things about that pipeline that are easy to get wrong, all of which fail **
 
 ## Drift is a CI failure, in two halves
 
-**Drift is a CI failure, in two halves.** The backend job regenerates the spec and fails
-on a diff; the frontend job does the same for `api.d.ts`. Together they prove the spec
-matches the code and the types match the spec. A committed generated artifact rots
-silently otherwise, which is the exact failure this pipeline exists to kill.
-
-The two freshness steps in CI are that gate. Both regenerate
-a committed artifact and fail on a non-empty `git diff`. Note where each one lives: the
+The backend job regenerates the spec and fails on a diff; the frontend job does the same for
+`api.d.ts`. Together they prove the spec matches the code and the types match the spec. A
+committed generated artifact rots silently otherwise, which is the exact failure this pipeline
+exists to kill. Both steps regenerate a committed artifact and fail on a non-empty `git diff`.
+Note where each one lives: the
 frontend half runs in the frontend job because `openapi-typescript` only reads the
 committed JSON and needs no `backend/node_modules`.
 

@@ -29,9 +29,11 @@ the team tooling is real rather than illustrative.
 
 The two halves are each substantially built and **currently do not talk to each other at all**.
 The backend has the whole access flow and the transaction write endpoints; the frontend has the
-design system, the app shell and the four routed views. What is missing between them is the
-session cookie (PET-52), which every authenticated read needs. PET-19 deleted the scaffold
-greeting page that fetched `GET /api/hello`, and it had been the only wire between them.
+design system, the app shell with its four routed views, and the first of the six access screens
+(01 Welcome, at `/`). What is missing between them is the session cookie (PET-52), which every
+authenticated read needs. PET-19 deleted the scaffold greeting page that fetched
+`GET /api/hello`, and it had been the only wire between them, so every screen renders real
+markup over placeholder data.
 
 ## Repository map
 
@@ -126,7 +128,8 @@ read the file before you write the change, not after.
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
 | add or change anything in `frontend/src/components/`                | `frontend/CLAUDE.md`, Shared components |
-| touch a route, a layout or the shell                                | `frontend/CLAUDE.md`, The app shell |
+| touch a route, a layout, or the session gate                        | `frontend/src/app/CLAUDE.md`    |
+| build one of the remaining access screens                            | `frontend/src/app/CLAUDE.md`, The access screens |
 | change a DTO, a response shape, or how a page fetches               | `docs/agents/api-contract.md`   |
 | branch, commit, push, or touch a stacked branch                     | `docs/CONTRIBUTING.md`          |
 | write a plan, or carry out any multi-step task                      | `docs/agents/conventions.md`    |

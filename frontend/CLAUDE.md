@@ -71,7 +71,16 @@ component from here on is a feature's own, not a tile.
 the vocabulary every screen draws from. Components that only make sense for one feature go
 in `components/` beside it, or next to the route that uses them. Nothing has earned a
 feature folder yet, so `ui/` is currently the only child - the app shell's own components
-took the second option and live under `app/(app)/`, described below.
+took the second option and live under `app/(app)/`, documented in
+`frontend/src/app/CLAUDE.md`.
+
+`components/` has exactly one direct child of its own, and it is worth knowing why:
+**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark. It is not a
+Components-page tile, so `ui/` is wrong; it belongs to six screens rather than one, so beside
+a route is wrong too. Note `ui/Sidebar.tsx` holds a _second_, smaller copy of the same lockup
+(34px, `rounded-[10px]`, `text-on-dark` against `surface-ink`) and that is deliberate for now:
+unifying them is not a refactor of one file, it needs a size and a tone pair, and it would
+drag a merged, pinned component through whichever ticket happens to notice.
 
 The Storybook section is still called **Components** while the folder is `ui/`. That
 mismatch is deliberate: `ui/` says where the code lives, **Components** is the Figma page
@@ -94,7 +103,8 @@ Five conventions, all of which existing files demonstrate:
   not style preference. Tailwind's scanner reads these files as raw text, so a class built
   by interpolation (`bg-category-${n}`) is found by nobody and compiles to nothing, with
   no build error and no failing test. There are no `clsx` / `cva` style dependencies and
-  none are needed.
+  none are needed. The rule extends to position classes held in data, which is why
+  `DecorativePanel`'s `SAMPLE_CHIPS` spells out `top-55 left-52.5` rather than computing it.
 - **`src/components/ui/utilities.test.ts` compiles every one of those classes** through
   Tailwind and fails if any generates no CSS. It is what makes the point above enforceable
   rather than a rule people remember. Add new class maps to it.
@@ -103,6 +113,16 @@ Five conventions, all of which existing files demonstrate:
   component that imports one pulls it into the client bundle on its own, and only a Server
   Component trying to pass a function would break. Only add the directive when a component
   genuinely needs the client itself.
+
+**`ui/Button` either navigates or acts, never both.** Its props are an exclusive union: pass
+`href` and it renders a `next/link`, otherwise a `<button>` with `type`, `disabled` and
+`onClick`. The `never`s in that union are load-bearing rather than pedantic - an anchor cannot
+be disabled by author styles, so `<Button href disabled>` would look dimmed and still
+navigate - and `npm run build`, the typecheck gate, is what rejects the combination. Both
+renderings share one exported `BUTTON_BASE` plus `BUTTON_VARIANTS`; **never duplicate those
+strings into a second link-shaped component**, which is the whole reason the prop lives here.
+A wrapped `<button>` inside an `<a>` was the alternative and is invalid HTML, so the element
+itself has to change.
 
 **Form fields go through `ui/Field.tsx`.** `Input` and `Select` are both built on it, and
 it owns the label, the inline validation message, and the `aria-invalid` /
@@ -190,101 +210,13 @@ shared because Dashboard and Transactions draw the identical overline. Both use 
 month and therefore ignore the profile's `monthStartDay`, which A9 says defines the period -
 that value is PET-45's, and the display is correct for its default of 1.
 
-## The app shell
+## The screens
 
-`frontend/src/app/(app)/` is the shell every signed-in screen renders inside: the fixed dark
-sidebar beside a content column, with the four routed views `/dashboard`, `/transactions`,
-`/insights` and `/settings` under it. A **route group**, so the paths stay exactly the hrefs
-`ui/Sidebar` declares while sharing one layout; the access screens (01, 02, 03, 22, 23, 24)
-sit outside it and inherit none of it.
-
-**`PageHeader` and `SidebarNav` live here rather than in `components/ui/`, deliberately.**
-`ui/` mirrors the nine tiles on the Figma Components page and is complete, and neither of
-these is a tile - they are the shell's own. The visible consequence is that `PageHeader`'s
-stories are filed under **Shell**, not **Components**, so they cannot join
-`ui.stories.test.tsx` (which asserts every module's title starts with `Components/`);
-`(app)/shell.stories.test.tsx` is the third copy of that smoke test for them. Their
-hard-coded classes are still guarded by `ui/utilities.test.ts`, because a _fourth_ copy of
-the Tailwind compile harness was worse than one list covering both folders.
-
-**`SidebarNav` is the shell's only `'use client'` file, and it exists for exactly one
-reason.** `Sidebar` takes `active` as a prop so it can stay a Server Component, and an App
-Router layout cannot read the pathname on the server, so something has to call
-`usePathname()`. It matches by **prefix with a trailing-slash boundary**, so
-`/transactions/abc` keeps Transactions lit while `/settings-import` does not light Settings.
-
-Two details of it are testability decisions rather than style, and both were review findings:
-
-- **`matchItem()` returns `SidebarItem | undefined` and the caller supplies the fallback.**
-  With `?? 'dashboard'` inside the function, `matchItem('/dashboard') === 'dashboard'` could
-  not fail - a completely broken lookup returns `'dashboard'` too - so the app's landing route
-  was the one case with no real coverage. The fallback now lives in `SidebarNav`, where a
-  separate test covers it.
-- **`SIDEBAR_HREFS` in `ui/Sidebar.tsx` is the single declaration of the four routes.** It is
-  exported for the same reason `SIDEBAR_ITEMS` is. Those hrefs previously existed as four
-  hand-written copies (the component, its test, `SidebarNav`, its test), each asserting itself
-  against itself, so none could notice a divergence. The fifth copy is the one code cannot
-  hold: the route directories on disk. `SidebarNav.test.tsx` therefore checks with `fs` that
-  every href has a `page.tsx` behind it, because renaming a folder is otherwise invisible to
-  the whole suite while the link 404s.
-
-**The header owns the overline, the title and a slot - nothing else.** Each route passes its
-own action, because all four differ: Dashboard a month select plus primary "Add transaction",
-Transactions a **search field** plus the same button, AI Insights a **secondary**
-"Regenerate", and Settings nothing at all. Two consequences worth knowing. The tickets that
-eventually make those controls work never touch `PageHeader`. And CTG-1's "Add category",
-which swaps in on the Categories tab, needs no header change either.
-
-Two things about that list contradict PET-19's own acceptance criteria, and the design won
-both times: **AC3 claimed the month select appears on Transactions too** (TRN-1 and node
-`26:137` draw a search field there instead), and **the ticket never mentioned "Regenerate"**
-(INS-1 and node `38:542` both do). The Jira description was corrected rather than the code.
-
-**The month select and the search field are inert `div`s, not controls.** A8 says the select
-renders the current period and does nothing until month navigation is designed, and the
-search filters a list that does not exist until PET-28. Neither is a `<select>`, `<input>` or
-`<button>`, so neither announces itself as operable, and `(app)/pages.test.tsx` pins that -
-`queryByRole('combobox')` and `queryByRole('textbox')` both have to stay empty.
-
-**`export const dynamic = 'force-dynamic'` on the layout is load-bearing today.** The pages
-read `new Date()` for the overline; without it Next prerenders them and every screen shows
-whatever month the build ran in, a bug that only appears a month after deploying. PET-52's
-`cookies()` read makes the segment dynamic on its own, at which point the line becomes
-redundant and should be deleted rather than left as a claim about nothing.
-
-`(app)/layout.test.tsx` asserts both that export and that `requireSession()` is called, because
-the layout is three lines long and every one of them fails silently when deleted. The session
-call is the sharper of the two: it is a documented no-op today, so without the assertion the
-call site could be dropped with the suite green, and PET-52's deferral would quietly become an
-omission.
-
-**Two Jest traps come from the parentheses in `(app)`, and both report as something else.**
-`jest.mock('@/lib/session')` from inside that directory fails with `Cannot find module`, because
-Jest's resolver mishandles the parens when applying the `@/` alias mapping - a plain `import`
-through the same alias works, which is what makes it confusing. Use a relative specifier in
-`jest.mock` there. The same character broke the pre-commit hook; see `docs/CONTRIBUTING.md`.
-
-**`/` is a bare `redirect('/dashboard')`.** No frame in the design corresponds to it: VER-4
-lands both a new and a returning account on the Dashboard, and a signed-out visitor belongs
-in the access flow, which the shell's own session check sends them to. It is here rather than
-in a middleware matcher so the rule has one home.
-
-**`lib/session.ts` is a stub, and that is PET-19's deferral of AC5.** `requireSession()` is
-called once, by the `(app)` layout, and currently lets every request through, so the shell is
-browsable with no backend. Its doc comment is the specification PET-52 fills in: read the
-httpOnly cookie, lift it into `Authorization: Bearer <token>`, call `GET /api/auth/session`,
-redirect on 401 or absence. It deliberately does **not** name the cookie, because that name
-is not decided anywhere in the repo and choosing it here would hand PET-52 a contract it did
-not pick. It returns `Promise<void>` from a non-`async` function so the signature is already
-the real one.
-
-**The sidebar footer's profile is fabricated.** `PLACEHOLDER_PROFILE` in `(app)/layout.tsx`
-is Figma's own sample data ("Marko", "Kovač", "marko@email.com"), so the shell diffs against
-the design rather than against invented copy - which also means it looks entirely real in a
-screenshot. It cannot be fixed here: names live in the per-user database's `profile` row and
-the email on the central `users` row, so it needs PET-45's read reached with PET-52's cookie.
-`ui/Sidebar` itself stays clean; its test pins that those three strings appear nowhere in the
-component.
+The signed-in shell, its four routed views and the access screens outside it are documented in
+`frontend/src/app/CLAUDE.md`, which loads whenever you read a file under `src/app/`. Read it
+before touching a route, a layout or the session gate: two of the seams there are deliberate
+stubs, and the shell's `force-dynamic` is load-bearing while `/`'s static prerender is equally
+deliberate, so copying one into the other breaks something quietly.
 
 ## Environment
 
@@ -310,6 +242,11 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
+- **Five of the six access screens.** Welcome exists at `/` (see "The access screens"). Setup
+  steps 1 and 2, Register, Log in and Check your email are PET-9 to PET-12, and the two links
+  Welcome offers - `/setup` and `/login` - **404 until they land**. The verify page that
+  consumes an emailed link is PET-52's, along with filling in `hasSession()` so `/` can send a
+  signed-in visitor to the Dashboard instead of showing everyone the pitch.
 - **The `/api/chat` route handler.** No route handler exists, and the env template deliberately
   declares no model-provider key. Add whichever variable your provider needs when you build the
   route, server-side only and never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once
@@ -325,4 +262,5 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `frontend/src` fetches the backend**: no verify page, no session cookie, no reads. The backend
   half is complete, so what is missing is this side. The session cookie is the frontend's own
   httpOnly first-party one, forwarded server-side; the backend reads no cookies, and the
-  cookie's name is still undecided. Everything above inherits from this.
+  cookie's name is still undecided. Everything above inherits from this: both session seams are
+  stubs and the shell's profile is a placeholder.

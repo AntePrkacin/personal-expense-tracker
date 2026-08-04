@@ -79,10 +79,16 @@ content: the marker is a breadcrumb, not drift detection.
    to be resolved amid a wall of generated migration and OpenAPI diff.
 
 **Sizing trigger.** If `backend/CLAUDE.md` or `frontend/CLAUDE.md` passes 400 lines, or produces
-its first merge conflict, promote its hottest topic one directory deeper
-(`backend/src/database/CLAUDE.md`, `frontend/src/components/CLAUDE.md`), which Claude Code
+its first merge conflict, promote its hottest topic one directory deeper, which Claude Code
 auto-loads by the same mechanism with better trigger locality. Do it on that evidence, not on
 taste.
+
+This has fired once already. Merging PET-8 took `frontend/CLAUDE.md` to 421 lines, so the app
+shell and the access screens moved to `frontend/src/app/CLAUDE.md`, leaving the design system and
+the `ui/` conventions in the parent. Both files load together when the work is in a route, and
+only the parent loads when it is in `components/`. The next candidates, if it fires again, are
+`backend/src/database/CLAUDE.md` for persistence and `frontend/src/components/CLAUDE.md` for the
+component conventions.
 
 ## Working conventions
 
