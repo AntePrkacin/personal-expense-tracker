@@ -32,6 +32,7 @@ interface ValidatedEnv {
   AUTH_RATE_LIMIT: number;
   AUTH_RATE_IP_LIMIT: number;
   AUTH_RATE_TTL_S: number;
+  TRUST_PROXY_HOPS: number;
 }
 
 describe('envValidationSchema', () => {
@@ -96,6 +97,10 @@ describe('envValidationSchema', () => {
         AUTH_RATE_LIMIT: 5,
         AUTH_RATE_IP_LIMIT: 30,
         AUTH_RATE_TTL_S: 900,
+        // 0, not 1: the default has to be safe with nothing in front, because
+        // trusting X-Forwarded-For unproxied lets a caller pick its own per-IP
+        // rate-limit bucket. The deployment opts in.
+        TRUST_PROXY_HOPS: 0,
       });
     });
 
@@ -203,6 +208,19 @@ describe('envValidationSchema', () => {
       expect(validate({ AUTH_RATE_LIMIT: '2.5' }).error).toBeDefined();
       expect(validate({ AUTH_RATE_IP_LIMIT: '0' }).error).toBeDefined();
       expect(validate({ AUTH_RATE_TTL_S: '90.5' }).error).toBeDefined();
+    });
+
+    it('accepts zero proxy hops but rejects a negative or fractional count', () => {
+      // Zero has to validate: it is the default, and it is what "nothing in
+      // front" means. A count of hops cannot be negative or partial.
+      expect(validate({ TRUST_PROXY_HOPS: '0' }).value.TRUST_PROXY_HOPS).toBe(
+        0,
+      );
+      expect(validate({ TRUST_PROXY_HOPS: '1' }).value.TRUST_PROXY_HOPS).toBe(
+        1,
+      );
+      expect(validate({ TRUST_PROXY_HOPS: '-1' }).error).toBeDefined();
+      expect(validate({ TRUST_PROXY_HOPS: '1.5' }).error).toBeDefined();
     });
   });
 });
