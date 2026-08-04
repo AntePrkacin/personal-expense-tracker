@@ -28,11 +28,21 @@ implementation, this plan changes in the same PR.
 
 - **`monthWindow(monthStartDay, today)`** from `backend/src/common/month-window.ts`, returning
   inclusive-start and exclusive-end `YYYY-MM-DD`. AC3's period boundary is this function and
-  nothing else.
+  nothing else. `today` is formatted against `APP_TIMEZONE` (`Europe/Zagreb` by default), which
+  PET-35 introduces - not UTC, and not a per-user zone, which `docs/TODO.md` records as the
+  eventual fix.
 - **The per-category month stats shape** - `spent`, `cap`, `percentUsed`, `remaining`, `over`
   and `status`, with the uncapped variant carrying nulls. AC4 asks the detail read for exactly
   the first four of those, so the detail response embeds PET-35's own DTO rather than defining a
   parallel one that drifts.
+
+**Uncapped is the common case, not the edge case**, which changes what AC4 actually returns most
+of the time. PET-35 settled that caps are optional everywhere, and that the seeded fallback
+category `Uncategorized` ships uncapped and is the default selection in the Add transaction form.
+So a detail read of a typical transaction returns `cap`, `percentUsed`, `remaining` and `over` all
+null with `status: "uncapped"`. The frame draws a progress bar there and PET-34 will have to
+handle its absence - the same unanswered designer question PET-35 raises for the category card,
+surfacing on a second screen.
 
 The second point is the reason for stacking. Written against `main`, this branch would compute
 "that category's spent, cap, percent used and remaining" itself, and the Categories screen and
@@ -54,6 +64,11 @@ nothing is lost.
 Resolving `previous` is "subtract one month from the window start, then take the window
 containing that day", not "subtract 30 days". With `monthStartDay` constrained to 1-28 there is
 no clamping case.
+
+Note the category filter will very often be `Uncategorized`, since PET-35 makes it the default
+selection when logging a transaction. Nothing special is needed for that - it is an ordinary
+category id to this endpoint - but it is worth knowing that the filter's most-used value is a
+category the user never picked.
 
 ### 2. Sort is a closed set of two, and the ticket's unknown stays unknown
 
@@ -152,8 +167,9 @@ lives on its own path, so this stays a note rather than a constraint.
 - [ ] **Implement the detail read** as its three queries, with the current-month stats window,
       the unbounded recent-in-category window, and the viewed row excluded from the latter
 - [ ] **Write the service spec** covering AC1 to AC6, plus a same-date tiebreak, a
-      whitespace-only search term, a `previous` period across the December-to-January roll, and a
-      detail read of a transaction older than the current window
+      whitespace-only search term, a `previous` period across the December-to-January roll, a
+      detail read of a transaction older than the current window, and a detail read whose
+      category is uncapped - which is the common case, not the exotic one
 - [ ] **Add e2e coverage** for both reads, including the 404 for an unknown id and for a
       tombstoned one
 - [ ] **Run `npm run api:sync`** from the repo root and commit both artifacts
@@ -167,7 +183,14 @@ lives on its own path, so this stays a note rather than a constraint.
 
 **This branch is meaningless if PET-35's `monthWindow()` signature changes.** It is the single
 hard dependency. The mitigation is the stack itself: this branch rebases onto PET-35 rather than
-racing it.
+racing it. As of 2026-08-04 that signature is settled, along with the rest of PET-35's six
+decisions, so the risk is now about drift during implementation rather than about an open
+question.
+
+**`APP_TIMEZONE` is inherited, and its failure mode is silent.** Set the zone wrong and the
+period boundary moves without anything crashing: the list quietly returns the wrong month's
+transactions. That is PET-35's variable, but this endpoint is where a user would first see the
+consequence.
 
 **AC4's "current month" reading is an interpretation.** If the designer means the month of the
 transaction being viewed instead, the detail read changes shape and the spec with it. Confirm
