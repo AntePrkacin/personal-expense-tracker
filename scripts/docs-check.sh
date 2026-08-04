@@ -126,6 +126,8 @@ fi
 absent_by_design() {
   case "$1" in
   .husky/_ | backend/src/database/CLAUDE.md | frontend/src/components/CLAUDE.md) return 0 ;;
+  # Build output, present only after an install or a build, and never committed.
+  *node_modules* | */dist/* | */dist | */.next/* | */.next) return 0 ;;
   *) return 1 ;;
   esac
 }
@@ -135,7 +137,13 @@ for f in $(docs); do
       case "$p" in *'*'* | */) continue ;; esac
       [ -e "$p" ] && continue
       absent_by_design "$p" && continue
+      # Two forms, because a .gitignore pattern ending in / only matches a
+      # directory and older git cannot tell that a path which does not exist is
+      # one. The runner's git could not classify `backend/node_modules` from the
+      # `node_modules/` pattern while the git here could, so this failed only in
+      # CI - and only in the conventions job, which installs the root deps alone.
       git check-ignore -q "$p" && continue
+      git check-ignore -q "$p/" && continue
       echo "FAIL: $f names $p, which does not exist" >&2
       exit 1
     done || fail=1
