@@ -8,6 +8,10 @@
 # POSIX sh + git + grep only: nothing to install, and it runs in well under a
 # second. git ls-files is used rather than find because it skips node_modules
 # and every gitignored path for free, while still covering dotfiles.
+#
+# Keep it POSIX. /bin/sh is dash on the CI runner and bash on many developer
+# machines, so a bashism passes locally and fails only in CI - which is exactly
+# how the first version of this script shipped with a <(...) in it.
 set -eu
 
 fail=0
@@ -91,12 +95,21 @@ count="$(printf '%s\n' "$owners" | grep -c . || true)"
 
 if [ "$count" = "1" ]; then
   doc_keys="$(grep -oE '^\| `[A-Z][A-Z0-9_]*`' "$owners" | tr -d '| `' | sort -u | drop_node_env)"
+
+  # Real temp files rather than process substitution: <(...) is a bashism, and
+  # this script runs under whatever /bin/sh is, which is dash on the CI runner.
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT INT TERM
+  printf '%s\n' "$schema_keys" >"$tmp/schema"
+  printf '%s\n' "$template_keys" >"$tmp/template"
+  printf '%s\n' "$doc_keys" >"$tmp/doc"
+
   [ "$schema_keys" = "$template_keys" ] ||
     note "the Joi schema and backend/.env.example declare different variables:
-$(printf '%s\n' "$schema_keys" | comm -3 - <(printf '%s\n' "$template_keys") 2>/dev/null || true)"
+$(comm -3 "$tmp/schema" "$tmp/template")"
   [ "$schema_keys" = "$doc_keys" ] ||
     note "the Joi schema and $owners document different variables:
-$(printf '%s\n' "$schema_keys" | comm -3 - <(printf '%s\n' "$doc_keys") 2>/dev/null || true)"
+$(comm -3 "$tmp/schema" "$tmp/doc")"
 fi
 
 # ------------------------------------------- 4. Backticked rooted paths exist
