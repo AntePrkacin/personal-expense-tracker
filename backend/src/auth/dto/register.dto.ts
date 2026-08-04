@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -45,6 +45,19 @@ export class RegisterDto {
 
   // Uppercased first, so 'eur' passes and is stored as 'EUR'; the validator
   // checks against the (uppercase) ISO 4217 list, not just "any 3 letters".
+  //
+  // The plugin derives nothing from @IsISO4217CurrencyCode(), so without the
+  // metadata below this publishes as a bare string and the generated frontend
+  // type accepts any text at all. The pattern is case-insensitive because the
+  // transform above runs before validation - it is honest about what the
+  // endpoint takes, and the ISO list itself belongs in the description rather
+  // than a 180-entry enum that drifts the moment the standard does.
+  @ApiPropertyOptional({
+    pattern: '^[A-Za-z]{3}$',
+    description:
+      'ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.',
+    example: 'EUR',
+  })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.toUpperCase() : value,
   )
@@ -69,6 +82,10 @@ export class RegisterDto {
   monthlyBudget!: number;
 
   /** Capped at 28 so the day exists in every month. */
+  // `type: 'integer'` spelled out because the plugin renders every TS `number`
+  // as `type: 'number'`, which publishes 3.5 as a valid day while @IsInt()
+  // rejects it. The derived `minimum` and `maximum` merge in alongside this.
+  @ApiPropertyOptional({ type: 'integer' })
   @IsOptional()
   @IsInt()
   @Min(1)

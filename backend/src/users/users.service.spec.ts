@@ -156,6 +156,25 @@ describe('UsersService', () => {
     });
   });
 
+  describe('updateEmail', () => {
+    it('sets exactly the address, on a live row', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.updateEmail('user-id', 'novi@email.com');
+
+      // Only the one column: the profile fields live in the user's own
+      // database and central has no business holding a second copy.
+      expect(argsOf(chain, 'set')[0]).toEqual({ email: 'novi@email.com' });
+
+      const where = toSql(argsOf(chain, 'where')[0]);
+      expect(where).toContain('"id" = ?');
+      // Without this a soft-deleted account could have its address changed, and
+      // the partial unique index would then let a live row claim it anyway.
+      expect(where).toContain('"deleted_at" is null');
+    });
+  });
+
   describe('clearOnboardingPayload', () => {
     it('nulls the payload, which is what marks the account verified', async () => {
       const chain = queryChain([]);
