@@ -1,0 +1,122 @@
+# Fly.io configuration for the Spendifico API. Deployed from THIS directory:
+#
+#   fly config validate --strict
+#   fly deploy --remote-only --ha=false
+#
+# --ha=false is not optional and has no key in this file. `fly deploy --ha`
+# defaults to TRUE, so a bare `fly deploy` creates a spare machine - and a second
+# machine is a second replica set with its own pending writes, which breaks the
+# per-replica atomicity LoginTokenService.issue() and consume() rely on, gives
+# the in-memory throttler a second budget, and races the same migrations. None of
+# the settings below prevent it, because it is a flag on every deploy.
+#
+# Why one instance at all, why the long kill_timeout, and why root: see
+# backend/CLAUDE.md, Deployment. How to run a deploy: docs/guides/deployment.md.
+
+app = "spendifico-api"
+
+# Chosen to sit near the Turso group, not near users: every request reads a local
+# replica, so sync latency matters and user proximity barely does. The decode-pet
+# group is in aws-eu-west-1 (Ireland) and Fly has no Dublin region, so London is
+# the nearest hop. `ams` is the fallback if `lhr` is ever capacity-constrained.
+primary_region = "lhr"
+
+# Fly sends SIGINT by default, which Nest's enableShutdownHooks() already
+# handles. The default grace is only 5 SECONDS, and DatabaseModule's
+# onApplicationShutdown flushes every open user replica plus the central one
+# before it returns, each doing a final push() to Turso Cloud, unbounded in time.
+# 60s is cheap insurance against exactly the silent write loss that ruled out a
+# serverless host. Quoted: KillTimeout is a duration, and a bare integer risks
+# being read as nanoseconds. Confirm with `fly config show` after any change.
+kill_signal = "SIGINT"
+kill_timeout = "60s"
+
+# 512MB of RAM with a deliberately unbounded user-replica cache can reach an OOM
+# kill, and SIGKILL skips onApplicationShutdown entirely, so the final push()
+# never runs. Swap is here to keep the process STOPPABLE, not to make it fast; it
+# is not a substitute for the LRU in docs/TODO.md if memory pressure shows up.
+swap_size_mb = 512
+
+[deploy]
+  # One volume-bound machine gives a rolling deploy nothing to roll to. A few
+  # seconds of downtime per deploy is accepted; there is no availability target.
+  strategy = "immediate"
+
+[env]
+  # Must agree with internal_port below - the one duplicated number in this file.
+  PORT = "3000"
+
+  # On the mounted volume, so replicas survive a restart. Absolute, because the
+  # ./databases default is resolved from the process cwd.
+  DATABASE_DIR = "/data/databases"
+
+  # PLACEHOLDER until the production Vercel domain exists. main.ts allows exactly
+  # ONE CORS origin, so no Vercel preview URL will ever pass this. Nothing breaks
+  # today because every frontend fetch is server-side, but the first browser
+  # fetch will care. Joi only checks that it is a valid URI, so a wrong-but-valid
+  # value fails silently as CORS denials rather than at boot.
+  FRONTEND_URL = "https://spendifico.vercel.app"
+
+  TURSO_GROUP = "decode-pet"
+
+  # Paired with the MAILPACE_API_TOKEN secret by Joi's .and(). Note the sharp
+  # edge: `fly secrets unset MAILPACE_API_TOKEN` on its own leaves this half of
+  # the pair set, and the app then REFUSES TO BOOT rather than falling back to
+  # logging links. Remove both together or the machine crash-loops.
+  MAIL_FROM = "login@spendifico.eu"
+  MAIL_FROM_NAME = "Spendifico"
+
+  # One reverse proxy in front of us, Fly's. At 0 the per-IP auth throttler keys
+  # on the proxy's own address, so every caller shares one bucket and
+  # AUTH_RATE_IP_LIMIT becomes a global cap on the auth routes instead of a
+  # per-caller one.
+  TRUST_PROXY_HOPS = "1"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+
+  # Never more than one machine. Note what these two do and do not buy:
+  # min_machines_running only governs autostart/autostop behaviour, so with
+  # autostop off it is documentation rather than enforcement - and neither key
+  # stops `fly deploy --ha` from adding a machine.
+  auto_stop_machines = "off"
+
+  # Deliberately false. An autostart would put a cold central-replica bootstrap
+  # pull on some user's request, and false is what makes `fly machine stop` stay
+  # stopped so the graceful-shutdown check is deterministic rather than racing
+  # the next health probe. The cost is honest: a machine that stops unnoticed
+  # stays down until someone runs `fly machine start`.
+  auto_start_machines = false
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+
+  # Must cover the WHOLE boot, because Nest serves nothing until app.listen(),
+  # which is after the central replica is opened and its migrations run - on a
+  # fresh volume that includes a full bootstrap pull from Turso Cloud. Too short
+  # turns a slow first boot into a boot loop. Replace with roughly 3x the
+  # observed machine-start-to-listening time from `fly logs`.
+  grace_period = "30s"
+  method = "GET"
+
+  # One of the four @Public() routes, so the check needs no bearer. Liveness
+  # only: it is a constant and touches no database, which is deliberate - a
+  # DB-touching check would flap the machine on a transient Turso blip. Boot
+  # ordering covers the rest, since an unreachable database means the process
+  # never listens at all.
+  path = "/api/hello"
+
+[[mounts]]
+  source = "spendifico_data"
+  destination = "/data"
+  # initial_size is deliberately omitted: the volume is created explicitly before
+  # the first deploy, so a failure provisioning it cannot be mistaken for a
+  # failure deploying. A volume also cannot move between orgs, so it is worth
+  # creating by hand with --org spelled out.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
