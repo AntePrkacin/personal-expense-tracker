@@ -14,11 +14,12 @@ Next.js frontend talks to a NestJS backend over HTTP.
 
 The two halves are each substantially built and **currently do not talk to each other at
 all**. The backend has the whole passwordless access flow and transaction writes; the
-frontend has the design system, the app shell and the four routed views. What is missing
-between them is the session cookie (PET-52), which is what every frontend read has to be
-authenticated with. PET-19 deleted the scaffold greeting page that fetched
-`GET /api/hello`, which had been the only wire between them, so the shell renders real
-screens with placeholder data. Restoring the connection is PET-52's plus PET-45's.
+frontend has the design system, the app shell with its four routed views, and the first of
+the six access screens (01 Welcome, at `/`). What is missing between them is the session
+cookie (PET-52), which is what every frontend read has to be authenticated with. PET-19
+deleted the scaffold greeting page that fetched `GET /api/hello`, which had been the only
+wire between them, so every screen renders real markup over placeholder data. Restoring the
+connection is PET-52's plus PET-45's.
 
 Because this is a starting point rather than a finished app, the "Not yet built"
 section at the bottom is load-bearing. Read it before assuming a feature exists.
@@ -134,8 +135,9 @@ server. The e2e test re-applies the same prefix manually to match production, so
 change the prefix you must change it in both places.
 
 **Frontend to backend data flow: server-side, and currently nonexistent.** No file in
-`frontend/src` fetches the backend any more. PET-19 replaced the scaffold greeting page
-with a redirect, and it was the only caller. The shape the first real read has to take is
+`frontend/src` fetches the backend any more. PET-19 deleted the scaffold greeting page, which
+was the only caller; `/` is now the Welcome screen behind a session gate whose read is still a
+stub (PET-52). The shape the first real read has to take is
 still fixed, though: an **async Server Component** (or a route handler) fetching at request
 time with `cache: 'no-store'`, so the session cookie never leaves the server and no CORS is
 involved. CORS is enabled on the backend anyway (`main.ts`), for the case of genuinely
@@ -507,9 +509,16 @@ component from here on is a feature's own, not a tile.
 
 **Shared UI is split by role, not by file type.** `components/ui/` is the primitive layer,
 the vocabulary every screen draws from. Components that only make sense for one feature go
-in `components/` beside it, or next to the route that uses them. Nothing has earned a
-feature folder yet, so `ui/` is currently the only child - the app shell's own components
-took the second option and live under `app/(app)/`, described below.
+in `components/` beside it, or next to the route that uses them. The app shell's own
+components took the second option and live under `app/(app)/`, described below.
+
+`components/` has exactly one direct child of its own, and it is worth knowing why:
+**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark. It is not a
+Components-page tile, so `ui/` is wrong; it belongs to six screens rather than one, so beside
+a route is wrong too. Note `ui/Sidebar.tsx` holds a _second_, smaller copy of the same lockup
+(34px, `rounded-[10px]`, `text-on-dark` against `surface-ink`) and that is deliberate for now:
+unifying them is not a refactor of one file, it needs a size and a tone pair, and it would
+drag a merged, pinned component through whichever ticket happens to notice.
 
 The Storybook section is still called **Components** while the folder is `ui/`. That
 mismatch is deliberate: `ui/` says where the code lives, **Components** is the Figma page
@@ -532,7 +541,8 @@ Five conventions, all of which existing files demonstrate:
   not style preference. Tailwind's scanner reads these files as raw text, so a class built
   by interpolation (`bg-category-${n}`) is found by nobody and compiles to nothing, with
   no build error and no failing test. There are no `clsx` / `cva` style dependencies and
-  none are needed.
+  none are needed. The rule extends to position classes held in data, which is why
+  `DecorativePanel`'s `SAMPLE_CHIPS` spells out `top-55 left-52.5` rather than computing it.
 - **`src/components/ui/utilities.test.ts` compiles every one of those classes** through
   Tailwind and fails if any generates no CSS. It is what makes the point above enforceable
   rather than a rule people remember. Add new class maps to it.
@@ -541,6 +551,16 @@ Five conventions, all of which existing files demonstrate:
   component that imports one pulls it into the client bundle on its own, and only a Server
   Component trying to pass a function would break. Only add the directive when a component
   genuinely needs the client itself.
+
+**`ui/Button` either navigates or acts, never both.** Its props are an exclusive union: pass
+`href` and it renders a `next/link`, otherwise a `<button>` with `type`, `disabled` and
+`onClick`. The `never`s in that union are load-bearing rather than pedantic - an anchor cannot
+be disabled by author styles, so `<Button href disabled>` would look dimmed and still
+navigate - and `npm run build`, the typecheck gate, is what rejects the combination. Both
+renderings share one exported `BUTTON_BASE` plus `BUTTON_VARIANTS`; **never duplicate those
+strings into a second link-shaped component**, which is the whole reason the prop lives here.
+A wrapped `<button>` inside an `<a>` was the alternative and is invalid HTML, so the element
+itself has to change.
 
 **Form fields go through `ui/Field.tsx`.** `Input` and `Select` are both built on it, and
 it owns the label, the inline validation message, and the `aria-invalid` /
@@ -642,7 +662,7 @@ these is a tile - they are the shell's own. The visible consequence is that `Pag
 stories are filed under **Shell**, not **Components**, so they cannot join
 `ui.stories.test.tsx` (which asserts every module's title starts with `Components/`);
 `(app)/shell.stories.test.tsx` is the third copy of that smoke test for them. Their
-hard-coded classes are still guarded by `ui/utilities.test.ts`, because a *fourth* copy of
+hard-coded classes are still guarded by `ui/utilities.test.ts`, because a _fourth_ copy of
 the Tailwind compile harness was worse than one list covering both folders.
 
 **`SidebarNav` is the shell's only `'use client'` file, and it exists for exactly one
@@ -696,25 +716,30 @@ call is the sharper of the two: it is a documented no-op today, so without the a
 call site could be dropped with the suite green, and PET-52's deferral would quietly become an
 omission.
 
-**Two Jest traps come from the parentheses in `(app)`, and both report as something else.**
-`jest.mock('@/lib/session')` from inside that directory fails with `Cannot find module`, because
-Jest's resolver mishandles the parens when applying the `@/` alias mapping - a plain `import`
-through the same alias works, which is what makes it confusing. Use a relative specifier in
-`jest.mock` there. The same character broke the pre-commit hook; see Git workflow.
+**`jest.mock()` cannot resolve the `@/` alias, anywhere.** `jest.mock('@/lib/session')` fails
+with `Cannot find module` from any directory - PET-8 reproduced it from `src/app/` and
+`src/lib/`, so the earlier explanation blaming `(app)`'s parentheses was wrong. The resolved
+Jest config carries no `moduleNameMapper` entry for `@/*` and a null `modulePaths`, so the
+alias is unresolvable at runtime; plain `import`s work because SWC rewrites aliased specifiers
+at transform time from tsconfig `paths`, while `jest.mock`'s argument is a string the resolver
+sees verbatim. Use a relative specifier, and have the accompanying `import` name the same one.
+(The parentheses _did_ break the pre-commit hook, which is a real and separate trap; see Git
+workflow.)
 
-**`/` is a bare `redirect('/dashboard')`.** No frame in the design corresponds to it: VER-4
-lands both a new and a returning account on the Dashboard, and a signed-out visitor belongs
-in the access flow, which the shell's own session check sends them to. It is here rather than
-in a middleware matcher so the rule has one home.
+**`lib/session.ts` holds two stubs, and they are PET-19's and PET-8's deferrals.**
+`requireSession()` is called once, by the `(app)` layout, and lets every request through, so
+the shell is browsable with no backend - PET-19's deferral of its AC5. `hasSession()` is called
+once, by `app/page.tsx`, and answers `false` for everybody, which is what puts Welcome at `/`;
+that is PET-8's. Both doc comments are the specification PET-52 fills in: read the httpOnly
+cookie, lift it into `Authorization: Bearer <token>`, call `GET /api/auth/session`, then either
+redirect or answer. They deliberately do **not** name the cookie, because that name is not
+decided anywhere in the repo and choosing it here would hand PET-52 a contract it did not pick.
+Both return a promise from a non-`async` function so the signatures are already the real ones.
 
-**`lib/session.ts` is a stub, and that is PET-19's deferral of AC5.** `requireSession()` is
-called once, by the `(app)` layout, and currently lets every request through, so the shell is
-browsable with no backend. Its doc comment is the specification PET-52 fills in: read the
-httpOnly cookie, lift it into `Authorization: Bearer <token>`, call `GET /api/auth/session`,
-redirect on 401 or absence. It deliberately does **not** name the cookie, because that name
-is not decided anywhere in the repo and choosing it here would hand PET-52 a contract it did
-not pick. It returns `Promise<void>` from a non-`async` function so the signature is already
-the real one.
+They are two functions rather than one because the callers want opposite things from the same
+read: the shell wants "let me through or send me away" and answers nothing itself, while the
+root route wants a fact to branch on, since both of its destinations are legitimate. PET-52
+should give them a shared helper for the fetch rather than two round trips.
 
 **The sidebar footer's profile is fabricated.** `PLACEHOLDER_PROFILE` in `(app)/layout.tsx`
 is Figma's own sample data ("Marko", "Kovač", "marko@email.com"), so the shell diffs against
@@ -723,6 +748,64 @@ screenshot. It cannot be fixed here: names live in the per-user database's `prof
 the email on the central `users` row, so it needs PET-45's read reached with PET-52's cookie.
 `ui/Sidebar` itself stays clean; its test pins that those three strings appear nowhere in the
 component.
+
+## The access screens
+
+The six frames outside the shell (01 Welcome, 02 and 03 Setup, 22 Register, 23 Log in, 24
+Check your email). **One of them is built**: Welcome, at `/`.
+
+**`/` is the front door and its one job is choosing which door.** `app/page.tsx` awaits
+`hasSession()`; a signed-out visitor gets `<WelcomeScreen />` and a signed-in one is redirected
+to `/dashboard`, because VER-4 lands both a new and a returning account there. The rule is here
+rather than in a middleware matcher so it has one home. Until PET-52 fills the seam in,
+`hasSession()` answers `false` for everybody, so **every visitor lands on Welcome and
+`/dashboard` is reached by typed URL only** - the same shape of deferral the shell's own gate
+already carries.
+
+Two consequences of that gate being async. The screen is a **separate component**
+(`app/WelcomeScreen.tsx`) rather than inlined, because Storybook cannot render an async Server
+Component that awaits a session, and it keeps the screen's own test free of mocks. And `/`
+currently prerenders **static**, correctly, since nothing in the path reads a request yet;
+PET-52's `cookies()` read opts it out on its own, so no `export const dynamic` belongs there
+now or then. That is the opposite of `(app)/layout.tsx`, whose `force-dynamic` is load-bearing
+today - do not copy it here by reflex.
+
+**`lib/routes.ts` declares where the other screens will live**, and only the two Welcome links
+out to: `/setup` and `/login`. Same single-declaration reasoning as `SIDEBAR_HREFS`, and the
+two sets must not restate each other - app routes stay in `ui/Sidebar.tsx`, access routes here.
+Welcome is deliberately absent, because it is served at `/` and there is no path to declare.
+Both destinations **404 today**, which is as far as a frontend-only ticket reaches: the href is
+the contract WEL-2 and WEL-3 describe, and an inert control would fail both outright while
+hiding it. `/setup` is chosen so it is correct however PET-9 shapes onboarding - one route for
+all three steps, or the first of three - so the string does not move either way; docs/TODO.md
+records that trade-off.
+
+**There is no `(access)` route group and no shared layout, on purpose.** Welcome is
+architecturally the odd one out: a two-column split with a left-aligned logo, where 02, 03 and
+22 are centred cards with a step indicator. A group whose one member shares nothing with the
+rest carries no decision. PET-9 is the ticket that discovers whether a shared layout exists.
+
+**The right half of Welcome is `aria-hidden`, and that is load-bearing.**
+`app/DecorativePanel.tsx` is a dark panel with two accent washes, a sample budget card and two
+floating chips - WEL-4's "display only", every figure fabricated and permanently so. It is
+hidden because `ui/ProgressBar` publishes `role="progressbar"` with `aria-valuenow`, so
+unhidden it announces a real progressbar reporting 62% of a budget that is not the reader's,
+and `ui/Tag` announces "On track" as if it described their finances. Two notes: `aria-hidden`
+does **not** remove focusable descendants from the tab order, so the screen's test pins that
+the subtree contains none; and it is a plain `div`, never an `<aside>`, because an
+`aria-hidden` landmark is self-contradictory.
+
+**Storybook gains a third section, `Screens/`.** Named after the Figma page the frames live on,
+exactly as `Components` and `Foundations` are. It needs its own story smoke test
+(`app/screens.stories.test.tsx`) because each of those suites asserts its own title prefix,
+which is the one thing each exists to make unambiguous - that is now the fourth copy of the
+same harness, and docs/TODO.md records the helper it should become.
+
+`app/WelcomeScreen.tsx`, `app/DecorativePanel.tsx` and `components/LogoLockup.tsx` are all
+covered by `components/ui/utilities.test.ts`, which guards their hard-coded classes alongside
+`ui/`'s and the shell's. **The two box shadows are deliberately excluded** - they are the first
+in the repo, Foundations has no shadow tokens, and that file's `selector()` cannot escape their
+parens and commas. Both facts are in docs/TODO.md.
 
 ## Environment variables
 
@@ -969,7 +1052,7 @@ something that is not there.
   `NEXT_PUBLIC_`. Related: `@google/genai` was once present in `frontend/node_modules`
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
-- **The frontend half of the access flow, which is now the single biggest gap.** The backend
+- **The frontend half of the access flow, which is still the single biggest gap.** The backend
   is complete - verify provisions and returns a session, and `GET /api/auth/session` answers
   who a bearer is - but nothing on the frontend calls either: no verify page, no session
   cookie, and **nothing in `frontend/src` fetches the backend at all**. The session cookie is
@@ -977,7 +1060,12 @@ something that is not there.
   cookies, and its name is still undecided. The old proof-of-stack routes `POST /api/users`
   and `GET /api/users/:id` are **gone**, and the read's replacement is a session-scoped
   `getProfile()` with preferences, which is PET-45's rather than done. Everything below
-  inherits from this: the shell is unauthenticated and its profile is a placeholder.
+  inherits from this: both session seams are stubs and the shell's profile is a placeholder.
+- **Five of the six access screens.** Welcome exists at `/` (see "The access screens"). Setup
+  steps 1 and 2, Register, Log in and Check your email are PET-9 to PET-12, and the two links
+  Welcome offers - `/setup` and `/login` - **404 until they land**. The verify page that
+  consumes an emailed link is PET-52's, along with filling in `hasSession()` so `/` can send a
+  signed-in visitor to the Dashboard instead of showing everyone the pitch.
 - **The shell's content, and its authentication.** The `(app)` group, the four routes and the
   page header exist (see "The app shell"), and every screen renders its designed header. What
   is missing is everything below the header - all four `<main>` elements are empty - plus the
