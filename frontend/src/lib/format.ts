@@ -1,9 +1,11 @@
-// Display formatting: money, and the two forms a stored name takes on screen.
+// Display formatting: money, the two forms a stored name takes on screen, and
+// the two forms the current period takes in the page header.
 //
-// Both halves are here for the same reason. Transactions are stored as positive
-// magnitudes and rendered as negative amounts, and a profile stores two names
-// while the UI shows initials and a shortened form. Neither is a property of the
-// data, so both live here, once, instead of in every screen that shows them.
+// All three are here for the same reason. Transactions are stored as positive
+// magnitudes and rendered as negative amounts, a profile stores two names while
+// the UI shows initials and a shortened form, and the header shows a month that
+// nothing stores at all. None of them is a property of the data, so they live
+// here, once, instead of in every screen that shows them.
 
 /**
  * U+2212 MINUS SIGN, which is what the Figma frames use, not U+002D
@@ -84,4 +86,32 @@ export function initials(firstName: string, lastName: string): string {
 export function shortName(firstName: string, lastName: string): string {
   const initial = firstLetter(lastName);
   return initial === '' ? firstName : `${firstName} ${initial}.`;
+}
+
+// The period the page header shows, in the two lengths the design draws: the
+// overline carries the month and the year ("October 2025", DSH-2 and TRN-1) and
+// the month select carries the month alone ("October").
+//
+// Both are here rather than in the pages because Dashboard and Transactions
+// render the identical overline and must not drift, which is the same reason
+// initials() is shared with the Settings avatar.
+//
+// Two limits worth knowing. The locale is hard-coded to en-US, matching
+// CURRENCY above; when the onboarding currency is finally threaded through, the
+// locale should follow it. And the period is the calendar month, ignoring the
+// profile's `monthStartDay` - A9 makes that value define the period, but it is
+// PET-45's to read, and the display is correct for its default of 1.
+
+const MONTH_AND_YEAR = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
+
+const MONTH_ONLY = new Intl.DateTimeFormat('en-US', { month: 'long' });
+
+/** The header overline, e.g. `"October 2025"`. */
+export function monthOverline(date: Date): string {
+  return MONTH_AND_YEAR.format(date);
+}
+
+/** The month select's label, e.g. `"October"`. */
+export function monthLabel(date: Date): string {
+  return MONTH_ONLY.format(date);
 }

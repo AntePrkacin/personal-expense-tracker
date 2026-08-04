@@ -4,13 +4,27 @@ const path = require('path');
 // node_modules. Run each app's eslint from that app's directory (paths made
 // relative to it) so the right config + plugins resolve. Prettier is shared and
 // can format any staged file from the repo root.
+
+// Single-quote a path for the `bash -c` wrappers below.
+//
+// Not defensive: Next.js route groups put literal parentheses in real filenames,
+// as in frontend/src/app/(app)/layout.tsx, and bash reads an unquoted `(` as the
+// start of a subshell. The failure is a `syntax error near unexpected token '('`
+// from bash rather than anything mentioning the file, and it makes every file in
+// such a folder uncommittable. Only the eslint half needs this - lint-staged
+// spawns prettier with no shell, so parentheses reach it intact.
+//
+// The replace handles a path containing a single quote, which closes the quoting
+// and would otherwise reintroduce the same class of bug.
+const shellQuote = (file) => `'${file.replace(/'/g, `'\\''`)}'`;
+
 module.exports = {
   // Backend (NestJS) - ESLint --fix, then Prettier.
   'backend/**/*.ts': (filenames) => {
     const cwd = path.join(process.cwd(), 'backend');
     const files = filenames.map((f) => path.relative(cwd, f));
     return [
-      `bash -c "cd backend && npx eslint --fix ${files.join(' ')}"`,
+      `bash -c "cd backend && npx eslint --fix ${files.map(shellQuote).join(' ')}"`,
       `prettier --write ${filenames.join(' ')}`,
     ];
   },
@@ -20,7 +34,7 @@ module.exports = {
     const cwd = path.join(process.cwd(), 'frontend');
     const files = filenames.map((f) => path.relative(cwd, f));
     return [
-      `bash -c "cd frontend && npx eslint --fix ${files.join(' ')}"`,
+      `bash -c "cd frontend && npx eslint --fix ${files.map(shellQuote).join(' ')}"`,
       `prettier --write ${filenames.join(' ')}`,
     ];
   },

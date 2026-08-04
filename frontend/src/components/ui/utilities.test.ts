@@ -10,7 +10,13 @@ import { SELECT_CONTROL } from './Select';
 import { NAV_ITEM_ICON, NAV_ITEM_LABEL, NAV_ITEM_SURFACE } from './Sidebar';
 import { TAG_TONES } from './Tag';
 
-// Proves every utility these components rely on actually generates CSS.
+// Proves every utility the components and the app shell rely on actually
+// generates CSS.
+//
+// It covers app/(app)/ as well as this folder, despite living here. A parallel
+// guard next to the shell would mean a third copy of the compile harness below,
+// and the note at the end of this comment says to lift it into a helper before
+// that happens - so until somebody does, one list is better than two.
 //
 // The colocated *.test.tsx files assert that a component applies the *expected*
 // class. Only this file catches the other failure: a class that is spelled
@@ -34,6 +40,7 @@ const HARDCODED = [
   'text-label-m',
   'text-label-l',
   'text-display-s',
+  'text-display-m',
   'text-heading-m',
   'text-strong-s',
   'text-strong-m',
@@ -109,6 +116,29 @@ const HARDCODED = [
   'left-4',
   'top-1/2',
   '-translate-y-1/2',
+  // The app shell: app/(app)/layout.tsx, SidebarNav, PageHeader and the two
+  // inert header pills. Same reasoning as everything above - these are typed
+  // straight into JSX, so nothing else would notice one of them generating
+  // nothing.
+  //
+  // gap-0.75 is the header's 3px overline-to-title gap, and py-2.5 the pills'
+  // 10px. They resolve off the --spacing namespace exactly like the gap-2.75 and
+  // py-3.25 the sidebar and button already prove, but a fractional step is
+  // precisely what a cleared or redefined scale would silently drop.
+  //
+  // The month chevron's 4.5x9 is deliberately absent: 4.5px would be `h-1.125`,
+  // and Tailwind generates nothing for a three-decimal step, so MonthPill uses
+  // literal pixels instead. This guard is what found that.
+  'sticky',
+  'top-0',
+  'h-screen',
+  'gap-0.75',
+  'px-10',
+  'py-2.5',
+  'pb-5',
+  'pb-10',
+  'pr-3',
+  'pr-3.5',
   // layout and text handling the components depend on
   'flex',
   'flex-col',

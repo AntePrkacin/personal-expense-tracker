@@ -1,58 +1,19 @@
-import type { paths } from '@/types/api';
+import { redirect } from 'next/navigation';
 
-// Read out of the generated spec rather than restated here. Renaming this
-// field in the backend now breaks the build instead of quietly rendering an
-// empty box. Regenerate with `npm run api:sync` from the repo root.
-type HelloResponse = paths['/api/hello']['get']['responses'][200]['content']['application/json'];
+// `/` is not a screen. The design has no frame for it: a signed-in visitor
+// belongs on the Dashboard - VER-4 lands both a new and a returning account
+// there - and a signed-out one belongs in the access flow, which the (app)
+// shell's own session check sends them to once PET-52 builds it.
+//
+// So this redirects and the shell decides the rest. Doing it here rather than in
+// a middleware matcher keeps the one rule in one place.
+//
+// This replaced the scaffold greeting page that fetched GET /api/hello. That was
+// the proof the two apps could talk to each other, and it was worth keeping only
+// until there was a real screen to put in its place. Nothing in the frontend
+// calls the backend now, which is a real gap: the verify page (PET-52) and the
+// profile read (PET-45) are what make it true again.
 
-async function getHello(): Promise<HelloResponse> {
-  const baseUrl = process.env.BACKEND_URL ?? 'http://localhost:3000';
-  // no-store: always hit the API so the page reflects the live backend.
-  const res = await fetch(`${baseUrl}/api/hello`, { cache: 'no-store' });
-  if (!res.ok) {
-    throw new Error(`API responded with ${res.status}`);
-  }
-  return res.json();
-}
-
-// Async Server Component: the fetch runs on the server at request time, so
-// there is no CORS involved and no client-side loading state to manage.
-export default async function Home() {
-  let message: string;
-  let reachable = true;
-
-  try {
-    const data = await getHello();
-    message = data.message;
-  } catch {
-    reachable = false;
-    message = 'Could not reach the API. Is the backend running on port 3000?';
-  }
-
-  // This scaffold page has no Figma design, so it is styled from the
-  // Foundations tokens alone. Two things the pre-token version did are
-  // deliberately not reproduced: the heading's responsive step-up
-  // (`text-4xl sm:text-5xl`), because the design specifies no breakpoints and
-  // the type scale has no responsive variants; and `font-mono` on the API
-  // message, because a monospace face is not part of the design system.
-  return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-24 text-center">
-      <span className="text-label-m rounded-full border border-border-default bg-surface-card px-3 py-1 text-text-secondary">
-        Decode Academy Demo
-      </span>
-      <h1 className="text-display-l max-w-2xl">Frontend + Backend connected 🎉</h1>
-      <p className="text-body-l max-w-md text-text-secondary">
-        {reachable ? 'Message fetched from the NestJS API:' : 'Backend unreachable:'}
-      </p>
-      <p
-        className={`text-body-m max-w-md rounded-lg border px-4 py-3 ${
-          reachable
-            ? 'border-border-default bg-surface-card text-text-primary'
-            : 'border-status-danger bg-status-danger-soft text-status-danger-text'
-        }`}
-      >
-        {message}
-      </p>
-    </main>
-  );
+export default function Home() {
+  redirect('/dashboard');
 }

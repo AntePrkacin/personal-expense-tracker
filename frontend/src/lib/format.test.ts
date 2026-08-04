@@ -1,4 +1,11 @@
-import { formatCurrency, formatNegative, initials, shortName } from './format';
+import {
+  formatCurrency,
+  formatNegative,
+  initials,
+  monthLabel,
+  monthOverline,
+  shortName,
+} from './format';
 
 // The point of these tests is the sign glyph.
 //
@@ -106,5 +113,36 @@ describe('shortName', () => {
     // Only the last name is shortened. A first-name initial would make the
     // footer unreadable, and the design shows the full first name.
     expect(shortName('Marko', 'Kovač')).toContain('Marko');
+  });
+});
+
+// Every date below is built with the local-time constructor rather than an ISO
+// string. `new Date('2025-10-08')` is parsed as UTC, so west of Greenwich it
+// formats as October 7 - and on the 1st of a month it would format as the month
+// before, which is exactly the assertion these tests make.
+
+describe('monthOverline', () => {
+  it('names the month and the year', () => {
+    // The designed overline on 04 Dashboard (node 21:58) and 06 Transactions
+    // (node 26:139).
+    expect(monthOverline(new Date(2025, 9, 8))).toBe('October 2025');
+  });
+
+  it('carries the year of the date, not of the month name', () => {
+    // December and January are the pair a year-boundary mistake shows up on.
+    expect(monthOverline(new Date(2025, 11, 31))).toBe('December 2025');
+    expect(monthOverline(new Date(2026, 0, 1))).toBe('January 2026');
+  });
+});
+
+describe('monthLabel', () => {
+  it('names the month alone', () => {
+    // The month select reads "October", without the year (DSH-2).
+    expect(monthLabel(new Date(2025, 9, 8))).toBe('October');
+  });
+
+  it('spells the month out rather than abbreviating it', () => {
+    // 'short' would give "Sep", which is not what the frame draws.
+    expect(monthLabel(new Date(2025, 8, 8))).toBe('September');
   });
 });
