@@ -455,6 +455,29 @@ the designed **order**, which wrapping preserves. Forcing the picture would mean
 which breaks at the first long category name, or shaving the designed 10px gap to 8px to win a
 coincidence back. Worth a designer glance so the difference is known rather than discovered.
 
+### The budgeting period resolves against one server timezone, not the user's
+
+Every month-scoped figure in the app - the transaction list's period, per-category month
+stats, the dashboard's buckets and its days-left tile - is derived by reading a
+`YYYY-MM-DD` date against the profile's `monthStartDay`. That needs to know what day it is
+now, and PET-35 decided that "now" comes from a single configured `APP_TIMEZONE`
+(`Europe/Zagreb`) rather than from UTC or from the user.
+
+UTC was the first instinct and it is wrong for everybody: on the period boundary a
+transaction logged just after local midnight falls into the previous period, so the whole
+dashboard shows the wrong month for a few hours, twice a month. One configured zone is
+right for every user this project actually has, and honest about not solving the general
+case.
+
+**The eventual fix is a timezone on the profile, one per user.** It needs a column in the
+user scope, a Settings field, and a decision about what to do for accounts that predate it.
+None of that exists: no Figma frame collects a timezone, so there is nothing to build
+against yet. Until it lands, a user outside the configured zone sees the boundary skew
+described above, and the further from `Europe/Zagreb` they are the worse it gets.
+
+Note the config value fails silently when wrong, the same failure class as `use_tursodb` in
+`backend/src/database/CLAUDE.md`: nothing crashes, the months are just quietly off.
+
 ---
 
 - **A generated HTTP client is not decided.** Types are shared and that part is settled:
