@@ -1,98 +1,51 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Spendifico API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
-
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+NestJS REST API on port **3000** (the Next.js frontend owns 4200). Drizzle ORM over Turso's
+SQLite engine with a database per user, passwordless login links, and an OpenAPI contract the
+frontend's types are generated from.
 
 ```bash
-$ npm install
+cd backend
+npm install
+cp .env.example .env      # optional: every variable has a working local default
+npm run start:dev         # http://localhost:3000/api/hello
 ```
 
-## Compile and run the project
+Swagger UI over the same document the frontend types come from:
+<http://localhost:3000/api/docs>. Note the global `api` prefix, which is why
+`http://localhost:3000/` returns 404 by design.
 
-```bash
-# development
-$ npm run start
+## Where things are
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```text
+src/
+  main.ts             Bootstrap: global 'api' prefix, CORS, Swagger UI, port, shutdown hooks
+  app.module.ts       Root module: config, database, auth, transactions, global pipe/filter/guard
+  app.controller.ts   GET /api/hello
+  openapi.ts          Writes openapi.json. Run it via `npm run api:spec`, never ts-node
+  auth/               Passwordless flow: register, login-link, verify, session, SessionGuard
+  transactions/       POST /api/transactions, PATCH and DELETE /api/transactions/:id
+  users/              Central directory reads and writes (no controller)
+  database/           Drizzle + Turso: central and per-user schemas, the client factory
+  mail/               Mailer seam: logs by default, MailPace over HTTP when configured
+  common/             ids, money, email normalization, the exception filter, the error DTO
+  config/             The Joi schema that validates the environment at boot
+  dto/                Response shapes. Classes in *.dto.ts files, never interfaces
+drizzle/              Generated migrations, committed: central/ and user/
+databases/            Local database files. Gitignored; the migrations recreate them
+openapi.json          The API contract. Generated and committed, never edited by hand
+test/                 Supertest e2e specs
 ```
 
-## Run tests
+A new feature is a new folder under `src/` with its own module.
 
-```bash
-# unit tests
-$ npm run test
+## Guides
 
-# e2e tests
-$ npm run test:e2e
+- [Commands](../docs/guides/commands.md) - every script here, and what it is for
+- [Configuration](../docs/guides/configuration.md) - every environment variable
+- [Database](../docs/guides/database.md) - local files, schema changes, Turso Cloud
+- [Sending real email](../docs/guides/email.md) - MailPace setup and the smoke test
+- [Troubleshooting](../docs/guides/troubleshooting.md)
 
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Why it is built the way it is - why registration provisions no database, why login tokens are
+looked up by hash, why every aggregate is computed on read - is in [`CLAUDE.md`](CLAUDE.md).

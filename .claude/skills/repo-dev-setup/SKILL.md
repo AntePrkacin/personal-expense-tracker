@@ -1,15 +1,15 @@
 ---
 name: repo-dev-setup
-description: This skill should be used when the user asks to "set up the project", "onboard me", "get me running locally", "set up local dev", "how do I run the app", "configure my environment", "install dependencies", or says "/dev-setup", or on a first-time clone. Guides through full first-time local setup for the Decode Academy Demo repo (backend + frontend).
+description: This skill should be used when the user asks to "set up the project", "onboard me", "get me running locally", "set up local dev", "how do I run the app", "configure my environment", "install dependencies", or says "/dev-setup", or on a first-time clone. Guides through full first-time local setup for the Spendifico repo (backend + frontend).
 argument-hint: "[app - backend | frontend | omit for full stack]"
 allowed-tools: Read, Bash(node:*), Bash(npm:*), Bash(curl:*), Bash(git:*), Bash(which:*), Bash(command:*), Bash(uname:*)
 ---
 
 > **Tools used:** `Read` (check `.nvmrc` and `.env` files), `Bash(node:*)`/`Bash(npm:*)` (version checks, installs), `Bash(which:*)`/`Bash(command:*)`/`Bash(uname:*)` (locate the toolchain, detect the OS), `Bash(curl:*)` (verify a server the user started), `Bash(git:*)` (version and hook state).
 
-Walk the user through setting up their local development environment for the Decode Academy Demo repo.
+Walk the user through setting up their local development environment for the Spendifico repo.
 
-This is a **multi-app repository**: two independent npm projects in one git repo - `backend/` (NestJS 11, port 3000) and `frontend/` (Next.js 16, port 4200). There are **three** `package.json` files and each is installed separately. The root one is not a workspace manager; it holds only the repo-wide git-hook tooling, but installing it is **mandatory**, not optional (see Step 3).
+This is a **multi-app repository**: two independent npm projects in one git repo - `backend/` (NestJS, port 3000) and `frontend/` (Next.js, port 4200). There are **three** `package.json` files and each is installed separately. The root one is not a workspace manager; it holds only the repo-wide git-hook tooling, but installing it is **mandatory**, not optional (see Step 3).
 
 The optional argument selects what to set up: `backend`, `frontend`, or omit for the full stack.
 
@@ -51,8 +51,7 @@ git --version
 Judge the output of `command -v node`:
 
 - A path under a version manager or system prefix (`~/.nvm/versions/node/...`,
-  `/usr/local/bin`, `/opt/homebrew/bin`, `~/.fnm/...`, `C:\Program Files\nodejs\...`) means
-  a real system Node. Good.
+  `/usr/local/bin`, `/opt/homebrew/bin`) means a real system Node. Good.
 - A path inside a Claude Code installation (contains `.claude`, `Claude`, `claude-code`,
   or sits next to the Claude binary) means you are seeing a **bundled runtime**. The user
   very likely has no Node of their own. Treat this as "Node is missing" and go to Step 2.
@@ -69,11 +68,14 @@ own check returned. Go to Step 2.
 
 Version requirements once Node is present:
 
-- Match `.nvmrc` (currently **24**). CI reads that same file.
-- The hard floor is **v20.9.0**, which `next` declares in `engines`; NestJS 11 asks for
-  `>= 20`. All three `package.json` files carry that constraint, so npm warns with
-  `EBADENGINE` on a mismatch. Compare against v20.9.0, never against a bare "v20".
-- npm **v10+**, which ships with any acceptable Node.
+- Match `.nvmrc`, which is the single home for the Node major. CI reads that same file, and
+  `mise.toml` pins it a second time because mise cannot read `.nvmrc`.
+- The hard floor is the one in `engines.node` in all three `package.json` files, so npm warns
+  with `EBADENGINE` on a mismatch. It is the **backend's** floor, not `next`'s: the backend
+  loads three ESM-only packages from CommonJS, which needs Node's `require()` of ESM. Below it
+  the failure is a startup crash, not a warning. Compare against the full version, never
+  against a bare major.
+- Nothing in this repo pins npm: there is no `engines.npm`, so do not assert a version.
 
 If Node is present but the version is wrong, ask the user to run `nvm use` in their own
 terminal. It reads `.nvmrc` and takes no version argument. Do **not** suggest
@@ -97,22 +99,6 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 nvm install      # reads .nvmrc
 nvm use          # reads .nvmrc
 ```
-
-**Windows** - `nvm` from the block above does not exist on Windows. Use fnm, which also
-reads `.nvmrc`:
-
-```powershell
-winget install Schniz.fnm
-# reopen the terminal, then from the repo root:
-fnm install
-fnm use
-```
-
-Add fnm's shell hook so the version switches automatically per directory, following
-<https://github.com/Schniz/fnm#shell-setup>. Alternatives, if the student prefers: nvm-windows
-(<https://github.com/coreybutler/nvm-windows>, note it does not read `.nvmrc`, so pass `24`
-explicitly), or `winget install OpenJS.NodeJS.LTS` for a plain install with no version
-switching, or WSL2 and then the macOS/Linux instructions inside it.
 
 After they report back, re-run Step 1 and confirm their own terminal now prints a version
 that satisfies `.nvmrc`. Do not proceed until it does. Everything after this point fails
@@ -180,14 +166,7 @@ Steps 1 to 3 always apply, whichever path is taken.
 
    `.env` is read at startup by `ConfigModule.forRoot()` in `src/app.module.ts`, and values are consumed through `ConfigService` in `src/main.ts`. It is gitignored and must never be committed. The app also runs without it, on the defaults below.
 
-3. Read `backend/.env` and flag any variables that are missing or still set to placeholder values. The backend currently reads exactly two:
-
-   | Variable       | Default if unset        | Purpose                             |
-   | -------------- | ----------------------- | ----------------------------------- |
-   | `PORT`         | `3000`                  | Port the API listens on             |
-   | `FRONTEND_URL` | `http://localhost:4200` | CORS origin for client-side fetches |
-
-   Anything set in the shell environment overrides `.env`.
+3. Read `backend/.env` and flag any variables that are missing or still set to placeholder values. The variable list, every default and which values are paired is in `docs/guides/configuration.md`, which is their single home - read it rather than restating them here, because a copy in this file has already gone wrong once. Anything set in the shell environment overrides `.env`.
 
    > Real secrets (API keys, tokens) never live in the repo - they come from the team secret manager and are pasted into `.env` locally. See the `repo-secrets` skill.
 
@@ -249,8 +228,7 @@ Then they open `http://localhost:4200` in a browser. The frontend calls the API 
 `http://localhost:3000`; traffic never goes the other way.
 
 If a port is already taken, the offender is usually a dev server from an earlier session.
-On macOS/Linux `lsof -nP -iTCP:3000 -sTCP:LISTEN` names the process; on Windows
-`netstat -ano | findstr :3000`.
+`lsof -nP -iTCP:3000 -sTCP:LISTEN` names the process.
 
 ---
 

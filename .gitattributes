@@ -1,0 +1,4 @@
+# Line endings only. No merge driver here: union-merging prose interleaves two
+# authors sentences into text that is grammatical nowhere, and it lands silently.
+# A conflict that stops a merge beats a document that quietly says two things.
+* text=auto eol=lf

@@ -344,6 +344,14 @@ from a screenshot.
 
 ---
 
+- **A generated HTTP client is not decided.** Types are shared and that part is settled:
+  response shapes come out of `backend/openapi.json`, so a caller derives its type rather than
+  restating it. What is open is whether the calls themselves get wrapped. A generated client
+  would fight Next.js caching, because a Server Component passes `cache` and `next` options
+  straight to `fetch`; `openapi-fetch` is the upgrade worth considering, because it delegates to
+  global `fetch` and passes `RequestInit` through untouched. Recorded here because the old
+  README was its only home outside a frozen plan file.
+
 ## Operational
 
 ### Unverified registrations accumulate, and hold their address
@@ -612,11 +620,6 @@ than discovered.
   the parentheses" note was corrected to one. Adding
   `moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' }` to `jest.config.ts` would fix it
   repo-wide and is worth doing next time somebody is in that file.
-- **The four oldest plan files do not match the documented naming pattern.** CLAUDE.md
-  specifies `YYYY-MM-DD_PET-{number}_{slug}.md`, and `2026-08-03_PET-18_app-sidebar.md`
-  follows it, but the four that predate the convention are `YYYY-MM-DD-{slug}.md` with no
-  ticket number. Renaming them is a one-line `git mv` each; the reason to bother is that the
-  ticket number is the only thing tying a plan to its Jira issue.
 - **`created_at` and `updated_at` can differ by a millisecond on insert.** Every table
   defaults the two from independent `$defaultFn(() => new Date())` calls, so an insert that
   straddles a millisecond boundary writes two different values - observed on a local

@@ -18,7 +18,7 @@ Manage local secrets and configuration for the two apps in this repo via per-app
 - Each app has a committed **`.env.example`** - the template. It lists every variable name the app reads, with placeholder or safe-default values and a short comment. It contains **no real secret values**.
 - Each developer copies `.env.example` → **`.env`** locally and fills in real values. `.env` is **gitignored and never committed**.
 - The **real values** live in the team's secret manager / shared vault (referenced generically here). That vault is the single source of truth - `.env` files are disposable local copies.
-- `backend/.env` and `frontend/.env` are independent - a variable used by both must be added to both templates.
+- `backend/.env` and `frontend/.env.local` are independent (note the different filenames: Nest reads `.env`, Next.js reads `.env.local`) - a variable used by both must be added to both templates.
 
 | File | Committed? | Contains |
 |---|---|---|
@@ -70,7 +70,7 @@ For backend secrets, confirm the variable is actually read at the boundary:
 1. `ConfigModule.forRoot({ isGlobal: true })` is already registered in `backend/src/app.module.ts`, so any key in `backend/.env` is available without further wiring.
 2. Read it through `ConfigService` (`config.get<string>('MY_KEY')`), as `src/main.ts` does - not via `process.env` scattered through the code.
 3. Add a placeholder entry to `backend/.env.example` so the next person knows the variable exists.
-4. **Not yet set up: validation.** There is no schema, so a missing value fails at first use rather than at boot. If a secret is required for the app to work at all, add a `validationSchema` to `ConfigModule.forRoot()` and say so to the user.
+4. **Add it to the validation schema.** `ConfigModule.forRoot()` takes a `validationSchema` (Joi, `backend/src/config/env.validation.ts`), so a declared value that is missing or malformed fails at **boot** with a message naming the variable, not at first use. Note the failure direction: `ConfigModule` validates with `allowUnknown: true`, because `process.env` carries hundreds of unrelated keys, so a variable you leave out of the schema is **not** rejected - it passes through silently unvalidated, which is the outcome to avoid. Add it there, and use `.and()` if it is only valid alongside another one.
 
 Inform the user of any missing wiring. (See the `backend-nestjs` skill for config patterns.)
 
@@ -79,7 +79,7 @@ For frontend config, confirm public values use the `NEXT_PUBLIC_` prefix and com
 ### Step 5 - Verify it stays out of git
 
 ```bash
-git check-ignore backend/.env frontend/.env
+git check-ignore backend/.env frontend/.env.local
 ```
 
 Both should be reported as ignored. If not, stop and fix `.gitignore` before doing anything else. Only the `.env.example` change should be staged and committed:

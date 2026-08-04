@@ -24,7 +24,7 @@ because the `/dev-setup` skill checks them in its first step.
 
 Always asks, even though the commands are ordinary: `git push`, `git reset --hard`,
 `npm publish`. These either send work outward or throw work away. `git push` in
-particular gives the "never push directly to `main`" rule in `CLAUDE.md` a real
+particular gives the "never push directly to `main`" rule in root `CLAUDE.md` a real
 barrier instead of just an instruction.
 
 ### The `gh` split is the point, not an accident
@@ -46,7 +46,7 @@ command with `-X POST` writes to GitHub. Nothing in a permission pattern can tel
 apart, so it is treated as a write.
 
 Setup instructions for `gh` itself, including which OAuth scopes matter, are in the
-`README.md` section "GitHub CLI (`gh`)". The `repo-review-prs` skill assumes it is already
+`docs/guides/installation.md` section on the GitHub CLI. The `repo-review-prs` skill assumes it is already
 authenticated.
 
 ### `permissions.deny`
