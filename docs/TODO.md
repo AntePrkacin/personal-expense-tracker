@@ -18,7 +18,7 @@ relitigated by accident.
 
 The backend is done: `POST /api/auth/verify` spends a link, provisions the account and
 returns a session, and `GET /api/auth/session` answers who the bearer is. Nothing on the
-frontend calls either yet - there is no verify page and no session cookie. There *is* now a
+frontend calls either yet - there is no verify page and no session cookie. There _is_ now a
 dashboard to land on: PET-19 built the `(app)` shell and the four routed views. The
 session-scoped `getProfile()` that replaces the deleted proof-of-stack `GET /api/users/:id`
 is PET-45's, not this.
@@ -30,15 +30,24 @@ the generated contract. The drift gates still run, so `api.d.ts` cannot rot sile
 end-to-end proof is gone until this item lands. **This is the first thing the work here
 restores.**
 
-**Two things in the shell are stubs waiting on this, both deliberate and both loud.**
+**Three things in the shell are stubs waiting on this, all deliberate and all loud.**
 
 `frontend/src/lib/session.ts` holds `requireSession()`, called once by `app/(app)/layout.tsx`
 and currently letting every request through - which is PET-19's explicit deferral of its own
 AC5. Its doc comment is the specification: read the cookie, lift it into
 `Authorization: Bearer <token>`, call `GET /api/auth/session`, redirect to the access flow on
 401 or absence. **The cookie's name is still undecided and this work picks it**; PET-19
-deliberately did not, so as not to hand over a contract it had not chosen. Note the access
-flow has no route yet either, so the redirect target is this work's to name too.
+deliberately did not, so as not to hand over a contract it had not chosen.
+
+The same file now holds a second seam, `hasSession()`, called once by `app/page.tsx` and
+currently answering `false` for everybody - PET-8's equivalent deferral. `/` is the app's
+front door and branches on it: no session renders 01 Welcome, a live session redirects to
+`/dashboard`. Until this work lands, that means **every visitor lands on Welcome and
+`/dashboard` is reached by typed URL only**. The two functions are separate because the
+shell wants "let me through or send me away" while the root route wants a fact it can branch
+on, but they want the same underlying read, so give them a shared helper rather than two
+fetches. The redirect target `requireSession()` needs is no longer unnamed either: `ACCESS_ROUTES`
+in `frontend/src/lib/routes.ts` declares `/login`, and Welcome is at `/`.
 
 `PLACEHOLDER_PROFILE` in `app/(app)/layout.tsx` feeds the sidebar footer Figma's own sample
 data. It cannot be fixed without both halves: names live in the per-user `profile` row and the
@@ -170,7 +179,7 @@ applying to new users only, which costs `deleteUserDb` that no-row compensation 
 a real change to `UserDatabaseService` rather than a rename, and infrastructure naming no user
 ever sees does not need to follow the brand a second time.
 
-### The sidebar's nav pills use a radius that is not on the scale
+### The logo tile and nav pills use radii that are not on the scale
 
 Figma bound the logo tile and the four nav pills to a raw **10px** corner rather than to a
 radius variable, and Foundations offers only `Radius/SM` (8) and `Radius/MD` (12).
@@ -183,7 +192,13 @@ is a consistency question rather than a bug.
 
 The **two header pills** (the month select and the search field) bind the same raw 10px, so
 `app/(app)/dashboard/MonthPill.tsx` and `transactions/SearchPill.tsx` carry the literal too.
-Whatever the designer decides covers all four places at once.
+
+**PET-8 found a third value, which is what turns this from a nit into an answerable
+question.** The access screens draw the same logo lockup at 38px instead of the sidebar's
+34px, and Figma binds that larger tile to a raw **11px** - so `components/LogoLockup.tsx`
+carries `rounded-[11px]`. One lockup at two sizes with two different off-scale radii is much
+more readily a pair of slips than a designed progression, which makes "snap both to 12" the
+likely answer. Whatever the designer decides covers all five places at once.
 
 ### The page header's two inert controls
 
@@ -198,7 +213,7 @@ The **month select** is inert by the design's own decision. A8 says only October
 file, so it renders the current period and stays non-functional until month navigation is
 designed. Making it real needs a designed control first, not just code.
 
-The **search field** is inert because there is nothing to filter. TRN-1 *does* describe a real
+The **search field** is inert because there is nothing to filter. TRN-1 _does_ describe a real
 search input, so this one is a chosen behaviour rather than a read one: a box that accepts
 typing and filters nothing is a worse lie than one that plainly does nothing. PET-28's
 transaction list is what turns it into an `<input>` plus the state that owns the query.
@@ -227,6 +242,95 @@ change when somebody makes it, since all three want the same missing profile dat
 Note the tests are not exposed to this. `format.test.ts` builds every fixture with the
 local-time `Date` constructor rather than an ISO string, and says why: `new Date('2025-10-08')`
 parses as UTC, so west of Greenwich a date on the 1st formats as the month before.
+
+### The onboarding route shape is PET-9's to settle
+
+PET-8 points "Get started" at `/setup`, which is deliberately correct under either reading:
+if the three setup steps share one route it _is_ that route, and if each gets its own it is
+step one's. `ACCESS_ROUTES` in `frontend/src/lib/routes.ts` is the single declaration, so
+whichever PET-9 picks, that string does not move.
+
+The trade-off, recorded so PET-9 decides with it in front of them rather than defaulting:
+
+**One route** holding all three steps as rendered screens is simplest. The draft (currency,
+budget, chips) lives in one client component's state and never crosses a route boundary, so
+"Back keeps my values" is free. The cost is that the **browser's** Back button exits
+onboarding entirely and discards everything typed - you cannot fix that inside the one-route
+design without pushing history entries by hand, which is reinventing routing badly.
+
+**Three routes** under a shared `'use client'` layout give step-by-step Back and preserve the
+draft anyway: App Router keeps a layout's state across navigation between its own children,
+so `/setup` to `/setup/categories` does not lose it. A refresh is also less destructive, and
+a step is linkable for QA diffing against its Figma frame.
+
+What tips it is that all three tickets carry an explicit "Back keeps my values" acceptance
+criterion (PET-9 AC5, PET-10 AC4, PET-11 AC5), which says back-navigation is a first-class
+path through this flow rather than an edge case. A32 (nothing persisted server side until
+"Finish setup") holds either way.
+
+### Foundations declares no shadow tokens, and the access screens need two
+
+The Welcome panel's sample budget card and its two floating chips are the first shadows in
+the repo: `0px 24px 50px rgba(0,0,0,0.35)` and `0px 10px 24px rgba(0,0,0,0.25)`, written as
+arbitrary literals in `frontend/src/app/DecorativePanel.tsx` because `globals.css` has no
+`--shadow-*` namespace to reach for.
+
+Question for the designer or a Foundations ticket: do `--shadow-card` and `--shadow-chip`
+join the theme? This will recur immediately rather than eventually - frames 02, 03, 22, 23
+and 24 are all cards on a canvas, and the dashboard's own cards almost certainly carry a
+shadow too, so PET-9 hits it next.
+
+**Two notes for whoever adds the tokens.** The literals are deliberately absent from
+`components/ui/utilities.test.ts`, on the same reasoning that excludes `w-[520px]`: they
+compile without a token lookup, so no token change can break them. But there is a second
+reason worth knowing before adding them - that file's `selector()` escapes only `.`, `:`,
+`/`, `[` and `]`, while Tailwind writes these as
+`.shadow-\[0px_10px_24px_0px_rgba\(0\,0\,0\,0\.25\)\]`, so a shadow candidate reports
+"generates no CSS" for a class that generates perfectly. The fix is one character class:
+`[.:/[\]().,#]`. The same gap applies to any `bg-[#abc123]`-style raw colour.
+
+### The Welcome panel's circles are filled with an unbound hex
+
+Figma fills both decorative circles on frame 01 (nodes 41:712 and 41:713) with `#4F45E6` at
+28% and 18% opacity, bound to no variable. That is one hex digit off `--color-brand-accent`
+(`#4F46E5`), which makes it a slip rather than a decision.
+
+`DecorativePanel.tsx` ships `bg-brand-accent` under those opacities instead. Hard-coding
+`bg-[#4F45E6]` would be the first raw colour in the entire frontend and would defeat the
+point of clearing Tailwind's palette, and the difference is one unit of green seen through
+28% opacity over `#101720`.
+
+Recorded so the designer can confirm and bind the layer, and so nobody later "corrects" the
+code back to the raw hex from a screenshot. The exported SVGs were inspected while
+implementing: plain solid circles, no blur and no gradient, which is why they are `div`s with
+a background rather than assets - worth knowing before somebody reaches for `blur-*`.
+
+### The design shows whole dollars and `formatCurrency` always emits cents
+
+`formatCurrency(1240)` returns `"$1,240.00"`, pinned in `frontend/src/lib/format.test.ts`,
+while frame 01's sample card and frame 04's real budget card both draw `"$1,240"`. So the
+shared formatter cannot produce the string the design asks for.
+
+Welcome sidesteps it: its figures are permanent marketing copy, so `SAMPLE_BUDGET` holds
+literal strings and `ui/Stat.stories.tsx` already hard-codes `'$1,240'` for the same reason.
+**The dashboard's budget card cannot sidestep it**, because its numbers are real. That ticket
+needs either a no-cents variant beside `formatCurrency` or a designer answer on whether the
+app shows cents at all - and the answer probably differs by context, since a transaction of
+$24.50 clearly needs them while a $2,000 budget clearly does not. Recorded now because it is
+cheap to note and annoying to rediscover mid-ticket.
+
+### The frontend is desktop-only, and Welcome is the first genuinely public page
+
+There is not one responsive utility in `frontend/src` - no `sm:`, `md:` or `lg:` anywhere -
+which is a consistent decision for an app behind a login, drawn at 1440x1024.
+
+Welcome is the one screen a stranger might open on a phone. Its 560px fixed panel plus 80px
+gutters squeezes badly below roughly 900px, and the panel's contents are absolutely
+positioned so they clip rather than reflow. Staying consistent with the repo was the right
+call for PET-8 and this is out of its scope, but the gap is recorded here so it is known
+rather than discovered by a visitor. The cheapest first move, if it matters, is hiding the
+decorative panel below a breakpoint - it carries no information the left column lacks, which
+is also why it is `aria-hidden`.
 
 ### Figma's page header is 2px shorter on two of the four screens
 
@@ -491,6 +595,31 @@ than discovered.
   type is `string` either way - but if PET-28's read DTOs want the published contract to
   say what the string is, each instant field needs an explicit
   `@ApiProperty({ format: 'date-time' })`.
+- **The Storybook story smoke harness is now duplicated four times.** The same ~30 lines of
+  story discovery and `renders without throwing` live in
+  `frontend/src/components/ui/ui.stories.test.tsx`, `src/app/(app)/shell.stories.test.tsx`,
+  `src/stories/foundations/foundations.stories.test.tsx` and, since PET-8,
+  `src/app/screens.stories.test.tsx`. Each exists because it asserts its own section's title
+  prefix - `/^Components\//`, `/^Shell\//`, `/^Foundations\//`, `/^Screens\//` - and that
+  assertion is the one thing each is there to make unambiguous. Four copies is past the rule
+  `utilities.test.ts` sets for its own harness ("if a third consumer appears, lift it into a
+  helper then"). The shape: one exported function taking the `MODULES` array and a
+  title-prefix `RegExp`, returning nothing and registering the three `describe` blocks, so each
+  suite shrinks to an import, a `MODULES` literal and one call. Lifting three existing suites
+  was out of scope for the ticket that added the fourth; do it before a fifth section appears,
+  which PET-9 onward will not need but a future "Modals" section would.
+- **The `@/` alias does not work inside `jest.mock()`, and it is not the route group's
+  parentheses.** `jest.mock('@/lib/session')` fails with "Cannot find module" from anywhere,
+  which PET-8 reproduced from `src/app/` and `src/lib/` with no parentheses in the path. The
+  resolved Jest config carries no `moduleNameMapper` entry for `@/*` and a null `modulePaths`,
+  so the alias is simply unresolvable at runtime; plain `import`s work because SWC rewrites
+  aliased specifiers at transform time from tsconfig `paths`, while `jest.mock`'s argument is a
+  string the resolver sees verbatim. Use a relative specifier, and name the same specifier in
+  the accompanying `import` so the pair reads as one thing. `app/(app)/layout.test.tsx` used to
+  blame the parentheses and now records the real cause; CLAUDE.md's "Two Jest traps come from
+  the parentheses" note was corrected to one. Adding
+  `moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' }` to `jest.config.ts` would fix it
+  repo-wide and is worth doing next time somebody is in that file.
 - **`created_at` and `updated_at` can differ by a millisecond on insert.** Every table
   defaults the two from independent `$defaultFn(() => new Date())` calls, so an insert that
   straddles a millisecond boundary writes two different values - observed on a local

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
-import { BUTTON_VARIANTS, Button, TrashGlyph, type ButtonVariant } from './Button';
+import { BUTTON_BASE, BUTTON_VARIANTS, Button, TrashGlyph, type ButtonVariant } from './Button';
 
 // next/jest maps every .css import to an empty object, so jsdom never receives a
 // stylesheet and no test here can assert a rendered colour or size. These assert
@@ -82,5 +82,63 @@ describe('Button', () => {
     render(<Button label="Continue" />);
 
     expect(screen.getByRole('button').querySelector('svg')).toBeNull();
+  });
+});
+
+// "Get started" on 01 Welcome (WEL-2) changes the page location, so it has to be
+// an <a>: a <button> firing router.push() would force 'use client' onto the page
+// and break middle-click, copy-link and prefetch. Figma draws it with its own
+// Button component, which is why that behaviour lives here rather than in a
+// second link-shaped component.
+//
+// The other half of the union - that `href` cannot be combined with `type`,
+// `disabled` or `onClick` - is checked by `npm run build`, this repo's typecheck
+// gate, and cannot be asserted at runtime.
+describe('Button as a link', () => {
+  it('renders a link carrying its label, and no button at all', () => {
+    render(<Button label="Get started" href="/setup" />);
+
+    expect(screen.getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '/setup');
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it.each(VARIANTS)('%s applies the same designed fill, border and padding', (variant) => {
+    // The point of the whole exercise: one BUTTON_VARIANTS, whichever element
+    // renders. A second copy of these strings in a link component is exactly what
+    // this asserts does not exist.
+    render(<Button variant={variant} label="Get started" href="/setup" />);
+
+    expect(screen.getByRole('link')).toHaveClass(...BUTTON_VARIANTS[variant].split(' '));
+  });
+
+  it('applies the shared base classes too', () => {
+    // Guards the BUTTON_BASE extraction: the two renderings could otherwise drift
+    // apart on the focus ring or the radius while every variant test stayed green.
+    render(<Button label="Get started" href="/setup" />);
+
+    expect(screen.getByRole('link')).toHaveClass(...BUTTON_BASE.split(' '));
+  });
+
+  it('defaults to the primary variant', () => {
+    render(<Button label="Get started" href="/setup" />);
+
+    expect(screen.getByRole('link')).toHaveClass(...BUTTON_VARIANTS.primary.split(' '));
+  });
+
+  it('carries no type attribute', () => {
+    // `type` on an anchor means the linked resource's media type, which is not
+    // what the button branch's `type="button"` means at all. Leaking it across
+    // would be a quietly wrong attribute rather than a visible bug.
+    render(<Button label="Get started" href="/setup" />);
+
+    expect(screen.getByRole('link')).not.toHaveAttribute('type');
+  });
+
+  it('still renders a leading glyph', () => {
+    render(<Button label="Get started" href="/setup" icon={<TrashGlyph />} />);
+
+    const glyph = screen.getByRole('link').firstElementChild;
+    expect(glyph?.tagName).toBe('svg');
+    expect(glyph).toHaveAttribute('aria-hidden', 'true');
   });
 });
