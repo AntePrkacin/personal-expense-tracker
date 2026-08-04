@@ -1,6 +1,6 @@
 # Documentation restructure: thin CLAUDE.md, real README, guides under docs/
 
-**Ticket:** not yet created - the Atlassian MCP was unreachable on 2026-08-04, see Known risks · **Branch:** `docs/claude-md-optimization` · **Written:** 2026-08-04
+**Ticket:** PET-54 · **Branch:** `docs/PET-54-docs-restructure` · **Written:** 2026-08-04
 
 ## Context
 
@@ -442,14 +442,8 @@ Not a pre-commit hook: a hook that fails on a doc mid-edit is how `--no-verify` 
   deliberately restates something. It is reasoning rather than an actionable token, and the
   alternative (stating it once) is what let the overlap happen: today only `CLAUDE.md` mentions
   it, and it licenses the duplication instead of forbidding it.
-- **The Jira ticket does not exist yet.** `createJiraIssue` hung for 300s and a follow-up
-  verifying JQL read hung for 300s as well, which is this site's known whole-connector outage
-  signature rather than a payload problem. The create timing out client-side does **not** prove
-  the server rejected it, so the issue may already exist in `PET`: check the board or run
-  `project = PET AND summary ~ "Restructure CLAUDE.md"` before re-running the create, or risk a
-  duplicate. Everything needed is resolved and it is a single call: Task type, summary
-  `[DOCS] Restructure CLAUDE.md and README.md to stop merge conflicts`, priority `{"id": "3"}`,
-  labels `DOCS` and `mvp`, assignee Iskren Nemet, no parent, no story points (`standards.md` §4:
-  DOCS tasks are never estimated). This plan file and the branch are named without a key for now;
-  both are cheap to rename while nothing is pushed, and the commit subjects carry `(PET-NN)` as a
-  placeholder to be filled in.
+- **The ticket was created late.** `createJiraIssue` hung for 300s on the first attempt, and a
+  verifying JQL read hung too, which is this site's whole-connector outage signature. PET-54 was
+  created once the connector recovered, after a duplicate check confirmed the timed-out call had
+  not landed server-side. The plan file and the branch were named without a key in the meantime,
+  which is why this plan is not literally the branch's first commit: `11271da` precedes it.

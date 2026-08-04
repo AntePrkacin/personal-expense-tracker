@@ -491,11 +491,6 @@ than discovered.
   type is `string` either way - but if PET-28's read DTOs want the published contract to
   say what the string is, each instant field needs an explicit
   `@ApiProperty({ format: 'date-time' })`.
-- **One plan file has no ticket number.** Root `CLAUDE.md` specifies
-  `YYYY-MM-DD_PET-{number}_{slug}.md` and every file now follows it except
-  `2026-08-04_docs-restructure.md`, which was written while the Atlassian connector was down and
-  no key could be minted. Rename it with `git mv` once the ticket exists; the ticket number is
-  the only thing tying a plan to its Jira issue.
 - **`created_at` and `updated_at` can differ by a millisecond on insert.** Every table
   defaults the two from independent `$defaultFn(() => new Date())` calls, so an insert that
   straddles a millisecond boundary writes two different values - observed on a local
