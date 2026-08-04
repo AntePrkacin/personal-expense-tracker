@@ -24,11 +24,27 @@ and [05 Dashboard - Empty](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/P
 Nothing here is re-implemented. Each of these is imported from a branch below it in the stack.
 
 - **`monthWindow(monthStartDay, today)`** (PET-35). Drives the period and, through its exclusive
-  end bound, the days-left figure in AC2.
+  end bound, the days-left figure in AC2. `today` is formatted against `APP_TIMEZONE`
+  (`Europe/Zagreb` by default), not UTC and not a per-user zone - see `docs/TODO.md` for why the
+  per-user version is deferred.
 - **The per-category aggregation** (PET-35). The donut's slices are the same grouped SUM the
   Categories list runs, with the cap and status fields dropped.
 - **The recent-transactions shape** (PET-28). The dashboard's three rows are that list read,
   sorted `date_desc` with the same tiebreak, limited to three.
+
+**Three of PET-35's settled decisions land visibly on this screen**, and none of them was
+anticipated by the design:
+
+- **`Uncategorized` is the default category**, so for a user who never changes the picker it will
+  hold most or all of their spend. That makes it the likely **top category** on the stats tile,
+  and the dominant donut slice. A tile reading "Top category: Uncategorized" is honest and not
+  very useful; whether the design wants the fallback excluded from that tile is a question for
+  the designer, and this plan does not exclude it unasked.
+- **Its color is `#98A0AE`**, a deliberately muted neutral rather than one of the eight category
+  colors, so the largest donut slice may be the greyest one. That is the intended signal.
+- **Caps are optional**, so the per-category slices carry no cap or status here anyway - the
+  donut never needed them - but it does mean the Categories screen and this one can both be
+  dominated by an uncapped category, which no frame draws.
 
 ## Decisions made
 
@@ -80,9 +96,12 @@ the only place that knows how many digits the donut legend has room for. A25's u
 question - whether small categories collapse into an "Other" slice - stays unresolved and every
 nonzero category is returned, as the ticket says.
 
-Note the collision with PET-35's fallback category, which is genuinely called "Other": if the
-designer later asks for a collapsed remainder slice it must not be conflated with the real
-category of that name. Whatever it ends up called, it is a presentation grouping and not a row.
+Note the naming collision waiting here. Two things on this screen could reasonably be called
+"other": the seeded fallback category, now named `Uncategorized`, and a collapsed remainder slice
+if the designer ever asks for one. They are not the same thing - the first is a real row that
+holds real transactions, the second is a presentation grouping over several rows. PET-35 renaming
+the fallback away from "Other" removes most of the trap, but a remainder slice must still not
+reuse either name without saying which it means.
 
 ### 5. Remaining may be negative, and the empty account is not an error
 
@@ -156,7 +175,7 @@ if it becomes one, the fix is a single grouped query in a shared read model, not
 - [ ] **Add `insight: null`** to the response with a DTO comment naming PET-41 as what fills it
 - [ ] **Write the service spec** covering AC1 to AC5, the empty account, a period spanning the
       December-to-January roll, a non-1st `monthStartDay`, buckets summing to the period total,
-      and a two-way top-category tie
+      a two-way top-category tie, and an account whose spend sits entirely in `Uncategorized`
 - [ ] **Add e2e coverage** for a populated account and an empty one
 - [ ] **Run `npm run api:sync`** from the repo root and commit both artifacts
 - [ ] **Document it**: a `## Dashboard` section in `backend/CLAUDE.md`, the trigger row in root
@@ -168,7 +187,13 @@ if it becomes one, the fix is a single grouped query in a shared read model, not
 
 **Two hard dependencies below it in the stack**, so this branch cannot be reviewed meaningfully
 until both merge. That is the accepted cost of stacking rather than duplicating the aggregation
-three times.
+three times. PET-35's six decisions were settled on 2026-08-04, so what is left is drift during
+implementation rather than open questions.
+
+**The top-category tile may permanently read `Uncategorized`.** Not a defect in this endpoint -
+it is the arithmetic working - but it is the most visible consequence on the whole app of making
+the fallback the default selection, and it is worth putting in front of the designer before the
+dashboard is built rather than after.
 
 **AC6 ships unsatisfied.** Recorded above and worth agreeing before implementation, not at review
 time.
