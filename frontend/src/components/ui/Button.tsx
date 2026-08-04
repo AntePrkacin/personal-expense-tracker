@@ -50,12 +50,21 @@ export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
  * buttons anywhere in the file - but a keyboard user needs one, and an outline is
  * the right tool because, unlike a border or a ring, it never affects layout.
  *
+ * **`cursor-pointer` is not redundant**, which is the thing to know before deleting
+ * it as noise. Neither the user agent nor Tailwind's preflight gives a `<button>` a
+ * pointer: preflight only sets `appearance: button` on one, and the UA default is an
+ * arrow, so every button in this app read as unclickable on hover until this was
+ * added. An anchor gets the pointer natively, so this only changes the `<button>`
+ * branch - but it belongs in the shared base rather than that branch, because the
+ * two renderings must not look different under the cursor. `disabled:` beats it
+ * through the pseudo-class, so a disabled button still shows not-allowed.
+ *
  * Exported so utilities.test.ts can compile it, the way FIELD_CONTROL_BASE and
  * SELECT_CONTROL already are.
  */
 export const BUTTON_BASE =
-  'text-strong-m focus-visible:outline-brand-accent inline-flex items-center justify-center ' +
-  'gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'text-strong-m focus-visible:outline-brand-accent inline-flex cursor-pointer items-center ' +
+  'justify-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 ' +
   'disabled:cursor-not-allowed disabled:opacity-60';
 
 /**

@@ -68,10 +68,17 @@ export const CHIP_LABEL: Record<'on' | 'off', string> = {
  *
  * The focus ring is the one every other component uses, and it is why `SetupShell`
  * deliberately omits `overflow-hidden` on the card: ten of these sit inside it.
+ *
+ * `cursor-pointer` for the reason `BUTTON_BASE` records: a `<button>` gets an arrow
+ * from the user agent, and preflight does not change it. It matters more here than
+ * on an ordinary button, because a chip is the one control on this screen and it
+ * does not look like a button otherwise - CAT-1 tells the user to "tap to toggle",
+ * so the cursor is the only thing that says the pills are what to tap.
  */
 const CHIP_BASE =
-  'text-label-l focus-visible:outline-brand-accent inline-flex items-center gap-2.25 ' +
-  'rounded-md border-[1.5px] px-3.5 py-2.75 focus-visible:outline-2 focus-visible:outline-offset-2';
+  'text-label-l focus-visible:outline-brand-accent inline-flex cursor-pointer items-center ' +
+  'gap-2.25 rounded-md border-[1.5px] px-3.5 py-2.75 focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2';
 
 /**
  * The checkmark a selected chip shows (node 43:723).

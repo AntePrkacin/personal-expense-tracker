@@ -126,6 +126,9 @@ describe('CategoryChip', () => {
     // The width that does not change with the state, which is the deviation from
     // the frame: a border that thickened on selection would rewrap the row.
     expect(chip).toHaveClass('border-[1.5px]');
+    // A <button> gets an arrow from the user agent, and a chip does not look like a
+    // button, so the pointer is what says these pills are the thing to tap (CAT-1).
+    expect(chip).toHaveClass('cursor-pointer');
   });
 
   it('toggles on a click', async () => {

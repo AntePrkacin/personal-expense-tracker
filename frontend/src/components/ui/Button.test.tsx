@@ -57,6 +57,19 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toBeDisabled();
   });
 
+  it('shows a pointer on hover, and not-allowed when disabled', () => {
+    // Neither the user agent nor Tailwind's preflight gives a <button> a pointer, so
+    // this class is the only reason one appears - and the compile guard cannot notice
+    // it being deleted, because the candidate would still generate CSS from the list
+    // in utilities.test.ts. The anchor branch inherits it through BUTTON_BASE and is
+    // covered by the drift assertion further down.
+    const { rerender } = render(<Button label="Continue" />);
+    expect(screen.getByRole('button')).toHaveClass('cursor-pointer');
+
+    rerender(<Button label="Continue" disabled />);
+    expect(screen.getByRole('button')).toHaveClass('cursor-pointer', 'disabled:cursor-not-allowed');
+  });
+
   it('calls onClick', () => {
     let clicks = 0;
     // A plain counter rather than a jest.fn or storybook's fn: nothing else in

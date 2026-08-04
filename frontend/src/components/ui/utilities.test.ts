@@ -262,6 +262,10 @@ const HARDCODED = [
   // White rather than the accent, and only in the sidebar: brand-accent on
   // surface-ink is too dark to read as a focus ring.
   'focus-visible:outline-white',
+  // Neither the UA nor preflight gives a <button> a pointer, so this is load-bearing
+  // rather than decorative - see the note on BUTTON_BASE. Listed beside its disabled
+  // counterpart, which overrides it through the pseudo-class.
+  'cursor-pointer',
   'disabled:cursor-not-allowed',
   'disabled:opacity-60',
   'disabled:text-text-tertiary',
