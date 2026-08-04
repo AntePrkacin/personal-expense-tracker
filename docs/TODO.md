@@ -18,16 +18,33 @@ relitigated by accident.
 
 The backend is done: `POST /api/auth/verify` spends a link, provisions the account and
 returns a session, and `GET /api/auth/session` answers who the bearer is. Nothing on the
-frontend calls either yet - there is no verify page, no session cookie, and no dashboard to
-land on. The session-scoped `getProfile()` that replaces the deleted proof-of-stack
-`GET /api/users/:id` is PET-45's, not this.
+frontend calls either yet - there is no verify page and no session cookie. There *is* now a
+dashboard to land on: PET-19 built the `(app)` shell and the four routed views. The
+session-scoped `getProfile()` that replaces the deleted proof-of-stack `GET /api/users/:id`
+is PET-45's, not this.
 
-**The sidebar is built and waiting on both halves.** PET-18 landed `ui/Sidebar.tsx` with its
-footer taking `firstName`, `lastName` and `email` as required props, deliberately with no
-fetch of its own and no sample defaults. Feeding it needs PET-45's profile read reached with
-the cookie this item describes, and mounting it needs PET-19's `(app)` shell. Until then the
-component is only reachable in Storybook, and its four nav links point at routes that do not
-exist.
+**The frontend no longer calls the backend at all.** PET-19 replaced the scaffold greeting
+page with a `redirect('/dashboard')`, and its `GET /api/hello` fetch was the only wire between
+the two apps. `BACKEND_URL` is consequently read by nothing, and no frontend test exercises
+the generated contract. The drift gates still run, so `api.d.ts` cannot rot silently, but the
+end-to-end proof is gone until this item lands. **This is the first thing the work here
+restores.**
+
+**Two things in the shell are stubs waiting on this, both deliberate and both loud.**
+
+`frontend/src/lib/session.ts` holds `requireSession()`, called once by `app/(app)/layout.tsx`
+and currently letting every request through - which is PET-19's explicit deferral of its own
+AC5. Its doc comment is the specification: read the cookie, lift it into
+`Authorization: Bearer <token>`, call `GET /api/auth/session`, redirect to the access flow on
+401 or absence. **The cookie's name is still undecided and this work picks it**; PET-19
+deliberately did not, so as not to hand over a contract it had not chosen. Note the access
+flow has no route yet either, so the redirect target is this work's to name too.
+
+`PLACEHOLDER_PROFILE` in `app/(app)/layout.tsx` feeds the sidebar footer Figma's own sample
+data. It cannot be fixed without both halves: names live in the per-user `profile` row and the
+email on the central `users` row, so it needs PET-45's read reached with the cookie above.
+`ui/Sidebar` itself is clean - its test pins that those sample strings appear nowhere in the
+component - so this is one constant in one file.
 
 Three constraints that work inherits.
 
@@ -163,6 +180,52 @@ and is registered in `utilities.test.ts` so it is findable.
 Worth a designer answer: either 10 joins the scale as a token, or these two corners snap to
 8 or 12. Nothing breaks either way, since a literal compiles without a token lookup, so this
 is a consistency question rather than a bug.
+
+The **two header pills** (the month select and the search field) bind the same raw 10px, so
+`app/(app)/dashboard/MonthPill.tsx` and `transactions/SearchPill.tsx` carry the literal too.
+Whatever the designer decides covers all four places at once.
+
+### The page header's two inert controls
+
+The month select (04, node 21:61) and the search field (06, node 26:142) are drawn but do
+nothing. They are plain `div`s rather than a `<select>` and an `<input>`, so neither announces
+itself as operable, and `app/(app)/pages.test.tsx` pins that: `queryByRole('combobox')` and
+`queryByRole('textbox')` both have to stay empty.
+
+Each is waiting on something different, which is why they are one item and not two.
+
+The **month select** is inert by the design's own decision. A8 says only October exists in the
+file, so it renders the current period and stays non-functional until month navigation is
+designed. Making it real needs a designed control first, not just code.
+
+The **search field** is inert because there is nothing to filter. TRN-1 *does* describe a real
+search input, so this one is a chosen behaviour rather than a read one: a box that accepts
+typing and filters nothing is a worse lie than one that plainly does nothing. PET-28's
+transaction list is what turns it into an `<input>` plus the state that owns the query.
+
+### The header period ignores the profile's month start day
+
+`monthOverline()` and `monthLabel()` in `lib/format.ts` format the **calendar** month, and
+A9 says the profile's `monthStartDay` is what defines the period used by "This month" filters
+and "days left" math. The display is correct for the default of 1 and wrong for any other
+value, which no user can set yet.
+
+Fixing it is not just threading a number through: with `monthStartDay = 15`, the period
+spanning 15 Aug to 14 Sep has no single month name, and the design draws no label for that
+case. So this needs a designer answer alongside PET-45's read, not only the value.
+
+The same two functions also hard-code the `en-US` locale, matching `formatCurrency`. When
+onboarding's chosen currency is finally threaded through, the locale should follow it.
+
+### Figma's page header is 2px shorter on two of the four screens
+
+Bottom padding is 20px on 04 Dashboard and 14 AI Insights, and 18px on 06 Transactions and 17
+Settings. `PageHeader` uses 20px everywhere, on the reading that this is a Figma inconsistency
+rather than a designed distinction - nothing else about the four headers differs, and no
+plausible reason for the two screens to be shorter exists.
+
+Cheap to confirm and cheap to change if the answer is no; recorded so nobody re-derives it
+from a screenshot.
 
 ---
 

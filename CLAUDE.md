@@ -10,9 +10,15 @@ duplicate. When something structural changes, check whether both need updating.
 ## What this is
 
 **Decode Academy Demo**, a teaching boilerplate for academy final projects. A minimal
-Next.js frontend talks to a NestJS backend over HTTP. Exactly one feature works
-end to end: the frontend fetches a greeting from the backend's `GET /api/hello` and
-renders it. Everything else is scaffolding for you to build on.
+Next.js frontend talks to a NestJS backend over HTTP.
+
+The two halves are each substantially built and **currently do not talk to each other at
+all**. The backend has the whole passwordless access flow and transaction writes; the
+frontend has the design system, the app shell and the four routed views. What is missing
+between them is the session cookie (PET-52), which is what every frontend read has to be
+authenticated with. PET-19 deleted the scaffold greeting page that fetched
+`GET /api/hello`, which had been the only wire between them, so the shell renders real
+screens with placeholder data. Restoring the connection is PET-52's plus PET-45's.
 
 Because this is a starting point rather than a finished app, the "Not yet built"
 section at the bottom is load-bearing. Read it before assuming a feature exists.
@@ -127,11 +133,13 @@ consequence: `GET http://localhost:3000/` returns 404, which is normal, not a br
 server. The e2e test re-applies the same prefix manually to match production, so if you
 change the prefix you must change it in both places.
 
-**Frontend to backend data flow.** The home page (`frontend/src/app/page.tsx`) is an
-**async Server Component**. It fetches the backend at request time on the server with
-`cache: 'no-store'`, which means no CORS is involved and there is no client-side loading
-state for that call. CORS is enabled on the backend anyway (`main.ts`), for the case of
-genuinely client-side fetches, allowing origin `FRONTEND_URL`.
+**Frontend to backend data flow: server-side, and currently nonexistent.** No file in
+`frontend/src` fetches the backend any more. PET-19 replaced the scaffold greeting page
+with a redirect, and it was the only caller. The shape the first real read has to take is
+still fixed, though: an **async Server Component** (or a route handler) fetching at request
+time with `cache: 'no-store'`, so the session cookie never leaves the server and no CORS is
+involved. CORS is enabled on the backend anyway (`main.ts`), for the case of genuinely
+client-side fetches, allowing origin `FRONTEND_URL`.
 
 **Configuration goes through ConfigService.** `ConfigModule.forRoot({ isGlobal: true })`
 is registered in `backend/src/app.module.ts`, so it reads `backend/.env` at startup and
@@ -500,7 +508,8 @@ component from here on is a feature's own, not a tile.
 **Shared UI is split by role, not by file type.** `components/ui/` is the primitive layer,
 the vocabulary every screen draws from. Components that only make sense for one feature go
 in `components/` beside it, or next to the route that uses them. Nothing has earned a
-feature folder yet, so `ui/` is currently the only child.
+feature folder yet, so `ui/` is currently the only child - the app shell's own components
+took the second option and live under `app/(app)/`, described below.
 
 The Storybook section is still called **Components** while the folder is `ui/`. That
 mismatch is deliberate: `ui/` says where the code lives, **Components** is the Figma page
@@ -606,14 +615,88 @@ consumer at all.
   so the design file is the only holdout left; `docs/TODO.md` records that, and the one
   constraint the rename leaves on any future change to the per-user database naming.
 
-`frontend/src/lib/format.ts` owns display formatting, in two halves. Money: amounts are
+`frontend/src/lib/format.ts` owns display formatting, in three halves. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
 rather than the hyphen `Intl.NumberFormat` emits, matching the design. Names: `initials()`
 and `shortName()` derive the sidebar footer's "MK" and "Marko K." from the two stored name
 fields. Both are derived and never stored (SET-2), and SET-6 requires the sidebar footer and
 the Settings avatar to agree, which is why one shared function is the point rather than a
 convenience. Both take the first character with `Array.from(name)[0]` rather than
-`charAt(0)`, which would split an astral-plane character into a lone surrogate.
+`charAt(0)`, which would split an astral-plane character into a lone surrogate. Period:
+`monthOverline()` and `monthLabel()` give the page header its "October 2025" and "October",
+shared because Dashboard and Transactions draw the identical overline. Both use the calendar
+month and therefore ignore the profile's `monthStartDay`, which A9 says defines the period -
+that value is PET-45's, and the display is correct for its default of 1.
+
+## The app shell
+
+`frontend/src/app/(app)/` is the shell every signed-in screen renders inside: the fixed dark
+sidebar beside a content column, with the four routed views `/dashboard`, `/transactions`,
+`/insights` and `/settings` under it. A **route group**, so the paths stay exactly the hrefs
+`ui/Sidebar` declares while sharing one layout; the access screens (01, 02, 03, 22, 23, 24)
+sit outside it and inherit none of it.
+
+**`PageHeader` and `SidebarNav` live here rather than in `components/ui/`, deliberately.**
+`ui/` mirrors the nine tiles on the Figma Components page and is complete, and neither of
+these is a tile - they are the shell's own. The visible consequence is that `PageHeader`'s
+stories are filed under **Shell**, not **Components**, so they cannot join
+`ui.stories.test.tsx` (which asserts every module's title starts with `Components/`);
+`(app)/shell.stories.test.tsx` is the third copy of that smoke test for them. Their
+hard-coded classes are still guarded by `ui/utilities.test.ts`, because a *fourth* copy of
+the Tailwind compile harness was worse than one list covering both folders.
+
+**`SidebarNav` is the shell's only `'use client'` file, and it exists for exactly one
+reason.** `Sidebar` takes `active` as a prop so it can stay a Server Component, and an App
+Router layout cannot read the pathname on the server, so something has to call
+`usePathname()`. It matches by **prefix with a trailing-slash boundary**, so
+`/transactions/abc` keeps Transactions lit while `/settings-import` does not light Settings,
+and it falls back rather than throwing on no match: `active` has no "none" variant by design.
+
+**The header owns the overline, the title and a slot - nothing else.** Each route passes its
+own action, because all four differ: Dashboard a month select plus primary "Add transaction",
+Transactions a **search field** plus the same button, AI Insights a **secondary**
+"Regenerate", and Settings nothing at all. Two consequences worth knowing. The tickets that
+eventually make those controls work never touch `PageHeader`. And CTG-1's "Add category",
+which swaps in on the Categories tab, needs no header change either.
+
+Two things about that list contradict PET-19's own acceptance criteria, and the design won
+both times: **AC3 claimed the month select appears on Transactions too** (TRN-1 and node
+`26:137` draw a search field there instead), and **the ticket never mentioned "Regenerate"**
+(INS-1 and node `38:542` both do). The Jira description was corrected rather than the code.
+
+**The month select and the search field are inert `div`s, not controls.** A8 says the select
+renders the current period and does nothing until month navigation is designed, and the
+search filters a list that does not exist until PET-28. Neither is a `<select>`, `<input>` or
+`<button>`, so neither announces itself as operable, and `(app)/pages.test.tsx` pins that -
+`queryByRole('combobox')` and `queryByRole('textbox')` both have to stay empty.
+
+**`export const dynamic = 'force-dynamic'` on the layout is load-bearing today.** The pages
+read `new Date()` for the overline; without it Next prerenders them and every screen shows
+whatever month the build ran in, a bug that only appears a month after deploying. `npm run
+build` is where to check: all four routes must print `ƒ`, not `○`. PET-52's `cookies()` read
+makes the segment dynamic on its own, at which point the line becomes redundant.
+
+**`/` is a bare `redirect('/dashboard')`.** No frame in the design corresponds to it: VER-4
+lands both a new and a returning account on the Dashboard, and a signed-out visitor belongs
+in the access flow, which the shell's own session check sends them to. It is here rather than
+in a middleware matcher so the rule has one home.
+
+**`lib/session.ts` is a stub, and that is PET-19's deferral of AC5.** `requireSession()` is
+called once, by the `(app)` layout, and currently lets every request through, so the shell is
+browsable with no backend. Its doc comment is the specification PET-52 fills in: read the
+httpOnly cookie, lift it into `Authorization: Bearer <token>`, call `GET /api/auth/session`,
+redirect on 401 or absence. It deliberately does **not** name the cookie, because that name
+is not decided anywhere in the repo and choosing it here would hand PET-52 a contract it did
+not pick. It returns `Promise<void>` from a non-`async` function so the signature is already
+the real one.
+
+**The sidebar footer's profile is fabricated.** `PLACEHOLDER_PROFILE` in `(app)/layout.tsx`
+is Figma's own sample data ("Marko", "Kovač", "marko@email.com"), so the shell diffs against
+the design rather than against invented copy - which also means it looks entirely real in a
+screenshot. It cannot be fixed here: names live in the per-user database's `profile` row and
+the email on the central `users` row, so it needs PET-45's read reached with PET-52's cookie.
+`ui/Sidebar` itself stays clean; its test pins that those three strings appear nowhere in the
+component.
 
 ## Environment variables
 
@@ -798,6 +881,14 @@ rejected, including a bare description with no type.
 Prettier. ESLint is invoked from each app's own directory so its config and plugins
 resolve correctly, which is why you should not try to lint one app from the other's cwd.
 
+That indirection is via `bash -c "cd <app> && npx eslint ..."`, so **every staged path is
+single-quoted through a `shellQuote` helper**. Not defensive: a Next.js route group folder
+is literally named `(app)`, and bash reads an unquoted `(` as a subshell. PET-19 hit this
+the first time it tried to commit `frontend/src/app/(app)/layout.tsx`, and the error bash
+prints (`syntax error near unexpected token '('`) names no file, so it reads as a broken
+hook rather than a quoting bug. Prettier needs no quoting, because lint-staged spawns it
+with no shell.
+
 **Backend tests are not run on commit.** The hook prints a reminder only, because they
 are slow. CI runs them on every PR, but run them locally before pushing backend changes.
 
@@ -852,20 +943,21 @@ something that is not there.
   `NEXT_PUBLIC_`. Related: `@google/genai` was once present in `frontend/node_modules`
   while absent from `package.json`, so a clean install removes it. Declare any SDK
   properly rather than relying on a leftover install.
-- **The frontend half of the access flow.** The backend is complete - verify provisions and
-  returns a session, and `GET /api/auth/session` answers who a bearer is - but nothing on
-  the frontend calls either: no verify page, no session cookie, no dashboard. The session
-  cookie is the frontend's own httpOnly first-party one, forwarded server-side; the backend
-  reads no cookies. The old proof-of-stack routes `POST /api/users` and `GET /api/users/:id`
-  are **gone**, and the read's replacement is a session-scoped `getProfile()` with
-  preferences, which is PET-45's rather than done.
-- **The app shell, and therefore anything that renders the sidebar.** `ui/Sidebar.tsx` is
-  built, tested and in Storybook, but **nothing mounts it**: there is no `(app)` route group,
-  no `/dashboard`, `/transactions`, `/insights` or `/settings` route, and no page header, all
-  of which are PET-19's. Its four nav links are therefore live links to routes that do not
-  exist yet. Its footer props (`firstName`, `lastName`, `email`) also have no data source:
-  that needs PET-45's profile read reached with PET-52's session cookie. The one route that
-  exists is `/`, still the scaffold greeting page.
+- **The frontend half of the access flow, which is now the single biggest gap.** The backend
+  is complete - verify provisions and returns a session, and `GET /api/auth/session` answers
+  who a bearer is - but nothing on the frontend calls either: no verify page, no session
+  cookie, and **nothing in `frontend/src` fetches the backend at all**. The session cookie is
+  the frontend's own httpOnly first-party one, forwarded server-side; the backend reads no
+  cookies, and its name is still undecided. The old proof-of-stack routes `POST /api/users`
+  and `GET /api/users/:id` are **gone**, and the read's replacement is a session-scoped
+  `getProfile()` with preferences, which is PET-45's rather than done. Everything below
+  inherits from this: the shell is unauthenticated and its profile is a placeholder.
+- **The shell's content, and its authentication.** The `(app)` group, the four routes and the
+  page header exist (see "The app shell"), and every screen renders its designed header. What
+  is missing is everything below the header - all four `<main>` elements are empty - plus the
+  two things the shell fakes: `requireSession()` lets every request through (PET-52), and the
+  sidebar footer shows `PLACEHOLDER_PROFILE` rather than a real profile (PET-45 reached with
+  PET-52's cookie). The month select and the search field are drawn but inert by design.
 - **The rest of the data model.** `users`, `login_links` and `sessions` (central) and
   `profile`, `categories` and `transactions` (per user) exist. Insights arrives with its
   feature. `transactions` has the three write endpoints and **no reads at all** - the list,
