@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
 import * as SetupCategoriesScreen from './setup/categories/SetupCategoriesScreen.stories';
+import * as SetupRegisterScreen from './setup/register/SetupRegisterScreen.stories';
 import * as SetupBudgetScreen from './setup/SetupBudgetScreen.stories';
 import * as WelcomeScreen from './WelcomeScreen.stories';
 
@@ -42,6 +43,7 @@ const MODULES: [name: string, module: StoryModule][] = [
   ['WelcomeScreen', WelcomeScreen as StoryModule],
   ['SetupBudgetScreen', SetupBudgetScreen as StoryModule],
   ['SetupCategoriesScreen', SetupCategoriesScreen as StoryModule],
+  ['SetupRegisterScreen', SetupRegisterScreen as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

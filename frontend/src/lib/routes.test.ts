@@ -11,7 +11,7 @@ import { ACCESS_ROUTES } from './routes';
 // invisible to every other assertion in the suite - the link 404s with everything
 // green.
 //
-// What makes it writable now is that one route is built and two are not, so the
+// What makes it writable is that some routes are built and some are not, so the
 // check has to *classify* rather than iterate. A blanket sweep over
 // Object.values(ACCESS_ROUTES) would fail on /login, and asserting that /login is
 // absent would be a test somebody has to delete the moment PET-12 lands.
@@ -19,10 +19,10 @@ import { ACCESS_ROUTES } from './routes';
 type RouteKey = keyof typeof ACCESS_ROUTES;
 
 /** Routes with a page behind them today. */
-const BUILT = ['setup', 'setupCategories'] as const satisfies readonly RouteKey[];
+const BUILT = ['setup', 'setupCategories', 'setupRegister'] as const satisfies readonly RouteKey[];
 
 /** Routes declared for a screen nobody has built yet. */
-const PENDING = ['setupRegister', 'login'] as const satisfies readonly RouteKey[];
+const PENDING = ['login', 'checkEmail'] as const satisfies readonly RouteKey[];
 
 /**
  * Every onboarding step after the first, derived rather than listed.

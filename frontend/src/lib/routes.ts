@@ -18,9 +18,9 @@
 /**
  * Where the access screens live.
  *
- * `/setup` and `/setup/categories` are built. The other two 404 today, which is as
- * far as a frontend-only ticket reaches: the href is the contract, and an inert
- * control would fail its criterion outright while hiding that it had.
+ * The three onboarding steps are built. The other two 404 today, which is as far as
+ * a frontend-only ticket reaches: the href is the contract, and an inert control
+ * would fail its criterion outright while hiding that it had.
  *
  * **PET-9 settled the onboarding route shape**: three nested routes under one
  * layout, not one route rendering three steps from client state. All three
@@ -58,4 +58,15 @@ export const ACCESS_ROUTES = {
   setupRegister: '/setup/register',
   /** 23 Log in (PET-12, WEL-3, A2). The only route into the returning-user flow. */
   login: '/login',
+  /**
+   * 24 Check your email (PET-12, REG-4, LOG-3). Where both entry points end.
+   *
+   * **Not** nested under `/setup`, unlike the three steps: LOG-3 reaches it from Log
+   * in too, so it does not belong to onboarding and must not sit inside the draft
+   * provider - by the time it renders, PET-11 has cleared the draft anyway.
+   *
+   * The submitted address arrives as an `email` query parameter, which is what VER-1
+   * interpolates into the body copy. It 404s until PET-12 builds it.
+   */
+  checkEmail: '/check-email',
 } as const;

@@ -134,6 +134,9 @@ const HARDCODED = [
   // is a literal only because 4.5px is not. Being on the scale is exactly why they
   // belong here: a fractional step is what a redefined scale silently drops.
   'w-107.5',
+  // 440px, the setup card's content box. Only the register story needs it as a
+  // class, to show its two-column row at the designed width outside the card.
+  'w-110',
   'w-115',
   // 520px and 600px, the setup card on frames 02 and 22 and on frame 03. Both are
   // reached through STEP_WIDTH below, and both are listed because a spacing step is
@@ -239,6 +242,11 @@ const HARDCODED = [
   'flex-col',
   // The chip field on frame 03, whose three rows are wrapping rather than a grid.
   'flex-wrap',
+  // The two name fields on frame 22, which *are* a grid: the frame draws them at a
+  // fixed 214px each, and two equal columns is what reproduces that from the card's
+  // 440px content box rather than restating the measurement.
+  'grid',
+  'grid-cols-2',
   'items-center',
   'items-baseline',
   'justify-center',
