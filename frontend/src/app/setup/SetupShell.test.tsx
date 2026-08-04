@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
-import { SETUP_STEPS, SetupShell, STEP_DOT } from './SetupShell';
+import { SETUP_STEPS, SetupShell, STEP_DOT, STEP_WIDTH } from './SetupShell';
 
 // The chrome frames 02, 03 and 22 share: the lockup, the step indicator and the
 // card box.
@@ -36,11 +36,22 @@ function indicator(container: HTMLElement): HTMLElement {
 }
 
 describe('the step tables', () => {
-  it('declares three steps and two dot states', () => {
+  it('declares three steps, two dot states and a width per step', () => {
     // Guards the it.each below: an emptied table still passes an iteration over
     // itself, which is the failure mode utilities.test.ts sets the precedent for.
     expect(SETUP_STEPS).toHaveLength(3);
     expect(Object.keys(STEP_DOT)).toHaveLength(2);
+    expect(Object.keys(STEP_WIDTH)).toHaveLength(3);
+  });
+
+  it('widens only step 2, which is the one 600px frame', () => {
+    // Frames 02 and 22 are 520px and frame 03 is 600px. Asserted as values rather
+    // than through the render below, because "the middle step is the wide one" is
+    // the design fact, and a map that widened all three would still satisfy every
+    // per-step render assertion.
+    expect(STEP_WIDTH[1]).toBe('w-130');
+    expect(STEP_WIDTH[2]).toBe('w-150');
+    expect(STEP_WIDTH[3]).toBe('w-130');
   });
 
   it('fills the active dot with brand-accent, not the overline colour', () => {
@@ -123,13 +134,13 @@ describe('SetupShell', () => {
     expect(card).toContainElement(screen.getByText('card body'));
   });
 
-  it('carries the designed card treatment', () => {
-    // The one class assertion worth making here, because `shadow-card` is a token
+  it.each(SETUP_STEPS)('carries the designed card treatment at step %s', (step) => {
+    // The class assertions worth making here, because `shadow-card` is a token
     // PET-9 added and re-inlining it as an arbitrary literal would look identical
     // on screen while escaping the compile guard - which is exactly the state the
-    // Welcome panel's two shadows were in before this ticket.
+    // Welcome panel's two shadows were in before that ticket.
     const { container } = render(
-      <SetupShell step={1}>
+      <SetupShell step={step}>
         <p>card body</p>
       </SetupShell>,
     );
@@ -138,9 +149,9 @@ describe('SetupShell', () => {
     expect(card.className).toContain('bg-surface-card');
     expect(card.className).toContain('border-border-default');
     expect(card.className).toContain('rounded-xl');
-    // 520px, the designed width of frames 02 and 22. Frame 03 is 600px, so PET-10
-    // changes this and this assertion together.
-    expect(card.className).toContain('w-130');
+    // Per step, so a shell that hard-codes one width again fails on the step it is
+    // wrong for rather than passing everywhere.
+    expect(card.className).toContain(STEP_WIDTH[step]);
   });
 
   it('renders no heading of its own', () => {

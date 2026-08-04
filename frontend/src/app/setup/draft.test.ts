@@ -22,23 +22,32 @@ describe('SETUP_DRAFT_KEY', () => {
 });
 
 describe('EMPTY_DRAFT', () => {
-  it('defaults the currency and leaves the budget blank', () => {
+  it('defaults the currency, leaves the budget blank and picks no categories', () => {
     // USD because A6 gives the design only one option. A blank budget because a
     // pre-filled one would be a number nobody chose, and AC3 has to be reachable.
-    expect(EMPTY_DRAFT).toEqual({ currency: 'USD', budget: '' });
+    //
+    // No categories preselected even though frame 03 draws seven chips selected:
+    // that mock illustrates the selected state, and the product decision is that
+    // the user picks. Pinned here rather than in the screen, because this is where
+    // a default would have to live for step 3 to submit what step 2 displayed.
+    expect(EMPTY_DRAFT).toEqual({ currency: 'USD', budget: '', categories: [] });
     expect(DEFAULT_CURRENCY).toBe('USD');
   });
 
-  it('carries no categories field yet', () => {
-    // PET-10 adds it. Pinned so this file records the omission as deliberate
-    // rather than forgotten: nothing can know step 2's shape yet.
-    expect(Object.keys(EMPTY_DRAFT).sort()).toEqual(['budget', 'currency']);
+  it('carries exactly the three fields onboarding collects before an account exists', () => {
+    // A fourth field would be data nothing submits: RegisterDto takes these three
+    // plus the two names and the email step 3 asks for.
+    expect(Object.keys(EMPTY_DRAFT).sort()).toEqual(['budget', 'categories', 'currency']);
   });
 });
 
 describe('parseDraft', () => {
   it('reads a draft it wrote', () => {
-    const draft: SetupDraft = { currency: 'USD', budget: '2,000' };
+    const draft: SetupDraft = {
+      currency: 'USD',
+      budget: '2,000',
+      categories: ['Groceries', 'Transport'],
+    };
     expect(parseDraft(serializeDraft(draft))).toEqual(draft);
   });
 
@@ -70,6 +79,7 @@ describe('parseDraft', () => {
     expect(parseDraft('{"currency":null,"budget":"2,000"}')).toEqual({
       currency: DEFAULT_CURRENCY,
       budget: '2,000',
+      categories: [],
     });
   });
 
@@ -99,13 +109,70 @@ describe('parseDraft', () => {
   });
 
   it('ignores keys it does not recognise', () => {
-    // The forward-compatibility property PET-10 depends on: it adds a field, and
-    // a payload written before that change still loads instead of being dropped.
-    // Equally, a payload written *after* a rollback does not break this version.
-    expect(parseDraft('{"currency":"USD","budget":"2,000","categories":["Groceries"]}')).toEqual({
+    // Forward compatibility, and it cut both ways: a payload written before
+    // `categories` existed still loads, and one written by a later version that
+    // adds a fourth field does not break this one.
+    expect(parseDraft('{"currency":"USD","budget":"2,000","monthStartDay":5}')).toEqual({
       currency: 'USD',
       budget: '2,000',
+      categories: [],
     });
+  });
+});
+
+describe('parseDraft, the picked categories', () => {
+  it.each([
+    ['a field that was never written', '{}', []],
+    ['an explicit empty selection', '{"categories":[]}', []],
+    ['a value that is not an array', '{"categories":"Groceries"}', []],
+    ['an object where an array belongs', '{"categories":{"0":"Groceries"}}', []],
+    ['names that are not on the list', '{"categories":["Rent","Groceries"]}', ['Groceries']],
+    ['non-strings mixed in', '{"categories":[5,null,"Bills"]}', ['Bills']],
+    ['a duplicated name', '{"categories":["Bills","Bills"]}', ['Bills']],
+    [
+      'click order rather than designed order',
+      '{"categories":["Other","Groceries","Health"]}',
+      ['Groceries', 'Health', 'Other'],
+    ],
+  ])('reads %s', (_label, raw, expected) => {
+    // Total and canonicalising, for the reason the budget is: sessionStorage is
+    // writable from that tab's devtools console, and RegisterDto carries @IsIn,
+    // @ArrayUnique and @ArrayMaxSize - so an unknown name, a duplicate or a
+    // non-string is a guaranteed 400 on a screen with no error state designed for
+    // it. Every one of these has to degrade to something the picker could have
+    // produced instead.
+    expect(parseDraft(raw).categories).toEqual(expected);
+  });
+
+  it.each([
+    ['an empty slot', null],
+    ['unparseable json', 'not json'],
+    ['json that is not an object', '[]'],
+  ])('hands %s its own array rather than the shared default', (_label, raw) => {
+    // Every one of these takes an early return, and each used to return EMPTY_DRAFT
+    // itself. That was harmless while both fields were strings; `categories` is an
+    // array, so a caller doing the ordinary thing - `.sort()` or `.push()` while
+    // building the register body - would have mutated the module's own default and
+    // every later fallback would carry the leftovers. Asserted by identity, because
+    // an equality check passes either way.
+    const first = parseDraft(raw);
+    const second = parseDraft(raw);
+
+    expect(first.categories).not.toBe(EMPTY_DRAFT.categories);
+    expect(first.categories).not.toBe(second.categories);
+
+    first.categories.push('Groceries');
+
+    expect(EMPTY_DRAFT.categories).toEqual([]);
+    expect(second.categories).toEqual([]);
+  });
+
+  it('keeps an empty selection empty rather than filling it in', () => {
+    // The direction that matters for AC3. A4 enforces no minimum, so deselecting
+    // every chip is a choice - and a default applied here would silently undo it
+    // on the way back from step 1.
+    expect(parseDraft('{"categories":[]}').categories).toEqual([]);
+    expect(EMPTY_DRAFT.categories).toEqual([]);
   });
 });
 

@@ -1,5 +1,7 @@
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
 
+import { STARTER_CATEGORIES, type StarterCategoryName } from './starterCategories';
+
 // The onboarding draft: everything screens 02, 03 and 22 collect before there is
 // an account to save it to.
 //
@@ -44,20 +46,49 @@ export type SetupDraft = {
    * its request - the same rule `backend/src/common/money.ts` follows.
    */
   budget: string;
+  /**
+   * The starter chips picked on screen 03, **by name**, in the canonical order
+   * `STARTER_CATEGORIES` declares rather than the order they were clicked.
+   *
+   * Names because that is what the API takes: `RegisterDto.categories` is
+   * `@IsIn(STARTER_CATEGORY_NAMES)`, so names are what eventually cross the wire
+   * and an id would be a translation layer with nothing on the other side of it.
+   * Typed as the union rather than `string[]` so step 3 can hand this array
+   * straight to the register body.
+   *
+   * Empty is a legitimate value, not a missing one: A4 enforces no minimum and a
+   * user who deselects everything has made a choice (CAT-4, AC3).
+   */
+  categories: StarterCategoryName[];
 };
 
 /**
- * There is deliberately **no `categories` field yet**.
+ * Nothing picked, no budget typed, and the one currency the design offers.
  *
- * PET-10 owns step 2 and nothing here can know whether it wants names, ids or
- * something else, so declaring the field now would be a claim about nothing.
- * `parseDraft` ignores keys it does not recognise, which is what lets PET-10 add
- * one without a stored payload from before the change failing to load.
+ * The canonical shape, for tests and for anything that wants to name the default.
+ * **Do not return it from `parseDraft`** - use `emptyDraft()` below, and read its
+ * note for why the distinction is load-bearing now that a field is mutable.
  */
 export const EMPTY_DRAFT: SetupDraft = {
   currency: DEFAULT_CURRENCY,
   budget: '',
+  categories: [],
 };
+
+/**
+ * A fresh empty draft, never the shared one.
+ *
+ * `parseDraft` used to return `EMPTY_DRAFT` itself, which was harmless while every
+ * field was a string: two callers holding the same object could not affect each
+ * other. `categories` is an **array**, so they can. Handing out the shared instance
+ * means `draft.categories.sort()` or `.push()` - both ordinary things to write when
+ * building the register body - would mutate the module's own default, and every
+ * later draft that fell back to it would come back carrying somebody else's
+ * selection. Nothing does that today; the point is that nothing can.
+ */
+function emptyDraft(): SetupDraft {
+  return { ...EMPTY_DRAFT, categories: [] };
+}
 
 export function serializeDraft(draft: SetupDraft): string {
   return JSON.stringify(draft);
@@ -67,6 +98,35 @@ export function serializeDraft(draft: SetupDraft): string {
 function readString(source: Record<string, unknown>, key: string, fallback: string): string {
   const value = source[key];
   return typeof value === 'string' ? value : fallback;
+}
+
+/**
+ * The picked chips, filtered to names the API will accept and put back in
+ * canonical order.
+ *
+ * Total the same way `readString` is, and canonicalised for the same reason the
+ * budget is - see the note on `parseDraft` below. `RegisterDto` carries `@IsIn`,
+ * `@ArrayUnique` and `@ArrayMaxSize`, so a stored array holding an unknown name, a
+ * duplicate or a non-string is a guaranteed 400 on a screen with no error state
+ * designed for it (A29). Dropping the unusable entries here means everything this
+ * module hands out is something the picker could have produced itself.
+ *
+ * Filtering `STARTER_CATEGORIES` rather than the stored array is what does three
+ * jobs at once: it drops the unknown, collapses the duplicated, and returns the
+ * survivors in the designed order, so two identical selections serialize to
+ * identical strings whatever order they were clicked in.
+ *
+ * An empty array is preserved rather than treated as absent. Deselecting every chip
+ * is a valid choice (A4), and falling back to a default would silently undo it.
+ */
+function readCategories(source: Record<string, unknown>): StarterCategoryName[] {
+  const stored = source.categories;
+  if (!Array.isArray(stored)) return [];
+
+  const picked = new Set(stored);
+  return STARTER_CATEGORIES.filter((category) => picked.has(category.name)).map(
+    (category) => category.name,
+  );
 }
 
 /**
@@ -93,25 +153,29 @@ function readString(source: Record<string, unknown>, key: string, fallback: stri
  * on, with no error state designed for that (A29). Running it through the
  * formatter here means every value this module hands out is one the field could
  * have produced itself. Idempotence is what makes it free for the normal case.
+ *
+ * The picked categories get the same treatment for the same reason, which
+ * `readCategories` above records.
  */
 export function parseDraft(raw: string | null): SetupDraft {
-  if (raw === null) return EMPTY_DRAFT;
+  if (raw === null) return emptyDraft();
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return EMPTY_DRAFT;
+    return emptyDraft();
   }
 
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return EMPTY_DRAFT;
+    return emptyDraft();
   }
 
   const source = parsed as Record<string, unknown>;
   return {
     currency: readString(source, 'currency', DEFAULT_CURRENCY),
     budget: formatAmountInput(readString(source, 'budget', '')),
+    categories: readCategories(source),
   };
 }
 

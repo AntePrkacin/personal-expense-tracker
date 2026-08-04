@@ -54,6 +54,25 @@ export const STEP_DOT: Record<'active' | 'inactive', string> = {
 };
 
 /**
+ * The card's width, which is the one thing about this chrome that is not shared.
+ *
+ * Frames 02 and 22 are 520px and frame 03 is 600px (node 43:706), so the width is
+ * per step rather than per shell. PET-9 shipped a hard-coded `w-130` with a
+ * comment saying PET-10 either changes it or lifts it to a prop; a second width
+ * has now appeared, and this map is the cheaper of the two. It needs no prop, it
+ * keeps every class a complete literal string for Tailwind's scanner, and it
+ * records frame 22's width now rather than leaving PET-11 to rediscover it.
+ *
+ * A `Record` over the step union, so `npm run build` rejects a missing entry -
+ * the same reason `SETUP_STEPS` is a union rather than a count.
+ */
+export const STEP_WIDTH: Record<SetupStep, string> = {
+  1: 'w-130',
+  2: 'w-150',
+  3: 'w-130',
+};
+
+/**
  * Three dots, the current one drawn as a pill (node 42:706).
  *
  * **Hidden from assistive technology, deliberately.** The card's own overline
@@ -113,10 +132,8 @@ export function SetupShell({ step, children }: { step: SetupStep; children: Reac
 
       <StepIndicator step={step} />
 
-      {/* w-130 is the designed 520px of frames 02 and 22. Frame 03 is 600px
-          (node 43:706), so PET-10 changes this one class - or, if a third width
-          ever appears, lifts it to a prop. One legal value is not a prop yet,
-          which is the call LogoLockup already made about `size`.
+      {/* The width comes from STEP_WIDTH above, which is the only thing frames 02,
+          03 and 22 disagree about. Everything else here is identical on all three.
 
           rounded-xl is Radius/20. shadow-card is the Foundations token PET-9
           added for exactly this card; before it, the only two shadows in the repo
@@ -124,8 +141,11 @@ export function SetupShell({ step, children }: { step: SetupStep; children: Reac
 
           Deliberately no overflow-hidden, even though Figma reports overflow-clip
           on this frame: nothing is positioned outside it, and it would clip the
-          Continue button's focus-visible outline-offset. */}
-      <div className="bg-surface-card border-border-default shadow-card flex w-130 flex-col gap-5 rounded-xl border px-10 pt-9 pb-8">
+          Continue button's focus-visible outline-offset - and step 2's ten chips
+          each carry the same ring. */}
+      <div
+        className={`bg-surface-card border-border-default shadow-card flex ${STEP_WIDTH[step]} flex-col gap-5 rounded-xl border px-10 pt-9 pb-8`}
+      >
         {children}
       </div>
     </div>

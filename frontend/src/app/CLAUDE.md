@@ -123,7 +123,8 @@ component.
 ## The access screens
 
 The six frames outside the shell (01 Welcome, 02 and 03 Setup, 22 Register, 23 Log in, 24
-Check your email). **Two of them are built**: Welcome at `/`, and Setup step 1 at `/setup`.
+Check your email). **Three of them are built**: Welcome at `/`, Setup step 1 at `/setup`, and
+Setup step 2 at `/setup/categories`.
 
 **`/` is the front door and its one job is choosing which door.** `app/page.tsx` awaits
 `hasSession()`; a signed-out visitor gets `<WelcomeScreen />` and a signed-in one is redirected
@@ -145,9 +146,9 @@ today - do not copy it here by reflex.
 out to: `/setup` and `/login`. Same single-declaration reasoning as `SIDEBAR_HREFS`, and the
 two sets must not restate each other - app routes stay in `ui/Sidebar.tsx`, access routes here.
 Welcome is deliberately absent, because it is served at `/` and there is no path to declare.
-`/setup` now answers; `/setup/categories` and `/login` **404 today**, which is as far as a
-frontend-only ticket reaches: the href is the contract its criterion describes, and an inert
-control would fail that criterion outright while hiding it. `lib/routes.test.ts` asserts with
+`/setup` and `/setup/categories` now answer; `/setup/register` and `/login` **404 today**, which
+is as far as a frontend-only ticket reaches: the href is the contract its criterion describes,
+and an inert control would fail that criterion outright while hiding it. `lib/routes.test.ts` asserts with
 `fs` that every built route has a `page.tsx` behind it, the way `SidebarNav.test.tsx` does for
 the four app routes; it classifies each key as built or pending rather than sweeping them all,
 so adding a route forces a decision instead of silently escaping the check.
@@ -175,7 +176,7 @@ the subtree contains none; and it is a plain `div`, never an `<aside>`, because 
 `aria-hidden` landmark is self-contradictory.
 
 **Onboarding is three nested routes under one layout**: `/setup` (02, step 1),
-`/setup/categories` (03, step 2, PET-10) and `/setup/register` (22, step 3, PET-11). PET-9
+`/setup/categories` (03, step 2) and `/setup/register` (22, step 3, PET-11). PET-9
 settled that. The alternative - one route rendering all three steps from client state - is
 simpler and keeps the draft inside one component, but the browser's own Back button then
 exits onboarding and discards everything typed, and you cannot fix that without pushing
@@ -296,10 +297,76 @@ which PET-9 turned into Foundations tokens (`frontend/CLAUDE.md` owns them) and 
 excluded for two reasons that are both gone: there was no token to check them against, and
 that file's `selector()` could not escape their parens and commas.
 
+**Step 2 has no `<form>`, and both of its exits are links.** That is deliberately the opposite
+of step 1, and the reasoning is the same rule applied to a different fact: an exit that always
+navigates is a link, which is Welcome's rule, and Continue on step 2 always navigates because
+A4 enforces no minimum selection. Step 1 is the exception rather than the pattern - `BudgetForm`
+is a real form with a submit button only because its navigation is conditional on validation,
+and an anchor cannot be blocked. Copying step 1's shape onto step 2 would invent a validation
+seam the design does not have, so `SetupCategoriesScreen.test.tsx` asserts two links and ten
+buttons, the inverted mirror of step 1's one and one, and that no `form` element exists at all.
+
+**The chip is the repo's first toggle control, and it is a `<button aria-pressed>`.** There was
+no `aria-pressed`, `aria-checked` or `type="checkbox"` anywhere in `frontend/src` before it, so
+`app/setup/categories/CategoryChip.tsx` sets the precedent the later category screens inherit.
+The ARIA toggle-button pattern, which is also what the design draws: a chip that presses. Space
+and Enter both activate it, each chip is one ordinary tab stop, and the colour dot and the
+checkmark are both `aria-hidden` because `aria-pressed` already carries the state - the same
+call `ui/Tag`'s dot and `ui/Input`'s `$` prefix make. That file records the rejected
+`<input type="checkbox">` alternative, and two appearance decisions with no Figma counterpart:
+`border-[1.5px]` in both states, and the checkmark stroked `text-brand-accent` rather than
+`currentColor`.
+
+**The three onboarding cards differ only in width, and `STEP_WIDTH` is where that lives.** Frame
+03 is 600px against 02's and 22's 520. PET-9 hard-coded `w-130` with a note saying PET-10 either
+changes it or lifts it to a prop; a second width appeared, so `SetupShell` now holds a
+`Record<SetupStep, string>` beside `STEP_DOT`. No prop, every class still a complete literal
+string for Tailwind's scanner, guarded by `components/ui/utilities.test.ts` like its neighbour,
+and frame 22's width recorded now rather than left for PET-11 to rediscover.
+
+**The draft's third field is `categories`, and it holds names.** `RegisterDto.categories` is
+`@IsIn(STARTER_CATEGORY_NAMES)`, so names are what cross the wire and an id would be a
+translation layer with nothing behind it. `parseDraft` canonicalises the array exactly as it
+canonicalises the budget, and for the same reason rather than out of caution: the DTO also
+carries `@ArrayUnique` and `@ArrayMaxSize`, so a stored array holding an unknown name, a
+duplicate or a non-string is a guaranteed 400 with no error state designed for it (A29).
+`readCategories` filters the canonical list rather than the stored one, which drops the unknown,
+collapses the duplicated and returns the survivors in the designed order in one pass - so two
+identical selections serialize to identical strings whatever order the chips were clicked. An
+explicitly stored empty array is preserved, because deselecting everything is a valid choice
+(A4) and a default applied on read would silently undo it.
+
+**`patchDraft` takes either a patch or an updater, and step 2 is why.** A plain
+`patchDraft({ budget })` replaces one field with a keystroke's own value and cannot go stale, but
+the chips compute `categories` _from_ the current selection, so a value read during render is
+wrong the moment two toggles land in one tick: both start from the same pre-change draft and the
+second overwrites the first. One click is one event, so a re-render lands in between and no real
+user reaches it - which is exactly what makes it worth removing rather than relying on, since
+nothing about the screen says its correctness depends on render timing. Both forms merge over
+what is in storage rather than over the closed-over draft, `layout.test.tsx` pins the same-tick
+case directly, and `SetupCategoriesScreen.test.tsx` pins it through the chips. Reach for the
+updater whenever the next value is a function of the current one.
+
+**Frame 03 draws seven chips selected and a first visit selects none**, by product decision:
+the mock illustrates the selected state rather than setting a default. Where that default would
+have to live is `EMPTY_DRAFT`, not the screen, or step 3 would submit something step 2 never
+displayed - `draft.test.ts` pins it there for exactly that reason. `docs/TODO.md` records the
+designer answer it owes.
+
+**`app/setup/starterCategories.ts` is the frontend's first consumer of `types/api.d.ts`, and it
+is type-only.** The ten names are read out of
+`components['schemas']['RegisterDto']['categories'][number]`, which is a real literal union
+because `@IsIn` publishes an OpenAPI `enum`, so the list `satisfies` the contract instead of
+restating it - the rule `docs/agents/api-contract.md` sets for every caller. An exported
+`AssertNever<Exclude<...>>` alias then fails `npm run build` if the backend ever accepts a name
+this screen does not offer. Nothing fetches and no request shape changes, so this needs no
+`api:sync`. The colours cannot come from the same place, because the backend publishes names
+only: they are `CategoryColour` keys, so no hex value enters the frontend.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
-alongside this file whenever the work is in a route: five of the six access screens, the
+alongside this file whenever the work is in a route: three of the six access screens, the
 shell's content and its authentication, and any call to the backend at all. That list is the
 single home, so nothing is restated here.
 

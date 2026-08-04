@@ -135,6 +135,10 @@ questions remain, both for the designer rather than for code:
   Subscriptions, which never reappear, while later screens show Health and Other - and the
   duplicated colors are exactly on those chips. All ten are seeded until it is resolved.
 
+Both questions stopped being theoretical when PET-10 shipped Setup step 2: all ten chips are
+now on screen, so the two repeated colours are visible side by side and Bills and Subscriptions
+are offered to every new account. Neither is a blocker, and neither should be answered in code.
+
 ### The transaction detail fields no form captures (A20)
 
 The transaction detail mock (DET-8) shows **time, payment method, status and account**
@@ -370,7 +374,9 @@ day A6 is answered and a second currency appears:
 
 Its `onChange` **cannot fire**, so `patchDraft({ currency })` is unreachable from the UI and
 untested through it. The merge semantics that handler relies on are covered directly in
-`app/setup/layout.test.tsx` instead, which is the part PET-10 actually depends on.
+`app/setup/layout.test.tsx` instead, which is the part PET-10 actually depended on - and step
+2's chips now exercise the same merge through a real interaction, since toggling one has to
+leave step 1's budget alone.
 
 And a stored `currency` is not checked against the option list. `parseDraft` canonicalises
 the budget but only type-checks the currency, so a draft carrying `EUR` - devtools, or a
@@ -388,8 +394,66 @@ first live use, with the string `Enter an amount greater than 0.` taken verbatim
 story and from `Field`'s own doc comment rather than invented.
 
 That raises the priority of the designer sign-off A29 already owed. The pattern is now what
-users see, and every remaining form ticket (PET-10 through PET-12, Settings, the transaction
-forms) will copy it.
+users see, and every remaining form ticket (PET-11, PET-12, Settings, the transaction forms)
+will copy it. PET-10 did not: A4 enforces no minimum selection, so step 2 has nothing to
+validate and deliberately ships no error state at all.
+
+### The starter category list exists in two files, linked only by a generated type
+
+The names are single-sourced and the colours are not. `backend/src/database/user/starter-categories.ts`
+owns both; `frontend/src/app/setup/starterCategories.ts` reads the **names** out of
+`frontend/src/types/api.d.ts`, because `@IsIn` on the DTO publishes an OpenAPI `enum` and
+`openapi-typescript` turns it into a literal union, so `npm run build` fails if the two lists
+disagree about a name. Nothing does that for a colour: the API publishes names only, so the
+frontend's ten `CategoryColour` keys are a hand-kept mirror of the backend's ten hex values, and
+a colour changed on one side is a silent divergence. `starterCategories.test.ts` pins the
+frontend's order and its two repeated colours, which catches an accidental edit but cannot see
+the other file.
+
+**The preferred fix is a public endpoint serving the starter list**, which would delete the
+frontend copy outright. It needs its own ticket, and one constraint has to be in it: during
+onboarding there is no account and no per-user database, so such an endpoint cannot read *the
+user's* categories - it serves the constant, and it has to be `@Public()` like the other four
+pre-session routes. The per-user read that lists a real account's categories is a different
+endpoint and belongs with the category CRUD that "The rest of the data model" above still
+records as missing.
+
+### Step 2 starts with nothing selected, where frame 03 shows seven
+
+The mock has Groceries, Dining out, Transport, Shopping, Housing, Entertainment and Bills
+selected. PET-10 treats that as an illustration of the selected state rather than as a default,
+by product decision: the user picks. So a first visit renders ten unselected chips and a diff
+against the frame shows seven differences, every one of them intended.
+
+Worth a designer answer, because the two readings are genuinely different products - a curated
+starter set somebody can pare down, or an empty sheet. If the answer is the mock, the change is
+one line in `EMPTY_DRAFT` and **not** in the screen: `parseDraft` preserves an explicitly stored
+empty array, so a default in the draft still lets a user deselect everything, while a default
+applied in the picker would be re-imposed on every return from step 1 and would leave step 3
+submitting something step 2 never showed.
+
+### The category chip's border is 1.5px in both states
+
+Frame 03 draws the unselected chip at 1px and the selected one at 1.5px. `CategoryChip` uses
+1.5px for both and changes only the colour, because the chip is auto-sized rather than
+full-width: a border that thickened on selection would make it a pixel wider and taller and
+nudge, or rewrap, the whole row under the pointer. Half a pixel of border is invisible; a row
+that jumps when clicked is not.
+
+The related fact worth knowing before touching that layout: the three rows Figma draws are
+`flex-wrap` inside the 600px card, not a grid, and **the browser does not reproduce them.**
+Measured in Chrome at 1440x1024: with nothing selected the chips wrap 4 / 4 / 2, because an
+unselected chip is about 17px narrower than the same chip with its checkmark; with the mock's
+own seven selected they wrap 3 / 3 / 3 / 1, because that third row measures 523px against 520px
+of content box. Figma has the same row at 513px, so every chip renders 2 to 3.5px wider here
+than the design file measures it.
+
+Two things follow. The 1.5px border on unselected chips is **not** what causes it: at 1px that
+row would still come to 521px and still wrap, so reverting the deviation would buy nothing.
+And nothing should be done about the rows themselves - CAT-2 and AC1 ask for the ten chips in
+the designed **order**, which wrapping preserves. Forcing the picture would mean either a grid,
+which breaks at the first long category name, or shaving the designed 10px gap to 8px to win a
+coincidence back. Worth a designer glance so the difference is known rather than discovered.
 
 ---
 
