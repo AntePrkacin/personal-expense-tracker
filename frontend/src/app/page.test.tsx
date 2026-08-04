@@ -1,35 +1,28 @@
-import { render, screen } from '@testing-library/react';
+import { redirect } from 'next/navigation';
+
 import Home from './page';
 
+// `redirect` works by throwing, so it cannot be exercised for real under Jest:
+// the thrown control-flow signal is caught by the App Router, which is not here.
+// Mocking it turns "did the page choose the right destination" into an ordinary
+// assertion, which is the only thing worth asserting about a page whose entire
+// body is one call.
+jest.mock('next/navigation', () => ({ redirect: jest.fn() }));
+
 describe('Home page', () => {
-  const originalFetch = global.fetch;
+  it('sends the visitor to the dashboard', () => {
+    Home();
 
-  afterEach(() => {
-    global.fetch = originalFetch;
+    // Hard-coded rather than read from a constant: this string and the sidebar's
+    // own /dashboard href are two independent halves of the same contract, and a
+    // shared constant would let them move together and stay wrong.
+    expect(redirect).toHaveBeenCalledWith('/dashboard');
   });
 
-  it('renders the greeting fetched from the API', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ message: 'Hello from the API' }),
-    }) as unknown as typeof fetch;
-
-    // Home is an async Server Component, so await it to get the element tree.
-    render(await Home());
-
-    expect(
-      screen.getByRole('heading', { name: /frontend \+ backend connected/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Decode Academy Demo')).toBeInTheDocument();
-    expect(screen.getByText('Hello from the API')).toBeInTheDocument();
-  });
-
-  it('shows an error message when the API is unreachable', async () => {
-    global.fetch = jest.fn().mockRejectedValue(new Error('network down')) as unknown as typeof fetch;
-
-    render(await Home());
-
-    expect(screen.getByText(/backend unreachable/i)).toBeInTheDocument();
-    expect(screen.getByText(/could not reach the api/i)).toBeInTheDocument();
+  it('renders nothing of its own', () => {
+    // Guards against somebody putting a "redirecting..." screen here. There is
+    // no such frame in the design, and the page never paints: the redirect is
+    // answered before a response body exists.
+    expect(Home()).toBeUndefined();
   });
 });
