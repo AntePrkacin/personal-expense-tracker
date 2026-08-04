@@ -118,7 +118,50 @@ describe('patchDraft', () => {
     expect(JSON.parse(sessionStorage.getItem(SETUP_DRAFT_KEY)!)).toEqual({
       currency: 'EUR',
       budget: '2,000',
+      categories: [],
     });
+  });
+
+  /** Accumulates into a list, the way step 2's chips do. */
+  function ListEditor() {
+    const { draft, patchDraft } = useSetupDraft();
+
+    /** Both appends, from one handler, so they land in a single tick. */
+    function appendTwice() {
+      patchDraft((current) => ({ categories: [...current.categories, 'Groceries'] }));
+      patchDraft((current) => ({ categories: [...current.categories, 'Bills'] }));
+    }
+
+    return (
+      <>
+        <p>picked: {draft.categories.join(',')}</p>
+        <button onClick={appendTwice}>append twice</button>
+      </>
+    );
+  }
+
+  it('applies two patches in one tick without either overwriting the other', async () => {
+    // The reason `patchDraft` takes an updater at all, and a case a real browser
+    // hides: one click is one event, so a re-render lands between two chip toggles
+    // and a value read during render is still fresh. Batch them - a fast synthetic
+    // sequence, a future "select all", anything wrapping toggles in a transition -
+    // and a render-time read makes the second patch start from the pre-first draft
+    // and silently drop a selection. Reading storage inside patchDraft is what
+    // makes that impossible rather than unlikely.
+    const user = userEvent.setup();
+    render(
+      <SetupLayout>
+        <ListEditor />
+      </SetupLayout>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'append twice' }));
+
+    expect(screen.getByText('picked: Groceries,Bills')).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(SETUP_DRAFT_KEY)!).categories).toEqual([
+      'Groceries',
+      'Bills',
+    ]);
   });
 });
 

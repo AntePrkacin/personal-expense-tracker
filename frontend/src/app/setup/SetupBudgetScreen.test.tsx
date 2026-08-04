@@ -334,7 +334,10 @@ describe('AC5: the draft survives leaving and coming back', () => {
 
     await user.type(budgetField(), '2000');
 
-    expect(storedDraft()).toEqual({ currency: 'USD', budget: '2,000' });
+    // `categories` rides along empty because patchDraft merges over the whole
+    // draft, which is what stops step 2's selection clobbering this budget and
+    // vice versa.
+    expect(storedDraft()).toEqual({ currency: 'USD', budget: '2,000', categories: [] });
   });
 
   it('comes back filled in after the screen unmounts', async () => {

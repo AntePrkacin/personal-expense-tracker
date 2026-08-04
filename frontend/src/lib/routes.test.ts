@@ -19,10 +19,10 @@ import { ACCESS_ROUTES } from './routes';
 type RouteKey = keyof typeof ACCESS_ROUTES;
 
 /** Routes with a page behind them today. */
-const BUILT = ['setup'] as const satisfies readonly RouteKey[];
+const BUILT = ['setup', 'setupCategories'] as const satisfies readonly RouteKey[];
 
 /** Routes declared for a screen nobody has built yet. */
-const PENDING = ['setupCategories', 'login'] as const satisfies readonly RouteKey[];
+const PENDING = ['setupRegister', 'login'] as const satisfies readonly RouteKey[];
 
 describe('ACCESS_ROUTES', () => {
   it('classifies every declared route as built or pending', () => {
@@ -42,14 +42,17 @@ describe('ACCESS_ROUTES', () => {
     expect(fs.existsSync(page)).toBe(true);
   });
 
-  it('nests onboarding step 2 under step 1s route', () => {
-    // The structural claim behind PET-9's route-shape decision, and the one thing
-    // a page.tsx check cannot make: step 2 has to be a *child* of /setup for the
-    // draft provider in app/setup/layout.tsx to stay mounted across the move.
-    // Flatten it to /setup-categories and "Back keeps my values" breaks while
-    // both routes still resolve.
-    expect(ACCESS_ROUTES.setupCategories.startsWith(`${ACCESS_ROUTES.setup}/`)).toBe(true);
-  });
+  it.each(['setupCategories', 'setupRegister'] as const)(
+    'nests onboarding %s under step 1s route',
+    (key) => {
+      // The structural claim behind PET-9's route-shape decision, and the one thing
+      // a page.tsx check cannot make: steps 2 and 3 have to be *children* of /setup
+      // for the draft provider in app/setup/layout.tsx to stay mounted across the
+      // move. Flatten either to /setup-categories and "Back keeps my values" breaks
+      // while every route still resolves.
+      expect(ACCESS_ROUTES[key].startsWith(`${ACCESS_ROUTES.setup}/`)).toBe(true);
+    },
+  );
 
   it('gives every route an absolute path', () => {
     // A relative href resolves against whatever screen rendered it, so "/setup"

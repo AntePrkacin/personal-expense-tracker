@@ -18,9 +18,9 @@
 /**
  * Where the access screens live.
  *
- * `/setup` is built. The other two 404 today, which is as far as a frontend-only
- * ticket reaches: the href is the contract, and an inert control would fail its
- * criterion outright while hiding that it had.
+ * `/setup` and `/setup/categories` are built. The other two 404 today, which is as
+ * far as a frontend-only ticket reaches: the href is the contract, and an inert
+ * control would fail its criterion outright while hiding that it had.
  *
  * **PET-9 settled the onboarding route shape**: three nested routes under one
  * layout, not one route rendering three steps from client state. All three
@@ -47,6 +47,15 @@ export const ACCESS_ROUTES = {
    * cosmetic choice about the URL.
    */
   setupCategories: '/setup/categories',
+  /**
+   * 22 Register (PET-11, REG-4). Onboarding step 3 of 3, and where the account is
+   * finally created.
+   *
+   * Nested for the same reason as step 2: step 3's own "Back" has to return to the
+   * categories with the selection intact (PET-11 AC5), which only holds while all
+   * three steps share the one layout that holds the draft.
+   */
+  setupRegister: '/setup/register',
   /** 23 Log in (PET-12, WEL-3, A2). The only route into the returning-user flow. */
   login: '/login',
 } as const;

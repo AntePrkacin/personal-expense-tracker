@@ -10,7 +10,8 @@ import { SELECT_CONTROL } from './Select';
 import { NAV_ITEM_ICON, NAV_ITEM_LABEL, NAV_ITEM_SURFACE } from './Sidebar';
 import { TAG_TONES } from './Tag';
 // Outside this folder, like the shell's maps: see the note on coverage above.
-import { STEP_DOT } from '../../app/setup/SetupShell';
+import { CHIP_LABEL, CHIP_SURFACE } from '../../app/setup/categories/CategoryChip';
+import { STEP_DOT, STEP_WIDTH } from '../../app/setup/SetupShell';
 
 // Proves every utility the components, the app shell and the access screens rely
 // on actually generates CSS.
@@ -99,9 +100,16 @@ const HARDCODED = [
   // is the argument that both are slips rather than intent.
   'rounded-[10px]',
   'rounded-[11px]',
+  // Tailwind v4 has no border-width theme namespace, so 1.5px cannot come from a
+  // token at all - Field.tsx records that for the focus border, and the category
+  // chip carries the same width in both of its states. An arbitrary value by
+  // necessity rather than by choice, which is why it sits with the two radii above.
+  'border-[1.5px]',
   // sizing and spacing, which share the --spacing namespace
   'size-1.5',
   'size-2.5',
+  // 11px, the category chip's colour dot. Fractional, so a redefined scale drops it.
+  'size-2.75',
   'size-4',
   'size-5',
   'size-8.5',
@@ -111,6 +119,10 @@ const HARDCODED = [
   'size-90',
   'size-130',
   'h-1.25',
+  // 6px, the height of the selected chip's checkmark. Its 8.5px width is a literal
+  // rather than a step, for the reason MonthPill's chevron is: a three-decimal step
+  // generates nothing, and a literal cannot be broken by a scale change anyway.
+  'h-1.5',
   'h-2',
   'h-full',
   'w-2.5',
@@ -123,10 +135,12 @@ const HARDCODED = [
   // belong here: a fractional step is what a redefined scale silently drops.
   'w-107.5',
   'w-115',
-  // 520px, the setup card on frames 02 and 22. Frame 03 is 600px, so PET-10 adds
-  // `w-150` beside this rather than replacing it.
+  // 520px and 600px, the setup card on frames 02 and 22 and on frame 03. Both are
+  // reached through STEP_WIDTH below, and both are listed because a spacing step is
+  // exactly what a redefined scale drops silently.
   'w-130',
   'w-140',
+  'w-150',
   'w-full',
   'gap-0.5',
   'gap-1',
@@ -135,6 +149,8 @@ const HARDCODED = [
   'gap-1.75',
   'gap-2',
   'gap-2.25',
+  // 10px, between the ten chips on frame 03.
+  'gap-2.5',
   'gap-2.75',
   'gap-3',
   'gap-3.5',
@@ -145,6 +161,7 @@ const HARDCODED = [
   'gap-px',
   'px-2.5',
   'px-3',
+  'px-3.5',
   'px-5',
   'px-6.5',
   'px-20',
@@ -153,6 +170,8 @@ const HARDCODED = [
   'py-3',
   'py-10',
   'pt-1',
+  // 6px, the gap above both setup cards' Back-and-Continue row.
+  'pt-1.5',
   'pt-3',
   'pt-6',
   'pt-7',
@@ -218,6 +237,8 @@ const HARDCODED = [
   // layout and text handling the components depend on
   'flex',
   'flex-col',
+  // The chip field on frame 03, whose three rows are wrapping rather than a grid.
+  'flex-wrap',
   'items-center',
   'items-baseline',
   'justify-center',
@@ -300,6 +321,20 @@ const NAV_ITEM_CLASSES = [NAV_ITEM_SURFACE, NAV_ITEM_LABEL, NAV_ITEM_ICON].flatM
 const STEP_DOT_CLASSES = Object.values(STEP_DOT).flatMap(split);
 
 /**
+ * The setup card's width per step, and the category chip's two state maps
+ * (app/setup/SetupShell.tsx, app/setup/categories/CategoryChip.tsx).
+ *
+ * The chip's fill, border and label are split across two maps rather than one for
+ * the reason Field.tsx records: `border-border-strong` and `border-brand-accent`
+ * have equal specificity, so a component emitting both would depend on stylesheet
+ * order. Which means each map has to compile on its own, and this is where that is
+ * checked.
+ */
+const STEP_WIDTH_CLASSES = Object.values(STEP_WIDTH).flatMap(split);
+
+const CHIP_CLASSES = [CHIP_SURFACE, CHIP_LABEL].flatMap((map) => Object.values(map).flatMap(split));
+
+/**
  * Classes used only by the stories, to frame a component against a card.
  *
  * Worth guarding for the same reason as the components: Storybook is where
@@ -340,6 +375,8 @@ const EXPECTED = [
   ...SELECT_CONTROL.split(' '),
   ...NAV_ITEM_CLASSES,
   ...STEP_DOT_CLASSES,
+  ...STEP_WIDTH_CLASSES,
+  ...CHIP_CLASSES,
   ...HARDCODED,
   ...STORY_CHROME,
 ];
@@ -444,6 +481,9 @@ describe('component utilities compile', () => {
     expect(Object.keys(NAV_ITEM_LABEL)).toHaveLength(2);
     expect(Object.keys(NAV_ITEM_ICON)).toHaveLength(2);
     expect(Object.keys(STEP_DOT)).toHaveLength(2);
+    expect(Object.keys(STEP_WIDTH)).toHaveLength(3);
+    expect(Object.keys(CHIP_SURFACE)).toHaveLength(2);
+    expect(Object.keys(CHIP_LABEL)).toHaveLength(2);
     expect(EXPECTED).toContain('bg-category-8-pink');
     expect(EXPECTED).toContain('text-brand-accent-pressed');
     expect(EXPECTED).toContain('text-status-danger-text');

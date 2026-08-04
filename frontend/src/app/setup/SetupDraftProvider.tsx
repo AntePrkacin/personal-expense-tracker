@@ -43,10 +43,22 @@ import { parseDraft, SETUP_DRAFT_KEY, serializeDraft, type SetupDraft } from './
 // `getSnapshot` referentially stable between reads: an uncached snapshot that
 // parsed JSON would return a fresh object every call and loop forever.
 
+/**
+ * A patch, or a function handed the draft as it is *right now*.
+ *
+ * The updater form exists because a value computed during render is stale by the
+ * time two changes land in one tick: both read the same pre-change draft, and the
+ * second overwrites rather than extends. `patchDraft({ budget })` cannot hit that -
+ * it replaces one field with a keystroke's own value - but step 2's chips compute
+ * `categories` *from* the current selection, so a stale read there silently drops a
+ * toggle. Same reason React's own setState takes an updater.
+ */
+type DraftPatch = Partial<SetupDraft> | ((current: SetupDraft) => Partial<SetupDraft>);
+
 type SetupDraftValue = {
   draft: SetupDraft;
-  /** Merges a partial change. Never replaces the whole draft. */
-  patchDraft: (patch: Partial<SetupDraft>) => void;
+  /** Merges a partial change, or the result of an updater. Never replaces the whole draft. */
+  patchDraft: (patch: DraftPatch) => void;
 };
 
 const SetupDraftContext = createContext<SetupDraftValue | null>(null);
@@ -116,8 +128,12 @@ export function SetupDraftProvider({ children }: { children: React.ReactNode }) 
   const draft = useMemo(() => parseDraft(raw), [raw]);
 
   const patchDraft = useCallback(
-    (patch: Partial<SetupDraft>) => {
-      const next = { ...parseDraft(getSnapshot()), ...patch };
+    (patch: DraftPatch) => {
+      // Read first, then apply. Both forms merge over what is *in storage* rather
+      // than over the draft this render closed on, which is what keeps two changes
+      // landing in one tick from clobbering each other - one field or ten.
+      const current = parseDraft(getSnapshot());
+      const next = { ...current, ...(typeof patch === 'function' ? patch(current) : patch) };
       const serialized = serializeDraft(next);
 
       // The cache is updated *before* the write, and deliberately not from it: if
