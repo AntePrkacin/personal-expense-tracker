@@ -1,8 +1,9 @@
-import { LogoLockup } from '@/components/LogoLockup';
+import { AccessCard } from '@/components/AccessCard';
 
-// The chrome the three onboarding steps share: the centred column carrying the
-// logo lockup, the step indicator and the card box. `children` is the card's
-// contents, which is the only part that differs between steps.
+// What the three onboarding steps add to the shared access chrome: the step
+// indicator, and which width the card takes. The centred column, the logo lockup
+// and the card box itself are `components/AccessCard.tsx`, because screens 23 and
+// 24 draw them with no indicator at all.
 //
 // Frames 02 (node 42:701), 03 and 22 draw this identically. The only variables
 // are which dot is filled and the column width, 520 / 600 / 520 - so PET-9
@@ -17,10 +18,10 @@ import { LogoLockup } from '@/components/LogoLockup';
 // site.
 //
 // **Not in components/ui/**: that folder mirrors the nine Figma Components tiles
-// and is complete. Not in components/ either, where `LogoLockup` earns its place
-// by belonging to six screens - this belongs to three that all sit under one
-// route segment, which is the "next to the route that uses them" case
-// `(app)/PageHeader.tsx` already took.
+// and is complete. Not in components/ either, which is where the chrome underneath
+// it went once five frames shared it: what is left here is the indicator and the
+// step union, and those belong to the three screens under this route segment -
+// the "next to the route that uses them" case `(app)/PageHeader.tsx` already took.
 
 /**
  * The three onboarding steps, as a literal union rather than a count.
@@ -114,40 +115,15 @@ function StepIndicator({ step }: { step: SetupStep }) {
 
 export function SetupShell({ step, children }: { step: SetupStep; children: React.ReactNode }) {
   return (
-    // The canvas is not painted here: globals.css already gives `body`
-    // `bg-surface-canvas`, so repeating it would be a second declaration of one
-    // fact. flex-1 is what makes the column centre in the viewport, matching the
-    // root layout's `min-h-full flex flex-col` - the same hook WelcomeScreen uses.
+    // The width comes from STEP_WIDTH above, which is the only thing frames 02, 03
+    // and 22 disagree about; the indicator goes in the slot AccessCard leaves
+    // between the lockup and the card, which screens 23 and 24 leave empty.
     //
-    // gap-6 is the designed 24px, twice: lockup to indicator, indicator to card.
-    //
-    // py-10 has **no Figma counterpart** and is the one addition on this screen.
-    // The frame is a fixed 1024px tall, so the centred column always fits; a real
-    // browser window shorter than the card would clip it against the viewport
-    // instead, because `justify-center` overflows in both directions. The padding
-    // is what turns that into a scroll. Same class of deliberate deviation as the
-    // five `ui/` form details `frontend/CLAUDE.md` lists.
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 py-10">
-      <LogoLockup />
-
-      <StepIndicator step={step} />
-
-      {/* The width comes from STEP_WIDTH above, which is the only thing frames 02,
-          03 and 22 disagree about. Everything else here is identical on all three.
-
-          rounded-xl is Radius/20. shadow-card is the Foundations token PET-9
-          added for exactly this card; before it, the only two shadows in the repo
-          were arbitrary literals on the Welcome panel.
-
-          Deliberately no overflow-hidden, even though Figma reports overflow-clip
-          on this frame: nothing is positioned outside it, and it would clip the
-          Continue button's focus-visible outline-offset - and step 2's ten chips
-          each carry the same ring. */}
-      <div
-        className={`bg-surface-card border-border-default shadow-card flex ${STEP_WIDTH[step]} flex-col gap-5 rounded-xl border px-10 pt-9 pb-8`}
-      >
-        {children}
-      </div>
-    </div>
+    // This renders exactly the DOM this component rendered before the chrome moved,
+    // which is why SetupShell.test.tsx needed no change: same element order, same
+    // class strings, and the width still on the element carrying `shadow-card`.
+    <AccessCard width={STEP_WIDTH[step]} aboveCard={<StepIndicator step={step} />}>
+      {children}
+    </AccessCard>
   );
 }
