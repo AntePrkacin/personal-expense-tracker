@@ -4,7 +4,7 @@ Everything about the data on disk: what runs locally with no setup, how to try t
 end to end, how to change the schema, and how to point the backend at Turso Cloud.
 
 Why it is built this way - the two driver modes, why the CLI cannot see a per-user database, why
-there is no `db:migrate` script - is in `backend/CLAUDE.md` under Persistence.
+there is no `db:migrate` script - is in `backend/src/database/CLAUDE.md`.
 
 ## Database
 

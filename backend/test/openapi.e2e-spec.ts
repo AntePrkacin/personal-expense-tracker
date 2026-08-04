@@ -68,6 +68,7 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/auth/session`,
       `/${API_PREFIX}/auth/verify`,
       `/${API_PREFIX}/hello`,
+      `/${API_PREFIX}/profile`,
       `/${API_PREFIX}/transactions`,
       `/${API_PREFIX}/transactions/{id}`,
     ]);
@@ -349,6 +350,119 @@ describe('openapi.json', () => {
     });
   });
 
+  describe('the profile endpoints', () => {
+    const path = () => spec.paths[`/${API_PREFIX}/profile`];
+
+    it('declares exactly a read and an update, on the collection itself', () => {
+      // No `/profile/{id}`, and there must never be one: the resource is always
+      // the session's own.
+      expect(Object.keys(path()).sort()).toEqual(['get', 'patch']);
+    });
+
+    it.each([
+      ['read', () => path().get, ['200', '401']],
+      ['update', () => path().patch, ['200', '400', '401', '409']],
+    ])('documents the %s with exactly its own statuses', (_name, op, codes) => {
+      expect(Object.keys(op().responses).sort()).toEqual(codes);
+
+      for (const status of codes.filter((code) => code !== '200')) {
+        expect(
+          op().responses[status].content?.['application/json'].schema?.$ref,
+        ).toBe(ERROR_REF);
+      }
+    });
+
+    it('documents no 404 on either operation', () => {
+      // A verified session implies a profile row, so its absence is a broken
+      // invariant answered by the generic 500 - not a state a client could act
+      // on. A documented 404 would invite a "create profile" flow that has
+      // nothing behind it.
+      for (const op of [path().get, path().patch]) {
+        expect(Object.keys(op.responses)).not.toContain('404');
+      }
+      // Nor a 429: neither route carries a throttler.
+      for (const op of [path().get, path().patch]) {
+        expect(Object.keys(op.responses)).not.toContain('429');
+      }
+    });
+
+    it('requires the bearer on both', () => {
+      // Class-level `@ApiBearerAuth()`, so this pins that the decorator has not
+      // been lost from the controller as a whole.
+      for (const op of [path().get, path().patch]) {
+        expect(op.security).toEqual([{ bearer: [] }]);
+      }
+    });
+
+    it('returns the same six-field profile from both', () => {
+      const ref = '#/components/schemas/ProfileResponseDto';
+
+      for (const op of [path().get, path().patch]) {
+        expect(
+          op.responses['200'].content?.['application/json'].schema?.$ref,
+        ).toBe(ref);
+      }
+
+      // All six always present - a client never has to tell "unset" from
+      // "absent", and every column behind them is NOT NULL anyway.
+      expect(schema('ProfileResponseDto').required!.slice().sort()).toEqual([
+        'currency',
+        'email',
+        'firstName',
+        'lastName',
+        'monthStartDay',
+        'monthlyBudget',
+      ]);
+      // Major units on the way out, matching the way in.
+      expect(
+        schema('ProfileResponseDto').properties!.monthlyBudget.description,
+      ).toMatch(/major units/i);
+      expect(
+        schema('ProfileResponseDto').properties!.monthStartDay,
+      ).toMatchObject({ type: 'integer' });
+    });
+
+    it('makes every update field optional and none of them nullable', () => {
+      // PATCH semantics: an absent field means "leave it alone". Unlike the
+      // transaction update there is no nullable field at all, because there is
+      // no nullable column to clear.
+      expect(schema('UpdateProfileDto').required).toBeUndefined();
+
+      for (const property of Object.values(
+        schema('UpdateProfileDto').properties!,
+      )) {
+        expect(property).not.toMatchObject({ nullable: true });
+      }
+    });
+
+    it('publishes the update email as an email and the budget as money', () => {
+      expect(schema('UpdateProfileDto').properties!.email).toMatchObject({
+        type: 'string',
+        format: 'email',
+      });
+
+      // The @IsPositive() trap, now on a third DTO: the plugin renders it as
+      // `minimum: 1`, which is right for an integer and wrong for money - it
+      // would forbid every budget under a unit.
+      const budget = schema('UpdateProfileDto').properties!.monthlyBudget;
+      expect(budget).toMatchObject({
+        type: 'number',
+        minimum: 0,
+        exclusiveMinimum: true,
+        maximum: 1_000_000_000,
+      });
+      expect(budget).not.toMatchObject({ minimum: 1 });
+    });
+
+    it('says what the 409 means and that null is not accepted', () => {
+      const description = path().patch.description!;
+
+      expect(description).toMatch(/409/);
+      expect(description).toMatch(/null/);
+      expect(description).toMatch(/major units/i);
+    });
+  });
+
   it("carries VerifyLoginLinkDto's bound on the token", () => {
     // The bound is what keeps a megabyte body from ever reaching a hash
     // function, so it belongs in the published contract rather than only in the
@@ -366,7 +480,6 @@ describe('openapi.json', () => {
     expect(properties.firstName).toMatchObject({ maxLength: 100 });
     expect(properties.lastName).toMatchObject({ maxLength: 100 });
     expect(properties.email).toMatchObject({ format: 'email' });
-    expect(properties.monthStartDay).toMatchObject({ minimum: 1, maximum: 28 });
     // Major units, not the cents the column stores. The description is the
     // JSDoc on the DTO, lifted by the plugin's `introspectComments`.
     expect(properties.monthlyBudget.description).toMatch(/major units/i);
@@ -383,6 +496,36 @@ describe('openapi.json', () => {
     expect(schema('RegisterDto').required).not.toContain('currency');
     expect(schema('RegisterDto').required).not.toContain('monthStartDay');
   });
+
+  describe.each(['RegisterDto', 'UpdateProfileDto'])(
+    'the preference fields %s shares with the other',
+    (name) => {
+      it('constrains currency rather than publishing a bare string', () => {
+        // @IsISO4217CurrencyCode() derives nothing, so without the explicit
+        // metadata this is `{ type: 'string' }` and the generated frontend type
+        // accepts any text at all. Case-insensitive because the DTO uppercases
+        // before validating.
+        expect(schema(name).properties!.currency).toMatchObject({
+          type: 'string',
+          pattern: '^[A-Za-z]{3}$',
+        });
+        expect(schema(name).properties!.currency.description).toMatch(
+          /ISO 4217/,
+        );
+      });
+
+      it('publishes monthStartDay as an integer, not any number', () => {
+        // The plugin renders every TS `number` as `type: 'number'`, which would
+        // publish 3.5 as a valid day while @IsInt() rejects it. The explicit
+        // type and the derived bounds coexist.
+        expect(schema(name).properties!.monthStartDay).toMatchObject({
+          type: 'integer',
+          minimum: 1,
+          maximum: 28,
+        });
+      });
+    },
+  );
 
   it('describes message as either a string or an array of them', () => {
     // The one field the plugin cannot derive, so the only one that breaks by

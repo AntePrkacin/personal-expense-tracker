@@ -32,7 +32,7 @@ backend/
 
 `central` is the user directory, one database. `user` is one person's own database,
 instantiated once per registered user. One schema file and one migrations folder each,
-both committed. `backend/CLAUDE.md` has the reasoning, under Persistence.
+both committed. `backend/src/database/CLAUDE.md` has the reasoning.
 
 Consequences that do not apply to a normal single-database Drizzle project:
 

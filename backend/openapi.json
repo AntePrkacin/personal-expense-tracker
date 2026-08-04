@@ -226,6 +226,110 @@
         ]
       }
     },
+    "/api/profile": {
+      "get": {
+        "description": "`email` comes from the central directory, everything else from your own database. `monthlyBudget` is in major units (2000.50, not 200050) and `monthStartDay` is the day of the month your budgeting period starts on.",
+        "operationId": "ProfileController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The signed-in person and their preferences.",
+        "tags": [
+          "profile"
+        ]
+      },
+      "patch": {
+        "description": "Send only the fields to change: an absent field is left alone, and no field accepts null - every one of them is required in storage. An empty body is a **400**. `monthlyBudget` is in major units. Changing `email` changes where future login links are sent; links already in flight to the old address keep working, and your current session is unaffected. **409** means the address belongs to another account.",
+        "operationId": "ProfileController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change your details or preferences.",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
     "/api/transactions": {
       "post": {
         "description": "`amount` is in major units (12.50, not 1250) and must be positive. `date` is a calendar date, `YYYY-MM-DD`, stored verbatim - backdating is supported and puts the transaction in the month that date falls in. **404** means the `categoryId` in the body names no category of yours.",
@@ -461,12 +565,24 @@
       "RegisterDto": {
         "type": "object",
         "properties": {
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$",
+            "description": "ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.",
+            "example": "EUR"
+          },
           "monthlyBudget": {
             "type": "number",
             "description": "Major units (e.g. 2000.50). Stored as integer cents. The cap is not a\nproduct judgment: it keeps the cents conversion far inside JS safe-integer\nrange while staying generous for zero-decimal currencies, whose budgets\ncarry many digits.",
             "maximum": 1000000000,
             "minimum": 0,
             "exclusiveMinimum": true
+          },
+          "monthStartDay": {
+            "type": "integer",
+            "description": "Capped at 28 so the day exists in every month.",
+            "minimum": 1,
+            "maximum": 28
           },
           "firstName": {
             "type": "string",
@@ -479,15 +595,6 @@
           "email": {
             "type": "string",
             "format": "email"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "monthStartDay": {
-            "type": "number",
-            "description": "Capped at 28 so the day exists in every month.",
-            "minimum": 1,
-            "maximum": 28
           },
           "categories": {
             "type": "array",
@@ -617,6 +724,78 @@
           "email",
           "expiresAt"
         ]
+      },
+      "ProfileResponseDto": {
+        "type": "object",
+        "properties": {
+          "monthStartDay": {
+            "type": "integer",
+            "description": "Day of the month the budgeting period starts on, 1-28. Every period-scoped\nread derives its month window from this at query time, so changing it\nre-buckets history rather than rewriting anything."
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "description": "The login identifier. Lives in the central directory, not the profile row."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code, uppercase. Display only - amounts are stored in minor units."
+          },
+          "monthlyBudget": {
+            "type": "number",
+            "description": "Major units (e.g. 2000.5). Stored as integer cents; converted on the way out."
+          }
+        },
+        "required": [
+          "monthStartDay",
+          "firstName",
+          "lastName",
+          "email",
+          "currency",
+          "monthlyBudget"
+        ]
+      },
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$",
+            "description": "ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.",
+            "example": "EUR"
+          },
+          "monthlyBudget": {
+            "type": "number",
+            "description": "Major units (e.g. 2000.50), as at registration. Stored as integer cents.",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "monthStartDay": {
+            "type": "integer",
+            "description": "Capped at 28 so the day exists in every month.",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "firstName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "description": "The login identifier. Changing it changes where future login links are sent\n(AC6); links already in flight to the old address keep working.",
+            "format": "email"
+          }
+        }
       },
       "CreateTransactionDto": {
         "type": "object",

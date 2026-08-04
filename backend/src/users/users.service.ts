@@ -151,6 +151,26 @@ export class UsersService {
   }
 
   /**
+   * Changes the login identifier of a live account.
+   *
+   * Expects an **already-normalized** address: normalizing is the DTO's job
+   * everywhere in this repo (see normalize-email.ts), and doing it a second time
+   * here would put a second definition of "the same address" in the codebase.
+   *
+   * No uniqueness check of its own. ProfileService pre-checks and answers 409,
+   * which is what gives the Settings form something to say; the partial unique
+   * index `users_email_live_unique` is the backstop for the race that pre-check
+   * cannot close, and it surfaces as a logged 500 rather than a corrupt
+   * directory.
+   */
+  async updateEmail(userId: string, email: string): Promise<void> {
+    await this.centralDb
+      .update(users)
+      .set({ email })
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+  }
+
+  /**
    * Drops the stashed onboarding payload, which is what marks an account
    * verified.
    *

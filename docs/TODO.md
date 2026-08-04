@@ -20,8 +20,9 @@ The backend is done: `POST /api/auth/verify` spends a link, provisions the accou
 returns a session, and `GET /api/auth/session` answers who the bearer is. Nothing on the
 frontend calls either yet - there is no verify page and no session cookie. There _is_ now a
 dashboard to land on: PET-19 built the `(app)` shell and the four routed views. The
-session-scoped `getProfile()` that replaces the deleted proof-of-stack `GET /api/users/:id`
-is PET-45's, not this.
+session-scoped read that replaces the deleted proof-of-stack `GET /api/users/:id` also
+exists now: PET-45 shipped `GET /api/profile` and `PATCH /api/profile`. What is left here is
+entirely the frontend's half.
 
 **The frontend no longer calls the backend at all.** PET-19 replaced the scaffold greeting
 page with a `redirect('/dashboard')`, and its `GET /api/hello` fetch was the only wire between
@@ -51,7 +52,8 @@ in `frontend/src/lib/routes.ts` declares `/login`, and Welcome is at `/`.
 
 `PLACEHOLDER_PROFILE` in `app/(app)/layout.tsx` feeds the sidebar footer Figma's own sample
 data. It cannot be fixed without both halves: names live in the per-user `profile` row and the
-email on the central `users` row, so it needs PET-45's read reached with the cookie above.
+email on the central `users` row, which is exactly what `GET /api/profile` stitches together -
+so the endpoint is no longer the blocker, only the cookie above is.
 `ui/Sidebar` itself is clean - its test pins that those sample strings appear nowhere in the
 component - so this is one constant in one file.
 
@@ -517,6 +519,33 @@ Migration folders are resolved from `process.cwd()`, because `nest build` emits 
 JavaScript into `dist/` and leaves the SQL behind. Any future Dockerfile has to `COPY` the
 `drizzle/` directory next to `dist/`, or the app boots and fails to migrate.
 
+### Changing an email address leaves three loose ends, all accepted
+
+`PATCH /api/profile` moves the login identifier, and PET-45 took three residuals knowingly
+rather than by omission.
+
+**The uniqueness pre-check can lose a race.** The update reads `users` for the requested
+address and answers 409 before writing anything, but two concurrent PATCHes claiming one new
+address both pass that read. The loser then violates the partial unique index _after_ its
+profile fields have already persisted, and answers a logged 500 rather than a 409. It is
+retry-safe - the retry gets an honest 409, or succeeds - and it needs two people racing for
+one address in the same instant. Closing it means sniffing a driver-specific constraint error
+and translating it, which is worth doing the day this backend runs more than one instance,
+since the same window is what `sessions` and `login_links` already tolerate.
+
+**Login links already in flight keep working, and they point at the old address.** A link is
+a row keyed to a user id, not to an email, so one issued before the change still verifies
+afterwards - it just arrived in an inbox the account no longer answers to. That is in spec
+rather than a bug: AC6 governs where _subsequent_ links are sent, and the window is bounded
+by `LOGIN_LINK_TTL_M`. Standard account-takeover hygiene would supersede every live link on
+an address change, which is one `UPDATE` in `LoginTokenService` whenever it is wanted.
+
+**Nothing tells the old address it lost the account.** The usual defence against a hijacked
+session quietly moving the login identifier is a notification to the previous address, and
+there is none: the change answers 200 and only the new address ever hears about it. A39
+designs no logout and no security-alert mail, so adding one is a product decision before it
+is a code one.
+
 ---
 
 ## Scaling, when it is actually needed
@@ -559,7 +588,12 @@ than discovered.
   exponent table rather than a change at those two call sites. Note the blast radius grew
   with PET-27: it was one profile field written once at verification, and it is now every
   transaction amount in both directions, so a wrong exponent would misreport every number
-  the dashboard shows rather than just a budget.
+  the dashboard shows rather than just a budget. PET-45 added a second dimension to it:
+  `PATCH /api/profile` lets a user change `currency` at will, while nothing rescales the
+  cents already stored under the old one. Switching EUR to JPY today keeps every stored
+  integer and simply relabels it, which is arguably the least surprising behaviour but is a
+  decision nobody made - whatever the exponent table does, it also has to say what a
+  currency change means for existing rows.
 - **Offline conflict policy is undecided.** The schema is shaped for last-write-wins
   (UUIDv7 keys, epoch-ms timestamps, tombstones), but no client syncs yet and clock skew is
   unaddressed.
@@ -579,16 +613,20 @@ than discovered.
   actually enforce. `RegisterDto.monthlyBudget` carries an explicit
   `@ApiProperty({ minimum: 0, exclusiveMinimum: true })` to correct it, and PET-27 added the
   second and third compliant fields, `amount` on both `CreateTransactionDto` and
-  `UpdateTransactionDto`; any future money field needs the same line, and
-  `test/openapi.e2e-spec.ts` now pins all three against a regression. Check the generated `backend/openapi.json` when adding a DTO
+  `UpdateTransactionDto`, PET-45 a fourth in `UpdateProfileDto.monthlyBudget`; any future
+  money field needs the same line, and
+  `test/openapi.e2e-spec.ts` now pins every one of them against a regression. Check the generated `backend/openapi.json` when adding a DTO
   rather than assuming the derived constraints are faithful - `@ArrayMaxSize` is simply
-  dropped, for instance, which is a smaller version of the same thing. Two more live
-  gaps, both in the permissive direction, so a client that codes to the spec can still be
-  handed a 400: `RegisterDto.currency` is published as a bare string while
-  `@IsISO4217CurrencyCode()` enforces the ISO 4217 list, and `monthStartDay` is published
-  as `type: number` while `@IsInt()` rejects anything fractional. Neither has earned a
-  hand-written `@ApiProperty` correction yet; `currency` is the one a frontend developer
-  reading the generated `currency?: string` will trip over first. A third gap is cosmetic
+  dropped, for instance, which is a smaller version of the same thing. Two more gaps of the
+  same permissive shape were closed by PET-45, which had to publish the same two fields a
+  second time on `UpdateProfileDto` and would have shipped both defects twice:
+  `currency` now carries `pattern: '^[A-Za-z]{3}$'` with the ISO 4217 list named in its
+  description rather than a 180-entry enum that drifts the moment the standard does, and it
+  is case-insensitive because the DTO uppercases before validating; `monthStartDay` now
+  carries `@ApiPropertyOptional({ type: 'integer' })`, with the derived `minimum`/`maximum`
+  merging in beside it. The two DTOs are written byte-identically and an
+  `it.each(['RegisterDto', 'UpdateProfileDto'])` pins both, because one schema drifting from
+  the other is exactly how a shared field goes wrong. A third gap is cosmetic
   rather than permissive: `TransactionResponseDto.createdAt`/`updatedAt` are ISO 8601
   instants but publish as bare `type: string` with no `format: 'date-time'`, because the
   plugin cannot read that out of a doc comment. Harmless today - the generated TypeScript

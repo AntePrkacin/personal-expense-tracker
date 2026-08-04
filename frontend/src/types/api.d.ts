@@ -101,6 +101,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The signed-in person and their preferences.
+         * @description `email` comes from the central directory, everything else from your own database. `monthlyBudget` is in major units (2000.50, not 200050) and `monthStartDay` is the day of the month your budgeting period starts on.
+         */
+        get: operations["ProfileController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change your details or preferences.
+         * @description Send only the fields to change: an absent field is left alone, and no field accepts null - every one of them is required in storage. An empty body is a **400**. `monthlyBudget` is in major units. Changing `email` changes where future login links are sent; links already in flight to the old address keep working, and your current session is unaffected. **409** means the address belongs to another account.
+         */
+        patch: operations["ProfileController_update"];
+        trace?: never;
+    };
     "/api/transactions": {
         parameters: {
             query?: never;
@@ -154,19 +178,23 @@ export interface components {
         };
         RegisterDto: {
             /**
+             * @description ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.
+             * @example EUR
+             */
+            currency?: string;
+            /**
              * @description Major units (e.g. 2000.50). Stored as integer cents. The cap is not a
              *     product judgment: it keeps the cents conversion far inside JS safe-integer
              *     range while staying generous for zero-decimal currencies, whose budgets
              *     carry many digits.
              */
             monthlyBudget: number;
+            /** @description Capped at 28 so the day exists in every month. */
+            monthStartDay?: number;
             firstName: string;
             lastName: string;
             /** Format: email */
             email: string;
-            currency?: string;
-            /** @description Capped at 28 so the day exists in every month. */
-            monthStartDay?: number;
             /**
              * @description The starter chips picked on screen 03, by name.
              *
@@ -214,6 +242,41 @@ export interface components {
             email: string;
             /** @description ISO 8601, the same instant verification returned. */
             expiresAt: string;
+        };
+        ProfileResponseDto: {
+            /**
+             * @description Day of the month the budgeting period starts on, 1-28. Every period-scoped
+             *     read derives its month window from this at query time, so changing it
+             *     re-buckets history rather than rewriting anything.
+             */
+            monthStartDay: number;
+            firstName: string;
+            lastName: string;
+            /** @description The login identifier. Lives in the central directory, not the profile row. */
+            email: string;
+            /** @description ISO 4217 code, uppercase. Display only - amounts are stored in minor units. */
+            currency: string;
+            /** @description Major units (e.g. 2000.5). Stored as integer cents; converted on the way out. */
+            monthlyBudget: number;
+        };
+        UpdateProfileDto: {
+            /**
+             * @description ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.
+             * @example EUR
+             */
+            currency?: string;
+            /** @description Major units (e.g. 2000.50), as at registration. Stored as integer cents. */
+            monthlyBudget?: number;
+            /** @description Capped at 28 so the day exists in every month. */
+            monthStartDay?: number;
+            firstName?: string;
+            lastName?: string;
+            /**
+             * Format: email
+             * @description The login identifier. Changing it changes where future login links are sent
+             *     (AC6); links already in flight to the old address keep working.
+             */
+            email?: string;
         };
         CreateTransactionDto: {
             /**
@@ -464,6 +527,84 @@ export interface operations {
             };
             /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ProfileController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    ProfileController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The request conflicts with the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
