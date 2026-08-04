@@ -123,8 +123,8 @@ component.
 ## The access screens
 
 The six frames outside the shell (01 Welcome, 02 and 03 Setup, 22 Register, 23 Log in, 24
-Check your email). **Three of them are built**: Welcome at `/`, Setup step 1 at `/setup`, and
-Setup step 2 at `/setup/categories`.
+Check your email). **Four of them are built**: Welcome at `/` and all three onboarding steps, at
+`/setup`, `/setup/categories` and `/setup/register`.
 
 **`/` is the front door and its one job is choosing which door.** `app/page.tsx` awaits
 `hasSession()`; a signed-out visitor gets `<WelcomeScreen />` and a signed-in one is redirected
@@ -146,7 +146,7 @@ today - do not copy it here by reflex.
 out to: `/setup` and `/login`. Same single-declaration reasoning as `SIDEBAR_HREFS`, and the
 two sets must not restate each other - app routes stay in `ui/Sidebar.tsx`, access routes here.
 Welcome is deliberately absent, because it is served at `/` and there is no path to declare.
-`/setup` and `/setup/categories` now answer; `/setup/register` and `/login` **404 today**, which
+All three onboarding steps now answer; `/login` and `/check-email` **404 today**, which
 is as far as a frontend-only ticket reaches: the href is the contract its criterion describes,
 and an inert control would fail that criterion outright while hiding it. `lib/routes.test.ts` asserts with
 `fs` that every built route has a `page.tsx` behind it, the way `SidebarNav.test.tsx` does for
@@ -363,11 +363,65 @@ this screen does not offer. Nothing fetches and no request shape changes, so thi
 `api:sync`. The colours cannot come from the same place, because the backend publishes names
 only: they are `CategoryColour` keys, so no hex value enters the frontend.
 
+**Step 3's two name fields are a `grid`, not a flex row, and the 214px in the frame is a
+consequence rather than a measurement.** Frame 22 draws them at 214px each with a 12px gutter
+inside the card's 440px content box, and `(440 - 12) / 2` is exactly 214 - so `grid grid-cols-2
+gap-3` reproduces the design without restating any of its numbers. A flex row would not: `ui/Field`
+is `w-full`, which spans a grid cell correctly and overflows a flex row, so the fix there would
+have been a `flex-1` on each child to re-derive what the grid already gives. The email field is a
+sibling of the grid rather than a third cell, which is what makes it full width.
+
+**The draft now carries all six values, and step 3's three are the reason it was always going to.**
+`draft.ts` said from the start that it held "everything screens 02, 03 and 22 collect", and its
+choice of sessionStorage is justified in that file by not offering the next person on a shared
+machine a half-finished registration carrying somebody's name and email. The three are stored
+**untrimmed**, unlike the budget, which `parseDraft` re-canonicalises: trimming on read would
+delete the space the moment somebody typed one between two words. Trimming happens once, in
+`toRegisterBody`, which is also where `budget` stops being the display string `'2,000'` and becomes
+`monthlyBudget: 2000`. That function is the only boundary, and it deliberately does **not**
+lowercase the email, because `RegisterDto` carries `@Transform(normalizeEmail)` and a second
+normaliser is one that can drift from the first.
+
+**`clearDraft` is a third member of the context, and it could not have been anything else.** Step 3
+calls it once, after a 202. `SetupDraftProvider`'s snapshot cache is invalidated only by a write
+through the provider, so a bare `sessionStorage.removeItem` at the call site would empty storage
+while every field kept rendering the values it had cached - and the next `patchDraft` would merge
+onto the stale snapshot and bring the cleared draft back. `layout.test.tsx` pins both halves.
+`docs/TODO.md` records what clearing costs: the browser's own Back button still reaches
+`/setup/register`, so it renders empty, which is accepted because the account exists by then.
+
+**The register call is a Server Action, and `RegisterForm` takes it as a prop.** The mechanism and
+the reasoning belong to `docs/agents/api-contract.md`, which now covers writes. What belongs here is
+the prop: `SetupRegisterScreen` imports `registerAccount` and passes it down, which is the ordinary
+way a Server Component hands an action to a client component, and it means `RegisterForm.test.tsx`
+injects a `jest.fn()` and needs no module mock at all - so the alias trap above never comes up.
+`SetupRegisterScreen.test.tsx` does mock `./actions`, with a relative specifier, purely so no
+assertion about the card can reach a real `fetch`.
+
+**Step 3 adds two states the design does not draw, and they are the fifth and sixth of their kind.**
+A19 designs no pending state and A29 no error surface - the spec says outright that a failed
+account creation has none - so both are ours, alongside the details `frontend/CLAUDE.md` lists for
+`ui/`. The submit button is `disabled` while the request is out, because a double submit spends one
+of the five per-address attempts the backend's throttler allows and the second comes back a 429. And
+one failure message sits above the footer row in the same `text-body-s text-status-danger-text`
+treatment `ui/Field` uses, with **`role="alert"`, which `ui/Field` deliberately omits**: Field's
+message appears synchronously beside the field the user just left, while this one appears after a
+network round trip with nothing else on screen changing, so nothing else would tell a screen reader
+the submit failed. Five new strings come with it, and `docs/TODO.md` adds them to what A29 owes.
+
+**Onboarding runs to the end now, and the dead end moved rather than closed.** Step 3's "Finish
+setup" creates a real account and pushes to `/check-email?email=...`, which 404s until PET-12. The
+address travels in the query string because the draft is gone by then and VER-1 interpolates it into
+the body copy. Screen 24 is deliberately **not** nested under `/setup`: LOG-3 reaches it from Log in
+too, so it does not belong to onboarding and must not sit inside the draft provider. And it gets
+**no "Back" button**, which amends A37, VER-3 and PET-12's AC6 - by the time it renders the account
+exists and the link is sent, so there is nowhere backwards to go.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
-alongside this file whenever the work is in a route: three of the six access screens, the
-shell's content and its authentication, and any call to the backend at all. That list is the
+alongside this file whenever the work is in a route: two of the six access screens, the
+shell's content and its authentication, and any read from the backend. That list is the
 single home, so nothing is restated here.
 
 The one trap to carry into every file in this directory: **both session seams are stubs that

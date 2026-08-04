@@ -24,12 +24,14 @@ session-scoped read that replaces the deleted proof-of-stack `GET /api/users/:id
 exists now: PET-45 shipped `GET /api/profile` and `PATCH /api/profile`. What is left here is
 entirely the frontend's half.
 
-**The frontend no longer calls the backend at all.** PET-19 replaced the scaffold greeting
-page with a `redirect('/dashboard')`, and its `GET /api/hello` fetch was the only wire between
-the two apps. `BACKEND_URL` is consequently read by nothing, and no frontend test exercises
-the generated contract. The drift gates still run, so `api.d.ts` cannot rot silently, but the
-end-to-end proof is gone until this item lands. **This is the first thing the work here
-restores.**
+**The frontend makes one call to the backend, and it is a write.** PET-19 replaced the scaffold
+greeting page with a `redirect('/dashboard')`, deleting the `GET /api/hello` fetch that had been
+the only wire between the two apps, and PET-11 restored one from the other end: `registerAccount`
+in `app/setup/register/actions.ts` posts `POST /api/auth/register`, so `BACKEND_URL` is read
+again and `actions.test.ts` exercises the generated request type against a `fetch` spy. **Every
+read is still missing**, which is what the work here is: no verify page, no session, and no
+screen that displays anything the backend knows. The drift gates always ran, so `api.d.ts` could
+not rot silently either way, but nothing yet proves a response shape end to end.
 
 **Three things in the shell are stubs waiting on this, all deliberate and all loud.**
 
@@ -330,9 +332,21 @@ The write is **best effort**: a `QuotaExceededError` or Safari's historical priv
 is swallowed, and the in-memory cache is updated before the write is attempted, so the field
 still shows what was typed. Persisting degrades; the form does not.
 
-**Nothing clears the draft.** Back must not, because AC5 forbids it, and no reset control is
-designed anywhere. So an abandoned onboarding shows stale values in that tab until it closes.
-PET-11 should clear it on a successful register, which is the only natural moment.
+**A successful register clears it, and nothing else does.** Back must not, because every step's
+AC5 forbids it, and no reset control is designed anywhere - so an *abandoned* onboarding still
+shows stale values in that tab until it closes. PET-11 took the one natural moment: `clearDraft`
+runs after the 202, which is when the values have a real account behind them.
+
+That leaves one accepted consequence, recorded here because it looks like a bug and is a
+decision. **The browser's own Back button from screen 24 reaches an empty Register.** PET-11
+deleted screen 24's own "Back" control for this reason - amending A37, VER-3 and PET-12's AC6 -
+but deleting a control does not delete the history entry, and the draft is gone by then. Accepted
+on three grounds: the account exists and the login link is sent, so nothing is lost; the form's
+own validation turns an accidental empty re-submit into three inline messages rather than a bad
+request; and a deliberate re-submit of the same address is explicitly safe, because the backend
+sends a fresh link instead of duplicating (REG-6, A35). Both alternatives are worse - keeping the
+draft alive defeats the clearing, and suppressing the history entry means `router.replace` on the
+way to screen 24, which would also swallow the legitimate Back from Register to step 2.
 
 ### The budget field's caret has two rough edges, and jsdom cannot see either
 
@@ -381,10 +395,13 @@ leave step 1's budget alone.
 And a stored `currency` is not checked against the option list. `parseDraft` canonicalises
 the budget but only type-checks the currency, so a draft carrying `EUR` - devtools, or a
 build that offered more options - lands on a `<select>` with nothing matching. The browser
-then shows the first option while the draft still says `EUR`, and step 3 would post it.
-Harmless while one option exists; the fix, when the list grows, is for `parseDraft` to fall
-back to `DEFAULT_CURRENCY` for a code it does not recognise, which means the allowlist has
-to move out of the form and into `draft.ts` beside the rest of the shape.
+then shows the first option while the draft still says `EUR`, and step 3 **does** post it -
+`toRegisterBody` passes the stored code straight through, and the DTO's
+`@IsISO4217CurrencyCode()` accepts `EUR`, so the account would be created in a currency nobody
+picked. Still harmless while one option exists, since nothing can put a second code in there
+except devtools; the fix, when the list grows, is for `parseDraft` to fall back to
+`DEFAULT_CURRENCY` for a code it does not recognise, which means the allowlist has to move out of
+the form and into `draft.ts` beside the rest of the shape.
 
 ### A29's inline error pattern is now live rather than illustrative
 
@@ -397,6 +414,29 @@ That raises the priority of the designer sign-off A29 already owed. The pattern 
 users see, and every remaining form ticket (PET-11, PET-12, Settings, the transaction forms)
 will copy it. PET-10 did not: A4 enforces no minimum selection, so step 2 has nothing to
 validate and deliberately ships no error state at all.
+
+**PET-11 raised it again, with five strings and a second shape.** Step 3 is the first screen with
+more than one thing to validate, so it needed copy the design file does not contain: `Enter your
+first name.`, `Enter your last name.`, `Enter your email address.`, `Enter a valid email
+address.`, and for a failed request `We couldn't create your account. Please try again.` All five
+follow the shape of the one live message rather than inventing a voice, but none was read off a
+frame. The `Screens/22 Register` story's `WithMessages` case renders all of them at once, which is
+the quickest thing to put in front of the designer.
+
+The second shape is the one that needs an actual decision rather than a sign-off: **a form-level
+message, which `ui/Field` has no concept of.** Field owns per-field messages and deliberately
+carries no `role="alert"`; a failed request belongs to no field and arrives after a network round
+trip with nothing else on screen changing, so PET-11's line sits above the footer row in Field's
+own treatment *with* `role="alert"`. If a second form ever needs one, that is the moment it
+belongs in `ui/` rather than in a screen.
+
+Two things the same screen does not validate, both deliberate. `@MaxLength(100)` on the two names
+is **not** mirrored client-side: no `maxlength` is drawn in the frame, so a longer name gets a 400
+rendered as the generic form-level message rather than an inline one. And `isEmailValid` is looser
+than the DTO's `@IsEmail()`, which is validator.js, so a handful of addresses pass here and come
+back a 400 the same way - `draft.test.ts` pins `marko@email.com.` as the example. Closing either
+gap means shipping a validation dependency for one field, or copying validator.js's expression
+into the frontend where it would rot silently.
 
 ### The starter category list exists in two files, linked only by a generated type
 

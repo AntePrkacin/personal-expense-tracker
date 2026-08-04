@@ -16,14 +16,32 @@ consequence: `GET http://localhost:3000/` returns 404, which is normal, not a br
 server. The e2e test re-applies the same prefix manually to match production, so if you
 change the prefix you must change it in both places.
 
-**Frontend to backend data flow: server-side, and currently nonexistent.** No file in
-`frontend/src` fetches the backend any more. PET-19 deleted the scaffold greeting page, which
-was the only caller; `/` is now the Welcome screen behind a session gate whose read is still a
-stub (PET-52). The shape the first real read has to take is still fixed, though: an
-**async Server Component** (or a route handler) fetching at request
+**Frontend to backend data flow: server-side, and currently one write and no reads.** PET-19
+deleted the scaffold greeting page, which had been the only caller, and PET-11 restored the wire
+from the other end: `POST /api/auth/register` is the one backend call `frontend/src` makes today.
+There are still **no reads** - `/` is the Welcome screen behind a session gate whose own read is
+a stub (PET-52). The shape the first real read has to take is still fixed: an **async Server
+Component** (or a route handler) fetching at request
 time with `cache: 'no-store'`, so the session cookie never leaves the server and no CORS is
 involved. CORS is enabled on the backend anyway (`main.ts`), for the case of genuinely
 client-side fetches, allowing origin `FRONTEND_URL`.
+
+**A write from a form is a Server Action**, which is the shape PET-11 established in
+`frontend/src/app/setup/register/actions.ts`. The rule above names a Server Component or a route
+handler because it was written about reads, and neither fits a POST that a client-side form fires
+and then branches on: a Server Component cannot be invoked by an event, and a route handler would
+publish an endpoint on the frontend's own origin that only its own form should ever reach. What
+the two shapes share is the part that matters - the request leaves the server, so `BACKEND_URL`
+and any cookie stay there, and `cache: 'no-store'` is set explicitly, because a POST Next decided
+to cache would silently swallow a second attempt. A route handler is still the right answer when
+the browser has to navigate *to* the call rather than fire it, which is why PET-52's verify page
+will use one: it has to set a cookie during a GET.
+
+**An action returns a result rather than throwing.** An unhandled rejection inside a Server
+Action reaches the client as an opaque digest with nothing a screen can render, so the caller
+would have no way to tell a validation rejection from an unreachable backend. `registerAccount`
+answers a discriminated `{ ok: true } | { ok: false; status? }`, and the absent status is what
+"the request never completed" looks like.
 
 ## One contract, generated, and the frontend types come out of it
 

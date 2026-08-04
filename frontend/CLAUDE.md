@@ -274,14 +274,14 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Three of the six access screens**, meaning the three that are missing: Register, Log in and
-  Check your email are PET-11 and PET-12, so `/setup/register` and `/login` **404 until they
-  land** - which means onboarding currently dead-ends at step 2's "Continue". Welcome at `/`,
-  Setup step 1 at `/setup` and Setup step 2 at `/setup/categories` do exist (see "The access
-  screens" in `frontend/src/app/CLAUDE.md`), which is why the count reads the same either way.
-  The verify page that consumes an emailed link is PET-52's, along with filling in
-  `hasSession()` so `/` can send a signed-in visitor to the Dashboard instead of showing
-  everyone the pitch.
+- **Two of the six access screens**, meaning the two that are missing: Log in and Check your
+  email are both PET-12, so `/login` and `/check-email` **404 until they land** - which means
+  onboarding now runs to the end and then dead-ends on "Finish setup", after the account has
+  really been created. Welcome at `/`, and all three onboarding steps at `/setup`,
+  `/setup/categories` and `/setup/register`, do exist (see "The access screens" in
+  `frontend/src/app/CLAUDE.md`). The verify page that consumes an emailed link is PET-52's, along
+  with filling in `hasSession()` so `/` can send a signed-in visitor to the Dashboard instead of
+  showing everyone the pitch.
 - **The `/api/chat` route handler.** No route handler exists, and the env template deliberately
   declares no model-provider key. Add whichever variable your provider needs when you build the
   route, server-side only and never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once
@@ -293,9 +293,11 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `requireSession()` lets every request through (PET-52), and the sidebar footer shows
   `PLACEHOLDER_PROFILE` rather than a real profile (PET-45 reached with PET-52's cookie). The
   month select and the search field are drawn but inert by design.
-- **Any call to the backend at all, which is the single biggest gap.** **Nothing in
-  `frontend/src` fetches the backend**: no verify page, no session cookie, no reads. The backend
-  half is complete, so what is missing is this side. The session cookie is the frontend's own
-  httpOnly first-party one, forwarded server-side; the backend reads no cookies, and the
-  cookie's name is still undecided. Everything above inherits from this: both session seams are
-  stubs and the shell's profile is a placeholder.
+- **Any _read_ from the backend, which is still the single biggest gap.** PET-11 ended the
+  "nothing fetches at all" era with exactly one write - `registerAccount` in
+  `app/setup/register/actions.ts` posts `POST /api/auth/register` - and that is the whole of it:
+  **no reads, no verify page, no session cookie.** The backend half is complete, so what is
+  missing is this side. The session cookie is the frontend's own httpOnly first-party one,
+  forwarded server-side; the backend reads no cookies, and the cookie's name is still undecided.
+  Everything above inherits from this: both session seams are stubs and the shell's profile is a
+  placeholder.
