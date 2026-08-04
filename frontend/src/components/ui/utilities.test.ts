@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { compile } from 'tailwindcss';
 
-import { BUTTON_VARIANTS } from './Button';
+import { BUTTON_BASE, BUTTON_VARIANTS } from './Button';
 import { CATEGORY_TILE } from './categoryColour';
 import { FIELD_CONTROL_BASE, FIELD_CONTROL_BORDER, FIELD_CONTROL_SURFACE } from './Field';
 import { INPUT_VARIANTS } from './Input';
@@ -10,13 +10,15 @@ import { SELECT_CONTROL } from './Select';
 import { NAV_ITEM_ICON, NAV_ITEM_LABEL, NAV_ITEM_SURFACE } from './Sidebar';
 import { TAG_TONES } from './Tag';
 
-// Proves every utility the components and the app shell rely on actually
-// generates CSS.
+// Proves every utility the components, the app shell and the access screens rely
+// on actually generates CSS.
 //
-// It covers app/(app)/ as well as this folder, despite living here. A parallel
-// guard next to the shell would mean a third copy of the compile harness below,
-// and the note at the end of this comment says to lift it into a helper before
-// that happens - so until somebody does, one list is better than two.
+// It covers app/(app)/ and the Welcome screen (app/WelcomeScreen.tsx,
+// app/DecorativePanel.tsx, components/LogoLockup.tsx) as well as this folder,
+// despite living here. A parallel guard next to each would mean a third and fourth
+// copy of the compile harness below, and the note at the end of this comment says to
+// lift it into a helper before that happens - so until somebody does, one list is
+// better than three.
 //
 // The colocated *.test.tsx files assert that a component applies the *expected*
 // class. Only this file catches the other failure: a class that is spelled
@@ -41,11 +43,15 @@ const HARDCODED = [
   'text-label-l',
   'text-display-s',
   'text-display-m',
+  'text-display-l',
+  'text-display-xl',
   'text-heading-m',
+  'text-heading-l',
   'text-strong-s',
   'text-strong-m',
   'text-body-s',
   'text-body-m',
+  'text-body-l',
   'text-caption',
   'text-overline',
   'text-wordmark',
@@ -54,11 +60,18 @@ const HARDCODED = [
   'text-text-secondary',
   'text-text-tertiary',
   'text-brand-accent',
+  // Listed even though TAG_TONES already reaches it: the Welcome overline types it
+  // straight into JSX, and `text-brand-accent` above is here twice for the same
+  // reason. It is what Figma binds the overline to, not a slip for `text-brand-accent`.
+  'text-brand-accent-pressed',
   'text-white',
   'bg-surface-muted',
   'bg-brand-accent',
   'bg-status-danger',
   'bg-transparent',
+  // The card and the two floating chips on the Welcome panel, and the story chrome
+  // this moved out of; see the note at the foot of this file.
+  'bg-surface-card',
   // the dark-surface tokens, which only the sidebar uses
   'bg-surface-ink',
   'bg-surface-ink-elevated',
@@ -66,25 +79,43 @@ const HARDCODED = [
   'text-text-on-dark-subtle',
   // radius, whose namespace is cleared: `rounded` on its own does not exist
   'rounded-md',
+  'rounded-xl',
   'rounded-full',
   // Off the Foundations scale, which offers only 8 and 12. Figma bound the
   // sidebar's logo tile and nav pills to a raw 10px rather than a radius
-  // variable, so this is a literal. It compiles without a token lookup, so no
-  // token change can break it; it is here to be found when the designer resolves
-  // the gap.
+  // variable, and the access screens' larger 38px logo tile to a raw 11px, so
+  // these are literals. They compile without a token lookup, so no token change can
+  // break them; they are here to be found when the designer resolves the gap.
+  //
+  // That there are two different off-scale values for the same lockup at two sizes
+  // is the argument that both are slips rather than intent.
   'rounded-[10px]',
+  'rounded-[11px]',
   // sizing and spacing, which share the --spacing namespace
   'size-1.5',
+  'size-2.5',
   'size-4',
   'size-5',
   'size-8.5',
   'size-9',
+  'size-9.5',
   'size-10',
+  'size-90',
+  'size-130',
   'h-1.25',
   'h-2',
   'h-full',
   'w-2.5',
   'w-65',
+  'w-90',
+  // 430px and 460px, the designed widths of the Welcome intro copy and heading.
+  // Spacing steps rather than `w-[430px]` literals because both are expressible on
+  // the scale, which is the same call `w-65` (260px) makes; MonthPill's `h-[4.5px]`
+  // is a literal only because 4.5px is not. Being on the scale is exactly why they
+  // belong here: a fractional step is what a redefined scale silently drops.
+  'w-107.5',
+  'w-115',
+  'w-140',
   'w-full',
   'gap-0.5',
   'gap-1',
@@ -92,23 +123,33 @@ const HARDCODED = [
   'gap-1.5',
   'gap-1.75',
   'gap-2',
+  'gap-2.25',
   'gap-2.75',
   'gap-3',
   'gap-3.5',
+  'gap-4.5',
+  'gap-5',
   'gap-5.5',
   'gap-px',
   'px-2.5',
   'px-3',
   'px-5',
+  'px-6.5',
+  'px-20',
   'py-1',
   'py-2.75',
   'py-3',
   'pt-1',
   'pt-3',
+  'pt-6',
   'pt-7',
+  'pt-8',
+  'pt-16',
   'pb-0.5',
   'pb-2',
   'pb-6',
+  'pb-6.5',
+  'pb-14',
   'pl-2',
   'pl-3',
   'min-w-0',
@@ -116,6 +157,26 @@ const HARDCODED = [
   'left-4',
   'top-1/2',
   '-translate-y-1/2',
+  // The Welcome panel's absolute placement (app/DecorativePanel.tsx): two circles
+  // bleeding off two edges, the sample budget card, and the two floating chips.
+  // Every one is a --spacing step, including the negative and fractional ones, so
+  // they fail exactly the way a sizing utility would if the scale were redefined.
+  'left-15',
+  'left-25',
+  'left-45',
+  'left-52.5',
+  '-left-30',
+  'top-55',
+  'top-75',
+  'top-130',
+  'top-160',
+  '-top-35',
+  // Opacity, a namespace nothing else in the repo touches. The two circles are the
+  // only consumers: Figma fills both with a raw hex at 28% and 18%, and we ship the
+  // brand token under those opacities instead. Bare integers are legal here and
+  // compile to `opacity: 28%`.
+  'opacity-18',
+  'opacity-28',
   // The app shell: app/(app)/layout.tsx, SidebarNav, PageHeader and the two
   // inert header pills. Same reasoning as everything above - these are typed
   // straight into JSX, so nothing else would notice one of them generating
@@ -143,6 +204,7 @@ const HARDCODED = [
   'flex',
   'flex-col',
   'items-center',
+  'items-baseline',
   'justify-center',
   'justify-between',
   'shrink-0',
@@ -170,6 +232,21 @@ const HARDCODED = [
   'placeholder:text-text-tertiary',
 ];
 
+// Two classes are DELIBERATELY absent from the list above: the sample budget card's
+// `shadow-[0px_24px_50px_0px_rgba(0,0,0,0.35)]` and the floating chips'
+// `shadow-[0px_10px_24px_0px_rgba(0,0,0,0.25)]` in app/DecorativePanel.tsx. They are
+// the first two shadows in the repo, because Foundations declares no shadow tokens
+// (see docs/TODO.md, which asks the designer whether it should).
+//
+// Excluded for the reason STORY_CHROME's note gives about `w-[520px]`: they compile
+// to literal CSS with no token lookup, so there is nothing a token change could
+// break. But there is a second, sharper reason to know about before adding them -
+// `selector()` below escapes only . : / [ ] and Tailwind writes these as
+// `.shadow-\[0px_10px_24px_0px_rgba\(0\,0\,0\,0\.25\)\]`, so a shadow candidate
+// reports "generates no CSS" for a class that generates fine. The fix, if a later
+// ticket does want them guarded, is one character class: `[.:/[\]().,#]`. The same
+// gap applies to any `bg-[#4F45E6]`-style raw colour.
+
 /**
  * The variant maps, flattened.
  *
@@ -179,7 +256,10 @@ const HARDCODED = [
  */
 const split = (classes: string) => classes.split(' ');
 
-const BUTTON_VARIANTS_CLASSES = Object.values(BUTTON_VARIANTS).flatMap(split);
+const BUTTON_VARIANTS_CLASSES = [
+  ...split(BUTTON_BASE),
+  ...Object.values(BUTTON_VARIANTS).flatMap(split),
+];
 
 const FIELD_CLASSES = [
   ...split(FIELD_CONTROL_BASE),
@@ -212,16 +292,13 @@ const NAV_ITEM_CLASSES = [NAV_ITEM_SURFACE, NAV_ITEM_LABEL, NAV_ITEM_ICON].flatM
  * with no token lookup, so there is nothing about them a token change could break.
  */
 const STORY_CHROME = [
-  'bg-surface-card',
   'border-border-default',
   'divide-border-subtle',
   'divide-y',
-  'rounded-xl',
   'p-8',
   'px-7',
   'py-6',
   'gap-4',
-  'gap-5',
   'gap-12',
   // The sidebar's own decorator: a fixed-height frame, because justify-between
   // needs a constrained height to put the footer at the bottom.
@@ -230,7 +307,9 @@ const STORY_CHROME = [
 ];
 
 // `gap-3` used to live in STORY_CHROME. The sidebar's nav items hard-code it, so
-// it moved to HARDCODED above; it is still guarded either way.
+// it moved to HARDCODED above; it is still guarded either way. `bg-surface-card`,
+// `rounded-xl` and `gap-5` went the same way when the Welcome screen hard-coded all
+// three - the card, its radius, and the pitch block's stacking gap.
 
 const EXPECTED = [
   ...Object.values(TAG_TONES).flatMap(({ pill, dot }) => [...pill.split(' '), dot]),
@@ -341,14 +420,18 @@ describe('component utilities compile', () => {
     expect(EXPECTED).toContain('appearance-none');
     expect(EXPECTED).toContain('bg-surface-ink-raised');
     expect(EXPECTED).toContain('text-text-on-dark-subtle');
+    // The opacity namespace, which only the Welcome panel's two circles touch, so
+    // nothing else here would notice it disappearing.
+    expect(EXPECTED).toContain('opacity-28');
   });
 
-  it('guards the two constants that are bare strings rather than maps', () => {
-    // A key count cannot protect these. Empty either one and it contributes a
+  it('guards the three constants that are bare strings rather than maps', () => {
+    // A key count cannot protect these. Empty any one and it contributes a
     // single '' to EXPECTED, which `generates` now rejects - but only because it
     // special-cases it, so the shape is worth asserting at the source too.
     expect(FIELD_CONTROL_BASE.split(' ').length).toBeGreaterThanOrEqual(6);
     expect(SELECT_CONTROL.split(' ').length).toBeGreaterThanOrEqual(9);
+    expect(BUTTON_BASE.split(' ').length).toBeGreaterThanOrEqual(8);
     expect(EXPECTED).not.toContain('');
   });
 
