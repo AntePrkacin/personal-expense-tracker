@@ -51,8 +51,7 @@ git --version
 Judge the output of `command -v node`:
 
 - A path under a version manager or system prefix (`~/.nvm/versions/node/...`,
-  `/usr/local/bin`, `/opt/homebrew/bin`, `~/.fnm/...`, `C:\Program Files\nodejs\...`) means
-  a real system Node. Good.
+  `/usr/local/bin`, `/opt/homebrew/bin`) means a real system Node. Good.
 - A path inside a Claude Code installation (contains `.claude`, `Claude`, `claude-code`,
   or sits next to the Claude binary) means you are seeing a **bundled runtime**. The user
   very likely has no Node of their own. Treat this as "Node is missing" and go to Step 2.
@@ -100,22 +99,6 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 nvm install      # reads .nvmrc
 nvm use          # reads .nvmrc
 ```
-
-**Windows** - `nvm` from the block above does not exist on Windows. Use fnm, which also
-reads `.nvmrc`:
-
-```powershell
-winget install Schniz.fnm
-# reopen the terminal, then from the repo root:
-fnm install
-fnm use
-```
-
-Add fnm's shell hook so the version switches automatically per directory, following
-<https://github.com/Schniz/fnm#shell-setup>. Alternatives, if the student prefers: nvm-windows
-(<https://github.com/coreybutler/nvm-windows>, note it does not read `.nvmrc`, so pass `24`
-explicitly), or `winget install OpenJS.NodeJS.LTS` for a plain install with no version
-switching, or WSL2 and then the macOS/Linux instructions inside it.
 
 After they report back, re-run Step 1 and confirm their own terminal now prints a version
 that satisfies `.nvmrc`. Do not proceed until it does. Everything after this point fails
@@ -245,8 +228,7 @@ Then they open `http://localhost:4200` in a browser. The frontend calls the API 
 `http://localhost:3000`; traffic never goes the other way.
 
 If a port is already taken, the offender is usually a dev server from an earlier session.
-On macOS/Linux `lsof -nP -iTCP:3000 -sTCP:LISTEN` names the process; on Windows
-`netstat -ano | findstr :3000`.
+`lsof -nP -iTCP:3000 -sTCP:LISTEN` names the process.
 
 ---
 
