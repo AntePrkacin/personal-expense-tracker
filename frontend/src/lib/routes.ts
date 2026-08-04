@@ -16,25 +16,37 @@
 // to declare. app/page.tsx is the one place that fact lives.
 
 /**
- * The two destinations 01 Welcome links out to.
+ * Where the access screens live.
  *
- * Both 404 today - PET-9 and PET-12 own the screens behind them - which is as far
- * as a frontend-only ticket reaches: the href is the contract, and an inert
- * control would fail WEL-2 and WEL-3 outright while hiding it.
+ * `/setup` is built. The other two 404 today, which is as far as a frontend-only
+ * ticket reaches: the href is the contract, and an inert control would fail its
+ * criterion outright while hiding that it had.
  *
- * `/setup` is chosen so it is correct however PET-9 shapes onboarding. If the
- * three steps share one route it is that route; if each gets its own it is step
- * one's. Either way this string does not move. See "The onboarding route shape"
- * in docs/TODO.md for the trade-off, which is PET-9's to settle.
+ * **PET-9 settled the onboarding route shape**: three nested routes under one
+ * layout, not one route rendering three steps from client state. All three
+ * onboarding tickets carry an explicit "Back keeps my values" criterion (PET-9
+ * AC5, PET-10 AC4, PET-11 AC5), so back-navigation is a first-class path here,
+ * and the one-route design makes the browser's own Back button leave onboarding
+ * and discard the draft. `/setup` did not have to move either way, which is why
+ * PET-8 could point at it before the question was answered.
  *
- * TODO(PET-9, PET-12): once those `page.tsx` files exist, assert with `fs` that
- * every value here has a route folder behind it, the way SidebarNav.test.tsx does.
- * That check cannot be written yet, and asserting the absence would be a test
- * somebody has to delete.
+ * `lib/routes.test.ts` asserts with `fs` that every built route has a `page.tsx`
+ * behind it, the way SidebarNav.test.tsx does for the four app routes. It
+ * classifies rather than filters, so adding a key here forces a decision about
+ * which list it belongs in instead of silently escaping the check.
  */
 export const ACCESS_ROUTES = {
-  /** 02 Setup - Currency & budget (PET-9, WEL-2, A1). */
+  /** 02 Setup - Currency & budget (PET-9, WEL-2, A1). Onboarding step 1 of 3. */
   setup: '/setup',
+  /**
+   * 03 Setup - Starter categories (PET-10, CAT-4). Onboarding step 2 of 3.
+   *
+   * Nested under step 1's route rather than a sibling `/setup-categories`, which
+   * is what puts it inside `app/setup/layout.tsx` and so inside the draft
+   * provider. That nesting is the mechanism behind "Back keeps my values", not a
+   * cosmetic choice about the URL.
+   */
+  setupCategories: '/setup/categories',
   /** 23 Log in (PET-12, WEL-3, A2). The only route into the returning-user flow. */
   login: '/login',
 } as const;

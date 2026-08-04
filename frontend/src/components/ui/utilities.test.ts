@@ -9,16 +9,18 @@ import { INPUT_VARIANTS } from './Input';
 import { SELECT_CONTROL } from './Select';
 import { NAV_ITEM_ICON, NAV_ITEM_LABEL, NAV_ITEM_SURFACE } from './Sidebar';
 import { TAG_TONES } from './Tag';
+// Outside this folder, like the shell's maps: see the note on coverage above.
+import { STEP_DOT } from '../../app/setup/SetupShell';
 
 // Proves every utility the components, the app shell and the access screens rely
 // on actually generates CSS.
 //
-// It covers app/(app)/ and the Welcome screen (app/WelcomeScreen.tsx,
-// app/DecorativePanel.tsx, components/LogoLockup.tsx) as well as this folder,
-// despite living here. A parallel guard next to each would mean a third and fourth
-// copy of the compile harness below, and the note at the end of this comment says to
-// lift it into a helper before that happens - so until somebody does, one list is
-// better than three.
+// It covers app/(app)/, the Welcome screen (app/WelcomeScreen.tsx,
+// app/DecorativePanel.tsx, components/LogoLockup.tsx) and app/setup/ as well as
+// this folder, despite living here. A parallel guard next to each would mean a
+// third and fourth copy of the compile harness below, and the note at the end of
+// this comment says to lift it into a helper before that happens - so until
+// somebody does, one list is better than four.
 //
 // The colocated *.test.tsx files assert that a component applies the *expected*
 // class. Only this file catches the other failure: a class that is spelled
@@ -81,6 +83,12 @@ const HARDCODED = [
   'rounded-md',
   'rounded-xl',
   'rounded-full',
+  // elevation, whose four namespaces are cleared the same way: `shadow` and
+  // `shadow-lg` do not exist either, and globals.test.ts is what pins that.
+  // Card is Setup step 1's card, panel and chip the Welcome panel's two.
+  'shadow-card',
+  'shadow-panel',
+  'shadow-chip',
   // Off the Foundations scale, which offers only 8 and 12. Figma bound the
   // sidebar's logo tile and nav pills to a raw 10px rather than a radius
   // variable, and the access screens' larger 38px logo tile to a raw 11px, so
@@ -115,6 +123,9 @@ const HARDCODED = [
   // belong here: a fractional step is what a redefined scale silently drops.
   'w-107.5',
   'w-115',
+  // 520px, the setup card on frames 02 and 22. Frame 03 is 600px, so PET-10 adds
+  // `w-150` beside this rather than replacing it.
+  'w-130',
   'w-140',
   'w-full',
   'gap-0.5',
@@ -130,6 +141,7 @@ const HARDCODED = [
   'gap-4.5',
   'gap-5',
   'gap-5.5',
+  'gap-6',
   'gap-px',
   'px-2.5',
   'px-3',
@@ -139,16 +151,19 @@ const HARDCODED = [
   'py-1',
   'py-2.75',
   'py-3',
+  'py-10',
   'pt-1',
   'pt-3',
   'pt-6',
   'pt-7',
   'pt-8',
+  'pt-9',
   'pt-16',
   'pb-0.5',
   'pb-2',
   'pb-6',
   'pb-6.5',
+  'pb-8',
   'pb-14',
   'pl-2',
   'pl-3',
@@ -232,20 +247,14 @@ const HARDCODED = [
   'placeholder:text-text-tertiary',
 ];
 
-// Two classes are DELIBERATELY absent from the list above: the sample budget card's
-// `shadow-[0px_24px_50px_0px_rgba(0,0,0,0.35)]` and the floating chips'
-// `shadow-[0px_10px_24px_0px_rgba(0,0,0,0.25)]` in app/DecorativePanel.tsx. They are
-// the first two shadows in the repo, because Foundations declares no shadow tokens
-// (see docs/TODO.md, which asks the designer whether it should).
-//
-// Excluded for the reason STORY_CHROME's note gives about `w-[520px]`: they compile
-// to literal CSS with no token lookup, so there is nothing a token change could
-// break. But there is a second, sharper reason to know about before adding them -
-// `selector()` below escapes only . : / [ ] and Tailwind writes these as
-// `.shadow-\[0px_10px_24px_0px_rgba\(0\,0\,0\,0\.25\)\]`, so a shadow candidate
-// reports "generates no CSS" for a class that generates fine. The fix, if a later
-// ticket does want them guarded, is one character class: `[.:/[\]().,#]`. The same
-// gap applies to any `bg-[#4F45E6]`-style raw colour.
+// The three shadows in HARDCODED above (`shadow-card`, `shadow-panel`, `shadow-chip`)
+// are ordinary token lookups, so they belong here like any other class. They did not
+// used to be: until PET-9 they were arbitrary literals in app/DecorativePanel.tsx and
+// were excluded, because `selector()` escaped only . : / [ ] while Tailwind writes an
+// arbitrary shadow as `.shadow-\[0px_10px_24px_0px_rgba\(0\,0\,0\,0\.25\)\]`, so the
+// candidate reported "generates no CSS" for a class that generated fine. `selector()`
+// now escapes parens, commas and `#` too, which is what makes any future
+// `bg-[#4F45E6]`-style raw value guardable rather than silently unassertable.
 
 /**
  * The variant maps, flattened.
@@ -282,6 +291,15 @@ const NAV_ITEM_CLASSES = [NAV_ITEM_SURFACE, NAV_ITEM_LABEL, NAV_ITEM_ICON].flatM
 );
 
 /**
+ * The onboarding step indicator's two dot states (app/setup/SetupShell.tsx).
+ *
+ * Guarded here rather than in a fourth copy of this harness, the same call the
+ * shell's maps made. Both values are pure geometry and one colour, so a token
+ * rename to `border-strong` or `brand-accent` is exactly what this catches.
+ */
+const STEP_DOT_CLASSES = Object.values(STEP_DOT).flatMap(split);
+
+/**
  * Classes used only by the stories, to frame a component against a card.
  *
  * Worth guarding for the same reason as the components: Storybook is where
@@ -299,6 +317,8 @@ const STORY_CHROME = [
   'px-7',
   'py-6',
   'gap-4',
+  // Separates the three shells in the 02 Setup step-indicator story.
+  'gap-8',
   'gap-12',
   // The sidebar's own decorator: a fixed-height frame, because justify-between
   // needs a constrained height to put the footer at the bottom.
@@ -319,6 +339,7 @@ const EXPECTED = [
   ...INPUT_VARIANT_CLASSES,
   ...SELECT_CONTROL.split(' '),
   ...NAV_ITEM_CLASSES,
+  ...STEP_DOT_CLASSES,
   ...HARDCODED,
   ...STORY_CHROME,
 ];
@@ -341,8 +362,17 @@ const FORBIDDEN = ['bg-category-9-taupe', 'text-status-info', 'bg-status-danger-
  * classes actually contain: `.` in `size-1.5`, `:` in a variant prefix like
  * `focus-visible:outline-2`, `/` in `top-1/2`, and the brackets of an arbitrary
  * value such as `border-[1.5px]`.
+ *
+ * Parens, commas and `#` are in the set for a class of candidate this file could
+ * not previously assert at all rather than for one it contains today: Tailwind
+ * writes an arbitrary shadow as
+ * `.shadow-\[0px_10px_24px_0px_rgba\(0\,0\,0\,0\.25\)\]` and a raw colour as
+ * `.bg-\[\#4F45E6\]`, so leaving them unescaped made a perfectly compiled class
+ * report "generates no CSS". That false negative is why the two Welcome shadows
+ * sat outside this guard until PET-9 turned them into tokens.
  */
-const selector = (candidate: string) => `.${candidate.replace(/[.:/[\]]/g, (char) => `\\${char}`)}`;
+const selector = (candidate: string) =>
+  `.${candidate.replace(/[.:/[\]().,#]/g, (char) => `\\${char}`)}`;
 
 /**
  * Characters that may legally follow a class name in a compiled selector.
@@ -413,6 +443,7 @@ describe('component utilities compile', () => {
     expect(Object.keys(NAV_ITEM_SURFACE)).toHaveLength(2);
     expect(Object.keys(NAV_ITEM_LABEL)).toHaveLength(2);
     expect(Object.keys(NAV_ITEM_ICON)).toHaveLength(2);
+    expect(Object.keys(STEP_DOT)).toHaveLength(2);
     expect(EXPECTED).toContain('bg-category-8-pink');
     expect(EXPECTED).toContain('text-brand-accent-pressed');
     expect(EXPECTED).toContain('text-status-danger-text');
@@ -439,6 +470,20 @@ describe('component utilities compile', () => {
     // selector('') is "." on its own. Left unguarded, an emptied constant turns
     // its whole assertion into `expect(anyCss).toContain('.')`.
     expect(generates(compiled, '')).toBe(false);
+  });
+
+  it('escapes the characters an arbitrary value puts in a class name', () => {
+    // No candidate above exercises this today - PET-9 turned the repo's only two
+    // arbitrary-value classes into shadow tokens - so it is pinned directly. Both
+    // strings are Tailwind's real output, read off a compile rather than derived
+    // by hand. Revert the escaping and a perfectly compiled class reports
+    // "generates no CSS", which reads as a missing utility rather than as a
+    // broken helper, and that is exactly how the two shadows escaped this guard
+    // for two tickets.
+    expect(selector('shadow-[0px_10px_24px_0px_rgba(0,0,0,0.25)]')).toBe(
+      '.shadow-\\[0px_10px_24px_0px_rgba\\(0\\,0\\,0\\,0\\.25\\)\\]',
+    );
+    expect(selector('bg-[#4F45E6]')).toBe('.bg-\\[\\#4F45E6\\]');
   });
 
   it.each(EXPECTED)('%s generates CSS', (candidate) => {
