@@ -1,4 +1,4 @@
-import { parseAmountInput } from '@/lib/format';
+import { formatAmountInput, parseAmountInput } from '@/lib/format';
 
 // The onboarding draft: everything screens 02, 03 and 22 collect before there is
 // an account to save it to.
@@ -81,6 +81,18 @@ function readString(source: Record<string, unknown>, key: string, fallback: stri
  *
  * Note `typeof null === 'object'`, so the null check is not redundant with the
  * object check.
+ *
+ * **The budget is re-canonicalised on the way out, not trusted.** Returning the
+ * stored string verbatim looked harmless and was not: a value that did not come
+ * from `formatAmountInput` renders straight into a controlled input and passes
+ * `isBudgetValid` unchanged. A stored `'2.000,50'` - which is what a European
+ * paste produces, or an older build of the formatter - read back as
+ * `parseAmountInput` = `2.0005`, four decimals, which `RegisterDto`'s
+ * `@IsNumber({ maxDecimalPlaces: 2 })` rejects. The screen would have shown a
+ * plausible number, validated it, and handed step 3 a payload the backend 400s
+ * on, with no error state designed for that (A29). Running it through the
+ * formatter here means every value this module hands out is one the field could
+ * have produced itself. Idempotence is what makes it free for the normal case.
  */
 export function parseDraft(raw: string | null): SetupDraft {
   if (raw === null) return EMPTY_DRAFT;
@@ -99,7 +111,7 @@ export function parseDraft(raw: string | null): SetupDraft {
   const source = parsed as Record<string, unknown>;
   return {
     currency: readString(source, 'currency', DEFAULT_CURRENCY),
-    budget: readString(source, 'budget', ''),
+    budget: formatAmountInput(readString(source, 'budget', '')),
   };
 }
 

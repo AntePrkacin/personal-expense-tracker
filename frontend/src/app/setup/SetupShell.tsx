@@ -101,6 +101,13 @@ export function SetupShell({ step, children }: { step: SetupStep; children: Reac
     // root layout's `min-h-full flex flex-col` - the same hook WelcomeScreen uses.
     //
     // gap-6 is the designed 24px, twice: lockup to indicator, indicator to card.
+    //
+    // py-10 has **no Figma counterpart** and is the one addition on this screen.
+    // The frame is a fixed 1024px tall, so the centred column always fits; a real
+    // browser window shorter than the card would clip it against the viewport
+    // instead, because `justify-center` overflows in both directions. The padding
+    // is what turns that into a scroll. Same class of deliberate deviation as the
+    // five `ui/` form details `frontend/CLAUDE.md` lists.
     <div className="flex flex-1 flex-col items-center justify-center gap-6 py-10">
       <LogoLockup />
 

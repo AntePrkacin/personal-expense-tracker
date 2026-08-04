@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
+import { SETUP_DRAFT_KEY } from './draft';
 import { useSetupDraft } from './SetupDraftProvider';
 import SetupLayout from './layout';
 
@@ -60,6 +62,63 @@ describe('SetupLayout', () => {
     // copying it across from the shell is the obvious reflex mistake.
     const segment: Record<string, unknown> = jest.requireActual('./layout');
     expect(segment.dynamic).toBeUndefined();
+  });
+});
+
+describe('patchDraft', () => {
+  /** Exposes both halves of the context so a patch can be driven from a click. */
+  function DraftEditor() {
+    const { draft, patchDraft } = useSetupDraft();
+    return (
+      <>
+        <p>
+          {draft.currency} / {draft.budget}
+        </p>
+        <button onClick={() => patchDraft({ budget: '2,000' })}>set budget</button>
+        <button onClick={() => patchDraft({ currency: 'EUR' })}>set currency</button>
+      </>
+    );
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it('merges one field without clobbering the other', async () => {
+    // The property PET-10 depends on: step 2 writing its categories must not wipe
+    // step 1's budget. Covered here rather than through the currency select, which
+    // has one option (A6) and so cannot fire its own onChange at all - that
+    // handler is unreachable until the option list grows.
+    const user = userEvent.setup();
+    render(
+      <SetupLayout>
+        <DraftEditor />
+      </SetupLayout>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'set budget' }));
+    expect(screen.getByText('USD / 2,000')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'set currency' }));
+
+    expect(screen.getByText('EUR / 2,000')).toBeInTheDocument();
+  });
+
+  it('persists the merged draft, not just the patch', async () => {
+    const user = userEvent.setup();
+    render(
+      <SetupLayout>
+        <DraftEditor />
+      </SetupLayout>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'set budget' }));
+    await user.click(screen.getByRole('button', { name: 'set currency' }));
+
+    expect(JSON.parse(sessionStorage.getItem(SETUP_DRAFT_KEY)!)).toEqual({
+      currency: 'EUR',
+      budget: '2,000',
+    });
   });
 });
 

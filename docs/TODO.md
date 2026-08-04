@@ -362,6 +362,24 @@ nothing is persisted until step 3 and the account already exists; worth a decisi
 makes a session readable. The cheapest answer is the same `hasSession()` branch `app/page.tsx`
 already uses.
 
+### The currency select has one option, and two things wait on A6
+
+`frontend/src/app/setup/BudgetForm.tsx` renders `CURRENCY_OPTIONS` with the single
+`USD - $` the design file contains. Two consequences, both of which resolve themselves the
+day A6 is answered and a second currency appears:
+
+Its `onChange` **cannot fire**, so `patchDraft({ currency })` is unreachable from the UI and
+untested through it. The merge semantics that handler relies on are covered directly in
+`app/setup/layout.test.tsx` instead, which is the part PET-10 actually depends on.
+
+And a stored `currency` is not checked against the option list. `parseDraft` canonicalises
+the budget but only type-checks the currency, so a draft carrying `EUR` - devtools, or a
+build that offered more options - lands on a `<select>` with nothing matching. The browser
+then shows the first option while the draft still says `EUR`, and step 3 would post it.
+Harmless while one option exists; the fix, when the list grows, is for `parseDraft` to fall
+back to `DEFAULT_CURRENCY` for a code it does not recognise, which means the allowlist has
+to move out of the form and into `draft.ts` beside the rest of the shape.
+
 ### A29's inline error pattern is now live rather than illustrative
 
 `ui/Field`'s red-border-plus-one-line treatment shipped with PET-17 but nothing rendered it in

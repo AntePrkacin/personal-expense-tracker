@@ -73,6 +73,31 @@ describe('parseDraft', () => {
     });
   });
 
+  it.each([
+    ['a European paste', '2.000,50', '2.00'],
+    ['exponent notation', '1e5', '15'],
+    ['surrounding whitespace', '  12  ', '12'],
+    ['a stored sign', '-500', '500'],
+    ['junk', 'abc', ''],
+    ['an already-canonical value', '2,000', '2,000'],
+  ])('canonicalises %s on the way out', (_label, stored, expected) => {
+    // Regression guard. Returning the stored string verbatim let a value that no
+    // field could have produced render into a controlled input and pass
+    // isBudgetValid: '2.000,50' read back as 2.0005, four decimals, which
+    // RegisterDto's @IsNumber({ maxDecimalPlaces: 2 }) rejects - so the screen
+    // showed a plausible number and handed step 3 a guaranteed 400.
+    expect(parseDraft(JSON.stringify({ currency: 'USD', budget: stored })).budget).toBe(expected);
+  });
+
+  it('leaves nothing it returns that the backend would reject on decimals', () => {
+    // The property behind the case above, stated once rather than per input.
+    for (const stored of ['2.000,50', '1.239999', '0.005']) {
+      const { budget } = parseDraft(JSON.stringify({ budget: stored }));
+      const fraction = budget.split('.')[1] ?? '';
+      expect(fraction.length).toBeLessThanOrEqual(2);
+    }
+  });
+
   it('ignores keys it does not recognise', () => {
     // The forward-compatibility property PET-10 depends on: it adds a field, and
     // a payload written before that change still loads instead of being dropped.

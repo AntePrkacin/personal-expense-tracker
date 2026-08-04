@@ -51,10 +51,20 @@ const continueButton = () => screen.getByRole('button', { name: 'Continue' });
 
 const storedDraft = () => JSON.parse(sessionStorage.getItem(SETUP_DRAFT_KEY) ?? 'null');
 
+// Captured once, because AC4 replaces it. Restoring it per test keeps a later
+// "asserts no request" case falsifiable: a leaked stub would make one pass whether
+// or not the code fetches. Saved and reassigned rather than jest.spyOn'd, because
+// jsdom does not guarantee a global fetch to spy on in the first place.
+const originalFetch = global.fetch;
+
 beforeEach(() => {
   jest.clearAllMocks();
   sessionStorage.clear();
   (useRouter as jest.Mock).mockReturnValue({ push: mockPush });
+});
+
+afterEach(() => {
+  global.fetch = originalFetch;
 });
 
 describe('AC1: the card as designed', () => {

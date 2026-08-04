@@ -209,6 +209,17 @@ number represents `'2000.'` mid-type - the conversion happens once, at the bound
 3 builds its request. And `parseDraft` is **total**, because sessionStorage is writable from
 that tab's devtools console and a throw in the read would white-screen onboarding.
 
+**`parseDraft` also re-canonicalises the budget rather than trusting it**, which is not
+belt-and-braces. Returning the stored string verbatim let a value no field could have produced
+render straight into a controlled input and pass `isBudgetValid`: a stored `'2.000,50'` - a
+European paste, or an older formatter - read back as `2.0005`, four decimals, which
+`RegisterDto`'s `@IsNumber({ maxDecimalPlaces: 2 })` rejects. The screen would have shown a
+plausible number, validated it, and handed step 3 a guaranteed 400 with no error state designed
+for that (A29). Running the value through `formatAmountInput` on read means everything this
+module hands out is something the field could have produced, and idempotence is what makes that
+free for the normal case. The currency is only type-checked, not checked against the option
+list, which `docs/TODO.md` records as A6's to settle.
+
 **This is the repo's first stateful form, so its conventions are new.** `app/setup/BudgetForm.tsx`
 is a real `<form noValidate onSubmit>` with a `type="submit"` button, not an `onClick`: Enter in
 the budget field has to submit, and an `onClick`-only button leaves it dead on a two-field card.

@@ -85,17 +85,25 @@ export function SetupDraftProvider({ children }: { children: React.ReactNode }) 
   // two different readers: each test gets a fresh one after sessionStorage.clear(),
   // and nothing leaks between two providers if a future screen ever mounts a second.
   const cache = useRef<{ raw: string | null } | null>(null);
-  const listeners = useRef(new Set<() => void>());
+  // Lazily initialised rather than `useRef(new Set())`, which would allocate a
+  // fresh Set on every render and discard all but the first.
+  const listeners = useRef<Set<() => void> | null>(null);
 
   const subscribe = useCallback((listener: () => void) => {
-    listeners.current.add(listener);
+    const set = (listeners.current ??= new Set());
+    set.add(listener);
     return () => {
-      listeners.current.delete(listener);
+      set.delete(listener);
     };
   }, []);
 
   // Cached, so repeated calls in one render return the identical string. React
   // compares snapshots by identity and would otherwise re-render without end.
+  //
+  // The cache is only invalidated by patchDraft, so it goes stale if anything else
+  // clears the key mid-session. Nothing does - this provider is the sole writer,
+  // and sessionStorage fires no event for same-tab writes anyway, which is why
+  // subscribe has no storage listener to attach.
   const getSnapshot = useCallback(() => {
     cache.current ??= { raw: readStoredDraft() };
     return cache.current.raw;
@@ -123,7 +131,10 @@ export function SetupDraftProvider({ children }: { children: React.ReactNode }) 
         // Best effort. AC5 is what suffers, and only for this tab.
       }
 
-      for (const listener of listeners.current) listener();
+      // Nullable because the Set is created by the first subscribe. In practice
+      // useSyncExternalStore has always subscribed by the time a user event can
+      // fire, so this coalesce is for the type rather than for a real path.
+      for (const listener of listeners.current ?? []) listener();
     },
     [getSnapshot],
   );
