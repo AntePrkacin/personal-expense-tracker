@@ -8,9 +8,6 @@ definitions the harness loads; `docs/agents/` (this directory) holds prose agent
 **`.claude/SETTINGS.md` owns every permission decision** in `.claude/settings.json`, decision by
 decision, because JSON cannot hold comments; this file does not restate them.
 
-This repo ships Claude Code configuration. Knowing what is there prevents both
-reinventing it and being surprised by it.
-
 **Skills.** A skill is invoked by its own name, so the slash command is the full name in
 the left column (`/repo-dev-setup`). You do not have to remember them: each skill's
 description also matches plain requests, so "set me up locally" reaches `repo-dev-setup`
@@ -25,8 +22,8 @@ matching phrases, not registered commands.
 | `repo-jira`       | Creates/estimates/transitions Jira issues over MCP. Needs a Jira MCP server; see `.claude/skills/repo-jira/references/jira-access.md` for the two supported setups       |
 | `repo-review-prs` | Fetches open PRs via `gh` and reviews unreviewed ones                                                                                                                    |
 | `repo-stack`      | This repo's stacked-branch wiring: the layers of truth, the worktree trap, the conventions. CLI mechanics live in the committed official `gh-stack` skill                |
-| `backend-nestjs`  | Passive reference library, 12 NestJS rules across 7 categories. Consulted when writing backend code                                                                      |
-| `frontend-nextjs` | Passive reference library, 16 Next.js/React rules. Consulted when writing frontend code                                                                                  |
+| `backend-nestjs`  | Passive reference library of NestJS rules, vendored from upstream. Consulted when writing backend code                                                                    |
+| `frontend-nextjs` | Passive reference library of Next.js/React rules, vendored from upstream. Consulted when writing frontend code                                                            |
 | `backend-drizzle` | How Drizzle and Turso are wired in **this** repo: the two migration scopes, the database-per-user consequences, the Turso drivers. Deliberately not a drizzle-kit manual |
 
 **Agents** (delegated subtasks with their own context): `code-reviewer`, `debugger`,
@@ -50,9 +47,10 @@ byte-identical copy and a fresh clone works with no extra step; refreshing it is
 deliberate act - re-run the install and commit the diff. The repo's own `repo-stack`
 skill covers only this repo's stacked-branch wiring and defers the CLI to it.
 
-**Drizzle ships its own skills, and they are committed.** `drizzle-kit` bundles eight agent
-skills (`drizzle`, `drizzle-generate`, `drizzle-migrations`, `drizzle-push`, `drizzle-pull`,
-`drizzle-hints`, `drizzle-output-modes`, `drizzle-responses-and-errors`). `npm run skills`
+**Drizzle ships its own skills, and they are committed.** `drizzle-kit` bundles agent skills
+of its own (`drizzle`, `drizzle-generate`, `drizzle-migrations`, `drizzle-push`,
+`drizzle-pull`, `drizzle-hints`, `drizzle-output-modes`, `drizzle-responses-and-errors`, at
+the revision committed here). `npm run skills`
 at the repo root extracts them from the drizzle-kit in `backend/node_modules` into
 `.agents/skills/`, and symlinks `.claude/skills/drizzle*` at them.
 
@@ -68,8 +66,8 @@ that is needed: the `drizzle` skill compares its own `metadata.revision` against
 bundle is newer. That check is why committing them is safe - drift is surfaced rather than
 silent.
 
-Because those eight cover the CLI thoroughly, the repo's own `backend-drizzle` skill covers
-only this project's wiring and defers the rest to them.
+Because those cover the CLI thoroughly, the repo's own `backend-drizzle` skill covers only
+this project's wiring and defers the rest to them.
 
 `drizzle-kit` also ships an **MCP server**, `node backend/node_modules/drizzle-kit/bin.cjs
 mcp`, exposing `generate`, `push`, `pull`, `check`, `export` and `up` as tools. It is in

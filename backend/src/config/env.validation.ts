@@ -6,8 +6,8 @@ import * as Joi from 'joi';
  * odd runtime error later.
  *
  * Every variable has a default or is optional on purpose: the backend must
- * still start with no .env at all (see docs/guides/configuration.md), in which case it runs in local
- * mode against plain files under DATABASE_DIR.
+ * still start with no .env at all (see docs/guides/configuration.md), in which
+ * case it runs in local mode against plain files under DATABASE_DIR.
  */
 export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string()

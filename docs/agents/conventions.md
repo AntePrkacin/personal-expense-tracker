@@ -17,8 +17,10 @@ confidence. "The floor is the backend's, not `next`'s, because the backend `requ
 packages" is not actionable in isolation; it is a claim you would verify before using. That is
 exactly the shape of the three drifts this convention exists to prevent: `.nvmrc` documented as
 24 when it was 26, the Node floor as v20.9.0 when it was v22.12.0, and the backend described as
-reading "exactly two" environment variables when it reads seventeen. All three were actionable
-tokens, consumed without checking. None of the reasoning around them drifted.
+reading "exactly two" environment variables when it read most of a screenful. All three were
+actionable tokens, consumed without checking. None of the reasoning around them drifted. Note
+that this paragraph names no current value: the count that belongs here is the one in
+`docs/guides/configuration.md`, and restating it is the mistake being described.
 
 **A count nobody can verify gets deleted, not corrected.** The repo-wide Prettier gate was
 documented as failing on "55 files"; it was 69 one day later and 71 the next, and every commit
@@ -30,9 +32,10 @@ set" instead.
 | Node major | `.nvmrc`, and `mise.toml` must agree because mise cannot read it | "read `.nvmrc`" |
 | Node floor, and why it is the backend's | `engines.node` in the three `package.json` files; the reasoning is below | "read `engines.node` in `backend/package.json`" |
 | npm floor | nowhere: there is no `engines.npm` | do not assert one |
+| Framework majors (NestJS, Next.js, React) | `dependencies` in each app's `package.json`; root `CLAUDE.md` is the one file that names them in prose | name the framework without its major |
 | Every command in either app | `docs/guides/commands.md` | pointer, or a marked copy inside a procedure |
 | Backend environment variables, defaults, pairings | `docs/guides/configuration.md`; enforced by `backend/src/config/env.validation.ts`; reasoning in `backend/CLAUDE.md` | pointer; procedures may name a variable without restating its default |
-| Ports 3000, 4200 and 6006 | root `CLAUDE.md` | quote a port only where a command literally contains it |
+| Ports 3000, 4200 and 6006 | the code and config that bind them: `PORT`'s default in the Joi schema, and `-p` in the frontend's `dev`, `start` and `storybook` scripts | name a port freely. These are fixed by design, and the asymmetry is the part worth repeating |
 | Branch format, commit types, the hooks, the CI job list | `docs/CONTRIBUTING.md`; types enforced by `commitlint.config.js` | pointer |
 | Stacked-branch mechanics | `.claude/skills/repo-stack/SKILL.md` and the committed `gh-stack` skill | pointer, including from `docs/CONTRIBUTING.md` |
 | Migration scopes, schema conventions, drivers | `backend/CLAUDE.md` | pointer |
@@ -43,6 +46,17 @@ set" instead.
 
 Note two rows where the single home is a skill rather than a doc. Single-sourcing does not mean
 docs win; it means one file wins.
+
+**`npm run docs:check` (`scripts/docs-check.sh`) is what keeps the rows above honest**, and it
+runs in the `conventions` CI job. It asserts the Node major and floor against their real homes,
+that `backend/.env.example` and the one marked table declare the same variables, that every
+backticked rooted path and every relative link resolves, that each `<!-- sync: -->` target
+exists, that no code fence is left unclosed, and that every scoped `CLAUDE.md` carries a
+`## Not built here`. Two of those last checks are not about single-sourcing at all: they exist
+because an unclosed fence swallows the rest of a file on GitHub while staying valid Markdown,
+and because a missing gap list reads as "no gaps". No hook runs this, so run it before pushing
+a docs change. When an assertion becomes wrong, relax the assertion deliberately rather than
+editing the documents back to fit it.
 
 **The one exception is a procedure someone executes top to bottom**, where a pointer is not
 executable. There a copy is allowed if the line above it names its source:
@@ -221,7 +235,7 @@ reformatted away from repo style the day anyone runs `prettier --write .`, so ke
 in root `CLAUDE.md` and `docs/**` as inline spans, which Prettier leaves alone. A repo-wide
 `prettier --check` step exists in CI but is intentionally commented out, because files that
 predate the config would fail it immediately; `npx prettier --list-different .` reports the
-current set, and 38 of them are vendored skill trees that must not be reformatted.
+current set, most of which is vendored skill trees that must not be reformatted.
 
 Actions are pinned to `actions/checkout@v7` and `actions/setup-node@v7`. Older majors run
 on Node 20, which GitHub has deprecated: the runner forces them onto a newer runtime and

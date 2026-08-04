@@ -4,7 +4,7 @@ Spendifico is a personal expense tracker. You log what you spend, and it shows w
 went, how much of the month's budget is left, and what that looks like over time. There are no
 passwords: you enter your email address and the app sends a single-use login link.
 
-It is a two-app repo. A **NestJS 11** API serves `/api` on port **3000**; a **Next.js 16** App
+It is a two-app repo. A **NestJS** API serves `/api` on port **3000**; a **Next.js** App
 Router frontend runs on **4200** and is the only thing that talks to it. They share one HTTP
 contract, generated from the backend and committed, so neither side restates the other's types.
 Data is persisted with Drizzle ORM over Turso's SQLite engine, and **every user gets a database
@@ -50,7 +50,7 @@ Node comes from [`.nvmrc`](.nvmrc); `nvm use` picks it up. Full prerequisites, i
 bundled-Node trap that catches people whose terminal cannot see `node`, are in the
 [installation guide](docs/guides/installation.md).
 
-<!-- Keep in sync with docs/guides/installation.md, the only intentionally duplicated block in these docs. -->
+<!-- sync: docs/guides/installation.md -->
 
 ```bash
 npm install                                              # root: this is what installs the git hooks

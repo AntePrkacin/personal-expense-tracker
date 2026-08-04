@@ -13,7 +13,7 @@ metadata:
 
 A focused best-practices guide for building CRUD APIs with NestJS. Contains 12 rules
 across 7 categories, prioritized by impact to guide code generation and review. This is
-a trimmed, teaching-oriented subset of a larger library (see this skill's own `README.md`, not the repo root one).
+a trimmed, teaching-oriented subset of a larger library (see `README.md`).
 
 ## When to Apply
 

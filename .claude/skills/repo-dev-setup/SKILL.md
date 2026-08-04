@@ -9,7 +9,7 @@ allowed-tools: Read, Bash(node:*), Bash(npm:*), Bash(curl:*), Bash(git:*), Bash(
 
 Walk the user through setting up their local development environment for the Spendifico repo.
 
-This is a **multi-app repository**: two independent npm projects in one git repo - `backend/` (NestJS 11, port 3000) and `frontend/` (Next.js 16, port 4200). There are **three** `package.json` files and each is installed separately. The root one is not a workspace manager; it holds only the repo-wide git-hook tooling, but installing it is **mandatory**, not optional (see Step 3).
+This is a **multi-app repository**: two independent npm projects in one git repo - `backend/` (NestJS, port 3000) and `frontend/` (Next.js, port 4200). There are **three** `package.json` files and each is installed separately. The root one is not a workspace manager; it holds only the repo-wide git-hook tooling, but installing it is **mandatory**, not optional (see Step 3).
 
 The optional argument selects what to set up: `backend`, `frontend`, or omit for the full stack.
 

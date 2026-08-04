@@ -2,12 +2,12 @@
 
 Symptom first. If something here sends you to another guide, the fix lives there.
 
-## Gotchas
+## The repo and both apps
 
 | Symptom                                                   | Cause                                                                                                                                                |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `http://localhost:3000/` returns 404                      | Correct. A global `api` prefix means the route is `/api/hello`. The prefix is set once in `backend/src/main.ts`                                      |
-| Page says "Could not reach the API"                       | The backend is not running, or not on 3000                                                                                                           |
+| A screen renders but shows no real data                   | Expected for now. Nothing in `frontend/src` fetches the backend yet, so every screen is placeholder data until the session cookie lands              |
 | `node: command not found`, but it worked via the AI agent | Claude Code can ship its own bundled Node, which your terminal does not see. Install Node yourself, see [Prerequisites](installation.md#prerequisites)              |
 | Servers die as soon as the AI assistant finishes          | Expected. Processes an assistant starts belong to its session. Start `npm run start:dev` and `npm run dev` in your own terminals and leave them open |
 | Commits go through with no lint or message check          | You skipped the root `npm install`, so the hooks were never installed. Check with `git config core.hooksPath`, which should print `.husky/_`         |
@@ -19,14 +19,11 @@ Symptom first. If something here sends you to another guide, the fix lives there
 | CI fails on "OpenAPI spec is up to date"                  | You changed a request or response shape without regenerating. Run `npm run api:sync` from the repo root and commit both files it writes              |
 | The spec has a response of `{}`                           | The shape is an `interface`, or its class is not in a `*.dto.ts` file. Both make the generator's plugin skip it, and neither is an error             |
 
-
-## GitHub CLI
-
-### Troubleshooting
+## The GitHub CLI
 
 | Symptom                               | Fix                                                                                        |
 | ------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `gh: command not found`               | Install step above. On macOS restart the terminal after `brew install`                     |
+| `gh: command not found`               | Not installed. See [Installation](installation.md#optional-the-github-cli). On macOS restart the terminal after `brew install` |
 | `gh auth status` says not logged in   | Run `gh auth login`. In a container or over SSH, add `--web` or use a token via `GH_TOKEN` |
 | `HTTP 403` when posting a review      | Your token lacks `repo`, or you lack write access to that repository                       |
 | git still asks for a password on push | You answered "No" to the credential-helper prompt. Re-run `gh auth login` and answer Yes   |

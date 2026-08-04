@@ -70,7 +70,7 @@ For backend secrets, confirm the variable is actually read at the boundary:
 1. `ConfigModule.forRoot({ isGlobal: true })` is already registered in `backend/src/app.module.ts`, so any key in `backend/.env` is available without further wiring.
 2. Read it through `ConfigService` (`config.get<string>('MY_KEY')`), as `src/main.ts` does - not via `process.env` scattered through the code.
 3. Add a placeholder entry to `backend/.env.example` so the next person knows the variable exists.
-4. **Add it to the validation schema.** `ConfigModule.forRoot()` takes a `validationSchema` (Joi, `backend/src/config/env.validation.ts`), so a missing or malformed value fails at **boot** with a message naming the variable, not at first use. A new variable that is not in that schema is rejected outright, so add it there, and use `.and()` if it is only valid alongside another one.
+4. **Add it to the validation schema.** `ConfigModule.forRoot()` takes a `validationSchema` (Joi, `backend/src/config/env.validation.ts`), so a declared value that is missing or malformed fails at **boot** with a message naming the variable, not at first use. Note the failure direction: `ConfigModule` validates with `allowUnknown: true`, because `process.env` carries hundreds of unrelated keys, so a variable you leave out of the schema is **not** rejected - it passes through silently unvalidated, which is the outcome to avoid. Add it there, and use `.and()` if it is only valid alongside another one.
 
 Inform the user of any missing wiring. (See the `backend-nestjs` skill for config patterns.)
 

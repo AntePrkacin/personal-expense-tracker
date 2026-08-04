@@ -1,6 +1,6 @@
 # Spendifico API
 
-NestJS 11 REST API on port **3000** (the Next.js frontend owns 4200). Drizzle ORM over Turso's
+NestJS REST API on port **3000** (the Next.js frontend owns 4200). Drizzle ORM over Turso's
 SQLite engine with a database per user, passwordless login links, and an OpenAPI contract the
 frontend's types are generated from.
 

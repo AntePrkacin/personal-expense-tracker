@@ -1,6 +1,6 @@
 # Spendifico web app
 
-Next.js 16 (App Router) frontend for Spendifico, the personal expense tracker. React 19,
+Next.js (App Router) frontend for Spendifico, the personal expense tracker. React,
 Tailwind CSS v4, TypeScript, tested with Jest + React Testing Library, with the design system
 rendered in Storybook. Runs on **port 4200** (the NestJS API owns 3000).
 

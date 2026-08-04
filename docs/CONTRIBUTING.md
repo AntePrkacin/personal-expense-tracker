@@ -107,9 +107,13 @@ short code samples in those files as inline spans, which Prettier leaves alone.
 
 - **backend**: lint, build, OpenAPI spec is fresh, unit tests, e2e
 - **frontend**: generated API types are fresh, lint, unit tests, build, build-storybook
-- **conventions**: commitlint over the PR's commit range
+- **conventions**: commitlint over the PR's commit range, then `npm run docs:check`
 
-The two freshness steps are the drift gate described in `docs/agents/api-contract.md`. Both regenerate
-a committed artifact and fail on a non-empty `git diff`. Note where each one lives: the
-frontend half runs in the frontend job because `openapi-typescript` only reads the
-committed JSON and needs no `backend/node_modules`.
+The two freshness steps are the drift gate, and `docs/agents/api-contract.md` explains why
+they live in the jobs they do.
+
+`npm run docs:check` (`scripts/docs-check.sh`) asserts that the facts this documentation
+states about the code still match it: the Node major and floor, the backend's environment
+variables, that every backticked path resolves, and that no code fence is left unclosed.
+Run it locally before pushing a docs change; no hook runs it for you. The rule it enforces,
+and the table of which file owns which fact, are in `docs/agents/conventions.md`.

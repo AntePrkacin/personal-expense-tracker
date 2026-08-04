@@ -8,7 +8,7 @@ Linux; there are no Windows instructions in this repo.
 | Tool    | Version                                   | Note                                                                                    |
 | ------- | ----------------------------------------- | --------------------------------------------------------------------------------------- |
 | Node.js | see [`.nvmrc`](../../.nvmrc) (currently **26**) | `nvm use` picks it up automatically. CI uses this same file                             |
-| npm     | 12+                                       | Ships with Node 26                                                                      |
+| npm     | whatever ships with that Node             | Nothing here pins npm, so there is no version to match                                  |
 | git     | any recent                                |                                                                                         |
 | mise    | optional                                  | Runs the repo-wide tasks below. Every task wraps plain npm commands, so you can skip it |
 
@@ -34,7 +34,6 @@ nothing. The terminal you type in is the one that counts.
 
 ### Installing Node
 
-
 Use [nvm](https://github.com/nvm-sh/nvm), which reads `.nvmrc`:
 
 ```bash
@@ -47,20 +46,17 @@ nvm use        # reads .nvmrc
 
 ## Optional: mise
 
-
 [mise](https://mise.jdx.dev) is a task runner. This repo uses it for one reason: three
 `package.json` files mean most chores are the same command typed three times, and mise
 collapses each into one. It is **entirely optional**, and every task wraps plain npm
 commands you can always run by hand.
 
 ```bash
-
 # macOS / Linux
 curl https://mise.run | sh
 
 # macOS (Homebrew)
 brew install mise
-
 ```
 
 Then activate it in your shell, which is the step people miss:
@@ -86,7 +82,6 @@ This is a **multi-app repo**, not an npm-workspaces monorepo. There are three
 `package.json` files and each one is installed separately.
 
 ```bash
-
 # 1. Repo tooling. Do not skip this: it activates the git hooks.
 npm install
 
@@ -107,22 +102,19 @@ them anyway so you can see which variables exist.
 Now run both apps, each in its **own terminal**:
 
 ```bash
-
 # Terminal 1
 cd backend && npm run start:dev     # http://localhost:3000
 ```
 
 ```bash
-
 # Terminal 2
 cd frontend && npm run dev          # http://localhost:4200
 ```
 
-Open <http://localhost:4200>. You should see "Frontend + Backend connected" with the
-message fetched from the API.
+Open <http://localhost:4200>. You should see the Welcome screen. Nothing on it fetches the
+backend yet, so it renders whether or not the API is running.
 
 ## Shortcut with mise
-
 
 With [mise](#optional-mise) installed, all three installs are one command from
 the repo root:
@@ -147,7 +139,6 @@ you are actually debugging one of them.
 
 ## Verify it works
 
-
 ```bash
 curl http://localhost:3000/api/hello
 
@@ -155,7 +146,7 @@ curl http://localhost:3000/api/hello
 ```
 
 Note the `/api` part. `http://localhost:3000/` on its own returns **404**, and that is
-correct, not a broken server. See "Gotchas" below.
+correct, not a broken server. See [Troubleshooting](troubleshooting.md).
 
 Or browse the whole API at **http://localhost:3000/api/docs**, which is Swagger UI over
 the same contract the frontend types are generated from. You can send requests from
@@ -175,10 +166,8 @@ keychain and can act as git's credential helper.
 ### 1. Install
 
 ```bash
-
 # macOS
 brew install gh
-
 
 # Linux (Debian/Ubuntu)
 sudo apt install gh
@@ -192,6 +181,7 @@ Check it landed:
 gh --version
 ```
 
+### 2. Log in
 
 ```bash
 gh auth login
@@ -232,6 +222,11 @@ gh auth refresh -s read:project
 
 ## Optional: the drizzle-kit MCP server
 
+`drizzle-kit` ships an MCP server exposing `generate`, `push`, `pull`, `check`, `export` and
+`up` as tools. It is already in the MCP template, so copy that and keep the `drizzle` entry:
+
+```bash
+cp .mcp.json.example .mcp.json
 ```
 
 `.mcp.json` is gitignored, so this part is per-developer and optional. One caution: `push`

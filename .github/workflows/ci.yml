@@ -160,9 +160,11 @@ jobs:
 
       - name: Documentation facts are single-sourced
         # Every assertion in this script corresponds to a fact that was once
-        # stated in two places and where one copy silently went wrong: the Node
-        # major, the engines floor, and the backend's environment variables. It
-        # is POSIX sh, git and grep only, so it needs nothing installed.
+        # stated in two places and where one copy silently went wrong (the Node
+        # major, the engines floor, the backend's environment variables), or to
+        # a break nothing else could see (an unclosed code fence, a scoped
+        # CLAUDE.md with no "Not built here"). It is POSIX sh, git and grep
+        # only, so it needs nothing installed.
         run: npm run docs:check
 
       # A repo-wide Prettier gate is deliberately NOT enabled yet: existing

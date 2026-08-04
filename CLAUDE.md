@@ -157,9 +157,11 @@ ordered alphabetically and why the two scoped files must not grow tables, is in
 This is a starting point, not a finished app, and the gaps are load-bearing: a feature that was
 never built looks exactly like a feature you have not found yet.
 
-**Every area guide ends with a `## Not built here` section.** Read that section for the area you
-are about to touch before assuming a capability exists. Why something is deferred, where that was
-a decision rather than a queue, is in `docs/TODO.md`.
+**Every scoped `CLAUDE.md` ends with a `## Not built here` section**, and `npm run docs:check`
+fails if one does not. Read that section for the area you are about to touch before assuming a
+capability exists. A scoped file deeper in the tree may point at its parent's list rather than
+keep its own; follow the pointer, because both files load together. Why something is deferred,
+where that was a decision rather than a queue, is in `docs/TODO.md`.
 
 This file deliberately keeps no summary of either. A shared list of everybody's gaps is what two
 people kept editing in the same place, and it is the one merge conflict this repo has actually

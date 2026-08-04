@@ -21,7 +21,7 @@ sidebar beside a content column, with the four routed views `/dashboard`, `/tran
 sit outside it and inherit none of it.
 
 **`PageHeader` and `SidebarNav` live here rather than in `components/ui/`, deliberately.**
-`ui/` mirrors the nine tiles on the Figma Components page and is complete, and neither of
+`ui/` mirrors the tiles on the Figma Components page and is complete, and neither of
 these is a tile - they are the shell's own. The visible consequence is that `PageHeader`'s
 stories are filed under **Shell**, not **Components**, so they cannot join
 `ui.stories.test.tsx` (which asserts every module's title starts with `Components/`);
@@ -175,3 +175,16 @@ covered by `components/ui/utilities.test.ts`, which guards their hard-coded clas
 `ui/`'s and the shell's. **The two box shadows are deliberately excluded** - they are the first
 in the repo, Foundations has no shadow tokens, and that file's `selector()` cannot escape their
 parens and commas. Both facts are in docs/TODO.md.
+
+## Not built here
+
+`frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
+alongside this file whenever the work is in a route: five of the six access screens, the
+shell's content and its authentication, and any call to the backend at all. That list is the
+single home, so nothing is restated here.
+
+The one trap to carry into every file in this directory: **both session seams are stubs that
+answer optimistically.** `requireSession()` lets every request through and `hasSession()`
+returns `false` for everybody, so a route that reads as authenticated is not, and a screen
+that renders is not evidence that its data path exists. Both are PET-52's, and the stubs are
+documented above under The app shell.

@@ -8,7 +8,6 @@ installed separately, and ESLint in particular resolves its config and plugins f
 `node_modules`.
 
 ## Backend, from `backend/`
-Backend, from `backend/`:
 
 | Command                                        | Purpose                                                     |
 | ---------------------------------------------- | ----------------------------------------------------------- |
@@ -23,8 +22,8 @@ Backend, from `backend/`:
 | `npm run db:studio:central` / `db:studio:user` | Drizzle Studio over the local file                          |
 | `npm run api:spec`                             | Build, then write `openapi.json`; commit what it writes     |
 | `npm run api:emit`                             | The write half alone, reusing `dist/`. What CI runs         |
+
 ## Frontend, from `frontend/`
-Frontend, from `frontend/`:
 
 | Command                   | Purpose                                                   |
 | ------------------------- | --------------------------------------------------------- |
@@ -38,12 +37,20 @@ Frontend, from `frontend/`:
 | `npm run storybook`       | Storybook on :6006, the design system reference           |
 | `npm run build-storybook` | Static Storybook build into `storybook-static/`           |
 
-From the repo root, `npm run api:sync` runs both halves in the right order. That is the
-command to use after touching anything a response or request body is made of; the two
-per-app scripts exist for CI, which has already built one side or the other.
+## Root, from the repo root
 
-Single test in either app: `npm test -- page` filters by path,
-`npm test -- -t "greeting"` filters by test name.
+| Command              | Purpose                                                               |
+| -------------------- | --------------------------------------------------------------------- |
+| `npm install`        | Repo-wide dev tooling. Its `prepare` script is what installs the hooks |
+| `npm run api:sync`   | The OpenAPI spec, then the frontend types from it, in that order       |
+| `npm run docs:check` | Single-source assertions over this repo's Markdown. What CI runs       |
+| `npm run skills`     | Re-extract Drizzle's committed agent skills after a drizzle-kit bump   |
+
+`api:sync` is the command to use after touching anything a response or request body is made
+of; the two per-app scripts exist for CI, which has already built one side or the other.
+
+Single test in either app: `npm test -- page` filters by path, `npm test -- -t "<name>"`
+filters by test name.
 
 Neither app has a standalone `typecheck` script. `npm run build` is the typecheck.
 
@@ -72,7 +79,6 @@ Every task also has per-package variants when you want just one: `install:repo`,
 
 ## Auditing and updating dependencies
 
-
 ```bash
 mise run audit               # what is vulnerable
 mise run check-for-updates   # what is outdated
@@ -94,9 +100,8 @@ Two things about `audit` that will otherwise confuse you:
 
 ## Regenerating the committed agent skills
 
-`drizzle-kit` ships eight agent skills of its own, and they are **already committed** here,
-so a fresh clone has them with no extra step. You only need this command when refreshing
-them:
+`drizzle-kit` ships agent skills of its own, and they are **already committed** here, so a
+fresh clone has them with no extra step. You only need this command when refreshing them:
 
 ```bash
 npm run skills     # re-extract from the installed drizzle-kit, then commit the diff
@@ -108,16 +113,12 @@ checks its own revision against the installed `drizzle-kit` and says so when it 
 behind.
 
 The repo's own `backend-drizzle` skill covers only this project's wiring (two migration
-scopes, a database per user, the Turso drivers) and leaves the generic CLI to Drizzle's.
-
-`drizzle-kit` also ships an MCP server exposing `generate`, `push`, `pull`, `check`,
-`export` and `up` as tools. It is in the MCP template, so copy that and keep the `drizzle`
-entry:
-
-```bash
+scopes, a database per user, the Turso drivers) and leaves the generic CLI to Drizzle's. The
+full inventory, including the MCP server `drizzle-kit` also ships, is in
+`docs/agents/claude-tooling.md`; setting that server up is a step in the
+[installation guide](installation.md#optional-the-drizzle-kit-mcp-server).
 
 ## GitHub CLI
-
 
 ```bash
 gh pr create --fill                # open a PR from the current branch
