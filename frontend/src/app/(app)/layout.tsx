@@ -30,9 +30,10 @@ export const dynamic = 'force-dynamic';
 /**
  * The profile the sidebar footer shows. **None of this is real.**
  *
- * TODO(PET-45, PET-52): replace with `GET /api/profile`, reached with the
- * session cookie. It does not exist yet - PET-45 is an unmerged plan and PET-52
- * has no branch - and the three fields do not even come from one place: names
+ * TODO(PET-52): replace with `GET /api/profile`, reached with the session
+ * cookie. The endpoint exists now (PET-45) and answers all three fields in one
+ * read; what is missing is the cookie, which has no branch yet - and note the
+ * three fields do not come from one place on the backend either: names
  * live in the per-user database's `profile` row while the email lives on the
  * central `users` row, which is why `GET /api/auth/session` knows the email and
  * nothing knows the names.

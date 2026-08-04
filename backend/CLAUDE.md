@@ -145,9 +145,11 @@ skips nothing at all - silently.** The named form is mandatory.
 ## Backend conventions
 
 Money crosses units in `src/common/money.ts` and nowhere else: `toCents()` on the way in,
-`fromCents()` on the way out. Two callers so far, `VerificationService` for the profile and
-`TransactionsService` for amounts, which is what the schema comments mean by the conversion
-happening at the service boundary. A third place doing its own arithmetic is a bug.
+`fromCents()` on the way out. Three callers so far - `VerificationService` for the budget
+the onboarding payload carries, `ProfileService` for the same budget on every read and
+update, and `TransactionsService` for amounts - which is what the schema comments mean by
+the conversion happening at the service boundary. A fourth place doing its own arithmetic
+is a bug.
 
 ## Transaction writes
 
@@ -193,117 +195,58 @@ payment method, status and account (DET-8, A20). No form captures them and no co
 them, so `forbidNonWhitelisted` answers 400 rather than dropping them silently and letting a
 frontend believe they were saved.
 
+## Profile and preferences
+
+**One resource with two homes, and `ProfileService` is the only place that sees the seam.**
+`GET /api/profile` and `PATCH /api/profile` live in `src/profile/` and serve the Settings
+page and the sidebar footer. There is no `/profile/{id}` and no id in any signature - the
+resource is always the session's own, so cross-user access is structural rather than
+policed. `email` is the login identifier and lives on the central `users` row; the other
+five fields live in the caller's own single-row `profile` table. The read never touches
+central at all, because `SessionService.validate` already joins `users` on every request,
+so the principal's address cannot be stale and a second lookup would buy a round trip for
+a value already in hand.
+
+Five things about the update are easy to get wrong:
+
+- **The `PATCH` is tri-state minus its middle case.** Absent is unchanged and a value sets,
+  but **no field accepts null**, because every profile column is NOT NULL. Every field
+  carries `@ValidateIf((_, v) => v !== undefined)` and none carries `@IsOptional()`, which
+  would skip validation for null as well as undefined.
+
+- **An empty body is a 400** before any database is opened, the `UpdateTransactionDto`
+  reasoning exactly: a bare UPDATE would bump `updated_at` through `$onUpdateFn`.
+
+- **A body carrying only the address you already have is a 200, not that 400.** The
+  Settings form saves the whole page at once (SET-5), so resubmitting an unchanged address
+  is ordinary rather than an error. Both sides of that comparison are normalized, or a
+  differently cased address would read as a self-conflict. An email-only `PATCH` selects
+  rather than issuing an empty UPDATE, so the profile's `updated_at` does not move for a
+  change that happened in another database.
+
+- **A taken address is a 409, and the disclosure is deliberate.** Unlike the public auth
+  routes, whose identical 202s exist to defeat enumeration, an authenticated Settings form
+  cannot tell a typo from a taken address unless it is told. It sits behind no throttler;
+  the trade-off and the pre-check race it leaves are in `docs/TODO.md`.
+
+- **Write order is the only atomicity there is.** No cross-database transaction exists, so
+  the 409 pre-check runs before either write, the user database is written first, and
+  central's email strictly last - a profile that saved is never contradicted by a directory
+  that did not.
+
+**A missing profile row answers 500, not 404.** Verification inserts it before clearing the
+onboarding payload, so a verified session implies one exists and its absence is a broken
+invariant: the service throws a plain `Error` naming the user id. A documented 404 would
+invite a "create your profile" flow that has nothing behind it, which is why neither
+operation declares one.
+
 ## Persistence
 
-**Drizzle ORM (v1 RC) over Turso's new engine, in two modes behind one seam.**
-
-- **Cloud mode**, when all four of `TURSO_ORG`, `TURSO_ORG_TOKEN`,
-  `TURSO_CENTRAL_DB_URL` and `TURSO_CENTRAL_DB_TOKEN` are set: `@tursodatabase/sync` with
-  the `drizzle-orm/tursodatabase-sync` driver. A local file kept in step with a Turso
-  Cloud database. The client has no timer of its own, so
-  `backend/src/database/turso-client.factory.ts` schedules `push()` then `pull()` every
-  `TURSO_SYNC_INTERVAL_S`.
-- **Local mode**, otherwise: `@tursodatabase/database` with
-  `drizzle-orm/tursodatabase/database`. A plain local file, nothing remote. CI, the e2e
-  suite and offline development all run here, which is why the backend still works with
-  no `.env` at all.
-
-Both are the same engine and the same SQLite dialect, so one schema and one migrations
-folder per scope serve both. `turso-client.factory.ts` and `UserDatabaseService` are the
-only two files that know which mode is active.
-
-**Every cloud database must use the Turso engine, never libSQL.** Turso Cloud still creates
-libSQL databases by default, but the local half of `@tursodatabase/sync` is a real Turso
-database, so the remote it replicates against has to be one as well. `TursoPlatformService`
-therefore sends `use_tursodb: true` on every create, and the central database has to be
-made with `turso db create ... --tursodb` by hand. Two things make this easy to get wrong:
-the field is **undocumented** in the public API reference (it comes from the CLI's own
-request struct, where `--tursodb` serializes as `use_tursodb`), and getting it wrong is
-**silent** - the API accepts the request and the app runs. Since the engine is fixed at
-creation, the only remedy is deleting the database and making a new one. Check with
-`turso db list`, whose `TYPE` column reads `Turso` rather than `SQLite`, or the `engine`
-field the Platform API returns. A dedicated test pins the flag in
-`turso-platform.service.spec.ts`.
-
-**Database per user.** A small **central** database (`users`: id, email, and a pointer to
-that person's database) exists because identity must resolve by email before the per-user
-database is known. Everything else about a person lives in **their own Turso database**,
-holding `profile` (single row), `categories` and `transactions`. Insights arrive there
-later as an ordinary migration. In cloud mode the central database and every per-user one
-live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
-per-user ones itself, at **verification** rather than registration - see Access and sessions
-above.
-
-**The Turso CLI cannot address a per-user database, and fails silently at it.** `turso db
-shell` and `turso db destroy` resolve names against a local name cache in
-`~/.config/turso/settings.json`, not the API, so every `spendifico-user-<uuid>` database -
-created by the backend through the Platform API - is invisible to them: `db shell` says
-"database not found" and `db destroy` exits 0 having deleted nothing. `db show` and `db
-list` hit the API and work on the same name. Use the Turso MCP server (`plugin:turso`)
-instead, which has no cache; `docs/TODO.md` has the full write-up and the cache-expiry
-workaround. The central database has a short CLI-created name, so the CLI is fine there.
-
-Central carries three deliberate exceptions to "email and a pointer". `login_links` is there
-because a link is consumed before we know - or, for an unverified account, before there
-even is - the user's own database, and `sessions` for the same reason one step later: a
-bearer is validated before anything knows which database to open. `users.onboarding_payload`
-is there because the registration form is collected before the address is proven and the
-profile it becomes lives in a database that does not exist yet; it is transient, written at
-registration and set NULL by verification, and it holds `monthlyBudget` in **major** units
-with the DTO defaults already applied. None of them is a licence to put more profile data in
-central.
-
-**Tokens.** Creating databases and minting their tokens are control-plane operations that
-no data-plane token can perform, so `TURSO_ORG_TOKEN` is used in exactly one place
-(`TursoPlatformService`) at provisioning time. It does not have to be an organization-wide
-token: minting it scoped to the group with just `db:create`, `db:delete` and
-`db:mint-token` covers everything the service does. Each user database is then reached with
-its own minted data-plane token, stored in the central row and never serialized into an API
-response. By MVP decision every Turso token is created with **Expires: NEVER**: no refresh
-logic anywhere, rotation is a manual ops action.
-
-**Migrations are committed and applied programmatically**, in
-`backend/drizzle/central/` and `backend/drizzle/user/`. Note the v1 RC layout: one
-directory per migration named `<YYYYMMDDHHMMSS>_<slug>`, holding `migration.sql` and the
-`snapshot.json` that `generate` diffs the next one against, with no `meta/_journal.json`.
-Both files are committed. The central database is migrated by the `APP_DB` async factory
-before Nest finishes booting; a user database is migrated on first open, so adding a
-migration upgrades every existing user the next time they are touched. There is no
-`db:migrate` script, because N user databases cannot be migrated from a CLI. Consequence
-for deployment: `drizzle/` is resolved from `process.cwd()`, so a future Dockerfile must
-`COPY` it next to `dist/`.
-
-**A user-scope migration runs against live data, unattended, one user at a time**, which
-constrains what it may contain. There is no operator step and no window to inspect the
-result: the first request that touches a person's database applies it, and a failure
-surfaces as a broken request for that one user rather than a failed deploy. So a new column
-must be nullable or carry a default - a bare `NOT NULL` add fails against any database that
-already has rows - and a migration that cannot be made safe that way needs to be split into
-an additive step now and a tightening step once the data is known to be backfilled.
-
-**Conventions worth knowing before writing a table.** Primary keys are UUIDv7 text
-(`src/common/ids.ts`). Money is integer minor units in `*_cents` columns; the API speaks
-major units and the service converts. Instants are `integer` epoch-ms
-(`{ mode: 'timestamp_ms' }`) set app-side with `$defaultFn`/`$onUpdateFn`; calendar dates
-will be `text` `YYYY-MM-DD`. Every table carries a nullable `deleted_at` for future sync
-and reads filter it with `isNull(deletedAt)` - the tombstone is invisible through the API,
-which still deletes permanently as far as a client can tell.
-
-**Two things the test setup exists to work around.** `@tursodatabase/database`,
-`@tursodatabase/sync` and `uuid` are ESM-only. Node loads them fine, but Jest's CommonJS
-runtime cannot, and they cannot be transformed either (their napi loader uses
-`import.meta.url`). `backend/test/esm-environment.cjs` therefore injects a real Node
-`require`, and `test/esm-shims/` plus a `moduleNameMapper` entry in both jest configs
-route those three specifiers through it.
-
-**Keeping tests off the cloud takes two separate mechanisms, and both are load-bearing.**
-`test/setup-e2e.ts` points `DATABASE_DIR` at a temp directory and deletes every `TURSO_*`
-variable inherited from the shell. That alone is not enough: `ConfigModule` also reads
-`backend/.env` from disk and puts the deleted variables straight back, which pointed the
-whole e2e suite at live Turso Cloud and created real databases there. `AppModule` closes
-that hole with `ignoreEnvFile: process.env.NODE_ENV === 'test'` (Jest sets `NODE_ENV`
-itself). Remove either half and a developer with a filled-in `.env` runs the suite against
-production infrastructure.
+The persistence layer has its own file, `backend/src/database/CLAUDE.md`, which loads
+whenever the work is under `backend/src/database/`. It is the authority for the two driver
+modes, the database-per-user design and what follows from it, the migration scopes and the
+table conventions, and the two mechanisms that keep the test suites off Turso Cloud. Read it
+before writing a schema, a migration, or anything that opens a database.
 
 ## Environment
 
@@ -337,7 +280,8 @@ Node's `fetch` does not send.
 ## The backend's half of CI
 
 The backend job covers the persistence layer without any Turso credentials: `test-e2e`
-runs in local mode against files in a temp directory (see Keeping tests off the cloud), and
+runs in local mode against files in a temp directory (see `backend/src/database/CLAUDE.md`,
+What the test setup works around), and
 `npm ci` resolving the `@tursodatabase/*` native bindings on `ubuntu-latest` is itself the
 check that those platform binaries are available there. Both are confirmed working.
 
@@ -353,10 +297,6 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   03, read per chip from the design's variable bindings, and the palette has eight colors for
   ten chips, so two repeat and color alone cannot identify a category.
 - **Insights has no table.** It arrives with its feature, as an ordinary user-scope migration.
-- **The profile read.** The old proof-of-stack routes `POST /api/users` and `GET /api/users/:id`
-  are **gone**. Their replacement is a session-scoped `getProfile()` with preferences, which is
-  PET-45's rather than done, and it owns `monthStartDay` and `monthlyBudgetCents` that every
-  later month-scoped read derives from.
 - **Transaction reads.** `transactions` has the three write endpoints above and **no reads at
   all**. The list, the month windows and every aggregate the designs show are PET-28's and the
   dashboard tickets', all computed on read and never stored.

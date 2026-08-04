@@ -38,7 +38,7 @@ set" instead.
 | Ports 3000, 4200 and 6006 | the code and config that bind them: `PORT`'s default in the Joi schema, and `-p` in the frontend's `dev`, `start` and `storybook` scripts | name a port freely. These are fixed by design, and the asymmetry is the part worth repeating |
 | Branch format, commit types, the hooks, the CI job list | `docs/CONTRIBUTING.md`; types enforced by `commitlint.config.js` | pointer |
 | Stacked-branch mechanics | `.claude/skills/repo-stack/SKILL.md` and the committed `gh-stack` skill | pointer, including from `docs/CONTRIBUTING.md` |
-| Migration scopes, schema conventions, drivers | `backend/CLAUDE.md` | pointer |
+| Migration scopes, schema conventions, drivers | `backend/src/database/CLAUDE.md` | pointer |
 | Design tokens and component conventions | `frontend/CLAUDE.md` | pointer |
 | The HTTP contract and its generated artifacts | `docs/agents/api-contract.md` | pointer |
 | Skills, subagents, MCP | `docs/agents/claude-tooling.md`; permissions stay in `.claude/SETTINGS.md` | pointer |
@@ -97,12 +97,18 @@ its first merge conflict, promote its hottest topic one directory deeper, which 
 auto-loads by the same mechanism with better trigger locality. Do it on that evidence, not on
 taste.
 
-This has fired once already. Merging PET-8 took `frontend/CLAUDE.md` to 421 lines, so the app
+This has fired twice. Merging PET-8 took `frontend/CLAUDE.md` to 421 lines, so the app
 shell and the access screens moved to `frontend/src/app/CLAUDE.md`, leaving the design system and
 the `ui/` conventions in the parent. Both files load together when the work is in a route, and
-only the parent loads when it is in `components/`. The next candidates, if it fires again, are
-`backend/src/database/CLAUDE.md` for persistence and `frontend/src/components/CLAUDE.md` for the
-component conventions.
+only the parent loads when it is in `components/`. PET-45's profile endpoints then took
+`backend/CLAUDE.md` past 400, and persistence moved to `backend/src/database/CLAUDE.md` the same
+way - the candidate this paragraph had already named, which is the point of naming one in
+advance. The remaining candidate is `frontend/src/components/CLAUDE.md` for the component
+conventions.
+
+Both promotions kept a stub section behind, `## The screens` and `## Persistence`, rather than
+deleting the heading outright. The parent is what a reader lands on first, and a topic that
+simply vanishes from it reads as a topic nobody wrote down.
 
 ## Working conventions
 
