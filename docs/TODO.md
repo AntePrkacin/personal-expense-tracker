@@ -24,14 +24,26 @@ session-scoped read that replaces the deleted proof-of-stack `GET /api/users/:id
 exists now: PET-45 shipped `GET /api/profile` and `PATCH /api/profile`. What is left here is
 entirely the frontend's half.
 
-**The frontend makes one call to the backend, and it is a write.** PET-19 replaced the scaffold
+**The frontend calls the backend twice now, and both are writes.** PET-19 replaced the scaffold
 greeting page with a `redirect('/dashboard')`, deleting the `GET /api/hello` fetch that had been
 the only wire between the two apps, and PET-11 restored one from the other end: `registerAccount`
 in `app/setup/register/actions.ts` posts `POST /api/auth/register`, so `BACKEND_URL` is read
-again and `actions.test.ts` exercises the generated request type against a `fetch` spy. **Every
-read is still missing**, which is what the work here is: no verify page, no session, and no
-screen that displays anything the backend knows. The drift gates always ran, so `api.d.ts` could
-not rot silently either way, but nothing yet proves a response shape end to end.
+again. PET-12 added `POST /api/auth/login-link` from two callers, and moved the fetch itself into
+`frontend/src/lib/backend.ts`, whose suite exercises the generated request type against a `fetch`
+spy. **Every read is still missing**, which is what the work here is: no verify page, no session,
+and no screen that displays anything the backend knows. The drift gates always ran, so `api.d.ts`
+could not rot silently either way, but nothing yet proves a response shape end to end.
+
+**PET-12 introduced the frontend's first cookie, and it is not this one.**
+`frontend/src/lib/pendingEmail.ts` writes `spendifico.pending_email`, a fifteen-minute httpOnly
+cookie carrying the address screen 24 interpolates into its copy, because a query parameter put it
+into the server's request log on every registration. It is a display value, not a credential, and
+the session cookie this item is about is still unnamed. Two things it leaves for this work, both
+small. `sameSite: 'lax'` is already the value the session cookie needs, since the emailed verify
+link arrives as a cross-site top-level GET that `strict` withholds cookies from - so do not
+"tighten" it. And **the verify page should clear the pending-address cookie** once a link is spent:
+nothing does today, so it simply expires, which is harmless but leaves a stale address readable for
+up to fifteen minutes after the account is in.
 
 **Three things in the shell are stubs waiting on this, all deliberate and all loud.**
 
@@ -380,6 +392,12 @@ nothing is persisted until step 3 and the account already exists; worth a decisi
 makes a session readable. The cheapest answer is the same `hasSession()` branch `app/page.tsx`
 already uses.
 
+**PET-12 left `/login` ungated for the same reason, and it is the same decision.** A fourth call
+into those stubs would be a fourth untestable claim, and LOG-5 designs one entry into that screen
+anyway. So a signed-in visitor can reach Log in and request a link they do not need; the backend
+sends one and it works, which is right rather than broken, just pointless. Whichever way PET-52
+answers this for `/setup`, it should answer it for `/login` in the same breath.
+
 ### The currency select has one option, and two things wait on A6
 
 `frontend/src/app/setup/BudgetForm.tsx` renders `CURRENCY_OPTIONS` with the single
@@ -434,9 +452,54 @@ Two things the same screen does not validate, both deliberate. `@MaxLength(100)`
 is **not** mirrored client-side: no `maxlength` is drawn in the frame, so a longer name gets a 400
 rendered as the generic form-level message rather than an inline one. And `isEmailValid` is looser
 than the DTO's `@IsEmail()`, which is validator.js, so a handful of addresses pass here and come
-back a 400 the same way - `draft.test.ts` pins `marko@email.com.` as the example. Closing either
+back a 400 the same way - `lib/email.test.ts` pins `marko@email.com.` as the example. Closing either
 gap means shipping a validation dependency for one field, or copying validator.js's expression
 into the frontend where it would rot silently.
+
+**PET-12 raised it a third time, with four more strings and one that is a decision rather than a
+sign-off.** Screen 23's failure line is `We couldn't send your login link. Please try again.`,
+shaped like PET-11's. Screen 24's three are all A36's, which says outright that no cooldown, counter
+or confirmation is designed for "Resend link": `A new link is on its way.` after a success,
+`We couldn't send a new link. Please try again.` after a failure, and
+`Too many requests. Please wait a few minutes and try again.` for a 429. The `Screens/24 Check your
+email` story reaches all three by clicking the button.
+
+Two decisions inside that worth a designer's eye rather than a rubber stamp. **A resend now confirms
+itself**, which A36 says nothing is designed for - and the alternative is worse rather than
+cheaper: with no confirmation a click has no observable effect at all, so a user cannot tell whether
+it worked and clicks until the backend's five-per-address limiter answers 429, which without the
+third string would also render as nothing. **And there is deliberately no cooldown**, which A36 does
+mention. The backend's per-address throttler is the real limit and a client-side timer would be a
+second, weaker authority that a reload defeats, so the 429 message replaces it. If the designer
+wants a visible cooldown, it belongs on top of that message rather than instead of it.
+
+### Screen 24's no-address arrival is new copy and a reworded AC
+
+`/check-email` shows the address the user submitted, and PET-12 carries it in a fifteen-minute
+cookie rather than a query string. So there is a real state where the screen has no address: the
+cookie expired, the screen was opened in a second browser, or its value was not something the field
+could have produced. AC7 asked for copy that "still reads correctly rather than leaving an empty gap
+or the literal placeholder" and noted A29 designs none, so the sentence drops the address clause
+entirely - `We've sent you a secure login link. Open the link on this device to access your
+account.` - chosen over filling the slot with a generic phrase.
+
+**The control in that state is `Log in again`, and that amends AC6's wording.** AC6 requires "Resend
+link" to be the only action, and with no address there is nothing to resend. A disabled button
+satisfies the letter of it and leaves a screen with no Back, no working control and no way out,
+which a reload twenty minutes later reaches - and a permanently disabled button announces as
+"Resend link, dimmed" with no reason given. What AC6 defends is that there is no way *backwards*
+into a form the user has already completed, and a link forward to Log in does not touch that. The
+Jira ticket records the amendment; the alternative is recorded here so nobody re-proposes it.
+
+### The pending-address cookie's lifetime is coupled to a backend variable it cannot read
+
+`lib/pendingEmail.ts` expires its cookie after fifteen minutes to mirror the login link's own
+lifetime, which the backend takes from `LOGIN_LINK_TTL_M` (see `docs/guides/configuration.md`). The
+frontend has no channel to that value, so the two can drift: raise it and a still-valid link gets
+the no-address fallback, lower it and the cookie outlives the link it describes. Both degrade to
+copy that reads correctly rather than to anything misleading, which is why the duplication was
+accepted rather than fixed. Closing it properly means either publishing the value in the API or
+giving the frontend its own environment variable, and neither is worth it for a display string.
 
 ### The starter category list exists in two files, linked only by a generated type
 

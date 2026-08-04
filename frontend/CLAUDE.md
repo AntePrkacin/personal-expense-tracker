@@ -85,10 +85,16 @@ feature folder yet, so `ui/` is currently the only child - the app shell's own c
 took the second option and live under `app/(app)/`, documented in
 `frontend/src/app/CLAUDE.md`.
 
-`components/` has exactly one direct child of its own, and it is worth knowing why:
-**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark. It is not a
-Components-page tile, so `ui/` is wrong; it belongs to six screens rather than one, so beside
-a route is wrong too. Note `ui/Sidebar.tsx` holds a _second_, smaller copy of the same lockup
+`components/` has two direct children of its own, and both are there for one reason:
+**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark, and
+**`AccessCard.tsx`**, the centred column and card box under it. Neither is a Components-page tile,
+so `ui/` is wrong; each belongs to more screens than one route segment holds, so beside a route is
+wrong too - the lockup to all six access frames, the card to the five that are centred cards.
+`AccessCard` arrived late, in PET-12, and the sequence is the useful part: the chrome lived in
+`app/setup/SetupShell.tsx` while only the three onboarding steps drew it, and moved here when Log
+in and Check your email turned out to draw the identical box with no step indicator. That shell
+still exists and still owns the indicator and the per-step width, which really are onboarding's.
+Note `ui/Sidebar.tsx` holds a _second_, smaller copy of the same lockup
 (34px, `rounded-[10px]`, `text-on-dark` against `surface-ink`) and that is deliberate for now:
 unifying them is not a refactor of one file, it needs a size and a tone pair, and it would
 drag a merged, pinned component through whichever ticket happens to notice.
@@ -274,14 +280,6 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Two of the six access screens**, meaning the two that are missing: Log in and Check your
-  email are both PET-12, so `/login` and `/check-email` **404 until they land** - which means
-  onboarding now runs to the end and then dead-ends on "Finish setup", after the account has
-  really been created. Welcome at `/`, and all three onboarding steps at `/setup`,
-  `/setup/categories` and `/setup/register`, do exist (see "The access screens" in
-  `frontend/src/app/CLAUDE.md`). The verify page that consumes an emailed link is PET-52's, along
-  with filling in `hasSession()` so `/` can send a signed-in visitor to the Dashboard instead of
-  showing everyone the pitch.
 - **The `/api/chat` route handler.** No route handler exists, and the env template deliberately
   declares no model-provider key. Add whichever variable your provider needs when you build the
   route, server-side only and never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once
@@ -294,10 +292,13 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `PLACEHOLDER_PROFILE` rather than a real profile (PET-45 reached with PET-52's cookie). The
   month select and the search field are drawn but inert by design.
 - **Any _read_ from the backend, which is still the single biggest gap.** PET-11 ended the
-  "nothing fetches at all" era with exactly one write - `registerAccount` in
-  `app/setup/register/actions.ts` posts `POST /api/auth/register` - and that is the whole of it:
-  **no reads, no verify page, no session cookie.** The backend half is complete, so what is
-  missing is this side. The session cookie is the frontend's own httpOnly first-party one,
-  forwarded server-side; the backend reads no cookies, and the cookie's name is still undecided.
-  Everything above inherits from this: both session seams are stubs and the shell's profile is a
-  placeholder.
+  "nothing fetches at all" era and PET-12 added the second write, so `frontend/src` now posts
+  `POST /api/auth/register` and `POST /api/auth/login-link` through `lib/backend.ts` - and that is
+  the whole of it: **no reads, and no verify page.** The backend half is complete, so what is
+  missing is this side. **The verify page is PET-52's**, along with filling in `hasSession()` so
+  `/` can send a signed-in visitor to the Dashboard instead of showing everyone the pitch, and
+  along with the **session cookie**, which is a different cookie from the short-lived
+  pending-address one PET-12 introduced in `lib/pendingEmail.ts`: the session one is the
+  frontend's own httpOnly first-party credential, forwarded server-side into an `Authorization`
+  header because the backend reads no cookies at all, and its name is still undecided. Everything
+  above inherits from this: both session seams are stubs and the shell's profile is a placeholder.
