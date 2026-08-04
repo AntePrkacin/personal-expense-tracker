@@ -26,6 +26,14 @@ Colour tokens are group-prefixed to match the Figma groups: `brand-*`, `surface-
 `text-*`, `border-*`, `status-*`, `category-*`. This is why you write
 `text-text-primary` and `border-border-default`; the stutter is deliberate.
 
+Each `status-*` group carries three values and they are not interchangeable: the bare name
+is the fill (`status-danger`, `#dc2626`), `-text` is the darker one to set type in
+(`status-danger-text`, `#b91c1c`), and `-soft` is the tint to sit that type on
+(`status-danger-soft`). Red type therefore takes `text-status-danger-text`, not
+`text-status-danger`. Note also that the three status colours carry meaning - danger means an
+error or an over-budget condition - so reaching for one purely because a design asks for that
+hue says something the interface did not intend.
+
 **The 19 type styles are `@utility` blocks, not `--text-*` tokens**, because a type
 style has to carry its font-family and the compiler only accepts `--line-height`,
 `--letter-spacing` and `--font-weight` as paired suffixes on a `--text-*` token.

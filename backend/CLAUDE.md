@@ -264,13 +264,22 @@ logic anywhere, rotation is a manual ops action.
 
 **Migrations are committed and applied programmatically**, in
 `backend/drizzle/central/` and `backend/drizzle/user/`. Note the v1 RC layout: one
-directory per migration containing `migration.sql`, named `<YYYYMMDDHHMMSS>_<slug>`, with
-no `meta/_journal.json`. The central database is migrated by the `APP_DB` async factory
+directory per migration named `<YYYYMMDDHHMMSS>_<slug>`, holding `migration.sql` and the
+`snapshot.json` that `generate` diffs the next one against, with no `meta/_journal.json`.
+Both files are committed. The central database is migrated by the `APP_DB` async factory
 before Nest finishes booting; a user database is migrated on first open, so adding a
 migration upgrades every existing user the next time they are touched. There is no
 `db:migrate` script, because N user databases cannot be migrated from a CLI. Consequence
 for deployment: `drizzle/` is resolved from `process.cwd()`, so a future Dockerfile must
 `COPY` it next to `dist/`.
+
+**A user-scope migration runs against live data, unattended, one user at a time**, which
+constrains what it may contain. There is no operator step and no window to inspect the
+result: the first request that touches a person's database applies it, and a failure
+surfaces as a broken request for that one user rather than a failed deploy. So a new column
+must be nullable or carry a default - a bare `NOT NULL` add fails against any database that
+already has rows - and a migration that cannot be made safe that way needs to be split into
+an additive step now and a tightening step once the data is known to be backfilled.
 
 **Conventions worth knowing before writing a table.** Primary keys are UUIDv7 text
 (`src/common/ids.ts`). Money is integer minor units in `*_cents` columns; the API speaks
