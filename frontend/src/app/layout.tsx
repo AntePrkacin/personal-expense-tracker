@@ -2,10 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { inter, plusJakartaSans } from './fonts';
 
-// "Spendifico", the name decided on 2026-08-02. The Figma file still says
-// "Expensa" throughout, and so does the backend's mail copy and OpenAPI title;
-// see "Renaming the product from Expensa to Spendifico" in docs/TODO.md for which
-// halves of the rename are safe and which one is a data migration.
+// "Spendifico", the name decided on 2026-08-02 and now carried everywhere in
+// the repo. The Figma file is the one holdout and still says "Expensa"
+// throughout; see "The Figma file still says Expensa" in docs/TODO.md.
 export const metadata: Metadata = {
   title: 'Spendifico',
   description: 'Track what you spend, see where it goes, and stay on budget.',

@@ -49,16 +49,16 @@ export const users = sqliteTable(
     // it, so normalization is the DTO's job and this index is the backstop.
     email: text('email').notNull(),
 
-    // Turso database name, always `expensa-user-<id>` - in local mode too, so a
-    // row provisioned offline stays valid after switching to cloud, and so the
-    // name is always derivable from the id alone.
+    // Turso database name, always `spendifico-user-<id>` - in local mode too,
+    // so a row provisioned offline stays valid after switching to cloud, and so
+    // the name is always derivable from the id alone.
     dbName: text('db_name').notNull(),
 
     // Cloud mode only, and NULL until the account is verified: registration
     // deliberately provisions nothing, so an unauthenticated endpoint cannot
     // create real cloud databases. The exact hostname the Turso Platform API
     // returned at creation. Hostnames are region-scoped (e.g.
-    // `expensa-user-x-acme.aws-eu-west-1.turso.io`), so this can NOT be
+    // `spendifico-user-x-acme.aws-eu-west-1.turso.io`), so this can NOT be
     // reconstructed from the name and must be persisted.
     dbUrl: text('db_url'),
 

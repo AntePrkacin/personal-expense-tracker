@@ -602,8 +602,9 @@ consumer at all.
   token. Figma bound that corner to a raw 10px rather than a radius variable, and the scale
   offers only 8 and 12. Worth a designer answer; until then the literal matches the design.
 - **The wordmark reads "Spendifico", not Figma's "Expensa".** The rename was decided on
-  2026-08-02 and this is its most visible string. See `docs/TODO.md` for which halves of the
-  rename are safe and which one is a data migration wearing a find-and-replace costume.
+  2026-08-02 and this is its most visible string. PET-51 finished it everywhere in the repo,
+  so the design file is the only holdout left; `docs/TODO.md` records that, and the one
+  constraint the rename leaves on any future change to the per-user database naming.
 
 `frontend/src/lib/format.ts` owns display formatting, in two halves. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN

@@ -4,6 +4,8 @@ This spec turns the Figma design into buildable requirements. Every requirement 
 
 > **Source:** Figma file [Personal Expense Tracker](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=1-4), page "Screens" (24 frames in 5 sections: Onboarding, Dashboard, Transactions, AI Insights, Account). Frame names and UI copy are quoted as designed, except that long dashes are written as hyphens per DECODE writing rules.
 >
+> **Product name:** the app is **Spendifico**, renamed from "Expensa" on 2026-08-02 (PET-51). The requirements below say Spendifico because that is what the app must ship, and the code already does. The Figma file has not caught up: it still draws the old logo and wordmark, so this is the one place the spec knowingly departs from the design. Swapping the asset is a designer task, and until it happens `ui/Sidebar.tsx` diverges deliberately, with a test pinning it so the divergence cannot be half-reverted.
+>
 > **How to read requirement IDs:** each screen has a code (WEL, BUD, CAT, REG, LOG, VER, DSH, TRN, DET, ADD, EDT, MNU, DEL, CTG, CED, INS, SET). "TRN-3" means requirement 3 of the Transactions screens. Use these IDs when you write Jira tasks so every task traces back here.
 >
 > **For students:** read the brief first, then work through this spec screen by screen. Every bolded ID is one requirement your Jira tasks must reference. Section 6 records working decisions where the design is ambiguous: challenge an assumption with your teacher if you disagree, don't silently change it. When the design and your instinct conflict, the design wins.
@@ -41,7 +43,7 @@ Two parts need real backend work beyond CRUD:
 
 UI elements and behavior:
 
-- **WEL-1.** Show the Expensa logo (top left), the overline "PERSONAL FINANCE, SIMPLIFIED", the heading "Take control of your money.", the intro "Track every expense, set budgets by category, and get AI insights that keep you on plan - all in one calm, focused space.", and the footer microcopy "Made for mindful spending."
+- **WEL-1.** Show the Spendifico logo (top left), the overline "PERSONAL FINANCE, SIMPLIFIED", the heading "Take control of your money.", the intro "Track every expense, set budgets by category, and get AI insights that keep you on plan - all in one calm, focused space.", and the footer microcopy "Made for mindful spending."
 - **WEL-2.** Primary button "Get started" opens Setup - Currency & budget (02) (assumption A1).
 - **WEL-3.** Text link "I already have an account" opens Log in (23) (assumption A2). This is the only route into the returning-user flow.
 - **WEL-4.** Right half: a dark decorative panel with a sample budget card ("October budget", "$1,240 of $2,000", green "On track" chip, "$760 left · 8 days to go") and two floating chips ("Dining $298", "Transport $223"). Display only, no interactions.
@@ -60,7 +62,7 @@ Edge cases: none visible.
 
 UI elements and behavior:
 
-- **BUD-1.** Centered Expensa logo, a step indicator (three dots, first active as a filled pill), and a card with overline "STEP 1 OF 3", heading "Set your monthly budget", and supporting copy "How much do you plan to spend each month? You can change this anytime in Settings." (which proves the value is editable on 17).
+- **BUD-1.** Centered Spendifico logo, a step indicator (three dots, first active as a filled pill), and a card with overline "STEP 1 OF 3", heading "Set your monthly budget", and supporting copy "How much do you plan to spend each month? You can change this anytime in Settings." (which proves the value is editable on 17).
 - **BUD-2.** Select "Currency" showing "USD - $". Only USD appears in the file; the option list is unknown (assumption A6).
 - **BUD-3.** Input "Monthly budget" with a "$" prefix and value "2,000". The frame shows its focused state (highlighted border), so a designed focus style exists.
 - **BUD-4.** Text button "Back" returns to Welcome (01).
@@ -101,7 +103,7 @@ Edge cases: the onboarding chip set conflicts with the categories the app screen
 
 UI elements and behavior:
 
-- **REG-1.** Centered Expensa logo, step indicator (three dots, third active as a filled pill), and a card with overline "STEP 3 OF 3", heading "Register", and copy "Create your account to start tracking your spending."
+- **REG-1.** Centered Spendifico logo, step indicator (three dots, third active as a filled pill), and a card with overline "STEP 3 OF 3", heading "Register", and copy "Create your account to start tracking your spending."
 - **REG-2.** Fields: "First name" ("Marko") and "Last name" ("Kovač") side by side on one row, then "Email" ("marko@email.com") full width. All three are required; there is no password field anywhere in the file, so access is passwordless by design (assumption A31).
 - **REG-3.** Text button "Back" returns to 03 with the category selection kept (assumption A3).
 - **REG-4.** Primary button "Finish setup" creates the account, persists the currency, monthly budget, and starter categories collected in steps 1 and 2, emails a single-use login link, and opens Check your email (24) (assumption A31). The Dashboard is reached only after that link is opened (assumption A33).
@@ -122,7 +124,7 @@ Edge cases: the account does not exist during steps 1 and 2, so those values mus
 
 UI elements and behavior:
 
-- **LOG-1.** Centered Expensa logo and a card with heading "Log in" and copy "Enter the email you signed up with and we'll send you a secure login link." No step indicator (this is not part of onboarding) and no overline.
+- **LOG-1.** Centered Spendifico logo and a card with heading "Log in" and copy "Enter the email you signed up with and we'll send you a secure login link." No step indicator (this is not part of onboarding) and no overline.
 - **LOG-2.** One field, "Email" ("marko@email.com"), required and validated as an email address.
 - **LOG-3.** Primary button "Log in" emails a single-use login link and opens Check your email (24).
 - **LOG-4.** Text button "Back" returns to Welcome (01).
@@ -141,7 +143,7 @@ Navigation: entry from 01. Exits: "Back" → 01, "Log in" → 24.
 
 UI elements and behavior:
 
-- **VER-1.** Centered Expensa logo and a card with heading "Check your email" and body "We've sent a secure login link to marko@email.com. Open the link on this device to access your account." The address is interpolated from whatever was submitted on 22 or 23, and the copy commits to a same-device link.
+- **VER-1.** Centered Spendifico logo and a card with heading "Check your email" and body "We've sent a secure login link to marko@email.com. Open the link on this device to access your account." The address is interpolated from whatever was submitted on 22 or 23, and the copy commits to a same-device link.
 - **VER-2.** Secondary button "Resend link" sends a fresh link and invalidates the previous one. No cooldown, counter, or success confirmation is designed (assumption A36).
 - **VER-3.** Text button "Back" returns to whichever screen opened this one, 22 or 23 (assumption A37).
 - **VER-4.** Opening the link signs the user in and lands them in the app: Dashboard - Empty (05) for a new account, Dashboard (04) for a returning one. The link-opening step has no frame of its own (assumption A33).
@@ -161,7 +163,7 @@ Edge cases: this screen is a dead end inside the app until the user leaves for t
 
 Shared shell (also applies to Transactions, AI Insights, Settings):
 
-- **DSH-1.** Fixed dark sidebar: Expensa logo; section "MENU" with "Dashboard" and "Transactions"; section "ASSISTANT" with "Insights"; section "ACCOUNT" with "Settings". The active item is highlighted (Sidebar component variants). Footer shows avatar initials ("MK"), name "Marko K." and email "marko@email.com" from the profile.
+- **DSH-1.** Fixed dark sidebar: Spendifico logo; section "MENU" with "Dashboard" and "Transactions"; section "ASSISTANT" with "Insights"; section "ACCOUNT" with "Settings". The active item is highlighted (Sidebar component variants). Footer shows avatar initials ("MK"), name "Marko K." and email "marko@email.com" from the profile.
 - **DSH-2.** Page header: overline "October 2025", title "Dashboard", a month select showing "October", and a primary "Add transaction" button that opens the Add transaction modal (09). Only October exists in the file, so the month select renders the current month and stays non-functional until month navigation is designed (assumption A8).
 
 Monthly budget card:
@@ -364,7 +366,7 @@ Edge cases: what triggers the very first generation isn't designed; the empty-st
 **Figma frame:** [17 · Settings](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=40-630). **Purpose:** edit the profile and preferences; reach category management.
 
 - **SET-1.** Header: overline "Manage your account", title "Settings".
-- **SET-2.** Card "Profile": avatar tile with initials "MK", label "Your avatar", caption "Your initials are used across Expensa." (initials derive from the name, no upload exists). Inputs: "First name" ("Marko"), "Last name" ("Kovač"), "Email" ("marko@email.com"), the same three fields captured at registration (REG-2). Email is also the login identifier, and changing it changes where future login links are sent; no re-verification step is designed (assumption A39).
+- **SET-2.** Card "Profile": avatar tile with initials "MK", label "Your avatar", caption "Your initials are used across Spendifico." (initials derive from the name, no upload exists). Inputs: "First name" ("Marko"), "Last name" ("Kovač"), "Email" ("marko@email.com"), the same three fields captured at registration (REG-2). Email is also the login identifier, and changing it changes where future login links are sent; no re-verification step is designed (assumption A39).
 - **SET-3.** Card "Preferences": select "Currency" ("USD - $"), input "Monthly budget" ("$2,000", the same value onboarding set), select "Month starts on" ("1st of the month"). "Month starts on" defines the period used by "This month" filters and "days left" math (assumption A9).
 - **SET-4.** Card "Categories": text "8 categories · $1,800 allocated of $2,000" and a secondary "Manage" button. No prototype link is drawn, but the category editor now exists, so "Manage" opens the Categories tab (13) rather than a settings-local editor (assumption A24).
 - **SET-5.** Primary button "Save changes" persists everything on the page. No success, error, or unsaved-changes state is designed (assumption A29).
@@ -390,7 +392,7 @@ Entities and fields implied by the screens. Names are suggestions, fields are ev
 | currency | code from a closed list | "USD - $" selects (02, 17) |
 | monthlyBudget | number | "$2,000" (02, 04, 13, 17) |
 | monthStartDay | enum/day | "Month starts on - 1st of the month" (17) |
-| avatarInitials | derived from names | "Your initials are used across Expensa." (17) |
+| avatarInitials | derived from names | "Your initials are used across Spendifico." (17) |
 
 **LoginLink** (implied by 22, 23, 24; no frame shows it directly)
 

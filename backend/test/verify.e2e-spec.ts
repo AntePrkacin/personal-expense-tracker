@@ -205,7 +205,7 @@ describe('Verification and sessions (e2e)', () => {
       expect(user.onboardingPayload).toBeNull();
       expect(user.dbUrl).toBeNull();
       expect(user.dbAuthToken).toBeNull();
-      expect(user.dbName).toBe(`expensa-user-${user.id}`);
+      expect(user.dbName).toBe(`spendifico-user-${user.id}`);
     });
 
     it('refuses the same link a second time, creating no second session', async () => {

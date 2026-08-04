@@ -15,7 +15,7 @@ jest.mock('drizzle-orm/tursodatabase-sync/migrator');
 jest.mock('node:fs/promises');
 
 const USER_ID = '019fbd57-ca52-7509-bc0d-fee63ffc5294';
-const USER_DB_PATH = `/tmp/expensa-test/users/expensa-user-${USER_ID}.db`;
+const USER_DB_PATH = `/tmp/spendifico-test/users/spendifico-user-${USER_ID}.db`;
 
 const openLocalMock = jest.mocked(openLocalDatabase);
 const openCloudMock = jest.mocked(openCloudDatabase);
@@ -45,7 +45,7 @@ describe('UserDatabaseService', () => {
     jest.clearAllMocks();
     closes = [];
 
-    env = { DATABASE_DIR: '/tmp/expensa-test' };
+    env = { DATABASE_DIR: '/tmp/spendifico-test' };
     config = {
       get: (key: string, fallback?: unknown) => env[key] ?? fallback,
       getOrThrow: (key: string) => env[key],
@@ -114,7 +114,7 @@ describe('UserDatabaseService', () => {
 
     it('provisions without touching the Platform API', async () => {
       await expect(build().provisionUserDb(USER_ID)).resolves.toEqual({
-        dbName: `expensa-user-${USER_ID}`,
+        dbName: `spendifico-user-${USER_ID}`,
         dbUrl: null,
         dbAuthToken: null,
       });
@@ -134,14 +134,17 @@ describe('UserDatabaseService', () => {
 
     it("connects with that one user's stored url and token, not a shared one", async () => {
       centralRows = [
-        { dbUrl: 'expensa-user-x.aws.turso.io', dbAuthToken: 'per-user-token' },
+        {
+          dbUrl: 'spendifico-user-x.aws.turso.io',
+          dbAuthToken: 'per-user-token',
+        },
       ];
 
       await build().getUserDb(USER_ID);
 
       expect(openCloudMock).toHaveBeenCalledWith({
         path: USER_DB_PATH,
-        url: 'expensa-user-x.aws.turso.io',
+        url: 'spendifico-user-x.aws.turso.io',
         authToken: 'per-user-token',
         syncIntervalS: 60,
       });
@@ -158,14 +161,14 @@ describe('UserDatabaseService', () => {
 
     it('creates the database and mints its token when provisioning', async () => {
       createUserDatabase.mockResolvedValue({
-        dbName: `expensa-user-${USER_ID}`,
-        hostname: 'expensa-user-x.aws.turso.io',
+        dbName: `spendifico-user-${USER_ID}`,
+        hostname: 'spendifico-user-x.aws.turso.io',
       });
       mintDbToken.mockResolvedValue('per-user-token');
 
       await expect(build().provisionUserDb(USER_ID)).resolves.toEqual({
-        dbName: `expensa-user-${USER_ID}`,
-        dbUrl: 'expensa-user-x.aws.turso.io',
+        dbName: `spendifico-user-${USER_ID}`,
+        dbUrl: 'spendifico-user-x.aws.turso.io',
         dbAuthToken: 'per-user-token',
       });
     });
@@ -178,7 +181,7 @@ describe('UserDatabaseService', () => {
       await build().deleteUserDb(USER_ID);
 
       expect(deleteUserDatabase).toHaveBeenCalledWith(
-        `expensa-user-${USER_ID}`,
+        `spendifico-user-${USER_ID}`,
       );
     });
   });

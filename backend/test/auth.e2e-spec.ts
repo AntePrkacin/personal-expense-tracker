@@ -94,7 +94,7 @@ describe('AuthController (e2e)', () => {
 
       await mailer.waitFor(email.toLowerCase(), 1);
       const [message] = mailer.to(email.toLowerCase());
-      expect(message.subject).toBe('Your Expensa login link');
+      expect(message.subject).toBe('Your Spendifico login link');
       expect(message.tags).toEqual(['login-link']);
       expect(message.textbody).toContain(
         'http://localhost:4200/auth/verify?token=',
@@ -124,7 +124,7 @@ describe('AuthController (e2e)', () => {
 
       // The cloud pointer waits for verification, and in local mode no file is
       // created either. This is the whole pre-auth cost exposure, asserted.
-      expect(row.dbName).toBe(`expensa-user-${row.id}`);
+      expect(row.dbName).toBe(`spendifico-user-${row.id}`);
       expect(row.dbUrl).toBeNull();
       expect(row.dbAuthToken).toBeNull();
       await expect(

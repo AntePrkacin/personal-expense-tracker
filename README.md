@@ -444,14 +444,17 @@ turso auth login
 turso group create decode-pet                       # holds every database
 
 # --tursodb is required, not optional. See the note below.
-turso db create expensa-app --group decode-pet --tursodb
+turso db create spendifico-app --group decode-pet --tursodb
 
-turso db show expensa-app --url                     # -> TURSO_CENTRAL_DB_URL
-turso db tokens create expensa-app                  # -> TURSO_CENTRAL_DB_TOKEN
+turso db show spendifico-app --url                     # -> TURSO_CENTRAL_DB_URL
+turso db tokens create spendifico-app                  # -> TURSO_CENTRAL_DB_TOKEN
 
 # -> TURSO_ORG_TOKEN. Scoped to the group and to the three things the backend
 # actually does, rather than a token that can do anything in your org.
-turso auth api-tokens mint expensa-backend --group decode-pet \
+# --org is mandatory whenever --group is given; without it the CLI (v1.0.31)
+# refuses with "Error: --group requires --org" rather than assuming the current
+# org. Your slug is the one `turso org list` marks as current.
+turso auth api-tokens mint spendifico-backend --org <your-org-slug> --group decode-pet \
   --scope db:create --scope db:delete --scope db:mint-token
 ```
 
@@ -471,6 +474,19 @@ data exists. Check an existing one with `turso db list`, whose `TYPE` column rea
 rather than `SQLite`. The backend passes the equivalent flag itself for every per-user
 database it creates, so this only applies to the central one you make by hand.
 
+**If your `.env` predates the Spendifico rename (PET-51), clear your local state first:**
+
+```bash
+rm -rf backend/databases
+```
+
+The rename replaced the central database and the per-user name prefix, so those files are
+synced replicas of a remote that no longer exists, pointed at by a URL that no longer
+resolves. Leaving them is the bad kind of wrong: nothing errors on startup, you simply have
+a local copy that can never reconcile with its remote. The directory is gitignored and
+rebuilt from the migrations, so deleting it costs nothing but your local dev account, which
+you re-create by registering again.
+
 ## Sending real email (optional)
 
 Access to the app is passwordless: you submit an email address and the backend sends a
@@ -480,7 +496,7 @@ registration prints something like this in the backend terminal and you open the
 yourself:
 
 ```text
-[LogMailer] Email not sent (no MAILPACE_API_TOKEN): to=marko@email.com subject="Your Expensa login link"
+[LogMailer] Email not sent (no MAILPACE_API_TOKEN): to=marko@email.com subject="Your Spendifico login link"
 [LogMailer] Link: http://localhost:4200/auth/verify?token=...
 ```
 

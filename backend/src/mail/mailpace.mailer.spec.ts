@@ -5,7 +5,7 @@ import type { MailMessage } from './mailer';
 
 const message: MailMessage = {
   to: 'marko@email.com',
-  subject: 'Your Expensa login link',
+  subject: 'Your Spendifico login link',
   htmlbody: '<p>Log in</p>',
   textbody: 'Log in',
   tags: ['login-link'],
@@ -20,7 +20,7 @@ describe('MailPaceMailer', () => {
 
   const config = {
     getOrThrow: (key: string) =>
-      key === 'MAILPACE_API_TOKEN' ? 'server-token' : 'hello@expensa.test',
+      key === 'MAILPACE_API_TOKEN' ? 'server-token' : 'hello@spendifico.test',
     get: (key: string) => (key === 'MAIL_FROM_NAME' ? fromName : undefined),
   } as unknown as ConfigService;
 
@@ -61,9 +61,9 @@ describe('MailPaceMailer', () => {
     await mailer.send(message);
 
     expect(requestBody()).toEqual({
-      from: 'hello@expensa.test',
+      from: 'hello@spendifico.test',
       to: 'marko@email.com',
-      subject: 'Your Expensa login link',
+      subject: 'Your Spendifico login link',
       htmlbody: '<p>Log in</p>',
       textbody: 'Log in',
       tags: ['login-link'],
@@ -73,7 +73,7 @@ describe('MailPaceMailer', () => {
   it('sends the bare address when no display name is configured', async () => {
     await mailer.send(message);
 
-    expect(requestBody().from).toBe('hello@expensa.test');
+    expect(requestBody().from).toBe('hello@spendifico.test');
   });
 
   it('sends `Name <address>` when MAIL_FROM_NAME is set', async () => {
@@ -81,7 +81,7 @@ describe('MailPaceMailer', () => {
 
     await mailer.send(message);
 
-    expect(requestBody().from).toBe('"Spendifico" <hello@expensa.test>');
+    expect(requestBody().from).toBe('"Spendifico" <hello@spendifico.test>');
   });
 
   it('strips quotes and backslashes that would break the display name', async () => {
@@ -89,7 +89,7 @@ describe('MailPaceMailer', () => {
 
     await mailer.send(message);
 
-    expect(requestBody().from).toBe('"Spendifico" <hello@expensa.test>');
+    expect(requestBody().from).toBe('"Spendifico" <hello@spendifico.test>');
   });
 
   it('omits tags rather than sending an empty field', async () => {

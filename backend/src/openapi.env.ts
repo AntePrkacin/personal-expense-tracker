@@ -23,7 +23,7 @@ process.env.OPENAPI_EMIT = '1';
 
 /** Exported so the emitter can delete it again rather than litter /tmp. */
 export const SCRATCH_DATABASE_DIR = mkdtempSync(
-  join(tmpdir(), 'expensa-openapi-'),
+  join(tmpdir(), 'spendifico-openapi-'),
 );
 
 process.env.DATABASE_DIR = SCRATCH_DATABASE_DIR;

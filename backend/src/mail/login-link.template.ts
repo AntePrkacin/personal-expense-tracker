@@ -27,7 +27,7 @@ export function renderLoginLinkEmail(
   const expiry = `This link works once and expires in ${ttlMinutes} minutes.`;
 
   return {
-    subject: 'Your Expensa login link',
+    subject: 'Your Spendifico login link',
     textbody: [
       'Open this link on this device to access your account:',
       '',
@@ -38,7 +38,7 @@ export function renderLoginLinkEmail(
     ].join('\n'),
     htmlbody: [
       '<p>Open this link on this device to access your account:</p>',
-      `<p><a href="${link}">Log in to Expensa</a></p>`,
+      `<p><a href="${link}">Log in to Spendifico</a></p>`,
       `<p>${expiry}</p>`,
       "<p>If you didn't ask for it, you can ignore this email.</p>",
     ].join('\n'),
