@@ -46,12 +46,12 @@ describe('TursoPlatformService', () => {
     it('posts to the organization scoped endpoint with the configured group', async () => {
       respond({
         database: {
-          Name: 'expensa-user-1',
-          Hostname: 'expensa-user-1-acme.aws.turso.io',
+          Name: 'spendifico-user-1',
+          Hostname: 'spendifico-user-1-acme.aws.turso.io',
         },
       });
 
-      const result = await service.createUserDatabase('expensa-user-1');
+      const result = await service.createUserDatabase('spendifico-user-1');
 
       const [url, init] = lastCall();
       expect(url).toBe(
@@ -60,13 +60,13 @@ describe('TursoPlatformService', () => {
       expect(init.method).toBe('POST');
       expect(init.headers).toMatchObject({ Authorization: 'Bearer org-token' });
       expect(JSON.parse(init.body as string)).toEqual({
-        name: 'expensa-user-1',
+        name: 'spendifico-user-1',
         group: 'decode-pet',
         use_tursodb: true,
       });
       expect(result).toEqual({
-        dbName: 'expensa-user-1',
-        hostname: 'expensa-user-1-acme.aws.turso.io',
+        dbName: 'spendifico-user-1',
+        hostname: 'spendifico-user-1-acme.aws.turso.io',
       });
     });
 
@@ -78,12 +78,12 @@ describe('TursoPlatformService', () => {
     it('always requests the Turso engine, never the libSQL default', async () => {
       respond({
         database: {
-          Name: 'expensa-user-1',
-          Hostname: 'expensa-user-1-acme.aws.turso.io',
+          Name: 'spendifico-user-1',
+          Hostname: 'spendifico-user-1-acme.aws.turso.io',
         },
       });
 
-      await service.createUserDatabase('expensa-user-1');
+      await service.createUserDatabase('spendifico-user-1');
 
       const [, init] = lastCall();
       expect(JSON.parse(init.body as string)).toHaveProperty(
@@ -93,10 +93,10 @@ describe('TursoPlatformService', () => {
     });
 
     it('fails loudly when Turso returns no hostname', async () => {
-      respond({ database: { Name: 'expensa-user-1' } });
+      respond({ database: { Name: 'spendifico-user-1' } });
 
       await expect(
-        service.createUserDatabase('expensa-user-1'),
+        service.createUserDatabase('spendifico-user-1'),
       ).rejects.toThrow(InternalServerErrorException);
     });
 
@@ -104,12 +104,12 @@ describe('TursoPlatformService', () => {
       delete env.TURSO_GROUP;
       respond({
         database: {
-          Name: 'expensa-user-1',
-          Hostname: 'expensa-user-1-acme.aws.turso.io',
+          Name: 'spendifico-user-1',
+          Hostname: 'spendifico-user-1-acme.aws.turso.io',
         },
       });
 
-      await service.createUserDatabase('expensa-user-1');
+      await service.createUserDatabase('spendifico-user-1');
 
       const [, init] = lastCall();
       expect(JSON.parse(init.body as string)).toHaveProperty(
@@ -123,13 +123,13 @@ describe('TursoPlatformService', () => {
     it('requests a full-access token that never expires', async () => {
       respond({ jwt: 'db-token' });
 
-      await expect(service.mintDbToken('expensa-user-1')).resolves.toBe(
+      await expect(service.mintDbToken('spendifico-user-1')).resolves.toBe(
         'db-token',
       );
 
       const [url, init] = lastCall();
       expect(url).toBe(
-        'https://api.turso.tech/v1/organizations/acme/databases/expensa-user-1/auth/tokens?authorization=full-access&expiration=never',
+        'https://api.turso.tech/v1/organizations/acme/databases/spendifico-user-1/auth/tokens?authorization=full-access&expiration=never',
       );
       expect(init.method).toBe('POST');
     });
@@ -137,7 +137,7 @@ describe('TursoPlatformService', () => {
     it('fails loudly when Turso returns no token', async () => {
       respond({});
 
-      await expect(service.mintDbToken('expensa-user-1')).rejects.toThrow(
+      await expect(service.mintDbToken('spendifico-user-1')).rejects.toThrow(
         InternalServerErrorException,
       );
     });
@@ -147,11 +147,11 @@ describe('TursoPlatformService', () => {
     it('deletes by name', async () => {
       respond({}, { status: 204 });
 
-      await service.deleteUserDatabase('expensa-user-1');
+      await service.deleteUserDatabase('spendifico-user-1');
 
       const [url, init] = lastCall();
       expect(url).toBe(
-        'https://api.turso.tech/v1/organizations/acme/databases/expensa-user-1',
+        'https://api.turso.tech/v1/organizations/acme/databases/spendifico-user-1',
       );
       expect(init.method).toBe('DELETE');
     });
@@ -166,7 +166,7 @@ describe('TursoPlatformService', () => {
   it('bounds every request with a timeout, so a hung call cannot stall registration', async () => {
     respond({ jwt: 'db-token' });
 
-    await service.mintDbToken('expensa-user-1');
+    await service.mintDbToken('spendifico-user-1');
 
     const [, init] = lastCall();
     expect(init.signal).toBeInstanceOf(AbortSignal);
@@ -175,8 +175,8 @@ describe('TursoPlatformService', () => {
   it('turns an API error into a generic 500 rather than leaking the response', async () => {
     respond({ error: 'token xyz is invalid' }, { status: 401 });
 
-    await expect(service.createUserDatabase('expensa-user-1')).rejects.toThrow(
-      InternalServerErrorException,
-    );
+    await expect(
+      service.createUserDatabase('spendifico-user-1'),
+    ).rejects.toThrow(InternalServerErrorException);
   });
 });

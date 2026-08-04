@@ -205,10 +205,11 @@ export function Sidebar({ active, firstName, lastName, email }: SidebarProps) {
             </span>
           </div>
           {/* "Spendifico", not Figma's "Expensa": the rename was decided on
-              2026-08-02 and this is its most visible string. The deliberate
-              divergence is recorded under "Renaming the product" in
-              docs/TODO.md, along with the backend half that has not moved yet.
-              Do not "correct" this back to the design. */}
+              2026-08-02 and this is its most visible string. The design file is
+              the only half that has not moved - swapping the logo asset is the
+              designer's call - and the divergence is recorded under "The Figma
+              file still says Expensa" in docs/TODO.md. Do not "correct" this
+              back to the design. */}
           <p className="text-wordmark text-text-on-dark">Spendifico</p>
         </div>
 

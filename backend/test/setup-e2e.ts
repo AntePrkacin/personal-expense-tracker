@@ -21,7 +21,7 @@ import { join } from 'node:path';
  * NODE_ENV=test. Both halves are needed - this one covers the shell, that one
  * covers the file.
  */
-const dir = mkdtempSync(join(tmpdir(), 'expensa-e2e-'));
+const dir = mkdtempSync(join(tmpdir(), 'spendifico-e2e-'));
 process.env.DATABASE_DIR = dir;
 
 for (const key of Object.keys(process.env)) {

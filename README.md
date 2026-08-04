@@ -444,14 +444,14 @@ turso auth login
 turso group create decode-pet                       # holds every database
 
 # --tursodb is required, not optional. See the note below.
-turso db create expensa-app --group decode-pet --tursodb
+turso db create spendifico-app --group decode-pet --tursodb
 
-turso db show expensa-app --url                     # -> TURSO_CENTRAL_DB_URL
-turso db tokens create expensa-app                  # -> TURSO_CENTRAL_DB_TOKEN
+turso db show spendifico-app --url                     # -> TURSO_CENTRAL_DB_URL
+turso db tokens create spendifico-app                  # -> TURSO_CENTRAL_DB_TOKEN
 
 # -> TURSO_ORG_TOKEN. Scoped to the group and to the three things the backend
 # actually does, rather than a token that can do anything in your org.
-turso auth api-tokens mint expensa-backend --group decode-pet \
+turso auth api-tokens mint spendifico-backend --group decode-pet \
   --scope db:create --scope db:delete --scope db:mint-token
 ```
 
@@ -480,7 +480,7 @@ registration prints something like this in the backend terminal and you open the
 yourself:
 
 ```text
-[LogMailer] Email not sent (no MAILPACE_API_TOKEN): to=marko@email.com subject="Your Expensa login link"
+[LogMailer] Email not sent (no MAILPACE_API_TOKEN): to=marko@email.com subject="Your Spendifico login link"
 [LogMailer] Link: http://localhost:4200/auth/verify?token=...
 ```
 

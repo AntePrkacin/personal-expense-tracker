@@ -95,7 +95,7 @@ describe('UsersService', () => {
       expect(values).toEqual({
         id,
         email: 'marko@email.com',
-        dbName: `expensa-user-${id}`,
+        dbName: `spendifico-user-${id}`,
         onboardingPayload: payload,
       });
       // The cloud pointer columns stay NULL until verification provisions the
@@ -125,14 +125,14 @@ describe('UsersService', () => {
       update.mockReturnValue(chain);
 
       await service.persistProvisionedDb('user-id', {
-        dbUrl: 'expensa-user-x-acme.aws-eu-west-1.turso.io',
+        dbUrl: 'spendifico-user-x-acme.aws-eu-west-1.turso.io',
         dbAuthToken: 'db-token',
       });
 
       // dbName is not among them: it was written at registration and derives
       // from the id, so there is nothing to update about it.
       expect(argsOf(chain, 'set')[0]).toEqual({
-        dbUrl: 'expensa-user-x-acme.aws-eu-west-1.turso.io',
+        dbUrl: 'spendifico-user-x-acme.aws-eu-west-1.turso.io',
         dbAuthToken: 'db-token',
       });
       expect(toSql(argsOf(chain, 'where')[0])).toContain(

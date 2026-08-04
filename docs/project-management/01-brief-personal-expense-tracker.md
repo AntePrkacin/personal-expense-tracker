@@ -1,6 +1,6 @@
 # Personal Expense Tracker: app brief
 
-**One-line pitch:** Expensa is a desktop web app where one person logs expenses by hand, tracks spending against a monthly budget split into categories, and gets AI-written insights about where the money goes. The Welcome screen says it directly: "Take control of your money."
+**One-line pitch:** Spendifico is a desktop web app where one person logs expenses by hand, tracks spending against a monthly budget split into categories, and gets AI-written insights about where the money goes. The Welcome screen says it directly: "Take control of your money."
 
 > **Source:** Figma file [Personal Expense Tracker](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=1-4), page "Screens", 24 frames in 5 sections (Onboarding, Dashboard, Transactions, AI Insights, Account). Everything in this brief comes from those frames. Inferences are labeled as inferences.
 >

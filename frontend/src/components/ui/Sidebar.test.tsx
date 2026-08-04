@@ -60,9 +60,9 @@ describe('Sidebar', () => {
   it('renders the wordmark, all three headings and all four items (AC1)', () => {
     renderSidebar('dashboard');
 
-    // "Spendifico", not Figma's "Expensa". See the comment in Sidebar.tsx and the
-    // rename entry in docs/TODO.md; this pins the deliberate divergence so the
-    // rename cannot be half-reverted.
+    // "Spendifico", not Figma's "Expensa". See the comment in Sidebar.tsx and
+    // "The Figma file still says Expensa" in docs/TODO.md; this pins the
+    // deliberate divergence so the rename cannot be half-reverted.
     expect(screen.getByText('Spendifico')).toBeInTheDocument();
     expect(screen.queryByText('Expensa')).not.toBeInTheDocument();
 

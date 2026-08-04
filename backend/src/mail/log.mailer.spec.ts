@@ -4,7 +4,7 @@ import type { MailMessage } from './mailer';
 
 const message: MailMessage = {
   to: 'marko@email.com',
-  subject: 'Your Expensa login link',
+  subject: 'Your Spendifico login link',
   htmlbody:
     '<p><a href="http://localhost:4200/auth/verify?token=abc">Log in</a></p>',
   textbody:
@@ -29,7 +29,7 @@ describe('LogMailer', () => {
 
     const lines = log.mock.calls.map(([line]) => String(line));
     expect(lines.join('\n')).toContain('to=marko@email.com');
-    expect(lines.join('\n')).toContain('Your Expensa login link');
+    expect(lines.join('\n')).toContain('Your Spendifico login link');
     // On its own line, so it is one click in a terminal rather than buried in
     // the body. This is the whole developer experience with no .env set.
     expect(lines).toContain(

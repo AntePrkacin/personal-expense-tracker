@@ -19,10 +19,10 @@ import {
  */
 export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
   const config = new DocumentBuilder()
-    .setTitle('Expensa API')
+    .setTitle('Spendifico API')
     .setDescription(
       [
-        'The HTTP contract of the Expensa backend.',
+        'The HTTP contract of the Spendifico backend.',
         '',
         'Generated from the NestJS code at build time, committed as `backend/openapi.json`, and',
         'the only source of the frontend response types in `frontend/src/types/api.d.ts`.',

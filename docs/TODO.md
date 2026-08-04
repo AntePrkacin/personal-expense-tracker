@@ -126,45 +126,32 @@ illustrative and the detail view drops them, or a form has to capture them and t
 columns in a later migration. Until then A20 stands, and nothing should infer a payment
 method from anything.
 
-### Renaming the product from Expensa to Spendifico
+### The Figma file still says Expensa
 
-Decided on 2026-08-02: the product becomes **Spendifico**. Not done yet, and the rename is
-not uniform - one part of it is a data migration wearing a find-and-replace costume.
+The product became **Spendifico** on 2026-08-02 and PET-51 finished the rename: the login
+email, the OpenAPI document title, the docs, every internal identifier, and the per-user
+database prefix, on top of the wordmark and `<title>` PET-18 had already taken. The only
+places left that say Expensa are the ones naming this divergence, plus `docs/plans/` and
+`docs/reviews/`, which are dated records. The plan is
+`docs/plans/2026-08-02_PET-51_spendifico-rename.md`.
 
-**Safe to change with a find and replace.** User-facing copy: the email subject and body
-(`src/mail/login-link.template.ts`, currently "Your Expensa login link" and "Log in to
-Expensa"), the frontend `<title>`, the OpenAPI document title in `src/openapi.document.ts`
-(run `npm run api:sync` after, or CI's drift gate fails), README prose, and the wording
-throughout `docs/project-management/`. `SYNC_CLIENT_NAME` (`expensa-backend`) is sent to
-Turso for observability only and nothing keys on it.
+The design file is the one holdout: it still draws the old logo and wordmark, and swapping
+the asset is the designer's call. Until it happens, `ui/Sidebar.tsx` renders "Spendifico"
+against the design on purpose, `Sidebar.test.tsx` pins that so it cannot be half-reverted,
+and `02-tech-spec-personal-expense-tracker.md` records the departure beside its **Source:**
+note.
 
-**Not safe: `USER_DB_NAME_PREFIX` in `src/database/database.constants.ts`.** That prefix
-feeds `userDbName(id)`, which derives both the remote Turso database name and the local
-file path, and the result is persisted in `users.db_name`. Change the prefix and every
-existing user's derived name stops matching both their central row and the database that
-actually exists: `getUserDb` opens or creates the wrong file, and `deleteUserDb` - which
-derives the name from the id on purpose, because its caller may have no row to read -
-targets a database that is not there. Nothing errors loudly; people simply lose their data.
-
-If it has to change, the prefix stops being derivable and `db_name` becomes the source of
-truth: read it from the central row wherever a name is needed, and let the constant apply
-to new users only. That is a real change to `UserDatabaseService`, not a rename, and it is
-worth deciding whether the infrastructure naming needs to follow the brand at all.
-
-The central database (`expensa-app`) is created by hand per the README, so renaming it
-means creating a new one and moving the directory into it.
-
-**The frontend half is done.** PET-18 took it: `ui/Sidebar.tsx` renders the wordmark as
-"Spendifico" and `src/app/layout.tsx` carries it as the `<title>`. A test pins the wordmark
-so the divergence from the Figma file cannot be half-reverted. Nothing else in `frontend/`
-mentions either name.
-
-**The backend copy has not moved, so the sender and the copy still disagree.**
-`MAIL_FROM_NAME` is already `Spendifico`, so the login email arrives from "Spendifico" while
-its subject and body still say Expensa (`src/mail/login-link.template.ts`), as does the
-OpenAPI document title. That is the remaining safe half: change both, then run
-`npm run api:sync` or CI's drift gate fails. It is the one email a stranger has to trust
-enough to click, so it should not sit that way for long.
+**One constraint the rename leaves behind.** `USER_DB_NAME_PREFIX` was renamed while it was
+still free, verified against live Turso: no per-user database existed and no `users` row
+named one. That window is closed the moment PET-52 lets a real account verify. `userDbName(id)`
+derives the name and `users.db_name` persists it, so a second rename would strand every
+existing account silently - `getUserDb` creates a fresh empty file instead of opening the
+synced one, and `deleteUserDb`, which derives the name from the id on purpose because its
+caller may have no row to read, targets a database that is not there. Doing it then means
+`db_name` first becoming the source of truth wherever a name is needed, with the constant
+applying to new users only, which costs `deleteUserDb` that no-row compensation path. That is
+a real change to `UserDatabaseService` rather than a rename, and infrastructure naming no user
+ever sees does not need to follow the brand a second time.
 
 ### The sidebar's nav pills use a radius that is not on the scale
 
@@ -233,7 +220,7 @@ delete _also_ fails, a cloud database exists that no row points at, the central 
 `db_url` stays NULL, and every later verification of that account 500s on the name
 collision. The failure is logged in full by `VerificationService`, naming the database.
 
-The fix is manual and one step: delete `expensa-user-<id>` through the Turso MCP server or
+The fix is manual and one step: delete `spendifico-user-<id>` through the Turso MCP server or
 the Platform API - never the CLI, for the name-cache reason below. The next resent link then
 provisions cleanly.
 
@@ -273,8 +260,8 @@ dies on its own.
 Rotation is a deliberate ops action:
 
 ```bash
-turso db tokens invalidate expensa-app        # central database
-turso auth api-tokens revoke expensa-backend  # control plane
+turso db tokens invalidate spendifico-app        # central database
+turso auth api-tokens revoke spendifico-backend  # control plane
 ```
 
 Per-user tokens live in the central `users.db_auth_token` column, so rotating those means
@@ -283,8 +270,8 @@ needed urgently rather than during an incident.
 
 ### The Turso CLI has a stale name cache, and it bites this project constantly
 
-With CLI v1.0.31, `turso db shell expensa-user-<uuid>` reports "database not found" and
-`turso db destroy expensa-user-<uuid> --yes` exits 0 having done nothing, while `turso db
+With CLI v1.0.31, `turso db shell spendifico-user-<uuid>` reports "database not found" and
+`turso db destroy spendifico-user-<uuid> --yes` exits 0 having done nothing, while `turso db
 show` and `turso db list` handle the identical name perfectly.
 
 **Cause, confirmed on 2026-08-01.** The CLI caches the organization's database names in
@@ -292,8 +279,8 @@ show` and `turso db list` handle the identical name perfectly.
 and `db destroy` resolve the name against that cache instead of the API. Any database
 created by something other than this CLI is therefore invisible to them until the cache
 expires. That is _every_ per-user database, since the backend creates them through the
-Platform API, which is why `expensa-app` and `jura` work (both created via the CLI) and
-`expensa-user-*` never does. Nothing to do with the name being long, which was the first
+Platform API, which is why `spendifico-app` and `jura` work (both created via the CLI) and
+`spendifico-user-*` never does. Nothing to do with the name being long, which was the first
 guess.
 
 Note that `turso db list` does **not** refresh the cache, so the error message's advice to
@@ -303,7 +290,7 @@ Three ways around it, best first:
 
 1. **Use the Turso MCP server.** It goes straight to the API and has no cache.
    `read_database`, `evolve_schema` and `delete_database` all worked on a
-   freshly-created `expensa-user-<uuid>` in the same session where the CLI refused.
+   freshly-created `spendifico-user-<uuid>` in the same session where the CLI refused.
 2. **Expire the cache**, after which the CLI falls back to the API and works:
    ```bash
    python3 -c "import json;p='$HOME/.config/turso/settings.json';d=json.load(open(p));d['cache']['database_names']['expiration']=0;json.dump(d,open(p,'w'))"
@@ -317,7 +304,7 @@ Three ways around it, best first:
 
 Worth retesting after a CLI upgrade; this looks like a plain bug rather than a design
 decision. Inspecting the central directory is unaffected either way:
-`turso db shell expensa-app "select id, email from users;"`.
+`turso db shell spendifico-app "select id, email from users;"`.
 
 ### Text primary keys are nullable at the database level
 

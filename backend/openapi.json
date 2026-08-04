@@ -431,8 +431,8 @@
     }
   },
   "info": {
-    "title": "Expensa API",
-    "description": "The HTTP contract of the Expensa backend.\n\nGenerated from the NestJS code at build time, committed as `backend/openapi.json`, and\nthe only source of the frontend response types in `frontend/src/types/api.d.ts`.\nDo not edit either by hand: run `npm run api:sync` from the repo root.\n\nEvery operation can additionally answer **500** with `ErrorResponseDto`, via the global\nexception filter. It is stated once here rather than per operation: it is the same\nnon-actionable fact everywhere, and repeating it would widen every generated response type.",
+    "title": "Spendifico API",
+    "description": "The HTTP contract of the Spendifico backend.\n\nGenerated from the NestJS code at build time, committed as `backend/openapi.json`, and\nthe only source of the frontend response types in `frontend/src/types/api.d.ts`.\nDo not edit either by hand: run `npm run api:sync` from the repo root.\n\nEvery operation can additionally answer **500** with `ErrorResponseDto`, via the global\nexception filter. It is stated once here rather than per operation: it is the same\nnon-actionable fact everywhere, and repeating it would widen every generated response type.",
     "version": "0.1.0",
     "contact": {}
   },

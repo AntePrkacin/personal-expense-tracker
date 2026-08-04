@@ -39,7 +39,7 @@ export interface LocalConnectionOptions {
 /**
  * The sync client accepts `libsql://` and `turso://` and rewrites them to
  * `https://` itself, so the only case needing help is the Platform API's bare
- * `Hostname` (e.g. `expensa-user-x-acme.aws-eu-west-1.turso.io`), which we
+ * `Hostname` (e.g. `spendifico-user-x-acme.aws-eu-west-1.turso.io`), which we
  * store verbatim rather than guessing a scheme at write time.
  */
 export function toSyncUrl(urlOrHostname: string): string {
