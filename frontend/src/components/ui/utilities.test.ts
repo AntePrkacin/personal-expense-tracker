@@ -12,6 +12,7 @@ import { TAG_TONES } from './Tag';
 // Outside this folder, like the shell's maps: see the note on coverage above.
 import { RESEND_MESSAGE } from '../ResendLink';
 import { CHIP_LABEL, CHIP_SURFACE } from '../../app/setup/categories/CategoryChip';
+import { MODAL_BACKDROP, MODAL_BOX, MODAL_CLOSE, MODAL_DIVIDER } from '../../app/(app)/Modal';
 import { STEP_DOT, STEP_WIDTH } from '../../app/setup/SetupShell';
 
 // Proves every utility the components, the app shell and the access screens rely
@@ -202,6 +203,8 @@ const HARDCODED = [
   'px-3',
   'px-3.5',
   'px-5',
+  // 24px, the horizontal padding on all three of the modal's bands (node 28:384).
+  'px-6',
   'px-6.5',
   'px-20',
   // 2px, the count badge's vertical inset.
@@ -209,11 +212,16 @@ const HARDCODED = [
   'py-1',
   'py-2.75',
   'py-3',
+  // 22px, the modal body's vertical padding (node 28:390).
+  'py-5.5',
   'py-10',
   'pt-1',
   // 6px, the gap above both setup cards' Back-and-Continue row.
   'pt-1.5',
   'pt-3',
+  // 18px above the modal's footer row and 22px above its title (nodes 28:416, 28:385).
+  'pt-4.5',
+  'pt-5.5',
   'pt-6',
   'pt-7',
   'pt-8',
@@ -223,12 +231,19 @@ const HARDCODED = [
   'pb-2',
   // 12px, under each tab's label, which is what lifts both labels off the bar's rule.
   'pb-3',
+  // 18px under the modal's title and 22px under its footer row.
+  'pb-4.5',
+  'pb-5.5',
   'pb-6',
   'pb-6.5',
   'pb-8',
   'pb-14',
   'pl-2',
   'pl-3',
+  // The modal header's asymmetric inset: 24 left against 20 right, because the close
+  // target carries its own visual padding inside a 34px box (node 28:385).
+  'pl-6',
+  'pr-5',
   // 20px, and the one class here derived from two Figma numbers rather than read off
   // one. The empty-state action sits 36px below the copy; the card's gap-4 supplies 16
   // of that, because Figma spends a 4px spacer frame inside a 16px-gap column to get
@@ -406,6 +421,23 @@ const CHIP_CLASSES = [CHIP_SURFACE, CHIP_LABEL].flatMap((map) => Object.values(m
 const RESEND_MESSAGE_CLASSES = Object.values(RESEND_MESSAGE).flatMap(split);
 
 /**
+ * The modal's box, scrim and close target (app/(app)/Modal.tsx).
+ *
+ * Three of these are exactly what this harness exists for, because each one fails silently
+ * and invisibly:
+ *
+ * - **`m-auto`** is what centres the dialog, because Tailwind's preflight zeroes the user
+ *   agent's own `dialog { margin: auto }`. Compiled away, the modal pins to the top-left
+ *   corner and no other test notices.
+ * - **`open:flex`** carries a variant prefix, so a change to how Tailwind spells the `open`
+ *   variant would drop the whole declaration and leave the box's children unstacked.
+ * - **`backdrop:bg-[rgba(10,15,23,0.5)]`** is a variant *and* an arbitrary value with parens
+ *   and commas in it - the exact shape this file's `selector()` grew its escaping for - and
+ *   it is the only scrim in the app. Losing it leaves a modal floating over an undimmed page.
+ */
+const MODAL_CLASSES = [MODAL_BOX, MODAL_BACKDROP, MODAL_CLOSE, MODAL_DIVIDER].flatMap(split);
+
+/**
  * Classes used only by the stories, to frame a component against a card.
  *
  * Worth guarding for the same reason as the components: Storybook is where
@@ -450,6 +482,7 @@ const EXPECTED = [
   ...STEP_WIDTH_CLASSES,
   ...CHIP_CLASSES,
   ...RESEND_MESSAGE_CLASSES,
+  ...MODAL_CLASSES,
   ...HARDCODED,
   ...STORY_CHROME,
 ];

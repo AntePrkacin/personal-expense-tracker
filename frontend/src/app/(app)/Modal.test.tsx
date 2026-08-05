@@ -1,0 +1,320 @@
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
+
+import { Modal } from './Modal';
+
+// What this suite can and cannot see is the thing to understand before adding to it.
+//
+// jsdom 26.1.0 implements almost nothing of `HTMLDialogElement` - its prototype carries
+// exactly `constructor` and `open` - so `jest.setup.ts` fakes `showModal()` and `close()` and
+// **deliberately fakes nothing else**. Three behaviours are therefore unassertable here, and
+// asserting them would mean asserting the polyfill rather than the browser:
+//
+//   - **Escape.** In a browser it fires `cancel`, whose default action calls `close()`. The
+//     closest honest thing is the last test in "closing", which fires a real `close` event and
+//     proves the wiring Escape arrives through.
+//   - **The focus trap.** `user.tab()` walks straight out of the dialog under jsdom, because
+//     there is no top layer.
+//   - **Focus returning to the trigger.** The browser does it and this component writes no
+//     code for it, so there is nothing here to observe.
+//
+// All three are Storybook and manual checks, recorded in `frontend/src/app/CLAUDE.md`.
+
+/** A trigger plus the modal, so opening is a real interaction rather than a mount. */
+function Harness({
+  onClose,
+  initialFocusId,
+  onSubmit,
+}: {
+  onClose?: () => void;
+  initialFocusId?: string;
+  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Open it
+      </button>
+
+      {open ? (
+        <Modal
+          title="Add transaction"
+          onClose={() => {
+            setOpen(false);
+            onClose?.();
+          }}
+          footer={
+            <>
+              <button type="button">Cancel</button>
+              <button type={onSubmit ? 'submit' : 'button'}>Add transaction</button>
+            </>
+          }
+          initialFocusId={initialFocusId}
+          onSubmit={onSubmit}
+        >
+          <label htmlFor="amount">Amount</label>
+          <input id="amount" />
+          <label htmlFor="merchant">Merchant</label>
+          <input id="merchant" />
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+
+const dialog = () => screen.getByRole('dialog');
+const openIt = () => screen.getByRole('button', { name: 'Open it' });
+
+describe('mounting and unmounting', () => {
+  it('renders nothing at all until it is mounted', async () => {
+    render(<Harness />);
+
+    // The property (app)/pages.test.tsx leans on. A closed <dialog> is display:none, so
+    // queryByRole cannot see inside it - but queryAllByText and queryAllByLabelText CAN, so
+    // "closed" is not enough and "not rendered" is the requirement.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add transaction')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+
+    await userEvent.click(openIt());
+
+    expect(dialog()).toBeInTheDocument();
+  });
+
+  it('opens as a modal rather than by setting the open attribute', async () => {
+    // showModal() is what puts the dialog in the top layer, contains focus and paints a
+    // ::backdrop. A bare `open` attribute renders the same box in jsdom and none of that in a
+    // browser, so the distinction is invisible here and has to be pinned directly.
+    const showModal = jest.spyOn(HTMLDialogElement.prototype, 'showModal');
+
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(showModal).toHaveBeenCalledTimes(1);
+    expect(dialog()).toHaveAttribute('open');
+
+    showModal.mockRestore();
+  });
+});
+
+describe('the header', () => {
+  it('takes its accessible name from the title', async () => {
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByRole('dialog', { name: 'Add transaction' })).toBeInTheDocument();
+  });
+
+  it('renders the title as an h2, leaving the page its only h1', async () => {
+    // PageHeader owns the page's h1 and (app)/pages.test.tsx asserts there is exactly one.
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Add transaction' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+  });
+
+  it('names the close control "Close" without drawing a label', async () => {
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    const close = screen.getByRole('button', { name: 'Close' });
+
+    // A visually hidden span rather than aria-label, and the glyph hidden from the tree.
+    expect(close).toBeInTheDocument();
+    expect(close.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+describe('closing', () => {
+  it('closes when the X is clicked', async () => {
+    const onClose = jest.fn();
+    render(<Harness onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('closes when the scrim is clicked', async () => {
+    // A click on ::backdrop reports the dialog element itself as its target, which is what
+    // this simulates by clicking the dialog rather than a child of it.
+    const onClose = jest.fn();
+    render(<Harness onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    await userEvent.click(dialog());
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close when something inside it is clicked', async () => {
+    const onClose = jest.fn();
+    render(<Harness onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    await userEvent.click(screen.getByLabelText('Amount'));
+    await userEvent.click(screen.getByRole('heading', { level: 2 }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(dialog()).toBeInTheDocument();
+  });
+
+  it('reports a close exactly once, however it was closed', async () => {
+    // The one-exit rule. Every affordance funnels through close(), and the polyfill no-ops a
+    // close() on an already-closed dialog, so a double call cannot double-report.
+    const onClose = jest.fn();
+    render(<Harness onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    const close = screen.getByRole('button', { name: 'Close' });
+    await userEvent.click(close);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a native close event, which is the path Escape arrives through', async () => {
+    // The closest this environment gets to AC7's Escape. In a browser, Escape fires `cancel`,
+    // whose default action calls close(), which fires this event. Firing it directly proves
+    // the component's half of that chain; the keystroke itself is a manual check.
+    const onClose = jest.fn();
+    render(<Harness onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    // Wrapped in act because this dispatch is the one interaction here that React does not
+    // already own: it unmounts the modal through the harness's setOpen, and an unwrapped
+    // state update warns rather than failing.
+    const target = dialog();
+    act(() => {
+      target.dispatchEvent(new Event('close'));
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('focus on open', () => {
+  it('focuses the control named by initialFocusId', async () => {
+    // AC2's precondition: frame 09 draws the Amount field focused, and the designed 1.5px
+    // accent border is a focus style, so nothing renders it unless focus actually lands here.
+    render(<Harness initialFocusId="amount" />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByLabelText('Amount')).toHaveFocus();
+  });
+
+  it('does not focus the close button, which is the first tabbable child', async () => {
+    // The reason initialFocusId exists. Without it the browser's default lands here and a
+    // screen reader announces "Close" on arrival.
+    render(<Harness initialFocusId="amount" />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByRole('button', { name: 'Close' })).not.toHaveFocus();
+  });
+
+  it('moves no focus when no id is given', async () => {
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    // Nothing inside claims focus, so whatever the environment focused stays focused. The
+    // browser would have focused the X; jsdom focuses nothing, which is why this asserts the
+    // absence of *our* move rather than a specific element.
+    expect(screen.getByLabelText('Amount')).not.toHaveFocus();
+  });
+
+  it('ignores an id that matches nothing rather than throwing', async () => {
+    render(<Harness initialFocusId="not-here" />);
+
+    await expect(userEvent.click(openIt())).resolves.not.toThrow();
+    expect(dialog()).toBeInTheDocument();
+  });
+});
+
+describe('the optional form', () => {
+  it('wraps the body and footer in a form when onSubmit is given', async () => {
+    const onSubmit = jest.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
+    render(<Harness onSubmit={onSubmit} />);
+    await userEvent.click(openIt());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add transaction' }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits on Enter in a field, which is why it is a real form', async () => {
+    // An onClick-only button leaves Enter dead in every field. BudgetForm records the same.
+    const onSubmit = jest.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
+    render(<Harness onSubmit={onSubmit} />);
+    await userEvent.click(openIt());
+
+    await userEvent.type(screen.getByLabelText('Amount'), '24{Enter}');
+
+    expect(onSubmit).toHaveBeenCalled();
+  });
+
+  it('marks the form noValidate, so the browser bubble cannot replace the inline message', async () => {
+    const onSubmit = jest.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
+    render(<Harness onSubmit={onSubmit} />);
+    await userEvent.click(openIt());
+
+    expect(dialog().querySelector('form')).toHaveAttribute('novalidate');
+  });
+
+  it('renders no form at all when onSubmit is absent', async () => {
+    // Frame 12 and the category delete confirmation have nothing to submit.
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(dialog().querySelector('form')).toBeNull();
+  });
+});
+
+describe('the designed structure', () => {
+  it('draws the two hairline dividers', async () => {
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(dialog().querySelectorAll('.bg-border-subtle.h-px')).toHaveLength(2);
+  });
+
+  it('carries m-auto, without which preflight leaves it in the corner', async () => {
+    // Tailwind preflight sets margin:0 on *, overriding the UA's dialog{margin:auto} - the
+    // entire centring mechanism. Nothing about the markup looks wrong when it is missing,
+    // which is why it is pinned here rather than left to a visual check.
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(dialog()).toHaveClass('m-auto');
+  });
+
+  it('scopes its display to the open state rather than laying out unconditionally', async () => {
+    // A bare `flex` would outrank the UA's dialog:not([open]){display:none} and show the box
+    // for the frame between mount and the effect.
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(dialog()).toHaveClass('open:flex');
+    expect(dialog().className).not.toMatch(/(^|\s)flex(\s|$)/);
+  });
+
+  it('does not clip its own overflow, which would cut the footer focus rings', async () => {
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(dialog().className).not.toContain('overflow-clip');
+    expect(dialog().className).not.toContain('overflow-hidden');
+  });
+
+  it('styles the scrim through the backdrop variant', async () => {
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(dialog().className).toContain('backdrop:bg-[rgba(10,15,23,0.5)]');
+  });
+});
