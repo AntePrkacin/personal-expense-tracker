@@ -62,8 +62,6 @@ type TransactionsTableProps = {
   transactions: Transaction[];
   /** The account's categories, for the id-to-name-and-colour join below. */
   categories: CategoryLabel[];
-  /** True while a filter change is in flight, so the rows can say they are stale. */
-  pending?: boolean;
 };
 
 /**
@@ -82,12 +80,19 @@ function categoryIndex(categories: CategoryLabel[]): Map<string, RowCategory> {
   );
 }
 
-export function TransactionsTable({ transactions, categories, pending }: TransactionsTableProps) {
+export function TransactionsTable({ transactions, categories }: TransactionsTableProps) {
   const index = categoryIndex(categories);
 
   return (
     <div className="bg-surface-card border-border-default rounded-lg border px-6 pt-1.5 pb-2">
       <table className="w-full table-fixed">
+        {/* A table needs a name, and the design draws none - the page's `h1` is the only
+            heading near it. `sr-only` rather than an `aria-label` because a caption is the
+            element HTML has for exactly this, and PET-34's detail page adds a second table
+            ("Recent in {category}"), at which point two unnamed tables in one app is a worse
+            problem than one. */}
+        <caption className="sr-only">Transactions</caption>
+
         <thead>
           {/* The rule under the header, and the only border-b in this file: the rules
               *between* rows come from `divide-y` on the body, which draws none after the
@@ -110,14 +115,11 @@ export function TransactionsTable({ transactions, categories, pending }: Transac
           </tr>
         </thead>
 
-        {/* aria-busy while a filter change is in flight. There is no designed pending state
-            anywhere in the file (A29), so the dimming and this attribute are ours: without
-            them the gap between the last keystroke and the new rows is a screen where
-            nothing at all changes, which reads as a search that does not work. */}
-        <tbody
-          aria-busy={pending ? true : undefined}
-          className={`divide-border-subtle divide-y transition-opacity ${pending ? 'opacity-60' : ''}`}
-        >
+        {/* The pending affordance is deliberately **not** here. It was, as a `pending` prop,
+            and nothing could ever pass it: this is a Server Component, and the flag lives in
+            the client components that start the navigation. `FilterNavigation`'s
+            `PendingRegion` wraps this card and owns it now. */}
+        <tbody className="divide-border-subtle divide-y">
           {transactions.map((transaction) => (
             <TransactionRow
               key={transaction.id}

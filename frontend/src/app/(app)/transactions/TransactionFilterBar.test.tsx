@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { CategoryLabel } from '../../../lib/categories';
 import type { TransactionFilters } from '../../../lib/transactions';
 
+import { FilterNavigationProvider } from './FilterNavigation';
 import { TransactionFilterBar } from './TransactionFilterBar';
 
 // The three selects (TRN-3, AC4, AC5).
@@ -18,9 +19,14 @@ const CATEGORIES: CategoryLabel[] = [
   { id: '0198c2a1-0000-7000-8000-0000000000a2', name: 'Transport', color: '#3F8EE6' },
 ];
 
-function setup(filters: TransactionFilters = {}) {
+/** The provider is real: it owns the router call, and the bar throws outside it by design. */
+function setup(filters: TransactionFilters = {}, categories = CATEGORIES) {
   const user = userEvent.setup();
-  render(<TransactionFilterBar filters={filters} categories={CATEGORIES} />);
+  render(
+    <FilterNavigationProvider>
+      <TransactionFilterBar filters={filters} categories={categories} />
+    </FilterNavigationProvider>,
+  );
 
   return { user };
 }
@@ -181,7 +187,7 @@ describe('an account with no categories', () => {
   it('still renders the category select with its "All categories" entry', () => {
     // Not reachable today - provisioning seeds the fallback - but an empty <select> with no
     // options is a control that cannot be operated.
-    render(<TransactionFilterBar filters={{}} categories={[]} />);
+    setup({}, []);
 
     expect(screen.getByRole('combobox', { name: 'Category' })).toHaveDisplayValue('All categories');
   });

@@ -34,13 +34,19 @@ const UBER = transaction({
   date: '2025-10-08',
 });
 
-function renderTable(transactions: Transaction[] = [transaction()], pending?: boolean) {
-  return render(
-    <TransactionsTable transactions={transactions} categories={CATEGORIES} pending={pending} />,
-  );
+function renderTable(transactions: Transaction[] = [transaction()]) {
+  return render(<TransactionsTable transactions={transactions} categories={CATEGORIES} />);
 }
 
 describe('the columns', () => {
+  it('has an accessible name, so a second table on a page stays distinguishable', () => {
+    // A `<caption>` rather than an `aria-label`: it is the element HTML has for this, and
+    // PET-34's detail page adds "Recent in {category}" beside it.
+    renderTable();
+
+    expect(screen.getByRole('table', { name: 'Transactions' })).toBeInTheDocument();
+  });
+
   it('publishes real table semantics rather than a grid of divs', () => {
     // The reason a <table> was chosen: a screen reader gets "Date, column 3" from the
     // element, where a div grid needs four ARIA roles spelled out to say the same thing.
@@ -136,25 +142,6 @@ describe('the rows', () => {
     renderTable([]);
 
     expect(screen.getAllByRole('row')).toHaveLength(1);
-  });
-});
-
-describe('the pending state', () => {
-  it('says so while a filter change is in flight', () => {
-    // Ours rather than designed (A29): without it, the gap between the last keystroke and
-    // the new rows is a screen where nothing changes, which reads as a broken search.
-    const { container } = renderTable([transaction()], true);
-    const body = container.querySelector('tbody');
-
-    expect(body).toHaveAttribute('aria-busy', 'true');
-    expect(body).toHaveClass('opacity-60');
-  });
-
-  it('sets no aria-busy at rest', () => {
-    // `aria-busy="false"` on every idle render would be noise; the attribute is absent.
-    const { container } = renderTable();
-
-    expect(container.querySelector('tbody')).not.toHaveAttribute('aria-busy');
   });
 });
 

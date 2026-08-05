@@ -1,11 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useTransition } from 'react';
-
 import type { CategoryLabel } from '@/lib/categories';
 import type { TransactionFilters } from '@/lib/transactions';
 
+import { useFilterNavigation } from './FilterNavigation';
 import {
   DEFAULT_PERIOD,
   DEFAULT_SORT,
@@ -31,15 +29,11 @@ import {
 // the bordered box** - a padded box turns its own 9-14px band into a dead zone where a click
 // opens no list.
 //
-// **A filter change is a `replace`, not a `push`.** These are three views of one page rather
-// than three places, so walking Back through every category a user tried is not history, it
-// is noise - and the search field beside them, which writes on a debounce, would push an
-// entry per typing pause. The cost is real and stated rather than hidden: Back no longer
-// undoes a filter change either.
-//
-// The pending state is `TransactionsTable`'s to render; this bar starts the transition and
-// hands `isPending` up through nothing - the page re-renders on the server, so the table
-// reads it from its own render rather than from a shared store.
+// **The navigation goes through `FilterNavigation` rather than through this file's own
+// router.** That provider owns the one `useTransition` on the screen, which is what lets the
+// table dim while a change is in flight - three controls each owning their own would produce
+// three `isPending` flags that nothing between them can read. It is also where the
+// `replace`-not-`push` decision is recorded, since it applies to the search field equally.
 
 /**
  * The pill's box, and the control inside it.
@@ -127,19 +121,20 @@ type TransactionFilterBarProps = {
 };
 
 export function TransactionFilterBar({ filters, categories }: TransactionFilterBarProps) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
+  const { navigate } = useFilterNavigation();
 
   /**
    * Navigate to the same page with one filter changed.
    *
    * **A default is written as `undefined`, so the key leaves the URL rather than being
    * spelled out.** `filters.ts` gives the reason in full: one view must not have two URLs.
+   *
+   * No `scroll: false` here, unlike the search field: these three sit above the table, so
+   * whoever touches one is already at the top, and landing on the new first row after a sort
+   * change is what was asked for.
    */
   function apply(change: Partial<TransactionFilters>) {
-    startTransition(() => {
-      router.replace(filterHref({ ...filters, ...change }));
-    });
+    navigate(filterHref({ ...filters, ...change }));
   }
 
   return (

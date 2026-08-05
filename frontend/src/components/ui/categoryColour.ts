@@ -88,8 +88,19 @@ export const CATEGORY_TILE_NEUTRAL = 'bg-text-tertiary';
  * go through a class map.
  */
 export function categoryTileClass(hex: string | null | undefined): string {
-  const colour =
-    hex === null || hex === undefined ? undefined : CATEGORY_COLOUR_BY_HEX[hex.toUpperCase()];
+  if (hex === null || hex === undefined) {
+    return CATEGORY_TILE_NEUTRAL;
+  }
 
-  return colour === undefined ? CATEGORY_TILE_NEUTRAL : CATEGORY_TILE[colour];
+  // `Object.hasOwn` rather than a bare index. The key is a stored value that reaches here from
+  // the API, and a plain object lookup also finds everything on `Object.prototype` - so a
+  // colour of `constructor` or `toString` would return a function where a class string is
+  // expected. Uppercasing happens to defeat that today, since none of those keys carry
+  // capitals, but that is luck rather than a guard and it would stop being true the moment
+  // this stopped normalising case.
+  const key = hex.toUpperCase();
+
+  return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
+    ? CATEGORY_TILE[CATEGORY_COLOUR_BY_HEX[key]!]
+    : CATEGORY_TILE_NEUTRAL;
 }

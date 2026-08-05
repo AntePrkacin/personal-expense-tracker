@@ -355,6 +355,43 @@ search matching nothing costs two requests rather than one, so a navigation per 
 be two round trips per keystroke - which is why the 300ms debounce in
 `app/(app)/transactions/TransactionSearch.tsx` is load-bearing rather than a nicety.
 
+### The filter bar's pending state is a browser check, not a jsdom one
+
+`app/(app)/transactions/FilterNavigation.tsx` dims the table and sets `aria-busy` while a filter
+change is in flight, and the moment it turns true cannot be asserted under Jest. A transition
+stays pending only while something inside it suspends; in the running app that is
+`router.replace` suspending on the RSC payload, and a mocked router resolves immediately, so the
+callback completes synchronously and `isPending` is false again before an assertion can run.
+
+Rewriting `navigate` into an async transition purely so a test could observe it would be
+contorting the component to suit the harness, which is the call `(app)/Modal.tsx` already makes
+about Escape and its focus trap. So the suite pins everything either side - that the region is
+mounted around the table, that it is silent at rest, that the controls reach the provider at all -
+and the busy state itself is eyeballed.
+
+The near miss is worth recording, because it is what the region exists to prevent: an earlier
+version of this ticket gave `TransactionsTable` a `pending` prop that **no caller could pass**,
+and its tests set the prop by hand, so they were green against a feature wired to nothing. If a
+future change breaks the wiring again, the assertion that catches it is the one in
+`TransactionsScreen.test.tsx` that the table sits inside the region, not anything about the class.
+
+### The transactions page re-reads the categories on every filter change
+
+`app/(app)/transactions/page.tsx` runs `readTransactionsView` and `readCategoryLabels` in
+`Promise.all`, and both re-run on every navigation - so each debounced keystroke, each category
+change and each sort change fetches a category list that cannot have changed. With the probe
+above, a search matching nothing costs **three** backend requests where one would do.
+
+Deliberate for now rather than overlooked. The obvious fix is caching the category read, and the
+invalidation story is the part that makes it a decision rather than a tidy-up: a category created
+in the Add transaction modal has to appear in the filter select, and the modal already re-reads
+on every open with `cache: 'no-store'` for exactly that reason. Ten categories is also a cheap
+query against a per-user SQLite database, so the win is small today.
+
+What would change the calculus is the account-wide count discussed above landing, or a user with
+enough categories that the join stops being trivial. Whoever picks it up should look at the two
+reads together rather than only this one.
+
 ### The header period ignores the profile's month start day
 
 `monthOverline()` and `monthLabel()` in `lib/format.ts` format the **calendar** month, and

@@ -105,9 +105,37 @@ Six things the plan got wrong or did not know, all verified rather than assumed:
 ## Undesigned decisions this ticket adds
 
 All owe A29 sign-off with the rest: the two period labels beyond "This month" and the second sort
-label (A16's amendment); and the pending affordance - `aria-busy` plus a dimmed `<tbody>` while a
+label (A16's amendment); and the pending affordance - `aria-busy` plus a dimmed table while a
 filter change is in flight - since no frame draws one and without it the gap between the last
 keystroke and the new rows is a screen where nothing changes.
+
+## Fixed in review
+
+Six findings from the review of PR #46, all of them in this ticket's own work.
+
+1. **The pending affordance was dead code.** `TransactionsTable` took a `pending` prop and
+   nothing could pass it - the flag lives in the client components that navigate, and the table
+   is a Server Component between them. It was documented, tested against a hand-set prop, and
+   wired to nothing. `FilterNavigation.tsx` now hoists the one `useTransition` to a provider
+   around the whole screen; both controls navigate through it and `PendingRegion` wraps the
+   table. The prop is gone.
+2. **Its tests tested the prop, not the behaviour**, so they would have stayed green whatever
+   the wiring did. Replaced with a provider suite plus a `TransactionsScreen` assertion that the
+   table is actually inside the region - the assertion that would have caught (1).
+3. **The debounce timer is cancelled on unmount.** The comment justifying its absence confused
+   `router.replace` with the setState-after-unmount warning React 18 removed; a timer firing
+   after the user clicks away would navigate them back to `/transactions?search=...`. Not
+   reproduced (the window is 300ms) but three lines removes the question.
+4. **The categories re-read on every keystroke is recorded** in `page.tsx` and `docs/TODO.md`
+   rather than left for the next person to rediscover.
+5. **`page.tsx`'s categories failure policy is tested** - the 401 redirect and the throw, plus
+   that it does not degrade to a table with every category cell blank.
+6. **The table has an accessible name**, an `sr-only` `<caption>`, since PET-34 adds a second
+   table to the app.
+
+Two smaller notes went with them: `categoryTileClass` uses `Object.hasOwn` rather than relying on
+uppercasing to defeat a prototype lookup, and `SearchPill`'s props are an exclusive union so a
+`value` without an `onChange` is a build error rather than a runtime warning.
 
 ## Verification
 

@@ -168,6 +168,19 @@ describe('the populated state', () => {
 
     expect(screen.getByTestId('filter-bar')).toBeInTheDocument();
   });
+
+  it('wraps the table in the pending region, so a filter change can dim it', () => {
+    // **The assertion that would have caught the bug this replaced.** `TransactionsTable` used
+    // to take a `pending` prop, and nothing could pass it: the flag lives in the client
+    // components that navigate and the table is a Server Component between them. The
+    // affordance was documented, tested against a hand-set prop, and wired to nothing.
+    //
+    // `transition-opacity` is the region's marker in both states - see FilterNavigation.test
+    // for why the busy state itself is a browser check rather than a jsdom one.
+    renderScreen(<TransactionsScreen filters={{}} view={POPULATED} table={TABLE} />);
+
+    expect(screen.getByTestId('table').parentElement).toHaveClass('transition-opacity');
+  });
 });
 
 describe('the chrome every state shares', () => {

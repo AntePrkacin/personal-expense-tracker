@@ -701,6 +701,25 @@ else's and empties the box. It is written as a render-phase state adjustment bec
 `react-hooks/set-state-in-effect` rejects the effect version and `react-hooks/refs` rejects doing
 it with a ref, which is why the echo is state rather than the `useRef` it obviously wants to be.
 
+**`FilterNavigation.tsx` owns the screen's one transition, and it exists because a pending
+state has nowhere else to live.** The search field and the three selects are separate client
+components on opposite sides of the `<main>` boundary, and the thing that should dim is the
+table, which is a Server Component between them. The first version of this ticket gave
+`TransactionsTable` a `pending` prop and shipped with nothing able to pass it: the affordance
+existed in a file, had tests that set the prop by hand, and was wired to nothing - which is the
+exact failure mode `frontend/CLAUDE.md` warns about for a class map, arrived at from a different
+direction. So the `useTransition` is hoisted to a provider wrapping the whole screen, both
+controls navigate through it, and `PendingRegion` wraps the table and reads it. `useFilterNavigation`
+throws outside the provider rather than returning a no-op, the call `AddTransactionProvider`
+makes: a control that quietly stops navigating is a bug that looks like a slow network.
+
+Two consequences. The provider has to wrap the **header** as well as `<main>`, or the search
+field throws. And `isPending` turning true is **not assertable in jsdom** - a transition stays
+pending only while something inside it suspends, which in the real app is `router.replace`
+suspending on the RSC payload, and a mocked router resolves immediately. That is the same class
+of gap `Modal` records for Escape and its focus trap, and the same answer applies: the tests pin
+that the region is mounted and silent at rest, and the busy state itself is a browser check.
+
 **The table is a real `<table>`, and the column widths are the designed ones plus 16.** A table
 has no `gap`, so Figma's 16px between columns is `pr-4` on every cell but the last and each
 declared width absorbs it - `w-[166px]` for a 150px CATEGORY column. `TransactionsTable.tsx`

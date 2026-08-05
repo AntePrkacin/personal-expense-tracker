@@ -1,10 +1,10 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { TransactionFilters } from '@/lib/transactions';
 
+import { useFilterNavigation } from './FilterNavigation';
 import { filterHref } from './filters';
 import { SearchPill } from './SearchPill';
 
@@ -48,8 +48,7 @@ type TransactionSearchProps = {
 };
 
 export function TransactionSearch({ filters }: TransactionSearchProps) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
+  const { navigate } = useFilterNavigation();
 
   const urlValue = filters.search ?? '';
   const [value, setValue] = useState(urlValue);
@@ -97,21 +96,15 @@ export function TransactionSearch({ filters }: TransactionSearchProps) {
     }
   }
 
-  function navigate(next: string) {
+  function search(next: string) {
     setWritten(next);
 
-    startTransition(() => {
-      // `replace`, not `push`: a debounced search that pushes puts one history entry behind
-      // every typing pause, so Back walks "Wh", "Whol", "Whole" instead of leaving the page.
-      //
-      // `scroll: false` because Next scrolls to the top on navigation, and a keystroke
-      // yanking a scrolled list back to the first row is not what typing asked for. The
-      // filter bar deliberately does not pass it - the selects sit above the table, so
-      // whoever touches one is already at the top, and landing on the new first row after a
-      // sort change is right.
-      router.replace(filterHref({ ...filters, search: next === '' ? undefined : next }), {
-        scroll: false,
-      });
+    // `scroll: false` because Next scrolls to the top on navigation, and a keystroke yanking
+    // a scrolled list back to the first row is not what typing asked for. The filter bar
+    // deliberately does not pass it, for the reason recorded there. The `replace`-not-`push`
+    // half of this lives in `FilterNavigation`, since it applies to both.
+    navigate(filterHref({ ...filters, search: next === '' ? undefined : next }), {
+      scroll: false,
     });
   }
 
@@ -120,7 +113,7 @@ export function TransactionSearch({ filters }: TransactionSearchProps) {
       clearTimeout(timer.current);
     }
 
-    timer.current = setTimeout(() => navigate(next), DEBOUNCE_MS);
+    timer.current = setTimeout(() => search(next), DEBOUNCE_MS);
   }
 
   function change(next: string) {
@@ -143,13 +136,27 @@ export function TransactionSearch({ filters }: TransactionSearchProps) {
       timer.current = null;
     }
 
-    navigate(value);
+    search(value);
   }
 
-  // No cleanup effect cancelling the timer on unmount. A fired callback on an unmounted
-  // component would only call `router.replace`, which React 18 onwards treats as a no-op
-  // rather than a warning - and the field only unmounts by navigating away, at which point
-  // the pending navigation is already moot.
+  // Cancel a scheduled navigation on unmount.
+  //
+  // **`router.replace` is not a no-op after unmount**, which an earlier version of this file
+  // claimed by confusing it with the setState-after-unmount warning React 18 removed. It is an
+  // imperative call on the router, so a timer that fires ~300ms after the user has clicked
+  // "Dashboard" would navigate them back to `/transactions?search=...` from wherever they went.
+  //
+  // Hard to hit deliberately and correspondingly hard to diagnose, which is the argument for
+  // three lines rather than a comment explaining why it is survivable. The effect depends on
+  // nothing, so it runs its cleanup once, on unmount.
+  useEffect(() => {
+    return () => {
+      if (timer.current !== null) {
+        clearTimeout(timer.current);
+      }
+    };
+  }, []);
+
   return (
     <SearchPill
       placeholder="Search transactions"

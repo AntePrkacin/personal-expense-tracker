@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 
 import type { TransactionFilters } from '../../../lib/transactions';
 
+import { FilterNavigationProvider } from './FilterNavigation';
 import { TransactionSearch } from './TransactionSearch';
 
 // The search field's state machine, which is the whole reason this component exists as
@@ -12,12 +13,29 @@ import { TransactionSearch } from './TransactionSearch';
 const replace = jest.fn();
 jest.mock('next/navigation', () => ({ useRouter: () => ({ replace, push: jest.fn() }) }));
 
-/** user-event drives its own timers, so it has to be told which ones are running. */
+/**
+ * user-event drives its own timers, so it has to be told which ones are running.
+ *
+ * The provider is real rather than mocked: it owns the router call this suite asserts, and
+ * `useFilterNavigation` throws outside it by design. `rerender` therefore has to re-wrap, which
+ * `rerenderSearch` below does.
+ */
 function setup(filters: TransactionFilters = {}) {
   const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-  const view = render(<TransactionSearch filters={filters} />);
+  const view = render(
+    <FilterNavigationProvider>
+      <TransactionSearch filters={filters} />
+    </FilterNavigationProvider>,
+  );
 
-  return { user, ...view };
+  const rerenderSearch = (next: TransactionFilters) =>
+    view.rerender(
+      <FilterNavigationProvider>
+        <TransactionSearch filters={next} />
+      </FilterNavigationProvider>,
+    );
+
+  return { user, ...view, rerenderSearch };
 }
 
 const field = () => screen.getByRole('textbox', { name: 'Search transactions' });
@@ -155,7 +173,7 @@ describe('resyncing from the URL', () => {
     // **The regression a future "simplification" reintroduces.** The server answers a
     // keystroke or two behind, so the prop arriving mid-word must not be written back over
     // the field - that is what collapses the caret to the end of the input.
-    const { user, rerender } = setup();
+    const { user, rerenderSearch } = setup();
 
     await user.type(field(), 'Whole');
     flushDebounce();
@@ -163,7 +181,7 @@ describe('resyncing from the URL', () => {
     // The navigation this component itself asked for, arriving as a new prop after the user
     // has typed on.
     await user.type(field(), ' Foods');
-    rerender(<TransactionSearch filters={{ search: 'Whole' }} />);
+    rerenderSearch({ search: 'Whole' });
 
     expect(field()).toHaveValue('Whole Foods');
   });
@@ -171,17 +189,17 @@ describe('resyncing from the URL', () => {
   it('resyncs when the URL changes for a reason other than this field', () => {
     // The Back button, or a link. Without this the field keeps showing a term the list is
     // no longer filtered by.
-    const { rerender } = setup({ search: 'Uber' });
+    const { rerenderSearch } = setup({ search: 'Uber' });
 
-    rerender(<TransactionSearch filters={{ search: 'Netflix' }} />);
+    rerenderSearch({ search: 'Netflix' });
 
     expect(field()).toHaveValue('Netflix');
   });
 
   it('clears the field when Back reaches an unfiltered URL', () => {
-    const { rerender } = setup({ search: 'Uber' });
+    const { rerenderSearch } = setup({ search: 'Uber' });
 
-    rerender(<TransactionSearch filters={{}} />);
+    rerenderSearch({});
 
     expect(field()).toHaveValue('');
   });
@@ -189,10 +207,10 @@ describe('resyncing from the URL', () => {
   it('does not resync for a change to a different filter', async () => {
     // A period change re-renders this component with a new `filters` object whose `search`
     // is unchanged. Comparing the object rather than the search term would reset the field.
-    const { user, rerender } = setup({ search: 'Uber' });
+    const { user, rerenderSearch } = setup({ search: 'Uber' });
 
     await user.type(field(), 'x');
-    rerender(<TransactionSearch filters={{ search: 'Uber', period: 'all' }} />);
+    rerenderSearch({ search: 'Uber', period: 'all' });
 
     expect(field()).toHaveValue('Uberx');
   });

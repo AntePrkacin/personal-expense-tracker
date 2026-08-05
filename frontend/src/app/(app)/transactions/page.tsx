@@ -29,6 +29,14 @@ import { TransactionsTable } from './TransactionsTable';
 // from `GET /api/categories`. `Promise.all` because neither depends on the other; serialising
 // them would add a round trip to the app's busiest screen for nothing.
 //
+// **Both re-run on every filter change, including every debounced keystroke**, and the
+// categories cannot have changed between two of them. So a search costs two requests where one
+// would do - three, on a term that matches nothing, since `readTransactionsView` then probes.
+// Left alone deliberately: the fix is a cache with an invalidation story (a category created in
+// the Add transaction modal has to appear), which is a real decision rather than a tidy-up, and
+// ten categories is a cheap query. `docs/TODO.md` carries it so the next person costing this
+// screen does not have to rediscover it.
+//
 // No `export const dynamic`: the cookie read behind both opts this route out of static
 // rendering on its own, exactly as it does everywhere else in the app.
 

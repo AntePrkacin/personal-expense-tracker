@@ -40,8 +40,14 @@ jest.mock('../../lib/categories', () => ({ readCategoryLabels: jest.fn() }));
 // for its refresh. Nothing here opens it, but the provider's subtree is rendered.
 // `replace` joins it as of PET-29: the transactions header's search field writes the query
 // string, and the filter bar's three selects do the same.
+// `redirect` is mocked as **throwing**, matching `lib/transactions.test.ts` and
+// `lib/profile.test.ts`: the real one is typed `never`, so a mock returning undefined would let
+// execution fall through past the redirect and test the opposite of what the case claims.
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: jest.fn(), replace: jest.fn(), push: jest.fn() }),
+  redirect: jest.fn(() => {
+    throw new Error('NEXT_REDIRECT');
+  }),
 }));
 
 /**
@@ -280,5 +286,48 @@ describe('the query string reaching the list read', () => {
     await renderWith({});
 
     expect(readCategoryLabels).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('when the categories read fails', () => {
+  // The branch with the longest comment in `page.tsx` and, until now, no test. It is also the
+  // one most likely to be "simplified" into a redirect later, which is the mistake that comment
+  // warns against - `lib/categories.ts` must never redirect, because its other caller is the
+  // route handler answering the Add transaction modal's fetch, where a redirect hands an open
+  // modal an HTML login page with a 200 on it. So the policy lives here and is asserted here.
+
+  async function renderTransactions() {
+    return render(
+      <AddTransactionProvider>
+        {await TransactionsPage({ searchParams: Promise.resolve({}) })}
+      </AddTransactionProvider>,
+    );
+  }
+
+  it('redirects to login on a 401, matching the transactions read beside it', async () => {
+    // Two guarded reads on one page is fine; two *opinions* about whether the session is alive
+    // is the shape the /dashboard-to-/login loop came out of, so both must answer identically.
+    (readCategoryLabels as jest.Mock).mockResolvedValue({
+      ok: false,
+      reason: 'unauthenticated',
+    });
+
+    await expect(renderTransactions()).rejects.toThrow('NEXT_REDIRECT');
+  });
+
+  it('throws on an unavailable backend rather than redirecting', async () => {
+    // A reload retries; a redirect to /login would bounce a live session straight back.
+    (readCategoryLabels as jest.Mock).mockResolvedValue({ ok: false, reason: 'unavailable' });
+
+    await expect(renderTransactions()).rejects.toThrow(/Could not load your categories/);
+  });
+
+  it('does not render a table with every category cell blank', async () => {
+    // The tempting alternative to throwing. It produces a screen that looks broken and says
+    // nothing about why, on a page whose transactions loaded perfectly well.
+    (readCategoryLabels as jest.Mock).mockResolvedValue({ ok: false, reason: 'unavailable' });
+
+    await expect(renderTransactions()).rejects.toThrow();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

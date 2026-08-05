@@ -3,6 +3,7 @@ import { monthOverline } from '@/lib/format';
 
 import { AddTransactionButton } from '../AddTransactionButton';
 import { PageHeader } from '../PageHeader';
+import { FilterNavigationProvider, PendingRegion } from './FilterNavigation';
 import { TransactionsEmpty } from './TransactionsEmpty';
 import { TransactionSearch } from './TransactionSearch';
 import { TransactionTabs } from './TransactionTabs';
@@ -55,7 +56,11 @@ export function TransactionsScreen({ view, filters, filterBar, table }: Transact
   const showFilterBar = view.state !== 'empty';
 
   return (
-    <>
+    // **The provider wraps the header as well as `<main>`, and it has to.** The search field
+    // and the three selects both navigate through it, and they sit on opposite sides of that
+    // boundary - so a provider around `<main>` alone would leave the field throwing. It is
+    // also what lets `PendingRegion` below dim the table for a change the header started.
+    <FilterNavigationProvider>
       <PageHeader
         overline={monthOverline(new Date())}
         title="Transactions"
@@ -83,8 +88,12 @@ export function TransactionsScreen({ view, filters, filterBar, table }: Transact
 
         {showFilterBar ? filterBar : null}
 
-        {view.state === 'populated' ? table : <TransactionsEmpty state={view.state} />}
+        {view.state === 'populated' ? (
+          <PendingRegion>{table}</PendingRegion>
+        ) : (
+          <TransactionsEmpty state={view.state} />
+        )}
       </main>
-    </>
+    </FilterNavigationProvider>
   );
 }

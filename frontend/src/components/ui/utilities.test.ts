@@ -397,7 +397,7 @@ const HARDCODED = [
   'w-33',
   'gap-2.25',
   'gap-2.5',
-  // The pending affordance, which has no Figma counterpart (A29).
+  // The pending affordance in `FilterNavigation.tsx`, which has no Figma counterpart (A29).
   'opacity-60',
   'transition-opacity',
   // The search pill's focus treatment, borrowed from ui/Field because the input inside the

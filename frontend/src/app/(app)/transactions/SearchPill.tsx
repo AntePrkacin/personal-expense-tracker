@@ -48,12 +48,23 @@ function MagnifierGlyph() {
   );
 }
 
-type SearchPillProps = {
-  placeholder: string;
-  value?: string;
-  onChange?: (value: string) => void;
-  onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
-};
+/**
+ * Controlled or uncontrolled, and never half of either.
+ *
+ * An exclusive union, the technique `ui/Button` uses for `href` versus `onClick` and
+ * `CheckEmailScreen` for its resend action. A `value` with no `onChange` is a React warning at
+ * runtime and a field the user cannot type in; the `never`s make it a build error instead.
+ * `npm run build` is the gate that rejects it - note it does **not** read `*.test.tsx`, so
+ * `npx tsc --noEmit` is what catches a test constructing the impossible pair by hand.
+ */
+type SearchPillProps = { placeholder: string } & (
+  | {
+      value: string;
+      onChange: (value: string) => void;
+      onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+    }
+  | { value?: never; onChange?: never; onKeyDown?: never }
+);
 
 export function SearchPill({ placeholder, value, onChange, onKeyDown }: SearchPillProps) {
   return (
@@ -90,7 +101,7 @@ export function SearchPill({ placeholder, value, onChange, onKeyDown }: SearchPi
         aria-label={placeholder}
         placeholder={placeholder}
         value={value}
-        onChange={onChange === undefined ? undefined : (event) => onChange(event.target.value)}
+        onChange={onChange && ((event) => onChange(event.target.value))}
         onKeyDown={onKeyDown}
         className="text-text-primary placeholder:text-text-tertiary w-33 bg-transparent outline-none"
       />
