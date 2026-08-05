@@ -588,9 +588,15 @@ variable exists to close. So the number tracks Fly's real topology, not a margin
 `backend/fly.toml`'s comment on `TRUST_PROXY_HOPS` and `docs/guides/deployment.md`'s per-IP
 verification step for the check that catches a regression here.
 
-**The deploy is manual, and that order was deliberate.** Automating it is PET-55. Automating
-before a manual `fly deploy` had ever succeeded would make a red CI run indistinguishable from a
-bad `fly.toml`, a bad Dockerfile or a missing secret.
+**Merging a backend change does not deploy it - dispatch the workflow, or it stays undeployed.**
+PET-55 added `.github/workflows/deploy.yml`, but its trigger is `workflow_dispatch` only, never a
+push to `main`: every deploy stops the single machine (see above), and a merge can add a new env
+var with no safe default for a blind auto-deploy to boot into. This already bit the project once,
+before PET-55 existed - merging PET-53 did not redeploy anything, and `main` drifted ahead of
+production until someone noticed and ran `fly deploy` by hand. So after merging a backend PR meant
+to reach users, go to the Actions tab and dispatch "Deploy backend to Fly.io" from `main` -
+finishing the merge is not finishing the deploy. Step by step, and what permission it needs:
+`docs/guides/deployment.md`, "Dispatching a deploy, step by step".
 
 ## Not built here
 

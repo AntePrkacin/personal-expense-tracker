@@ -1,0 +1,90 @@
+name: Deploy backend to Fly.io
+
+# Manual only, never on push. Every deploy stops the machine (a full replica-flush
+# plus a cold start plus brief downtime under strategy = "immediate"), and a merge
+# can add a new env var with no safe default that a blind auto-deploy would boot
+# wrong. So a human presses the button, having set any new config first. The full
+# reasoning is in docs/plans/2026-08-05_PET-55_automate-fly-deploy.md.
+on:
+  workflow_dispatch:
+
+# Two deploys at once would race the single-machine guarantee below, so serialize.
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    # Bounds how long a stuck `flyctl deploy` or remote builder can hold the
+    # `fly-deploy` concurrency group (cancel-in-progress: false above) before a
+    # retry is even possible.
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # App-scoped deploy token from `fly tokens create deploy -a spendifico-api`.
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      # workflow_dispatch can be run against any branch/tag from the Actions UI's
+      # "Use workflow from" picker, not just main. Refuse anything else so a
+      # misclick can't deploy unreviewed code to production.
+      - name: Refuse to deploy from a non-main ref
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::dispatched from '${{ github.ref }}', not refs/heads/main - re-run selecting the main branch"
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      # Pin flyctl so a release cannot change deploy behaviour under us. Bump this
+      # deliberately, never implicitly. The action itself is pinned to a major
+      # version tag too, matching this repo's convention for actions/checkout and
+      # actions/setup-node elsewhere - @master would let its install behaviour
+      # change under a job that holds FLY_API_TOKEN.
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+        with:
+          version: 0.4.77
+
+      # --ha=false is the single most important flag here. `fly deploy --ha`
+      # defaults to TRUE and would create a spare machine - a second replica set
+      # with its own unpushed writes, breaking the per-replica atomicity the whole
+      # single-instance design depends on. No fly.toml key prevents it.
+      - name: Deploy
+        run: flyctl deploy --remote-only --ha=false
+
+      # A green deploy step is not enough. `fly deploy` does not start a *stopped*
+      # machine, so it can report success while every request 503s; and a missed
+      # --ha would leave two machines. Assert the invariant before going green.
+      - name: Assert exactly one started machine
+        run: |
+          machines="$(flyctl machine list --json)"
+          count="$(echo "$machines" | jq 'length')"
+          started="$(echo "$machines" | jq '[.[] | select(.state == "started")] | length')"
+          echo "machines=$count started=$started"
+          if [ "$count" -ne 1 ]; then
+            echo "::error::expected exactly one machine, found $count"
+            exit 1
+          fi
+          if [ "$started" -ne 1 ]; then
+            echo "::error::the machine is not in the started state"
+            exit 1
+          fi
+
+      # Prove the deployed process actually serves. /api/hello is the one public,
+      # DB-free route. The fly.dev hostname is used rather than the custom domain
+      # so the check never depends on external DNS.
+      - name: Assert the API answers 200
+        run: |
+          for i in $(seq 1 30); do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' https://spendifico-api.fly.dev/api/hello || true)"
+            if [ "$code" = "200" ]; then
+              echo "healthy after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::/api/hello did not return 200 within the timeout"
+          exit 1

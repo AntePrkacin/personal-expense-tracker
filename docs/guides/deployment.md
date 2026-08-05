@@ -385,7 +385,51 @@ and the failure mode is an OOM kill, which skips the shutdown flush and loses wr
 The volume cannot go below 1GB. Autostop would cut the machine charge to near zero but was
 rejected for the cold start, as above.
 
-## Not automated yet
+## Automated deploys
 
-The deploy is manual. A GitHub Actions job is PET-55, and nothing in CI currently builds the image
-or validates `fly.toml`, so both can drift until the next manual deploy discovers it.
+Two GitHub Actions workflows (PET-55):
+
+- **`.github/workflows/deploy.yml`** deploys, on **manual dispatch only** (Actions tab, Run
+  workflow). Not on push to `main`, deliberately: every deploy stops the machine, so every trigger
+  is a full replica-flush plus a cold start plus brief downtime, and a merge can add a new env var
+  with no safe default. Press the button after setting any new config. It runs
+  `fly deploy --remote-only --ha=false`, then asserts exactly one started machine and a 200 from
+  `/api/hello` before going green - because `fly deploy` does not start a stopped machine and can
+  otherwise report success while the API 503s.
+- **`.github/workflows/deploy-verify.yml`** runs on any PR that touches `backend/Dockerfile`,
+  `backend/.dockerignore` or `backend/fly.toml`: `fly config validate --strict` plus a
+  `--build-only` image build, so a broken config or Dockerfile fails the PR rather than the next
+  deploy. It releases nothing.
+
+Both authenticate with the `FLY_API_TOKEN` repository secret (app-scoped, from
+`fly tokens create deploy`). The manual `fly deploy` above still works and is the fallback; the
+workflow runs the same command.
+
+Rollback stays manual (`fly deploy --image <ref>`), and there is no auto-deploy on merge, so after
+merging backend changes someone still dispatches the deploy - which is also the moment to set any
+new config the merge introduced.
+
+### Dispatching a deploy, step by step
+
+1. **Confirm anything new is configured first.** If the merge added a secret or a `fly.toml`
+   `[env]` value with no safe default, set it now (see First-time setup and Configuration above) -
+   the workflow does not do this for you.
+2. **Open the repo's Actions tab**, then **Deploy backend to Fly.io** in the left sidebar.
+3. **Click "Run workflow"**, confirm the branch dropdown reads **`main`** - the job refuses to run
+   from anything else, see `deploy.yml` - and click the green **Run workflow** button.
+4. **Watch the run.** `Deploy` runs `flyctl deploy --remote-only --ha=false`, then two assertion
+   steps check exactly one `started` machine and a 200 from `/api/hello`. A red run means one of
+   those failed, not necessarily the deploy itself - check `fly machine list` and `fly logs`
+   directly if the cause is not obvious from the step output.
+
+Equivalently, from a terminal with `gh` authenticated:
+
+```sh
+gh workflow run deploy.yml --ref main
+gh run watch          # follow the run that was just queued
+```
+
+**Dispatching needs write access to the repository, not admin.** GitHub gates `workflow_dispatch`
+(UI and API/CLI alike) on write access to the repo; write, maintain and admin can all trigger it,
+read-only collaborators cannot. It does not require repo-admin, an organization role, or being the
+`FLY_API_TOKEN`'s creator.

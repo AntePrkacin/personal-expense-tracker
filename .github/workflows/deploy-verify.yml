@@ -1,0 +1,50 @@
+name: Verify Fly config and image
+
+# The rest of the repo is strict about drift - two CI jobs exist only to fail on a
+# stale generated artifact - yet nothing checked the Fly config or the image, so a
+# broken fly.toml or Dockerfile could rot until the next manual deploy discovered
+# it. This closes that gap: on any PR that touches the deploy files, validate the
+# config and build the image WITHOUT deploying. Nothing is released here.
+on:
+  pull_request:
+    paths:
+      - backend/Dockerfile
+      - backend/.dockerignore
+      - backend/fly.toml
+      - .github/workflows/deploy-verify.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: validate config and build image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Both steps reach Fly's API (validation checks against the platform, the
+      # build uses Fly's remote builder), so both need the token. On a fork PR the
+      # secret is absent and this job fails, which is the safe direction.
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Pinned to a major version tag, matching deploy.yml and the rest of this
+      # repo's actions - @master would let the install step change under us.
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+        with:
+          version: 0.4.77
+
+      # --strict also rejects unrecognized sections and keys, which is the mistake
+      # a hand-edited fly.toml is most likely to introduce.
+      - name: Validate fly.toml
+        run: flyctl config validate --strict
+
+      # Build the image on Fly's remote builder without releasing it. A failure
+      # here is the Dockerfile, caught on the PR instead of at the next deploy.
+      - name: Build the image (no deploy)
+        run: flyctl deploy --remote-only --build-only
