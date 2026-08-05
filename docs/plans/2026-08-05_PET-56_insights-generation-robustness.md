@@ -93,6 +93,74 @@ request or response body change (the `empty`/`generating`/`ready` contract is un
 - [ ] Run gates from `backend/`: `npm run build`, `npm run lint`, `npm run test`, `npm run test:e2e`; then `npm run api:sync` from repo root and confirm zero diff
 - [ ] Push, tick the PR checklist, mark the PR ready for review
 
+## Second round: review of the first round
+
+Reviewing the five fixes above as a diff turned up four more, one of them a real bug the first
+round introduced and one a pre-existing bug in merged code that the same root cause explains.
+Carried on this branch rather than deferred, because every one of them is in the code this
+ticket already touches.
+
+6. **The 409 translation never fired (bug, shipped in the first round).** `isGeneratingConflict`
+   read `error.message`, but Drizzle wraps driver errors: the top-level message is the failed SQL
+   and the constraint text is on `cause`. So the racing POST the partial unique index exists to
+   catch answered **500**, not 409, and no test noticed because the unit test asserted a
+   hand-written message string. Found by writing the test that forces a real collision.
+
+   Worth being precise about why reading the wrapper alone fails so quietly: the wrapper's message
+   *is* the SQL, so it contains both the table and the column the predicate looks for, and only the
+   word "unique" is missing. The check therefore looks like it nearly matched rather than like it
+   was reading the wrong object.
+
+   **Approach:** one shared `src/common/unique-violation.ts` that walks the `cause` chain and
+   matches `table.column`. `isUniqueEmailViolation` in `auth.service.ts` had the identical bug
+   against the same driver, so registration's converge-on-the-winner path was equally dead; both
+   call sites now go through the helper. Out of this ticket's nominal scope, in scope for the root
+   cause, and leaving a known-broken twin behind would have been worse.
+
+   The walk is **duck-typed on `message` and `cause`, never `instanceof Error`**, which the same
+   test forced a second time: the driver builds its error inside its own ESM module, so under
+   Jest's module registry `cause instanceof Error` is `false` for an object that prints as an Error
+   and carries the constraint text. An instanceof-based walk passes every hand-written unit test
+   and then fails against the real driver, which is precisely the failure mode this whole finding
+   is about.
+
+7. **A run reclaimed as abandoned could resurrect its own row (bug, from fix 1).** All three of
+   `runGeneration`'s writes keyed on the row id alone. Past the cutoff a second run starts, and
+   the first, if still alive, would then flip its own `failed` row to `ready` with a fresh
+   `generated_at`, winning AC5's newest-set ordering with minutes-old content, or leave cards on a
+   set the read will never serve.
+
+   **Approach:** `status = 'generating'` in the `WHERE` of all three, so a run that lost its claim
+   is inert; the completion path detects the lost claim through `.returning()` and logs a warning.
+   The residual - two runs' transactions genuinely overlapping on the one cached connection - is
+   recorded in `docs/TODO.md` with the `issueQueue` fix shape, not solved here.
+
+8. **`getSet`'s content guard discarded a recoverable answer (fix 3, refined).** Degrading a
+   content-less newest `ready` row to `empty` blanks the screen even when an older complete set
+   exists, which is the opposite of what AC6 does for a `failed` run.
+
+   **Approach:** filter `summary_headline`/`summary_body IS NOT NULL` in `latestReadySet` instead,
+   so the previous good set still serves and `latestReadyTeaser` inherits the same rule rather
+   than guarding it a second, different way. The `getSet` condition stays as type narrowing.
+
+9. **Two low-value couplings.** `isGeneratingConflict` matched the bare table, so a `newId()`
+   primary-key clash would have read as "a run is already in progress"; and the e2e restated the
+   five-minute cutoff as a hardcoded six minutes.
+
+   **Approach:** match `insight_sets.status`, and export `GENERATING_STALE_AFTER_MS` so the test
+   ages its row against the real constant.
+
+### Tasks
+
+- [ ] Fix 7: guard all three `runGeneration` writes on `status = 'generating'`, detect the lost claim, correct the doc comment that claimed the single-run guard made it the only transaction
+- [ ] Fix 6: extract `src/common/unique-violation.ts` walking the `cause` chain duck-typed rather than by `instanceof Error`, route both `isGeneratingConflict` and `isUniqueEmailViolation` through it, spec it against the real wrapped shape and against a foreign-realm cause
+- [ ] Fix 8: filter content-less `ready` rows in `latestReadySet`; reduce the `getSet` guard to narrowing
+- [ ] Fix 9: match `insight_sets.status` not the table; export `GENERATING_STALE_AFTER_MS` and derive the e2e offset
+- [ ] Tests: e2e races two runs and asserts exactly one `ConflictException` (this is what caught fix 6); unit cover for the completion path claiming and losing its row, and for a PK clash not becoming a 409
+- [ ] Record in `docs/TODO.md`: the reclaimed-run overlap residual, the index's tombstone asymmetry, and unbounded insight-set growth; correct the stale "categories has no CRUD" and "transactions has no reads" claims in the same file
+- [ ] Document in `backend/CLAUDE.md` `## Insights`: the reclaimed-run inertness rule, the SQL-level content filter, and why unique-violation checks must read `cause`
+- [ ] Re-run all gates and confirm `api:sync` is still zero-diff
+
 ## Out of scope
 
 - The frontend insights screens (PET-42/43/44) and the dashboard teaser wiring (already in #33).

@@ -159,16 +159,17 @@ the three-month recurrence threshold are the parts most likely to be tuned first
 
 `users`, `login_links` and `sessions` (central) and `profile`, `categories`,
 `transactions` and the insights tables (per user) exist. PET-41 added `insight_sets` and
-`insights` under `backend/drizzle/user/` with the read; PET-40 added rule-based generation, so
-the insights feature is complete on the backend. `categories` has its table
-and a `STARTER_CATEGORIES` constant but no CRUD, no per-category stats and no allocation summary.
+`insights` under `backend/drizzle/user/` with the read; PET-40 added rule-based generation and
+PET-56 hardened its lifecycle, so the insights feature is complete on the backend. So are
+`categories` (list, create, update, delete, per-category month stats and the allocation summary)
+and `transactions` (the three writes from PET-27 plus the list and the detail read).
 
-`transactions` has its three write endpoints (PET-27) and **no reads whatsoever**. The list,
-the month windows, the trend buckets, the donut and every card are PET-28's and the
-dashboard tickets', and all of them are computed on read - the table carries no month column
-and no stored aggregate on purpose, so nothing can go stale. A read implementing them needs
-the profile's `monthStartDay` to attribute a `date` to a month; both indexes it will want
-(`date`, `category_id`) already ship in the first migration.
+Everything month-scoped stays computed on read: no table carries a month column or a stored
+aggregate, on purpose, so nothing can go stale, and a backdated row or a changed `monthStartDay`
+re-buckets history for free. `src/common/month-window.ts` resolves every period and nothing else
+computes one. Both indexes the transaction reads want (`date`, `category_id`) ship in the first
+migration. The one deliberate exception is insight content, which is stored as rendered prose
+because a persisted generation is a snapshot rather than a derived view - see `backend/CLAUDE.md`.
 
 Starter category colors are the real ones, read per chip from the design's variable
 bindings in Figma frame 03 (node 43:705) and checked against a render. Two open design
@@ -953,6 +954,56 @@ is actually running, so a deploy can go green while the database connection is b
 `/api/status` endpoint (DB ping plus the deployed commit SHA or version, still unauthenticated so
 the assertion needs no token) should replace it in both `deploy.yml`'s assertion step and
 `docs/guides/deployment.md`'s verification section.
+
+### A reclaimed insight run can still overlap the run that replaced it
+
+PET-56 made an abandoned `generating` row self-heal after `GENERATING_STALE_AFTER_MS`, and every
+write in `runGeneration` is conditional on the row still being `generating`, so a reclaimed run
+cannot resurrect its own row, stamp a stale `generated_at` over the newest set, or leave cards
+hanging off a `failed` one. What the guard does **not** do is stop the two runs existing at once:
+past the cutoff a new run starts while the old one may still be working, and the embedded driver
+refuses overlapping transactions rather than queueing them, so one of the two completion
+transactions can simply fail and mark its run `failed`. The user sees a regenerate that did not
+take and retries; nothing is corrupted.
+
+Unreachable while generation is rule-based, because a run settles in well under a second and
+nothing can be five minutes stale while alive. It becomes reachable the moment a slow
+`LlmInsightGenerator` lands behind the `INSIGHT_GENERATOR` seam, which is the case the cutoff was
+sized for in the first place. The shape of the fix is the same one the overlapping-verify entry
+above names: a per-user in-process queue around the run, the `issueQueue` pattern
+`LoginTokenService` already uses. Reaching for a heartbeat column instead - a run proving liveness
+so the cutoff never fires on a live one - is the alternative, and the more invasive of the two.
+
+### The insights single-run index ignores tombstones, so a soft-deleted run would wedge it
+
+`insight_sets_generating_idx` is partial on `status = 'generating'` and says nothing about
+`deleted_at`, while every query around it filters `deleted_at IS NULL`: both `hasRunInFlight` and
+the stale-run reclaim in `generate()` would skip a tombstoned `generating` row, but the index would
+still be holding it. A soft-deleted run in that state therefore 409s every future `POST
+/api/insights/generate` with no API path to clear it, which is exactly the wedge PET-56 removed for
+the un-tombstoned case.
+
+Unreachable today: nothing anywhere soft-deletes an insight set, and the only writer of that column
+would be code that does not exist. It is recorded rather than fixed because
+`categories_fallback_idx` has the identical asymmetry (partial on `is_fallback = 1`, while
+`fallbackId` filters `deleted_at IS NULL`), so changing one and not the other would be worse than
+leaving both consistent. If either is ever fixed, fix both, and the fix is to put the tombstone in
+the index predicate rather than to take it out of the queries. Manual recovery in the meantime is
+one statement: clear the row's `deleted_at`, or set its `status` to `failed`.
+
+### Insight sets accumulate, and nothing prunes them
+
+Every run leaves a row behind for good: `ready` sets are superseded by `generated_at DESC` rather
+than removed (AC5), and `failed` rows are now written by both a genuinely failed run and PET-56's
+stale-run reclaim. Only the empty-account placeholder is ever deleted. So a user who regenerates
+daily accrues a row and a card set per run, and the read pays for it in an `ORDER BY generated_at`
+over an unindexed column plus a `deleted_at IS NULL` scan.
+
+Nothing to do at this scale - a set is a handful of short rows, and the screen offers one
+regenerate button - and it is in this section rather than under Scaling because the shape of the
+answer is a policy decision, not a capacity one: keep the last N sets, or keep a window of history,
+or keep everything and index `generated_at`. Worth settling before any automatic or scheduled
+regeneration, which is what would turn a slow accrual into an unbounded one.
 
 ---
 

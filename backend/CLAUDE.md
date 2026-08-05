@@ -484,6 +484,39 @@ and a new POST is accepted, so skeletons-forever cannot outlive a crash. The cut
 against rule-based generation and exists for a future slow `LlmInsightGenerator`; its value lives in
 `insights.service.ts`.
 
+**A reclaimed run writes nothing, and every write in `runGeneration` says so.** The reclaim buys
+self-healing at the price of the guarantee the completion path used to rest on: past the cutoff a
+second run starts while the first may still be working, so "the single-run guard keeps this the only
+transaction on the connection" stopped being true. Hence `status = 'generating'` in the `WHERE` of
+all three writes there, not just the row id. A run that lost its claim cannot flip a row already
+declared `failed` back to `ready`, cannot stamp a fresh `generated_at` on content generated minutes
+ago and win AC5's newest-set ordering with it, and cannot leave cards hanging off a set the read will
+never serve; it logs a warning and drops its result. Two runs' transactions genuinely overlapping is
+still reachable and still degrades one of them to `failed`, which is in `docs/TODO.md` rather than
+fixed here.
+
+**A `ready` row missing its content is skipped in SQL, not patched up in the DTO.**
+`latestReadySet` filters `summary_headline`/`summary_body IS NOT NULL` alongside the status, so a
+half-written set behaves like a `failed` one: the previous complete set stays the answer, which is
+AC6's rule applied to a different way of being broken. Doing it in the query rather than in `getSet`
+is what keeps `latestReadyTeaser` honest too, since the dashboard teaser reads the same row through
+the same helper and would otherwise need its own copy of the check.
+
+**Translating a unique-constraint failure means reading `cause`, never `error.message`.** Drizzle
+wraps every driver error, so the top-level message is the failed SQL and the constraint text is one
+level down; `@tursodatabase/database` then wraps SQLite's own wording rather than replacing it.
+`src/common/unique-violation.ts` walks that chain and is shared by the single-run 409 and
+registration's converge-on-the-winner path, which both previously kept a local copy that read only
+`error.message` and therefore never fired. Note how quietly that failed: the wrapper's message is
+the SQL, so it contains the table and the column the predicate was looking for, and only the word
+"unique" was missing. It matches `table.column` rather than the table, because a primary-key clash
+on the same table is a broken invariant and belongs in the generic 500. **The walk is duck-typed on
+`message` and `cause` and must not use `instanceof Error`**: the driver builds its error inside its
+own ESM module, so under Jest's module registry that is a different realm with a different `Error`
+global and `cause instanceof Error` is `false` for an object that prints as one. The only test that
+catches any of this is one that forces a real collision, which is why `test/insights.e2e-spec.ts`
+races two runs rather than asserting a hand-written message.
+
 ## Profile and preferences
 
 **One resource with two homes, and `ProfileService` is the only place that sees the seam.**

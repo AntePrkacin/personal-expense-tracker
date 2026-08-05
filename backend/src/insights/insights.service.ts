@@ -1,6 +1,7 @@
 import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
-import { and, asc, desc, eq, gt, isNull, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt } from 'drizzle-orm';
 import { newId } from '../common/ids';
+import { isUniqueViolation } from '../common/unique-violation';
 import type { UserDatabase } from '../database/database.types';
 import { UserDatabaseService } from '../database/user-database.service';
 import {
@@ -22,8 +23,9 @@ const RUN_IN_FLIGHT =
 // one, the way the rest of the codebase reasons about token and session expiry.
 // Past the cutoff the run self-heals instead of wedging the read and every future
 // POST. Rule-based generation settles in well under a second; the margin is
-// headroom for a future slow `LlmInsightGenerator`.
-const GENERATING_STALE_AFTER_MS = 5 * 60 * 1000;
+// headroom for a future slow `LlmInsightGenerator`. Exported so the e2e suite
+// ages a row against the real cutoff rather than restating the number.
+export const GENERATING_STALE_AFTER_MS = 5 * 60 * 1000;
 
 /**
  * Stores, reads and orchestrates generation of insight sets. The read derives the
@@ -123,12 +125,21 @@ export class InsightsService {
    * The floated body of a run: generate, then persist or fail.
    *
    * On success the `generating` row becomes `ready` and its cards are inserted in
-   * **one transaction** - safe on the embedded driver because the single-run
-   * guard keeps this the only transaction on the connection. An empty account
-   * generates nothing (`null`), so the placeholder run is removed and the read
-   * falls back to whatever it was. On any failure the row is marked `failed` and
-   * nothing else is touched, so the previous `ready` set stays the read's answer
-   * (AC6).
+   * **one transaction**. An empty account generates nothing (`null`), so the
+   * placeholder run is removed and the read falls back to whatever it was. On any
+   * failure the row is marked `failed` and nothing else is touched, so the
+   * previous `ready` set stays the read's answer (AC6).
+   *
+   * **Every write here is conditional on the row still being `generating`, so a
+   * run reclaimed as abandoned writes nothing at all.** Past
+   * `GENERATING_STALE_AFTER_MS` a newer `generate()` flips this row to `failed`
+   * and starts its own run, so the single-run guard no longer makes this the only
+   * transaction on the connection - which is exactly why the status is in every
+   * `WHERE` below. A reclaimed loser cannot resurrect a row already declared
+   * dead, cannot stamp a stale `generated_at` over the newest set, and cannot
+   * leave cards hanging off a `failed` one. Two transactions genuinely overlapping
+   * on the one cached connection is still reachable and still degrades that run to
+   * `failed`; see docs/TODO.md.
    */
   private async runGeneration(userId: string, runId: string): Promise<void> {
     try {
@@ -139,12 +150,12 @@ export class InsightsService {
         // Hard delete, not a tombstone: this placeholder never reached `ready`,
         // so it holds no content to audit and nothing a soft-delete would keep.
         // The one row in this database exempt from the tombstone convention.
-        await db.delete(insightSets).where(eq(insightSets.id, runId));
+        await db.delete(insightSets).where(this.stillRunning(runId));
         return;
       }
 
-      await db.transaction(async (tx) => {
-        await tx
+      const claimed = await db.transaction(async (tx) => {
+        const [row] = await tx
           .update(insightSets)
           .set({
             status: 'ready',
@@ -153,7 +164,14 @@ export class InsightsService {
             summaryBody: set.summary.body,
             generatedAt: new Date(),
           })
-          .where(eq(insightSets.id, runId));
+          .where(this.stillRunning(runId))
+          .returning({ id: insightSets.id });
+
+        // Reclaimed mid-run, so a newer run owns the state now. Skip the cards
+        // too, or they would hang off a set the read will never serve.
+        if (!row) {
+          return false;
+        }
 
         if (set.cards.length > 0) {
           await tx.insert(insights).values(
@@ -167,15 +185,29 @@ export class InsightsService {
             })),
           );
         }
+
+        return true;
       });
+
+      if (!claimed) {
+        this.logger.warn(
+          `Insight generation ${runId} for user ${userId} was reclaimed as ` +
+            `abandoned while still running; its result was discarded`,
+        );
+      }
     } catch (error) {
       const db = await this.userDatabases.getUserDb(userId);
       await db
         .update(insightSets)
         .set({ status: 'failed' })
-        .where(eq(insightSets.id, runId));
+        .where(this.stillRunning(runId));
       throw error;
     }
+  }
+
+  /** This run's row, and only while it is still the run that owns the state. */
+  private stillRunning(runId: string) {
+    return and(eq(insightSets.id, runId), eq(insightSets.status, 'generating'));
   }
 
   /** The latest set with its derived state, for `GET /api/insights`. */
@@ -185,11 +217,10 @@ export class InsightsService {
     const ready = await this.latestReadySet(db);
     const running = await this.hasRunInFlight(db);
 
-    // A `ready` row carries its content by invariant - `runGeneration` writes the
-    // header and the cards in one transaction - but the columns are nullable in
-    // the schema, so guard rather than assert `!` through them. A `ready` row
-    // somehow missing its summary degrades to `empty` here rather than serving a
-    // DTO that claims a string where the column holds null.
+    // `latestReadySet` has already excluded a content-less row in SQL, so this
+    // reads as narrowing rather than a second guard: the columns are nullable in
+    // the schema, and the DTO promises strings. Kept as a condition rather than
+    // `!` so the types carry the invariant instead of an assertion hiding it.
     const content =
       ready && ready.summaryHeadline !== null && ready.summaryBody !== null
         ? {
@@ -239,7 +270,17 @@ export class InsightsService {
       .select()
       .from(insightSets)
       .where(
-        and(eq(insightSets.status, 'ready'), isNull(insightSets.deletedAt)),
+        and(
+          eq(insightSets.status, 'ready'),
+          // A `ready` row without its content is a broken invariant, not an
+          // answer, so it is skipped here rather than downstream: an older
+          // complete set then still serves, the same way AC6 lets one outlive a
+          // `failed` run. Filtered in SQL so `latestReadyTeaser` inherits it
+          // rather than guarding the same invariant a second, different way.
+          isNotNull(insightSets.summaryHeadline),
+          isNotNull(insightSets.summaryBody),
+          isNull(insightSets.deletedAt),
+        ),
       )
       // Newest wins (AC5): a later generation supersedes an earlier one, and the
       // dashboard teaser reads from this same newest set.
@@ -297,11 +338,10 @@ export class InsightsService {
 }
 
 /**
- * SQLite reports a partial-unique-index collision on the single-run guard as
- * `UNIQUE constraint failed: insight_sets.status`. Mirrors `isUniqueEmailViolation`
- * in `auth.service.ts`.
+ * A partial-unique-index collision on the single-run guard, as opposed to any other
+ * write failure. `insight_sets.status` and not the bare table: a `newId()`
+ * primary-key clash is a broken invariant, not "a run is already in progress".
  */
 function isGeneratingConflict(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /unique/i.test(message) && /insight_sets/i.test(message);
+  return isUniqueViolation(error, 'insight_sets.status');
 }

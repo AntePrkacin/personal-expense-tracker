@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { isUniqueViolation } from '../common/unique-violation';
 import type { OnboardingPayload } from '../database/central/schema';
 import { renderLoginLinkEmail } from '../mail/login-link.template';
 import { MAILER, type Mailer } from '../mail/mailer';
@@ -150,8 +151,12 @@ export class AuthService {
   }
 }
 
-/** SQLite reports this as `UNIQUE constraint failed: users.email`. */
+/**
+ * SQLite reports this as `UNIQUE constraint failed: users.email`, though never at
+ * the top level of what Drizzle throws - see `isUniqueViolation`, which is where
+ * this check lived as a local copy that only ever read `error.message` and so
+ * silently never fired.
+ */
 function isUniqueEmailViolation(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /unique/i.test(message) && /email/i.test(message);
+  return isUniqueViolation(error, 'users.email');
 }

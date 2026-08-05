@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { ConflictException, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { eq } from 'drizzle-orm';
 import { rm } from 'node:fs/promises';
@@ -10,6 +10,10 @@ import { newId } from './../src/common/ids';
 import { monthWindow, todayIn } from './../src/common/month-window';
 import type { DashboardResponseDto } from './../src/dashboard/dto/dashboard-response.dto';
 import type { InsightSetResponseDto } from './../src/insights/dto/insight-set-response.dto';
+import {
+  GENERATING_STALE_AFTER_MS,
+  InsightsService,
+} from './../src/insights/insights.service';
 import { users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
@@ -396,13 +400,43 @@ describe('Insight endpoints (e2e)', () => {
     await generate().expect(409);
   });
 
+  it('lets only one of two concurrent runs start', async () => {
+    // Both calls can clear the in-flight check before either insert lands, so the
+    // partial unique index on `status = 'generating'` is what decides the winner
+    // rather than the check - and this is the only place the driver's real
+    // constraint message meets the translation that turns it into the 409. If the
+    // check happens to win the interleaving the assertion still holds, because
+    // either path is one ConflictException; what must never happen is two runs.
+    //
+    // Driven through the service rather than two concurrent HTTP requests, which
+    // would race supertest's own listen/close on the shared server (ECONNRESET).
+    const service = app.get(InsightsService);
+
+    const outcomes = await Promise.allSettled([
+      service.generate(userId),
+      service.generate(userId),
+    ]);
+    const rejected = outcomes.filter(
+      (outcome): outcome is PromiseRejectedResult =>
+        outcome.status === 'rejected',
+    );
+
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBeInstanceOf(ConflictException);
+
+    await waitForSettled();
+  });
+
   it('reclaims an abandoned generating run past the stale cutoff', async () => {
     const db = await userDatabases.getUserDb(userId);
     // A generating row left behind by a run that died before it could settle,
-    // older than the service's 5-minute cutoff.
+    // aged past the service's own staleness cutoff.
     const staleId = await seedSet({
       status: 'generating',
-      createdAt: new Date(Date.now() - 6 * 60 * 1000),
+      // Derived from the service's own cutoff, not a restated number: raising
+      // GENERATING_STALE_AFTER_MS must not quietly stop this test from aging the
+      // row past it.
+      createdAt: new Date(Date.now() - GENERATING_STALE_AFTER_MS - 60_000),
     });
 
     // The read no longer treats it as in flight, so the state settles rather
