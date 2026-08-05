@@ -59,8 +59,9 @@ frontend on 4200. The frontend calls the backend, never the reverse.
 
 ## Repo-wide tasks with mise
 
-Unlike the npm commands above, these run **from the repo root**, and each one covers all
-three packages in order.
+Unlike the npm commands above, these run **from the repo root**, and most cover all
+three packages in order. The exception is `deploy-backend`, which dispatches the backend's
+Fly deploy (see [Deployment](deployment.md)).
 
 | Task                         | What it does                                                         |
 | ---------------------------- | -------------------------------------------------------------------- |
@@ -72,6 +73,7 @@ three packages in order.
 | `mise run db:generate`       | Generate Drizzle migrations for both database scopes                 |
 | `mise run api:sync`          | Regenerate the OpenAPI spec, then the frontend types from it         |
 | `mise run skills`            | Refresh Drizzle's committed agent skills after a drizzle-kit bump    |
+| `mise run deploy-backend`    | Dispatch the Fly deploy workflow on `main`, stream it, open the run  |
 
 Every task also has per-package variants when you want just one: `install:repo`,
 `install:backend`, `install:frontend`, `dev:backend`, `dev:frontend`, `update:repo`,
