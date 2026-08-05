@@ -784,36 +784,6 @@ answers 202 and never sends the email, recoverable only through "Resend link".
 Reconsider it if the bill matters more than a first impression, or pair it with a scheduled
 warm-up ping during the hours that matter.
 
-### Nothing verifies the `Dockerfile` or `fly.toml` after they were written
-
-This repo is otherwise strict about drift, with two CI jobs whose only purpose is failing on a
-stale generated artifact - yet CI never builds the image and never runs `fly config validate`,
-so both files can rot silently until the next manual deploy discovers it. A build step, or even
-just the validate, would match how the rest of the repo treats this class of problem. It belongs
-with the CI deploy job, PET-55, because that job has to build the image anyway.
-
-**Four things PET-55 has to get right, learned by deploying by hand first.** Recorded here
-because they are the reason the manual deploy came first, and none of them is guessable from
-Fly's docs alone:
-
-- **`--ha=false` on every deploy**, which is the highest-stakes line in that workflow. The flag
-  defaults to true and has no `fly.toml` equivalent, so a bare `fly deploy` in CI creates a spare
-  machine, and a second machine is a second replica set with its own unpushed writes.
-- **A post-deploy assertion, not just a green step.** `fly deploy` does not start a *stopped*
-  machine - it updates the config and leaves it stopped - and `auto_start_machines` is false. So a
-  deploy can report success while every request 503s. Assert exactly one machine, assert it is
-  started, then curl `/api/hello`.
-- **The trigger should be `workflow_dispatch` or a tag, not push to `main`.** Every deploy stops
-  the machine, so every trigger is a full replica-flush plus a cold start plus brief downtime. The
-  flush is proven to complete, including on redeploys, so this is safer than it first looked - but
-  push-to-`main` still multiplies how often the one path with a silent-data-loss failure mode runs,
-  on a backend that changes rarely and has no availability target.
-- **Auth is `fly tokens create deploy`** (app-scoped, better than an org token) stored as a
-  `FLY_API_TOKEN` repository secret. Needed by the *verification* half too, since both
-  `fly config validate` and `fly deploy --build-only` reach the platform. No repo admin is
-  required: `gh secret set` works at write level. Fly has no GitHub App or repo picker, so a
-  hand-written workflow is the only path.
-
 ### The Swagger UI is public on the deployed API
 
 `SwaggerModule.setup` registers its routes on the HTTP adapter rather than as Nest controllers,
