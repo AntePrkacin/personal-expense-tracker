@@ -148,6 +148,55 @@ describe('when the first read comes back empty', () => {
   });
 });
 
+describe('when the caller already asked the probe’s own question', () => {
+  // PET-29's period select offers "All time", so `period=all` with nothing else is now a
+  // request a user can make by clicking. Its first read *is* the probe, and firing an
+  // identical second one to interpret it answers a question already answered.
+
+  it('does not probe again for an unfiltered all-time read', async () => {
+    const fetchMock = respondInTurn(empty);
+
+    expect(await readTransactionsView({ period: 'all' })).toEqual({ state: 'empty', total: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores sort, which cannot change whether a result set is empty', async () => {
+    const fetchMock = respondInTurn(empty);
+
+    await readTransactionsView({ period: 'all', sort: 'date_asc' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a blank search as no search', async () => {
+    const fetchMock = respondInTurn(empty);
+
+    await readTransactionsView({ period: 'all', search: '' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['a search', { period: 'all', search: 'zzzz' } as const],
+    ['a category', { period: 'all', categoryId: '0198c2a1-0000-7000-8000-0000000000a1' } as const],
+  ])('still probes when all-time is narrowed by %s', async (_label, filters) => {
+    // The short-circuit is "these filters already are the probe", not "the period is all".
+    // An all-time search that matches nothing is a no-results state, and skipping the probe
+    // would report the account as empty and offer "Log your first expense" over a full one.
+    const fetchMock = respondInTurn(empty, oneRow);
+
+    expect(await readTransactionsView(filters)).toMatchObject({ state: 'noResults' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('still returns populated when the all-time read finds rows', async () => {
+    const fetchMock = respondInTurn(oneRow);
+
+    expect(await readTransactionsView({ period: 'all' })).toMatchObject({ state: 'populated' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('the request itself', () => {
   it('sends every filter it is given', async () => {
     const fetchMock = respondInTurn(oneRow);

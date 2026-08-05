@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { ACCESS_ROUTES } from '@/lib/routes';
 import { authorizedGet } from '@/lib/session';
+import { toQuery } from '@/lib/transactionQuery';
 import type { components, operations } from '@/types/api';
 
 // The transactions list read, and the one decision the API cannot make for us: which of
@@ -62,25 +63,6 @@ export type TransactionsView =
   | { state: 'empty'; total: 0 };
 
 /**
- * The filters as a query string, omitting anything blank.
- *
- * An empty `search` is dropped rather than sent. The backend trims it and applies no
- * predicate either way, so this is about the request being readable in a network log rather
- * than about behaviour.
- */
-function toQuery(filters: TransactionFilters): string {
-  const query = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== '') {
-      query.set(key, value);
-    }
-  }
-
-  return query.size > 0 ? `?${query}` : '';
-}
-
-/**
  * One list read, or the access flow.
  *
  * The failure policy is `lib/profile.ts`'s, deliberately and for the same reason: only a 401
@@ -107,6 +89,29 @@ async function readTransactions(filters: TransactionFilters): Promise<Transactio
 }
 
 /**
+ * The account-wide, all-time read that tells an empty account from an empty filter.
+ *
+ * `period=all` is the contract's way of applying no date predicate, and no other key is set
+ * because the question is not "does this filter match anything" - the first read already
+ * answered that - but "does this account contain a single transaction".
+ */
+const PROBE: TransactionFilters = { period: 'all' };
+
+/**
+ * Whether a caller's own filters already ask the probe's question.
+ *
+ * `sort` is deliberately not checked. It reorders a result set and cannot change its size,
+ * so "newest first" and "oldest first" answer zero together or not at all.
+ */
+function isProbe(filters: TransactionFilters): boolean {
+  return (
+    filters.period === PROBE.period &&
+    (filters.search === undefined || filters.search === '') &&
+    filters.categoryId === undefined
+  );
+}
+
+/**
  * The page's state, from one read in the common case and two in the empty one.
  *
  * **The second read fires only when the first returns nothing**, which is what keeps this
@@ -118,10 +123,12 @@ async function readTransactions(filters: TransactionFilters): Promise<Transactio
  * "does this account contain a single transaction". Only an account-wide, all-time read
  * answers it, and `period=all` is the contract's way of applying no date predicate.
  *
- * A caller that already asked for `period=all` with no filters pays one redundant request in
- * the empty case, since its first read was already the probe. No caller does today: the
- * design's period select draws "This month" and A16 leaves its other options unknown.
- * Worth a short-circuit if an "All time" option ever ships.
+ * **A caller that already asked the probe's own question does not ask it twice**, which this
+ * comment used to describe as a cost worth a short-circuit "if an `All time` option ever
+ * ships". PET-29 shipped it: the period select offers "All time", so `period=all` with no
+ * search and no category is now a request a user can make by clicking, and its first read is
+ * already the probe. Answering zero to that read *is* the account being empty, so there is
+ * nothing left to find out.
  */
 export async function readTransactionsView(
   filters: TransactionFilters = {},
@@ -132,7 +139,15 @@ export async function readTransactionsView(
     return { state: 'populated', transactions: list.transactions, total: list.total };
   }
 
-  const anything = await readTransactions({ period: 'all' });
+  // The condition is "these filters already are the probe", not "the period is all": a
+  // search or a category narrows the read past what the probe asks, so `period=all` with
+  // either of them still leaves the two cases apart - a filter matched nothing, or there is
+  // nothing to match. Only the unfiltered all-time read answers both at once.
+  if (isProbe(filters)) {
+    return { state: 'empty', total: 0 };
+  }
+
+  const anything = await readTransactions(PROBE);
 
   return anything.total > 0 ? { state: 'noResults', total: 0 } : { state: 'empty', total: 0 };
 }
