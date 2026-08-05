@@ -422,7 +422,16 @@ new config the merge introduced.
    those failed, not necessarily the deploy itself - check `fly machine list` and `fly logs`
    directly if the cause is not obvious from the step output.
 
-Equivalently, from a terminal with `gh` authenticated:
+Equivalently, from a terminal with `gh` authenticated, the one command does the whole thing -
+dispatch on `main`, wait for the run to register, stream it to completion, and open the run
+page in a browser:
+
+```sh
+mise run deploy-backend
+```
+
+It wraps `scripts/deploy-backend.sh`, which is just the two `gh` calls with the run id resolved
+in between (`gh workflow run` prints none):
 
 ```sh
 gh workflow run deploy.yml --ref main

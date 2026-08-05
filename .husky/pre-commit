@@ -11,6 +11,11 @@ npx lint-staged
 # Reminder only - backend unit tests are not run automatically here (they can be
 # slow). The `backend` job in .github/workflows/ci.yml runs lint, build, unit
 # tests and e2e on every PR. Run them locally if you like.
+#
+# The deploy reminder is a nudge, not a gate: merging a backend change does NOT
+# deploy it (the workflow is manual dispatch only, see backend/CLAUDE.md), so
+# once the change reaches main someone must dispatch the deploy by hand.
 if echo "$CHANGED" | grep -q '^backend/'; then
   echo "ℹ️  backend/ files changed - consider running: cd backend && npm test"
+  echo "⚠️  backend/ changed - main does not auto-deploy. Once this lands on main, deploy: mise run deploy-backend"
 fi
