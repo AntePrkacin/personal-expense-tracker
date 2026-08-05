@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { hasSession, SESSION_COOKIE, sessionCookieOptions } from './session';
+import { authorizedGet, hasSession, SESSION_COOKIE, sessionCookieOptions } from './session';
 
 // The module's first suite: `lib/session.ts` shipped as two documented stubs and was the
 // only file in `src/lib/` with no test beside it, because there was nothing yet to
@@ -183,5 +183,73 @@ describe('hasSession', () => {
     await hasSession();
 
     expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe('authorizedGet', () => {
+  // The seam `readSession()` and `requireProfile()` share, and `lib/transactions.ts` is the
+  // third consumer that earned it. `hasSession` above deliberately discards the failure
+  // reason, so these are the assertions that pin the distinction itself - the one that
+  // stopped `/dashboard` and `/login` bouncing off each other.
+
+  it('returns the parsed body on success', async () => {
+    expect(await authorizedGet('/api/auth/session')).toEqual({ ok: true, data: SESSION });
+  });
+
+  it('takes the path verbatim, query string included', async () => {
+    // What `lib/transactions.ts` needs from it: the filters are already in the path.
+    const fetchMock = respondWith(200);
+
+    await authorizedGet('/api/transactions?period=all');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://backend.test/api/transactions?period=all');
+  });
+
+  it.each([
+    ['no cookie at all', () => store(undefined)],
+    ['a 401, the only status the guard uses for a dead bearer', () => respondWith(401, {})],
+  ])('reports %s as unauthenticated', async (_label, arrange) => {
+    arrange();
+
+    expect(await authorizedGet('/api/profile')).toEqual({ ok: false, reason: 'unauthenticated' });
+  });
+
+  it.each([
+    ['a 500', () => respondWith(500, {})],
+    ['a bad gateway', () => respondWith(502, {})],
+    [
+      'an unreachable backend',
+      () => {
+        global.fetch = jest
+          .fn()
+          .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+      },
+    ],
+    [
+      'a body that will not parse',
+      () => {
+        global.fetch = jest.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new SyntaxError('Unexpected token < in JSON');
+          },
+        }) as unknown as typeof fetch;
+      },
+    ],
+  ])('reports %s as unavailable, never as signed out', async (_label, arrange) => {
+    // The half that must not be collapsed into the other. Answering "unauthenticated" here
+    // is what sent a live session with a failing read to /login, which sent it back.
+    arrange();
+
+    expect(await authorizedGet('/api/profile')).toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('never throws, whatever the backend does', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    await expect(authorizedGet('/api/profile')).resolves.toBeDefined();
   });
 });
