@@ -14,86 +14,92 @@ paragraph or two probably deserve their own plan in this directory.
 These were decided against deliberately. Reasons are recorded so the decision is not
 relitigated by accident.
 
-### The frontend half of verification: the verify page, the cookie, the dashboard
+### The verify page's inherited constraints, now that it exists
 
-The backend is done: `POST /api/auth/verify` spends a link, provisions the account and
-returns a session, and `GET /api/auth/session` answers who the bearer is. Nothing on the
-frontend calls either yet - there is no verify page and no session cookie. There _is_ now a
-dashboard to land on: PET-19 built the `(app)` shell and the four routed views. The
-session-scoped read that replaces the deleted proof-of-stack `GET /api/users/:id` also
-exists now: PET-45 shipped `GET /api/profile` and `PATCH /api/profile`. What is left here is
-entirely the frontend's half.
+PET-52 built the frontend half: `app/auth/verify/route.ts` spends the emailed link,
+`spendifico.session` carries the result, and `lib/session.ts` plus `lib/profile.ts` are the
+app's first two reads. Four things that ticket could not close, and one it deliberately did
+not.
 
-**The frontend calls the backend twice now, and both are writes.** PET-19 replaced the scaffold
-greeting page with a `redirect('/dashboard')`, deleting the `GET /api/hello` fetch that had been
-the only wire between the two apps, and PET-11 restored one from the other end: `registerAccount`
-in `app/setup/register/actions.ts` posts `POST /api/auth/register`, so `BACKEND_URL` is read
-again. PET-12 added `POST /api/auth/login-link` from two callers, and moved the fetch itself into
-`frontend/src/lib/backend.ts`, whose suite exercises the generated request type against a `fetch`
-spy. **Every read is still missing**, which is what the work here is: no verify page, no session,
-and no screen that displays anything the backend knows. The drift gates always ran, so `api.d.ts`
-could not rot silently either way, but nothing yet proves a response shape end to end.
+**The live token reaches the frontend's own access log.** The backend moved verify's token
+into a POST body precisely so a live credential never hit *its* logs, and the handler puts it
+straight into Next's request log and anything upstream - the same class of leak PET-12 removed
+when it replaced `/check-email?email=`. Not fixable here: the URL is chosen by
+`backend/src/mail/login-link.template.ts` and the token has to arrive somehow. What bounds it
+is that the token is single-use and is consumed by the very request that logged it, so the
+line is dead before anyone reads it, and the handler always answers a redirect so it leaves
+the address bar on the first paint. This is the same accepted exposure as browser history and
+the `Referer` header, one door further along.
 
-**PET-12 introduced the frontend's first cookie, and it is not this one.**
-`frontend/src/lib/pendingEmail.ts` writes `spendifico.pending_email`, a fifteen-minute httpOnly
-cookie carrying the address screen 24 interpolates into its copy, because a query parameter put it
-into the server's request log on every registration. It is a display value, not a credential, and
-the session cookie this item is about is still unnamed. Two things it leaves for this work, both
-small. `sameSite: 'lax'` is already the value the session cookie needs, since the emailed verify
-link arrives as a cross-site top-level GET that `strict` withholds cookies from - so do not
-"tighten" it. And **the verify page should clear the pending-address cookie** once a link is spent:
-nothing does today, so it simply expires, which is harmless but leaves a stale address readable for
-up to fifteen minutes after the account is in.
+**The route path is declared in two apps and nothing checks they agree.**
+`login-link.template.ts` builds `/auth/verify` and `app/auth/verify/route.ts` answers it.
+Change either and every login email in production points at a 404, with no gate failing and no
+test noticing. `routes.test.ts` pins the frontend's half against the literal string, which is
+as far as one repo half can reach. Same shape as the `LOGIN_LINK_TTL_M` coupling below.
 
-**Three things in the shell are stubs waiting on this, all deliberate and all loud.**
+**Verify's per-IP throttler now sees one address for the whole deployment.** The handler POSTs
+from the frontend server, so every verify in the application lands in one bucket - 15 per 15
+minutes on the deployed values. The third route to inherit this, after register and
+login-link, and the reason the failure screen has a `busy` reason at all. The fix is the same
+two-sided one described under "The auth throttler is in-memory", and neither half works alone.
 
-`frontend/src/lib/session.ts` holds `requireSession()`, called once by `app/(app)/layout.tsx`
-and currently letting every request through - which is PET-19's explicit deferral of its own
-AC5. Its doc comment is the specification: read the cookie, lift it into
-`Authorization: Bearer <token>`, call `GET /api/auth/session`, redirect to the access flow on
-401 or absence. **The cookie's name is still undecided and this work picks it**; PET-19
-deliberately did not, so as not to hand over a contract it had not chosen.
+**A stale session cookie survives a manual revocation.** `requireSession()` cannot clear it:
+its only caller is a layout, a Server Component, where the cookie jar is read-only and
+`.delete()` throws `ReadonlyRequestCookiesError` at runtime with nothing in the types to warn
+you. This amends the stub's own step 4, which said "clear the cookie and redirect", and
+`layout.test.tsx` pins that no delete is attempted so nobody "completes" the spec and breaks
+the shell. It costs almost nothing, because the cookie's `Max-Age` is derived from the
+session's own `expiresAt`, so an *expired* session's cookie is gone from the browser before
+the backend would reject it. Only a hand-written tombstone reaches the state, and only until
+the cookie expires.
 
-The same file now holds a second seam, `hasSession()`, called once by `app/page.tsx` and
-currently answering `false` for everybody - PET-8's equivalent deferral. `/` is the app's
-front door and branches on it: no session renders 01 Welcome, a live session redirects to
-`/dashboard`. Until this work lands, that means **every visitor lands on Welcome and
-`/dashboard` is reached by typed URL only**. The two functions are separate because the
-shell wants "let me through or send me away" while the root route wants a fact it can branch
-on, but they want the same underlying read, so give them a shared helper rather than two
-fetches. The redirect target `requireSession()` needs is no longer unnamed either: `ACCESS_ROUTES`
-in `frontend/src/lib/routes.ts` declares `/login`, and Welcome is at `/`.
+**The shell makes two backend requests per render**, the session gate and the profile, run
+concurrently through one `Promise.all` so it costs a request rather than a round trip. One
+guarded `GET /api/profile` would have answered both, since a 401 from it means exactly "no
+live session" - rejected because `/`, `/login` and `/setup` want the gate and have no use for
+a profile, and folding them would make `lib/session.ts` depend on a Settings-shaped endpoint.
+Same trade the dashboard already accepts on the backend. The tidy end state is a single
+`requireProfile()`, and it belongs to whichever ticket first measures this as slow.
 
-`PLACEHOLDER_PROFILE` in `app/(app)/layout.tsx` feeds the sidebar footer Figma's own sample
-data. It cannot be fixed without both halves: names live in the per-user `profile` row and the
-email on the central `users` row, which is exactly what `GET /api/profile` stitches together -
-so the endpoint is no longer the blocker, only the cookie above is.
-`ui/Sidebar` itself is clean - its test pins that those sample strings appear nowhere in the
-component - so this is one constant in one file.
+**The wait behind the verify click was measured on 2026-08-05, and the blank page stands.**
+This was the open question A33/A19 left: verify is one blocking POST with no loading state
+designed, so the number decided whether a waiting state had to go to the designer. Measured
+in cloud mode against Turso (group `decode-pet`, `aws-eu-west-1`), with a throwaway central
+database so nothing touched the real directory:
 
-Three constraints that work inherits.
+- **First verification, which provisions:** 2.10s and 1.83s across two accounts. That covers
+  creating the Turso database, minting its token, persisting the pointer, opening and
+  migrating it, inserting the profile and seeding the categories.
+- **Returning verification:** 4.1ms, 4.3ms and 4.8ms across three links for one account.
+  Effectively instant, as the design assumed.
+- `POST /api/auth/register` answers in 14ms, because it floats the token issue and the mail
+  send rather than awaiting them.
 
-The token travels in a **query string**, so it lands in browser history and potentially a
-`Referer` header - the accepted norm for magic links, bounded by the short single-use
-window, but it means the verify page must load no third-party resources and must consume
-the token immediately. (It no longer reaches backend access logs: verify takes the token in
-a POST body.)
+**So no designed waiting state is needed.** Roughly two seconds of blank tab after clicking a
+link in an email is the normalized OAuth and SSO redirect experience, and it happens once per
+account, ever. A streamed "Signing you in..." shell remains technically cheap but is an
+in-page loading state, which is exactly what the design deliberately lacks - so it stays a
+design conversation rather than a gap.
 
-A failed send leaves the user with **zero** live links rather than the one they had, because
-`issue()` supersedes the previous link before sending; "Resend link" (VER-2) is the only
-recovery, and it is the design's own answer (A36).
+Two honesty notes on the number. It is the **backend POST alone**, timed from the same
+machine as the server, so it excludes the browser's own navigation, the frontend route
+handler's overhead and the redirected Dashboard render; the figure a user experiences is
+larger by whatever the network adds. And it was taken against a group that had already been
+used that session - `TursoPlatformService` warns in its own comment that creating a database
+is slower on a cold group, so treat 2s as a floor for the provisioning case rather than a
+worst case.
 
-**The wait behind the verify click is undesigned on purpose, and blank until measured.**
-A33/A19 design no loading state, and verify is one blocking POST: on a first verify the
-user who clicked the email link sits on a blank tab with only the browser's own loading
-affordances while provisioning runs (estimated seconds; a returning user's verify is
-effectively instant). A blank-and-brief wait after clicking a link is the normalized
-OAuth/SSO-redirect experience and needs no design if the number stays small. The frontend
-branch's first job is therefore to measure real cloud-mode provisioning latency, then
-choose: keep the plain page-load wait, or take a designed waiting state to the designer.
-A streamed "Signing you in..." shell is technically cheap (Suspense), but it is an
-in-page loading state, exactly what the design deliberately lacks, so that path is a
-design conversation before it is code.
+### `/check-email` is the one access route with no session gate
+
+PET-52 gated `/setup` and `/login`, which `docs/TODO.md` had asked it to answer in the same
+breath, and deliberately left this one alone. Its entire premise is that no session exists
+yet - it is the screen a user sits on while waiting for mail - so a gate would add a round
+trip to the pre-session wait to defend against a state nobody reaches by accident. The way to
+reach it signed in is to verify in a second tab and come back, at which point the screen says
+something true and harmless.
+
+Recorded so the asymmetry reads as a decision rather than an oversight. If it ever needs
+answering differently, it is the same three-line `hasSession()` branch the other three carry.
 
 ### Handing a browser a token to sync with directly
 
@@ -189,7 +195,8 @@ note.
 
 **One constraint the rename leaves behind.** `USER_DB_NAME_PREFIX` was renamed while it was
 still free, verified against live Turso: no per-user database existed and no `users` row
-named one. That window is closed the moment PET-52 lets a real account verify. `userDbName(id)`
+named one. **That window is now shut**: PET-52 shipped the verify page, so a real account can
+verify and the first per-user database can exist. `userDbName(id)`
 derives the name and `users.db_name` persists it, so a second rename would strand every
 existing account silently - `getUserDb` creates a fresh empty file instead of opening the
 synced one, and `deleteUserDb`, which derives the name from the id on purpose because its
@@ -381,23 +388,6 @@ called with the computed offset, and the visible behaviour is a Storybook or man
 real browser test (Playwright, or Storybook's own test runner) is what would close this
 properly, and nothing in the repo runs one yet.
 
-### `/setup` is not gated on a session
-
-`/` sends a signed-in visitor to the Dashboard and the `(app)` shell gates itself, but `/setup`
-deliberately does neither. PET-9 had no session to read - both `lib/session.ts` seams are still
-stubs - and a third call site would have been a claim it could not test.
-
-So a signed-in user can reach onboarding by typed URL and re-run it. Harmless today, because
-nothing is persisted until step 3 and the account already exists; worth a decision when PET-52
-makes a session readable. The cheapest answer is the same `hasSession()` branch `app/page.tsx`
-already uses.
-
-**PET-12 left `/login` ungated for the same reason, and it is the same decision.** A fourth call
-into those stubs would be a fourth untestable claim, and LOG-5 designs one entry into that screen
-anyway. So a signed-in visitor can reach Log in and request a link they do not need; the backend
-sends one and it works, which is right rather than broken, just pointless. Whichever way PET-52
-answers this for `/setup`, it should answer it for `/login` in the same breath.
-
 ### The currency select has one option, and two things wait on A6
 
 `frontend/src/app/setup/BudgetForm.tsx` renders `CURRENCY_OPTIONS` with the single
@@ -483,6 +473,27 @@ for that reason - it announces what replaced the button - but a user tabbing fro
 re-enter the card from the top. Moving focus deliberately needs a focus-management pattern this repo
 does not have yet, and inventing one for a single control is the wrong first mover; the day a second
 screen swaps a control in place, it belongs in `ui/`.
+
+**PET-52 raised it a fourth time, with eight more strings and a whole screen behind them.** A38 says
+outright that nothing is designed for opening the link - "no success landing, expired-link,
+already-used-link, or wrong-device screen" - only that these should be handled "with plain messages
+and a way to request a new link". So `/auth/verify/failed` is the one screen in the app with no Figma
+frame at all, and its four headings and four body lines are ours:
+
+- `This link no longer works` / `Login links can only be used once and expire after a short time.
+  Send yourself a new one.` for a 401 or a 400.
+- `A newer link was sent` / `This link was replaced when a newer one was requested. Open the most
+  recent email to sign in.` for the 409.
+- `Too many attempts` / `Please wait a few minutes and then request a new link.` for a 429.
+- `We couldn't sign you in` / `Something went wrong on our end. Please try again.` for a fault, an
+  unreachable backend, or a reason the URL claims that does not exist.
+
+Four rather than one generic apology, because three of the four would be misleading if collapsed: a
+replaced link wants the newest email, a throttled one wants waiting, and a fault leaves the link
+itself still live. The `Screens/Verify link failed` stories reach all four, and they carry **no frame
+number** because there is no frame - which also makes opening them the only review this screen can
+get. The card and both controls are screen 24's, so what actually needs the designer's eye is the
+copy rather than the layout.
 
 ### Screen 24's no-address arrival is new copy and a reworded AC
 

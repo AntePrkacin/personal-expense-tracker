@@ -16,19 +16,23 @@ consequence: `GET http://localhost:3000/` returns 404, which is normal, not a br
 server. The e2e test re-applies the same prefix manually to match production, so if you
 change the prefix you must change it in both places.
 
-**Frontend to backend data flow: server-side, and still writes only.** PET-19
+**Frontend to backend data flow: server-side, and reads exist now.** PET-19
 deleted the scaffold greeting page, which had been the only caller, and PET-11 restored the wire
-from the other end. PET-12 added the second endpoint, so `frontend/src` now calls
+from the other end. PET-12 added the second endpoint, so `frontend/src` calls
 `POST /api/auth/register` and `POST /api/auth/login-link`, both through one helper in
 `frontend/src/lib/backend.ts`. That helper exists because both answer 202 with an empty body and
 differ only in path and body type, which is also why it is generalised over those two and not over
 PET-52's verify: that one returns a body and reads a 409.
-There are still **no reads** - `/` is the Welcome screen behind a session gate whose own read is
-a stub (PET-52). The shape the first real read has to take is still fixed: an **async Server
-Component** (or a route handler) fetching at request
-time with `cache: 'no-store'`, so the session cookie never leaves the server and no CORS is
-involved. CORS is enabled on the backend anyway (`main.ts`), for the case of genuinely
-client-side fetches, allowing origin `FRONTEND_URL`.
+
+PET-52 ended the no-reads era with three more calls: `POST /api/auth/verify` from the route
+handler at `app/auth/verify/route.ts`, and `GET /api/auth/session` and `GET /api/profile` from
+`lib/session.ts` and `lib/profile.ts`. All three take the shape this document had already fixed
+for the first read - an **async Server Component** or a route handler, fetching at request time
+with `cache: 'no-store'`, so the credential never leaves the server and no CORS is involved - and
+the two reads add the detail that only mattered once a session existed: the cookie is never
+forwarded as a cookie, because the backend reads none, so its value is lifted into an
+`Authorization: Bearer <token>` header server-side. CORS is enabled on the backend anyway
+(`main.ts`), for the case of genuinely client-side fetches, allowing origin `FRONTEND_URL`.
 
 **A write from a form is a Server Action**, which is the shape PET-11 established in
 `frontend/src/app/setup/register/actions.ts`. The rule above names a Server Component or a route
@@ -39,7 +43,7 @@ the two shapes share is the part that matters - the request leaves the server, s
 and any cookie stay there, and `cache: 'no-store'` is set explicitly, because a POST Next decided
 to cache would silently swallow a second attempt. A route handler is still the right answer when
 the browser has to navigate *to* the call rather than fire it, which is why PET-52's verify page
-will use one.
+uses one - `app/auth/verify/route.ts`, the repo's first, and the shape to copy for the second.
 
 **What forces that handler is the navigation, not the cookie**, and the distinction is worth
 keeping straight now that something depends on it. A Server Action sets a cookie perfectly well:
@@ -47,7 +51,9 @@ PET-12's register and login actions both call `cookies().set()` to stash the add
 interpolates, and `frontend/src/lib/pendingEmail.ts` records the one constraint, which is that the
 write is legal only inside an action or a handler and nothing but a runtime throw will tell you.
 Verify needs a handler because the browser arrives at it by following a link, and an action cannot
-answer a GET navigation.
+answer a GET navigation. PET-52's handler sets its two cookies on the `NextResponse` it is already
+building rather than through `cookies()`, which both work: it keeps the header write and the
+redirect in one object, and makes the whole thing assertable with no request scope to fake.
 
 **An action returns a result rather than throwing.** An unhandled rejection inside a Server
 Action reaches the client as an opaque digest with nothing a screen can render, so the caller

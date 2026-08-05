@@ -85,11 +85,13 @@ feature folder yet, so `ui/` is currently the only child - the app shell's own c
 took the second option and live under `app/(app)/`, documented in
 `frontend/src/app/CLAUDE.md`.
 
-`components/` has two direct children of its own, and both are there for one reason:
-**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark, and
-**`AccessCard.tsx`**, the centred column and card box under it. Neither is a Components-page tile,
+`components/` has four direct children of its own, and all four are there for one reason:
+**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark,
+**`AccessCard.tsx`**, the centred column and card box under it, and **`ResendLink.tsx`** with
+**`LogInAgain.tsx`**, the pair of recovery controls. None is a Components-page tile,
 so `ui/` is wrong; each belongs to more screens than one route segment holds, so beside a route is
-wrong too - the lockup to all six access frames, the card to the five that are centred cards.
+wrong too - the lockup to all six access frames, the card to the five that are centred cards, and
+the two controls to screen 24 plus PET-52's verify failure screen.
 `AccessCard` arrived late, in PET-12, and the sequence is the useful part: the chrome lived in
 `app/setup/SetupShell.tsx` while only the three onboarding steps drew it, and moved here when Log
 in and Check your email turned out to draw the identical box with no step indicator. That shell
@@ -292,25 +294,20 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **The `/api/chat` route handler.** No route handler exists, and the env template deliberately
-  declares no model-provider key. Add whichever variable your provider needs when you build the
-  route, server-side only and never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once
-  present in `frontend/node_modules` while absent from `package.json`, so a clean install
-  removes it. Declare any SDK properly rather than relying on a leftover install.
-- **The shell's content, and its authentication.** The `(app)` group, the four routes and the
-  page header exist and every screen renders its designed header. What is missing is everything
-  below the header - all four `<main>` elements are empty - plus the two things the shell fakes:
-  `requireSession()` lets every request through (PET-52), and the sidebar footer shows
-  `PLACEHOLDER_PROFILE` rather than a real profile (PET-45 reached with PET-52's cookie). The
-  month select and the search field are drawn but inert by design.
-- **Any _read_ from the backend, which is still the single biggest gap.** PET-11 ended the
-  "nothing fetches at all" era and PET-12 added the second write, so `frontend/src` now posts
-  `POST /api/auth/register` and `POST /api/auth/login-link` through `lib/backend.ts` - and that is
-  the whole of it: **no reads, and no verify page.** The backend half is complete, so what is
-  missing is this side. **The verify page is PET-52's**, along with filling in `hasSession()` so
-  `/` can send a signed-in visitor to the Dashboard instead of showing everyone the pitch, and
-  along with the **session cookie**, which is a different cookie from the short-lived
-  pending-address one PET-12 introduced in `lib/pendingEmail.ts`: the session one is the
-  frontend's own httpOnly first-party credential, forwarded server-side into an `Authorization`
-  header because the backend reads no cookies at all, and its name is still undecided. Everything
-  above inherits from this: both session seams are stubs and the shell's profile is a placeholder.
+- **The `/api/chat` route handler.** The env template deliberately declares no model-provider
+  key. Add whichever variable your provider needs when you build the route, server-side only and
+  never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once present in
+  `frontend/node_modules` while absent from `package.json`, so a clean install removes it.
+  Declare any SDK properly rather than relying on a leftover install. Note this is no longer the
+  repo's _first_ route handler either - `app/auth/verify/route.ts` is, and it is the one to copy
+  the shape from.
+- **The shell's content.** The `(app)` group, the four routes and the page header exist, every
+  screen renders its designed header, and the shell is really gated and really shows the signed-in
+  user's profile as of PET-52. What is missing is everything below the header: all four `<main>`
+  elements are empty. The month select and the search field are drawn but inert by design.
+- **Every read except the two the access flow needed.** PET-52 ended the "nothing reads at all"
+  era: `lib/session.ts` calls `GET /api/auth/session` and `lib/profile.ts` calls
+  `GET /api/profile`, both lifting the session cookie into an `Authorization` header
+  server-side, and both are the pattern to copy. What no screen fetches yet is its own data -
+  the dashboard summary, the transaction list and its detail, the categories and their month
+  stats all exist on the backend and are read by nobody.
