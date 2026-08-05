@@ -164,9 +164,10 @@ database. Note the CLI cannot address a per-user database beyond `list`; use the
 ## Idling and cold starts
 
 The machine stops when Fly's proxy sees no traffic, and starts again on the next request. That is
-a cost decision for a showcase, and it costs a **cold start of about nine seconds** on the first
-request after an idle period - Node booting, then the central replica opening and migrating. Later
-requests are warm.
+a cost decision for a showcase, and it costs a **cold start of about 15 seconds** on the first
+request after an idle period, measured end to end from the client. Roughly 9s of that is the app -
+Node booting, then the central replica opening and migrating - and the rest is Fly provisioning and
+starting the machine before the app runs at all. Later requests are about 200ms.
 
 Two things this deliberately does not do. It does not create a second instance: autostart starts
 *the* machine, while a second replica set only comes from `--ha` or autoscaling. And it does not
@@ -192,6 +193,29 @@ fly deploy --image <previous-image-ref>
 
 Worth doing once deliberately, while nothing is at stake, so the procedure is known before it is
 needed. It requires at least two releases to exist.
+
+## `FRONTEND_URL` is load-bearing, and it is currently a placeholder
+
+`fly.toml` sets it to `https://spendifico.vercel.app`, which does not exist yet. It has **two**
+consumers, and the second is easy to miss:
+
+- `main.ts` uses it as the only allowed CORS origin.
+- `auth.service.ts` uses it as the **base of every emailed login link**.
+
+So the placeholder is not cosmetic. Every login email currently points at a host that does not
+resolve, which means nobody can complete the access flow from their inbox - the flow only
+completes today by posting the token straight to `POST /api/auth/verify`. Joi validates only that
+the value parses as a URI, so a wrong-but-valid one fails silently rather than at boot.
+
+Fix it the moment the real Vercel domain exists:
+
+```sh
+cd backend
+# edit FRONTEND_URL in fly.toml, then
+fly deploy --remote-only --ha=false
+```
+
+Separately, the CORS half allows exactly one origin, so no Vercel preview URL will ever pass it.
 
 ## The Vercel side
 

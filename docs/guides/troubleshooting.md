@@ -42,7 +42,8 @@ Fixes are in [Deployment](deployment.md); this table only maps the symptom.
 | Every auth request 429s, from every caller                    | `TRUST_PROXY_HOPS` is 0 behind the proxy, so all callers share one bucket and the per-IP limit became global                                        |
 | The app crash-loops right after a `fly secrets unset`         | You unset half a validated pair. `MAILPACE_API_TOKEN` needs `MAIL_FROM`, and the four `TURSO_*` are all-or-none                                     |
 | The machine restarts on its own right after `fly machine stop` | Expected: `auto_start_machines` is true, so any request wakes it. Set it false for the duration of a deliberate stop test                          |
-| The first request after a quiet spell takes ~9 seconds        | A cold start. The machine autostops when idle and boots on demand; later requests are warm                                                          |
+| The first request after a quiet spell takes ~15 seconds       | A cold start. The machine autostops when idle and boots on demand; later requests are ~200ms                                                        |
 | `fly config show` errors with "no machines configured"        | It reads from a running machine, so it cannot work on an app that has never deployed                                                                |
 | The deployed API rejects the frontend's browser request        | `FRONTEND_URL` allows exactly one CORS origin, and no Vercel preview URL will ever match it                                                        |
+| A login email arrives but its link goes nowhere                | `FRONTEND_URL` is also the base of every login link, not just the CORS origin. It is still the placeholder domain                                   |
 

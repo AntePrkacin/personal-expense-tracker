@@ -310,9 +310,10 @@ machine - it is `--ha` and autoscaling that create a second replica set. The sto
 full shutdown path rather than skipping it, because an autostop sends the configured
 `kill_signal` and honours `kill_timeout`. That is also why the mode is `"stop"` and not
 `"suspend"`: suspend freezes the process, so the shutdown hook never runs and locally-committed
-writes stay unpushed in frozen memory. The cost is a cold start of about nine seconds, paid by
-whoever sends the first request after an idle period, and it is accepted because this is a
-showcase rather than something with an availability target.
+writes stay unpushed in frozen memory. The cost is a cold start of about 15 seconds measured from
+the client, paid by whoever sends the first request after an idle period, and it is accepted
+because this is a showcase rather than something with an availability target. Note the app
+accounts for only about 9s of that; the rest is Fly starting the machine.
 
 **The kill timeout is raised far past Fly's default of 5 seconds** because
 `DatabaseModule.onApplicationShutdown` closes every open user replica and then the central one,

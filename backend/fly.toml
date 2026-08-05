@@ -50,11 +50,17 @@ swap_size_mb = 512
   # ./databases default is resolved from the process cwd.
   DATABASE_DIR = "/data/databases"
 
-  # PLACEHOLDER until the production Vercel domain exists. main.ts allows exactly
-  # ONE CORS origin, so no Vercel preview URL will ever pass this. Nothing breaks
-  # today because every frontend fetch is server-side, but the first browser
-  # fetch will care. Joi only checks that it is a valid URI, so a wrong-but-valid
-  # value fails silently as CORS denials rather than at boot.
+  # PLACEHOLDER until the production Vercel domain exists, and the single most
+  # load-bearing wrong value in this file. It has TWO consumers, not one:
+  # main.ts uses it as the only allowed CORS origin, and auth.service.ts uses it
+  # as the base of every emailed login link. So while it is wrong, every login
+  # email points at a host that does not resolve and nobody can complete the
+  # access flow in a browser - verified by receiving one. Joi only checks that it
+  # parses as a URI, so a wrong-but-valid value fails silently rather than at
+  # boot. Update it the moment the real domain exists.
+  #
+  # The CORS half has a consequence worth knowing separately: exactly one origin
+  # is allowed, so no Vercel preview URL will ever pass it.
   FRONTEND_URL = "https://spendifico.vercel.app"
 
   TURSO_GROUP = "decode-pet"
@@ -93,8 +99,10 @@ swap_size_mb = 512
   # so the shutdown hook never runs and locally-committed writes stay unpushed in
   # frozen memory. Faster to resume, wrong trade for this app.
   #
-  # The price is a cold start on the first request after an idle period - about
-  # nine seconds, most of it Node booting and the central replica opening.
+  # The price is a cold start on the first request after an idle period. Measured
+  # end to end from a client: about 15 seconds, of which roughly 9 is the app
+  # (Node boot plus opening the central replica) and the rest is Fly starting the
+  # machine. Warm requests are about 200ms.
   auto_stop_machines = "stop"
   auto_start_machines = true
 
