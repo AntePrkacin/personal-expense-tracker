@@ -159,3 +159,12 @@ run = "npm run dev"
 [tasks.dev]
 description = "Start both backend and frontend servers together"
 depends = ["dev:backend", "dev:frontend"]
+
+# Fire the workflow_dispatch-only deploy, stream it live (instead of clicking
+# through the Actions tab), and open the run page at the end. `raw = true` hands
+# the terminal to `gh run watch` so its live-redrawing status renders. Always
+# deploys main; the workflow refuses any other ref.
+[tasks."deploy-backend"]
+description = "Dispatch the Fly deploy workflow and stream it to completion"
+raw = true
+run = "scripts/deploy-backend.sh"
