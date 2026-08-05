@@ -661,6 +661,64 @@ fills something that already knows when to disappear. Built the other way round,
 have failed if the bar rendered unconditionally. `table` is the same shape for the populated
 branch.
 
+**PET-29 filled both, and they stayed slots.** `page.tsx` builds a `TransactionFilterBar` and a
+`TransactionsTable` and passes them down, rather than the screen importing either: both need the
+category read the screen deliberately does not make, and Storybook has to be able to hand it
+stand-ins. The screen's own new prop is `filters`, and it is a **prop rather than a third slot**
+because the search field has no conditional - all three states draw it - so an omitted node would
+silently delete a control instead of expressing a choice. It is required rather than defaulted for
+the reason `frontend/CLAUDE.md` gives about the typecheck: `npm run build` never reads
+`*.test.tsx`, so a default of `{}` would let a call site quietly test a screen with no filters.
+
+**The search field must stay in the header, outside the state conditional, and that is a
+correctness requirement.** It keeps its focus and its caret across a filter change only because
+its position in the tree is identical in all three states, so React reconciles it instead of
+remounting it. Move it under `<main>` - into the branch that swaps between the table and the
+empty card - or key the screen on anything, and every keystroke loses focus once the debounce
+lands. `TransactionsScreen.test.tsx` pins that it is inside `<header>` and not inside `<main>`,
+because the failure is invisible in a diff.
+
+**The filters live in `searchParams`, which is the choice PET-30 left open, and
+`app/(app)/transactions/filters.ts` is where the decision is written down.** Three things about
+it are worth knowing before touching that page. The URL keys are the backend's own parameter
+names, so `filterHref` and the API request are built by one function and cannot drift. A default
+is written as the **absent key** rather than `?period=current`, so one view has one URL - which
+means the parsed filters are sparse while every select needs a resolved value, and a pill reading
+blank on a bare `/transactions` is that mistake. And parsing is **load-bearing rather than
+defensive**: every one of those four keys is validated by the backend and answers 400, which
+`authorizedGet` reports as `unavailable` and `readTransactions` throws on, and there is no
+`error.tsx` anywhere in this app - so `?sort=lol` is not an ignored filter, it is the whole screen
+replaced by Next's default error page.
+
+**`TransactionSearch` is the smallest client boundary on the screen, and its state machine is not
+optional.** A plain `value={filters.search}` fails twice over: without a debounce React re-renders
+with the old prop before the server answers and typed characters visibly disappear; with one, the
+prop lands mid-word and React's controlled-input commit collapses the caret to the end. So the
+value is local state, the URL is write-mostly, and the field re-reads the URL only when the prop
+_changed_ **and** the change was not its own echo. Both halves of that condition are load-bearing:
+comparing against the last write alone reads the component's own pending navigation as somebody
+else's and empties the box. It is written as a render-phase state adjustment because
+`react-hooks/set-state-in-effect` rejects the effect version and `react-hooks/refs` rejects doing
+it with a ref, which is why the echo is state rather than the `useRef` it obviously wants to be.
+
+**The table is a real `<table>`, and the column widths are the designed ones plus 16.** A table
+has no `gap`, so Figma's 16px between columns is `pr-4` on every cell but the last and each
+declared width absorbs it - `w-[166px]` for a 150px CATEGORY column. `TransactionsTable.tsx`
+writes that arithmetic out, because "correcting" it back to the design file's numbers shifts every
+column left by 16px. Two more values there look like mistakes and are read off node 26:172: the
+card is `rounded-lg` with **no shadow**, exactly as frame 07's empty card is, so reaching for
+`AccessCard`'s `shadow-card rounded-xl` box is wrong twice; and the rules between rows are
+`border-subtle` where the card's own border is `border-default`.
+
+**A row is not a link and the kebab is not a button.** Frame 08 is PET-34's and frame 10 is
+PET-33's, and neither exists, so AC7 is drawn and deliberately not wired - the same call the two
+tabs, the month pill and the search pill before it all made. `pages.test.tsx` still pins
+`queryByRole('link')` empty on this page, and it now holds **by decision** rather than by absence
+of features, which is worth knowing before somebody deletes it as stale. PET-33's diff is a span
+becoming a `<button>` plus an `sr-only` label on the header's deliberately empty fifth cell;
+PET-34's link belongs on the **merchant cell** rather than the row, which is the accessible-name
+argument `ui/ListRow.tsx` already recorded.
+
 **Both tabs are inert, and "Categories" specifically must not become a link.** It opens frame 13,
 which is PET-36's route and has no `page.tsx` behind it, and `lib/routes.test.ts` asserts with
 `fs` that every declared route does - its `PENDING` list is empty and stays. So a link here would
@@ -670,6 +728,13 @@ is a `<button>`, `<a>` or `role="tab"`, matching the month and search pills, and
 AC2. The count badge beside "All transactions" is the one real thing in the bar, and it reads
 `total` rather than `transactions.length` because the contract says to: a future page size must
 not silently turn TRN-2's badge into a page count.
+
+**PET-29 did not make them real, and that amends AC2.** Everything else on the page became
+operable in that ticket and these two deliberately did not, because the reason above has not
+changed: frame 13 is still PET-36's and `routes.test.ts` still keeps an empty `PENDING` list. AC2's
+first half - the badge showing the real total - shipped in PET-30 and is untouched. So the
+inertness here is now a recorded decision rather than a screen nobody has got to yet, and the
+assertions pinning it should be read that way.
 
 **The no-results copy is ours, and it amends A15 and PET-30's AC5.** Both said to reuse frame
 07's message until a variant is designed. That message reads "Log your first expense and it'll
@@ -812,3 +877,17 @@ AC5 can honestly claim. Two consequences worth carrying: a **backdated** transac
 `period=current` and so neither appears nor counts, which is PET-29's filter to own rather than a
 bug here; and a successful save from an empty state **destroys the button that opened the modal**,
 so the browser's focus restore has nowhere to go. Both are in `docs/TODO.md`.
+
+**PET-29 closes the first of those and leaves the second.** The table is real, so a save now shows
+its row rather than a blank body, and a backdated one can be reached with the period select
+instead of being invisible - though nothing switches the period _for_ you, which `docs/TODO.md`
+records as still wanting the confirmation copy A19 and A29 owe. The focus-restore gap is unchanged
+and is now slightly more visible, since the card is replaced by rows rather than by nothing.
+
+**The trap PET-29 leaves is the opposite shape to the ones above: this screen now looks finished
+and is not.** Every control on it works except the two that navigate. A row click does nothing and
+the kebab does nothing, because frame 08 is PET-34's and frame 10 is PET-33's - so the one thing a
+reviewer is most likely to try on a full table is the one thing that is deliberately dead. It is
+also the only screen of the four with a real data path, which was true before PET-29 and is worth
+restating: the Dashboard, AI Insights and Settings `<main>` elements are still empty and still
+fetch nothing.

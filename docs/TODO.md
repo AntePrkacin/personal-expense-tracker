@@ -283,6 +283,19 @@ PET-36's route and has no `page.tsx`, and `lib/routes.test.ts` asserts with `fs`
 declared route has one - so a link there would either 404 or force a hole into that check.
 `pages.test.tsx` now pins `queryByRole('tab')` and `queryByRole('link')` empty on that page too.
 
+**Amended 2026-08-05 by PET-29, and the search field is off this list.** It is a real
+`<input>` now, filters on a 300ms debounce, and holds its term in `searchParams` - the choice
+PET-30 left open. `pages.test.tsx`'s assertion about it was **inverted rather than deleted**,
+so a `<div>` creeping back is a failure rather than a silence.
+
+**Two of the three remain, and only one of them is still waiting on the same thing.** The
+month select is unchanged and still needs a designed control before it can do anything (A8).
+The tab bar is now inert **by decision** rather than by absence: PET-29 made every other
+control on that page real and deliberately left "Categories" alone, because frame 13 is still
+PET-36's and `routes.test.ts` still has an empty `PENDING` list. That is AC2's amendment, and
+the distinction matters for whoever reads the assertion next - it is a record of a choice now,
+not a description of an unbuilt screen.
+
 ### A15's no-results state is amended, and its copy is ours until a variant is designed
 
 A15 said: no search-or-filter no-results state is designed, so show frame 07's "No transactions
@@ -327,6 +340,20 @@ backend change reversing a recorded PET-28 decision, so it wants a real reason r
 One reason may arrive on its own: if the period select ever offers "All time" (A16 leaves its
 options unknown), a caller already asking for `period=all` pays one redundant request in the empty
 case, and `readTransactionsView` should short-circuit rather than probe.
+
+**Amended 2026-08-05 by PET-29: that reason arrived, and the short-circuit is in.** The period
+select offers "All time", so `period=all` with no search and no category is now one click away,
+and its first read already *is* the probe - answering zero to it means the account is empty and
+there is nothing left to ask. `readTransactionsView` returns `empty` directly in that one case.
+The condition is "these filters already are the probe" rather than "the period is all": an
+all-time read narrowed by a search or a category still leaves the two states apart, so it still
+probes. The second request is otherwise unchanged, and so is the argument for eventually
+replacing it with a count the API publishes.
+
+**One cost of the search field is worth naming here**, because it multiplies against this. A
+search matching nothing costs two requests rather than one, so a navigation per keystroke would
+be two round trips per keystroke - which is why the 300ms debounce in
+`app/(app)/transactions/TransactionSearch.tsx` is load-bearing rather than a nicety.
 
 ### The header period ignores the profile's month start day
 
@@ -720,6 +747,15 @@ design nothing for; and bounding the date field to the current period contradict
 neighbour is worth knowing too - a **future** date inside the current month does appear, and one in
 the next month does not.
 
+**Amended 2026-08-05 by PET-29: there is a way to go and find it now, and nothing automatic.**
+The period select offers "Last month" and "All time", so a backdated transaction is two clicks
+from being visible instead of being unreachable - which is the part that made this a defect
+rather than a quirk. What PET-29 did **not** do is switch the period for you after a save. That
+would mean the modal reaching into the list's filter state to move it somewhere the user did not
+ask to go, and the honest fix is still the one A19 and A29 owe copy for: a confirmation naming
+the month it landed in. The count badge remains the only immediate feedback, and it still does
+not tick for a backdated row.
+
 Two smaller edges from the same ticket. A successful save from an **empty state** destroys the
 button that opened the modal, because the empty card is replaced by the (currently blank) table -
 so the browser's focus restore has nowhere to return to and focus falls back to the document. That
@@ -730,7 +766,75 @@ of four `<main>` elements are still empty so there is nothing to scroll yet, and
 matters is an `overflow-hidden` toggle plus `scrollbar-gutter: stable` - both undesigned, and
 neither observable in jsdom.
 
-### The amount rule now exists twice, and PET-32 will make it three
+**The first of those two is live now.** PET-29 filled the table, so a save from the empty state
+replaces the card with real rows rather than with a blank slot - which means the focus restore
+lands on a document that has visibly changed under it. Still the same fix and still nobody's
+single control to invent.
+
+### A category colour outside the eight renders grey, and nothing can produce one yet
+
+`CategoryResponseDto.color` is a hex string and `CreateCategoryDto` validates it with
+`/^#[0-9A-Fa-f]{6}$/` - any well-formed hex, not one of the palette's eight. The frontend's only
+colour vocabulary is Tailwind class names, and a class cannot be built from a hex at runtime
+without Tailwind's scanner failing to find it, so `components/ui/categoryColour.ts` maps the eight
+known hexes and falls back to `bg-text-tertiary` for anything else.
+
+That fallback is **correct rather than lossy today**, and for a reason worth writing down: the only
+colour outside the eight that a real account holds is `FALLBACK_CATEGORY.color`, `#98A0AE`, which
+*is* `--color-text-tertiary`. So "Uncategorized" gets the grey the design gives it, and nothing
+else can reach the branch - no screen can create a category yet.
+
+The day category writes ship (PET-37 and friends), that stops being true, and whoever builds them
+has to choose: a colour picker restricted to the eight, which is what frame 19's "Color" select
+implies and what `ui/Select.tsx` already records it cannot render; or a rendering path that does
+not go through a class map, which means an inline `style` and a deliberate exception to the
+literal-class rule. Note the second also affects the 8px category dot, not only the tile.
+
+### The transactions table's tile glyph is not `ui/ListRow`'s
+
+Both are the placeholder shopping bag Figma uses for every category, and they are different
+drawings rather than one drawing at two sizes. `ui/ListRow`'s export (node 15:13) puts the handle
+at x=0..8 over a bag spanning 3..17 - left of centre, which that file records as deliberate
+because it is what the export says. The table's (node 27:149) centres it: a bag at 3..15 under a
+handle at 5.5..12.5.
+
+So `app/(app)/transactions/TransactionRow.tsx` traces its own rather than scaling ListRow's, which
+would reproduce the offset handle on a frame that does not draw one. Two glyphs for what is
+supposed to be one placeholder is a discrepancy in the design file rather than in the code, and it
+wants a designer's answer: if the centred one is right, ListRow's export is stale and the dashboard
+row should follow it. Until then neither file is guessing.
+
+### The 9x4.5 chevron now exists three times
+
+`dashboard/MonthPill.tsx` set the trigger itself - "if a third chevron ever appears, lift them
+then" - and PET-29's filter bar is the third. It is deliberately **not** lifted in that ticket: the
+change belongs to a Dashboard file, and editing one from a Transactions branch is the sort of
+drive-by that makes a diff hard to review.
+
+Note `ui/Select.tsx`'s `ChevronLeaf` is not the answer either, and this is the detail that makes
+the unification real work rather than a move. Its viewBox is 10x5 for the form control; rendered
+into a 9x4.5 box it scales the 1.5 round-capped stroke down to 1.35, so the arrow reads visibly
+lighter than the two beside it. A shared component needs a size and a positioning prop before it
+can serve all three, which is three parameters on a nine-pixel arrow - worth doing once, once
+somebody owns all three call sites.
+
+### An unknown category id in the URL shows no-results with the select reading "All categories"
+
+`parseTransactionFilters` checks that `?categoryId=` is a well-formed UUID and deliberately does
+**not** check that it is one of the account's categories. The two reads run in `Promise.all`, so
+the category list is not available before the list request goes out, and serialising them would add
+a round trip to every load of the app's busiest screen to fix a state only a stale bookmark or a
+hand-edited URL reaches.
+
+The outcome is coherent enough: the API filters everything out rather than 404ing, so the screen
+shows the no-results card, whose copy already reads "Try a different search term, category or
+period". The incoherence is one line of display - the category select falls back to
+"All categories" while the URL is filtered by something else, so the bar disagrees with the list
+until the next interaction, which heals it.
+
+The fix, if it is ever worth the round trip, is one line between two awaits: drop `categoryId` when
+no category matches it. The alternative that costs nothing is to render the unknown id as a
+disabled option reading something like "Unknown category", which is new copy A29 would owe.
 
 `isBudgetValid` in `app/setup/draft.ts` and `isAmountValid` in `app/(app)/transactionForm.ts` are
 the same one-line rule, `parseAmountInput(value) > 0`, copied rather than shared. Each names the

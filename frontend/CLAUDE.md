@@ -238,7 +238,7 @@ consumer at all.
   so the design file is the only holdout left; `docs/TODO.md` records that, and the one
   constraint the rename leaves on any future change to the per-user database naming.
 
-`frontend/src/lib/format.ts` owns display formatting, in five parts. Money: amounts are
+`frontend/src/lib/format.ts` owns display formatting, in six parts. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
 rather than the hyphen `Intl.NumberFormat` emits, matching the design. Names: `initials()`
 and `shortName()` derive the sidebar footer's "MK" and "Marko K." from the two stored name
@@ -261,7 +261,11 @@ the string. `formatAmountInput` is **idempotent**, which the controlled input in
 `formatIsoDate()` turns the `YYYY-MM-DD` a transaction is stored under into the "Oct 8, 2025" the
 Date field's trigger draws, and it goes through `lib/date.ts`'s `dateFromIso` rather than
 `new Date(iso)` - which parses a date-only string as **UTC midnight**, so any zone behind UTC
-formats it as the day before.
+formats it as the day before. Short calendar date: PET-29 added `formatIsoDayMonth()`, the same
+date without its year - the "Oct 8" the transactions table's DATE column draws, where every row
+in a period filtered to one month would otherwise repeat it. A second formatter rather than a
+slice off the first, because `"Oct 8, 2025".split(',')[0]` is an assumption about a separator
+that stops holding the moment the locale does.
 
 **`lib/date.ts` is the other half of that and is deliberately not this file.** It owns the wire
 form - today's date, the parts either side of a `YYYY-MM-DD` string, calendar-date arithmetic -
@@ -269,7 +273,7 @@ and touches neither `Intl` nor UTC, because a calendar date is a day rather than
 must never follow a locale. That file records the two directions the mistake runs in;
 `lib/calendar.ts` builds the picker's month grid on top of it.
 
-All five parts hard-code `en-US` and its separators. When the currency chosen during onboarding
+All six parts hard-code `en-US` and its separators. When the currency chosen during onboarding
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
 that, and PET-9 made the amount input its third consumer. The one thing that must **not** follow
 it is `lib/date.ts`, for the reason above.
@@ -352,12 +356,19 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   screen renders its designed header, and the shell is really gated and really shows the signed-in
   user's profile as of PET-52. What is missing is everything below the header on **three** of the
   four: the Dashboard, AI Insights and Settings `<main>` elements are empty. Transactions is the
-  exception as of PET-30 - it renders the tab bar, its real count badge and both empty states,
-  leaving the table body and the filter bar as slots PET-29 fills, so a `filterBar` or `table`
-  prop that goes nowhere is a seam rather than a stub. The month select and the search field are
-  drawn but inert by design, and so are both of the transactions tabs. Every "Add transaction"
-  button is real as of PET-31, including the empty card's - but the **table** it would populate is
-  still PET-29's, so a save shows its effect in the count badge and nowhere else.
+  exception, and as of PET-29 it is a **complete** screen rather than a partial one: the tab bar
+  and its real count badge, both empty states, the filter bar and the table are all built, and the
+  two slots PET-30 left are filled by `page.tsx`. They are still slots rather than direct imports,
+  because both need reads the screen cannot make and Storybook has to be able to hand it
+  stand-ins. The search field is a real `<input>` now and the three filter selects are real
+  `<select>`s; what stays inert there is the Dashboard's month select (A8 wants a designed control
+  first) and **both transactions tabs**, because "Categories" opens frame 13, which is PET-36's
+  route with no `page.tsx` behind it. Every "Add transaction" button is real as of PET-31, and as
+  of PET-29 a save finally shows its effect in the list rather than only in the badge - unless the
+  date is backdated out of the current period, which the period select can now go and find.
+  What the transactions screen still does not do is **navigate**: a row click opens nothing
+  (PET-34's detail page) and the kebab opens nothing (PET-33's row menu). Both are drawn and
+  deliberately inoperable, the same call the inert tabs make.
 - **Every read a screen needs for its own data, bar the transactions list and the categories.**
   PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and
   `lib/profile.ts` calls `GET /api/profile`, both lifting the session cookie into an
@@ -367,9 +378,16 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   answer is ambiguous. PET-31 added `lib/categories.ts`, narrowed to what a picker needs.
   All four now go through `authorizedGet` in `lib/session.ts`, which is where the cookie becomes
   a bearer token; do not inline a fifth copy of that. What no screen fetches yet is the
-  dashboard summary, the transaction _detail_, and the categories' **month stats** - the read
-  exists but drops everything but `id` and `name`, so a screen wanting a cap or a spend adds it
-  back rather than writing a new read.
+  dashboard summary, the transaction _detail_, and the categories' **month stats**.
+  `lib/categories.ts` now holds **two** projections over one shared request: `readCategoryOptions`
+  for the modal's `<select>`, and PET-29's `readCategoryLabels`, which adds `color` because a
+  transaction row carries only a `categoryId` and the table joins the name and the tile colour
+  onto it. A screen wanting a cap or a spend widens the right one or adds a third; do not open
+  either up, since the point of the narrowing is that a cap and a month's spend never reach a
+  browser bundle drawing neither. Note that module deliberately **never redirects** - its
+  route-handler caller would be handed an HTML login page with a 200 on it - so a Server
+  Component using it applies the 401 policy at the call site, which
+  `app/(app)/transactions/page.tsx` is the worked example of.
 - **Every write except creating a transaction.** PET-31 is the app's first authenticated write:
   `lib/createTransaction.ts` is a Server Action over `authorizedPost` in `lib/session.ts`, the
   write half of `authorizedGet` and the second thing to reuse rather than re-derive. Two of its
