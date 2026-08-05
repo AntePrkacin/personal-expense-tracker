@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { TransactionsView } from '@/lib/transactions';
 
+import { AddTransactionProvider } from '../AddTransactionProvider';
 import { TransactionsScreen } from './TransactionsScreen';
 
 // The import above is type-only on purpose. Importing any *value* from Storybook breaks the
@@ -46,12 +47,25 @@ type Story = StoryObj<typeof TransactionsScreen>;
 const EMPTY: TransactionsView = { state: 'empty', total: 0 };
 const NO_RESULTS: TransactionsView = { state: 'noResults', total: 0 };
 
-/** The column every state shares, supplying the height the empty card centres inside. */
+/**
+ * The column every state shares, supplying the height the empty card centres inside.
+ *
+ * **The provider is inside this frame rather than in a decorator**, for the reason the header
+ * note gives about `meta.decorators` - the smoke harness never applies them, so a decorator
+ * works in Storybook and throws under Jest. Both of this screen's "Add transaction" buttons
+ * call `useAddTransaction`, which throws outside a provider by design, so it has to be here.
+ *
+ * A real provider rather than a stub, which means both buttons genuinely open modal 09 in
+ * Storybook. That is worth having: it is the only place the two triggers on one page can be
+ * checked against the single-dialog rule by hand.
+ */
 function Frame({ view }: { view: TransactionsView }) {
   return (
-    <div className="bg-surface-canvas flex h-screen flex-col">
-      <TransactionsScreen view={view} />
-    </div>
+    <AddTransactionProvider>
+      <div className="bg-surface-canvas flex h-screen flex-col">
+        <TransactionsScreen view={view} />
+      </div>
+    </AddTransactionProvider>
   );
 }
 

@@ -1,7 +1,7 @@
-import { Button } from '@/components/ui/Button';
 import type { TransactionsView } from '@/lib/transactions';
 import { monthOverline } from '@/lib/format';
 
+import { AddTransactionButton } from '../AddTransactionButton';
 import { PageHeader } from '../PageHeader';
 import { SearchPill } from './SearchPill';
 import { TransactionsEmpty } from './TransactionsEmpty';
@@ -48,9 +48,10 @@ export function TransactionsScreen({ view, filterBar, table }: TransactionsScree
         action={
           <>
             <SearchPill placeholder="Search transactions" />
-            {/* No onClick: this opens modal 09, which is PET-31's, matching the dashboard's
-                copy of the same button. */}
-            <Button label="Add transaction" />
+            {/* Opens modal 09, as of PET-31, and so does the empty card's copy below. Both go
+                through the one provider on the shell's layout, which is what stops this page
+                mounting two dialogs. */}
+            <AddTransactionButton />
           </>
         }
       />

@@ -1,5 +1,6 @@
-import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/EmptyState';
+
+import { AddTransactionButton } from '../AddTransactionButton';
 
 // The transactions page's two empty states: frame 07's designed one (TRN-9) and the no-results
 // one nobody drew (A15). Both are `EmptyState` with this file's glyph; only the two strings
@@ -60,9 +61,10 @@ function TransactionsGlyph() {
  * duplicated box. The caller's `view.state` is already the discriminated value, which is why
  * this takes the state name rather than a boolean called something like `filtered`.
  *
- * **The button has no `onClick` yet.** It opens modal 09, which is PET-31's, exactly as the
- * header's copy of it does - `dashboard/page.tsx` carries the same note. Both are the same
- * ticket's wiring, and PET-30's AC4 stays open until it lands.
+ * **The button opens modal 09 as of PET-31**, which closes PET-30's AC4 - exactly as that
+ * ticket predicted, with an `onClick` and nothing else here changing. It is the same trigger
+ * component the header above uses, and both reach the single modal on the shell's layout: two
+ * independent modals on one page would mean two focus traps and duplicate `ui/Field` ids.
  */
 export function TransactionsEmpty({ state }: { state: 'empty' | 'noResults' }) {
   const copy = state === 'empty' ? EMPTY_COPY : NO_RESULTS_COPY;
@@ -72,7 +74,7 @@ export function TransactionsEmpty({ state }: { state: 'empty' | 'noResults' }) {
       icon={<TransactionsGlyph />}
       heading={copy.heading}
       body={copy.body}
-      action={<Button label="Add transaction" />}
+      action={<AddTransactionButton />}
     />
   );
 }

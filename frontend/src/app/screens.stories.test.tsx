@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
+import * as AddTransactionModal from './(app)/AddTransactionModal.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
 import * as CheckEmailScreen from './check-email/CheckEmailScreen.stories';
@@ -58,6 +59,11 @@ const MODULES: [name: string, module: StoryModule][] = [
   // whole frame, where `Shell/Page header` is one band of chrome shared by four - so
   // the section follows what the story is for, not which folder it sits in.
   ['TransactionsScreen', TransactionsScreen as StoryModule],
+  // Frame 09, and the first *modal* in this section. Filed under Screens for the same
+  // reason frame 07 is - it is a whole frame worth diffing - while `Shell/Modal` holds
+  // the empty box those frames share. The two are not duplicates: one is the chrome,
+  // this one is the form inside it.
+  ['AddTransactionModal', AddTransactionModal as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {
