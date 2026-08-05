@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 
 // The dialog box every modal in the app draws (Figma node 28:384, which is literally named
 // "Modal"): the scrim, the centred 520px card, the titled header with its close button, the
@@ -168,9 +168,32 @@ type ModalProps = {
    * footers are two buttons and an action.
    */
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  /**
+   * Exposes `close()` so a caller can dismiss the dialog itself.
+   *
+   * **The point is that it closes the dialog rather than unmounting it**, and the difference
+   * is the browser's focus restore. `AddTransactionModal` needs this on a successful save: it
+   * could simply call its own `onClose` and let the owner stop rendering it, but removing an
+   * open dialog from the DOM skips the platform's "return focus to whatever opened this"
+   * behaviour, so the user would be left with focus on `<body>` after logging an expense. Going
+   * through `close()` fires the `close` event, which is `onClose`, which unmounts it - so the
+   * one-exit rule still holds and this adds a way in, not a second way out.
+   */
+  ref?: React.Ref<ModalHandle>;
 };
 
-export function Modal({ title, onClose, children, footer, initialFocusId, onSubmit }: ModalProps) {
+/** What `ref` exposes. One method, because there is one thing a caller cannot already do. */
+export type ModalHandle = { close: () => void };
+
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+  initialFocusId,
+  onSubmit,
+  ref,
+}: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   /**
@@ -198,6 +221,9 @@ export function Modal({ title, onClose, children, footer, initialFocusId, onSubm
   function close() {
     dialogRef.current?.close();
   }
+
+  // React 19 takes `ref` as an ordinary prop, so no forwardRef wrapper is needed.
+  useImperativeHandle(ref, () => ({ close }));
 
   /**
    * A click on the scrim, and the target test is the whole of it.

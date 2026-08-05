@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 
-import { Modal } from './Modal';
+import { Modal, type ModalHandle } from './Modal';
 
 // What this suite can and cannot see is the thing to understand before adding to it.
 //
@@ -196,6 +196,47 @@ describe('closing', () => {
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the ref handle', () => {
+  it('closes the dialog through close(), so the browser restores focus', async () => {
+    // The reason the handle exists. A caller could unmount the modal instead, but removing an
+    // open dialog from the DOM skips the platform's focus restore - so a user who saved a
+    // transaction would be left with focus on <body>. Going through close() fires the close
+    // event, which is onClose, which unmounts it: one exit, reached one more way.
+    const onClose = jest.fn();
+    let handle: ModalHandle | null = null;
+
+    function Controlled() {
+      const [open, setOpen] = useState(true);
+
+      return open ? (
+        <Modal
+          ref={(instance) => {
+            handle = instance;
+          }}
+          title="Add transaction"
+          onClose={() => {
+            setOpen(false);
+            onClose();
+          }}
+          footer={<button type="button">Cancel</button>}
+        >
+          <p>Body</p>
+        </Modal>
+      ) : null;
+    }
+
+    render(<Controlled />);
+    expect(dialog()).toBeInTheDocument();
+
+    act(() => {
+      handle!.close();
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 
