@@ -75,8 +75,13 @@ export function ChevronLeaf({ className }: { className?: string }) {
  * designed right padding, the 10px chevron, and the 10px gap the tile draws
  * between value and chevron.
  */
+// `cursor-pointer` for the reason `BUTTON_BASE` carries it, and it is not redundant here either:
+// the user agent draws an arrow over a `<select>`, so the one control on the form that opens a
+// list read as unclickable on hover. `(app)/DateField.tsx` wears this same box and already had a
+// pointer, so without this the two disagreed - which is exactly the drift that field exists not
+// to cause. `disabled:cursor-not-allowed` still wins through its pseudo-class.
 export const SELECT_CONTROL =
-  'text-body-m text-text-primary disabled:text-text-tertiary w-full appearance-none bg-transparent py-3 pr-8.5 pl-3.5 outline-none disabled:cursor-not-allowed';
+  'text-body-m text-text-primary disabled:text-text-tertiary w-full cursor-pointer appearance-none bg-transparent py-3 pr-8.5 pl-3.5 outline-none disabled:cursor-not-allowed';
 
 type SelectProps = {
   /** Wired to the label and the error message; see Field for why it is required. */

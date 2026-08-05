@@ -330,6 +330,9 @@ const HARDCODED = [
   // would put a lone child at the start instead. Every other access footer has two
   // children and takes `justify-between`.
   'justify-end',
+  // What keeps every field label as narrow as its own text. A flex item stretches by default,
+  // so without this a label is a full-width invisible click target for the control below it.
+  'self-start',
   'shrink-0',
   'flex-1',
   'truncate',

@@ -495,20 +495,34 @@ called with the computed offset, and the visible behaviour is a Storybook or man
 real browser test (Playwright, or Storybook's own test runner) is what would close this
 properly, and nothing in the repo runs one yet.
 
-**PET-31 made that missing browser test matter more, and named three more behaviours behind it.**
-`(app)/Modal.tsx` is built on the native `<dialog>`, and jsdom 26.1.0 implements almost none of it -
-`HTMLDialogElement.prototype` carries exactly `constructor` and `open`. So `jest.setup.ts` fakes
-`showModal()` and `close()` and **deliberately stops there**, leaving three things unassertable:
-**Escape** (in a browser the UA fires `cancel`, whose default action closes the dialog), the **focus
-trap**, and **focus returning to the trigger** on close. Faking Escape was the obvious next step and
-is the wrong one: AC7's "Escape closes the modal" would then be a test of fifteen lines of polyfill,
-passing just as happily with the real behaviour deleted.
+**PET-31 made that missing browser test matter more, and one of the gaps it named turned out to be
+a bug.** `(app)/Modal.tsx` is built on the native `<dialog>`, and jsdom 26.1.0 implements almost
+none of it - `HTMLDialogElement.prototype` carries exactly `constructor` and `open`. So
+`jest.setup.ts` fakes `showModal()` and `close()` and **deliberately stops there**, leaving two
+things unassertable: **Escape** (in a browser the UA fires `cancel`, whose default action closes the
+dialog) and the **focus trap**. Faking Escape was the obvious next step and is the wrong one: AC7's
+"Escape closes the modal" would then be a test of fifteen lines of polyfill, passing just as
+happily with the real behaviour deleted.
 
-The amount field's caret makes a fourth in the same modal, since it reuses `BudgetForm`'s handler
-verbatim. All four are checked by hand against `Shell/Modal`'s `FromTrigger` story and
-`Screens/09 Add transaction`, in both Chrome and Firefox, because every one of them is the browser's
-behaviour rather than ours. One real browser test would close the whole set at once, which is the
-strongest argument yet for adding the runner.
+The amount field's caret is the third, since the modal reuses `BudgetForm`'s handler verbatim. All
+three are checked by hand against `Shell/Modal`'s `FromTrigger` story and
+`Screens/09 Add transaction`, in both Chrome and Firefox, because every one of them is the
+browser's behaviour rather than ours. One real browser test would close the whole set at once,
+which is the strongest argument yet for adding the runner.
+
+**Focus returning to the trigger was a fourth item on that list, and walking it in Chrome is what
+demoted it from "untestable" to "was broken".** The platform restores focus to whatever opened a
+dialog, so `Modal` wrote no code for it. In the real thing focus landed on `<body>`: `close()` fires
+the `close` event, `onClose` is where the owner stops rendering the modal, React does that
+**synchronously inside the event dispatch**, and the dialog detaches before the browser's restore
+step completes - so the next Tab started from the top of the page. `Modal` now captures
+`document.activeElement` on open and refocuses it on unmount, and because that is our code it is
+asserted in `Modal.test.tsx` rather than eyeballed.
+
+Worth generalising rather than filing away: **a platform guarantee that fires during an event React
+unmounts inside is not a guarantee.** The same shape will apply to any future component that closes
+itself by ceasing to exist, and it is invisible to jsdom in both directions - the polyfill cannot
+fake the guarantee, so nothing failed.
 
 ### The currency select has one option, and two things wait on A6
 
@@ -667,6 +681,18 @@ control**: paging December forward reaches January, which makes the two chevrons
 makes a date two years back twenty-four clicks away. And the trigger is a `<button>` rather than a
 `<select>`, which is what makes the popover possible at all and is the reason
 `(app)/DateField.tsx` carries three ARIA decisions the two real fields beside it do not need.
+
+**The popover is `position: fixed` and that is not cosmetic.** A modal `<dialog>` gets
+`overflow: auto` and a `max-height` from the user agent, so an `absolute` popover anchored to the
+field is inside that scroll box: opening it grew the dialog's `scrollHeight` from 532 to 663, put a
+scrollbar down the side of the modal, and clipped 131px of the calendar - all measured in Chrome.
+`fixed` escapes both, because the dialog sets no `transform`, `filter` or `contain` and so
+establishes no containing block, while the popover stays a DOM child of the dialog and therefore
+still paints inside its top layer. The cost is that the coordinates are computed on open rather
+than declared, which brings two small limits with it: the flip-above decision reads a
+`POPOVER_HEIGHT` constant that is only correct because `monthMatrix` fixes the grid at six rows,
+and a window resize **closes** the popover rather than repositioning it. Both are cheap to revisit
+if a second popover ever appears; a shared positioning helper is what that would want.
 
 ### A created transaction can legitimately fail to appear, and two smaller edges around it
 

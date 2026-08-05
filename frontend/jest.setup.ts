@@ -17,16 +17,22 @@ import '@testing-library/jest-dom';
 //
 //   - the top layer, so nothing here proves the modal paints above the sidebar;
 //   - focus containment, so `user.tab()` walks straight out of the dialog;
-//   - focus restoration to the trigger on close, which the browser does and we
-//     write no code for;
 //   - Escape, which in a browser fires `cancel`, whose default action calls close().
+//
+// **Focus restoration used to be on that list and no longer is.** The platform does restore
+// focus to whatever opened a dialog, so `Modal` originally wrote no code for it - and walking
+// the real thing in Chrome showed focus landing on `<body>` instead, because `onClose` is where
+// the owner unmounts the modal and React does that synchronously inside the event dispatch, so
+// the dialog detaches before the browser's restore step completes. `Modal` now captures and
+// restores it, which means it is our behaviour and therefore assertable: see "focus on close" in
+// Modal.test.tsx.
 //
 // **Escape is left out on purpose, and that is the load-bearing decision.** Faking
 // keydown -> cancel -> close would turn AC7's "Escape closes the modal" into a test
 // of these few lines, passing just as happily with the real handler deleted. So the
 // suite asserts the wiring it can see - that a native `close` event unmounts and
-// calls `onClose` exactly once - and Escape, the trap and the restore are checked in
-// Storybook and by hand. `frontend/src/app/CLAUDE.md` records that split, and it is
+// calls `onClose` exactly once - and Escape and the trap are checked in Storybook
+// and by hand. `frontend/src/app/CLAUDE.md` records that split, and it is
 // the same call BudgetForm's caret restore already documents: jsdom cannot observe
 // the outcome, so assert the wiring and eyeball the behaviour.
 //

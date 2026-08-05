@@ -8,11 +8,17 @@ import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 //
 // **Built on the native `<dialog>` with `showModal()`**, which is the call `ui/Select.tsx`
 // already argues for about native controls: the platform gives the top layer, focus
-// containment, Escape, restoring focus to whatever opened it, `inert`-equivalent blocking of
-// the page behind, and `::backdrop` - none of which a hand-rolled `role="dialog"` gets
-// without a few hundred lines of the least reliable code in the category. Two things fall out
-// of the top layer specifically and are worth knowing: nothing here picks a z-index, and the
-// box paints over `SidebarNav`'s `sticky top-0` with no stacking context to arrange.
+// containment, Escape, `inert`-equivalent blocking of the page behind, and `::backdrop` -
+// none of which a hand-rolled `role="dialog"` gets without a few hundred lines of the least
+// reliable code in the category. Two things fall out of the top layer specifically and are
+// worth knowing: nothing here picks a z-index, and the box paints over `SidebarNav`'s
+// `sticky top-0` with no stacking context to arrange. Verified in Chrome against a sticky
+// element at `z-index: 9999`, which the dialog still covers.
+//
+// **Focus restoration is the one item that was on that list and had to come off it.** The
+// platform does restore focus to whatever opened a dialog, and it does not survive an owner
+// that unmounts the modal in `onClose` - see the effect below, which is why this component
+// writes that part itself.
 //
 // **It lives here rather than in `components/ui/`.** That folder mirrors the Figma Components
 // page and is complete, and this is not a tile. It is not `components/`' case either -
@@ -22,11 +28,11 @@ import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 // signed-in shell's own component, beside the layout. Its stories are filed under **Shell**
 // for that reason.
 //
-// **Three behaviours this component's suite cannot see**, because jsdom implements none of
-// them and `jest.setup.ts` deliberately does not fake them: Escape, the focus trap, and focus
-// returning to the trigger. They are Storybook and manual checks, recorded in
-// `frontend/src/app/CLAUDE.md` and `docs/TODO.md`. The same split `BudgetForm`'s caret
-// restore already lives with.
+// **Two behaviours this component's suite cannot see**, because jsdom implements neither and
+// `jest.setup.ts` deliberately does not fake them: Escape and the focus trap. Both are
+// Storybook and manual checks, recorded in `frontend/src/app/CLAUDE.md` and `docs/TODO.md` -
+// the same split `BudgetForm`'s caret restore already lives with. It was three until the
+// focus restore turned out to need our own code, at which point it became testable.
 
 /**
  * The scrim.
@@ -206,9 +212,16 @@ export function Modal({
    */
   const titleId = useId();
 
+  /** Whatever had focus when this opened, so closing can hand it back. See the effect below. */
+  const restoreFocusTo = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
+
+    // Captured before anything below moves focus, and only on the first run: `??=` is what keeps
+    // a re-render from recording the Amount field as "where the user came from".
+    restoreFocusTo.current ??= document.activeElement as HTMLElement | null;
 
     // Guarded because `showModal()` on an already-open dialog throws InvalidStateError, and
     // this effect re-runs if `initialFocusId` changes. Re-running should only move focus.
@@ -216,6 +229,34 @@ export function Modal({
 
     if (initialFocusId) document.getElementById(initialFocusId)?.focus();
   }, [initialFocusId]);
+
+  /**
+   * Hands focus back to whatever opened this, on unmount.
+   *
+   * **The platform does this itself, and in this architecture that is not enough** - which was
+   * found by walking the real thing in Chrome rather than by reading the spec. `close()` fires
+   * the `close` event, `onClose` is where the owner stops rendering the modal, and React does
+   * that *synchronously inside the event dispatch* - so the dialog is detached before the
+   * browser's own focus-restore step completes, and focus lands on `<body>` instead. The next
+   * Tab then starts from the top of the page.
+   *
+   * Doing it here rather than in `close()` covers every exit, including the ones this component
+   * never sees: Escape, and an owner that unmounts the modal for its own reasons.
+   *
+   * **`isConnected` is the one case that legitimately cannot be restored**, and it is real rather
+   * than defensive: saving from the Transactions empty state replaces the card holding the button
+   * that opened this, so there is nothing left to focus. `docs/TODO.md` records that gap.
+   *
+   * Re-focusing an element the browser already restored is a no-op, so this is safe when it
+   * happens to be redundant.
+   */
+  useEffect(
+    () => () => {
+      const target = restoreFocusTo.current;
+      if (target?.isConnected) target.focus();
+    },
+    [],
+  );
 
   /** Every affordance goes through here. Escape needs no code: the UA's own default calls it. */
   function close() {

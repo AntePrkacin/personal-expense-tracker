@@ -690,9 +690,10 @@ the loop described under The app shell.
 
 **`(app)/Modal.tsx` is built on the native `<dialog>` with `showModal()`, and that buys four
 things nobody had to write.** The top layer, so no z-index is chosen anywhere and the box paints
-over `SidebarNav`'s `sticky top-0` with no stacking context to arrange; focus containment; Escape,
-which the user agent turns into a `cancel` whose default action closes the dialog; and focus
-restored to whatever opened it. `ui/Select.tsx` makes the same argument about native controls
+over `SidebarNav`'s `sticky top-0` with no stacking context to arrange - verified in Chrome
+against a sticky element at `z-index: 9999`, which the dialog still covers; focus containment;
+and Escape, which the user agent turns into a `cancel` whose default action closes the dialog.
+`ui/Select.tsx` makes the same argument about native controls
 generally, and it is the reason the alternative - a `fixed inset-0` div with `role="dialog"`, a
 hand-rolled focus trap and a chosen z-index - was rejected: it trades three browser guarantees
 for three green tests over our own approximations of them. It lives beside the layout rather than
@@ -717,16 +718,27 @@ than a second way out. Cancel, the X and a backdrop click all call `close()`, wh
 is `onClose`; Escape reaches the same place through the UA's default action, so the component
 carries no keydown handler at all. The backdrop test is `event.target === dialogRef.current`,
 which works because a click on `::backdrop` reports the dialog itself while any child reports
-itself, and because the box carries no padding of its own. The `ref` handle exists for one case:
-a successful save has to close the dialog rather than unmount it, because removing an open dialog
-skips the platform's focus restore and would leave the user on `<body>`.
+itself, and because the box carries no padding of its own. The `ref` handle exists so a successful
+save closes the dialog rather than merely unmounting it, which keeps every exit on the one path the
+owner listens to - the `close` event.
 
-**Three of the modal's behaviours are unassertable in Jest, and `jest.setup.ts` deliberately does
+**Two of the modal's behaviours are unassertable in Jest, and `jest.setup.ts` deliberately does
 not fake them.** jsdom 26.1.0's `HTMLDialogElement.prototype` carries exactly `constructor` and
-`open`, so the polyfill supplies `showModal()` and `close()` and stops there: Escape, the focus
-trap and the focus restore are Storybook and manual checks. Faking Escape would turn AC7 into a
-test of the polyfill, passing just as happily with the real handler deleted - the same call
-`BudgetForm`'s caret restore already lives with. `docs/TODO.md` records the gap.
+`open`, so the polyfill supplies `showModal()` and `close()` and stops there: Escape and the focus
+trap are Storybook and manual checks. Faking Escape would turn AC7 into a test of the polyfill,
+passing just as happily with the real handler deleted - the same call `BudgetForm`'s caret restore
+already lives with. `docs/TODO.md` records the gap.
+
+**It was three, and the third turned into a bug worth knowing about.** The platform restores focus
+to whatever opened a dialog, so `Modal` originally wrote no code for it and the behaviour was
+listed as another manual check. Walking it in Chrome showed focus landing on `<body>` instead: the
+`close` event fires, `onClose` is where the owner stops rendering the modal, React does that
+**synchronously inside the event dispatch**, and the dialog therefore detaches before the
+browser's restore step completes - so the next Tab started from the top of the page. `Modal` now
+captures `document.activeElement` on open and refocuses it on unmount, which covers every exit
+including Escape, and which - because it is our code rather than the platform's - is asserted in
+`Modal.test.tsx` rather than eyeballed. The lesson generalises past this component: **a platform
+guarantee that fires during an event React unmounts inside is not a guarantee.**
 
 **The Add transaction modal is mounted once, on the layout, and that is a correctness requirement
 rather than a tidiness one.** `AddTransactionProvider` holds it, `AddTransactionButton` is the

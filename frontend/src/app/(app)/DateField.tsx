@@ -45,10 +45,43 @@ export const DATE_TRIGGER =
   'text-body-m text-text-primary w-full cursor-pointer bg-transparent py-3 pr-8.5 pl-3.5 ' +
   'text-left outline-none';
 
-/** The popover card. `shadow-card` is the elevation every other floating surface here uses. */
+/**
+ * The popover card.
+ *
+ * **`fixed`, not `absolute`, and that is the whole of one bug fix.** The user agent gives a modal
+ * dialog `overflow: auto` with a `max-height`, so an `absolute` popover anchored to the field is
+ * a descendant of that scroll box: opening it grew the dialog's `scrollHeight` from 532 to 663,
+ * put a scrollbar down the side of the modal, and clipped 131px of the calendar. Measured in
+ * Chrome, not inferred.
+ *
+ * `fixed` escapes both, because the dialog sets no `transform`, `filter` or `contain` - so it
+ * establishes no containing block, the popover's containing block is the viewport, and the
+ * dialog's overflow cannot clip it or count it. It stays a DOM child of the dialog, so it still
+ * paints inside the dialog's own top-layer stacking context and over the modal rather than under
+ * it. The cost is that the coordinates have to be computed, which `placeAgainst` does.
+ *
+ * `shadow-card` is the elevation every other floating surface here uses.
+ */
 export const DATE_POPOVER =
-  'border-border-default bg-surface-card shadow-card absolute top-full left-0 z-10 mt-2 ' +
-  'w-70 rounded-md border p-3';
+  'border-border-default bg-surface-card shadow-card fixed z-10 w-70 rounded-md border p-3';
+
+/** The gap between the field and the popover, and the minimum inset from any viewport edge. */
+const GAP = 8;
+
+/** `w-70`, needed as a number to keep the popover inside the viewport horizontally. */
+const POPOVER_WIDTH = 280;
+
+/**
+ * The popover's height, which is a constant because the grid is a fixed six rows.
+ *
+ * 12 padding + 28 header + 8 gap + 36 weekday row + 216 for six 36px rows + 12 padding = 312,
+ * and Chrome measures 314 with the border. Only the flip decision below reads it, so being a
+ * pixel or two out changes nothing - and `monthMatrix`'s fixed row count is what makes it a
+ * constant at all rather than something to measure after render. Measuring would mean setting
+ * state in a layout effect, which `react-hooks/set-state-in-effect` rejects and this repo carries
+ * no disable comments for.
+ */
+const POPOVER_HEIGHT = 314;
 
 /**
  * A month chevron's hit area.
@@ -109,6 +142,30 @@ function viewOf(iso: string): { year: number; month: number } {
   return { year: parts.year, month: parts.month };
 }
 
+/**
+ * Where a `fixed` popover goes to sit under its trigger.
+ *
+ * Computed in the click handler rather than in an effect, which keeps it out of
+ * `react-hooks/set-state-in-effect`'s way and means the popover's first paint is already in the
+ * right place with no reposition flicker.
+ *
+ * It flips **above** the field when there is not room below, so the calendar is never half off
+ * the bottom of a short window, and clamps horizontally so it cannot leave the viewport on the
+ * right. Both use the constants above rather than a measurement.
+ */
+function placeAgainst(trigger: HTMLElement): { top: number; left: number } {
+  const rect = trigger.getBoundingClientRect();
+  const roomBelow = window.innerHeight - rect.bottom - GAP;
+
+  return {
+    top:
+      roomBelow >= POPOVER_HEIGHT
+        ? rect.bottom + GAP
+        : Math.max(GAP, rect.top - POPOVER_HEIGHT - GAP),
+    left: Math.max(GAP, Math.min(rect.left, window.innerWidth - POPOVER_WIDTH - GAP)),
+  };
+}
+
 export function DateField({ id, label, value, onChange, error }: DateFieldProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => viewOf(value));
@@ -133,8 +190,12 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
    */
   const moveFocus = useRef(false);
 
+  /** Where the `fixed` popover sits, computed against the trigger when it opens. */
+  const [placement, setPlacement] = useState({ top: 0, left: 0 });
+
   const gridRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const today = todayIsoDate();
 
@@ -145,11 +206,60 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
     gridRef.current?.querySelector<HTMLButtonElement>(`[data-iso="${focusedIso}"]`)?.focus();
   }, [open, focusedIso]);
 
+  /**
+   * Dismissal by anything that is not the calendar: a click elsewhere, or a resize.
+   *
+   * **`mousedown` rather than `click`**, so the popover is gone before whatever was clicked
+   * reacts - a click on the Category select closes this and opens that in one gesture rather
+   * than needing two.
+   *
+   * **The trigger is excluded, and that is load-bearing.** Its own `onClick` toggles, so if this
+   * closed the popover on mousedown the click would immediately reopen it and the button would
+   * appear dead.
+   *
+   * Resize **closes** rather than repositions, because the coordinates are computed once on open
+   * and a resize invalidates them. Cheap, honest, and a resize with the calendar open is rare;
+   * repositioning would mean tracking the trigger's rect continuously for no real gain.
+   *
+   * Note a click on the scrim closes this *and* the modal - the popover on mousedown, the dialog
+   * on the click that follows. That is the same "click outside dismisses" the modal already
+   * promises (AC7), rather than a two-step Escape has to be.
+   */
+  useEffect(() => {
+    if (!open) return;
+
+    function dismiss() {
+      // Not `closePopover()`, which pulls focus back to the trigger: that would fight whatever
+      // the user just clicked into. Dismiss quietly and let the click land where it was aimed.
+      setOpen(false);
+    }
+
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as Node | null;
+      if (target === null) return;
+      if (popoverRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+
+      dismiss();
+    }
+
+    document.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('resize', dismiss);
+
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('resize', dismiss);
+    };
+  }, [open]);
+
   function openPopover() {
     const next = value || today;
+    const trigger = triggerRef.current;
+    if (trigger === null) return;
 
     setFocusedIso(next);
     setView(viewOf(next));
+    setPlacement(placeAgainst(trigger));
     moveFocus.current = true;
     setOpen(true);
   }
@@ -272,9 +382,13 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
 
         {open ? (
           <div
+            ref={popoverRef}
             role="dialog"
             aria-label="Choose a date"
             className={DATE_POPOVER}
+            // The one inline style in this component, and it has to be: `fixed` needs viewport
+            // coordinates, and Tailwind cannot express "wherever this field happens to be".
+            style={{ top: placement.top, left: placement.left }}
             onKeyDown={onGridKeyDown}
           >
             <div className="mb-2 flex items-center justify-between">

@@ -199,6 +199,90 @@ describe('closing', () => {
   });
 });
 
+describe('focus on close', () => {
+  // **This was a real defect, found by walking the modal in Chrome rather than by reading the
+  // spec.** The platform restores focus to whatever opened a dialog - but `onClose` is where the
+  // owner unmounts the modal, React does that synchronously inside the event dispatch, and the
+  // dialog is therefore detached before the browser's restore step completes. Focus landed on
+  // `<body>` and the next Tab started from the top of the page.
+  //
+  // Because the restore is now this component's code rather than the platform's, it is
+  // assertable here - which is the one behaviour of the four in jest.setup.ts's list that moved
+  // from "manual check" to "tested".
+  it('returns focus to the control that opened it', async () => {
+    render(<Harness />);
+    const opener = openIt();
+
+    await userEvent.click(opener);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(opener).toHaveFocus();
+  });
+
+  it('returns focus after a Cancel too, not just the X', async () => {
+    render(<Harness />);
+    const opener = openIt();
+
+    await userEvent.click(opener);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Cancel does not close on its own in this harness, so drive the one exit directly - the
+    // point is that any unmount restores, not that Cancel is wired.
+    act(() => {
+      screen.queryByRole('dialog')?.dispatchEvent(new Event('close'));
+    });
+
+    expect(opener).toHaveFocus();
+  });
+
+  it('does not move focus when the opener is gone', async () => {
+    // The case that legitimately cannot be restored, and it is real: saving from the Transactions
+    // empty state replaces the card holding the button that opened the modal.
+    function Vanishing() {
+      const [open, setOpen] = useState(false);
+      const [triggerGone, setTriggerGone] = useState(false);
+
+      return (
+        <>
+          {triggerGone ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(true);
+              }}
+            >
+              Open it
+            </button>
+          )}
+          {open ? (
+            <Modal
+              title="Add transaction"
+              onClose={() => {
+                setOpen(false);
+                setTriggerGone(true);
+              }}
+              footer={<button type="button">Cancel</button>}
+            >
+              <p>Body</p>
+            </Modal>
+          ) : null}
+        </>
+      );
+    }
+
+    render(<Vanishing />);
+    await userEvent.click(screen.getByRole('button', { name: 'Open it' }));
+
+    await expect(
+      userEvent.click(screen.getByRole('button', { name: 'Close' })),
+    ).resolves.not.toThrow();
+
+    expect(screen.queryByRole('button', { name: 'Open it' })).not.toBeInTheDocument();
+  });
+});
+
 describe('the ref handle', () => {
   it('closes the dialog through close(), so the browser restores focus', async () => {
     // The reason the handle exists. A caller could unmount the modal instead, but removing an

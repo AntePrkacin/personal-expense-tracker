@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 
@@ -370,6 +370,94 @@ describe('Escape', () => {
     popover().dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
+  });
+});
+
+describe('the popover escapes the modal rather than scrolling it', () => {
+  it('is positioned fixed, so the dialog’s overflow cannot clip or count it', async () => {
+    // Measured in Chrome before this was written: a `<dialog>` gets `overflow: auto` and a
+    // max-height from the user agent, so an `absolute` popover grew the modal's scrollHeight
+    // from 532 to 663 and 131px of the calendar was clipped behind a scrollbar. `fixed` escapes
+    // both, because the dialog sets no transform and so establishes no containing block.
+    render(<Harness initial="2025-10-08" />);
+
+    await user().click(trigger());
+
+    expect(popover()).toHaveClass('fixed');
+    expect(popover().className).not.toContain('absolute');
+  });
+
+  it('anchors itself to the trigger with inline coordinates', async () => {
+    // `fixed` needs viewport coordinates, which Tailwind cannot express. jsdom reports every rect
+    // as zero, so what is assertable is that both are set rather than what they are; the visual
+    // placement is a browser check.
+    render(<Harness initial="2025-10-08" />);
+
+    await user().click(trigger());
+
+    expect(popover().style.top).not.toBe('');
+    expect(popover().style.left).not.toBe('');
+  });
+});
+
+describe('dismissing by clicking elsewhere', () => {
+  it('closes when something else in the form is clicked', async () => {
+    render(<Harness initial="2025-10-08" />);
+    const u = user();
+    await u.click(trigger());
+
+    await u.click(screen.getByRole('button', { name: 'After' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('lets that click land where it was aimed', async () => {
+    // Dismissal is on `mousedown`, so the popover is gone before the thing under the pointer
+    // reacts - one gesture rather than two. And it deliberately does not pull focus back to the
+    // trigger, which would fight whatever the user just clicked into.
+    render(<Harness initial="2025-10-08" />);
+    const u = user();
+    await u.click(trigger());
+
+    const after = screen.getByRole('button', { name: 'After' });
+    await u.click(after);
+
+    expect(after).toHaveFocus();
+    expect(trigger()).not.toHaveFocus();
+  });
+
+  it('stays open when the calendar itself is clicked', async () => {
+    render(<Harness initial="2025-10-08" />);
+    const u = user();
+    await u.click(trigger());
+
+    await u.click(screen.getByRole('button', { name: 'Previous month' }));
+
+    expect(popover()).toBeInTheDocument();
+  });
+
+  // The trigger is excluded from the outside-click handler on purpose: its own onClick toggles,
+  // so dismissing on mousedown would let the click immediately reopen it and the button would
+  // appear dead.
+  it('still closes on a second click of the trigger rather than reopening', async () => {
+    render(<Harness initial="2025-10-08" />);
+    const u = user();
+
+    await u.click(trigger());
+    await u.click(trigger());
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('closes on a resize, because its coordinates were computed once', async () => {
+    render(<Harness initial="2025-10-08" />);
+    await user().click(trigger());
+
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 

@@ -157,6 +157,17 @@ state-dependent colour comes from its own `Record` (`FIELD_CONTROL_SURFACE` for 
 makes the winner depend on stylesheet order. Classes carrying a variant prefix
 (`focus-within:`, `disabled:`) are exempt, since the extra pseudo-class settles it.
 
+**Every field label is `self-start`, and that is a bug fix rather than alignment.** `ui/Field`'s
+column is `w-full` and a flex item stretches by default, so a label used to be a full-width block -
+472px of it inside the Add transaction modal against about 55px of text. Clicking anywhere in that
+invisible strip activated the control, which is `<label for>` behaving exactly as specified and
+reads as a glitch. It was worst on a `<select>`: Chrome focuses the control from a forwarded label
+click but does **not** open the list, so the border turned accent and nothing else happened.
+Shrinking the label to its own text makes the hit area what a reader would guess it is, and
+`Field.test.tsx` pins the class because jsdom computes no layout to measure. `ui/Select`'s control
+also carries `cursor-pointer` now, for the reason `BUTTON_BASE` does: the user agent draws an arrow
+over a `<select>`, so the one control on a form that opens a list read as unclickable.
+
 **Padding sits on the control, never on the bordered box.** Both `Input` and `Select` put it
 on the `<input>` / `<select>`, and `Input`'s `$` prefix and `Select`'s chevron are absolutely
 positioned over the control with `pointer-events-none`. A padded box turns its own 14-16px
