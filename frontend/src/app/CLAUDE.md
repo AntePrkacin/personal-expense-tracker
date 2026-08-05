@@ -688,6 +688,94 @@ footer unfixable by the session read alone. Because that route is guarded, the s
 decide and deliberately carries no branch of its own. A second opinion is exactly what produced
 the loop described under The app shell.
 
+**`(app)/Modal.tsx` is built on the native `<dialog>` with `showModal()`, and that buys four
+things nobody had to write.** The top layer, so no z-index is chosen anywhere and the box paints
+over `SidebarNav`'s `sticky top-0` with no stacking context to arrange; focus containment; Escape,
+which the user agent turns into a `cancel` whose default action closes the dialog; and focus
+restored to whatever opened it. `ui/Select.tsx` makes the same argument about native controls
+generally, and it is the reason the alternative - a `fixed inset-0` div with `role="dialog"`, a
+hand-rolled focus trap and a chosen z-index - was rejected: it trades three browser guarantees
+for three green tests over our own approximations of them. It lives beside the layout rather than
+in `components/ui/` because that folder mirrors the Figma Components page and this is not a tile,
+and not in `components/` because `AccessCard`'s reason for being there is spanning route segments
+in _different_ trees, whereas frames 09, 11, 19, 21 and both delete confirmations all sit inside
+this group.
+
+**Two of its Tailwind classes are load-bearing and invisible on reading.** `m-auto` is mandatory:
+preflight sets `margin: 0` on `*` and `::backdrop`, which overrides the user agent's own
+`dialog { margin: auto }` - the entire centring mechanism - so without it the box pins to the
+top-left corner with nothing in the markup looking wrong. And the display class must be
+`open:flex`, never a bare `flex`, which would outrank `dialog:not([open]) { display: none }` and
+show the box for the frame between mount and the effect. There is deliberately **no**
+`overflow-clip`, although Figma reports it: it would clip the footer buttons'
+`focus-visible:outline-offset-2`, which is the reason `components/AccessCard.tsx` omits it too,
+and the UA's own `dialog:modal` max-height survives preflight so a short viewport scrolls the box
+instead of losing its footer.
+
+**Every close affordance funnels through one exit**, and `ref.close()` is a way _in_ to it rather
+than a second way out. Cancel, the X and a backdrop click all call `close()`, whose `close` event
+is `onClose`; Escape reaches the same place through the UA's default action, so the component
+carries no keydown handler at all. The backdrop test is `event.target === dialogRef.current`,
+which works because a click on `::backdrop` reports the dialog itself while any child reports
+itself, and because the box carries no padding of its own. The `ref` handle exists for one case:
+a successful save has to close the dialog rather than unmount it, because removing an open dialog
+skips the platform's focus restore and would leave the user on `<body>`.
+
+**Three of the modal's behaviours are unassertable in Jest, and `jest.setup.ts` deliberately does
+not fake them.** jsdom 26.1.0's `HTMLDialogElement.prototype` carries exactly `constructor` and
+`open`, so the polyfill supplies `showModal()` and `close()` and stops there: Escape, the focus
+trap and the focus restore are Storybook and manual checks. Faking Escape would turn AC7 into a
+test of the polyfill, passing just as happily with the real handler deleted - the same call
+`BudgetForm`'s caret restore already lives with. `docs/TODO.md` records the gap.
+
+**The Add transaction modal is mounted once, on the layout, and that is a correctness requirement
+rather than a tidiness one.** `AddTransactionProvider` holds it, `AddTransactionButton` is the
+trigger every entry point renders, and `useAddTransaction()` throws outside the provider rather
+than returning a no-op. Three triggers exist - the Dashboard header, the Transactions header and
+the Transactions empty card - and the last two are on **one page**: a component owning its own
+modal would mount two `<dialog>` elements there, with two focus traps and two copies of every
+`ui/Field` id, which is a required literal prop precisely because `useId` would force
+`'use client'` onto the field layer. Duplicate ids make `getByLabelText` ambiguous, which is the
+failure PET-30's own `pages.test.tsx` comment already names. The payoff is that PET-20's DSH-9
+teaser and PET-44's INS-7 card each add a trigger in two lines with no prop threading through
+`<main>`.
+
+**A closed modal renders nothing, and the reason is text queries rather than role queries.** A
+closed `<dialog>` is `display: none`, so `queryByRole` cannot see inside it - but
+`queryAllByText` and `queryAllByLabelText` **can**, so an always-mounted modal would put a
+combobox, a textbox and five labels into every screen's tree forever. `(app)/pages.test.tsx`
+depends on this in two places: its inert-control assertions would break for reasons having
+nothing to do with the header pills they are about, which is why that file now also asserts the
+absence of a dialog directly.
+
+**The categories are read on open, through the frontend's own route handler.** Not in each
+`page.tsx`, which would pay for the request on every load whether or not anybody opens the modal
+and make three otherwise-synchronous pages async; and not on the layout, which would put a second
+guarded read into the shell - the shape the `/dashboard` to `/login` loop came out of. The
+provider re-reads on **every** open with `cache: 'no-store'`, so a category created in another
+tab appears, and it guards against a read landing after the modal was closed and reopened. The
+one string that must not drift is the fetch path, which exists in `app/api/categories/route.ts`
+and in the provider; the provider's suite asserts it exactly, because `lib/routes.ts` deliberately
+does not declare it.
+
+**`(app)/DateField.tsx` is the one place in this feature where Escape needs code.** ADD-7 draws
+the Date field as a closed select and Figma opens it nowhere, so the trigger is read off the
+design and the mini-calendar is entirely ours (A14 owes it a confirmation, and `lib/calendar.ts`
+records what "ours" covers). It is a `<button>` wearing `ui/Select`'s box, padding and chevron,
+because a native `<select>` cannot host a popover - and the popover's keydown handler must
+`preventDefault()` the Escape, or the surrounding `<dialog>` treats it as a close request and
+shuts the whole modal, discarding everything typed. First Escape closes the popover, second
+closes the modal.
+
+Three smaller decisions in that field are worth not re-litigating. Its trigger is named by
+`aria-labelledby` pointing at `ui/Field`'s label **and a value span inside the button**, because
+HTML-AAM computes a button's name from its own subtree and would ignore the `<label for>`
+entirely - which is why `Field` gained a label id. `aria-selected` sits on the `gridcell` rather
+than on the day button, since the `button` role does not support it, and today is marked with
+`aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `Input` and `Select`:
+those are real form controls whose roles support it, a button's does not, and this repo keeps no
+eslint-disable comments - so the red border and `aria-describedby` carry the state.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
@@ -702,3 +790,13 @@ real person. PET-30 then filled one `<main>`: `/transactions` reads its own data
 The Dashboard, AI Insights and Settings `<main>` elements are still empty and still fetch nothing.
 A screen that renders is not evidence that its data path exists - `/transactions` is now the only
 one where it does, and it is the file to copy rather than the new normal.
+
+PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
+the three Add transaction triggers, and the write is the only one in the app. What it cannot show
+you is the result: the transactions **table** is PET-29's slot, so saving from the Transactions
+empty card correctly replaces the card with a blank table body - correct tabs, a badge that ticks
+up, and nothing beneath. The badge moving is the visible evidence the write landed, and it is what
+AC5 can honestly claim. Two consequences worth carrying: a **backdated** transaction lands outside
+`period=current` and so neither appears nor counts, which is PET-29's filter to own rather than a
+bug here; and a successful save from an empty state **destroys the button that opened the modal**,
+so the browser's focus restore has nowhere to go. Both are in `docs/TODO.md`.

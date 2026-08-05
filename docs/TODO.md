@@ -382,6 +382,22 @@ code back to the raw hex from a screenshot. The exported SVGs were inspected whi
 implementing: plain solid circles, no blur and no gradient, which is why they are `div`s with
 a background rather than assets - worth knowing before somebody reaches for `blur-*`.
 
+**The modal's scrim is the second unbound fill, and it ships as a raw literal rather than as a
+token.** Frame 09's node 28:383 is `rgba(10, 15, 23, 0.5)` over the whole viewport, bound to no
+variable, and it is **not** `Surface/Ink` (`#101720`, which is rgb(16, 23, 32)) - so unlike the
+circles above there is no near-miss token to substitute. `(app)/Modal.tsx` therefore carries
+`backdrop:bg-[rgba(10,15,23,0.5)]` as a complete literal, guarded by `ui/utilities.test.ts` like
+every other hard-coded class.
+
+Promoting it to `--color-surface-scrim` was considered and deferred for a specific reason rather
+than a general one: `globals.test.ts` cross-checks the colour list against
+`src/stories/foundations/tokens.ts`, so a 37th colour would also put a **translucent swatch** into
+the Foundations Colour story for something that page does not draw. That is the PET-8 side of the
+precedent - ship the literal, let a later ticket promote it - and the promotion is one line plus
+two table rows the day the designer binds the layer. The `--shadow-modal` beside it went the other
+way and became a token, because the shadow group is already documented as having no Figma swatch
+behind it.
+
 ### The design shows whole dollars and `formatCurrency` always emits cents
 
 `formatCurrency(1240)` returns `"$1,240.00"`, pinned in `frontend/src/lib/format.test.ts`,
@@ -478,6 +494,21 @@ earlier version of that test did. The suite therefore asserts that `setSelection
 called with the computed offset, and the visible behaviour is a Storybook or manual check. A
 real browser test (Playwright, or Storybook's own test runner) is what would close this
 properly, and nothing in the repo runs one yet.
+
+**PET-31 made that missing browser test matter more, and named three more behaviours behind it.**
+`(app)/Modal.tsx` is built on the native `<dialog>`, and jsdom 26.1.0 implements almost none of it -
+`HTMLDialogElement.prototype` carries exactly `constructor` and `open`. So `jest.setup.ts` fakes
+`showModal()` and `close()` and **deliberately stops there**, leaving three things unassertable:
+**Escape** (in a browser the UA fires `cancel`, whose default action closes the dialog), the **focus
+trap**, and **focus returning to the trigger** on close. Faking Escape was the obvious next step and
+is the wrong one: AC7's "Escape closes the modal" would then be a test of fifteen lines of polyfill,
+passing just as happily with the real behaviour deleted.
+
+The amount field's caret makes a fourth in the same modal, since it reuses `BudgetForm`'s handler
+verbatim. All four are checked by hand against `Shell/Modal`'s `FromTrigger` story and
+`Screens/09 Add transaction`, in both Chrome and Firefox, because every one of them is the browser's
+behaviour rather than ours. One real browser test would close the whole set at once, which is the
+strongest argument yet for adding the runner.
 
 ### The currency select has one option, and two things wait on A6
 
@@ -596,6 +627,87 @@ frame 07's body tells a user with a full history to log their first expense. The
 A15's own item above, and `Screens/07 Transactions — No results` sits beside the `Empty` story it
 should be compared against. If the answer is no, reverting is two strings in
 `TransactionsEmpty.tsx` and the assertions naming them.
+
+**PET-31 raised it a sixth time, with nine strings, and it is the first form with more than one way
+to fail.** Four are field messages - `Choose a category.`, `Choose a date.`, `Enter a merchant.`,
+and `Enter an amount greater than 0.` reused verbatim from the budget field. Four are the
+form-level line in `ui/Field`'s treatment with `role="alert"`, one per way the write can be
+refused: `We couldn't add this transaction. Please check the values and try again.` for a 400,
+`That category no longer exists. Pick another one.` for a 404, `Your session has expired. Log in
+again to save this.` for a 401, and `We couldn't add this transaction. Please try again.` for
+everything else. The ninth covers the categories read failing:
+`We couldn't load your categories. Please close this and try again.`
+
+Two things in that set are decisions rather than sign-offs. **The amount message covers both AC3's
+"missing" and AC4's "zero or negative"**, because it states the rule rather than the symptom and is
+therefore true of an empty field and a typed `0` alike - the ticket carries an amendment saying so,
+so QA does not read AC4 as requiring a second string. And **four failure lines rather than one
+apology**, because collapsing them would make two actively wrong: a 400 told to "try again" loops
+forever on a body the DTO will always reject, and a 404 has an obvious next move that a generic line
+hides. `Screens/09 Add transaction`'s `WithMessages` story renders the four field messages at once,
+and `CategoriesUnavailable` shows the ninth.
+
+### The Add transaction modal's date picker has no Figma counterpart at all
+
+ADD-7 draws the Date field as a **closed select** showing "Oct 8, 2025", and assumption A14 says to
+"use a standard date picker and confirm the pattern with the designer". Frame 09 never opens it, and
+no frame anywhere in the file contains a calendar - so PET-31 built one and every part of it inside
+the trigger is invented.
+
+What the design does fix, and what PET-31 matched exactly: the resting field is `ui/Select`'s box,
+padding and chevron, so it is pixel-identical to the Category select above it. What is ours: a 280px
+popover; a **six-row** grid, fixed so paging cannot change the popover's height under the user's
+cursor; Sunday-first single-letter column headings; the three day-cell states (selected, today,
+default), none of which the file colours; the two month chevrons, which are `ui/Select`'s own leaf
+rotated a quarter turn; and the whole keyboard model - arrows by day and week, PageUp and PageDown
+by month with the day clamped rather than rolled, Enter to pick.
+
+Two consequences worth the designer's attention rather than just a nod. There is **no year
+control**: paging December forward reaches January, which makes the two chevrons sufficient but
+makes a date two years back twenty-four clicks away. And the trigger is a `<button>` rather than a
+`<select>`, which is what makes the popover possible at all and is the reason
+`(app)/DateField.tsx` carries three ARIA decisions the two real fields beside it do not need.
+
+### A created transaction can legitimately fail to appear, and two smaller edges around it
+
+`GET /api/transactions` defaults to `period=current`, so a transaction dated into an earlier month
+is created successfully and then shows up in neither the list nor the count badge. To the user the
+modal closes and nothing happens, which reads exactly like a failed save. Backdating is not an edge
+case the backend tolerates but a documented feature of it - `CreateTransactionDto` says so, and the
+date is stored verbatim precisely to support it.
+
+PET-31 deliberately neither fixed nor prevented this. All three candidate fixes are owned
+elsewhere: switching the list's period to the new transaction's month is filter state **PET-29**
+owns; a confirmation naming the month ("Added to September") is new copy plus a state A19 and A29
+design nothing for; and bounding the date field to the current period contradicts the DTO. The near
+neighbour is worth knowing too - a **future** date inside the current month does appear, and one in
+the next month does not.
+
+Two smaller edges from the same ticket. A successful save from an **empty state** destroys the
+button that opened the modal, because the empty card is replaced by the (currently blank) table -
+so the browser's focus restore has nowhere to return to and focus falls back to the document. That
+is the same class of problem as screen 24's expiry swap above, and the same answer applies: it wants
+a focus-management pattern this repo does not have, and a single control is the wrong first mover.
+And **background scroll behind an open modal is unhandled**: `showModal()` does not lock it, three
+of four `<main>` elements are still empty so there is nothing to scroll yet, and the fix if it ever
+matters is an `overflow-hidden` toggle plus `scrollbar-gutter: stable` - both undesigned, and
+neither observable in jsdom.
+
+### The amount rule now exists twice, and PET-32 will make it three
+
+`isBudgetValid` in `app/setup/draft.ts` and `isAmountValid` in `app/(app)/transactionForm.ts` are
+the same one-line rule, `parseAmountInput(value) > 0`, copied rather than shared. Each names the
+other in a comment.
+
+The copy is deliberate for now, and the reason is layering rather than laziness: importing would
+point the signed-in shell at onboarding, which is the inversion that moved `resendLoginLink` out of
+`app/check-email/` into `lib/`. It is also the call `LoginForm` already made about its two field
+messages - "copied rather than shared: there is no copy module in this repo and two overlapping
+strings are the wrong reason to invent one."
+
+PET-32's Edit transaction modal validates the same field and would make it a third copy, which is
+the point at which a shared `lib/amount.ts` earns its place. Whoever writes that should take
+`isMerchantValid` and `isNameValid` with it - they are the same pair of twins.
 
 ### Screen 24's no-address arrival is new copy and a reworded AC
 

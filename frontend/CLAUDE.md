@@ -47,10 +47,12 @@ Two smaller traps. `--radius-full` is ignored by the compiler, so Radius/Full is
 Tailwind's built-in `rounded-full`; and clearing `--radius-*` also removes the bare
 `rounded` utility, so use `rounded-md` explicitly.
 
-**Foundations declares three shadows, and they are the one group with no Figma swatch behind
+**Foundations declares four shadows, and they are the one group with no Figma swatch behind
 them.** `--shadow-card` is the centred card every access frame and every dashboard card draws;
 `--shadow-panel` and `--shadow-chip` are Welcome's decorative panel, which shipped them as
-arbitrary literals before PET-9 gave them names. All four shadow namespaces are cleared -
+arbitrary literals before PET-9 gave them names; `--shadow-modal` is the lifted box behind every
+dialog, and it is deliberately not `--shadow-panel` - close enough to read as a duplicate in a
+diff, far enough apart that reusing either would be visibly wrong. All four shadow namespaces are cleared -
 `--shadow-*`, `--inset-shadow-*`, `--drop-shadow-*` and `--text-shadow-*` - for the same reason
 the palette is, so `shadow-lg` and `drop-shadow-md` generate nothing. Bare `shadow` disappears
 with the namespace exactly as bare `rounded` does; `shadow-none` is the one survivor, because it
@@ -225,7 +227,7 @@ consumer at all.
   so the design file is the only holdout left; `docs/TODO.md` records that, and the one
   constraint the rename leaves on any future change to the per-user database naming.
 
-`frontend/src/lib/format.ts` owns display formatting, in four parts. Money: amounts are
+`frontend/src/lib/format.ts` owns display formatting, in five parts. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
 rather than the hyphen `Intl.NumberFormat` emits, matching the design. Names: `initials()`
 and `shortName()` derive the sidebar footer's "MK" and "Marko K." from the two stored name
@@ -244,11 +246,22 @@ every one of which is wrong mid-keystroke, where a user typing `24.` would watch
 `$24.00` under the caret. So none of the three touches `Number` on the way out, the fraction is
 truncated rather than rounded, and the `$` belongs to `Input variant="currency"` instead of to
 the string. `formatAmountInput` is **idempotent**, which the controlled input in
-`app/setup/BudgetForm.tsx` depends on rather than merely benefits from.
+`app/setup/BudgetForm.tsx` depends on rather than merely benefits from. Calendar date:
+`formatIsoDate()` turns the `YYYY-MM-DD` a transaction is stored under into the "Oct 8, 2025" the
+Date field's trigger draws, and it goes through `lib/date.ts`'s `dateFromIso` rather than
+`new Date(iso)` - which parses a date-only string as **UTC midnight**, so any zone behind UTC
+formats it as the day before.
 
-All four parts hard-code `en-US` and its separators. When the currency chosen during onboarding
+**`lib/date.ts` is the other half of that and is deliberately not this file.** It owns the wire
+form - today's date, the parts either side of a `YYYY-MM-DD` string, calendar-date arithmetic -
+and touches neither `Intl` nor UTC, because a calendar date is a day rather than an instant and
+must never follow a locale. That file records the two directions the mistake runs in;
+`lib/calendar.ts` builds the picker's month grid on top of it.
+
+All five parts hard-code `en-US` and its separators. When the currency chosen during onboarding
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
-that, and PET-9 made the amount input its third consumer.
+that, and PET-9 made the amount input its third consumer. The one thing that must **not** follow
+it is `lib/date.ts`, for the reason above.
 
 **`components/EmptyState.tsx` is the fifth direct child, and it arrived before its second
 consumer rather than after.** `AccessCard` above records the usual sequence: chrome lives beside
@@ -331,14 +344,27 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   exception as of PET-30 - it renders the tab bar, its real count badge and both empty states,
   leaving the table body and the filter bar as slots PET-29 fills, so a `filterBar` or `table`
   prop that goes nowhere is a seam rather than a stub. The month select and the search field are
-  drawn but inert by design, and so are both of the transactions tabs.
-- **Every read a screen needs for its own data, bar the transactions list.** PET-52 ended the
-  "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and `lib/profile.ts`
-  calls `GET /api/profile`, both lifting the session cookie into an `Authorization` header
-  server-side. PET-30 added the third, `lib/transactions.ts`, and it is the first read a _screen_
-  makes for its own data - so it, rather than the two access reads, is the one to copy: it shows
-  the classified-failure policy, and it shows what to do when the API's answer is ambiguous.
-  All three now go through `authorizedGet` in `lib/session.ts`, which is where the cookie becomes
-  a bearer token; do not inline a fourth copy of that. What no screen fetches yet is the
-  dashboard summary, the transaction _detail_, and the categories with their month stats: all
-  three exist on the backend and are read by nobody.
+  drawn but inert by design, and so are both of the transactions tabs. Every "Add transaction"
+  button is real as of PET-31, including the empty card's - but the **table** it would populate is
+  still PET-29's, so a save shows its effect in the count badge and nowhere else.
+- **Every read a screen needs for its own data, bar the transactions list and the categories.**
+  PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and
+  `lib/profile.ts` calls `GET /api/profile`, both lifting the session cookie into an
+  `Authorization` header server-side. PET-30 added the third, `lib/transactions.ts`, and it is the
+  first read a _screen_ makes for its own data - so it, rather than the two access reads, is the
+  one to copy: it shows the classified-failure policy, and it shows what to do when the API's
+  answer is ambiguous. PET-31 added `lib/categories.ts`, narrowed to what a picker needs.
+  All four now go through `authorizedGet` in `lib/session.ts`, which is where the cookie becomes
+  a bearer token; do not inline a fifth copy of that. What no screen fetches yet is the
+  dashboard summary, the transaction _detail_, and the categories' **month stats** - the read
+  exists but drops everything but `id` and `name`, so a screen wanting a cap or a spend adds it
+  back rather than writing a new read.
+- **Every write except creating a transaction.** PET-31 is the app's first authenticated write:
+  `lib/createTransaction.ts` is a Server Action over `authorizedPost` in `lib/session.ts`, the
+  write half of `authorizedGet` and the second thing to reuse rather than re-derive. Two of its
+  decisions generalise to the writes still to come. It **surfaces the status on rejection** where
+  the read helper collapses everything non-401 into `unavailable`, because 400, 404 and 401 need
+  three different messages from a form and one of them must not say "try again". And it **does not
+  parse the created row**: a 2xx whose body will not parse still means the write landed, so
+  reporting failure there would have the user create a duplicate. Editing, deleting, and every
+  category and profile write are still unbuilt.
