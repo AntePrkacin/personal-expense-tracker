@@ -499,6 +499,24 @@ native build per platform, and `test-e2e` runs against the embedded driver on a 
 Until then the DTO's own description says so, which is at least honest to a frontend developer
 reading the generated types.
 
+### The dashboard's insight teaser ships as `null` until PET-41
+
+PET-20's AC6 wants the dashboard to show the teaser from the most recently generated insight
+set. There is no `insights` table - it arrives with PET-41 as an ordinary user-scope migration -
+so no branch before that one can satisfy AC6 as written.
+
+Three options were on the table, and the third is the one taken. Building the table on PET-20
+would duplicate a schema decision that belongs to the feature that actually needs it. Omitting
+the `insight` field entirely would mean PET-41 changes the dashboard's response shape when it
+lands, which is a second `api:sync` churn and a second frontend change for a field that was
+always going to exist. Shipping `insight: null`, documented as always null until PET-41 fills it
+in, costs one line there and no shape change anywhere - so that is what `DashboardResponseDto`
+does.
+
+The amendment is recorded on PET-20 itself, per `docs/agents/conventions.md`'s note that
+acceptance criteria are amendable on engineering merit; this one is in the wrong ticket rather
+than wrong.
+
 ---
 
 - **A generated HTTP client is not decided.** Types are shared and that part is settled:
@@ -765,17 +783,19 @@ than discovered.
 
 ## Housekeeping
 
-- **The month window is reached through `CategoriesService`, and a third caller should promote
-  it.** `currentWindow`, `previousWindow` and `monthStatsFor` are public on that service so the
-  transaction reads and PET-20's dashboard compose one aggregation instead of writing three -
-  the right outcome, reached by the slightly wrong route, since a transaction read now injects a
-  categories service to learn what month it is. The tidy end state is a small `PeriodService`
-  under `src/common/` owning the profile read and the two windows, with `CategoriesService`
-  keeping only `withSpend` and the status bands. It was not done in PET-28 because that branch
-  sits in a three-branch stack on top of the branch that had just landed the code, and moving
-  `period()` would have dragged the churn through two rebases to buy a seam nothing yet needed.
-  Do it when a third feature needs a window, or the moment the stack has merged and there is no
-  rebase to pay for.
+- **The month window is reached through `CategoriesService`, and now has three callers who
+  should promote it.** `currentWindow`, `previousWindow` and `monthStatsFor` are public on that
+  service so the transaction reads and PET-20's dashboard compose one aggregation instead of
+  writing three - the right outcome, reached by the slightly wrong route, since both a
+  transaction read and the dashboard read now inject a categories service to learn what month
+  it is, and the dashboard reads the profile row up to three times in one request for it (see
+  `backend/CLAUDE.md`, Dashboard). The tidy end state is a small `PeriodService` under
+  `src/common/` owning the profile read and the two windows, with `CategoriesService` keeping
+  only `withSpend` and the status bands. It was not done in PET-28 or PET-20 because both sit in
+  a three-branch stack on top of the branch that had just landed the code, and moving `period()`
+  would have dragged the churn through however many rebases were still ahead to buy a seam
+  nothing yet measurably needed. The third caller the previous note was waiting for has now
+  landed; what is left is the stack merging so the refactor has no rebase left to pay for.
 - **Repo-wide `prettier --check` is commented out in CI.** 55 files predate the Prettier
   config and the step would fail on a fresh clone. To enable: run `npx prettier --write .`
   once, commit that, then uncomment the step in `.github/workflows/ci.yml`. Note that

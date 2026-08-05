@@ -342,10 +342,74 @@ described under Backend conventions.
 Three public methods exist for that and for no screen of its own: `currentWindow(userId)` and
 `previousWindow(userId)` hand out the windows, and `monthStatsFor(userId, categoryId)` returns
 one `CategoryResponseDto` with its stats for the current period. The transaction reads use all
-three and PET-20's dashboard will use the first two, while `period()` and `withSpend()` behind
+three and PET-20's dashboard uses the first two, while `period()` and `withSpend()` behind
 them stay private so there is one copy of "resolve the window, then sum against it". `update()`
 goes through `monthStatsFor` too rather than keeping a second copy, which is why it carries no
 `.returning()`: the row comes back out of the stats read.
+
+## Dashboard
+
+**`GET /api/dashboard` computes nothing itself.** `src/dashboard/` has no imports from
+`categories` or `transactions` tables at all - `DashboardService` composes `CategoriesService`
+(the window, the per-category totals, the monthly budget) and `TransactionsService` (the
+current period's rows, for the total, the weekly buckets and the recent-transactions card).
+A window resolved or a month summed here would be the fourth copy of arithmetic that
+`## Backend conventions`' money note already calls a bug at the third.
+
+**This is the most expensive read in the app, and that is accepted rather than optimised
+away.** `currentWindow`, `CategoriesService.list` and `TransactionsService.list` each resolve
+the period independently, so one request reads the profile row up to three times. All three
+land on the one connection `UserDatabaseService` caches per user, the database is small and
+the caller's own, and the alternative - a shared `PeriodService` - would edit code in both
+branches below this one to save a read nothing has measured as slow. That trade, and the
+`PeriodService` idea itself, are in `docs/TODO.md`.
+
+Five things about the figures are easy to get wrong:
+
+- **The account-wide total is summed from the transaction list, never from the per-category
+  rows.** A transaction whose category was deleted moments after it was created (see
+  `TransactionsService`'s own note on that race) would not appear in any live category row, and
+  summing categories instead would silently under-report `spent` - the one figure the top stat
+  tile exists to get right. The same reasoning makes the donut's percentages relative to that
+  total rather than to the sum of the slices: the two can disagree by the same rare margin, and
+  disagreeing in the total would be worse.
+- **`averagePerDay` divides by days elapsed, counting today, never by the days in the whole
+  period.** Elapsed is the rate that answers "am I burning too fast"; dividing by the full
+  period on day 2 makes a number that looks like success and means nothing. It is never zero,
+  so there is no division to guard.
+- **The weekly buckets anchor to the period start, not to ISO weeks**, because AC3 needs them
+  to sum to the period total and ISO weeks do not: a period starting on the 5th would straddle
+  two ISO weeks at each end and overshoot. Bucket _n_ covers `start + 7n` to `start + 7(n+1)`,
+  clipped to the period end, so the last one is short rather than reaching past it. Each bucket
+  carries its own `startDate`/`endDate` rather than a rendered label, which is what
+  `addDays` in `src/common/month-window.ts` exists for - the one function in that file that
+  inverts `toDayNumber` rather than only subtracting two of them, because a label needs an
+  actual calendar date, not a day count.
+- **An empty account's weekly series is an empty array, not five zero buckets.** Within an
+  account that does have spend, a week with none still gets a zero-valued bucket - the chart
+  draws a continuous axis and a missing week would compress it - but "nothing to chart at all"
+  is a different state the empty-state frame replaces the chart for entirely.
+- **`topCategory` ties break by name ascending, and `Uncategorized` is not excluded.** Two
+  categories at the same spend is possible with round numbers, and `CategoriesService.list()`
+  already returns its rows name-ascending, so replacing the running winner only on a strictly
+  greater spend is enough - no separate tiebreak comparison is needed. Nothing here special-cases
+  the fallback: whether the designer wants it excluded from this tile is an open question
+  recorded on the ticket, not one this branch answers unasked.
+
+**`insight` is always `null`.** AC6 wants the teaser from the most recently generated insight
+set, and there is no `insights` table yet - `## Not built here` below still lists it. The field
+ships in the contract now so PET-41 fills it in without a second `api:sync` churn and a second
+frontend change for a field that was always going to exist. The amendment is recorded on the
+ticket, per `docs/agents/conventions.md`.
+
+**`TransactionsModule` exports `TransactionsService`, the same reason `CategoriesModule`
+exports `CategoriesService`.** Without it, `DashboardModule` importing `TransactionsModule` for
+the recent-transactions card cannot actually inject the service Nest resolves it to - a module
+that provides something is not the same as a module that shares it.
+
+Like `ProfileController`, there is no 404: a verified session implies a profile row, and its
+absence is the broken invariant `CategoriesService.period()` already throws a plain `Error`
+for, answered by the generic 500.
 
 ## Profile and preferences
 
@@ -445,6 +509,3 @@ capability lands, delete its whole bullet and nothing else. Why each one is defe
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
 - **Insights has no table.** It arrives with its feature, as an ordinary user-scope migration.
-- **The dashboard aggregates.** The cards, the trend buckets and the donut on frame 04 are
-  PET-20's. The month window and the per-category stats they need already exist on
-  `CategoriesService`; what is missing is the endpoint that composes them.

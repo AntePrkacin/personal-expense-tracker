@@ -29,10 +29,10 @@ the team tooling is real rather than illustrative.
 
 The two halves are each substantially built and **currently do not talk to each other at all**.
 The backend has the whole access flow, the transaction endpoints in full, the profile read and
-update, and the category endpoints with their month stats; the frontend has the design system,
-the app shell with its four routed views, and the first three of the six access screens (01
-Welcome at `/`, 02 Setup step 1 at `/setup`, and 03 Setup step 2 at `/setup/categories`). What is
-missing between them is the session cookie (PET-52), which every
+update, the category endpoints with their month stats, and the dashboard summary; the frontend
+has the design system, the app shell with its four routed views, and the first three of the six
+access screens (01 Welcome at `/`, 02 Setup step 1 at `/setup`, and 03 Setup step 2 at
+`/setup/categories`). What is missing between them is the session cookie (PET-52), which every
 authenticated read needs. PET-19 deleted the scaffold greeting page that fetched
 `GET /api/hello`, and it had been the only wire between them, so every screen renders real
 markup over placeholder data.
@@ -129,6 +129,7 @@ read the file before you write the change, not after.
 | add or change a transaction endpoint                                | `backend/CLAUDE.md`, Transaction endpoints |
 | add or change a profile or preferences endpoint                     | `backend/CLAUDE.md`, Profile and preferences |
 | add or change a category endpoint, or touch the fallback category   | `backend/CLAUDE.md`, Category endpoints |
+| add or change the dashboard endpoint                                | `backend/CLAUDE.md`, Dashboard   |
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
