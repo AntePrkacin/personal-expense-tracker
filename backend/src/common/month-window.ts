@@ -164,3 +164,49 @@ function toDayNumber(date: string): number {
   const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
   return era * 146097 + doe;
 }
+
+/**
+ * The inverse of `toDayNumber`: civil-from-days, run against the same
+ * unshifted epoch. Hinnant's version subtracts 719468 up front to land on
+ * 1970-01-01; `toDayNumber` never added it, so this does not undo it either -
+ * the two would disagree on every date if one shifted and the other did not.
+ */
+function fromDayNumber(dayNumber: number): {
+  year: number;
+  month: number;
+  day: number;
+} {
+  const era = Math.floor(dayNumber / 146097);
+  const doe = dayNumber - era * 146097; // [0, 146096]
+  const yoe = Math.floor(
+    (doe -
+      Math.floor(doe / 1460) +
+      Math.floor(doe / 36524) -
+      Math.floor(doe / 146096)) /
+      365,
+  ); // [0, 399]
+  const y = yoe + era * 400;
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100)); // [0, 365]
+  const monthShifted = Math.floor((5 * doy + 2) / 153); // [0, 11], March-based
+  const day = doy - Math.floor((153 * monthShifted + 2) / 5) + 1;
+  // Undoes toDayNumber's own shift: 10 and 11 are January and February of the
+  // *next* civil year, everything else is March (0) through December (9).
+  const month = monthShifted < 10 ? monthShifted + 2 : monthShifted - 10;
+  const year = monthShifted < 10 ? y : y + 1;
+  return { year, month, day };
+}
+
+/**
+ * `date` plus `days`, `YYYY-MM-DD` in, `YYYY-MM-DD` out. `days` may be
+ * negative.
+ *
+ * The one function in this file that has to invert `toDayNumber` rather than
+ * only subtract two of them, because a weekly bucket boundary needs an actual
+ * calendar date to label itself with, not a day count. Pure integer arithmetic
+ * throughout, like the rest of the file - no `Date`, so no timezone to get
+ * wrong.
+ */
+export function addDays(date: string, days: number): string {
+  const { year, month, day } = fromDayNumber(toDayNumber(date) + days);
+  return formatDate(year, month, day);
+}

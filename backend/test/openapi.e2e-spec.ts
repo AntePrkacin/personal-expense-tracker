@@ -78,6 +78,7 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/auth/verify`,
       `/${API_PREFIX}/categories`,
       `/${API_PREFIX}/categories/{id}`,
+      `/${API_PREFIX}/dashboard`,
       `/${API_PREFIX}/hello`,
       `/${API_PREFIX}/profile`,
       `/${API_PREFIX}/transactions`,
@@ -538,6 +539,79 @@ describe('openapi.json', () => {
       expect(description).toMatch(/409/);
       expect(description).toMatch(/null/);
       expect(description).toMatch(/major units/i);
+    });
+  });
+
+  describe('the dashboard endpoint', () => {
+    const path = () => spec.paths[`/${API_PREFIX}/dashboard`];
+
+    it('declares exactly a read, on the collection itself', () => {
+      // Singular /dashboard, no id: the resource is always the session's own.
+      expect(Object.keys(path()).sort()).toEqual(['get']);
+    });
+
+    it('documents exactly 200 and 401 - no query string and no id to reject', () => {
+      expect(Object.keys(path().get.responses).sort()).toEqual(['200', '401']);
+      expect(
+        path().get.responses['401'].content?.['application/json'].schema?.$ref,
+      ).toBe(ERROR_REF);
+    });
+
+    it('requires the bearer', () => {
+      expect(path().get.security).toEqual([{ bearer: [] }]);
+    });
+
+    it('returns DashboardResponseDto, never a bare {}', () => {
+      expect(
+        path().get.responses['200'].content?.['application/json'].schema?.$ref,
+      ).toBe('#/components/schemas/DashboardResponseDto');
+
+      // All eleven fields, including the two nullable ones: nullable is not
+      // optional in this codebase's convention (TransactionResponseDto.note is
+      // the precedent), so a null topCategory or insight is still a present
+      // key rather than an absent one.
+      expect(schema('DashboardResponseDto').required!.slice().sort()).toEqual([
+        'averagePerDay',
+        'categories',
+        'daysLeft',
+        'insight',
+        'monthlyBudget',
+        'recentTransactions',
+        'remaining',
+        'spent',
+        'topCategory',
+        'transactionCount',
+        'weeklyBuckets',
+      ]);
+    });
+
+    it('publishes insight as a nullable string, always null until PET-41', () => {
+      expect(schema('DashboardResponseDto').properties!.insight).toMatchObject({
+        type: 'string',
+        nullable: true,
+      });
+      expect(
+        schema('DashboardResponseDto').properties!.insight.description,
+      ).toMatch(/PET-41/);
+    });
+
+    it('publishes topCategory as a nullable reference, not a bare object', () => {
+      const topCategory = schema('DashboardResponseDto').properties!
+        .topCategory as { $ref?: string; allOf?: { $ref?: string }[] };
+
+      expect(topCategory.$ref ?? topCategory.allOf?.[0]?.$ref).toBe(
+        '#/components/schemas/TopCategoryDto',
+      );
+      expect(topCategory.nullable).toBe(true);
+    });
+
+    it('embeds TransactionResponseDto for the recent-transactions card, not a fresh shape', () => {
+      const recent = schema('DashboardResponseDto').properties!
+        .recentTransactions as { items?: { $ref?: string } };
+
+      expect(recent.items?.$ref).toBe(
+        '#/components/schemas/TransactionResponseDto',
+      );
     });
   });
 

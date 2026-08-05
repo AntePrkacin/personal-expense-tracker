@@ -933,6 +933,44 @@
           "categories"
         ]
       }
+    },
+    "/api/dashboard": {
+      "get": {
+        "description": "`remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is always null until PET-41 ships the insights table. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.",
+        "operationId": "DashboardController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every figure the dashboard draws, for the current period.",
+        "tags": [
+          "dashboard"
+        ]
+      }
     }
   },
   "info": {
@@ -1554,6 +1592,167 @@
             "maxLength": 60
           }
         }
+      },
+      "TopCategoryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Groceries"
+          },
+          "color": {
+            "type": "string",
+            "example": "#57B368",
+            "description": "Hex, `#RRGGBB`."
+          },
+          "spent": {
+            "type": "number",
+            "description": "Major units spent in this category during the current period."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "spent"
+        ]
+      },
+      "WeeklyBucketDto": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`, inclusive."
+          },
+          "endDate": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`, exclusive. The final bucket in a period is short - `endDate` is the period end, not seven days after `startDate`."
+          },
+          "total": {
+            "type": "number",
+            "description": "Major units spent within this bucket."
+          }
+        },
+        "required": [
+          "startDate",
+          "endDate",
+          "total"
+        ]
+      },
+      "DashboardCategoryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Groceries"
+          },
+          "color": {
+            "type": "string",
+            "example": "#57B368",
+            "description": "Hex, `#RRGGBB`."
+          },
+          "spent": {
+            "type": "number",
+            "description": "Major units spent in this category during the current period."
+          },
+          "percent": {
+            "type": "number",
+            "description": "Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "spent",
+          "percent"
+        ]
+      },
+      "DashboardResponseDto": {
+        "type": "object",
+        "properties": {
+          "spent": {
+            "type": "number",
+            "description": "Major units spent so far this period."
+          },
+          "monthlyBudget": {
+            "type": "number",
+            "description": "Major units, the monthly budget from your profile."
+          },
+          "remaining": {
+            "type": "number",
+            "description": "Major units, `monthlyBudget - spent`. Can be negative: overspending is a state the frontend needs the magnitude to draw, the same reasoning as `unallocated` on `GET /api/categories`."
+          },
+          "daysLeft": {
+            "type": "number",
+            "description": "Whole days from today to the end of the period, counting today. 1 on the last day of the period, never 0 - the day is not over."
+          },
+          "transactionCount": {
+            "type": "number",
+            "description": "Live transactions in the current period."
+          },
+          "averagePerDay": {
+            "type": "number",
+            "description": "`spent` divided by days elapsed so far (counting today), not by the days in the whole period - the rate that answers \"am I burning too fast\", not one that looks better the earlier in the month it is read."
+          },
+          "topCategory": {
+            "nullable": true,
+            "description": "The highest-spending category this period, ties broken by name ascending. Null when nothing has been spent yet.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TopCategoryDto"
+              }
+            ]
+          },
+          "weeklyBuckets": {
+            "description": "Sums to `spent`. Anchored to the period start, not to ISO weeks, so the buckets tile the period without gap or overlap; the last one is short rather than overshooting into the next period. An **empty array**, not zero-filled buckets, when there is nothing to chart this period.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeeklyBucketDto"
+            }
+          },
+          "categories": {
+            "description": "Every nonzero category this period, percentages unrounded and relative to `spent`. Empty when there is no spend yet.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardCategoryDto"
+            }
+          },
+          "recentTransactions": {
+            "description": "Up to 3 most recent transactions in the current period, newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransactionResponseDto"
+            }
+          },
+          "insight": {
+            "type": "string",
+            "nullable": true,
+            "description": "The teaser from the most recently generated insight set. Always null until PET-41 ships the insights table and starts filling this in."
+          }
+        },
+        "required": [
+          "spent",
+          "monthlyBudget",
+          "remaining",
+          "daysLeft",
+          "transactionCount",
+          "averagePerDay",
+          "topCategory",
+          "weeklyBuckets",
+          "categories",
+          "recentTransactions",
+          "insight"
+        ]
       }
     }
   }

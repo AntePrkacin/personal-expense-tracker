@@ -1,4 +1,5 @@
 import {
+  addDays,
   daysBetween,
   daysLeftInWindow,
   monthWindow,
@@ -144,6 +145,58 @@ describe('daysLeftInWindow', () => {
   it('counts down through the period', () => {
     const window = monthWindow(15, '2026-08-20');
     expect(daysLeftInWindow(window, '2026-09-14')).toBe(1);
+  });
+});
+
+describe('addDays', () => {
+  it('adds a plain span within a month', () => {
+    expect(addDays('2026-08-01', 3)).toBe('2026-08-04');
+  });
+
+  it('carries across a month boundary', () => {
+    expect(addDays('2026-08-30', 3)).toBe('2026-09-02');
+  });
+
+  it('carries across a year boundary', () => {
+    expect(addDays('2026-12-30', 3)).toBe('2027-01-02');
+  });
+
+  it('lands on the leap day in a leap year and skips it otherwise', () => {
+    expect(addDays('2024-02-28', 1)).toBe('2024-02-29');
+    expect(addDays('2026-02-28', 1)).toBe('2026-03-01');
+  });
+
+  it('carries across a century that is not a leap year', () => {
+    expect(addDays('1900-02-28', 1)).toBe('1900-03-01');
+    expect(addDays('2000-02-28', 1)).toBe('2000-02-29');
+  });
+
+  it('subtracts on a negative count', () => {
+    expect(addDays('2026-08-04', -3)).toBe('2026-08-01');
+    expect(addDays('2026-09-02', -3)).toBe('2026-08-30');
+  });
+
+  it('is a no-op for zero days', () => {
+    expect(addDays('2026-08-04', 0)).toBe('2026-08-04');
+  });
+
+  it('round-trips through daysBetween for an arbitrary span', () => {
+    // The property the weekly-bucket math actually leans on: adding the exact
+    // gap `daysBetween` reports lands back on the second date, whatever it is.
+    const from = '2026-01-15';
+    const to = '2027-03-02';
+    expect(addDays(from, daysBetween(from, to))).toBe(to);
+  });
+
+  it('round-trips across a wide span of consecutive days without drifting', () => {
+    // Walks a leap year and a non-leap year back to back, one day at a time,
+    // so a boundary bug anywhere in the run would surface as a mismatch.
+    let date = '2023-12-01';
+    for (let i = 1; i <= 500; i++) {
+      date = addDays(date, 1);
+      expect(date).toBe(addDays('2023-12-01', i));
+    }
+    expect(date).toBe('2025-04-14');
   });
 });
 

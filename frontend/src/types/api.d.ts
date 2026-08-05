@@ -225,6 +225,26 @@ export interface paths {
         patch: operations["CategoriesController_update"];
         trace?: never;
     };
+    "/api/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every figure the dashboard draws, for the current period.
+         * @description `remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is always null until PET-41 ships the insights table. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.
+         */
+        get: operations["DashboardController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -477,6 +497,66 @@ export interface components {
             icon?: string | null;
             note?: string | null;
             name?: string;
+        };
+        TopCategoryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Groceries */
+            name: string;
+            /**
+             * @description Hex, `#RRGGBB`.
+             * @example #57B368
+             */
+            color: string;
+            /** @description Major units spent in this category during the current period. */
+            spent: number;
+        };
+        WeeklyBucketDto: {
+            /** @description `YYYY-MM-DD`, inclusive. */
+            startDate: string;
+            /** @description `YYYY-MM-DD`, exclusive. The final bucket in a period is short - `endDate` is the period end, not seven days after `startDate`. */
+            endDate: string;
+            /** @description Major units spent within this bucket. */
+            total: number;
+        };
+        DashboardCategoryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Groceries */
+            name: string;
+            /**
+             * @description Hex, `#RRGGBB`.
+             * @example #57B368
+             */
+            color: string;
+            /** @description Major units spent in this category during the current period. */
+            spent: number;
+            /** @description Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap. */
+            percent: number;
+        };
+        DashboardResponseDto: {
+            /** @description Major units spent so far this period. */
+            spent: number;
+            /** @description Major units, the monthly budget from your profile. */
+            monthlyBudget: number;
+            /** @description Major units, `monthlyBudget - spent`. Can be negative: overspending is a state the frontend needs the magnitude to draw, the same reasoning as `unallocated` on `GET /api/categories`. */
+            remaining: number;
+            /** @description Whole days from today to the end of the period, counting today. 1 on the last day of the period, never 0 - the day is not over. */
+            daysLeft: number;
+            /** @description Live transactions in the current period. */
+            transactionCount: number;
+            /** @description `spent` divided by days elapsed so far (counting today), not by the days in the whole period - the rate that answers "am I burning too fast", not one that looks better the earlier in the month it is read. */
+            averagePerDay: number;
+            /** @description The highest-spending category this period, ties broken by name ascending. Null when nothing has been spent yet. */
+            topCategory: components["schemas"]["TopCategoryDto"] | null;
+            /** @description Sums to `spent`. Anchored to the period start, not to ISO weeks, so the buckets tile the period without gap or overlap; the last one is short rather than overshooting into the next period. An **empty array**, not zero-filled buckets, when there is nothing to chart this period. */
+            weeklyBuckets: components["schemas"]["WeeklyBucketDto"][];
+            /** @description Every nonzero category this period, percentages unrounded and relative to `spent`. Empty when there is no spend yet. */
+            categories: components["schemas"]["DashboardCategoryDto"][];
+            /** @description Up to 3 most recent transactions in the current period, newest first. */
+            recentTransactions: components["schemas"]["TransactionResponseDto"][];
+            /** @description The teaser from the most recently generated insight set. Always null until PET-41 ships the insights table and starts filling this in. */
+            insight: string | null;
         };
     };
     responses: never;
@@ -1164,6 +1244,34 @@ export interface operations {
             };
             /** @description The request conflicts with the current state. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DashboardController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
