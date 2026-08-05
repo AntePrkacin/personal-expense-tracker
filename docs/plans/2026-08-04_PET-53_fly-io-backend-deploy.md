@@ -642,13 +642,12 @@ The first four are the ones that would otherwise fail silently:
   sync replica for a remote HTTP driver, which changes read latency, moves migrations off
   first-open, and walks away from the offline/sync roadmap that the tombstone columns and
   the deferred "hand the browser its own sync token" item in `docs/TODO.md` exist to serve.
-- **Renaming `USER_DB_NAME_PREFIX`, though the window to do it cheaply is open right now.**
-  It is still `expensa-user-` in `database.constants.ts`, left from before the PET-51 rename,
-  and `CLAUDE.md` records that the rename deliberately stopped there because changing the
-  prefix would orphan existing per-user databases. The `turso db list` check above shows
-  **zero** per-user databases exist, so today that constraint does not actually bind and a
-  rename would cost nothing. It stops being free the first time anyone verifies in cloud
-  mode - which is a step in this very ticket. Deliberately not done here, because it touches
-  the persistence layer rather than the deployment, and it deserves its own ticket rather
-  than being smuggled into an INFRA one. Noted here so the window is a decision rather than
-  something discovered after it closed.
+- **Renaming `USER_DB_NAME_PREFIX` - already done in PET-51, so moot here.** This bullet
+  originally recorded the prefix as still `expensa-user-` and deferred the rename as out of
+  INFRA scope. That was stale the moment it was written: the `chore: rename the product from
+  Expensa to Spendifico` commit had already changed it to `spendifico-user-` in
+  `database.constants.ts` and merged just ahead of this plan. The reasoning is still worth
+  keeping: changing the prefix once real per-user databases exist would orphan them, the
+  `turso db list` check above showed **zero** of them, and the rename belonged in its own
+  ticket rather than being smuggled into an INFRA one - which is exactly where it landed.
+  Corrected 2026-08-05.
