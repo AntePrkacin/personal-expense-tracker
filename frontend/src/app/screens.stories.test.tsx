@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
+import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
 import * as CheckEmailScreen from './check-email/CheckEmailScreen.stories';
 import * as LoginScreen from './login/LoginScreen.stories';
@@ -52,6 +53,11 @@ const MODULES: [name: string, module: StoryModule][] = [
   // The one module here with no Figma frame behind it (A38), which is also what makes
   // its stories the only place the screen can be looked at.
   ['VerifyFailedScreen', VerifyFailedScreen as StoryModule],
+  // The first signed-in screen in this section, and the first module here that lives
+  // under `(app)/`. It is filed under Screens rather than Shell because frame 07 is a
+  // whole frame, where `Shell/Page header` is one band of chrome shared by four - so
+  // the section follows what the story is for, not which folder it sits in.
+  ['TransactionsScreen', TransactionsScreen as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

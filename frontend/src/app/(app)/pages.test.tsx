@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
 
+import { readTransactionsView } from '../../lib/transactions';
+
 import DashboardPage from './dashboard/page';
 import InsightsPage from './insights/page';
 import SettingsPage from './settings/page';
@@ -9,9 +11,29 @@ import TransactionsPage from './transactions/page';
 // worth asserting is the *set*: that every screen has its designed overline,
 // title and action, and that the differences between them are the designed ones.
 //
-// The pages are plain Server Components with no data of their own, so they can
-// be rendered directly. The layout that wraps them is not exercised here -
-// SidebarNav.test.tsx covers the sidebar half.
+// Three of the four are still plain Server Components with no data of their own.
+// **Transactions is not, as of PET-30**: it awaits `readTransactionsView()`, so it is
+// mocked here and every page is rendered through `await Page()` - which works
+// uniformly, since awaiting a synchronous component's return value is a no-op. The
+// layout that wraps them is not exercised here - SidebarNav.test.tsx covers the
+// sidebar half.
+//
+// A relative specifier, because `jest.mock` cannot resolve the `@/` alias from
+// anywhere in this repo - see the note in frontend/src/app/CLAUDE.md.
+jest.mock('../../lib/transactions', () => ({ readTransactionsView: jest.fn() }));
+
+// The populated state deliberately, even though the empty one is PET-30's subject.
+// This file asserts the *header*, and the empty card carries a second "Add
+// transaction" button that would make the getByRole below ambiguous. The three states
+// are TransactionsScreen.test.tsx's, where they can be asserted without a page around
+// them. No `table` is passed, so main holds only the tab bar.
+beforeEach(() => {
+  (readTransactionsView as jest.Mock).mockResolvedValue({
+    state: 'populated',
+    transactions: [],
+    total: 128,
+  });
+});
 
 // October 2025 is the month the whole Figma file is drawn in, so pinning the
 // clock lets these assert the designed strings literally rather than recomputing
@@ -34,17 +56,19 @@ const SCREENS = [
 describe('the four routed views', () => {
   it.each(SCREENS)(
     '%s opens with its designed overline and title',
-    (_name, Page, overline, title) => {
+    async (_name, Page, overline, title) => {
       // AC1.
-      render(<Page />);
+      render(await Page());
 
       expect(screen.getByText(overline)).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument();
     },
   );
 
-  it.each(SCREENS)('%s renders exactly one page-level heading', (_name, Page) => {
-    render(<Page />);
+  it.each(SCREENS)('%s renders exactly one page-level heading', async (_name, Page) => {
+    // Transactions now renders an h2 below the header in two of its three states, which
+    // is what this assertion is for: the page keeps exactly one h1 either way.
+    render(await Page());
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
@@ -69,10 +93,10 @@ describe('the header action, which differs on every screen', () => {
     expect(select).not.toHaveTextContent('2025');
   });
 
-  it('Transactions offers the search field and Add transaction, and no month select', () => {
+  it('Transactions offers the search field and Add transaction, and no month select', async () => {
     // The ticket's AC3 claims a month select here too. TRN-1 and Figma node
     // 26:137 both draw a search field instead, and this pins which one shipped.
-    render(<TransactionsPage />);
+    render(await TransactionsPage());
 
     expect(screen.getByText('Search transactions')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
@@ -107,12 +131,24 @@ describe('the inert header controls', () => {
     expect(screen.getByText('October').tagName).toBe('DIV');
   });
 
-  it('does not expose the search field as a text box', () => {
-    // Same reasoning, applied to a control TRN-1 does describe as real. It
-    // filters a list that does not exist until PET-28.
-    render(<TransactionsPage />);
+  it('does not expose the search field as a text box', async () => {
+    // Same reasoning, applied to a control TRN-1 does describe as real. The list it
+    // filters exists now, as of PET-30, but the query that would drive it does not -
+    // PET-29 owns turning this into an `<input>` plus the state behind it.
+    render(await TransactionsPage());
 
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  });
+
+  it('does not expose either tab as an operable control', async () => {
+    // "Categories" opens frame 13, which is PET-36's route and has no page.tsx behind
+    // it - and routes.test.ts asserts with `fs` that every declared route does. So a
+    // link here would 404 or force a hole into that check.
+    render(await TransactionsPage());
+
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.getByText('Categories').tagName).toBe('SPAN');
   });
 });

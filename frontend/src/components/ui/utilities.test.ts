@@ -72,6 +72,11 @@ const HARDCODED = [
   'text-white',
   'bg-surface-muted',
   'bg-brand-accent',
+  // The empty-state card's 72px icon circle and the tab bar's count badge. TAG_TONES
+  // reaches the same token for its indigo pill, so this is listed for the reason
+  // `text-brand-accent-pressed` below is: both of those spell it into JSX directly
+  // rather than through a map.
+  'bg-brand-accent-soft',
   'bg-status-danger',
   'bg-transparent',
   // The card and the two floating chips on the Welcome panel, and the story chrome
@@ -84,6 +89,10 @@ const HARDCODED = [
   'text-text-on-dark-subtle',
   // radius, whose namespace is cleared: `rounded` on its own does not exist
   'rounded-md',
+  // Radius/LG, 16px, and the empty-state card is the first thing in the app to use it.
+  // Node 45:1044 binds a raw 16 where the access card binds 20, so `rounded-xl` beside
+  // it is a different card rather than the same one written two ways.
+  'rounded-lg',
   'rounded-xl',
   'rounded-full',
   // elevation, whose four namespaces are cleared the same way: `shadow` and
@@ -119,12 +128,18 @@ const HARDCODED = [
   'size-2.75',
   'size-4',
   'size-5',
+  // 30px, the empty-state glyph. Fractional, so a redefined scale drops it silently.
+  'size-7.5',
   'size-8.5',
   'size-9',
   'size-9.5',
   'size-10',
+  // 72px, the empty-state card's accent circle, on frames 07 and 16 alike.
+  'size-18',
   'size-90',
   'size-130',
+  // 2px, the active tab's underline.
+  'h-0.5',
   'h-1.25',
   // 6px, the height of the selected chip's checkmark. Its 8.5px width is a literal
   // rather than a step, for the reason MonthPill's chevron is: a three-decimal step
@@ -144,6 +159,11 @@ const HARDCODED = [
   // 440px, the setup card's content box. Only the register story needs it as a
   // class, to show its two-column row at the designed width outside the card.
   'w-110',
+  // The same 440px as a ceiling rather than a fixed width. Frames 07 and 16 draw the
+  // empty-state copy at exactly 440, and at the designed 1440 the two are identical -
+  // but `max-w-` is what makes a narrower window wrap instead of overflowing the
+  // card's px-10, which is the deviation EmptyState.tsx records.
+  'max-w-110',
   'w-115',
   // 520px and 600px, the setup card on frames 02 and 22 and on frame 03. Both are
   // reached through STEP_WIDTH below, and both are listed because a spacing step is
@@ -164,17 +184,28 @@ const HARDCODED = [
   'gap-2.75',
   'gap-3',
   'gap-3.5',
+  // 16px, between all four children of the empty-state card. It used to sit in
+  // STORY_CHROME below and moved for exactly the reason `gap-3` did: a component now
+  // hard-codes it, so it stopped being a class only a decorator draws. Guarded either
+  // way, but the two lists mean different things.
+  'gap-4',
   'gap-4.5',
   'gap-5',
   'gap-5.5',
   'gap-6',
+  // 28px, between the two tabs on frames 06 and 07.
+  'gap-7',
   'gap-px',
+  // 7px, the count badge's horizontal inset.
+  'px-1.75',
   'px-2.5',
   'px-3',
   'px-3.5',
   'px-5',
   'px-6.5',
   'px-20',
+  // 2px, the count badge's vertical inset.
+  'py-0.5',
   'py-1',
   'py-2.75',
   'py-3',
@@ -190,12 +221,19 @@ const HARDCODED = [
   'pt-16',
   'pb-0.5',
   'pb-2',
+  // 12px, under each tab's label, which is what lifts both labels off the bar's rule.
+  'pb-3',
   'pb-6',
   'pb-6.5',
   'pb-8',
   'pb-14',
   'pl-2',
   'pl-3',
+  // 20px, and the one class here derived from two Figma numbers rather than read off
+  // one. The empty-state action sits 36px below the copy; the card's gap-4 supplies 16
+  // of that, because Figma spends a 4px spacer frame inside a 16px-gap column to get
+  // there. EmptyState.tsx shows the arithmetic.
+  'mt-5',
   'min-w-0',
   'right-3.5',
   'left-4',
@@ -383,7 +421,6 @@ const STORY_CHROME = [
   'p-8',
   'px-7',
   'py-6',
-  'gap-4',
   // Separates the three shells in the 02 Setup step-indicator story.
   'gap-8',
   'gap-12',
