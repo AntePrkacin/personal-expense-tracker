@@ -21,5 +21,10 @@ import { TransactionsService } from './transactions.service';
   imports: [CategoriesModule],
   controllers: [TransactionsController],
   providers: [TransactionsService],
+  // Exported because PET-20's dashboard composes it for the recent-
+  // transactions card, the same reason CategoriesModule exports
+  // CategoriesService: a fourth place computing month spend is precisely what
+  // backend/CLAUDE.md's money note already calls a bug.
+  exports: [TransactionsService],
 })
 export class TransactionsModule {}
