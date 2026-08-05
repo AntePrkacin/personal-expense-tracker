@@ -1,8 +1,10 @@
+import { dateFromIso } from './date';
+
 // Display formatting: money, the two forms a stored name takes on screen, the
-// two forms the current period takes in the page header, and the amount field
-// as it is being typed into.
+// two forms the current period takes in the page header, a single calendar date,
+// and the amount field as it is being typed into.
 //
-// All four are here for the same reason. Transactions are stored as positive
+// All five are here for the same reason. Transactions are stored as positive
 // magnitudes and rendered as negative amounts, a profile stores two names while
 // the UI shows initials and a shortened form, the header shows a month that
 // nothing stores at all, and a half-typed budget is a display string before it
@@ -116,6 +118,35 @@ export function monthOverline(date: Date): string {
 /** The month select's label, e.g. `"October"`. */
 export function monthLabel(date: Date): string {
   return MONTH_ONLY.format(date);
+}
+
+// A single calendar date, as the Date field's closed trigger shows it: "Oct 8, 2025"
+// (09 node 28:402, and the same string on 11). The calendar popover's own header
+// reuses monthOverline above rather than adding a sixth formatter.
+
+const SHORT_DATE = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+/**
+ * A `YYYY-MM-DD` string as the designed label, e.g. `'2025-10-08'` -> `"Oct 8, 2025"`.
+ *
+ * **It goes through `dateFromIso` rather than `new Date(iso)`, and that is the whole
+ * reason this is three lines instead of one.** The date-only grammar parses a bare
+ * `'2025-10-08'` as UTC midnight, so formatting it in any zone behind UTC prints
+ * "Oct 7, 2025" - a field that silently displays the day before the one the user
+ * picked. `lib/date.ts` builds the local midnight from parts instead, and its own
+ * suite pins that in `America/New_York`.
+ *
+ * Returns `''` for a string that is not a calendar date, matching `dateFromIso`'s
+ * totality: the trigger then renders its placeholder rather than "Invalid Date",
+ * which is what a throw here would put on screen.
+ */
+export function formatIsoDate(iso: string): string {
+  const date = dateFromIso(iso);
+  return date === null ? '' : SHORT_DATE.format(date);
 }
 
 // The amount field as it is being typed into (02 Setup's "Monthly budget", and
