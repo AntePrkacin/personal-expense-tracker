@@ -15,7 +15,7 @@ The frontend's own Vercel setup is in [`../../frontend/README.md`](../../fronten
 | Fly app | `spendifico-api`, in the `spendifico` organization |
 | URL | `https://spendifico-api.fly.dev` |
 | Region | `lhr`, chosen to sit near the Turso group in `aws-eu-west-1` |
-| Machine | One, `shared-cpu-1x` with 512MB and 512MB of swap. Stops when idle |
+| Machine | One, `shared-cpu-1x` with 512MB and 512MB of swap. Runs continuously |
 | Volume | `spendifico_data`, 1GB, encrypted, mounted at `/data` |
 | Config | `backend/fly.toml`, `backend/Dockerfile`, `backend/.dockerignore` |
 
@@ -128,10 +128,8 @@ fly machine stop <id>          # BARE. Never pass --timeout
 ```
 
 `fly machine stop --timeout` overrides `kill_timeout` for that stop, which would make this test
-prove nothing. Note that with autostop on, `auto_start_machines` is `true`, so any request - a
-browser tab, a curl - wakes the machine straight back up. Either set `auto_start_machines = false`
-for the duration of the test, or read the flush out of the logs after an ordinary idle autostop,
-which exercises the same path. Look for both bracket lines:
+prove nothing. `auto_start_machines` is false, so the machine stays stopped and the test is not
+raced by the next request. Look for both bracket lines:
 
 ```text
 INFO Sending signal SIGINT to main child process w/ PID 657
@@ -161,26 +159,30 @@ fly ssh console --command "ls /app/drizzle"     # must list central and user
 must read `Turso`, not `SQLite`. Getting this wrong is silent and the only remedy is deleting the
 database. Note the CLI cannot address a per-user database beyond `list`; use the Turso MCP server.
 
-## Idling and cold starts
+## The machine runs continuously, and autostop was rejected
 
-The machine stops when Fly's proxy sees no traffic, and starts again on the next request. That is
-a cost decision for a showcase, and it costs a **cold start of about 15 seconds** on the first
-request after an idle period, measured end to end from the client. Roughly 9s of that is the app -
-Node booting, then the central replica opening and migrating - and the rest is Fly provisioning and
-starting the machine before the app runs at all. Later requests are about 200ms.
+`auto_stop_machines = "off"`, so responses are always warm (~200ms) and there is never a cold
+start. That costs roughly $3.32/month of machine time, which is accepted.
 
-Two things this deliberately does not do. It does not create a second instance: autostart starts
-*the* machine, while a second replica set only comes from `--ha` or autoscaling. And it does not
-skip the shutdown flush - an autostop sends the configured `kill_signal` and honours
-`kill_timeout`, so writes are pushed exactly as they are on a manual stop.
+Autostop was configured, deployed and measured before being reverted, so it does not need
+retesting. It works: the shutdown flush ran on an autostop, and the health check did not keep the
+machine alive. What ruled it out was **~15 seconds** to serve the first request after idling -
+about 9s app, the rest Fly starting the machine - and the fact that Fly gives **no way to tune the
+idle delay**. The proxy's stop loop runs on its own schedule and decides on excess capacity;
+`idle_timeout` is an HTTP connection setting, not this. `backend/CLAUDE.md` has the full reasoning.
 
-`"suspend"` would resume faster by freezing the process instead of stopping it, but the shutdown
-hook never runs, so locally-committed writes stay unpushed in frozen memory. `"stop"` is the right
-trade here.
+`auto_start_machines` is also false, which matters mainly for one thing: a `fly machine stop`
+**stays** stopped, so the graceful-shutdown check below is deterministic. Crashes are covered
+separately by Fly's own restart policy.
 
-To pin the machine on - before a demo, say - set `min_machines_running = 1` and
-`auto_stop_machines = "off"`, then deploy. To confirm what the platform actually applied, use
-`fly config show`.
+The trade-off is sharper than it sounds, and it bit during this ticket: a machine that is stopped
+for any reason **stays down and every request 503s**, because nothing is permitted to wake it. Note
+in particular that **`fly deploy` does not start a stopped machine** - it updates the config and
+leaves it stopped. So after switching autostop off, or any time `fly status` shows `stopped`:
+
+```sh
+fly machine start <id>
+```
 
 ## Rolling back
 
@@ -258,10 +260,8 @@ until the session cookie lands.
 
 Pay As You Go, with no fixed plan and **no hard spend cap by default**.
 
-The volume is the only guaranteed charge: **$0.15/month** for 1GB, billed on provisioned capacity
-even while the machine is stopped. The machine bills only for the time it actually runs, which
-with autostop is a small fraction of the day for a showcase - against roughly $3.32/month had it
-run continuously. Egress is extra.
+Roughly **$3.47/month**: about $3.32 for the machine running continuously plus **$0.15** for the
+1GB volume, which bills on provisioned capacity even while the machine is stopped. Egress is extra.
 
 Nothing structurally prevents a mistake - a larger VM, a second machine from a missing
 `--ha=false`, an egress spike - from costing more, so a budget alert on the organization is worth
@@ -271,7 +271,8 @@ Two levers if it ever needs to be cheaper. Dropping the machine to 256MB would s
 $1.34/month of running time, but measured idle RSS is **119MB with no user databases open**, and
 `UserDatabaseService.connections` never evicts - so 256MB (about 210MB usable) leaves little room,
 and the failure mode is an OOM kill, which skips the shutdown flush and loses writes silently.
-With autostop on, that saving is mostly moot anyway. The volume cannot go below 1GB.
+The volume cannot go below 1GB. Autostop would cut the machine charge to near zero but was
+rejected for the cold start, as above.
 
 ## Not automated yet
 

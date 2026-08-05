@@ -610,6 +610,27 @@ there is none: the change answers 200 and only the new address ever hears about 
 designs no logout and no security-alert mail, so adding one is a product decision before it
 is a code one.
 
+### Autostop is available as a cost lever, and was measured before being rejected
+
+`auto_stop_machines = "stop"` would take the machine charge from roughly $3.32/month to near
+zero, leaving only the $0.15 volume. It was configured, deployed and measured on 2026-08-05,
+then reverted, and the numbers are recorded so nobody has to repeat the experiment.
+
+It works correctly. The proxy logs `has excess capacity, autostopping machine`, sends the
+configured `kill_signal`, and the shutdown flush completes - both bracket lines were observed.
+The 30s health check does not keep the machine alive. It does not breach the single-instance
+rule either, since autostart starts *the* machine rather than adding one.
+
+Three reasons it was rejected. The resume costs about **15 seconds** to serve the first request
+after idling, against ~200ms warm. Fly exposes **no way to tune the idle delay** - the stop loop
+runs on its own schedule and decides on excess capacity, and `idle_timeout` is an HTTP
+connection setting rather than this one. And `register` floats its token issue and mail send
+while `onApplicationShutdown` does not await that promise, so a stop landing in that window
+answers 202 and never sends the email, recoverable only through "Resend link".
+
+Reconsider it if the bill matters more than a first impression, or pair it with a scheduled
+warm-up ping during the hours that matter.
+
 ### Nothing verifies the `Dockerfile` or `fly.toml` after they were written
 
 This repo is otherwise strict about drift, with two CI jobs whose only purpose is failing on a

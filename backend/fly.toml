@@ -86,36 +86,29 @@ swap_size_mb = 512
   internal_port = 3000
   force_https = true
 
-  # Stop the machine when the proxy sees no traffic, and start it again on the
-  # next request. This is a cost decision for a showcase that idles most of the
-  # day, and it is safe for two reasons worth stating, because the obvious
-  # reading is that it contradicts the single-instance rule.
-  #
-  # It does not create a second instance. Autostart starts *this* machine; it is
-  # `fly deploy --ha` and autoscaling that add a second replica set, and both are
-  # still refused.
-  #
-  # And it does not skip the flush. An autostop sends the kill_signal above and
-  # honours kill_timeout exactly as `fly machine stop` does, so
-  # onApplicationShutdown still pushes every replica before the process exits.
-  #
-  # "stop", never "suspend": suspend freezes the process instead of stopping it,
-  # so the shutdown hook never runs and locally-committed writes stay unpushed in
-  # frozen memory. Faster to resume, wrong trade for this app.
-  #
-  # The price is a cold start on the first request after an idle period. Measured
-  # end to end from a client: about 15 seconds, of which roughly 9 is the app
-  # (Node boot plus opening the central replica) and the rest is Fly starting the
-  # machine. Warm requests are about 200ms.
-  auto_stop_machines = "stop"
-  auto_start_machines = true
+  # The machine runs continuously. Autostop was tried, measured and deliberately
+  # rejected: it works correctly - an autostop does send the kill_signal above
+  # and does run the shutdown flush - but the resume costs about 15 seconds on
+  # the first request, and Fly gives NO way to tune the idle delay (the proxy
+  # stop loop runs on its own schedule, and `idle_timeout` is an HTTP connection
+  # setting, not this). An always-instant API is worth ~$3.32/month here. The
+  # measured numbers are in backend/CLAUDE.md so the option is not re-litigated
+  # from scratch.
+  auto_stop_machines = "off"
 
-  # Zero, so the machine is actually allowed to stop. Note this is what makes
-  # `fly machine stop` non-deterministic as a test: any request now wakes the
-  # machine back up. To exercise the graceful-stop check deliberately, set
-  # auto_start_machines = false first, or read the flush out of `fly logs` after
-  # an idle autostop instead.
-  min_machines_running = 0
+  # Deliberately false, which is only meaningful because autostop is off: with
+  # nothing stopping the machine, autostart has no job to do, and false is what
+  # makes `fly machine stop` STAY stopped - so the graceful-shutdown check, which
+  # is the whole point of this deployment, is deterministic rather than racing the
+  # next request. The cost is honest: a machine stopped by hand, or stopped and
+  # not restarted after some incident, stays down until `fly machine start`.
+  # Crashes are covered separately by Fly's own machine restart policy.
+  auto_start_machines = false
+
+  # One, in the primary region. Note this only governs autostart/autostop
+  # behaviour, so with autostop off it is documentation rather than enforcement -
+  # and it does NOT stop `fly deploy --ha` from adding a second machine.
+  min_machines_running = 1
 
 [[http_service.checks]]
   interval = "30s"

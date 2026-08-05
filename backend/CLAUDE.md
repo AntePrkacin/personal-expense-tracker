@@ -304,16 +304,21 @@ machine, and no setting in `fly.toml` overrides it. A volume can only attach to 
 the platform partly enforces the rule, but relying on that rather than on the flag is relying on
 an accident.
 
-**Autostop is not a breach of that rule, which is worth stating because it reads like one.** The
-machine stops when idle and starts on the next request, and both are operations on _the_ one
-machine - it is `--ha` and autoscaling that create a second replica set. The stop also runs the
-full shutdown path rather than skipping it, because an autostop sends the configured
-`kill_signal` and honours `kill_timeout`. That is also why the mode is `"stop"` and not
-`"suspend"`: suspend freezes the process, so the shutdown hook never runs and locally-committed
-writes stay unpushed in frozen memory. The cost is a cold start of about 15 seconds measured from
-the client, paid by whoever sends the first request after an idle period, and it is accepted
-because this is a showcase rather than something with an availability target. Note the app
-accounts for only about 9s of that; the rest is Fly starting the machine.
+**The machine runs continuously, and autostop was rejected on evidence rather than on
+principle.** It was configured, deployed and measured, so the numbers are recorded here to save
+anyone repeating it. It is _not_ a breach of the single-instance rule, which is the obvious
+objection and a wrong one: stopping and starting are operations on _the_ one machine, while a
+second replica set only ever comes from `--ha` or autoscaling. It also does not skip the flush -
+an autostop sends the configured `kill_signal` and honours `kill_timeout`, and the shutdown
+bracket was observed completing on an autostop, with the health check not keeping the machine
+alive either. What killed it was the resume: about **15 seconds** to serve the first request
+after idling, of which roughly 9 is the app and the rest is Fly starting the machine, against
+about 200ms warm. And Fly exposes **no way to tune the idle delay** - the proxy's stop loop runs
+on its own schedule and decides on excess capacity, while `idle_timeout` is an HTTP connection
+setting rather than this. So the choice was 15-second first impressions or roughly $3.32 a month,
+and the money won. One further wrinkle if it is ever reconsidered: `register` floats its token
+issue and mail send rather than awaiting them, and `onApplicationShutdown` does not await that
+promise, so a stop landing in that window answers 202 and sends nothing.
 
 **The kill timeout is raised far past Fly's default of 5 seconds** because
 `DatabaseModule.onApplicationShutdown` closes every open user replica and then the central one,
