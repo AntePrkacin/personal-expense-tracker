@@ -31,10 +31,14 @@ implementation, this plan changes in the same PR.
   nothing else. `today` is formatted against `APP_TIMEZONE` (`Europe/Zagreb` by default), which
   PET-35 introduces - not UTC, and not a per-user zone, which `docs/TODO.md` records as the
   eventual fix.
-- **The per-category month stats shape** - `spent`, `cap`, `percentUsed`, `remaining`, `over`
-  and `status`, with the uncapped variant carrying nulls. AC4 asks the detail read for exactly
-  the first four of those, so the detail response embeds PET-35's own DTO rather than defining a
-  parallel one that drifts.
+- **`CategoryResponseDto`**, PET-35's category payload. It carries the month stats AC4 asks for -
+  `spent`, `monthlyCap`, `percentUsed`, `remaining`, `over`, `status` and `transactionCount`, with
+  the uncapped variant carrying nulls - and it carries them **alongside** the category's identity
+  fields, because PET-35 shipped one flat DTO rather than a nested stats object. So the detail
+  read embeds the whole thing. That is wider than the narrowing AC4 describes and is the right
+  shape anyway: DET-2's category chip needs `name` and `color`, and DET-5's rows need `color` for
+  their dots. Carving a stats-only DTO out of it now would be a breaking change to a response
+  already committed to `openapi.json`.
 
 **Uncapped is the common case, not the edge case**, which changes what AC4 actually returns most
 of the time. PET-35 settled that caps are optional everywhere, and that the seeded fallback
@@ -49,6 +53,13 @@ The second point is the reason for stacking. Written against `main`, this branch
 the transaction detail would then disagree the first time a threshold moved.
 
 ## Decisions made
+
+Seven. The first six were written on 2026-08-04 against PET-35's plan; the seventh was added on
+2026-08-05, once PET-35's code existed to be read rather than predicted, and it is the one that
+turns "this branch inherits two things" into an actual call path. All seven are settled with the
+ticket owner as of 2026-08-05, and **two of the spec's own assumptions are amended as a result** -
+A17 under decision 4, and A22's row set under decision 5. Both amendments are being made on the
+ticket rather than left to live only here.
 
 ### 1. The period is a named window, not a date range
 
@@ -109,6 +120,16 @@ the moment pagination does arrive the badge must not start counting the page - a
 that read `.length` would do exactly that, silently. This is a deliberate redundancy, not an
 oversight.
 
+**A17 reads the other way, and it is the assumption being amended.** It says the badge shows "the
+total transaction count", and TRN-2 draws 128 on it against ten visible rows, which is an
+unfiltered count on any plain reading. A badge that ignores the filter bar directly beneath it is
+the worse behaviour though: filter to Dining out and the tab still says 128, so the one number on
+the screen that could report what the filter caught reports nothing instead. Post-filter it is,
+and A17 is amended to say so rather than quietly contradicted.
+
+Returning a second, unfiltered count beside it was considered and dropped. No frame draws two
+numbers, so it would buy an extra `COUNT` on every request to serve a screen that does not exist.
+
 Returning an unbounded list is fine at this scale and will not stay fine forever. A cap with a
 `hasMore` flag is the natural next step; `docs/TODO.md` gets the note.
 
@@ -127,8 +148,16 @@ transaction being viewed is from an earlier one. That is what AC4 says and it is
 reading - the progress bar answers "where is this category now", not "where was it in March".
 Worth confirming with the designer, because the frame does not disambiguate.
 
-The recent-in-category list excludes the transaction being viewed. Showing a row its own detail
-page is already displaying is noise.
+**The recent-in-category list excludes the transaction being viewed, and DET-5 includes it.** The
+mock's three rows are Whole Foods · Oct 8 · -$62.40, Trader Joe's · Oct 3 and Costco · Sep 28,
+while DET-2's header is Whole Foods, Oct 8, -$62.40 - so the first row *is* the transaction whose
+page it sits on, printed for the third time on one screen. Excluding it is the right call and it
+is a deviation from the mock, which is the part of A22 being amended.
+
+The exclusion is also what fixes the limit. At three, the card would render three siblings where
+the mock renders two, a visible difference bought for nothing; at five it gets back the row the
+exclusion costs it and then some, and still reads as a short list rather than a second table. So
+five, newest first, `created_at` then `id` as the tiebreak, exactly as decision 2 orders the list.
 
 ### 6. A missing transaction is a 404, and cross-user isolation stays structural
 
@@ -136,6 +165,35 @@ AC6 requires that an unknown id, or one belonging to another account, fails rath
 data. Both are already covered by opening the caller's own database: another user's id does not
 exist there, so there is no `WHERE user_id = ?` to forget, exactly as `TransactionsService`'s
 existing doc comment records. Tombstoned rows filter on `isNull(deletedAt)` and 404 the same way.
+
+### 7. The month aggregation is composed from `CategoriesService`, never copied
+
+Decisions 1 and 5 both need something PET-35 wrote and then kept private. `period()` resolves
+`monthStartDay` and `todayIn(APP_TIMEZONE)` into a window; `withSpend()` and `toResponse()` turn
+one category id into the stats DTO. All of them are private to `CategoriesService`, so "this
+branch inherits `monthWindow()` and the stats shape" was true of the types and had no runtime
+path behind it - as written, the list read had no way to resolve a period and the detail read had
+no way to compute stats except by writing both again.
+
+`CategoriesModule` already exports `CategoriesService`, and its comment says why: "because
+PET-20's dashboard composes it rather than running a fourth copy of the same month aggregation".
+This branch is the third copy that comment exists to prevent. So the aggregation stays where it
+is and three public methods are added to reach it:
+
+- `currentWindow(userId)` and `previousWindow(userId)`, thin wrappers over the private `period()`
+  and `previousMonthWindow()`, for the list read's `period` filter.
+- `monthStatsFor(userId, categoryId)`, which is what `update()` already does at its tail -
+  `period()`, then `withSpend(db, window, id)`, then `toResponse()` - lifted into one method, with
+  `update()`'s own tail collapsed onto it so there is a single copy in that file too.
+
+`TransactionsModule` gains `imports: [CategoriesModule]`, its first import. The extra
+`getUserDb()` call this costs is free: `UserDatabaseService` caches an open handle per user, so
+the detail read opens one database no matter how many services ask it for one.
+
+A shared `PeriodService` under `src/common/` was the alternative and was dropped. It is the tidier
+end state, and it is also an edit to code the parent branch landed hours ago, so every commit here
+and on PET-20 would carry that churn through two rebases to buy a seam nothing yet needs. It goes
+in `docs/TODO.md` instead, as the thing to do when a third feature needs a window.
 
 ## Endpoints
 
@@ -157,25 +215,35 @@ lives on its own path, so this stays a note rather than a constraint.
 
 ## Tasks
 
+- [ ] **Expose the month aggregation on `CategoriesService`**: `currentWindow`, `previousWindow`
+      and `monthStatsFor`, with `update()`'s tail collapsed onto the last of them, and
+      `imports: [CategoriesModule]` added to `TransactionsModule`
 - [ ] **Write `ListTransactionsQueryDto`** with the four optional filters, the two-value sort
-      enum and the three-value period enum, and confirm the swagger plugin lifts the enums into
-      `openapi.json` rather than widening them to `string`
+      enum and the three-value period enum. This is the app's first `@Query` DTO, and every enum
+      in `openapi.json` today comes from an explicit `@ApiProperty({ enum: [...] })` rather than
+      from the swagger plugin, so declare these the same way instead of trusting it to lift them
 - [ ] **Implement the list read**: filters composed into one `and()`, the period resolved through
-      `monthWindow()`, the tiebreak on `created_at` then `id`, and `total` computed after filters
-- [ ] **Add the response DTOs**, embedding PET-35's category stats DTO for the detail read rather
-      than redefining its fields
+      `CategoriesService`'s two window methods, the tiebreak on `created_at` then `id`, and
+      `total` computed after filters
+- [ ] **Add the response DTOs**, the detail one embedding `CategoryResponseDto` whole rather than
+      restating any of its fields
 - [ ] **Implement the detail read** as its three queries, with the current-month stats window,
-      the unbounded recent-in-category window, and the viewed row excluded from the latter
+      the unbounded recent-in-category window, and the viewed row excluded from the latter under
+      a limit of 5
 - [ ] **Write the service spec** covering AC1 to AC6, plus a same-date tiebreak, a
       whitespace-only search term, a `previous` period across the December-to-January roll, a
-      detail read of a transaction older than the current window, and a detail read whose
-      category is uncapped - which is the common case, not the exotic one
+      detail read of a transaction older than the current window, a detail read whose category is
+      uncapped - which is the common case, not the exotic one - and a detail read whose category
+      holds fewer than six transactions, where the exclusion is visible in the row count
 - [ ] **Add e2e coverage** for both reads, including the 404 for an unknown id and for a
       tombstoned one
 - [ ] **Run `npm run api:sync`** from the repo root and commit both artifacts
 - [ ] **Document it**: extend `## Transaction writes` in `backend/CLAUDE.md` into the read
-      surface too, delete the **Transaction reads** bullet from its `## Not built here`, and
-      record the LIKE-diacritics and no-pagination limitations in `docs/TODO.md`
+      surface too, record there that `CategoriesService` owns the app's only month aggregation and
+      that the read endpoints compose it, delete the **Transaction reads** bullet from its
+      `## Not built here`, and record the LIKE-diacritics, no-pagination and
+      shared-`PeriodService` notes in `docs/TODO.md`
+- [ ] **Amend A17 and A22 on the ticket**, per decisions 4 and 5
 - [ ] **Run the gates**: `npm run lint`, `npm run build`, `npm test`, `npm run test:e2e` from
       `backend/`, and `npm run docs:check` from the root
 
@@ -192,9 +260,12 @@ period boundary moves without anything crashing: the list quietly returns the wr
 transactions. That is PET-35's variable, but this endpoint is where a user would first see the
 consequence.
 
-**AC4's "current month" reading is an interpretation.** If the designer means the month of the
-transaction being viewed instead, the detail read changes shape and the spec with it. Confirm
-before implementing rather than after.
+**AC4's "current month" reading is an interpretation, though a better-supported one than this plan
+first allowed.** DET-4 titles the card "Groceries this month", which is the frame saying it out
+loud. What the frame cannot settle is the case it never draws: the transaction it shows is itself
+in the current month, so the two readings agree there. If the designer means the month of the
+transaction being viewed, the detail read changes shape and the spec with it. Worth asking, not
+worth blocking on.
 
 **`backend/openapi.json` and `frontend/src/types/api.d.ts` conflict with both neighbours.** Take
 the parent's version and re-run `npm run api:sync`; never hand-edit either.
