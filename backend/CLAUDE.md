@@ -473,6 +473,17 @@ calendar months (`RECURRING_MONTHS`), the number most likely to be tuned - which
 seam: a later `LlmInsightGenerator` replaces the whole class through the one `INSIGHT_GENERATOR`
 provider binding in `InsightsModule`, storage, the read and the frontend untouched.
 
+**The single-run guard is enforced at the database, and an abandoned run self-heals.** The
+409 is not left to a check-then-insert: a partial unique index on `status = 'generating'` (the
+`categories_fallback_idx` shape) makes a second concurrent insert fail at the database, and that
+failure is translated to the same 409, so two racing POSTs cannot both start a run. Because that
+index would otherwise let one dead run wedge the feature forever, `generate()` first reclaims any
+`generating` row older than a staleness cutoff by marking it `failed` - the run whose process died
+mid-flight, or whose own failing catch threw. Past the cutoff the read stops reporting `generating`
+and a new POST is accepted, so skeletons-forever cannot outlive a crash. The cutoff is generous
+against rule-based generation and exists for a future slow `LlmInsightGenerator`; its value lives in
+`insights.service.ts`.
+
 ## Profile and preferences
 
 **One resource with two homes, and `ProfileService` is the only place that sees the seam.**

@@ -103,6 +103,7 @@ describe('Insight endpoints (e2e)', () => {
     summaryHeadline?: string;
     summaryBody?: string;
     generatedAt?: Date;
+    createdAt?: Date;
   }) => {
     const db = await userDatabases.getUserDb(userId);
     const id = newId();
@@ -113,6 +114,9 @@ describe('Insight endpoints (e2e)', () => {
       summaryHeadline: fields.summaryHeadline ?? null,
       summaryBody: fields.summaryBody ?? null,
       generatedAt: fields.generatedAt ?? null,
+      // Omitted so the column's $defaultFn stamps "now"; set only when a test
+      // needs an aged row, as the stale-run reclaim does.
+      ...(fields.createdAt ? { createdAt: fields.createdAt } : {}),
     });
     return id;
   };
@@ -390,6 +394,33 @@ describe('Insight endpoints (e2e)', () => {
     await seedSet({ status: 'generating' });
 
     await generate().expect(409);
+  });
+
+  it('reclaims an abandoned generating run past the stale cutoff', async () => {
+    const db = await userDatabases.getUserDb(userId);
+    // A generating row left behind by a run that died before it could settle,
+    // older than the service's 5-minute cutoff.
+    const staleId = await seedSet({
+      status: 'generating',
+      createdAt: new Date(Date.now() - 6 * 60 * 1000),
+    });
+
+    // The read no longer treats it as in flight, so the state settles rather
+    // than showing skeletons forever.
+    expect(insightsBody(await get().expect(200)).state).toBe('empty');
+
+    // And a fresh POST is accepted rather than 409'd against the stale row. The
+    // primary account has no transactions, so the new run settles back to empty;
+    // the stale row is reclaimed to `failed`, which is what frees the single-run
+    // unique index for the new insert.
+    await generate().expect(202);
+    await waitForSettled();
+
+    const [stale] = await db
+      .select({ status: insightSets.status })
+      .from(insightSets)
+      .where(eq(insightSets.id, staleId));
+    expect(stale.status).toBe('failed');
   });
 
   it('produces no set when the account has no transactions', async () => {

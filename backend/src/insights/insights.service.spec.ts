@@ -21,7 +21,12 @@ describe('InsightsService', () => {
   let service: InsightsService;
   let getUserDb: jest.Mock;
   let generatorGenerate: jest.Mock;
-  let db: { select: jest.Mock; insert: jest.Mock; delete: jest.Mock };
+  let db: {
+    select: jest.Mock;
+    insert: jest.Mock;
+    delete: jest.Mock;
+    update: jest.Mock;
+  };
 
   const readyRow = () => ({
     id: 'set-1',
@@ -70,6 +75,7 @@ describe('InsightsService', () => {
       select: jest.fn(),
       insert: jest.fn().mockReturnValue(queryChain([])),
       delete: jest.fn().mockReturnValue(queryChain([])),
+      update: jest.fn().mockReturnValue(queryChain([])),
     };
     await build();
   });
@@ -157,6 +163,24 @@ describe('InsightsService', () => {
       expect(toSql(where)).toContain('"deleted_at" is null');
       expect(toSql(orderBy)).toContain('"generated_at" desc');
     });
+
+    it('counts only a fresh generating row as in flight (stale cutoff)', async () => {
+      // A `generating` row older than the cutoff is an abandoned run, so
+      // hasRunInFlight filters on `created_at` rather than letting it win the
+      // state and wedge the read forever.
+      const readyQuery = queryChain([]);
+      const inFlightQuery = queryChain([{ id: 'run-1' }]);
+      db.select
+        .mockReturnValueOnce(readyQuery)
+        .mockReturnValueOnce(inFlightQuery);
+
+      await service.getSet('user-id');
+
+      const [where] = argsOf(inFlightQuery, 'where');
+      expect(toSql(where)).toContain('"status" = ?');
+      expect(toSql(where)).toContain('"created_at" >');
+      expect(toSql(where)).toContain('"deleted_at" is null');
+    });
   });
 
   describe('latestReadyTeaser', () => {
@@ -201,6 +225,51 @@ describe('InsightsService', () => {
       expect(argsOf(insertChain, 'values')[0]).toMatchObject({
         status: 'generating',
       });
+    });
+
+    it('reclaims an abandoned run before starting, marking it failed', async () => {
+      // A `generating` row past the stale cutoff is flipped to `failed` first, so
+      // the state self-heals and the unique index does not reject the new insert.
+      db.select.mockReturnValue(queryChain([]));
+      const updateChain = queryChain([]);
+      db.update.mockReturnValue(updateChain);
+
+      await service.generate('user-id');
+
+      expect(argsOf(updateChain, 'set')[0]).toEqual({ status: 'failed' });
+      const [where] = argsOf(updateChain, 'where');
+      expect(toSql(where)).toContain('"status" = ?');
+      expect(toSql(where)).toContain('"created_at" <');
+      expect(toSql(where)).toContain('"deleted_at" is null');
+    });
+
+    it('translates a unique-index collision into the same 409', async () => {
+      // No row seen by the check, but a concurrent POST slipped in between the
+      // check and this insert; the partial unique index rejects it and the driver
+      // reports a UNIQUE constraint failure, which becomes the one-run-at-a-time
+      // 409 rather than a 500.
+      db.select.mockReturnValue(queryChain([]));
+      db.insert.mockReturnValue(
+        queryChain(new Error('UNIQUE constraint failed: insight_sets.status')),
+      );
+
+      await expect(service.generate('user-id')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(generatorGenerate).not.toHaveBeenCalled();
+    });
+
+    it('rethrows an insert error that is not the single-run collision', async () => {
+      db.select.mockReturnValue(queryChain([]));
+      db.insert.mockReturnValue(queryChain(new Error('database is locked')));
+
+      const error: unknown = await service
+        .generate('user-id')
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(ConflictException);
+      expect((error as Error).message).toBe('database is locked');
     });
   });
 });

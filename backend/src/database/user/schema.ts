@@ -201,32 +201,46 @@ export type NewTransactionRow = typeof transactions.$inferInsert;
  * content columns, which is why they are nullable: a run's row exists before its
  * content does.
  */
-export const insightSets = sqliteTable('insight_sets', {
-  // Same primary-key caveat as everywhere else; see docs/TODO.md. Caller-supplied
-  // newId() like every other table in both scopes.
-  id: text('id').primaryKey().notNull(),
+export const insightSets = sqliteTable(
+  'insight_sets',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md. Caller-supplied
+    // newId() like every other table in both scopes.
+    id: text('id').primaryKey().notNull(),
 
-  // `generating` | `ready` | `failed`. A plain text column, not a DB enum: the
-  // repo constrains such closed sets in TypeScript (see the API's InsightState
-  // and CategoryStatus) rather than in SQLite.
-  status: text('status').notNull(),
+    // `generating` | `ready` | `failed`. A plain text column, not a DB enum: the
+    // repo constrains such closed sets in TypeScript (see the API's InsightState
+    // and CategoryStatus) rather than in SQLite.
+    status: text('status').notNull(),
 
-  // Rendered content, set when the row reaches `ready` and null until then.
-  monthLabel: text('month_label'),
-  summaryHeadline: text('summary_headline'),
-  summaryBody: text('summary_body'),
+    // Rendered content, set when the row reaches `ready` and null until then.
+    monthLabel: text('month_label'),
+    summaryHeadline: text('summary_headline'),
+    summaryBody: text('summary_body'),
 
-  // When the run completed, set as the row flips to `ready`. Null while
-  // generating or after a failure.
-  generatedAt: integer('generated_at', { mode: 'timestamp_ms' }),
+    // When the run completed, set as the row flips to `ready`. Null while
+    // generating or after a failure.
+    generatedAt: integer('generated_at', { mode: 'timestamp_ms' }),
 
-  createdAt: integer('created_at', { mode: 'timestamp_ms' })
-    .notNull()
-    .$defaultFn(() => new Date()),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
 
-  // Tombstone, like every table here. Every read filters isNull(deletedAt).
-  deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
-});
+    // Tombstone, like every table here. Every read filters isNull(deletedAt).
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object. Partial, so it
+  // constrains only rows currently `generating` and leaves every completed run
+  // free: at most one run in flight at a time (the single-run guard, A26),
+  // enforced at the database rather than by a racy check-then-insert. Same shape
+  // as `categories_fallback_idx`.
+  (table) => [
+    uniqueIndex('insight_sets_generating_idx')
+      .on(table.status)
+      .where(sql`${table.status} = 'generating'`),
+  ],
+);
 
 export type InsightSetRow = typeof insightSets.$inferSelect;
 export type NewInsightSetRow = typeof insightSets.$inferInsert;
