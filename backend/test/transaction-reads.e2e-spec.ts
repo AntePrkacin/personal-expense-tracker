@@ -349,6 +349,54 @@ describe('Transaction reads (e2e)', () => {
       expect(listBody(response).total).toBe(6);
     });
 
+    it('matches % and _ literally rather than as LIKE wildcards', async () => {
+      // A fresh category, so these rows are invisible to every count above.
+      const response = await request(app.getHttpServer())
+        .post('/api/categories')
+        .set('Authorization', `Bearer ${bearer}`)
+        .send({ name: 'Wildcard probe', color: '#8A79F1' })
+        .expect(201);
+      const probeId = (response.body as CategoryResponseDto).id;
+
+      await seed({
+        merchant: 'Save 10% Store',
+        categoryId: probeId,
+        amount: 1,
+        date: current.start,
+      });
+      await seed({
+        merchant: 'Save 1000 Mart',
+        categoryId: probeId,
+        amount: 1,
+        date: current.start,
+      });
+      await seed({
+        merchant: 'A_B Cafe',
+        categoryId: probeId,
+        amount: 1,
+        date: current.start,
+      });
+      await seed({
+        merchant: 'AXB Cafe',
+        categoryId: probeId,
+        amount: 1,
+        date: current.start,
+      });
+
+      // Unescaped, "10%" would also match "1000" and "A_B" would also match
+      // "AXB": `%` and `_` are live LIKE wildcards to SQLite, not literal
+      // characters, unless the query escapes them ahead of sending it.
+      const percent = await list(
+        `?period=all&categoryId=${probeId}&search=${encodeURIComponent('10%')}`,
+      ).expect(200);
+      expect(merchantsOf(percent)).toEqual(['Save 10% Store']);
+
+      const underscore = await list(
+        `?period=all&categoryId=${probeId}&search=${encodeURIComponent('A_B')}`,
+      ).expect(200);
+      expect(merchantsOf(underscore)).toEqual(['A_B Cafe']);
+    });
+
     it('filters by category', async () => {
       const response = await list(
         `?period=all&categoryId=${transportId}`,

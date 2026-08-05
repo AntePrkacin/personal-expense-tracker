@@ -10,12 +10,13 @@ import {
   eq,
   gte,
   isNull,
-  like,
   lt,
   ne,
+  sql,
   type SQL,
 } from 'drizzle-orm';
 import { CategoriesService } from '../categories/categories.service';
+import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
 import { newId } from '../common/ids';
 import { fromCents, toCents } from '../common/money';
 import type { MonthWindow } from '../common/month-window';
@@ -43,6 +44,9 @@ import type { UpdateTransactionDto } from './dto/update-transaction.dto';
 const NO_TRANSACTION = 'Transaction not found.';
 const NO_CATEGORY = 'Category not found.';
 const NOTHING_TO_UPDATE = 'Provide at least one field to update.';
+const DANGLING_CATEGORY = (transactionId: string, categoryId: string) =>
+  `Transaction ${transactionId} references category ${categoryId}, which no ` +
+  `longer exists. A create or update must have raced a delete of that category.`;
 
 /**
  * How many siblings the transaction detail's "Recent in {category}" card shows.
@@ -81,10 +85,15 @@ type TransactionUpdate = Partial<
  * a single statement, so `LoginTokenService.issue()` stays the only
  * transactional call site in the app and the embedded driver's refusal to
  * overlap transactions is never tested. The category check ahead of a write is a
- * plain SELECT, and check-then-insert is not a race today: categories have no
- * delete endpoint yet, and once they get one it will tombstone, at which point a
- * dangling reference is exactly what an FK-less schema already obliges every
- * read to tolerate.
+ * plain SELECT, and check-then-insert **is** a real, if narrow, race:
+ * `DELETE /api/categories/:id` already tombstones, so a create or update racing a
+ * delete of the same category can land a transaction whose `categoryId` points at
+ * a row gone a moment later. Every read but `detail()` tolerates that silently -
+ * `categoryId` is returned verbatim and never re-validated. `detail()` is the one
+ * read that joins back to the category, and `monthStatsFor` throwing there is
+ * turned into a broken-invariant error rather than the category's own 404, so
+ * the controller's "404 always means the transaction id" claim keeps holding
+ * even then. See `detail()`.
  *
  * Money crosses units here and nowhere else in the feature: `toCents` on the way
  * in, `fromCents` on the way out.
@@ -158,10 +167,7 @@ export class TransactionsService {
     // Not `Promise.all`: the embedded driver is happier with sequential
     // statements on one connection, and this is a read of two rows on a database
     // the caller already has open.
-    const category = await this.categories.monthStatsFor(
-      userId,
-      row.categoryId,
-    );
+    const category = await this.monthStatsForRow(userId, row);
     const recentInCategory = await this.recentInCategory(db, row);
 
     return {
@@ -316,7 +322,14 @@ export class TransactionsService {
     // less scan. `LIKE` is case-insensitive for ASCII only, which is what the
     // DTO's description warns about and docs/TODO.md records.
     if (query.search) {
-      where.push(like(transactions.merchant, `%${query.search}%`));
+      // `escapeLikeTerm` is what keeps this a substring match rather than a
+      // pattern: unescaped, a merchant search for "100%" would also match
+      // "1000" and "A_B" would also match "AXB", because `%` and `_` are
+      // live wildcards to SQLite. `\` is the escape character declared below,
+      // which is why it is escaped first - otherwise a term already
+      // containing a backslash would escape the wrong following character.
+      const pattern = `%${escapeLikeTerm(query.search)}%`;
+      where.push(sql`${transactions.merchant} like ${pattern} escape '\\'`);
     }
 
     return where;
@@ -370,6 +383,47 @@ export class TransactionsService {
       throw new NotFoundException(NO_CATEGORY);
     }
   }
+
+  /**
+   * `monthStatsFor`, with a dangling `categoryId` turned into a broken
+   * invariant rather than the category's own 404.
+   *
+   * `assertCategoryExists` runs ahead of every write, but it is a plain SELECT
+   * with no lock behind it, and `DELETE /api/categories/:id` already exists -
+   * so a create or update can still land a transaction whose `categoryId`
+   * points at a category tombstoned a moment later. Every other read tolerates
+   * that silently by never looking the id up; this is the one read that does,
+   * and letting `monthStatsFor`'s `NotFoundException` propagate would 404 the
+   * detail read under a message naming the category, contradicting the
+   * controller's "404 always means the transaction id" claim. A dangling
+   * reference is not a client error - the id in the URL is fine - so this
+   * answers 500, the same way a missing profile row does elsewhere in this
+   * feature.
+   */
+  private async monthStatsForRow(
+    userId: string,
+    row: TransactionRow,
+  ): Promise<CategoryResponseDto> {
+    try {
+      return await this.categories.monthStatsFor(userId, row.categoryId);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new Error(DANGLING_CATEGORY(row.id, row.categoryId));
+      }
+      throw error;
+    }
+  }
+}
+
+/**
+ * Escapes SQLite's LIKE wildcards, `%` and `_`, plus the escape character
+ * itself, `\`, so a merchant name containing any of them is matched as a
+ * literal substring rather than as a pattern. Backslash first, or a term
+ * already containing one would escape whichever character follows it instead
+ * of itself. Pairs with the literal `ESCAPE '\'` at the call site.
+ */
+function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 /**

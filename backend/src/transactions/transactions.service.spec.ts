@@ -199,6 +199,25 @@ describe('TransactionsService', () => {
       expect(toSql(whereOf())).not.toContain('note');
     });
 
+    it('escapes % and _ so they match literally rather than as wildcards', async () => {
+      // Unescaped, "10%" would also match "1000" and "A_B" would also match
+      // "AXB" - `%` and `_` are live LIKE wildcards to SQLite. `escape`
+      // pairs with the backslash `escapeLikeTerm` inserts ahead of each one.
+      await service.list(USER_ID, { period: 'all', search: '10%' });
+
+      expect(toSql(whereOf())).toContain('escape');
+      expect(paramsOf(whereOf())).toContain('%10\\%%');
+    });
+
+    it('escapes a literal backslash in the term ahead of the character it precedes', async () => {
+      await service.list(USER_ID, { period: 'all', search: 'A\\_B' });
+
+      // Backslash-first is what stops the term's own backslash from
+      // swallowing the underscore's escape: "A\_B" must become "A\\\_B", not
+      // "A\_B" read back as one escaped underscore.
+      expect(paramsOf(whereOf())).toContain('%A\\\\\\_B%');
+    });
+
     it('applies no predicate for a whitespace-only term rather than LIKE %%', async () => {
       // The DTO trims, so a whitespace-only term arrives as the empty string.
       await service.list(USER_ID, { period: 'all', search: '' });
@@ -311,6 +330,32 @@ describe('TransactionsService', () => {
 
       expect(monthStatsFor).toHaveBeenCalledWith(USER_ID, CATEGORY_ID);
       expect(result.category).toBe(uncappedStats);
+    });
+
+    it('turns a dangling categoryId into a broken-invariant error, not the category 404', async () => {
+      monthStatsFor.mockRejectedValue(
+        new NotFoundException('Category not found.'),
+      );
+
+      // `NotFoundException` here would 404 the whole detail read under a
+      // message naming the category, contradicting the controller's "404
+      // always means the transaction id" claim - see the note on
+      // `monthStatsForRow`. A plain Error is what every other broken
+      // invariant in this feature throws, and `AllExceptionsFilter` reduces it
+      // to a 500 rather than a misleading 404.
+      await expect(service.detail(USER_ID, TX_ID)).rejects.toThrow(
+        new RegExp(`${TX_ID}.*${CATEGORY_ID}`),
+      );
+      await expect(service.detail(USER_ID, TX_ID)).rejects.not.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('lets a non-404 error out of monthStatsFor propagate unchanged', async () => {
+      const dbError = new Error('db unreachable');
+      monthStatsFor.mockRejectedValue(dbError);
+
+      await expect(service.detail(USER_ID, TX_ID)).rejects.toBe(dbError);
     });
 
     it('asks for the current period even for a transaction from an older one', async () => {

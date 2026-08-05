@@ -188,7 +188,7 @@ exactly that, its one import. A window resolved or a category summed in
 and the Categories screen and the transaction detail would disagree the first time a status
 threshold moved.
 
-Six things about the reads are easy to get wrong:
+Eight things about the reads are easy to get wrong:
 
 - **`period` defaults to `current`, so a bare `GET /api/transactions` hides rows.** That is
   deliberate: TRN-1 titles the screen with an overline naming one month and TRN-3 draws the
@@ -217,7 +217,22 @@ Six things about the reads are easy to get wrong:
   surfaces on no list row, so matching it would return rows whose reason the user cannot see.
   SQLite's `LIKE` does not fold non-ASCII, so a merchant name with diacritics matches only on
   exact case - a real gap for this project's own persona, recorded in `docs/TODO.md`. The term
-  is trimmed in the DTO, and a whitespace-only term applies no predicate rather than `%%`.
+  is trimmed in the DTO, and a whitespace-only term applies no predicate rather than `%%`. The
+  term is also escaped before it reaches `LIKE`: `%` and `_` are wildcards to SQLite, not literal
+  characters, so a merchant search for `10%` would otherwise also match `1000`. `escapeLikeTerm`
+  in `transactions.service.ts` is the only place that builds this pattern, and it is why the
+  predicate is a raw `sql` template rather than drizzle's `like()` helper, which has no `ESCAPE`
+  clause to attach.
+
+- **A `categoryId` can dangle, narrowly, and only `detail()` notices.** `assertCategoryExists`
+  ahead of every write is a plain SELECT with no lock, and `DELETE /api/categories/:id` already
+  tombstones, so a create or update racing that delete can still land a transaction pointing at a
+  category gone a moment later. Every other read tolerates this silently - `categoryId` is
+  returned verbatim and never re-validated. `detail()` is the one read that joins back to the
+  category through `monthStatsFor`, and a `NotFoundException` from there is caught and rethrown
+  as a plain `Error`, the same broken-invariant pattern `ProfileService` uses for a missing
+  profile row: the id in the URL is fine, so the failure is a 500, not a 404 that would name the
+  wrong resource.
 
 Two smaller notes. The list's `ORDER BY` always carries `created_at` then `id` behind the
 date, because a calendar day is shared routinely and without a tiebreak the list reshuffles

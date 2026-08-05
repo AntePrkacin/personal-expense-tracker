@@ -290,8 +290,13 @@ export class CategoriesService {
 
     // `withSpend` filters on `deleted_at IS NULL`, so this covers a tombstoned
     // category as well as an unknown id - and, for the transaction detail, a
-    // dangling `category_id`. That last one is unreachable rather than tolerated:
-    // `remove` reassigns every transaction to the fallback before tombstoning.
+    // dangling `category_id`. That last one is reachable, if narrowly: `remove`
+    // reassigns live transactions before tombstoning, but a transaction created
+    // or updated concurrently with that delete can still be inserted with this
+    // category after the reassignment swept past it. `TransactionsService`
+    // catches exactly that NotFoundException and reports it as a broken
+    // invariant rather than passing this method's 404 straight through, since
+    // that 404 would name the wrong resource.
     if (!category) {
       throw new NotFoundException(NO_CATEGORY);
     }
