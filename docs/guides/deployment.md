@@ -13,8 +13,8 @@ The frontend's own Vercel setup is in [`../../frontend/README.md`](../../fronten
 | Thing | Value |
 | --- | --- |
 | Fly app | `spendifico-api`, in the `spendifico` organization |
-| URL | `https://spendifico-api.fly.dev` |
-| Region | `lhr`, chosen to sit near the Turso group in `aws-eu-west-1` |
+| URL | `https://api.spendifico.eu` (also reachable as `https://spendifico-api.fly.dev`) |
+| Region | `fra`, nearest our users. Sync mode keeps Turso off the request path |
 | Machine | One, `shared-cpu-1x` with 512MB and 512MB of swap. Runs continuously |
 | Volume | `spendifico_data`, 1GB, encrypted, mounted at `/data` |
 | Config | `backend/fly.toml`, `backend/Dockerfile`, `backend/.dockerignore` |
@@ -58,7 +58,7 @@ cd backend && fly config validate --strict
 #    attach it. Scheduled snapshots are on by default, 5-day retention.
 #    1GB is Fly's minimum and still far more than this app needs. Size up rather
 #    than down if unsure: volumes can be EXTENDED but never shrunk.
-fly volumes create spendifico_data --region lhr --size 1
+fly volumes create spendifico_data --region fra --size 1
 
 # 4. The secrets, in ONE command. See the warning below.
 fly secrets import        # then paste NAME=VALUE lines, or pipe them in
@@ -240,30 +240,77 @@ at all rather than 404ing:
 Until both land, the access flow can only be completed by posting the token to
 `POST /api/auth/verify` directly.
 
+## The backend's own domain
+
+The API answers on **`https://api.spendifico.eu`** as well as `spendifico-api.fly.dev`. Set up
+once, and reproducible:
+
+```sh
+cd backend
+fly certs add api.spendifico.eu     # prints the DNS records to add
+fly certs check api.spendifico.eu   # Status = Issued once DNS propagates
+```
+
+Two records at the registrar, which is Porkbun:
+
+| Type   | Host  | Value                                        |
+| ------ | ----- | -------------------------------------------- |
+| `A`    | `api` | Fly's shared IPv4, from `fly ips list`       |
+| `AAAA` | `api` | the app's **dedicated** IPv6, same command   |
+
+The `AAAA` record is what proves domain ownership, which is why no `_fly-ownership` TXT record is
+needed. Renewal is automatic while those records stand, and `force_https = true` means there is no
+unencrypted path.
+
+One trade-off to know: `fly certs setup` also offers a `CNAME` to a per-app `*.fly.dev` name. The
+`A` record above points at a **shared** IPv4, so if Fly ever changes it the record needs updating
+by hand, where a CNAME would follow. The A/AAAA pair was chosen because the dedicated IPv6 doubles
+as the ownership proof.
+
 ## The Vercel side
 
-Three settings, all in the Vercel project whose root directory is `frontend/`:
+Not yet created as of 2026-08-05. Everything below is dashboard work; only `vercel.json` lives in
+the repo. Steps in order:
 
-- **`BACKEND_URL`** points at `https://spendifico-api.fly.dev`.
-- **The function region is `lhr1`**, pinned by `frontend/vercel.json` and confirmable under
-  Settings, Functions, Function Regions.
-- **The production domain is `www.spendifico.eu`**, with the apex `spendifico.eu` **redirecting**
-  to it rather than serving the app. That is not cosmetic: the backend allows exactly one CORS
-  origin and it is the `www` form, so an apex that serves the app directly breaks both CORS and
-  every login link. See the `FRONTEND_URL` section above.
+1. **Create the project.** Import this Git repository, and set **Root Directory** to `frontend`.
+   This is a multi-app repo, so Vercel must build only that folder; it auto-detects the Next.js
+   preset and needs no build-command override.
+2. **Set `BACKEND_URL`** under Settings, Environment Variables, for **Production and Preview**:
 
-**Match Fly, not Turso.** This is easy to get backwards, because Vercel's own guidance is "run
-functions close to your database". The frontend's data source is not Turso, it is this API: the
-path is browser to Vercel function to Fly, and only Fly talks to Turso. `dub1` is the same AWS
-region as the Turso group and is the wrong choice for that reason. The default is `iad1`
-(Washington), which would put a transatlantic round trip on every server-side fetch.
+   ```text
+   BACKEND_URL=https://api.spendifico.eu
+   ```
 
+   No trailing slash and no `/api` suffix, matching the shape in `frontend/.env.example`, because
+   callers append the path themselves. It is read server-side only and must never gain a
+   `NEXT_PUBLIC_` prefix.
+
+3. **Add the domains.** `www.spendifico.eu` as the production domain, and `spendifico.eu`
+   configured to **redirect** to it rather than serve the app. Then replace the registrar's
+   parking records with whatever Vercel specifies for each.
+4. **Confirm the function region reads `fra1`** under Settings, Functions, Function Regions. It
+   comes from `frontend/vercel.json`, so it should already be right; confirming it is how you
+   catch the `iad1` default silently winning.
+
+**On the region, match Fly and not Turso.** This is easy to get backwards, because Vercel's own
+guidance is "run functions close to your database". The frontend's data source is not Turso, it is
+this API: the path is browser to Vercel function to Fly, and only Fly talks to Turso. The default
+is `iad1` (Washington), which would put a transatlantic round trip on every server-side fetch.
 Hobby gets one region, freely chosen, and exceeding the plan's count fails the deployment before
-the build rather than silently dropping extras. There is no function failover on Hobby, so an
-`lhr1` outage is downtime.
+the build rather than silently dropping extras. There is no function failover on Hobby, so a
+`fra1` outage is downtime.
 
-Neither setting can be exercised end to end yet: nothing in `frontend/src` fetches the backend
-until the session cookie lands.
+**Why the apex must redirect rather than serve.** The backend allows exactly one CORS origin and
+it is the `www` form, so an apex serving the app directly would break both CORS and every login
+link for those visitors.
+
+**Preview deployments share the production backend, deliberately.** There is no staging API. Since
+`BACKEND_URL` is read server-side, CORS never applies to those fetches, so previews can call the
+production backend perfectly well - but once PET-52 lands, testing on a preview writes real rows
+into the real user directory and sends real mail. Accepted for this project rather than overlooked.
+
+**None of this can be exercised end to end yet.** Nothing in `frontend/src` reads `process.env` at
+all; `BACKEND_URL` is a seam documented in `frontend/src/lib/session.ts` and filled in by PET-52.
 
 ## Costs
 

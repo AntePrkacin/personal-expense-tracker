@@ -44,7 +44,8 @@ build context and the Fly app root.
 
 ## Deploy on Fly.io
 
-Deployed as the Fly app `spendifico-api` in region `lhr`, on **one** machine with a volume
+Deployed as the Fly app `spendifico-api` in region `fra`, served at `https://api.spendifico.eu`,
+on **one** machine with a volume
 mounted at `/data`. From this directory:
 
 ```sh

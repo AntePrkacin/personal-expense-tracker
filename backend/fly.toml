@@ -15,11 +15,24 @@
 
 app = "spendifico-api"
 
-# Chosen to sit near the Turso group, not near users: every request reads a local
-# replica, so sync latency matters and user proximity barely does. The decode-pet
-# group is in aws-eu-west-1 (Ireland) and Fly has no Dublin region, so London is
-# the nearest hop. `ams` is the fallback if `lhr` is ever capacity-constrained.
-primary_region = "lhr"
+# Nearest to our users (Central and Southeast Europe), because sync mode takes
+# Turso off the request path.
+#
+# This deliberately reverses an earlier `lhr` choice, which was justified as the
+# nearest Fly hop to the Turso group in aws-eu-west-1. That reasoning was weak:
+# the backend reads and writes an embedded replica, and `turso-client.factory.ts`
+# is the only thing that calls `sync()`, on a TURSO_SYNC_INTERVAL_S timer. No read
+# or write endpoint waits on Turso, and even the bootstrap pull is once per user
+# per process because connections are cached. Turso distance therefore belongs to
+# background paths, so the region should track users instead.
+#
+# One exception, accepted: `POST /api/auth/verify` blocks on Turso provisioning
+# with nothing floated, so Frankfurt costs it tens of milliseconds - once per
+# account, ever.
+#
+# The Turso group stays in aws-eu-west-1; there is no reason to move it. `ams` is
+# the fallback if `fra` is ever capacity-constrained.
+primary_region = "fra"
 
 # Fly sends SIGINT by default, which Nest's enableShutdownHooks() already
 # handles. The default grace is only 5 SECONDS, and DatabaseModule's
