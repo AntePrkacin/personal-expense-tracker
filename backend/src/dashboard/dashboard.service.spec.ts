@@ -227,17 +227,19 @@ describe('DashboardService', () => {
     expect(result.recentTransactions).toEqual([]);
   });
 
-  it('breaks a two-way top-category tie by name ascending', async () => {
+  it('breaks a two-way top-category tie by name ascending, whatever order the rows arrive in', async () => {
     at('2026-08-15T12:00:00Z');
     buildService({
-      // Already name-ascending, the order CategoriesService.list() returns.
+      // Deliberately NOT name-ascending: the tie is broken on the name in
+      // topCategoryOf, not inherited from CategoriesService.list()'s ORDER BY,
+      // so a row-order change there cannot silently flip the winner.
       categories: [
-        category({ id: 'cat-apple', name: 'Apple', spent: 50 }),
         category({ id: 'cat-zebra', name: 'Zebra', spent: 50 }),
+        category({ id: 'cat-apple', name: 'Apple', spent: 50 }),
       ],
       transactions: [
-        transaction({ id: 'tx-1', categoryId: 'cat-apple', amount: 50 }),
-        transaction({ id: 'tx-2', categoryId: 'cat-zebra', amount: 50 }),
+        transaction({ id: 'tx-1', categoryId: 'cat-zebra', amount: 50 }),
+        transaction({ id: 'tx-2', categoryId: 'cat-apple', amount: 50 }),
       ],
     });
 

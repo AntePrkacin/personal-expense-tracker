@@ -120,17 +120,26 @@ interface SpentCategoryRow {
 /**
  * Highest spend among live categories, ties broken by name ascending.
  *
- * `categoryRows` already arrives sorted by name ascending
- * (`CategoriesService.withSpend`'s own `ORDER BY`), so replacing the running
- * winner only on a strictly greater spend - never on a tie - is what makes the
- * first (alphabetically earliest) of any tied categories the one that sticks,
- * with no separate tiebreak comparison needed here.
+ * The tiebreak is decided here, on the name, rather than inherited from the
+ * order `categoryRows` arrives in. `CategoriesService.withSpend` does sort
+ * name-ascending today, so a winner replaced only on strictly-greater spend
+ * would happen to pick the alphabetically-first of a tie - but it would flip
+ * silently the day that `ORDER BY` changed, and nothing in this file's tests
+ * would catch it. Comparing the name explicitly costs a line and removes the
+ * coupling.
  */
 function topCategoryOf(rows: SpentCategoryRow[]): TopCategoryDto | null {
   let winner: SpentCategoryRow | null = null;
 
   for (const row of rows) {
-    if (row.spent > 0 && (winner === null || row.spent > winner.spent)) {
+    if (row.spent <= 0) {
+      continue;
+    }
+    if (
+      winner === null ||
+      row.spent > winner.spent ||
+      (row.spent === winner.spent && row.name < winner.name)
+    ) {
       winner = row;
     }
   }

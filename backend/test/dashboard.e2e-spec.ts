@@ -243,6 +243,38 @@ describe('Dashboard (e2e)', () => {
     });
   });
 
+  describe('a two-way top-category tie', () => {
+    it('breaks the tie by name ascending, through the real category query', async () => {
+      const account = await provision();
+      const userDb = await userDatabases.getUserDb(account.id);
+      const seeded = await userDb
+        .select()
+        .from(categories)
+        .orderBy(asc(categories.name));
+      const groceriesId = seeded.find((row) => row.name === 'Groceries')!.id;
+      const transportId = seeded.find((row) => row.name === 'Transport')!.id;
+
+      // Equal spend in two categories: the winner must be the alphabetically
+      // first ('Groceries' < 'Transport'), decided by the service rather than
+      // by whatever order the category query happens to return its rows in.
+      await seed(account.token, {
+        merchant: 'Konzum',
+        categoryId: groceriesId,
+        amount: 40,
+        date: window.start,
+      });
+      await seed(account.token, {
+        merchant: 'Uber',
+        categoryId: transportId,
+        amount: 40,
+        date: window.start,
+      });
+
+      const response = await dashboard(account.token).expect(200);
+      expect(dashboardBody(response).topCategory?.id).toBe(groceriesId);
+    });
+  });
+
   describe('an empty account, which is AC5', () => {
     let bearer: string;
 

@@ -362,7 +362,11 @@ the period independently, so one request reads the profile row up to three times
 land on the one connection `UserDatabaseService` caches per user, the database is small and
 the caller's own, and the alternative - a shared `PeriodService` - would edit code in both
 branches below this one to save a read nothing has measured as slow. That trade, and the
-`PeriodService` idea itself, are in `docs/TODO.md`.
+`PeriodService` idea itself, are in `docs/TODO.md`. Resolving the period independently has one
+visible edge, at the midnight period boundary: the window and the request's own `today` can land
+on either side of it, so `daysLeft` could momentarily read 0 where its DTO promises 1. It
+self-heals on the next request and disappears the moment a shared `PeriodService` resolves the
+window once.
 
 Five things about the figures are easy to get wrong:
 
@@ -390,11 +394,12 @@ Five things about the figures are easy to get wrong:
   draws a continuous axis and a missing week would compress it - but "nothing to chart at all"
   is a different state the empty-state frame replaces the chart for entirely.
 - **`topCategory` ties break by name ascending, and `Uncategorized` is not excluded.** Two
-  categories at the same spend is possible with round numbers, and `CategoriesService.list()`
-  already returns its rows name-ascending, so replacing the running winner only on a strictly
-  greater spend is enough - no separate tiebreak comparison is needed. Nothing here special-cases
-  the fallback: whether the designer wants it excluded from this tile is an open question
-  recorded on the ticket, not one this branch answers unasked.
+  categories at the same spend is possible with round numbers, so the tie is broken in
+  `topCategoryOf` on the name itself rather than inherited from the order `CategoriesService.list()`
+  returns its rows in - that `ORDER BY` is name-ascending today, but a winner leaning on it would
+  flip silently the day it changed. Nothing here special-cases the fallback: whether the designer
+  wants it excluded from this tile is an open question recorded on the ticket, not one this branch
+  answers unasked.
 
 **`insight` is always `null`.** AC6 wants the teaser from the most recently generated insight
 set, and there is no `insights` table yet - `## Not built here` below still lists it. The field
