@@ -226,18 +226,13 @@ cd backend
 fly deploy --remote-only --ha=false
 ```
 
-**Two separate things are still missing, so nobody reads this as finished.** Links now point at
-`https://www.spendifico.eu/auth/verify?token=...`, and as of 2026-08-05 that URL fails to connect
-at all rather than 404ing:
+**One thing is still missing, so nobody reads this as finished.** Links point at
+`https://www.spendifico.eu/auth/verify?token=...`, and the domain is live as of 2026-08-05 - the
+Vercel project exists, both `www` and the apex resolve and serve, confirmed at the end of the
+Vercel section below. What is not there yet is `/auth/verify` itself: it 404s, correctly, because
+the frontend half of verification is PET-52.
 
-1. **There is no Vercel project.** `spendifico.eu` is registered at Porkbun and its DNS still
-   points at Porkbun parking, with no HTTPS. `spendifico.vercel.app` answers
-   `DEPLOYMENT_NOT_FOUND`, which is what Vercel's wildcard DNS returns for any unclaimed name - so
-   a name resolving there proves nothing.
-2. **`/auth/verify` does not exist** even once the site is up. The frontend half of verification is
-   PET-52.
-
-Until both land, the access flow can only be completed by posting the token to
+Until it lands, the access flow can only be completed by posting the token to
 `POST /api/auth/verify` directly.
 
 ## The backend's own domain
@@ -269,8 +264,22 @@ as the ownership proof.
 
 ## The Vercel side
 
-Not yet created as of 2026-08-05. Everything below is dashboard work; only `vercel.json` lives in
-the repo. Steps in order:
+Live as of 2026-08-05, verified against the deployed site rather than assumed:
+
+- `https://www.spendifico.eu` answers 200, real markup (`<title>Spendifico</title>`), valid TLS.
+- `https://spendifico.eu` answers a **308** to `https://www.spendifico.eu/` - the apex redirects
+  rather than serving, as required (see below).
+- `x-vercel-id` on every response reads `fra1::...`, confirming the function region actually took
+  rather than only being configured.
+- Root `/` is 200 (Welcome), `/dashboard` and `/setup` are 200 (the shell exists, ungated per
+  PET-52's deferral), `/login` is 404 (PET-12 not shipped) - all exactly what
+  `frontend/CLAUDE.md`'s Not built here list predicts.
+
+**`BACKEND_URL` cannot be confirmed from outside.** Nothing in `frontend/src` reads `process.env`
+yet (see below), so there is no HTTP behaviour that would prove the variable is set to the right
+value - only the dashboard shows it. Re-verify it once PET-52 adds the first real fetch.
+
+For reference, the steps that got it here:
 
 1. **Create the project.** Import this Git repository, and set **Root Directory** to `frontend`.
    This is a multi-app repo, so Vercel must build only that folder; it auto-detects the Next.js
@@ -287,7 +296,8 @@ the repo. Steps in order:
 
 3. **Add the domains.** `www.spendifico.eu` as the production domain, and `spendifico.eu`
    configured to **redirect** to it rather than serve the app. Then replace the registrar's
-   parking records with whatever Vercel specifies for each.
+   parking records with whatever Vercel specifies for each - a project-specific `CNAME` for `www`
+   and an `A` record for the apex, both shown only after the domains are added.
 4. **Confirm the function region reads `fra1`** under Settings, Functions, Function Regions. It
    comes from `frontend/vercel.json`, so it should already be right; confirming it is how you
    catch the `iad1` default silently winning.
