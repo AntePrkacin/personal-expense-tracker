@@ -273,6 +273,18 @@ includes `.storybook/**` and the story files, so `next build` already typechecks
 The extra step catches what typechecking cannot, such as a broken framework option or a
 CSS import that no longer resolves.
 
+**`npm run build` is the typecheck for shipped code, but it does not reach `*.test.ts(x)`.**
+Root `CLAUDE.md` states the short rule; this is the exception to know. `tsconfig.json` includes
+every `.tsx` in the project, so a test file with a type error is in scope on paper - and yet
+`next build` passes with one, because Next typechecks the module graph its routes actually pull
+in and nothing imports a test. PET-12 found this the direct way: an exclusive-union prop was
+being violated in four places in one suite while `build`, `lint` and `test` were all green,
+because Jest transpiles without checking types and the build never looked. **`npx tsc --noEmit`
+from `frontend/` is what covers them**, and running it reports pre-existing errors in
+`src/components/ui/Sidebar.test.tsx` that no gate has ever failed on. Reach for it after
+changing a prop type, a discriminated union or anything a test constructs by hand; CI does not,
+which is why the errors are still there.
+
 ## Not built here
 
 Treat these as planned, not available. This list exists so you do not build on something that

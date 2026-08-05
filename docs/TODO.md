@@ -456,13 +456,16 @@ back a 400 the same way - `lib/email.test.ts` pins `marko@email.com.` as the exa
 gap means shipping a validation dependency for one field, or copying validator.js's expression
 into the frontend where it would rot silently.
 
-**PET-12 raised it a third time, with four more strings and one that is a decision rather than a
+**PET-12 raised it a third time, with five more strings and one that is a decision rather than a
 sign-off.** Screen 23's failure line is `We couldn't send your login link. Please try again.`,
-shaped like PET-11's. Screen 24's three are all A36's, which says outright that no cooldown, counter
+shaped like PET-11's. Screen 24's four are all A36's, which says outright that no cooldown, counter
 or confirmation is designed for "Resend link": `A new link is on its way.` after a success,
-`We couldn't send a new link. Please try again.` after a failure, and
-`Too many requests. Please wait a few minutes and try again.` for a 429. The `Screens/24 Check your
-email` story reaches all three by clicking the button.
+`We couldn't send a new link. Please try again.` after a failure,
+`Too many requests. Please wait a few minutes and try again.` for a 429, and
+`This page has been open too long to resend.` when the address cookie has expired. The
+`Screens/24 Check your email` stories reach all four by clicking the button - the last one through
+its own `ResendAfterExpiry` story, because fifteen minutes of waiting is not something a
+click-through finds.
 
 Two decisions inside that worth a designer's eye rather than a rubber stamp. **A resend now confirms
 itself**, which A36 says nothing is designed for - and the alternative is worse rather than
@@ -472,6 +475,14 @@ third string would also render as nothing. **And there is deliberately no cooldo
 mention. The backend's per-address throttler is the real limit and a client-side timer would be a
 second, weaker authority that a reload defeats, so the 429 message replaces it. If the designer
 wants a visible cooldown, it belongs on top of that message rather than instead of it.
+
+**One accepted a11y consequence of the expiry state.** When the resend reports an expired address,
+the button the user just pressed is replaced by the "Log in again" link, so keyboard focus falls back
+to the document rather than following to the new control. The message carries `role="alert"` partly
+for that reason - it announces what replaced the button - but a user tabbing from where they were will
+re-enter the card from the top. Moving focus deliberately needs a focus-management pattern this repo
+does not have yet, and inventing one for a single control is the wrong first mover; the day a second
+screen swaps a control in place, it belongs in `ui/`.
 
 ### Screen 24's no-address arrival is new copy and a reworded AC
 

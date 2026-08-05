@@ -507,6 +507,26 @@ control and no way out, reachable by nothing worse than a reload twenty minutes 
 defends is that there is no way _backwards_ into a form the user already completed, and that still
 holds - this goes forward.
 
+**That state is reached two ways, and the second one is why `resendLoginLink` has three outcomes.**
+The screen can render without an address, and the address can expire _while the screen is open_ -
+which is the likelier of the two, because a fifteen-minute cookie sits on the one screen a user
+leaves open watching for mail. Reported as an ordinary failure it produced advice that could never
+work: "please try again", forever, on a screen with no other exit. So the action answers
+`{ ok: false, reason: 'expired' }` and `ResendLink` swaps the button for the same `LogInAgain`
+control the server-rendered branch uses. Two details of that are deliberate. It is a `reason` rather
+than a fabricated 410, because `lib/backend.ts` documents an absent status as "the request never
+completed" and nothing was asked of the backend at all. And the message takes the quiet treatment
+rather than the danger one, because a cookie reaching its own expiry is not a fault - the control
+underneath it is the fix. `docs/TODO.md` records the focus consequence of swapping a control in
+place.
+
+**`CheckEmailScreen`'s props are an exclusive union**, the same `never` technique `ui/Button` uses
+for `href` versus `onClick`: `resend` is required with an address and rejected without one, because
+there is nothing to send to without one. `page.tsx` therefore narrows before rendering rather than
+spreading one object. Worth knowing that **`npm run build` does not enforce this in the suites** -
+see the CI note in `frontend/CLAUDE.md` - so `npx tsc --noEmit` is what catches a test that
+constructs the impossible combination by hand.
+
 **`/login` is deliberately not gated on a session**, for the reason `/setup` is not: a fourth call
 into the `lib/session.ts` stubs would be a claim nothing can test, `/` already redirects a signed-in
 visitor, and LOG-5 makes Welcome's "I already have an account" the only designed entry. Whether it
