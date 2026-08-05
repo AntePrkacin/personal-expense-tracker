@@ -145,24 +145,103 @@ skips nothing at all - silently.** The named form is mandatory.
 ## Backend conventions
 
 Money crosses units in `src/common/money.ts` and nowhere else: `toCents()` on the way in,
-`fromCents()` on the way out. Three callers so far - `VerificationService` for the budget
+`fromCents()` on the way out. Four callers so far - `VerificationService` for the budget
 the onboarding payload carries, `ProfileService` for the same budget on every read and
-update, and `TransactionsService` for amounts - which is what the schema comments mean by
-the conversion happening at the service boundary. A fourth place doing its own arithmetic
-is a bug.
+update, `TransactionsService` for amounts, and `CategoriesService` for caps and derived
+totals - which is what the schema comments mean by the conversion happening at the service
+boundary. A fifth place doing its own arithmetic is a bug.
 
-## Transaction writes
+**Every month-scoped figure resolves its period through `src/common/month-window.ts`, and
+nothing else computes one.** `monthWindow(monthStartDay, today)` returns `YYYY-MM-DD` bounds
+that are inclusive at the start and **exclusive** at the end, so a query reads `date >= start
+and date < end`: text compared against the text column the schema stores, served as a range
+scan by `transactions_date_idx`, with no last-day-of-month arithmetic anywhere. Nothing in the
+file constructs a `Date`, because round-tripping a calendar date through one shifts it across
+timezones - the same reason `transactions.date` is text.
 
-**Transaction writes are the whole write surface of the spend feature, and nothing they
-touch is derived.** `POST /api/transactions` (201), `PATCH /api/transactions/:id` (200) and
-`DELETE /api/transactions/:id` (204) live in `src/transactions/`; reads are PET-28's. Every
-aggregate the UI shows - dashboard cards, trend buckets, the donut, per-category totals, the
-allocation summary - is computed on read and **never stored**, so there is deliberately no
-month column: month attribution is the `date` string read against the profile's
-`monthStartDay` at query time, which is what makes a backdated transaction land in its own
-month and a changed `monthStartDay` re-bucket history correctly.
+`today` is a parameter rather than a clock read, which is what lets specs pin month-boundary
+behaviour without faking timers, and it is formatted by `todayIn()` against **`APP_TIMEZONE`**
+rather than UTC. UTC is wrong for everybody: just after local midnight on the boundary day a
+transaction falls into the previous period, so the whole screen shows the wrong month for a
+few hours, twice a month. One configured zone is right for every user this project has and
+honest about not solving the general case; the per-user fix is in `docs/TODO.md`. The profile
+constrains `monthStartDay` to 1-28 precisely so every month has the day and there is no
+clamping case - anything outside that range throws, because it is a programming error rather
+than input.
 
-Four things about that contract are easy to get wrong:
+## Transaction endpoints
+
+**Nothing this feature touches is derived, and nothing it returns is stored.** `GET
+/api/transactions`, `GET /api/transactions/:id`, `POST /api/transactions` (201), `PATCH
+/api/transactions/:id` (200) and `DELETE /api/transactions/:id` (204) all live in
+`src/transactions/`. Every aggregate the UI shows - dashboard cards, trend buckets, the
+donut, per-category totals, the allocation summary - is computed on read and **never
+stored**, so there is deliberately no month column: month attribution is the `date` string
+read against the profile's `monthStartDay` at query time, which is what makes a backdated
+transaction land in its own month and a changed `monthStartDay` re-bucket history correctly.
+
+**Neither read computes a month itself.** The list's period filter and the detail read's
+category progress both come from `CategoriesService`, which owns the app's only month
+aggregation - see Category endpoints. `TransactionsModule` imports `CategoriesModule` for
+exactly that, its one import. A window resolved or a category summed in
+`TransactionsService` would be a second copy of the same arithmetic behind a second screen,
+and the Categories screen and the transaction detail would disagree the first time a status
+threshold moved.
+
+Eight things about the reads are easy to get wrong:
+
+- **`period` defaults to `current`, so a bare `GET /api/transactions` hides rows.** That is
+  deliberate: TRN-1 titles the screen with an overline naming one month and TRN-3 draws the
+  filter already reading "This month", so one period is the designed default view. The
+  alternative made every caller send `?period=current` to get the specified screen, and
+  forgetting it would render all history under a header naming a single month. `period=all`
+  is how you ask for history, and it applies no date predicate and reads no profile.
+- **The period is a named window, never `?from=&to=`.** A free range lets a caller ask for a
+  span that is not a budgeting period, and then every figure derived from it means something
+  other than what the screen claims. The three values are `current`, `previous` and `all`.
+- **`total` is the count after filters, and A17 was amended to say so.** The spec line reads
+  as an account-wide count, but a badge that ignores the filter bar beneath it reports
+  nothing useful. It equals `transactions.length` while there is no pagination and is
+  returned as its own field anyway, so a future page size cannot silently turn TRN-2's badge
+  into a page count.
+- **The detail read's two context pieces have different windows, and that is the point.**
+  `category` is the progress for the **current** period even when the transaction being
+  viewed is older - the bar answers where the category stands now (AC4, and DET-4's own "this
+  month" title). `recentInCategory` has **no date predicate at all**, because DET-5's mock
+  reaches back a month. Serving both from one window is wrong in one direction or the other.
+- **The sibling list excludes the transaction being viewed, at a limit of 5.** DET-5's first
+  row _is_ the transaction whose page it sits on, already the header and the amount card, so
+  A22's row set was amended. Five rather than the mock's three, so the exclusion costs the
+  card nothing.
+- **`search` matches the merchant only, and only folds ASCII case.** The note is captured but
+  surfaces on no list row, so matching it would return rows whose reason the user cannot see.
+  SQLite's `LIKE` does not fold non-ASCII, so a merchant name with diacritics matches only on
+  exact case - a real gap for this project's own persona, recorded in `docs/TODO.md`. The term
+  is trimmed in the DTO, and a whitespace-only term applies no predicate rather than `%%`. The
+  term is also escaped before it reaches `LIKE`: `%` and `_` are wildcards to SQLite, not literal
+  characters, so a merchant search for `10%` would otherwise also match `1000`. `escapeLikeTerm`
+  in `transactions.service.ts` is the only place that builds this pattern, and it is why the
+  predicate is a raw `sql` template rather than drizzle's `like()` helper, which has no `ESCAPE`
+  clause to attach.
+
+- **A `categoryId` can dangle, narrowly, and only `detail()` notices.** `assertCategoryExists`
+  ahead of every write is a plain SELECT with no lock, and `DELETE /api/categories/:id` already
+  tombstones, so a create or update racing that delete can still land a transaction pointing at a
+  category gone a moment later. Every other read tolerates this silently - `categoryId` is
+  returned verbatim and never re-validated. `detail()` is the one read that joins back to the
+  category through `monthStatsFor`, and a `NotFoundException` from there is caught and rethrown
+  as a plain `Error`, the same broken-invariant pattern `ProfileService` uses for a missing
+  profile row: the id in the URL is fine, so the failure is a 500, not a 404 that would name the
+  wrong resource.
+
+Two smaller notes. The list's `ORDER BY` always carries `created_at` then `id` behind the
+date, because a calendar day is shared routinely and without a tiebreak the list reshuffles
+between two identical requests; both tiebreaks stay descending under `date_asc`. And **`GET
+:id` must stay below any literal sibling path** in the controller, or Nest matches `:id`
+first - there is no literal sibling today, so it is a note rather than a constraint, and the
+failure would be a 400 from `ParseUUIDPipe` on a route that looks fine.
+
+Four things about the write contract are easy to get wrong:
 
 - **A `PATCH` is tri-state**: an absent field is unchanged, `null` clears (only `note` is
   nullable), a value sets. `UpdateTransactionDto` is hand-written rather than
@@ -185,15 +264,157 @@ Four things about that contract are easy to get wrong:
 
 Cross-user isolation is structural, not a filter: every method opens the caller's own
 database, so another user's transaction id simply does not exist there and the ordinary 404
-covers it. There is no `user_id` column to forget. Deletes tombstone (`deleted_at`) and
-`PATCH` guards on `deleted_at IS NULL`, so a deleted transaction cannot be edited back to
-life; the row survives only so a future offline sync cannot resurrect it under a
-delete-update conflict.
+covers it. There is no `user_id` column to forget. Deletes tombstone (`deleted_at`), `PATCH`
+guards on `deleted_at IS NULL`, and **every read filters on it too** - the list, the detail
+row and the sibling list - so a deleted transaction cannot be edited back to life and cannot
+be read back either. The row survives only so a future offline sync cannot resurrect it under
+a delete-update conflict.
 
 Four fields the transaction detail mock shows are **deliberately not accepted**: time,
 payment method, status and account (DET-8, A20). No form captures them and no column stores
 them, so `forbidNonWhitelisted` answers 400 rather than dropping them silently and letting a
 frontend believe they were saved.
+
+## Category endpoints
+
+**One `Uncategorized` category exists per account, and it is a system row rather than a
+chip.** `GET /api/categories`, `POST`, `PATCH /:id` and `DELETE /:id` live in
+`src/categories/`. The ticket named the "Other" onboarding chip as the fallback every
+deletion reassigns to; that would have made one row serve both as a user's free choice and as
+a system invariant, so the roles were split. "Other" stays an ordinary chip anyone can rename
+or delete, and `Uncategorized` is seeded at provisioning, offered on no screen, and never part
+of `STARTER_CATEGORIES`.
+
+It is found by an `is_fallback` column, not by its name. The flag is still needed even though
+the name is immutable, because refusing the rename requires already knowing the row is
+special - matching the string would also make "Uncategorized" a reserved word `POST` has to
+block. A partial unique index (`where is_fallback = 1`) enforces "at most one"; provisioning
+is what guarantees "at least one", and **no code repairs a database that predates the
+migration** - every account that existed was a test account and was re-provisioned by hand.
+
+Its color, `#98A0AE`, is the design system's `--color-text-tertiary` rather than one of the
+eight category colors. White was chosen first and reversed: since this is the category the
+transaction form preselects, it is likely to hold the largest donut slice, and white would
+have rendered that slice, the legend swatch and the list dot as nothing.
+
+Five things about the rest of it are easy to get wrong:
+
+- **A cap is optional, and `0` is not how you say "no cap".** The ticket originally required
+  one above zero, which would have made uncapped categories a legacy artifact the API could
+  never produce again - every onboarding chip and the fallback arrive without one. Users are
+  not forced to budget per category, so an absent cap is a first-class choice. A cap of
+  exactly `0` is still a 400: it means "spend nothing here", which puts the category Over on
+  its first transaction and is almost always an empty form field coerced to a number.
+
+- **The status band is decided on stored cents, never on `percentUsed`.** Read literally the
+  design's four bands leave a hole between 99% and 100% (CTG-5, A23). Comparing integers
+  closes it with no judgement call and makes display rounding unable to move a category
+  between bands - so a card can legitimately read 100% and say Near, which PET-36 has to
+  round down for. Uncapped is the fifth band, with a null cap, percent, remaining and over.
+
+- **The date predicates belong in the JOIN condition, not the WHERE clause.** The stats read
+  is one grouped LEFT JOIN from `categories` to `transactions`. Moved into WHERE, the window
+  bounds would filter out the category rows themselves, silently hiding every category that
+  happened to have no spend this period.
+
+- **The allocation summary ships inside the list response**, because frame 13 draws it as the
+  header of the screen the cards are on. It is the one figure there that is time-independent -
+  caps are monthly by definition, so no window enters into it. `unallocated` is returned
+  **unclamped** and goes negative when caps exceed the budget (A43).
+
+- **Delete is two ordered statements, not a `db.transaction()`.** Both tables are user-scope
+  so a transaction is genuinely available, and it is refused for the reason under Access and
+  sessions: the embedded driver refuses overlapping transactions, so a second call site means
+  two quick deletes on one database collide. Reassign first, tombstone second - a failure in
+  between leaves the transactions on `Uncategorized` and the category live but empty, which is
+  visible and fixed by retrying, where the reverse strands rows pointing at a tombstone. The
+  reassignment deliberately sweeps **tombstoned** transactions too, so the offline-sync record
+  carries no dangling category id.
+
+Renaming or deleting the fallback is a **409**, not a 403: the request is well-formed and the
+caller is entitled to make it, it just conflicts with an invariant of the resource. Everything
+else about that row - cap, color, icon, note - is editable.
+
+The month window itself is `src/common/month-window.ts`, shared with PET-28 and PET-20 and
+described under Backend conventions.
+
+**`CategoriesService` is the app's only month aggregation, and other features compose it.**
+Three public methods exist for that and for no screen of its own: `currentWindow(userId)` and
+`previousWindow(userId)` hand out the windows, and `monthStatsFor(userId, categoryId)` returns
+one `CategoryResponseDto` with its stats for the current period. The transaction reads use all
+three and PET-20's dashboard uses the first two, while `period()` and `withSpend()` behind
+them stay private so there is one copy of "resolve the window, then sum against it". `update()`
+goes through `monthStatsFor` too rather than keeping a second copy, which is why it carries no
+`.returning()`: the row comes back out of the stats read.
+
+## Dashboard
+
+**`GET /api/dashboard` computes nothing itself.** `src/dashboard/` has no imports from
+`categories` or `transactions` tables at all - `DashboardService` composes `CategoriesService`
+(the window, the per-category totals, the monthly budget) and `TransactionsService` (the
+current period's rows, for the total, the weekly buckets and the recent-transactions card).
+A window resolved or a month summed here would be the fourth copy of arithmetic that
+`## Backend conventions`' money note already calls a bug at the third.
+
+**This is the most expensive read in the app, and that is accepted rather than optimised
+away.** `currentWindow`, `CategoriesService.list` and `TransactionsService.list` each resolve
+the period independently, so one request reads the profile row up to three times. All three
+land on the one connection `UserDatabaseService` caches per user, the database is small and
+the caller's own, and the alternative - a shared `PeriodService` - would edit code in both
+branches below this one to save a read nothing has measured as slow. That trade, and the
+`PeriodService` idea itself, are in `docs/TODO.md`. Resolving the period independently has one
+visible edge, at the midnight period boundary: the window and the request's own `today` can land
+on either side of it, so `daysLeft` could momentarily read 0 where its DTO promises 1. It
+self-heals on the next request and disappears the moment a shared `PeriodService` resolves the
+window once.
+
+Five things about the figures are easy to get wrong:
+
+- **The account-wide total is summed from the transaction list, never from the per-category
+  rows.** A transaction whose category was deleted moments after it was created (see
+  `TransactionsService`'s own note on that race) would not appear in any live category row, and
+  summing categories instead would silently under-report `spent` - the one figure the top stat
+  tile exists to get right. The same reasoning makes the donut's percentages relative to that
+  total rather than to the sum of the slices: the two can disagree by the same rare margin, and
+  disagreeing in the total would be worse.
+- **`averagePerDay` divides by days elapsed, counting today, never by the days in the whole
+  period.** Elapsed is the rate that answers "am I burning too fast"; dividing by the full
+  period on day 2 makes a number that looks like success and means nothing. It is never zero,
+  so there is no division to guard.
+- **The weekly buckets anchor to the period start, not to ISO weeks**, because AC3 needs them
+  to sum to the period total and ISO weeks do not: a period starting on the 5th would straddle
+  two ISO weeks at each end and overshoot. Bucket _n_ covers `start + 7n` to `start + 7(n+1)`,
+  clipped to the period end, so the last one is short rather than reaching past it. Each bucket
+  carries its own `startDate`/`endDate` rather than a rendered label, which is what
+  `addDays` in `src/common/month-window.ts` exists for - the one function in that file that
+  inverts `toDayNumber` rather than only subtracting two of them, because a label needs an
+  actual calendar date, not a day count.
+- **An empty account's weekly series is an empty array, not five zero buckets.** Within an
+  account that does have spend, a week with none still gets a zero-valued bucket - the chart
+  draws a continuous axis and a missing week would compress it - but "nothing to chart at all"
+  is a different state the empty-state frame replaces the chart for entirely.
+- **`topCategory` ties break by name ascending, and `Uncategorized` is not excluded.** Two
+  categories at the same spend is possible with round numbers, so the tie is broken in
+  `topCategoryOf` on the name itself rather than inherited from the order `CategoriesService.list()`
+  returns its rows in - that `ORDER BY` is name-ascending today, but a winner leaning on it would
+  flip silently the day it changed. Nothing here special-cases the fallback: whether the designer
+  wants it excluded from this tile is an open question recorded on the ticket, not one this branch
+  answers unasked.
+
+**`insight` is always `null`.** AC6 wants the teaser from the most recently generated insight
+set, and there is no `insights` table yet - `## Not built here` below still lists it. The field
+ships in the contract now so PET-41 fills it in without a second `api:sync` churn and a second
+frontend change for a field that was always going to exist. The amendment is recorded on the
+ticket, per `docs/agents/conventions.md`.
+
+**`TransactionsModule` exports `TransactionsService`, the same reason `CategoriesModule`
+exports `CategoriesService`.** Without it, `DashboardModule` importing `TransactionsModule` for
+the recent-transactions card cannot actually inject the service Nest resolves it to - a module
+that provides something is not the same as a module that shares it.
+
+Like `ProfileController`, there is no 404: a verified session implies a profile row, and its
+absence is the broken invariant `CategoriesService.period()` already throws a plain `Error`
+for, answered by the generic 500.
 
 ## Profile and preferences
 
@@ -292,11 +513,4 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Categories have no endpoints.** The table and a starter set exist; there is no CRUD, no
-  month stats and no allocation summary. The starter colors are the real ones from Figma frame
-  03, read per chip from the design's variable bindings, and the palette has eight colors for
-  ten chips, so two repeat and color alone cannot identify a category.
 - **Insights has no table.** It arrives with its feature, as an ordinary user-scope migration.
-- **Transaction reads.** `transactions` has the three write endpoints above and **no reads at
-  all**. The list, the month windows and every aggregate the designs show are PET-28's and the
-  dashboard tickets', all computed on read and never stored.

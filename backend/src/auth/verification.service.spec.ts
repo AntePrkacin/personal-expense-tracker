@@ -182,13 +182,41 @@ describe('VerificationService', () => {
       ).toContain('onConflictDoNothing');
     });
 
-    it('seeds exactly the picked categories, in canonical order', async () => {
+    it('seeds the fallback first, then exactly the picked categories in canonical order', async () => {
       await service.verify('raw-token');
 
       const rows = argsOf(inserted.get(categories)!, 'values')[0] as {
         name: string;
+        isFallback?: boolean;
       }[];
-      expect(rows.map((row) => row.name)).toEqual(['Groceries', 'Transport']);
+      expect(rows.map((row) => row.name)).toEqual([
+        'Uncategorized',
+        'Groceries',
+        'Transport',
+      ]);
+      // Exactly one fallback, and it is not one of the picked chips.
+      expect(rows.filter((row) => row.isFallback === true)).toHaveLength(1);
+      expect(rows[0].isFallback).toBe(true);
+    });
+
+    it('seeds the fallback even when no categories were picked', async () => {
+      findById.mockResolvedValue({
+        id: 'user-id',
+        email: 'marko@email.com',
+        dbUrl: null,
+        onboardingPayload: { ...payload, categories: [] },
+      });
+
+      await service.verify('raw-token');
+
+      const rows = argsOf(inserted.get(categories)!, 'values')[0] as {
+        name: string;
+        isFallback?: boolean;
+      }[];
+      // A4 allows picking nothing. It used to leave the table empty; it cannot
+      // now, because deleting a category needs somewhere to reassign to.
+      expect(rows.map((row) => row.name)).toEqual(['Uncategorized']);
+      expect(rows[0].isFallback).toBe(true);
     });
 
     it('clears the payload only after the seed', async () => {

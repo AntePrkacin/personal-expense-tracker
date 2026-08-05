@@ -132,7 +132,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List transactions.
+         * @description Every filter is optional. `period` defaults to `current`, so a call with no query string returns **this budgeting period only**, which is the view TRN-3 draws; pass `period=all` for history. `total` counts matches after filters - read it rather than the array length. There is no pagination: the whole filtered set comes back and the table scrolls.
+         */
+        get: operations["TransactionsController_list"];
         put?: never;
         /**
          * Record a transaction.
@@ -152,7 +156,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * One transaction, with the context frame 08 draws around it.
+         * @description Carries two extras on **different windows**, deliberately. `category` is that category's progress for the **current** period, even when this transaction is from an earlier one - the bar answers where the category stands now. `recentInCategory` is the latest transactions in the same category from **any** month, excluding this one. **404** here always means the id in the URL. Expect `category.status` to be `uncapped` most of the time: caps are optional and the preselected fallback has none.
+         */
+        get: operations["TransactionsController_detail"];
         put?: never;
         post?: never;
         /**
@@ -167,6 +175,74 @@ export interface paths {
          * @description Send only the fields to change: an absent field is left alone, and `note` accepts null to clear it. An empty body is a **400**, because it would record an edit that changed nothing. **404** means either the id in the URL or a `categoryId` in the body names nothing of yours.
          */
         patch: operations["TransactionsController_update"];
+        trace?: never;
+    };
+    "/api/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your categories with this period’s progress, and the allocation summary.
+         * @description One call serves the whole screen. Money is in major units. `spent` and `transactionCount` cover the current budgeting period, which starts on your profile’s `monthStartDay` rather than the 1st. An uncapped category reports `status: "uncapped"` with a null cap, percent, remaining and over - a cap is optional, so this is ordinary rather than exceptional. `allocation.unallocated` can be negative when caps exceed the budget.
+         */
+        get: operations["CategoriesController_list"];
+        put?: never;
+        /**
+         * Add a category.
+         * @description `monthlyCap` is optional: omit it for a category with no limit. A cap of **0 or less is a 400** - it means "spend nothing here", which is not the same as no limit and is almost always an empty field rather than an intent.
+         */
+        post: operations["CategoriesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a category, keeping its transactions.
+         * @description The transactions are **not** deleted: they move to `Uncategorized`, which is why that category exists. **409** means you tried to delete `Uncategorized` itself.
+         */
+        delete: operations["CategoriesController_remove"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a category.
+         * @description Send only the fields to change. An absent field is left alone; `monthlyCap` and `note` also accept `null`, which clears them - clearing a cap makes the category uncapped. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and note are all editable.
+         */
+        patch: operations["CategoriesController_update"];
+        trace?: never;
+    };
+    "/api/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every figure the dashboard draws, for the current period.
+         * @description `remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is always null until PET-41 ships the insights table. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.
+         */
+        get: operations["DashboardController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -278,6 +354,71 @@ export interface components {
              */
             email?: string;
         };
+        TransactionResponseDto: {
+            id: string;
+            merchant: string;
+            categoryId: string;
+            /** @description Major units (e.g. 12.5). Stored as integer cents; converted on the way out. */
+            amount: number;
+            /** @description `YYYY-MM-DD`, exactly the string that was stored. */
+            date: string;
+            /** @description Null when the transaction has no note, never absent. */
+            note: string | null;
+            /** @description ISO 8601. */
+            createdAt: string;
+            /**
+             * @description ISO 8601. Within a millisecond of `createdAt` until the first edit, not
+             *     necessarily equal to it: the two columns default from independent `new Date()`
+             *     calls, so an insert can straddle a millisecond boundary. Do not use equality
+             *     of the two to mean "never edited".
+             */
+            updatedAt: string;
+        };
+        TransactionsResponseDto: {
+            /** @description Every matching transaction, in the requested sort order. */
+            transactions: components["schemas"]["TransactionResponseDto"][];
+            /** @description Matches after every filter, not the account total. Equal to `transactions.length` while there is no pagination; read this rather than the array length, so a future page size cannot silently turn the badge into a page count. */
+            total: number;
+        };
+        CategoryResponseDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Groceries */
+            name: string;
+            /**
+             * @description Hex, `#RRGGBB`.
+             * @example #57B368
+             */
+            color: string;
+            icon: string | null;
+            note: string | null;
+            /** @description True for the one `Uncategorized` category every account has. It cannot be deleted or renamed, deleting any other category moves its transactions here, and the transaction form preselects it. */
+            isFallback: boolean;
+            /** @description Major units. Null means uncapped, which is not a cap of 0. */
+            monthlyCap: number | null;
+            /** @description Major units spent in this category during the current period. */
+            spent: number;
+            /** @description Transactions counted in `spent`. */
+            transactionCount: number;
+            /** @description Percentage of the cap used, unrounded. Null when uncapped. Round it for display; the status is decided on cents, so rounding cannot disagree with it. */
+            percentUsed: number | null;
+            /** @description Major units still available. Null when uncapped or already over; `over` carries the excess instead. */
+            remaining: number | null;
+            /** @description Major units spent beyond the cap. Null unless the status is `over`. */
+            over: number | null;
+            /**
+             * @description Decided on cents, not on `percentUsed`. `uncapped` when there is no cap.
+             * @enum {string}
+             */
+            status: "on_track" | "near" | "full" | "over" | "uncapped";
+        };
+        TransactionDetailResponseDto: {
+            transaction: components["schemas"]["TransactionResponseDto"];
+            /** @description The transaction's category with its stats for the **current** period - not the period the transaction itself falls in. The bar answers where this category stands now. */
+            category: components["schemas"]["CategoryResponseDto"];
+            /** @description Up to 5 other transactions in the same category, newest first, from any month. Excludes the one in `transaction`. */
+            recentInCategory: components["schemas"]["TransactionResponseDto"][];
+        };
         CreateTransactionDto: {
             /**
              * @description Major units (e.g. 12.50), stored as integer cents. Positive: this app
@@ -302,26 +443,6 @@ export interface components {
             categoryId: string;
             note?: string;
         };
-        TransactionResponseDto: {
-            id: string;
-            merchant: string;
-            categoryId: string;
-            /** @description Major units (e.g. 12.5). Stored as integer cents; converted on the way out. */
-            amount: number;
-            /** @description `YYYY-MM-DD`, exactly the string that was stored. */
-            date: string;
-            /** @description Null when the transaction has no note, never absent. */
-            note: string | null;
-            /** @description ISO 8601. */
-            createdAt: string;
-            /**
-             * @description ISO 8601. Within a millisecond of `createdAt` until the first edit, not
-             *     necessarily equal to it: the two columns default from independent `new Date()`
-             *     calls, so an insert can straddle a millisecond boundary. Do not use equality
-             *     of the two to mean "never edited".
-             */
-            updatedAt: string;
-        };
         UpdateTransactionDto: {
             /** @description Major units, as on create. */
             amount?: number;
@@ -340,6 +461,102 @@ export interface components {
             merchant?: string;
             /** Format: uuid */
             categoryId?: string;
+        };
+        AllocationResponseDto: {
+            /** @description Major units, from your profile. */
+            monthlyBudget: number;
+            /** @description Major units. The sum of every live category cap; uncapped categories contribute nothing, so this can sit well below the budget for someone who caps little. */
+            allocated: number;
+            /** @description Major units, `monthlyBudget - allocated`. **Can be negative**: nothing prevents caps from exceeding the budget (A43), and the figure is returned unclamped so the excess is recoverable. */
+            unallocated: number;
+        };
+        CategoriesResponseDto: {
+            /** @description Live categories, ordered by name. */
+            categories: components["schemas"]["CategoryResponseDto"][];
+            allocation: components["schemas"]["AllocationResponseDto"];
+        };
+        CreateCategoryDto: {
+            /**
+             * @description Hex, `#RRGGBB`. The eight category colors come from Figma frame 03.
+             * @example #57B368
+             */
+            color: string;
+            /** @description Major units (e.g. 400.00), stored as integer cents. Omit for no cap. */
+            monthlyCap?: number;
+            name: string;
+            /** @description A name from the frontend's own icon set. Never resolved to an asset here. */
+            icon?: string;
+            /** @description Captured, but surfaces on no screen today (CED-4, A42). */
+            note?: string;
+        };
+        UpdateCategoryDto: {
+            /** @example #57B368 */
+            color?: string;
+            /** @description Major units. `null` clears the cap, leaving the category uncapped. */
+            monthlyCap?: number | null;
+            icon?: string | null;
+            note?: string | null;
+            name?: string;
+        };
+        TopCategoryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Groceries */
+            name: string;
+            /**
+             * @description Hex, `#RRGGBB`.
+             * @example #57B368
+             */
+            color: string;
+            /** @description Major units spent in this category during the current period. */
+            spent: number;
+        };
+        WeeklyBucketDto: {
+            /** @description `YYYY-MM-DD`, inclusive. */
+            startDate: string;
+            /** @description `YYYY-MM-DD`, exclusive. The final bucket in a period is short - `endDate` is the period end, not seven days after `startDate`. */
+            endDate: string;
+            /** @description Major units spent within this bucket. */
+            total: number;
+        };
+        DashboardCategoryDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Groceries */
+            name: string;
+            /**
+             * @description Hex, `#RRGGBB`.
+             * @example #57B368
+             */
+            color: string;
+            /** @description Major units spent in this category during the current period. */
+            spent: number;
+            /** @description Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap. */
+            percent: number;
+        };
+        DashboardResponseDto: {
+            /** @description Major units spent so far this period. */
+            spent: number;
+            /** @description Major units, the monthly budget from your profile. */
+            monthlyBudget: number;
+            /** @description Major units, `monthlyBudget - spent`. Can be negative: overspending is a state the frontend needs the magnitude to draw, the same reasoning as `unallocated` on `GET /api/categories`. */
+            remaining: number;
+            /** @description Whole days from today to the end of the period, counting today. 1 on the last day of the period, never 0 - the day is not over. */
+            daysLeft: number;
+            /** @description Live transactions in the current period. */
+            transactionCount: number;
+            /** @description `spent` divided by days elapsed so far (counting today), not by the days in the whole period - the rate that answers "am I burning too fast", not one that looks better the earlier in the month it is read. */
+            averagePerDay: number;
+            /** @description The highest-spending category this period, ties broken by name ascending. Null when nothing has been spent yet. */
+            topCategory: components["schemas"]["TopCategoryDto"] | null;
+            /** @description Sums to `spent`. Anchored to the period start, not to ISO weeks, so the buckets tile the period without gap or overlap; the last one is short rather than overshooting into the next period. An **empty array**, not zero-filled buckets, when there is nothing to chart this period. */
+            weeklyBuckets: components["schemas"]["WeeklyBucketDto"][];
+            /** @description Every nonzero category this period, percentages unrounded and relative to `spent`. Empty when there is no spend yet. */
+            categories: components["schemas"]["DashboardCategoryDto"][];
+            /** @description Up to 3 most recent transactions in the current period, newest first. */
+            recentTransactions: components["schemas"]["TransactionResponseDto"][];
+            /** @description The teaser from the most recently generated insight set. Always null until PET-41 ships the insights table and starts filling this in. */
+            insight: string | null;
         };
     };
     responses: never;
@@ -614,6 +831,55 @@ export interface operations {
             };
         };
     };
+    TransactionsController_list: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring of the merchant name. Trimmed; an empty or whitespace-only term filters nothing. **Case-insensitive for ASCII only** - SQLite `LIKE` does not fold non-ASCII, so a merchant name with diacritics matches only on exact case. */
+                search?: string;
+                /**
+                 * @description One of your categories. An unknown id filters everything out rather than
+                 *     404ing - it is a filter, not a resource being addressed.
+                 */
+                categoryId?: string;
+                /** @description Resolved server-side from your `monthStartDay`, so the boundary is your budgeting period rather than the calendar month. `previous` is the period before the current one. `all` applies no date filter. */
+                period?: "current" | "previous" | "all";
+                /** @description Ties on `date` break on `createdAt` descending, then `id`, so the order is stable across requests rather than reshuffling for no visible reason. */
+                sort?: "date_desc" | "date_asc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionsResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
     TransactionsController_create: {
         parameters: {
             query?: never;
@@ -633,6 +899,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransactionResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TransactionsController_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionDetailResponseDto"];
                 };
             };
             /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
@@ -754,6 +1068,210 @@ export interface operations {
             };
             /** @description No such resource. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriesResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The request conflicts with the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCategoryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The request conflicts with the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DashboardController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

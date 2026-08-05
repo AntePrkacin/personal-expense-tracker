@@ -455,6 +455,68 @@ the designed **order**, which wrapping preserves. Forcing the picture would mean
 which breaks at the first long category name, or shaving the designed 10px gap to 8px to win a
 coincidence back. Worth a designer glance so the difference is known rather than discovered.
 
+### The budgeting period resolves against one server timezone, not the user's
+
+Every month-scoped figure in the app - the transaction list's period, per-category month
+stats, the dashboard's buckets and its days-left tile - is derived by reading a
+`YYYY-MM-DD` date against the profile's `monthStartDay`. That needs to know what day it is
+now, and PET-35 decided that "now" comes from a single configured `APP_TIMEZONE`
+(`Europe/Zagreb`) rather than from UTC or from the user.
+
+UTC was the first instinct and it is wrong for everybody: on the period boundary a
+transaction logged just after local midnight falls into the previous period, so the whole
+dashboard shows the wrong month for a few hours, twice a month. One configured zone is
+right for every user this project actually has, and honest about not solving the general
+case.
+
+**The eventual fix is a timezone on the profile, one per user.** It needs a column in the
+user scope, a Settings field, and a decision about what to do for accounts that predate it.
+None of that exists: no Figma frame collects a timezone, so there is nothing to build
+against yet. Until it lands, a user outside the configured zone sees the boundary skew
+described above, and the further from `Europe/Zagreb` they are the worse it gets.
+
+Note the config value fails silently when wrong, the same failure class as `use_tursodb` in
+`backend/src/database/CLAUDE.md`: nothing crashes, the months are just quietly off.
+
+### Transaction search is case-insensitive for ASCII only
+
+`GET /api/transactions?search=` is a `LIKE '%term%'` on `transactions.merchant`. SQLite's `LIKE`
+folds case for ASCII and **only** for ASCII, so `konzum` finds `Konzum` while `kovačić` does not
+find `Kovačić`. That is not an exotic edge here: this project's persona is Croatian and its own
+example data carries diacritics, so the first realistic search that fails is a plausible one.
+
+**The fix is a normalized search column, which is why it is not in PET-28.** SQLite ships no
+`unaccent`, and `PRAGMA case_sensitive_like` would not help - the problem is folding, not
+sensitivity. Doing it properly means a `merchant_normalized` column written on every insert and
+update, a user-scope migration to add and backfill it, and the search predicate moved onto it.
+That is a schema change in a ticket whose whole point was that it stores nothing, and it would
+have to be kept in step with `merchant` at three write sites.
+
+Two cheaper things were considered and rejected. Normalizing in JS and comparing in JS means
+loading every row to filter it, which is the one thing the index is for. An `ICU` extension is a
+native build per platform, and `test-e2e` runs against the embedded driver on a CI runner.
+
+Until then the DTO's own description says so, which is at least honest to a frontend developer
+reading the generated types.
+
+### The dashboard's insight teaser ships as `null` until PET-41
+
+PET-20's AC6 wants the dashboard to show the teaser from the most recently generated insight
+set. There is no `insights` table - it arrives with PET-41 as an ordinary user-scope migration -
+so no branch before that one can satisfy AC6 as written.
+
+Three options were on the table, and the third is the one taken. Building the table on PET-20
+would duplicate a schema decision that belongs to the feature that actually needs it. Omitting
+the `insight` field entirely would mean PET-41 changes the dashboard's response shape when it
+lands, which is a second `api:sync` churn and a second frontend change for a field that was
+always going to exist. Shipping `insight: null`, documented as always null until PET-41 fills it
+in, costs one line there and no shape change anywhere - so that is what `DashboardResponseDto`
+does.
+
+The amendment is recorded on PET-20 itself, per `docs/agents/conventions.md`'s note that
+acceptance criteria are amendable on engineering merit; this one is in the wrong ticket rather
+than wrong.
+
 ---
 
 - **A generated HTTP client is not decided.** Types are shared and that part is settled:
@@ -705,6 +767,14 @@ than discovered.
   integer and simply relabels it, which is arguably the least surprising behaviour but is a
   decision nobody made - whatever the exponent table does, it also has to say what a
   currency change means for existing rows.
+- **The transaction list is unbounded, by design and only for now.** `GET /api/transactions`
+  returns every match in one response, because A11 and TRN-6 record that the design has no
+  pager anywhere and the table simply scrolls. Fine at a few hundred rows a month and not fine
+  forever: nothing caps the response, so a long-lived account eventually serializes its whole
+  history on every page load. The natural next step is a `limit` with a `hasMore` flag, and
+  `total` already exists as its own field precisely so that day does not silently turn TRN-2's
+  badge into a page count - a frontend reading `transactions.length` would do exactly that.
+  Whoever adds it also has to decide what the period filter's default means for a first page.
 - **Offline conflict policy is undecided.** The schema is shaped for last-write-wins
   (UUIDv7 keys, epoch-ms timestamps, tombstones), but no client syncs yet and clock skew is
   unaddressed.
@@ -713,6 +783,19 @@ than discovered.
 
 ## Housekeeping
 
+- **The month window is reached through `CategoriesService`, and now has three callers who
+  should promote it.** `currentWindow`, `previousWindow` and `monthStatsFor` are public on that
+  service so the transaction reads and PET-20's dashboard compose one aggregation instead of
+  writing three - the right outcome, reached by the slightly wrong route, since both a
+  transaction read and the dashboard read now inject a categories service to learn what month
+  it is, and the dashboard reads the profile row up to three times in one request for it (see
+  `backend/CLAUDE.md`, Dashboard). The tidy end state is a small `PeriodService` under
+  `src/common/` owning the profile read and the two windows, with `CategoriesService` keeping
+  only `withSpend` and the status bands. It was not done in PET-28 or PET-20 because both sit in
+  a three-branch stack on top of the branch that had just landed the code, and moving `period()`
+  would have dragged the churn through however many rebases were still ahead to buy a seam
+  nothing yet measurably needed. The third caller the previous note was waiting for has now
+  landed; what is left is the stack merging so the refactor has no rebase left to pay for.
 - **Repo-wide `prettier --check` is commented out in CI.** 55 files predate the Prettier
   config and the step would fail on a fresh clone. To enable: run `npx prettier --write .`
   once, commit that, then uncomment the step in `.github/workflows/ci.yml`. Note that

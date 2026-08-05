@@ -17,6 +17,31 @@ export const envValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3000),
   FRONTEND_URL: Joi.string().uri().default('http://localhost:4200'),
 
+  // IANA zone the budgeting period is resolved in. Every month-scoped figure -
+  // the transaction list's period, per-category month stats, the dashboard's
+  // buckets and days-left - reads a YYYY-MM-DD date against the profile's
+  // monthStartDay, and needs to know what day it is now to do it.
+  //
+  // Deliberately one server-wide zone rather than UTC or a per-user setting.
+  // UTC is wrong for everybody: just after local midnight on the boundary day a
+  // transaction falls into the previous period, so the whole dashboard shows
+  // the wrong month for a few hours, twice a month. Per-user is correct and
+  // unbuildable today, because no screen collects a timezone - docs/TODO.md
+  // carries it.
+  //
+  // Validated against the runtime's own zone list, so a typo fails at boot. It
+  // would otherwise fail silently: nothing crashes, the months are just off.
+  APP_TIMEZONE: Joi.string()
+    .custom((value: string, helpers) => {
+      try {
+        new Intl.DateTimeFormat('en-CA', { timeZone: value });
+        return value;
+      } catch {
+        return helpers.error('any.invalid');
+      }
+    }, 'IANA time zone')
+    .default('Europe/Zagreb'),
+
   // Where local database files live. Gitignored; the e2e suite points it at a
   // temp directory.
   DATABASE_DIR: Joi.string().default('./databases'),

@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -21,30 +23,81 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import type { SessionPrincipal } from '../auth/session.service';
 import { ApiErrorResponse } from '../common/decorators/api-error-response.decorator';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 import { TransactionResponseDto } from './dto/transaction-response.dto';
+import {
+  TransactionDetailResponseDto,
+  TransactionsResponseDto,
+} from './dto/transactions-response.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionsService } from './transactions.service';
 
 /**
- * The write half of the transaction feature. Reads - the list, the month
- * windows, the aggregates every screen is built from - belong to PET-28 and the
- * dashboard tickets, and none of them is stored: they are computed from these
- * rows on every read.
+ * The whole transaction feature, reads and writes.
+ *
+ * **Nothing either read returns is stored.** The period the list filters by and
+ * the category progress the detail read carries are computed per request from
+ * `transactions.date` against the caller's `monthStartDay`, which is what makes a
+ * backdated transaction land in its own month and a changed `monthStartDay`
+ * re-bucket history correctly. There is deliberately no month column to keep in
+ * step.
  *
  * No `@UseGuards` and no throttler. `SessionGuard` is global (see AppModule), so
  * these routes are protected by saying nothing at all; the bearer declaration is
  * class-level so it cannot drift route by route. Rate limiting is deliberately
- * absent: these are authenticated writes to the caller's own database, where the
- * budget an abuser would burn is their own.
+ * absent: these are authenticated reads and writes over the caller's own
+ * database, where the budget an abuser would burn is their own.
  *
- * Both 404s below are the same status for two different resources, which is why
- * each operation says out loud which one it means.
+ * **Route order is load-bearing.** `GET :id` must stay below any literal sibling
+ * path, or Nest matches `:id` against the literal first. There is no literal
+ * sibling today - PET-20's dashboard lives on its own path - so this is a note
+ * rather than a constraint, and it is written down because the failure is a 400
+ * from `ParseUUIDPipe` on a route that looks fine.
+ *
+ * Several 404s below are the same status for two different resources, which is
+ * why each operation says out loud which one it means.
  */
 @ApiTags('transactions')
 @ApiBearerAuth()
 @Controller('transactions')
 export class TransactionsController {
   constructor(private readonly transactions: TransactionsService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'List transactions.',
+    description:
+      'Every filter is optional. `period` defaults to `current`, so a call with no query string returns **this budgeting period only**, which is the view TRN-3 draws; pass `period=all` for history. `total` counts matches after filters - read it rather than the array length. There is no pagination: the whole filtered set comes back and the table scrolls.',
+  })
+  @ApiOkResponse({ type: TransactionsResponseDto })
+  @ApiErrorResponse(HttpStatus.BAD_REQUEST, HttpStatus.UNAUTHORIZED)
+  list(
+    @CurrentUser() user: SessionPrincipal,
+    @Query() query: ListTransactionsQueryDto,
+  ): Promise<TransactionsResponseDto> {
+    return this.transactions.list(user.userId, query);
+  }
+
+  // Below `@Get()` and below any literal path a future ticket adds here. See the
+  // class note.
+  @Get(':id')
+  @ApiOperation({
+    summary: 'One transaction, with the context frame 08 draws around it.',
+    description:
+      "Carries two extras on **different windows**, deliberately. `category` is that category's progress for the **current** period, even when this transaction is from an earlier one - the bar answers where the category stands now. `recentInCategory` is the latest transactions in the same category from **any** month, excluding this one. **404** here always means the id in the URL. Expect `category.status` to be `uncapped` most of the time: caps are optional and the preselected fallback has none.",
+  })
+  @ApiOkResponse({ type: TransactionDetailResponseDto })
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    HttpStatus.UNAUTHORIZED,
+    HttpStatus.NOT_FOUND,
+  )
+  detail(
+    @CurrentUser() user: SessionPrincipal,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<TransactionDetailResponseDto> {
+    return this.transactions.detail(user.userId, id);
+  }
 
   @Post()
   @ApiOperation({

@@ -4,6 +4,8 @@ import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CategoriesModule } from './categories/categories.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { SessionGuard } from './auth/session.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { envValidationSchema } from './config/env.validation';
@@ -38,6 +40,8 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     ProfileModule,
     TransactionsModule,
+    CategoriesModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [
