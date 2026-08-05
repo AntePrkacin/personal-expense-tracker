@@ -20,14 +20,31 @@ import { ACCESS_ROUTES } from './routes';
 
 type RouteKey = keyof typeof ACCESS_ROUTES;
 
-/** Routes with a page behind them today, which is now all of them. */
+/** Routes with a `page.tsx` behind them. */
 const BUILT = [
   'setup',
   'setupCategories',
   'setupRegister',
   'login',
   'checkEmail',
+  'verifyFailed',
 ] as const satisfies readonly RouteKey[];
+
+/**
+ * Routes answered by a `route.ts` instead, which PET-52 made a third case.
+ *
+ * A separate list rather than an exemption from `BUILT`, on the same reasoning that
+ * keeps `PENDING`: the check is only worth having if a new key cannot escape it, and
+ * "this one has a different filename" is exactly the sort of exception that quietly
+ * becomes "this one is unchecked". `/auth/verify` is a handler because the browser
+ * navigates to it from an email, and a Server Component could not write the session
+ * cookie it exists to set.
+ *
+ * This one matters more than the others rather than less. Its path is chosen by
+ * `backend/src/mail/login-link.template.ts`, so a rename here points every login email
+ * in production at a 404 with no other gate failing.
+ */
+const HANDLERS = ['verify'] as const satisfies readonly RouteKey[];
 
 /**
  * Routes declared for a screen nobody has built yet.
@@ -51,13 +68,13 @@ const NESTED_SETUP_KEYS = (Object.keys(ACCESS_ROUTES) as RouteKey[]).filter(
 );
 
 describe('ACCESS_ROUTES', () => {
-  it('classifies every declared route as built or pending', () => {
-    // The assertion that keeps the two lists honest. Adding a route to routes.ts
+  it('classifies every declared route as built, handled or pending', () => {
+    // The assertion that keeps the lists honest. Adding a route to routes.ts
     // now fails here until somebody says which list it belongs in, so a new
-    // route cannot quietly escape the page.tsx check below by not appearing in
-    // either. This is the case that made PET-10, PET-11 and PET-12 each *move* a
+    // route cannot quietly escape the file checks below by not appearing in
+    // any. This is the case that made PET-10, PET-11 and PET-12 each *move* a
     // key rather than delete a test.
-    expect([...BUILT, ...PENDING].sort()).toEqual(Object.keys(ACCESS_ROUTES).sort());
+    expect([...BUILT, ...HANDLERS, ...PENDING].sort()).toEqual(Object.keys(ACCESS_ROUTES).sort());
   });
 
   it.each(BUILT)('%s has a page.tsx behind it', (key) => {
@@ -66,6 +83,22 @@ describe('ACCESS_ROUTES', () => {
     const page = path.join(__dirname, '..', 'app', ACCESS_ROUTES[key], 'page.tsx');
 
     expect(fs.existsSync(page)).toBe(true);
+  });
+
+  it.each(HANDLERS)('%s has a route.ts behind it', (key) => {
+    // The same fs check with the other filename. A `page.tsx` here would compile, serve
+    // a screen, and never set the session cookie the whole route exists for.
+    const handler = path.join(__dirname, '..', 'app', ACCESS_ROUTES[key], 'route.ts');
+
+    expect(fs.existsSync(handler)).toBe(true);
+  });
+
+  it('answers the path the login email actually points at', () => {
+    // The one route in this file whose URL is not ours: it is built in
+    // `backend/src/mail/login-link.template.ts` as `${FRONTEND_URL}/auth/verify?token=`.
+    // Nothing can check the two repos agree, so this pins our half of it - a rename here
+    // would otherwise 404 every login email in production with every gate green.
+    expect(ACCESS_ROUTES.verify).toBe('/auth/verify');
   });
 
   it('gives every route an absolute path', () => {

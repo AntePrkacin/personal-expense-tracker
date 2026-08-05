@@ -80,4 +80,32 @@ export const ACCESS_ROUTES = {
    * whole URL, and a caller appending anything to it is reintroducing that leak.
    */
   checkEmail: '/check-email',
+  /**
+   * Where the emailed login link lands (PET-52, VER-1, VER-4). **A route handler, not a
+   * page** - the only key here that is.
+   *
+   * **This path is not ours to choose.** `backend/src/mail/login-link.template.ts` builds
+   * `${FRONTEND_URL}/auth/verify?token=<raw>`, so the folder answering it is a contract
+   * with another application rather than between two screens. It is declared here anyway
+   * so `routes.test.ts` can assert something answers it: change either side and every
+   * login email points at a 404, with no gate failing and nothing else noticing.
+   *
+   * Nothing in the frontend links to it, and nothing should - the token is the whole
+   * point of the URL, and a caller building one would need a credential it cannot have.
+   */
+  verify: '/auth/verify',
+  /**
+   * Where a link that did not work lands (PET-52, A38).
+   *
+   * **A38 designs no screen for this at all** - "no success landing, expired-link,
+   * already-used-link, or wrong-device screen" - only the instruction to handle them
+   * "with plain messages and a way to request a new link". So this is the one key here
+   * with no Figma frame behind it, and it borrows screen 24's card.
+   *
+   * Nested under `verify` rather than made a sibling, because the only thing that ever
+   * navigates here is that handler and the nesting says so. It takes a `?reason=`, which
+   * carries no personal data - the access-log argument that moved the address off
+   * `/check-email` and into a cookie does not apply to it.
+   */
+  verifyFailed: '/auth/verify/failed',
 } as const;
