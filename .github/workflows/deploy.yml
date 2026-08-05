@@ -55,40 +55,39 @@ jobs:
       - name: Deploy
         run: flyctl deploy --remote-only --ha=false
 
-      # `fly deploy` updates config but does NOT start a *stopped* machine, and
-      # auto_start_machines = false means Fly never starts it either - so a deploy
-      # onto a machine left stopped by a graceful-stop test reports success while
-      # the API stays down (the machines=1 started=0 this workflow first hit).
-      # Start it explicitly. `machine start` is idempotent - a no-op on an
-      # already-started machine - and blocks until the started state, so the
-      # assertion below reads the settled result. Only the single expected machine
-      # is started; a stray second one is caught by the count check, not woken.
-      - name: Start the machine
+      # `strategy = "immediate"` returns from `fly deploy` without waiting for the
+      # machine to finish restarting into the new release, so an immediate check
+      # races the replace: the first version of this job asserted `started` and saw
+      # started=0, and a naive `machine start` then hit "machine getting replaced,
+      # refusing to start". The machine comes back up on its own once the replace
+      # settles, so poll for it rather than forcing it. The count guard still
+      # catches a missed --ha (two machines). The start-if-stopped fallback covers
+      # a machine genuinely left stopped (auto_start_machines = false is off, so
+      # Fly will not start it), and `|| true` swallows the transient replace error
+      # while the VM is still swapping.
+      - name: Wait for exactly one started machine
         run: |
-          id="$(flyctl machine list --json | jq -r '.[0].id // empty')"
-          if [ -z "$id" ]; then
-            echo "::error::no machine found to start"
-            exit 1
-          fi
-          flyctl machine start "$id"
-
-      # A green deploy step is not enough: a missed --ha would leave two machines,
-      # and the start above could itself fail. Assert the invariant - exactly one
-      # machine, started - before going green.
-      - name: Assert exactly one started machine
-        run: |
-          machines="$(flyctl machine list --json)"
-          count="$(echo "$machines" | jq 'length')"
-          started="$(echo "$machines" | jq '[.[] | select(.state == "started")] | length')"
-          echo "machines=$count started=$started"
-          if [ "$count" -ne 1 ]; then
-            echo "::error::expected exactly one machine, found $count"
-            exit 1
-          fi
-          if [ "$started" -ne 1 ]; then
-            echo "::error::the machine is not in the started state"
-            exit 1
-          fi
+          for i in $(seq 1 40); do
+            machines="$(flyctl machine list --json)"
+            count="$(echo "$machines" | jq 'length')"
+            if [ "$count" -ne 1 ]; then
+              echo "::error::expected exactly one machine, found $count"
+              exit 1
+            fi
+            id="$(echo "$machines" | jq -r '.[0].id')"
+            state="$(echo "$machines" | jq -r '.[0].state')"
+            echo "attempt $i: id=$id state=$state"
+            if [ "$state" = "started" ]; then
+              echo "machine started"
+              exit 0
+            fi
+            if [ "$state" = "stopped" ]; then
+              flyctl machine start "$id" || true
+            fi
+            sleep 3
+          done
+          echo "::error::the machine did not reach the started state in time"
+          exit 1
 
       # Prove the deployed process actually serves. /api/hello is the one public,
       # DB-free route. The fly.dev hostname is used rather than the custom domain
