@@ -132,7 +132,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List transactions.
+         * @description Every filter is optional. `period` defaults to `current`, so a call with no query string returns **this budgeting period only**, which is the view TRN-3 draws; pass `period=all` for history. `total` counts matches after filters - read it rather than the array length. There is no pagination: the whole filtered set comes back and the table scrolls.
+         */
+        get: operations["TransactionsController_list"];
         put?: never;
         /**
          * Record a transaction.
@@ -152,7 +156,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * One transaction, with the context frame 08 draws around it.
+         * @description Carries two extras on **different windows**, deliberately. `category` is that category's progress for the **current** period, even when this transaction is from an earlier one - the bar answers where the category stands now. `recentInCategory` is the latest transactions in the same category from **any** month, excluding this one. **404** here always means the id in the URL. Expect `category.status` to be `uncapped` most of the time: caps are optional and the preselected fallback has none.
+         */
+        get: operations["TransactionsController_detail"];
         put?: never;
         post?: never;
         /**
@@ -326,30 +334,6 @@ export interface components {
              */
             email?: string;
         };
-        CreateTransactionDto: {
-            /**
-             * @description Major units (e.g. 12.50), stored as integer cents. Positive: this app
-             *     records spending, and direction is not a per-row choice.
-             */
-            amount: number;
-            /**
-             * Format: date
-             * @description The calendar day the money was spent, `YYYY-MM-DD`. Stored verbatim.
-             *
-             *     Backdating is ordinary and supported: the month a transaction belongs to is
-             *     derived from this at read time, so a date in a past month lands in that
-             *     month rather than the one it was entered in.
-             * @example 2026-08-03
-             */
-            date: string;
-            merchant: string;
-            /**
-             * Format: uuid
-             * @description An existing category of this user's. An unknown id is a 404, not a 400.
-             */
-            categoryId: string;
-            note?: string;
-        };
         TransactionResponseDto: {
             id: string;
             merchant: string;
@@ -370,24 +354,11 @@ export interface components {
              */
             updatedAt: string;
         };
-        UpdateTransactionDto: {
-            /** @description Major units, as on create. */
-            amount?: number;
-            /**
-             * Format: date
-             * @description `YYYY-MM-DD`, as on create. Inline regex for the `pattern` lift.
-             * @example 2026-08-03
-             */
-            date?: string;
-            /**
-             * @description The one nullable field, and so the one that keeps `@IsOptional()`: null is
-             *     a meaningful value here rather than a mistake, and it means "clear the
-             *     note".
-             */
-            note?: string | null;
-            merchant?: string;
-            /** Format: uuid */
-            categoryId?: string;
+        TransactionsResponseDto: {
+            /** @description Every matching transaction, in the requested sort order. */
+            transactions: components["schemas"]["TransactionResponseDto"][];
+            /** @description Matches after every filter, not the account total. Equal to `transactions.length` while there is no pagination; read this rather than the array length, so a future page size cannot silently turn the badge into a page count. */
+            total: number;
         };
         CategoryResponseDto: {
             /** Format: uuid */
@@ -420,6 +391,56 @@ export interface components {
              * @enum {string}
              */
             status: "on_track" | "near" | "full" | "over" | "uncapped";
+        };
+        TransactionDetailResponseDto: {
+            transaction: components["schemas"]["TransactionResponseDto"];
+            /** @description The transaction's category with its stats for the **current** period - not the period the transaction itself falls in. The bar answers where this category stands now. */
+            category: components["schemas"]["CategoryResponseDto"];
+            /** @description Up to 5 other transactions in the same category, newest first, from any month. Excludes the one in `transaction`. */
+            recentInCategory: components["schemas"]["TransactionResponseDto"][];
+        };
+        CreateTransactionDto: {
+            /**
+             * @description Major units (e.g. 12.50), stored as integer cents. Positive: this app
+             *     records spending, and direction is not a per-row choice.
+             */
+            amount: number;
+            /**
+             * Format: date
+             * @description The calendar day the money was spent, `YYYY-MM-DD`. Stored verbatim.
+             *
+             *     Backdating is ordinary and supported: the month a transaction belongs to is
+             *     derived from this at read time, so a date in a past month lands in that
+             *     month rather than the one it was entered in.
+             * @example 2026-08-03
+             */
+            date: string;
+            merchant: string;
+            /**
+             * Format: uuid
+             * @description An existing category of this user's. An unknown id is a 404, not a 400.
+             */
+            categoryId: string;
+            note?: string;
+        };
+        UpdateTransactionDto: {
+            /** @description Major units, as on create. */
+            amount?: number;
+            /**
+             * Format: date
+             * @description `YYYY-MM-DD`, as on create. Inline regex for the `pattern` lift.
+             * @example 2026-08-03
+             */
+            date?: string;
+            /**
+             * @description The one nullable field, and so the one that keeps `@IsOptional()`: null is
+             *     a meaningful value here rather than a mistake, and it means "clear the
+             *     note".
+             */
+            note?: string | null;
+            merchant?: string;
+            /** Format: uuid */
+            categoryId?: string;
         };
         AllocationResponseDto: {
             /** @description Major units, from your profile. */
@@ -730,6 +751,55 @@ export interface operations {
             };
         };
     };
+    TransactionsController_list: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring of the merchant name. Trimmed; an empty or whitespace-only term filters nothing. **Case-insensitive for ASCII only** - SQLite `LIKE` does not fold non-ASCII, so a merchant name with diacritics matches only on exact case. */
+                search?: string;
+                /**
+                 * @description One of your categories. An unknown id filters everything out rather than
+                 *     404ing - it is a filter, not a resource being addressed.
+                 */
+                categoryId?: string;
+                /** @description Resolved server-side from your `monthStartDay`, so the boundary is your budgeting period rather than the calendar month. `previous` is the period before the current one. `all` applies no date filter. */
+                period?: "current" | "previous" | "all";
+                /** @description Ties on `date` break on `createdAt` descending, then `id`, so the order is stable across requests rather than reshuffling for no visible reason. */
+                sort?: "date_desc" | "date_asc";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionsResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
     TransactionsController_create: {
         parameters: {
             query?: never;
@@ -749,6 +819,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransactionResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TransactionsController_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionDetailResponseDto"];
                 };
             };
             /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */

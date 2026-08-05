@@ -8,7 +8,12 @@ import { ConfigService } from '@nestjs/config';
 import { and, asc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { newId } from '../common/ids';
 import { fromCents, toCents } from '../common/money';
-import { monthWindow, todayIn, type MonthWindow } from '../common/month-window';
+import {
+  monthWindow,
+  previousMonthWindow,
+  todayIn,
+  type MonthWindow,
+} from '../common/month-window';
 import type { UserDatabase } from '../database/database.types';
 import { UserDatabaseService } from '../database/user-database.service';
 import {
@@ -61,6 +66,15 @@ interface CategoryWithSpend {
  * the caller's own database, so another user's category id simply does not exist
  * in it and the ordinary 404 covers the case. There is no `WHERE user_id = ?` to
  * forget, because there is no user column to have.
+ *
+ * **This is the app's only month aggregation, and other features compose it
+ * rather than repeat it.** `currentWindow`, `previousWindow` and `monthStatsFor`
+ * are public for exactly that: PET-28's transaction reads need a window to filter
+ * by and one category's stats for the detail screen, and PET-20's dashboard needs
+ * the same window again. `period` and `withSpend` behind them stay private so
+ * there is one copy of "resolve the window, then sum against it" - a second copy
+ * is how the Categories screen and the transaction detail would come to disagree
+ * the first time a threshold moved.
  *
  * **No `db.transaction()` anywhere in this file, deliberately** - including in
  * `remove`, which is the one operation with two writes. Both tables are in the
@@ -165,22 +179,19 @@ export class CategoriesService {
       throw new ConflictException(NO_RENAME_FALLBACK);
     }
 
-    const [updated] = await db
+    await db
       .update(categories)
       // Never sets `updatedAt` by hand: drizzle v1's buildUpdateSet applies
       // `$onUpdateFn` columns itself.
       .set(changes)
-      .where(and(eq(categories.id, id), isNull(categories.deletedAt)))
-      .returning();
+      .where(and(eq(categories.id, id), isNull(categories.deletedAt)));
 
-    const { window } = await this.period(db, userId);
-    const [spend] = await this.withSpend(db, window, id);
-
-    return toResponse({
-      row: updated,
-      spentCents: spend?.spentCents ?? 0,
-      transactionCount: spend?.transactionCount ?? 0,
-    });
+    // No `.returning()` above, because `monthStatsFor` selects the row again
+    // anyway and the two copies of "id to stats" this file used to hold are what
+    // PET-28 would have made a third of. The extra SELECT is the price of one
+    // copy, and it is also what turns a row deleted between `liveCategory` and
+    // this UPDATE into the ordinary 404 rather than a TypeError.
+    return this.monthStatsFor(userId, id);
   }
 
   /**
@@ -226,17 +237,89 @@ export class CategoriesService {
   }
 
   /**
+   * The budgeting period containing today, for callers outside this feature.
+   *
+   * A window, not a window and a budget: the transaction list filters by date
+   * and has no use for `monthlyBudget`, so handing it one would invite a second
+   * place to decide what a budget means.
+   */
+  async currentWindow(userId: string): Promise<MonthWindow> {
+    const db = await this.userDatabases.getUserDb(userId);
+    const { window } = await this.period(db, userId);
+
+    return window;
+  }
+
+  /**
+   * The window immediately before the current one.
+   *
+   * Resolved from `monthStartDay` and today rather than from the current
+   * window's bounds, because "one month before this window started" is calendar
+   * arithmetic `previousMonthWindow` already owns and subtracting a day count
+   * here would drift.
+   */
+  async previousWindow(userId: string): Promise<MonthWindow> {
+    const db = await this.userDatabases.getUserDb(userId);
+    const { monthStartDay, today } = await this.period(db, userId);
+
+    return previousMonthWindow(monthStartDay, today);
+  }
+
+  /**
+   * One category with its stats for the current period.
+   *
+   * The same three steps `list` runs for every category, narrowed to one. The
+   * transaction detail read calls this rather than computing `spent`, `cap`,
+   * `percentUsed` and `remaining` itself, which is what keeps the progress bar on
+   * frame 08 and the card on frame 13 reading the same number.
+   *
+   * The period is **always the current one**, even when the caller is looking at
+   * a transaction from an earlier month: the bar answers "where is this category
+   * now", which is what AC4 asks for and what DET-4's own "this month" title
+   * says.
+   *
+   * @throws NotFoundException if the id names no live category.
+   */
+  async monthStatsFor(
+    userId: string,
+    categoryId: string,
+  ): Promise<CategoryResponseDto> {
+    const db = await this.userDatabases.getUserDb(userId);
+    const { window } = await this.period(db, userId);
+    const [category] = await this.withSpend(db, window, categoryId);
+
+    // `withSpend` filters on `deleted_at IS NULL`, so this covers a tombstoned
+    // category as well as an unknown id - and, for the transaction detail, a
+    // dangling `category_id`. That last one is unreachable rather than tolerated:
+    // `remove` reassigns every transaction to the fallback before tombstoning.
+    if (!category) {
+      throw new NotFoundException(NO_CATEGORY);
+    }
+
+    return toResponse(category);
+  }
+
+  /**
    * The caller's budgeting period and monthly budget.
    *
    * "Today" is resolved in `APP_TIMEZONE`, not UTC: on the boundary day a
    * transaction logged just after local midnight would otherwise fall into the
    * previous period, and the whole screen would show the wrong month for a few
    * hours. A per-user timezone is the eventual fix (docs/TODO.md).
+   *
+   * `monthStartDay` and `today` come back alongside the window they produced, so
+   * `previousWindow` can derive a second window from the same profile read
+   * instead of taking one of its own.
    */
   private async period(
     db: UserDatabase,
     userId: string,
-  ): Promise<{ window: MonthWindow; monthlyBudgetCents: number }> {
+  ): Promise<{
+    window: MonthWindow;
+    monthStartDay: number;
+    today: string;
+    monthlyBudgetCents: number;
+  }> {
     const [row] = await db
       .select({
         monthStartDay: profile.monthStartDay,
@@ -253,11 +336,14 @@ export class CategoriesService {
       throw new Error(NO_PROFILE(userId));
     }
 
+    const today = todayIn(
+      this.config.get<string>('APP_TIMEZONE', 'Europe/Zagreb'),
+    );
+
     return {
-      window: monthWindow(
-        row.monthStartDay,
-        todayIn(this.config.get<string>('APP_TIMEZONE', 'Europe/Zagreb')),
-      ),
+      window: monthWindow(row.monthStartDay, today),
+      monthStartDay: row.monthStartDay,
+      today,
       monthlyBudgetCents: row.monthlyBudgetCents,
     };
   }

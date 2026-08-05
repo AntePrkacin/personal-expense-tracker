@@ -29,9 +29,18 @@ interface SpecResponse {
   content?: Record<string, { schema?: { $ref?: string } }>;
 }
 
+/** A query or path parameter, as the document describes it. */
+interface SpecParameter {
+  name: string;
+  in: string;
+  required?: boolean;
+  schema?: Record<string, unknown>;
+}
+
 interface SpecOperation {
   summary?: string;
   description?: string;
+  parameters?: SpecParameter[];
   responses: Record<string, SpecResponse>;
   requestBody?: { content: Record<string, { schema: { $ref: string } }> };
   security?: Record<string, string[]>[];
@@ -223,27 +232,33 @@ describe('openapi.json', () => {
     });
   });
 
-  describe('the transaction write endpoints', () => {
+  describe('the transaction endpoints', () => {
     const collection = () => spec.paths[`/${API_PREFIX}/transactions`];
     const item = () => spec.paths[`/${API_PREFIX}/transactions/{id}`];
 
-    it('declares exactly the three writes, and no reads yet', () => {
-      // Reads are PET-28's. If a GET appears here before that ticket, something
-      // was added without its aggregates being thought through.
-      expect(Object.keys(collection())).toEqual(['post']);
-      expect(Object.keys(item()).sort()).toEqual(['delete', 'patch']);
+    it('declares the two reads and the three writes, and nothing else', () => {
+      // This assertion used to read "and no reads yet", which is what caught
+      // PET-28 landing them - the point of pinning the operation set is that a
+      // sixth one cannot appear here without somebody updating this line.
+      expect(Object.keys(collection()).sort()).toEqual(['get', 'post']);
+      expect(Object.keys(item()).sort()).toEqual(['delete', 'get', 'patch']);
     });
 
     it.each([
+      ['list', () => collection().get, ['200', '400', '401']],
+      ['detail', () => item().get, ['200', '400', '401', '404']],
       ['create', () => collection().post, ['201', '400', '401', '404']],
       ['update', () => item().patch, ['200', '400', '401', '404']],
       ['delete', () => item().delete, ['204', '400', '401', '404']],
     ])('documents %s with exactly its own statuses', (_name, op, codes) => {
       expect(Object.keys(op().responses).sort()).toEqual(codes);
 
-      // 400 is reachable on all three: the two with a body validate it, and
-      // delete still has a ParseUUIDPipe on the id.
-      for (const status of ['400', '401', '404']) {
+      // Every declared error status points at the one error shape. Derived from
+      // `codes` rather than hardcoded, because the list is the one operation with
+      // no 404: `categoryId` there is a filter, so an id naming nothing simply
+      // matches nothing. 400 is reachable on all five - the three with a body or
+      // a query string validate it, and delete still has a ParseUUIDPipe.
+      for (const status of codes.filter((code) => code.startsWith('4'))) {
         expect(
           op().responses[status].content?.['application/json'].schema?.$ref,
         ).toBe(ERROR_REF);
@@ -253,9 +268,70 @@ describe('openapi.json', () => {
     it('requires the bearer on every one of them', () => {
       // Class-level `@ApiBearerAuth()`, so this is really pinning that the
       // decorator has not been lost from the controller as a whole.
-      for (const op of [collection().post, item().patch, item().delete]) {
+      for (const op of [
+        collection().get,
+        collection().post,
+        item().get,
+        item().patch,
+        item().delete,
+      ]) {
         expect(op.security).toEqual([{ bearer: [] }]);
       }
+    });
+
+    it('publishes the list filters as real enums, not as widened strings', () => {
+      // The failure this pins is silent and total: a widened `type: string`
+      // generates a frontend type accepting any text at all, and no build fails.
+      // Every enum in this spec is declared with an explicit `enum:` for that
+      // reason rather than left to the swagger plugin.
+      const byName = Object.fromEntries(
+        collection().get.parameters!.map((p) => [p.name, p.schema]),
+      );
+
+      expect(Object.keys(byName).sort()).toEqual([
+        'categoryId',
+        'period',
+        'search',
+        'sort',
+      ]);
+      expect(byName.period).toMatchObject({
+        enum: ['current', 'previous', 'all'],
+        default: 'current',
+      });
+      expect(byName.sort).toMatchObject({
+        enum: ['date_desc', 'date_asc'],
+        default: 'date_desc',
+      });
+      // Every one optional: an absent filter is absent, not a wildcard.
+      for (const parameter of collection().get.parameters!) {
+        expect(parameter.required).toBe(false);
+      }
+    });
+
+    it('returns the composed shapes from both reads, never a bare {}', () => {
+      expect(
+        collection().get.responses['200'].content?.['application/json'].schema
+          ?.$ref,
+      ).toBe('#/components/schemas/TransactionsResponseDto');
+      expect(
+        item().get.responses['200'].content?.['application/json'].schema?.$ref,
+      ).toBe('#/components/schemas/TransactionDetailResponseDto');
+
+      // The detail read embeds PET-35's category DTO rather than restating its
+      // fields. If this ever stops referencing it, the two screens have started
+      // describing the same category two ways.
+      //
+      // Read through `allOf`, which is not incidental: a `$ref` carrying a
+      // sibling `description` is illegal in OpenAPI 3.0, so the generator wraps
+      // it, and `openapi-typescript` unwraps it back to a plain
+      // `components["schemas"]["CategoryResponseDto"]`. Asserting the bare `$ref`
+      // form would fail the moment somebody documents the field.
+      const category = schema('TransactionDetailResponseDto').properties!
+        .category as { $ref?: string; allOf?: { $ref?: string }[] };
+
+      expect(category.$ref ?? category.allOf?.[0]?.$ref).toBe(
+        '#/components/schemas/CategoryResponseDto',
+      );
     });
 
     it('returns the transaction from create and update, and nothing from delete', () => {
