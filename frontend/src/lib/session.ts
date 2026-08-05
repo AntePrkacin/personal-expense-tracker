@@ -1,11 +1,9 @@
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 
-import { ACCESS_ROUTES } from '@/lib/routes';
 import type { components } from '@/types/api';
 
-// The session: the cookie PET-52 named, the one read behind it, and the two seams that
-// branch on it.
+// The session: the cookie PET-52 named, the one read behind it, and the seam that
+// branches on it.
 //
 // **The backend reads no cookies at all, by design.** So the credential lives in a
 // first-party cookie the frontend owns and is lifted into an `Authorization: Bearer
@@ -13,13 +11,19 @@ import type { components } from '@/types/api';
 // JavaScript, which is AC6 and is the whole reason the cookie is httpOnly and every
 // caller here is a Server Component or a route handler.
 //
-// The two exported seams are separate rather than one function because their callers
-// want opposite things from the same read. The `(app)` shell wants "let me through or
-// send me away" and answers nothing itself; `/`, `/login` and `/setup` want a plain fact
-// to branch on, because both of their destinations are legitimate. Collapsing them would
-// mean the shell duplicating a redirect or the other three catching one. What they do
-// share is `readSession()` below, which is the "give them a shared helper rather than
-// two fetches" the stubs asked for.
+// **There used to be a second seam here, `requireSession()`, and it is deliberately
+// gone.** It was the `(app)` shell's gate, and the shell also needed the profile - so it
+// made two guarded requests where the second already implied the first's answer, and
+// treating any absent profile as "not signed in" produced a redirect loop between
+// `/dashboard` and `/login`. `lib/profile.ts` now gates and reads in one call, which is
+// where that reasoning is written up. Nothing else ever called `requireSession()`, so
+// keeping it would have been an exported function with no consumer.
+//
+// What remains is the fact three routes outside the shell branch on. They want an answer
+// rather than a redirect, because both of their destinations are legitimate: `/` renders
+// Welcome or sends you to the Dashboard, and `/login` and `/setup` offer a flow or skip
+// it. `readSession()` below is the read behind it, kept separate from the exported
+// function so a future caller has to say which of the two it means.
 
 /**
  * The session cookie's name.
@@ -81,15 +85,17 @@ export function sessionCookieOptions(expiresAt: string) {
  * The one read both seams share. A missing cookie, a 401 and an unreachable backend are
  * all `null`, which is the same never-throw discipline `lib/backend.ts` sets and for the
  * same reason: a rejection inside a Server Component reaches the client as an opaque
- * digest that nothing can branch on, so the two callers below could not tell "signed
- * out" from "the network is down" - and both want to do the same thing either way.
+ * digest that nothing can branch on, so `hasSession()` could not tell "signed out" from
+ * "the network is down" - and it wants to do the same thing either way. Note this is the
+ * opposite call from `lib/profile.ts`, which does separate the two: that one gates the
+ * shell, where "could not ask" must not be answered by sending somebody to Log in.
  *
  * `cache: 'no-store'` is explicit. A session read Next decided to cache would keep
  * answering for a session that has since expired or been revoked, which is the one
  * response in this app that must never be served from a cache.
  *
- * Not exported: the two functions below are the surface, and a third caller wanting the
- * raw answer should say which of them it means.
+ * Not exported: `hasSession()` below is the surface, and a caller wanting the raw
+ * session should say so rather than reaching past it.
  */
 async function readSession(): Promise<Session | null> {
   const store = await cookies();
@@ -110,48 +116,17 @@ async function readSession(): Promise<Session | null> {
 
     return response.ok ? ((await response.json()) as Session) : null;
   } catch {
-    // Backend unreachable, DNS, or a dropped connection. Indistinguishable from signed
-    // out as far as both callers are concerned.
+    // Backend unreachable, DNS, a dropped connection, or a body that will not parse.
+    // Indistinguishable from signed out as far as this function's caller is concerned.
     return null;
   }
 }
 
 /**
- * Ensures the caller has a live session, or sends them to the access flow.
- *
- * This is PET-19's AC5 and PET-52's own: a request for a view without a valid session is
- * sent to 23 Log in rather than shown app data. Its one call site is
- * `app/(app)/layout.tsx`, so the whole shell is gated in one place.
- *
- * Returns the session, because the shell's one caller would otherwise have to read it
- * again to learn anything about who got through.
- *
- * **It does not clear a stale cookie, and that amends the specification this function
- * shipped with.** The stub's step 4 said "clear the cookie and redirect". It cannot: the
- * only caller is a layout, a Server Component, where `cookies()` is read-only and
- * `.delete()` throws `ReadonlyRequestCookiesError` at runtime with nothing in the types
- * to warn you - the same trap `lib/pendingEmail.ts` documents for `.set`. It also costs
- * almost nothing now that the cookie's own `maxAge` tracks `expiresAt`: an expired
- * session's cookie is gone from the browser before the backend would reject it. The only
- * state that leaves a live cookie holding a dead token is a manual revocation tombstone,
- * which `docs/TODO.md` describes as a hand-run operation with no user-facing path to it.
- * The cost is one wasted round trip per request until the cookie expires on its own.
- */
-export async function requireSession(): Promise<Session> {
-  const session = await readSession();
-
-  if (session === null) {
-    redirect(ACCESS_ROUTES.login);
-  }
-
-  return session;
-}
-
-/**
  * Whether the caller has a live session. Answers, never redirects.
  *
- * Three call sites, all of them routes outside the shell whose two destinations are both
- * legitimate: `app/page.tsx` renders 01 Welcome or sends a signed-in visitor to the
+ * The only exported seam left here, with three call sites, all of them routes outside
+ * the shell whose two destinations are both legitimate: `app/page.tsx` renders 01 Welcome or sends a signed-in visitor to the
  * Dashboard (VER-4), and `app/login/page.tsx` and `app/setup/layout.tsx` send one
  * onwards rather than offering a flow they have already finished.
  *

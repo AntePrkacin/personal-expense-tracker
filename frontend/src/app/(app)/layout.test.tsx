@@ -1,8 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import { redirect } from 'next/navigation';
 
 // Relative rather than the `@/lib/*` alias every other file uses, and it
-// has to be: `jest.mock('@/lib/session')` fails with "Cannot find module". A plain
+// has to be: `jest.mock('@/lib/profile')` fails with "Cannot find module". A plain
 // `import` through the alias works fine, which is what makes the failure confusing.
 //
 // This comment used to blame the parentheses of the `(app)` route group. It is not
@@ -15,44 +14,19 @@ import { redirect } from 'next/navigation';
 //
 // The relative path resolves to the same module, and Jest's registry keys on the
 // resolved path, so this still intercepts layout.tsx's own aliased import.
-import { readProfile } from '../../lib/profile';
-import { requireSession } from '../../lib/session';
+import { requireProfile } from '../../lib/profile';
 
 import AppLayout from './layout';
 
-// The shell layout's three jobs: gate the segment, fetch the footer's profile, and lay
-// the two columns out. The first two fail silently when dropped, which is why they are
-// asserted directly rather than through the markup alone.
+// The shell layout's two jobs: gate the segment and lay the two columns out. The gate is
+// one line whose deletion no rendering assertion would notice, so it is asserted
+// directly.
 //
 // SidebarNav is a client component that calls usePathname(), and jsdom has no
-// App Router, so the mock below is what lets the layout render here at all. `redirect`
-// joins it because the profile branch calls it.
-//
-// **The redirect mock throws, unlike the plain `jest.fn()` the other route suites use.**
-// The real one is typed `never` and throws NEXT_REDIRECT, which is what lets this layout
-// treat everything after the null check as unreachable and read `profile.firstName`
-// without a second guard. A mock that returns undefined would fall through into markup
-// the real app never reaches and fail on a TypeError, testing nothing.
-jest.mock('next/navigation', () => ({
-  usePathname: () => '/dashboard',
-  redirect: jest.fn(() => {
-    throw new Error('NEXT_REDIRECT');
-  }),
-}));
+// App Router, so the mock below is what lets the layout render here at all.
+jest.mock('next/navigation', () => ({ usePathname: () => '/dashboard' }));
 
-jest.mock('../../lib/session', () => ({
-  requireSession: jest.fn(),
-}));
-
-jest.mock('../../lib/profile', () => ({
-  readProfile: jest.fn(),
-}));
-
-const SESSION = {
-  userId: '0198c2a1-0000-7000-8000-000000000001',
-  email: 'marko@email.com',
-  expiresAt: '2026-09-04T10:00:00.000Z',
-};
+jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
 
 const PROFILE = {
   firstName: 'Ana',
@@ -65,8 +39,7 @@ const PROFILE = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (requireSession as jest.Mock).mockResolvedValue(SESSION);
-  (readProfile as jest.Mock).mockResolvedValue(PROFILE);
+  (requireProfile as jest.Mock).mockResolvedValue(PROFILE);
 });
 
 describe('the (app) segment configuration', () => {
@@ -82,19 +55,23 @@ describe('the (app) segment configuration', () => {
   });
 });
 
-describe('AC5: the shell is gated on a session', () => {
-  it('asks for one before rendering anything', async () => {
+describe('AC5: the shell is gated', () => {
+  it('asks for the profile before rendering anything', async () => {
+    // One call, not two. The gate and the footer data come from the same guarded read,
+    // which is what makes it impossible for them to disagree.
     render(await AppLayout({ children: null }));
 
-    expect(requireSession).toHaveBeenCalled();
+    expect(requireProfile).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves the redirect to requireSession rather than branching itself', async () => {
-    // The gate answers by redirecting, so a live session reaches here with nothing to
-    // decide. Two call sites deciding the same thing is how they come to disagree.
-    render(await AppLayout({ children: null }));
+  it('leaves both the redirect and the throw to requireProfile', async () => {
+    // Deliberately no branching here. The layout used to inspect a nullable profile and
+    // redirect on it, and that second opinion is exactly what produced a loop with
+    // /login. Anything this layout can see, requireProfile has already decided.
+    const failure = new Error('Could not load the profile: the backend did not answer.');
+    (requireProfile as jest.Mock).mockRejectedValue(failure);
 
-    expect(redirect).not.toHaveBeenCalled();
+    await expect(AppLayout({ children: null })).rejects.toThrow(/Could not load the profile/);
   });
 });
 
@@ -114,38 +91,6 @@ describe('the sidebar footer profile', () => {
 
     expect(screen.queryByText(/Marko/)).not.toBeInTheDocument();
     expect(screen.queryByText('marko@email.com')).not.toBeInTheDocument();
-  });
-
-  it('reads the profile concurrently with the gate', async () => {
-    // Both are issued before either is awaited, so the shell costs an extra request
-    // rather than an extra round trip. A sequential rewrite passes every other
-    // assertion here.
-    let profileStarted = false;
-    (requireSession as jest.Mock).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          setTimeout(() => resolve(SESSION), 0);
-        }),
-    );
-    (readProfile as jest.Mock).mockImplementation(() => {
-      profileStarted = true;
-      return Promise.resolve(PROFILE);
-    });
-
-    const rendered = AppLayout({ children: null });
-
-    expect(profileStarted).toBe(true);
-    render(await rendered);
-  });
-
-  it('sends a session with no profile back to Log in', async () => {
-    // A broken invariant rather than an empty state: verification writes the profile row
-    // before it clears the onboarding payload, so a verified session implies one. The
-    // alternative is a sidebar with holes where a name should be.
-    (readProfile as jest.Mock).mockResolvedValue(null);
-
-    await expect(AppLayout({ children: null })).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect).toHaveBeenCalledWith('/login');
   });
 });
 

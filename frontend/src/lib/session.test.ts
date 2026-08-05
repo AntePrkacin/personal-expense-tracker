@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { hasSession, requireSession, SESSION_COOKIE, sessionCookieOptions } from './session';
+import { hasSession, SESSION_COOKIE, sessionCookieOptions } from './session';
 
 // The module's first suite: `lib/session.ts` shipped as two documented stubs and was the
 // only file in `src/lib/` with no test beside it, because there was nothing yet to
@@ -183,52 +183,5 @@ describe('hasSession', () => {
     await hasSession();
 
     expect(redirect).not.toHaveBeenCalled();
-  });
-});
-
-describe('requireSession', () => {
-  it('returns the session for a live cookie', async () => {
-    expect(await requireSession()).toEqual(SESSION);
-  });
-
-  it('lets a live session through without redirecting', async () => {
-    await requireSession();
-
-    expect(redirect).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['no cookie', () => store(undefined)],
-    ['a 401', () => respondWith(401, {})],
-    [
-      'an unreachable backend',
-      () => {
-        global.fetch = jest
-          .fn()
-          .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
-      },
-    ],
-  ])('sends %s to Log in (AC5)', async (_label, arrange) => {
-    arrange();
-
-    // The mocked redirect does not throw, so the function returns past it; the assertion
-    // is on the call, which is the whole of the behaviour.
-    await requireSession();
-
-    expect(redirect).toHaveBeenCalledWith('/login');
-  });
-
-  it('does not try to clear the stale cookie', async () => {
-    // Amends the stub's own step 4. A Server Component's cookie jar is read-only and
-    // .delete() throws ReadonlyRequestCookiesError at runtime with nothing in the types
-    // to warn you. Pinned so nobody "completes" the spec and breaks the shell.
-    const get = jest.fn().mockReturnValue({ value: TOKEN });
-    const del = jest.fn();
-    (cookies as jest.Mock).mockResolvedValue({ get, delete: del });
-    respondWith(401, {});
-
-    await requireSession();
-
-    expect(del).not.toHaveBeenCalled();
   });
 });

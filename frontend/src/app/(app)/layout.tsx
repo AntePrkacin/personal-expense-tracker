@@ -1,8 +1,4 @@
-import { redirect } from 'next/navigation';
-
-import { readProfile } from '@/lib/profile';
-import { ACCESS_ROUTES } from '@/lib/routes';
-import { requireSession } from '@/lib/session';
+import { requireProfile } from '@/lib/profile';
 
 import { SidebarNav } from './SidebarNav';
 
@@ -26,26 +22,18 @@ import { SidebarNav } from './SidebarNav';
 // the export becomes a claim about nothing rather than a safeguard - which is the
 // condition `frontend/src/app/CLAUDE.md` set for deleting it.
 //
-// **Two reads, run concurrently.** The gate and the profile are different concerns with
-// different callers - `/`, `/login` and `/setup` want the gate and have no use for a
-// profile - so folding them into one guarded read would make `lib/session.ts` depend on
-// a Settings-shaped endpoint. `Promise.all` is what keeps that costing an extra request
-// rather than an extra round trip; `lib/profile.ts` records the trade in full.
+// **One read gates the shell and fills the footer**, because `GET /api/profile` is
+// guarded and so already answers "is this a live session" on its way to answering
+// "whose". This was briefly two - a session read for the gate and a profile read for the
+// data - and that had a redirect loop in it: a live session whose profile read failed
+// bounced to `/login`, which sends a signed-in visitor back to `/dashboard`. One read
+// cannot disagree with itself. `lib/profile.ts` records the whole of it.
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  // `requireSession()` redirects on its own when there is nothing live, which is AC5 and
-  // PET-19's long-deferred AC5 both. Its rejection propagates out of the Promise.all
-  // exactly as it would out of a bare await.
-  const [, profile] = await Promise.all([requireSession(), readProfile()]);
-
-  // A live session with no profile is a broken invariant rather than an empty state:
-  // verification inserts the row before it clears the onboarding payload, so a verified
-  // session implies one exists - which is why the backend answers 500 for a missing one
-  // rather than 404. Sending the user back to Log in is the only honest thing left; the
-  // alternative is a sidebar with holes where a name should be.
-  if (profile === null) {
-    redirect(ACCESS_ROUTES.login);
-  }
+  // Redirects to Log in when there is no live session, which is AC5 and PET-19's
+  // long-deferred AC5 both, and throws when the backend could not answer - deliberately
+  // not a redirect, because "we could not ask" is not "you are signed out".
+  const profile = await requireProfile();
 
   return (
     // `flex flex-1` rather than a height of its own: the root layout already

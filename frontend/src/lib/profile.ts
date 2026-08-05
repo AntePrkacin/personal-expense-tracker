@@ -1,66 +1,115 @@
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
+import { ACCESS_ROUTES } from '@/lib/routes';
 import { SESSION_COOKIE } from '@/lib/session';
 import type { components } from '@/types/api';
 
-// The signed-in user's own profile: the read that finally replaces the sidebar footer's
-// `PLACEHOLDER_PROFILE`, and the app's **first read of real data from the backend**.
+// The signed-in user's own profile, and the gate on the `(app)` shell - one read doing
+// both, because `GET /api/profile` is guarded and so already answers "is this a live
+// session" on its way to answering "whose".
 //
-// `GET /api/profile` is the endpoint PET-45 shipped, and it exists because the six
-// fields do not come from one place: the names, currency, budget and month start day
-// live in the per-user database's single `profile` row, while the email is the login
-// identifier on the central `users` row. The endpoint stitches them, which is exactly
-// the seam `PLACEHOLDER_PROFILE`'s comment describes and the reason the sidebar could
-// not be fixed by reading the session alone - `GET /api/auth/session` knows the email
-// and nothing about the names.
+// It is the app's **first read of real data from the backend**, and the endpoint PET-45
+// shipped. It exists because the six fields do not come from one place: the names,
+// currency, budget and month start day live in the per-user database's single `profile`
+// row, while the email is the login identifier on the central `users` row. The endpoint
+// stitches them, which is why the session read alone could never have fixed the sidebar -
+// `GET /api/auth/session` knows the email and nothing about the names.
 //
-// **A second read rather than folded into the gate, on purpose.** The shell therefore
-// makes two requests where this one alone would have satisfied both, since /api/profile
-// is guarded and a 401 from it means exactly "no live session". The two are separate
-// because they are different concerns and have different callers: `/`, `/login` and
-// `/setup` want the gate and have no use for a profile, and folding them would make
-// `lib/session.ts` depend on a Settings-shaped endpoint that three of its four callers
-// do not want. It is the same trade `backend/CLAUDE.md` accepts and documents for the
-// dashboard reading the profile row up to three times in one request. The layout runs
-// the two concurrently, so it costs a request rather than a round trip.
+// **This used to be two reads and a redirect, and that combination had a loop in it.**
+// The shell called `requireSession()` for the gate and then this for the data, treating
+// any absent profile as "send them to Log in". But a *live* session whose profile read
+// fails - a 500, a timeout, a restart mid-render - then bounced to `/login`, which
+// redirects a signed-in visitor to `/dashboard`, which bounced again: the whole app
+// unreachable until the backend settled, with no way to even reach the login screen. The
+// fix is this file distinguishing "not signed in" from "could not ask", and only the
+// first of those redirecting.
 
 /** What `GET /api/profile` answers. Read from the contract, never restated. */
 type Profile = components['schemas']['ProfileResponseDto'];
 
 /**
- * The signed-in user's profile, or `null` when there is no live session.
+ * Why a profile read did not produce a profile.
  *
- * The same cookie-plus-bearer shape as `lib/session.ts`'s own read, and the same
- * never-throw discipline: a missing cookie, a 401 and an unreachable backend are all
- * `null`, because a rejection inside a Server Component reaches the client as an opaque
- * digest nothing can branch on.
- *
- * **A `null` behind a live session is a broken invariant rather than an empty state.**
- * Verification inserts the profile row before it clears the onboarding payload, so a
- * verified session implies one exists - which is why the backend answers 500 rather than
- * 404 for a missing one, and why the caller redirects instead of rendering a sidebar
- * with holes in it.
- *
- * `cache: 'no-store'` for the reason the session read gives, plus one of its own: the
- * Settings form can change every field here, and a cached footer would keep showing the
- * old name.
+ * The distinction is the whole point rather than extra structure: the two failures want
+ * opposite handling. `unauthenticated` is an ordinary signed-out visitor and belongs in
+ * the access flow; `unavailable` is a backend that could not answer, where redirecting
+ * anywhere is a guess - and redirecting to `/login` specifically is the loop above.
  */
-export async function readProfile(): Promise<Profile | null> {
+type ProfileFailure = 'unauthenticated' | 'unavailable';
+
+type ProfileResult = { ok: true; profile: Profile } | { ok: false; reason: ProfileFailure };
+
+/**
+ * Reads the caller's profile, classifying failure.
+ *
+ * A **401 is the only status that means signed out**, because the route is guarded and
+ * the guard answers nothing else. Everything else - a 500 (the broken invariant of a
+ * verified session with no profile row), an unreachable backend, a body that will not
+ * parse - is `unavailable`: something is wrong that the user cannot fix by signing in
+ * again.
+ *
+ * `cache: 'no-store'` because the Settings form can change every field here, and a
+ * cached footer would keep showing the old name. It is also the rule
+ * `docs/agents/api-contract.md` sets for every read: the credential never leaves the
+ * server, so nothing about this response may be reused across requests.
+ */
+async function readProfile(): Promise<ProfileResult> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
 
   if (!token) {
-    return null;
+    return { ok: false, reason: 'unauthenticated' };
   }
 
   try {
     const response = await fetch(`${process.env.BACKEND_URL}/api/profile`, {
+      // Never forwarded as a cookie: the backend reads none, so the value moves into the
+      // header here, server-side, where the browser cannot see it happen.
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
 
-    return response.ok ? ((await response.json()) as Profile) : null;
+    if (response.status === 401) {
+      return { ok: false, reason: 'unauthenticated' };
+    }
+
+    if (!response.ok) {
+      return { ok: false, reason: 'unavailable' };
+    }
+
+    return { ok: true, profile: (await response.json()) as Profile };
   } catch {
-    return null;
+    // Unreachable backend, a dropped connection, or a body that would not parse. All
+    // "could not ask", none of them "not signed in".
+    return { ok: false, reason: 'unavailable' };
   }
+}
+
+/**
+ * The signed-in user's profile, or the access flow.
+ *
+ * **This is the `(app)` shell's gate as well as its data**, which is AC5 and PET-19's
+ * long-deferred AC5 both. One guarded read answers both questions, so there is no second
+ * request restating the first one's conclusion and no way for the two to disagree.
+ *
+ * **An `unavailable` backend throws rather than redirecting**, and that is the fix for
+ * the loop described at the top of this file. It surfaces through Next's error boundary,
+ * which a reload retries - the honest response to "we could not reach the backend", and
+ * one that terminates. Note the design draws no error screen anywhere (A19, A29), so what
+ * the reader sees is the framework's own; `docs/TODO.md` records that a custom `error.tsx`
+ * is a designer conversation rather than a gap this ticket could close.
+ */
+export async function requireProfile(): Promise<Profile> {
+  const result = await readProfile();
+
+  if (result.ok) {
+    return result.profile;
+  }
+
+  if (result.reason === 'unauthenticated') {
+    redirect(ACCESS_ROUTES.login);
+  }
+
+  throw new Error('Could not load the profile: the backend did not answer.');
 }
