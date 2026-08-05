@@ -1,6 +1,6 @@
 'use server';
 
-import { type AcceptedResult, postAccepted } from '@/lib/backend';
+import { postAccepted } from '@/lib/backend';
 import { readPendingEmail } from '@/lib/pendingEmail';
 import type { components } from '@/types/api';
 
@@ -15,12 +15,22 @@ import type { components } from '@/types/api';
 /**
  * What a resend reports back.
  *
- * `{ ok: false }` with no status covers both an unreachable backend and having no
- * address to resend to - the screen has one failure line either way, and the second
- * case is unreachable from the rendered UI anyway, since a screen with no address
- * shows a link back to Log in instead of this control.
+ * Three outcomes rather than two, because **"there is no address" is reachable while
+ * this screen is open** and needs different advice from a failure. The cookie carrying
+ * the address expires after fifteen minutes, and screen 24 is precisely the screen a
+ * user leaves open while waiting for mail - so a resend twenty minutes in finds nothing
+ * to send to. Told "please try again" the user would retry forever, on a screen whose
+ * only other exit was deliberately removed (AC6); told it has expired, they get the one
+ * control that does work.
+ *
+ * `reason` rather than a fabricated status: `lib/backend.ts` documents an absent status
+ * as meaning "the request never completed", so inventing a 410 the backend never sent
+ * would make that distinction a lie. Nothing here was requested of the backend at all.
  */
-export type ResendResult = AcceptedResult;
+export type ResendResult =
+  | { ok: true }
+  | { ok: false; reason: 'expired' }
+  | { ok: false; reason: 'failed'; status?: number };
 
 /**
  * Sends a fresh login link to the stashed address.
@@ -41,10 +51,12 @@ export async function resendLoginLink(): Promise<ResendResult> {
   const email = await readPendingEmail();
 
   if (!email) {
-    return { ok: false };
+    return { ok: false, reason: 'expired' };
   }
 
   const body: components['schemas']['RequestLoginLinkDto'] = { email };
 
-  return postAccepted('/api/auth/login-link', body);
+  const result = await postAccepted('/api/auth/login-link', body);
+
+  return result.ok ? { ok: true } : { ok: false, reason: 'failed', status: result.status };
 }

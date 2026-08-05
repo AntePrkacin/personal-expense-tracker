@@ -63,22 +63,23 @@ describe('resendLoginLink', () => {
     // reachable failure rather than an exotic one.
     respondWith(429);
 
-    expect(await resendLoginLink()).toEqual({ ok: false, status: 429 });
+    expect(await resendLoginLink()).toEqual({ ok: false, reason: 'failed', status: 429 });
   });
 
   it('reports a failure with no status when the backend is unreachable', async () => {
     const fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'));
     global.fetch = fetchMock as unknown as typeof fetch;
 
-    expect(await resendLoginLink()).toEqual({ ok: false });
+    expect(await resendLoginLink()).toEqual({ ok: false, reason: 'failed', status: undefined });
   });
 
   describe('with no address stashed', () => {
-    it('requests nothing', async () => {
-      // Unreachable from the rendered screen, which shows "Log in again" instead of this
-      // control when there is no address - but the action is reachable on its own, and a
-      // POST with an undefined email would be a guaranteed 400 for no reason.
+    beforeEach(() => {
       (readPendingEmail as jest.Mock).mockResolvedValue(null);
+    });
+
+    it('requests nothing', async () => {
+      // A POST with an undefined email would be a guaranteed 400 for no reason.
       const fetchMock = respondWith(202);
 
       await resendLoginLink();
@@ -86,11 +87,25 @@ describe('resendLoginLink', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('reports a plain failure', async () => {
-      (readPendingEmail as jest.Mock).mockResolvedValue(null);
+    it('says it expired rather than that the send failed', async () => {
+      // **Reachable while the screen is open**, which is the whole reason this is its own
+      // outcome: the address cookie lasts fifteen minutes and screen 24 is the one a user
+      // leaves open waiting for mail. Reported as a failure, the screen would tell them
+      // to try again forever - it has no other exit by design (AC6).
       respondWith(202);
 
-      expect(await resendLoginLink()).toEqual({ ok: false });
+      expect(await resendLoginLink()).toEqual({ ok: false, reason: 'expired' });
+    });
+
+    it('reports no status, because nothing was asked of the backend', async () => {
+      // lib/backend.ts documents an absent status as "the request never completed", so a
+      // fabricated 410 here would make that distinction a lie. Pinned as the reason this
+      // is a `reason` and not a status.
+      respondWith(202);
+
+      const result = await resendLoginLink();
+
+      expect(result).not.toHaveProperty('status');
     });
   });
 });

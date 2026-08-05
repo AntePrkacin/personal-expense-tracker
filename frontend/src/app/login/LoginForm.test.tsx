@@ -243,6 +243,21 @@ describe('the request, which the design draws no states for', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it('leaves the submit disabled after a success', async () => {
+    // The link is sent now, and the push takes a moment. Re-enabling would offer a
+    // second request that supersedes the link just emailed - the same call step 3 makes
+    // about a second registration. Nothing needs freezing here the way step 3 freezes
+    // its fields: this value lives in component state and nothing clears it.
+    const user = userEvent.setup();
+    render(<LoginForm sendLink={sendLink} />);
+
+    await user.type(emailField(), 'marko@email.com');
+    await user.click(loginButton());
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(loginButton()).toBeDisabled();
+  });
+
   it('re-enables the submit after a failure, so it can be retried', async () => {
     sendLink.mockResolvedValue({ ok: false, status: 500 });
     const user = userEvent.setup();

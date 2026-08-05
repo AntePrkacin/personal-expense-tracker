@@ -42,7 +42,7 @@ describe('the /check-email route', () => {
     expect(rendered.props.email).toBeNull();
   });
 
-  it('hands the resend action down', async () => {
+  it('hands the resend action down when there is an address', async () => {
     // The screen takes it as a prop so that nothing it imports reaches next/headers.
     // If this file stopped passing it, the button would throw on click with every
     // other test here still green.
@@ -51,5 +51,16 @@ describe('the /check-email route', () => {
     const rendered = await CheckEmail();
 
     expect(typeof rendered.props.resend).toBe('function');
+  });
+
+  it('hands down no action when there is no address', async () => {
+    // The screen's props are an exclusive union, so the combination that means nothing -
+    // an action with nothing to send to - is a build error rather than an ignored prop.
+    // This pins the call site's half of that.
+    (readPendingEmail as jest.Mock).mockResolvedValue(null);
+
+    const rendered = await CheckEmail();
+
+    expect(rendered.props.resend).toBeUndefined();
   });
 });

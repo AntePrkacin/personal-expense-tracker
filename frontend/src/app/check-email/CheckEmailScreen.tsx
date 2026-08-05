@@ -1,8 +1,7 @@
 import { AccessCard } from '@/components/AccessCard';
-import { Button } from '@/components/ui/Button';
-import { ACCESS_ROUTES } from '@/lib/routes';
 
 import type { ResendResult } from './actions';
+import { LogInAgain } from './LogInAgain';
 import { ResendLink } from './ResendLink';
 
 // 24 Check your email (node 134:1142), where both entry points end: "Finish setup" on
@@ -42,12 +41,27 @@ const SENT_SUFFIX = '. Open the link on this device to access your account.';
 const FALLBACK_COPY =
   "We've sent you a secure login link. Open the link on this device to access your account.";
 
-type CheckEmailScreenProps = {
-  /** The address submitted on 22 or 23, or `null` when there is none to name. */
-  email: string | null;
-  /** The resend server action. A prop so the story and the suite can pass a stub. */
-  resend: () => Promise<ResendResult>;
-};
+/**
+ * The address and, only if there is one, the action that resends to it.
+ *
+ * An **exclusive union**, the same `never` technique `ui/Button` uses for `href` versus
+ * `onClick` and for the same reason: it makes the combination that means nothing
+ * unrepresentable rather than merely unused. There is nothing to resend to without an
+ * address, so `resend` is required alongside one and rejected without one, and
+ * `npm run build` is what enforces it. The alternative - one required prop the null
+ * branch quietly ignores - type-checks a call that cannot do anything with what it was
+ * handed.
+ *
+ * The cost is that `page.tsx` narrows before rendering rather than spreading one object.
+ */
+type CheckEmailScreenProps =
+  | {
+      /** The address submitted on 22 or 23. */
+      email: string;
+      /** The resend server action. A prop so the story and the suite can pass a stub. */
+      resend: () => Promise<ResendResult>;
+    }
+  | { email: null; resend?: never };
 
 export function CheckEmailScreen({ email, resend }: CheckEmailScreenProps) {
   return (
@@ -69,23 +83,11 @@ export function CheckEmailScreen({ email, resend }: CheckEmailScreenProps) {
         </p>
       </div>
 
-      {email === null ? (
-        // Nothing to resend, so the one control is a way onwards instead of a dead one.
-        //
-        // **This amends AC6's wording**, which asks for "Resend link" to be the only
-        // action. A disabled Resend would satisfy that literally and leave a screen
-        // with no Back, no working control and no exit - reachable by nothing worse
-        // than a reload twenty minutes later - and a permanently disabled button
-        // announces as "Resend link, dimmed" with no reason given. What AC6 defends is
-        // that there is no way backwards into a form the user has already completed,
-        // and that still holds: this goes forward to Log in, which is where somebody
-        // whose link has gone stale belongs.
-        <div className="flex items-center justify-end pt-1.5">
-          <Button href={ACCESS_ROUTES.login} variant="secondary" label="Log in again" />
-        </div>
-      ) : (
-        <ResendLink resend={resend} />
-      )}
+      {/* Nothing to resend, so the one control is a way onwards instead of a dead one.
+          `LogInAgain` records why that amends AC6's wording, and `ResendLink` renders
+          the same control if the address expires while this screen is open - the two
+          states are one, reached at render time or after a click. */}
+      {email === null ? <LogInAgain /> : <ResendLink resend={resend} />}
     </AccessCard>
   );
 }

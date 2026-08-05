@@ -19,5 +19,12 @@ import { CheckEmailScreen } from './CheckEmailScreen';
 export default async function CheckEmail() {
   const email = await readPendingEmail();
 
-  return <CheckEmailScreen email={email} resend={resendLoginLink} />;
+  // Narrowed rather than spread, because `CheckEmailScreen`'s props are an exclusive
+  // union: there is nothing to resend to without an address, so the screen does not
+  // accept the action without one. That file records the reasoning.
+  return email === null ? (
+    <CheckEmailScreen email={null} />
+  ) : (
+    <CheckEmailScreen email={email} resend={resendLoginLink} />
+  );
 }

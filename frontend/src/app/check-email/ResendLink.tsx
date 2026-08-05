@@ -5,11 +5,12 @@ import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 
 import type { ResendResult } from './actions';
+import { LogInAgain } from './LogInAgain';
 
 // "Resend link" (VER-2), the only action screen 24 has (AC6).
 //
 // **The design draws no states for it at all** - A36 says outright that no cooldown,
-// counter or success confirmation exists - so the two below are ours, and they are the
+// counter or success confirmation exists - so the ones below are ours, and they are the
 // seventh and eighth details with no Figma counterpart. Without them a click has no
 // observable effect whatsoever: the request goes out, nothing on screen changes, and a
 // user with no way to tell whether it worked clicks again until the backend's
@@ -24,11 +25,12 @@ import type { ResendResult } from './actions';
 // This is the whole client boundary on screen 24. Everything else about the screen
 // renders on the server, which is what keeps the address out of client-side JavaScript.
 
-/** All three owing designer sign-off under A29, alongside PET-11's five and Log in's three. */
+/** All four owing designer sign-off under A29, alongside PET-11's five and Log in's three. */
 const MESSAGES = {
   sent: 'A new link is on its way.',
   failed: "We couldn't send a new link. Please try again.",
   throttled: 'Too many requests. Please wait a few minutes and try again.',
+  expired: 'This page has been open too long to resend.',
 } as const;
 
 type Outcome = keyof typeof MESSAGES;
@@ -42,15 +44,18 @@ type Outcome = keyof typeof MESSAGES;
  * no failing test. `components/ui/utilities.test.ts` compiles these.
  *
  * `failed` and `throttled` share a treatment on purpose - both are failures, and the
- * difference between them is what the sentence says, not how it looks. The success
- * line is `text-text-secondary` rather than a green: `status-success` means an
- * over-or-under-budget condition in this design system, and reaching for the hue
- * because it reads as "good" would say something the interface did not intend.
+ * difference between them is what the sentence says, not how it looks. `sent` and
+ * `expired` share the quieter one, because neither reports a fault: nothing broke when
+ * a cookie reached its own expiry, and the control below the line is the fix. The
+ * success line is `text-text-secondary` rather than a green, because `status-success`
+ * means an over-or-under-budget condition in this design system, and reaching for the
+ * hue because it reads as "good" would say something the interface did not intend.
  */
 export const RESEND_MESSAGE: Record<Outcome, string> = {
   sent: 'text-body-s text-text-secondary text-right',
   failed: 'text-body-s text-status-danger-text text-right',
   throttled: 'text-body-s text-status-danger-text text-right',
+  expired: 'text-body-s text-text-secondary text-right',
 };
 
 export function ResendLink({ resend }: { resend: () => Promise<ResendResult> }) {
@@ -73,6 +78,11 @@ export function ResendLink({ resend }: { resend: () => Promise<ResendResult> }) 
         return;
       }
 
+      if (result.reason === 'expired') {
+        setOutcome('expired');
+        return;
+      }
+
       // 429 is the one status worth distinguishing, because it is the only failure the
       // user can act on - and it is reachable precisely because A36 designs no
       // cooldown to prevent it.
@@ -80,17 +90,30 @@ export function ResendLink({ resend }: { resend: () => Promise<ResendResult> }) 
     });
   }
 
+  // Nothing left to resend, so the control becomes the one that does work rather than
+  // a button that will fail identically forever. Reached by waiting rather than by
+  // doing anything wrong: the address cookie expires after fifteen minutes and this is
+  // the screen a user leaves open while watching for mail.
+  //
+  // One accepted consequence, recorded rather than worked around: the button the user
+  // just pressed unmounts, so keyboard focus falls back to the document. The message
+  // carries `role="alert"` partly for that reason - it announces what replaced the
+  // control. Moving focus to the link would need focus management this repo has no
+  // pattern for yet; docs/TODO.md records it.
+  const expired = outcome === 'expired';
+
   return (
-    // The message sits above the button rather than beside it: the footer row is a
-    // fixed 49px on the frame with the button flush right, and a sibling line would
-    // either squeeze the button or push it off the designed position.
+    // The message sits above the control rather than beside it: the footer row is a
+    // fixed 49px on the frame with its control flush right, and a sibling line would
+    // either squeeze it or push it off the designed position.
     <div className="flex flex-col gap-3">
-      {/* `alert` for a failure and `status` for the success, which is the difference
-          between assertive and polite: a failed send interrupts, because the user has
-          to act on it, while "a new link is on its way" is exactly the kind of
-          confirmation that should wait for a pause in speech. `ui/Field` omits both,
-          for the reason PET-11 records - its message appears synchronously beside the
-          field the user just left, where these follow a network round trip with
+      {/* `alert` for anything that is not a success, and `status` for the success:
+          the difference between assertive and polite. A failed send interrupts because
+          the user has to act on it, and so does an expiry, because the control they
+          were using has just been replaced. "A new link is on its way" is exactly the
+          kind of confirmation that should wait for a pause in speech. `ui/Field` omits
+          both, for the reason PET-11 records - its message appears synchronously beside
+          the field the user just left, where these follow a network round trip with
           nothing else on screen changing. */}
       {outcome ? (
         <p role={outcome === 'sent' ? 'status' : 'alert'} className={RESEND_MESSAGE[outcome]}>
@@ -98,17 +121,19 @@ export function ResendLink({ resend }: { resend: () => Promise<ResendResult> }) 
         </p>
       ) : null}
 
-      {/* justify-end, not justify-between: this is the one access footer with a single
-          control, and node 134:1155 sits flush to the content box's right edge. */}
-      <div className="flex items-center justify-end pt-1.5">
-        <Button
-          type="button"
-          variant="secondary"
-          label="Resend link"
-          onClick={onClick}
-          disabled={pending}
-        />
-      </div>
+      {expired ? (
+        <LogInAgain />
+      ) : (
+        <div className="flex items-center justify-end pt-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            label="Resend link"
+            onClick={onClick}
+            disabled={pending}
+          />
+        </div>
+      )}
     </div>
   );
 }

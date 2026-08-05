@@ -95,6 +95,11 @@ export function LoginForm({ sendLink }: LoginFormProps) {
     // A bare path. The action stashed the address in an httpOnly cookie, which is what
     // keeps it out of the server's request log; screen 24 reads it back with
     // `cookies()`.
+    //
+    // `pending` deliberately stays true, the same call `RegisterForm` makes: the link is
+    // sent now, and the push takes a moment, so re-enabling would offer a second request
+    // that supersedes the link just emailed. Nothing needs freezing here the way step 3
+    // freezes its fields - this value lives in component state and nothing clears it.
     router.push(ACCESS_ROUTES.checkEmail);
   }
 

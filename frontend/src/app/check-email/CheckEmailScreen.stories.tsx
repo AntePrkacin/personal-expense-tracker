@@ -15,6 +15,9 @@ import { CheckEmailScreen } from './CheckEmailScreen';
 /** A stub, so clicking Resend in the story neither reaches the backend nor throws. */
 const resend = async () => ({ ok: true as const });
 
+/** The expiry the first story cannot reach on its own: fifteen minutes of waiting. */
+const expiredResend = async () => ({ ok: false as const, reason: 'expired' as const });
+
 const meta: Meta<typeof CheckEmailScreen> = {
   title: 'Screens/24 Check your email',
   component: CheckEmailScreen,
@@ -68,7 +71,28 @@ export const CheckYourEmail: Story = {
 export const NoAddress: Story = {
   render: () => (
     <div className="bg-surface-canvas flex h-[1024px] flex-col">
-      <CheckEmailScreen email={null} resend={resend} />
+      {/* No `resend` prop, and the props are an exclusive union so passing one here
+          would not compile: there is nothing to send to without an address. */}
+      <CheckEmailScreen email={null} />
+    </div>
+  ),
+};
+
+/**
+ * The same recovery, reached by waiting instead of by arriving without an address.
+ *
+ * Click "Resend link": the stub reports that the address cookie has expired, which is
+ * what happens fifteen minutes after arriving here with the tab still open. The control
+ * is replaced rather than left to fail identically forever - screen 24 has no Back by
+ * design, so a retry prompt here would be the one dead end on the screen.
+ *
+ * Worth opening because it is the one state neither Figma nor a quick click-through
+ * shows, and it is reached by doing nothing at all.
+ */
+export const ResendAfterExpiry: Story = {
+  render: () => (
+    <div className="bg-surface-canvas flex h-[1024px] flex-col">
+      <CheckEmailScreen email="marko@email.com" resend={expiredResend} />
     </div>
   ),
 };
