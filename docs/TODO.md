@@ -449,6 +449,25 @@ by a newer one, open the most recent email". If inbox confusion persists anyway,
 subject - appending a short local time is the usual trick - remains available, and costs
 only a slightly uglier subject line.
 
+### A real send can land in spam, despite correct DKIM
+
+Observed on 2026-08-05: a login email delivered to the project inbox (`spendifico@gmail.com`)
+landed in the inbox, the same email to a personal Gmail address landed in spam. Checked at the
+DNS level rather than by header, since the Gmail API this project can reach exposes no
+`Authentication-Results`: `ohmysmtp._domainkey.spendifico.eu` carries a real DKIM public key -
+MailPace's engine descends from OhMySMTP, hence the selector name - so DKIM is correctly
+configured and `docs/guides/email.md` step 1 is genuinely done. SPF
+(`v=spf1 include:_spf.porkbun.com ~all`) does not authorize MailPace, which is not a gap: without
+MailPace's "Advanced Verification" CNAME, sends carry a `Return-Path` on MailPace's own domain, so
+SPF authenticates there instead - and DMARC needs only one of SPF or DKIM aligned with the visible
+`From:`, which DKIM already satisfies (`d=spendifico.eu`). `_dmarc.spendifico.eu` is
+`v=DMARC1; p=none; sp=none;`, monitor-only.
+
+So authentication is not the cause. The likely one is plain sender reputation on a domain that has
+sent a handful of emails ever, which is largely orthogonal to DNS and improves with real volume
+over time - not something a repo config fixes. Worth knowing before reading a spam-foldered smoke
+test as a broken setup.
+
 ### In cloud mode the remote is a schema behind, briefly
 
 Observed on 2026-08-03 while smoke-testing verification against Turso Cloud: reading the
