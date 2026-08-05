@@ -260,7 +260,10 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
   });
 
   it('submits what was typed rather than what was seeded', async () => {
+    // Only steps 1 and 2's half is seeded; this screen's three fields are typed, the
+    // way a user who walked the flow would leave them.
     const user = userEvent.setup();
+    seed({ budget: '2,000', categories: ['Groceries'] });
     renderForm();
 
     await user.type(firstNameField(), 'Marko');
@@ -298,6 +301,52 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
     await waitFor(() => expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull());
   });
 
+  it('keeps the card filled while the next route loads', async () => {
+    // clearDraft re-renders this form synchronously, but the push it precedes takes
+    // a moment - so without freezing the values first, the user watches the card
+    // empty itself before the next screen arrives. Visible for as long as the
+    // navigation takes, which on PET-11 alone ends at a 404.
+    const user = userEvent.setup();
+    seed(FILLED);
+    renderForm();
+
+    await user.click(finishButton());
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
+    expect(firstNameField()).toHaveValue('Marko');
+    expect(emailField()).toHaveValue('marko@email.com');
+  });
+
+  it('cannot be typed back into once it has succeeded', async () => {
+    // The draft is gone by now, so an unguarded keystroke would write a fresh one
+    // holding a single field.
+    const user = userEvent.setup();
+    seed(FILLED);
+    renderForm();
+
+    await user.click(finishButton());
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+
+    await user.type(firstNameField(), 'X');
+
+    expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
+    expect(firstNameField()).toHaveValue('Marko');
+  });
+
+  it('leaves the submit disabled after a success', async () => {
+    // The account exists now. Re-enabling would offer a second registration of the
+    // same address while the next route loads.
+    const user = userEvent.setup();
+    seed(FILLED);
+    renderForm();
+
+    await user.click(finishButton());
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+
+    expect(finishButton()).toBeDisabled();
+  });
+
   it('clears the draft only after a success', async () => {
     register.mockResolvedValue({ ok: false, status: 429 });
 
@@ -309,6 +358,78 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(storedDraft()).toMatchObject({ email: 'marko@email.com', budget: '2,000' });
+  });
+});
+
+describe('the values steps 1 and 2 were supposed to collect', () => {
+  it('sends me back to step 1 rather than posting a budget that is not there', async () => {
+    // Reachable without a bug anywhere: the draft is per tab, so opening
+    // /setup/register in a new tab starts empty, and nothing gates the route. Before
+    // this guard, toRegisterBody produced monthlyBudget: NaN, JSON.stringify wrote
+    // it as null, and RegisterDto's @IsNumber answered 400 - surfaced as the generic
+    // failure message on a screen that cannot fix a budget.
+    const user = userEvent.setup();
+    seed({ ...FILLED, budget: '' });
+    renderForm();
+
+    await user.click(finishButton());
+
+    expect(register).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith('/setup');
+  });
+
+  it.each([
+    ['a bare zero', '0'],
+    ['zero with cents', '0.00'],
+    ['junk', 'abc'],
+  ])('treats %s the same way', async (_label, budget) => {
+    const user = userEvent.setup();
+    seed({ ...FILLED, budget });
+    renderForm();
+
+    await user.click(finishButton());
+
+    expect(register).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith('/setup');
+  });
+
+  it('keeps the draft so step 1 opens filled in and the names survive', async () => {
+    // The reason a redirect is enough on its own: nothing is lost by the detour.
+    const user = userEvent.setup();
+    seed({ ...FILLED, budget: '' });
+    renderForm();
+
+    await user.click(finishButton());
+
+    expect(storedDraft()).toMatchObject({
+      firstName: 'Marko',
+      lastName: 'Kovač',
+      email: 'marko@email.com',
+      categories: ['Groceries', 'Transport'],
+    });
+  });
+
+  it('still checks this screen s own fields first', async () => {
+    // Order matters: an empty form with an empty budget should say what is wrong
+    // here rather than silently bouncing to step 1.
+    const user = userEvent.setup();
+    seed({ ...FILLED, budget: '', firstName: '' });
+    renderForm();
+
+    await user.click(finishButton());
+
+    expect(screen.getByText('Enter your first name.')).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('lets an empty category selection through, because A4 allows it', async () => {
+    const user = userEvent.setup();
+    seed({ ...FILLED, categories: [] });
+    renderForm();
+
+    await user.click(finishButton());
+
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ categories: [] }));
   });
 });
 

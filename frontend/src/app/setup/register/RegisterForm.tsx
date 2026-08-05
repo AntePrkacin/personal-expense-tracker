@@ -7,7 +7,13 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ACCESS_ROUTES } from '@/lib/routes';
 
-import { isEmailValid, isNameValid, toRegisterBody } from '../draft';
+import {
+  isBudgetValid,
+  isEmailValid,
+  isNameValid,
+  type SetupDraft,
+  toRegisterBody,
+} from '../draft';
 import { useSetupDraft } from '../SetupDraftProvider';
 import type { RegisterResult } from './actions';
 
@@ -35,6 +41,9 @@ const EMAIL_ID = 'register-email';
 
 type FieldErrors = { firstName?: string; lastName?: string; email?: string };
 
+/** The three values as typed, kept on screen after the draft is cleared. */
+type ShownFields = Pick<SetupDraft, 'firstName' | 'lastName' | 'email'>;
+
 type RegisterFormProps = {
   /**
    * The register server action.
@@ -53,8 +62,18 @@ export function RegisterForm({ register }: RegisterFormProps) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitFailed, setSubmitFailed] = useState(false);
   const [pending, setPending] = useState(false);
+  // Set once, on the way out. clearDraft re-renders this form straight away while
+  // the navigation it precedes takes a moment, so without this the card visibly
+  // empties itself before the next screen arrives.
+  const [shown, setShown] = useState<ShownFields | null>(null);
+
+  const fields: ShownFields = shown ?? draft;
 
   function change(field: 'firstName' | 'lastName' | 'email', value: string) {
+    // Frozen means the register succeeded and we are navigating away; a keystroke
+    // landing here would write a new draft over the one just cleared.
+    if (shown !== null) return;
+
     patchDraft({ [field]: value });
     // Same rule as step 1: the message appears on submit and clears as soon as the
     // user starts fixing that field.
@@ -82,6 +101,23 @@ export function RegisterForm({ register }: RegisterFormProps) {
     setErrors(next);
     if (next.firstName || next.lastName || next.email) return;
 
+    // The two values this screen submits on behalf of steps 1 and 2 have to be
+    // checked too, and only the budget can be missing - an empty selection is
+    // legal (A4). Reachable without going through step 1 at all: the draft is per
+    // tab, so opening /setup/register in a new tab starts empty, and the route is
+    // not gated. Left unchecked, parseAmountInput('') is NaN, JSON.stringify turns
+    // that into null, and RegisterDto's @IsNumber rejects it - a 400 rendered as
+    // the generic message, on a screen with no way to fix what is actually wrong.
+    //
+    // Sent back to step 1 rather than given a message, because the design has no
+    // copy for a budget that went missing and step 1 is where it gets set. The
+    // draft survives the trip, so the two names and the email are still here on the
+    // way back.
+    if (!isBudgetValid(draft.budget)) {
+      router.push(ACCESS_ROUTES.setup);
+      return;
+    }
+
     const body = toRegisterBody(draft);
     setSubmitFailed(false);
     setPending(true);
@@ -93,8 +129,11 @@ export function RegisterForm({ register }: RegisterFormProps) {
       return;
     }
 
-    // Read the address off the body before clearing, not after. Ordering matters:
-    // clearDraft empties the store this component renders from.
+    // Freeze what is on screen, then clear. Read the address off the body rather
+    // than the draft, because the body holds the trimmed value that was actually
+    // submitted. `pending` deliberately stays true: the account exists now, so the
+    // button must not offer a second registration while the next route loads.
+    setShown({ firstName: draft.firstName, lastName: draft.lastName, email: draft.email });
     clearDraft();
     router.push(`${ACCESS_ROUTES.checkEmail}?email=${encodeURIComponent(body.email)}`);
   }
@@ -109,7 +148,7 @@ export function RegisterForm({ register }: RegisterFormProps) {
         <Input
           id={FIRST_NAME_ID}
           label="First name"
-          value={draft.firstName}
+          value={fields.firstName}
           onChange={(event) => change('firstName', event.currentTarget.value)}
           error={errors.firstName}
           required
@@ -117,7 +156,7 @@ export function RegisterForm({ register }: RegisterFormProps) {
         <Input
           id={LAST_NAME_ID}
           label="Last name"
-          value={draft.lastName}
+          value={fields.lastName}
           onChange={(event) => change('lastName', event.currentTarget.value)}
           error={errors.lastName}
           required
@@ -128,7 +167,7 @@ export function RegisterForm({ register }: RegisterFormProps) {
         id={EMAIL_ID}
         label="Email"
         type="email"
-        value={draft.email}
+        value={fields.email}
         onChange={(event) => change('email', event.currentTarget.value)}
         error={errors.email}
         required
