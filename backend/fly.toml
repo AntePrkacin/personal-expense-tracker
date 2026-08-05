@@ -76,19 +76,34 @@ swap_size_mb = 512
   internal_port = 3000
   force_https = true
 
-  # Never more than one machine. Note what these two do and do not buy:
-  # min_machines_running only governs autostart/autostop behaviour, so with
-  # autostop off it is documentation rather than enforcement - and neither key
-  # stops `fly deploy --ha` from adding a machine.
-  auto_stop_machines = "off"
+  # Stop the machine when the proxy sees no traffic, and start it again on the
+  # next request. This is a cost decision for a showcase that idles most of the
+  # day, and it is safe for two reasons worth stating, because the obvious
+  # reading is that it contradicts the single-instance rule.
+  #
+  # It does not create a second instance. Autostart starts *this* machine; it is
+  # `fly deploy --ha` and autoscaling that add a second replica set, and both are
+  # still refused.
+  #
+  # And it does not skip the flush. An autostop sends the kill_signal above and
+  # honours kill_timeout exactly as `fly machine stop` does, so
+  # onApplicationShutdown still pushes every replica before the process exits.
+  #
+  # "stop", never "suspend": suspend freezes the process instead of stopping it,
+  # so the shutdown hook never runs and locally-committed writes stay unpushed in
+  # frozen memory. Faster to resume, wrong trade for this app.
+  #
+  # The price is a cold start on the first request after an idle period - about
+  # nine seconds, most of it Node booting and the central replica opening.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
 
-  # Deliberately false. An autostart would put a cold central-replica bootstrap
-  # pull on some user's request, and false is what makes `fly machine stop` stay
-  # stopped so the graceful-shutdown check is deterministic rather than racing
-  # the next health probe. The cost is honest: a machine that stops unnoticed
-  # stays down until someone runs `fly machine start`.
-  auto_start_machines = false
-  min_machines_running = 1
+  # Zero, so the machine is actually allowed to stop. Note this is what makes
+  # `fly machine stop` non-deterministic as a test: any request now wakes the
+  # machine back up. To exercise the graceful-stop check deliberately, set
+  # auto_start_machines = false first, or read the flush out of `fly logs` after
+  # an idle autostop instead.
+  min_machines_running = 0
 
 [[http_service.checks]]
   interval = "30s"
@@ -112,6 +127,11 @@ swap_size_mb = 512
 [[mounts]]
   source = "spendifico_data"
   destination = "/data"
+  # 1GB, which is Fly's minimum and still enormous here: the central database is
+  # a few KB and each user replica a few hundred. Sized down from 3GB once the
+  # real usage was visible. Volumes can only be EXTENDED, never shrunk, so
+  # getting this wrong upward means destroy and recreate - cheap only because the
+  # volume holds a replica that connectSync re-pulls, never the system of record.
   # initial_size is deliberately omitted: the volume is created explicitly before
   # the first deploy, so a failure provisioning it cannot be mistaken for a
   # failure deploying. A volume also cannot move between orgs, so it is worth

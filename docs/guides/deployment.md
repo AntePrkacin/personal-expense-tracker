@@ -15,8 +15,8 @@ The frontend's own Vercel setup is in [`../../frontend/README.md`](../../fronten
 | Fly app | `spendifico-api`, in the `spendifico` organization |
 | URL | `https://spendifico-api.fly.dev` |
 | Region | `lhr`, chosen to sit near the Turso group in `aws-eu-west-1` |
-| Machine | One, `shared-cpu-1x` with 512MB and 512MB of swap |
-| Volume | `spendifico_data`, 3GB, encrypted, mounted at `/data` |
+| Machine | One, `shared-cpu-1x` with 512MB and 512MB of swap. Stops when idle |
+| Volume | `spendifico_data`, 1GB, encrypted, mounted at `/data` |
 | Config | `backend/fly.toml`, `backend/Dockerfile`, `backend/.dockerignore` |
 
 Everything runs from `backend/`, because that is the build context and where `fly.toml` lives.
@@ -56,7 +56,9 @@ cd backend && fly config validate --strict
 
 # 3. The volume. The region must match primary_region or the machine cannot
 #    attach it. Scheduled snapshots are on by default, 5-day retention.
-fly volumes create spendifico_data --region lhr --size 3
+#    1GB is Fly's minimum and still far more than this app needs. Size up rather
+#    than down if unsure: volumes can be EXTENDED but never shrunk.
+fly volumes create spendifico_data --region lhr --size 1
 
 # 4. The secrets, in ONE command. See the warning below.
 fly secrets import        # then paste NAME=VALUE lines, or pipe them in
@@ -126,7 +128,10 @@ fly machine stop <id>          # BARE. Never pass --timeout
 ```
 
 `fly machine stop --timeout` overrides `kill_timeout` for that stop, which would make this test
-prove nothing. Look for both bracket lines:
+prove nothing. Note that with autostop on, `auto_start_machines` is `true`, so any request - a
+browser tab, a curl - wakes the machine straight back up. Either set `auto_start_machines = false`
+for the duration of the test, or read the flush out of the logs after an ordinary idle autostop,
+which exercises the same path. Look for both bracket lines:
 
 ```text
 INFO Sending signal SIGINT to main child process w/ PID 657
@@ -155,6 +160,26 @@ fly ssh console --command "ls /app/drizzle"     # must list central and user
 **6. The engine of a newly provisioned user database.** `turso db list`, and the `TYPE` column
 must read `Turso`, not `SQLite`. Getting this wrong is silent and the only remedy is deleting the
 database. Note the CLI cannot address a per-user database beyond `list`; use the Turso MCP server.
+
+## Idling and cold starts
+
+The machine stops when Fly's proxy sees no traffic, and starts again on the next request. That is
+a cost decision for a showcase, and it costs a **cold start of about nine seconds** on the first
+request after an idle period - Node booting, then the central replica opening and migrating. Later
+requests are warm.
+
+Two things this deliberately does not do. It does not create a second instance: autostart starts
+*the* machine, while a second replica set only comes from `--ha` or autoscaling. And it does not
+skip the shutdown flush - an autostop sends the configured `kill_signal` and honours
+`kill_timeout`, so writes are pushed exactly as they are on a manual stop.
+
+`"suspend"` would resume faster by freezing the process instead of stopping it, but the shutdown
+hook never runs, so locally-committed writes stay unpushed in frozen memory. `"stop"` is the right
+trade here.
+
+To pin the machine on - before a demo, say - set `min_machines_running = 1` and
+`auto_stop_machines = "off"`, then deploy. To confirm what the platform actually applied, use
+`fly config show`.
 
 ## Rolling back
 
@@ -191,11 +216,22 @@ until the session cookie lands.
 
 ## Costs
 
-Pay As You Go, with no fixed plan and **no hard spend cap by default**. Roughly $3.32/month for
-the machine running continuously plus $0.45/month for the 3GB volume, plus egress. The volume
-bills on provisioned capacity even while the machine is stopped. Nothing structurally prevents a
-mistake - a larger VM, a second machine, an egress spike - from costing more, so a budget alert on
-the organization is worth setting.
+Pay As You Go, with no fixed plan and **no hard spend cap by default**.
+
+The volume is the only guaranteed charge: **$0.15/month** for 1GB, billed on provisioned capacity
+even while the machine is stopped. The machine bills only for the time it actually runs, which
+with autostop is a small fraction of the day for a showcase - against roughly $3.32/month had it
+run continuously. Egress is extra.
+
+Nothing structurally prevents a mistake - a larger VM, a second machine from a missing
+`--ha=false`, an egress spike - from costing more, so a budget alert on the organization is worth
+setting.
+
+Two levers if it ever needs to be cheaper. Dropping the machine to 256MB would save roughly
+$1.34/month of running time, but measured idle RSS is **119MB with no user databases open**, and
+`UserDatabaseService.connections` never evicts - so 256MB (about 210MB usable) leaves little room,
+and the failure mode is an OOM kill, which skips the shutdown flush and loses writes silently.
+With autostop on, that saving is mostly moot anyway. The volume cannot go below 1GB.
 
 ## Not automated yet
 

@@ -304,6 +304,16 @@ machine, and no setting in `fly.toml` overrides it. A volume can only attach to 
 the platform partly enforces the rule, but relying on that rather than on the flag is relying on
 an accident.
 
+**Autostop is not a breach of that rule, which is worth stating because it reads like one.** The
+machine stops when idle and starts on the next request, and both are operations on _the_ one
+machine - it is `--ha` and autoscaling that create a second replica set. The stop also runs the
+full shutdown path rather than skipping it, because an autostop sends the configured
+`kill_signal` and honours `kill_timeout`. That is also why the mode is `"stop"` and not
+`"suspend"`: suspend freezes the process, so the shutdown hook never runs and locally-committed
+writes stay unpushed in frozen memory. The cost is a cold start of about nine seconds, paid by
+whoever sends the first request after an idle period, and it is accepted because this is a
+showcase rather than something with an availability target.
+
 **The kill timeout is raised far past Fly's default of 5 seconds** because
 `DatabaseModule.onApplicationShutdown` closes every open user replica and then the central one,
 each `close()` doing a final `push()` over the network, with no timeout of its own. That final
