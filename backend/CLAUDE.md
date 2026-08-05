@@ -352,6 +352,21 @@ which is also true of CORS and the Swagger setup, and it cannot move into `AppMo
 repo puts globals so e2e sees them) because it needs the HTTP adapter that exists only after
 `NestFactory.create`.
 
+**The count is exact, and it shipped wrong once.** Fly's deployed value is 2, not the 1 that first
+went out - discovered when a phone tether got a 429 against an already-exhausted bucket, meaning
+every caller was landing in one shared one regardless of source. Captured via a throwaway
+diagnostic route echoing the raw `X-Forwarded-For` Fly delivers, then confirmed by replaying it
+offline through the same Express/proxy-addr stack: a direct client with nothing in front already
+produces two addresses, `<real client>, <this app's own IP>`, because Fly's internal routing
+appends the app's own address before the request reaches the machine. Numeric trust proxy counts
+hops from the **server** end of the chain, which is what makes an exact value safe rather than
+merely convenient: replaying a client-forged `X-Forwarded-For` prefix through the same stack, 2
+correctly ignores it - a client can only push its own junk further left, never move the boundary -
+while 3 or higher trusts the forged entry as if it were real, reopening the exact hole this
+variable exists to close. So the number tracks Fly's real topology, not a margin of safety; see
+`backend/fly.toml`'s comment on `TRUST_PROXY_HOPS` and `docs/guides/deployment.md`'s per-IP
+verification step for the check that catches a regression here.
+
 **The deploy is manual, and that order was deliberate.** Automating it is PET-55. Automating
 before a manual `fly deploy` had ever succeeded would make a red CI run indistinguishable from a
 bad `fly.toml`, a bad Dockerfile or a missing secret.

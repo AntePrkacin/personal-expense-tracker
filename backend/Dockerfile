@@ -41,8 +41,9 @@ COPY --from=builder /app/dist ./dist
 # instead - at central open, or on a new user's first authenticated request.
 COPY --from=builder /app/drizzle ./drizzle
 
-# Documentation only; Fly routes to fly.toml's internal_port. Keep the three in
-# step: this, internal_port, and PORT in fly.toml's [env].
+# Documentation only; Fly routes to fly.toml's internal_port, and the app's own
+# port comes from the Joi default (3000), not an [env] entry - see fly.toml.
+# Keep this and internal_port in step if either ever moves.
 EXPOSE 3000
 
 # Not `npm start`, which is `nest start` and needs the Nest CLI from

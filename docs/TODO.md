@@ -523,9 +523,17 @@ instance**: two instances give an attacker twice the budget. Same single-instanc
 assumption as the migration lock below, and one more reason the deployment runs exactly one
 machine.
 
-The proxy half of this entry is resolved: `TRUST_PROXY_HOPS` now tells Express how many
-hops to trust, and the Fly deployment sets it. See `docs/guides/configuration.md` for the
-value and `backend/CLAUDE.md` for why it is a hop count rather than a boolean.
+The proxy half of this entry is resolved, but not on the first try: `TRUST_PROXY_HOPS` shipped
+as `1`, and a phone-tether check against an exhausted bucket got 429 - proof every caller was
+still landing in one shared bucket. Fly's real topology puts two hops in front of the app for a
+direct client (the real address, then the app's own IP, appended by Fly's internal routing
+before the request reaches the machine), confirmed by capturing the raw header through a
+throwaway diagnostic route and replaying it offline against the same Express stack. The value is
+now `2`, and it is exact rather than a safe margin: replaying a client-forged prefix through the
+same stack showed 2 correctly ignores it while 3 or higher trusts it, so raising this number
+"to be safe" does the opposite. See `backend/CLAUDE.md` for why it is a hop count rather than a
+boolean and the full replay methodology, `backend/fly.toml`'s comment for the value, and
+`docs/guides/deployment.md`'s per-IP check for how to catch a regression here.
 
 ### Token rotation is manual
 

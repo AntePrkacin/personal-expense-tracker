@@ -159,6 +159,25 @@ fly ssh console --command "ls /app/drizzle"     # must list central and user
 must read `Turso`, not `SQLite`. Getting this wrong is silent and the only remedy is deleting the
 database. Note the CLI cannot address a per-user database beyond `list`; use the Turso MCP server.
 
+**7. The per-IP throttle is per caller, not per deployment.** This one shipped wrong once, so it
+earns its own check rather than trust. From one network, exhaust the bucket with distinct unknown
+addresses (`login-link` sends nothing for an address that does not exist, so this is safe to run
+against production):
+
+```sh
+for i in $(seq 1 31); do
+  curl -s -o /dev/null -w '%{http_code} ' -X POST https://api.spendifico.eu/api/auth/login-link \
+    -H 'Content-Type: application/json' -d "{\"email\":\"throttle-check-$i@example.com\"}"
+done
+```
+
+Expect 30 × `202` then `429`. Then, from a **second network** (a phone tether is enough - not a
+second browser tab, which shares the same source address), send one more request the same way.
+**202** means the per-caller key works. **429** means `TRUST_PROXY_HOPS` is not resolving the real
+caller, and every request everywhere is landing in one shared bucket - exactly what shipped
+initially with the value set to `1`. See `backend/fly.toml`'s comment on that variable for how the
+correct value was determined and why it must be exact rather than a safe-feeling guess.
+
 ## The machine runs continuously, and autostop was rejected
 
 `auto_stop_machines = "off"`, so responses are always warm (~200ms) and there is never a cold

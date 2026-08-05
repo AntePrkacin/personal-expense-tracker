@@ -56,8 +56,11 @@ swap_size_mb = 512
   strategy = "immediate"
 
 [env]
-  # Must agree with internal_port below - the one duplicated number in this file.
-  PORT = "3000"
+  # PORT deliberately NOT set here. The Joi schema defaults it to 3000, which is
+  # also internal_port below - restating it would be one fact with two homes that
+  # must always agree, and disagreeing means the app listens somewhere Fly's
+  # proxy never routes to, failing the health check with nothing in the app logs
+  # to explain why. Change internal_port and PORT together if either ever moves.
 
   # On the mounted volume, so replicas survive a restart. Absolute, because the
   # ./databases default is resolved from the process cwd.
@@ -89,11 +92,34 @@ swap_size_mb = 512
   MAIL_FROM = "login@spendifico.eu"
   MAIL_FROM_NAME = "Spendifico"
 
-  # One reverse proxy in front of us, Fly's. At 0 the per-IP auth throttler keys
-  # on the proxy's own address, so every caller shares one bucket and
-  # AUTH_RATE_IP_LIMIT becomes a global cap on the auth routes instead of a
-  # per-caller one.
-  TRUST_PROXY_HOPS = "1"
+  # TWO hops, not one - empirically determined on 2026-08-05 after "1" shipped
+  # and demonstrably failed: a phone tether got 429 against an already-exhausted
+  # bucket, proving every caller was landing in one shared bucket rather than
+  # each getting their own.
+  #
+  # Captured the real X-Forwarded-For Fly delivers to this app via a throwaway
+  # diagnostic route, then replayed it offline through the same Express/proxy-addr
+  # stack the app uses. For a direct client with no external proxy, the header
+  # already carries TWO addresses - `<real client>, <this app's own assigned
+  # IP>` - because Fly's internal routing appends the app's own address as it
+  # hands the request to the machine. Express's numeric trust proxy counts
+  # trusted hops from the SERVER end of the chain, so "1" strips only the
+  # rightmost entry (the app's own IP, a constant) and resolves every request to
+  # that same constant - the exact one-shared-bucket failure. "2" strips both
+  # and correctly resolves the real client.
+  #
+  # This number is exact, not a safe-ish estimate, and getting it wrong in
+  # either direction reopens a hole: confirmed by replaying a client-forged
+  # X-Forwarded-For prefix (e.g. attacker-IP prepended to the real chain)
+  # through the same stack. At 2 the forged entry is correctly ignored either
+  # way - trust proxy counts from the server end, so a client can only push its
+  # own junk further left, never move the boundary. At 3 or higher, the same
+  # forged prefix is trusted as if it were the real client, letting anyone pick
+  # their own rate-limit bucket - reopening the exact hole TRUST_PROXY_HOPS
+  # exists to close. So this value tracks Fly's own topology, not a margin of
+  # safety: raise it only if Fly's request path is confirmed to have gained a
+  # hop, never as a guess.
+  TRUST_PROXY_HOPS = "2"
 
 [http_service]
   internal_port = 3000
