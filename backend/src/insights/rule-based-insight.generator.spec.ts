@@ -1,0 +1,318 @@
+import type { ConfigService } from '@nestjs/config';
+import type { CategoriesService } from '../categories/categories.service';
+import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
+import { queryChain } from '../../test/query-chain';
+import type { UserDatabaseService } from '../database/user-database.service';
+import type { TransactionResponseDto } from '../transactions/dto/transaction-response.dto';
+import type { TransactionsService } from '../transactions/transactions.service';
+import { RuleBasedInsightGenerator } from './rule-based-insight.generator';
+
+/**
+ * The four content rules and the summary, over mocked composition surfaces.
+ *
+ * `CategoriesService` and `TransactionsService` are mocked rather than composed,
+ * the same reason the dashboard spec mocks them: the arithmetic under test is the
+ * generator's, and a mock returning a fixture is the whole assertion. The clock
+ * is faked because the projection and days-left figures read `today` through
+ * `todayIn`. Money renders in USD unless a currency fixture says otherwise.
+ */
+describe('RuleBasedInsightGenerator', () => {
+  const USER_ID = 'user-1';
+
+  let generator: RuleBasedInsightGenerator;
+  let currentWindow: jest.Mock;
+  let previousWindow: jest.Mock;
+  let categoriesList: jest.Mock;
+  let transactionsList: jest.Mock;
+
+  const category = (
+    overrides: Partial<CategoryResponseDto> = {},
+  ): CategoryResponseDto => ({
+    id: 'cat-1',
+    name: 'Groceries',
+    color: '#57B368',
+    icon: null,
+    note: null,
+    isFallback: false,
+    monthlyCap: null,
+    spent: 0,
+    transactionCount: 0,
+    percentUsed: null,
+    remaining: null,
+    over: null,
+    status: 'uncapped',
+    ...overrides,
+  });
+
+  const tx = (
+    overrides: Partial<TransactionResponseDto> = {},
+  ): TransactionResponseDto => ({
+    id: 'tx-1',
+    merchant: 'Konzum',
+    categoryId: 'cat-1',
+    amount: 10,
+    date: '2025-10-10',
+    note: null,
+    createdAt: '2025-10-10T10:00:00.000Z',
+    updatedAt: '2025-10-10T10:00:00.000Z',
+    ...overrides,
+  });
+
+  /** Builds the generator over the given data, defaulting to October 2025. */
+  const build = (options?: {
+    window?: { start: string; end: string };
+    previousWindow?: { start: string; end: string };
+    categories?: CategoryResponseDto[];
+    budget?: number;
+    currency?: string;
+    all?: TransactionResponseDto[];
+    current?: TransactionResponseDto[];
+    previous?: TransactionResponseDto[];
+  }) => {
+    currentWindow = jest
+      .fn()
+      .mockResolvedValue(
+        options?.window ?? { start: '2025-10-01', end: '2025-11-01' },
+      );
+    previousWindow = jest
+      .fn()
+      .mockResolvedValue(
+        options?.previousWindow ?? { start: '2025-09-01', end: '2025-10-01' },
+      );
+    categoriesList = jest.fn().mockResolvedValue({
+      categories: options?.categories ?? [],
+      allocation: {
+        monthlyBudget: options?.budget ?? 2000,
+        allocated: 0,
+        unallocated: options?.budget ?? 2000,
+      },
+    });
+    transactionsList = jest
+      .fn()
+      .mockImplementation((_userId: string, query: { period: string }) => {
+        const byPeriod: Record<string, TransactionResponseDto[]> = {
+          all: options?.all ?? [],
+          current: options?.current ?? [],
+          previous: options?.previous ?? [],
+        };
+        return Promise.resolve({ transactions: byPeriod[query.period] ?? [] });
+      });
+
+    const userDatabases = {
+      getUserDb: jest.fn().mockResolvedValue({
+        select: () => queryChain([{ currency: options?.currency ?? 'USD' }]),
+      }),
+    } as unknown as UserDatabaseService;
+
+    generator = new RuleBasedInsightGenerator(
+      {
+        currentWindow,
+        previousWindow,
+        list: categoriesList,
+      } as unknown as CategoriesService,
+      { list: transactionsList } as unknown as TransactionsService,
+      userDatabases,
+      { get: () => 'Europe/Zagreb' } as unknown as ConfigService,
+    );
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: new Date('2025-10-20T12:00:00Z') });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('produces no set for an account with no transactions (AC7)', async () => {
+    build({ all: [] });
+
+    await expect(generator.generate(USER_ID)).resolves.toBeNull();
+  });
+
+  it('renders the summary banner with real spent, budget and days-left figures (AC1)', async () => {
+    const current = [tx({ id: 't1', amount: 1240, categoryId: 'cat-1' })];
+    build({ budget: 2000, all: current, current });
+
+    const set = await generator.generate(USER_ID);
+
+    expect(set?.monthLabel).toBe('October 2025');
+    // today is the 20th of a period that started on the 1st: 12 days left.
+    expect(set?.summary).toEqual({
+      headline: "You're on track this month",
+      body: "You've spent $1,240 of your $2,000 budget with 12 days to go.",
+    });
+  });
+
+  it('names the category furthest over its cap, in the warning tone (AC2)', async () => {
+    const current = [tx({ id: 't1', amount: 312, categoryId: 'dining' })];
+    build({
+      categories: [
+        category({
+          id: 'dining',
+          name: 'Dining out',
+          spent: 312,
+          monthlyCap: 300,
+          over: 12,
+          status: 'over',
+        }),
+      ],
+      all: current,
+      current,
+    });
+
+    const set = await generator.generate(USER_ID);
+    const card = set?.cards.find((c) => c.tone === 'warning');
+
+    expect(card).toEqual({
+      tone: 'warning',
+      title: 'Dining out is over budget',
+      body: '$312 of $300 - $12 over',
+    });
+  });
+
+  it('reports a month-over-month decrease in the positive tone (AC3)', async () => {
+    build({
+      categories: [category({ id: 'transport', name: 'Transport' })],
+      current: [tx({ id: 'c', amount: 223.36, categoryId: 'transport' })],
+      previous: [
+        tx({
+          id: 'p',
+          amount: 286.36,
+          categoryId: 'transport',
+          date: '2025-09-10',
+        }),
+      ],
+      all: [
+        tx({ id: 'c', amount: 223.36, categoryId: 'transport' }),
+        tx({
+          id: 'p',
+          amount: 286.36,
+          categoryId: 'transport',
+          date: '2025-09-10',
+        }),
+      ],
+    });
+
+    const set = await generator.generate(USER_ID);
+    const card = set?.cards.find((c) => c.title.startsWith('Transport'));
+
+    expect(card).toEqual({
+      tone: 'positive',
+      title: 'Transport is down 22%',
+      body: 'You spent $63 less than September',
+    });
+  });
+
+  it('reports a month-over-month increase in the neutral tone', async () => {
+    build({
+      categories: [category({ id: 'transport', name: 'Transport' })],
+      current: [tx({ id: 'c', amount: 122, categoryId: 'transport' })],
+      previous: [
+        tx({
+          id: 'p',
+          amount: 100,
+          categoryId: 'transport',
+          date: '2025-09-10',
+        }),
+      ],
+      all: [
+        tx({ id: 'c', amount: 122, categoryId: 'transport' }),
+        tx({
+          id: 'p',
+          amount: 100,
+          categoryId: 'transport',
+          date: '2025-09-10',
+        }),
+      ],
+    });
+
+    const set = await generator.generate(USER_ID);
+    const card = set?.cards.find((c) => c.title.startsWith('Transport'));
+
+    expect(card).toMatchObject({
+      tone: 'neutral',
+      title: 'Transport is up 22%',
+      body: 'You spent $22 more than September',
+    });
+  });
+
+  it('projects the month-end total against the budget, in the info tone (AC4)', async () => {
+    // $500 over 20 elapsed days of a 31-day period projects to $775.
+    const current = [tx({ id: 't1', amount: 500, categoryId: 'cat-1' })];
+    build({ budget: 2000, all: current, current });
+
+    const set = await generator.generate(USER_ID);
+    const card = set?.cards.find((c) => c.tone === 'info');
+
+    expect(card).toEqual({
+      tone: 'info',
+      title: 'On track to stay under budget',
+      body: "At your current pace you'll land around $775 - just under your $2,000 target",
+    });
+  });
+
+  it('names recurring merchants and totals their monthly cost, in the neutral tone (AC5)', async () => {
+    // Three merchants, each seen in three distinct months.
+    const months = ['2025-08-05', '2025-09-05', '2025-10-05'];
+    const recurring = [
+      ...months.map((date, i) =>
+        tx({
+          id: `n${i}`,
+          merchant: 'Netflix',
+          amount: 15,
+          date,
+          categoryId: 'subs',
+        }),
+      ),
+      ...months.map((date, i) =>
+        tx({
+          id: `s${i}`,
+          merchant: 'Spotify',
+          amount: 12,
+          date,
+          categoryId: 'subs',
+        }),
+      ),
+      ...months.map((date, i) =>
+        tx({
+          id: `i${i}`,
+          merchant: 'iCloud',
+          amount: 10,
+          date,
+          categoryId: 'subs',
+        }),
+      ),
+    ];
+    build({ all: recurring, current: [] });
+
+    const set = await generator.generate(USER_ID);
+    const card = set?.cards.find((c) => c.title.includes('recurring'));
+
+    expect(card).toEqual({
+      tone: 'neutral',
+      title: '3 recurring subscriptions',
+      body: 'Netflix, Spotify and iCloud total $37/mo',
+    });
+  });
+
+  it('omits a rule that has nothing to say', async () => {
+    // One uncapped category, one month of history, spend only in the current
+    // period: no over-cap, no month-over-month, no recurring - projection only.
+    const current = [tx({ id: 't1', amount: 40, categoryId: 'cat-1' })];
+    build({ categories: [category()], all: current, current });
+
+    const set = await generator.generate(USER_ID);
+
+    expect(set?.cards.map((c) => c.tone)).toEqual(['info']);
+  });
+
+  it('renders money in the user’s currency', async () => {
+    const current = [tx({ id: 't1', amount: 1240, categoryId: 'cat-1' })];
+    build({ budget: 2000, currency: 'eur', all: current, current });
+
+    const set = await generator.generate(USER_ID);
+
+    expect(set?.summary.body).toContain('€1,240');
+  });
+});

@@ -1,5 +1,6 @@
-import { Controller, Get, HttpStatus } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
+  ApiAcceptedResponse,
   ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
@@ -36,5 +37,18 @@ export class InsightsController {
   @ApiErrorResponse(HttpStatus.UNAUTHORIZED)
   get(@CurrentUser() user: SessionPrincipal): Promise<InsightSetResponseDto> {
     return this.insights.getSet(user.userId);
+  }
+
+  @Post('generate')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Start generating a fresh insight set.',
+    description:
+      'Asynchronous: this returns **202** as soon as the run is registered, and the set is produced in the background. Poll `GET /api/insights` and render skeletons while `state` is `generating`; the new set replaces the old one when it finishes. A **409** means a run is already in flight - regenerate is disabled until it ends. An account with no transactions produces no set and stays in the empty state.',
+  })
+  @ApiAcceptedResponse()
+  @ApiErrorResponse(HttpStatus.UNAUTHORIZED, HttpStatus.CONFLICT)
+  generate(@CurrentUser() user: SessionPrincipal): Promise<void> {
+    return this.insights.generate(user.userId);
   }
 }

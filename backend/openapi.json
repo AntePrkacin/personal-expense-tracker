@@ -1009,6 +1009,47 @@
           "insights"
         ]
       }
+    },
+    "/api/insights/generate": {
+      "post": {
+        "description": "Asynchronous: this returns **202** as soon as the run is registered, and the set is produced in the background. Poll `GET /api/insights` and render skeletons while `state` is `generating`; the new set replaces the old one when it finishes. A **409** means a run is already in flight - regenerate is disabled until it ends. An account with no transactions produces no set and stays in the empty state.",
+        "operationId": "InsightsController_generate",
+        "parameters": [],
+        "responses": {
+          "202": {
+            "description": ""
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The request conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start generating a fresh insight set.",
+        "tags": [
+          "insights"
+        ]
+      }
     }
   },
   "info": {

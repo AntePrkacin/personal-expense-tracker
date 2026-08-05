@@ -81,6 +81,7 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/dashboard`,
       `/${API_PREFIX}/hello`,
       `/${API_PREFIX}/insights`,
+      `/${API_PREFIX}/insights/generate`,
       `/${API_PREFIX}/profile`,
       `/${API_PREFIX}/transactions`,
       `/${API_PREFIX}/transactions/{id}`,

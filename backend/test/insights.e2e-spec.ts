@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { LoginTokenService } from './../src/auth/login-token.service';
 import { newId } from './../src/common/ids';
+import { monthWindow, todayIn } from './../src/common/month-window';
 import type { DashboardResponseDto } from './../src/dashboard/dto/dashboard-response.dto';
 import type { InsightSetResponseDto } from './../src/insights/dto/insight-set-response.dto';
 import { users } from './../src/database/central/schema';
@@ -56,6 +57,44 @@ describe('Insight endpoints (e2e)', () => {
     request(app.getHttpServer())
       .get('/api/dashboard')
       .set('Authorization', `Bearer ${token}`);
+
+  const generate = (token = bearer) =>
+    request(app.getHttpServer())
+      .post('/api/insights/generate')
+      .set('Authorization', `Bearer ${token}`);
+
+  const addTransaction = (
+    token: string,
+    payload: {
+      categoryId: string;
+      amount: number;
+      date: string;
+      merchant?: string;
+    },
+  ) =>
+    request(app.getHttpServer())
+      .post('/api/transactions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ merchant: 'Konzum', ...payload })
+      .expect(201);
+
+  /** The current period, since registration leaves `monthStartDay` at 1. */
+  const window = monthWindow(1, todayIn('Europe/Zagreb'));
+
+  const sleep = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  /** Polls the read until the floated run leaves the generating state. */
+  const waitForSettled = async (token = bearer) => {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const body = insightsBody(await get(token).expect(200));
+      if (body.state !== 'generating') {
+        return body;
+      }
+      await sleep(20);
+    }
+    throw new Error('insight generation did not settle');
+  };
 
   /** Inserts one set row and returns its id. Content is null unless given. */
   const seedSet = async (fields: {
@@ -308,6 +347,59 @@ describe('Insight endpoints (e2e)', () => {
     // The second account provisioned its own database and never generated.
     const body = insightsBody(await get(otherBearer).expect(200));
 
+    expect(body.state).toBe('empty');
+  });
+
+  it('generates a ready set from real transactions', async () => {
+    // A fresh account so the seeded-row tests above do not interfere, and its
+    // own transactions drive a real generation rather than a seeded set.
+    const fresh = await provision();
+    const listResponse = await request(app.getHttpServer())
+      .get('/api/categories')
+      .set('Authorization', `Bearer ${fresh.token}`)
+      .expect(200);
+    const { categories } = listResponse.body as {
+      categories: { id: string; name: string }[];
+    };
+    const groceries = categories.find((row) => row.name === 'Groceries')!;
+
+    await addTransaction(fresh.token, {
+      categoryId: groceries.id,
+      amount: 500,
+      date: window.start,
+    });
+    await addTransaction(fresh.token, {
+      categoryId: groceries.id,
+      amount: 100,
+      date: window.start,
+    });
+
+    await generate(fresh.token).expect(202);
+    const body = await waitForSettled(fresh.token);
+
+    expect(body.state).toBe('ready');
+    expect(body.summary?.headline).toBeTruthy();
+    expect(body.generatedAt).not.toBeNull();
+    // Spend in the current period always yields at least the projection card.
+    expect(body.insights.length).toBeGreaterThanOrEqual(1);
+    expect(body.insights.some((card) => card.tone === 'info')).toBe(true);
+  });
+
+  it('refuses a second run while one is in flight (409)', async () => {
+    // A generating row standing in for a run that has not finished.
+    await seedSet({ status: 'generating' });
+
+    await generate().expect(409);
+  });
+
+  it('produces no set when the account has no transactions', async () => {
+    const fresh = await provision();
+
+    await generate(fresh.token).expect(202);
+    const body = await waitForSettled(fresh.token);
+
+    // The placeholder run is removed once the generator finds nothing to say,
+    // so the account settles back to empty rather than a bare ready set.
     expect(body.state).toBe('empty');
   });
 });

@@ -1,6 +1,8 @@
+import { ConflictException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { argsOf, queryChain, toSql } from '../../test/query-chain';
 import { UserDatabaseService } from '../database/user-database.service';
+import { INSIGHT_GENERATOR } from './insight-generator';
 import { InsightsService } from './insights.service';
 
 /**
@@ -18,7 +20,8 @@ import { InsightsService } from './insights.service';
 describe('InsightsService', () => {
   let service: InsightsService;
   let getUserDb: jest.Mock;
-  let db: { select: jest.Mock };
+  let generatorGenerate: jest.Mock;
+  let db: { select: jest.Mock; insert: jest.Mock; delete: jest.Mock };
 
   const readyRow = () => ({
     id: 'set-1',
@@ -46,11 +49,16 @@ describe('InsightsService', () => {
 
   const build = async () => {
     getUserDb = jest.fn().mockResolvedValue(db);
+    generatorGenerate = jest.fn().mockResolvedValue(null);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         InsightsService,
         { provide: UserDatabaseService, useValue: { getUserDb } },
+        {
+          provide: INSIGHT_GENERATOR,
+          useValue: { generate: generatorGenerate },
+        },
       ],
     }).compile();
 
@@ -58,7 +66,11 @@ describe('InsightsService', () => {
   };
 
   beforeEach(async () => {
-    db = { select: jest.fn() };
+    db = {
+      select: jest.fn(),
+      insert: jest.fn().mockReturnValue(queryChain([])),
+      delete: jest.fn().mockReturnValue(queryChain([])),
+    };
     await build();
   });
 
@@ -160,6 +172,35 @@ describe('InsightsService', () => {
       db.select.mockReturnValueOnce(queryChain([]));
 
       await expect(service.latestReadyTeaser('user-id')).resolves.toBeNull();
+    });
+  });
+
+  describe('generate', () => {
+    it('rejects with 409 when a run is already in flight, inserting nothing', async () => {
+      // hasRunInFlight finds a generating row, so a second run is refused rather
+      // than started - regenerate is disabled while one is running (A26).
+      db.select.mockReturnValue(queryChain([{ id: 'run-1' }]));
+
+      await expect(service.generate('user-id')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(db.insert).not.toHaveBeenCalled();
+      expect(generatorGenerate).not.toHaveBeenCalled();
+    });
+
+    it('inserts a generating row before returning, so the 202 is truthful', async () => {
+      // No run in flight. The generating row must be written before generate()
+      // resolves, so a concurrent read can observe the generating state; the
+      // generation itself is floated.
+      db.select.mockReturnValue(queryChain([]));
+      const insertChain = queryChain([]);
+      db.insert.mockReturnValue(insertChain);
+
+      await service.generate('user-id');
+
+      expect(argsOf(insertChain, 'values')[0]).toMatchObject({
+        status: 'generating',
+      });
     });
   });
 });

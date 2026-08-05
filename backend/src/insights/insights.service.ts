@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { newId } from '../common/ids';
 import type { UserDatabase } from '../database/database.types';
 import { UserDatabaseService } from '../database/user-database.service';
 import {
@@ -11,6 +12,10 @@ import type {
   InsightCardDto,
   InsightSetResponseDto,
 } from './dto/insight-set-response.dto';
+import { INSIGHT_GENERATOR, type InsightGenerator } from './insight-generator';
+
+const RUN_IN_FLIGHT =
+  'A generation run is already in progress. Wait for it to finish before starting another.';
 
 /**
  * Stores and reads a generated insight set. Generation itself is PET-40.
@@ -34,7 +39,104 @@ import type {
  */
 @Injectable()
 export class InsightsService {
-  constructor(private readonly userDatabases: UserDatabaseService) {}
+  private readonly logger = new Logger(InsightsService.name);
+
+  constructor(
+    private readonly userDatabases: UserDatabaseService,
+    @Inject(INSIGHT_GENERATOR)
+    private readonly generator: InsightGenerator,
+  ) {}
+
+  /**
+   * Starts an asynchronous generation run, for `POST /api/insights/generate`.
+   *
+   * The `generating` row is written and committed **before this returns**, so
+   * the 202 the controller sends is truthful and a concurrent read can observe
+   * the generating state. The generation itself is floated with a logging
+   * `.catch`, exactly the shape `AuthService` uses: the rule-based work is fast,
+   * but the async lifecycle is the design's contract (INS-5) and the seam a
+   * future slow generator needs.
+   *
+   * **Only one run at a time.** Regenerate is disabled while a run is in flight
+   * (A26), so a second request finding a `generating` row is a 409 rather than a
+   * second concurrent writer on the one cached connection.
+   *
+   * @throws ConflictException if a run is already in flight.
+   */
+  async generate(userId: string): Promise<void> {
+    const db = await this.userDatabases.getUserDb(userId);
+
+    if (await this.hasRunInFlight(db)) {
+      throw new ConflictException(RUN_IN_FLIGHT);
+    }
+
+    const runId = newId();
+    await db.insert(insightSets).values({ id: runId, status: 'generating' });
+
+    void this.runGeneration(userId, runId).catch((error) => {
+      // The run already marked itself failed (AC6); this only records why.
+      this.logger.error(
+        `Insight generation ${runId} for user ${userId} failed`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    });
+  }
+
+  /**
+   * The floated body of a run: generate, then persist or fail.
+   *
+   * On success the `generating` row becomes `ready` and its cards are inserted in
+   * **one transaction** - safe on the embedded driver because the single-run
+   * guard keeps this the only transaction on the connection. An empty account
+   * generates nothing (`null`), so the placeholder run is removed and the read
+   * falls back to whatever it was. On any failure the row is marked `failed` and
+   * nothing else is touched, so the previous `ready` set stays the read's answer
+   * (AC6).
+   */
+  private async runGeneration(userId: string, runId: string): Promise<void> {
+    try {
+      const set = await this.generator.generate(userId);
+      const db = await this.userDatabases.getUserDb(userId);
+
+      if (!set) {
+        await db.delete(insightSets).where(eq(insightSets.id, runId));
+        return;
+      }
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(insightSets)
+          .set({
+            status: 'ready',
+            monthLabel: set.monthLabel,
+            summaryHeadline: set.summary.headline,
+            summaryBody: set.summary.body,
+            generatedAt: new Date(),
+          })
+          .where(eq(insightSets.id, runId));
+
+        if (set.cards.length > 0) {
+          await tx.insert(insights).values(
+            set.cards.map((card, index) => ({
+              id: newId(),
+              setId: runId,
+              tone: card.tone,
+              title: card.title,
+              body: card.body,
+              sortOrder: index,
+            })),
+          );
+        }
+      });
+    } catch (error) {
+      const db = await this.userDatabases.getUserDb(userId);
+      await db
+        .update(insightSets)
+        .set({ status: 'failed' })
+        .where(eq(insightSets.id, runId));
+      throw error;
+    }
+  }
 
   /** The latest set with its derived state, for `GET /api/insights`. */
   async getSet(userId: string): Promise<InsightSetResponseDto> {
