@@ -18,7 +18,7 @@
 //     `en-US` convention the rest of the app is pinned to. A Monday-first locale is
 //     the same change as the locale work `lib/format.ts` already defers.
 
-import { isoFromParts } from './date';
+import { isoFromParts, partsFromIso } from './date';
 
 /**
  * The column headings, Sunday first.
@@ -73,6 +73,26 @@ export function addMonths(
   const index = year * 12 + (month - 1) + delta;
 
   return { year: Math.floor(index / 12), month: (index % 12) + 1 };
+}
+
+/**
+ * The date `delta` days from a `YYYY-MM-DD` string, or `null` if it was not one.
+ *
+ * What the picker's arrow keys move by: one day for left and right, seven for up and down.
+ * Crossing a month or year boundary is ordinary here, unlike in `addMonths`, because moving
+ * a day *should* carry into the next month.
+ *
+ * `setDate` past the end of a month rolls forward correctly, which is the one place that
+ * behaviour is wanted rather than a bug. The result is read back through local getters, so
+ * no UTC conversion happens in either direction - the rule `lib/date.ts` sets.
+ */
+export function addDays(iso: string, delta: number): string | null {
+  const parts = partsFromIso(iso);
+  if (parts === null) return null;
+
+  const date = new Date(parts.year, parts.month - 1, parts.day + delta);
+
+  return isoFromParts(date.getFullYear(), date.getMonth() + 1, date.getDate());
 }
 
 /**

@@ -1,4 +1,5 @@
 import {
+  addDays,
   addMonths,
   daysInMonth,
   firstWeekdayOfMonth,
@@ -76,6 +77,44 @@ describe('addMonths', () => {
     // January to February, which `date.setMonth(date.getMonth() + 1)` on the 31st
     // would turn into March.
     expect(addMonths(2025, 1, 1)).toEqual({ year: 2025, month: 2 });
+  });
+});
+
+describe('addDays', () => {
+  it('steps one day, which is what the left and right arrows move by', () => {
+    expect(addDays('2025-10-08', 1)).toBe('2025-10-09');
+    expect(addDays('2025-10-08', -1)).toBe('2025-10-07');
+  });
+
+  it('steps a week, which is what the up and down arrows move by', () => {
+    expect(addDays('2025-10-08', 7)).toBe('2025-10-15');
+    expect(addDays('2025-10-08', -7)).toBe('2025-10-01');
+  });
+
+  it('carries into the next and previous month', () => {
+    // Unlike addMonths, rolling over is wanted here: arrowing right off the 31st should
+    // land on the 1st rather than refuse.
+    expect(addDays('2025-10-31', 1)).toBe('2025-11-01');
+    expect(addDays('2025-10-01', -1)).toBe('2025-09-30');
+  });
+
+  it('carries across a year boundary', () => {
+    expect(addDays('2025-12-31', 1)).toBe('2026-01-01');
+    expect(addDays('2025-01-01', -1)).toBe('2024-12-31');
+  });
+
+  it('lands on 29 February in a leap year and skips it otherwise', () => {
+    expect(addDays('2024-02-28', 1)).toBe('2024-02-29');
+    expect(addDays('2025-02-28', 1)).toBe('2025-03-01');
+  });
+
+  it('is null for a string that is not a calendar date', () => {
+    expect(addDays('', 1)).toBeNull();
+    expect(addDays('2025-02-30', 1)).toBeNull();
+  });
+
+  it('is a no-op for a zero delta', () => {
+    expect(addDays('2025-10-08', 0)).toBe('2025-10-08');
   });
 });
 

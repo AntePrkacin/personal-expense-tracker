@@ -12,6 +12,13 @@ import { TAG_TONES } from './Tag';
 // Outside this folder, like the shell's maps: see the note on coverage above.
 import { RESEND_MESSAGE } from '../ResendLink';
 import { CHIP_LABEL, CHIP_SURFACE } from '../../app/setup/categories/CategoryChip';
+import {
+  DATE_DAY,
+  DATE_DAY_BASE,
+  DATE_PAGER,
+  DATE_POPOVER,
+  DATE_TRIGGER,
+} from '../../app/(app)/DateField';
 import { MODAL_BACKDROP, MODAL_BOX, MODAL_CLOSE, MODAL_DIVIDER } from '../../app/(app)/Modal';
 import { STEP_DOT, STEP_WIDTH } from '../../app/setup/SetupShell';
 
@@ -249,6 +256,13 @@ const HARDCODED = [
   // of that, because Figma spends a 4px spacer frame inside a 16px-gap column to get
   // there. EmptyState.tsx shows the arithmetic.
   'mt-5',
+  // 8px under the date picker's month header, above its grid.
+  'mb-2',
+  // The date picker's two month chevrons, which reuse ui/Select's leaf: it points down at
+  // rest, so a quarter turn clockwise points it left for Previous and anticlockwise right for
+  // Next. A negated utility, which is a shape nothing else in this list has.
+  'rotate-90',
+  '-rotate-90',
   'min-w-0',
   'right-3.5',
   'left-4',
@@ -438,6 +452,25 @@ const RESEND_MESSAGE_CLASSES = Object.values(RESEND_MESSAGE).flatMap(split);
 const MODAL_CLASSES = [MODAL_BOX, MODAL_BACKDROP, MODAL_CLOSE, MODAL_DIVIDER].flatMap(split);
 
 /**
+ * The date picker's trigger, popover, month pagers and day cells (app/(app)/DateField.tsx).
+ *
+ * The whole control is undesigned - ADD-7 draws a closed select and Figma contains no calendar
+ * - so every one of these is ours, which makes this the only thing standing between a token
+ * rename and a popover that renders as unstyled text on top of the field below it.
+ *
+ * `DATE_DAY` is a `Record` for `ui/Field`'s reason rather than for tidiness: its three states
+ * each set a colour, so a component emitting two of them would depend on stylesheet order.
+ * Each value therefore has to compile on its own, which is what this checks.
+ */
+const DATE_FIELD_CLASSES = [
+  ...split(DATE_TRIGGER),
+  ...split(DATE_POPOVER),
+  ...split(DATE_PAGER),
+  ...split(DATE_DAY_BASE),
+  ...Object.values(DATE_DAY).flatMap(split),
+];
+
+/**
  * Classes used only by the stories, to frame a component against a card.
  *
  * Worth guarding for the same reason as the components: Storybook is where
@@ -483,6 +516,7 @@ const EXPECTED = [
   ...CHIP_CLASSES,
   ...RESEND_MESSAGE_CLASSES,
   ...MODAL_CLASSES,
+  ...DATE_FIELD_CLASSES,
   ...HARDCODED,
   ...STORY_CHROME,
 ];

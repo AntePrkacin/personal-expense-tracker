@@ -118,7 +118,14 @@ type FieldProps = {
 export function Field({ id, label, children, error }: FieldProps) {
   return (
     <div className="flex w-full flex-col gap-1.75">
-      <label htmlFor={id} className="text-label-m text-text-secondary">
+      {/* The label carries an id as well as `htmlFor`, and the id is for one consumer:
+          `(app)/DateField.tsx`, whose control is a <button> rather than an input. A
+          `<label for>` is **not** part of a button's accessible-name computation in
+          HTML-AAM - the name comes from its own subtree - so that field composes
+          `aria-labelledby` from this id plus the button, and announces "Date, Oct 8,
+          2025" instead of just the value. Input and Select need none of this, because
+          `htmlFor` works normally on a real form control. */}
+      <label id={`${id}-label`} htmlFor={id} className="text-label-m text-text-secondary">
         {label}
       </label>
       {children}
