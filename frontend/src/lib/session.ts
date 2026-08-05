@@ -120,6 +120,90 @@ export async function authorizedGet<T>(path: string): Promise<AuthorizedResult<T
 }
 
 /**
+ * What a guarded write reports back.
+ *
+ * **Deliberately not `AuthorizedResult`**, and the difference is the reason this type
+ * exists. That one collapses every non-401 into `unavailable`, which is right for a read -
+ * a caller that could not get its data has one thing to say about it - and wrong for a
+ * write, where the statuses mean genuinely different things to the person who pressed the
+ * button. `POST /api/transactions` answers 400 when the body was rejected, 404 when the
+ * `categoryId` names no category of theirs, and 401 when the session died with the form
+ * open; those want three different messages, and one of them must not say "try again"
+ * because retrying an unacceptable body loops forever.
+ *
+ * So the status travels, and the caller classifies. **An absent `status` means the request
+ * never completed** - the convention `lib/backend.ts` sets for `AcceptedResult` and the one
+ * thing about that type its own doc calls out as not being an oversight.
+ *
+ * **No parsed body, which is a decision rather than laziness.** `POST /api/transactions`
+ * answers 201 with the created row, and returning it looked obviously right until the
+ * failure mode showed up: if a 2xx arrives with a body that will not parse - a proxy's
+ * error page, a truncated response - then the transaction *exists*, and a result saying
+ * otherwise would send the user to press the button again and create a second one. A write
+ * that cannot be told apart from its own success is the one failure worth engineering
+ * against here, so a 2xx is success on the status alone. Nothing needs the row today: the
+ * modal closes and `router.refresh()` re-reads the page. PET-32 can parse it when
+ * something actually reads it.
+ */
+export type AuthorizedWriteResult = { ok: true } | { ok: false; status?: number };
+
+/**
+ * POSTs a JSON body to a guarded endpoint with the session lifted into an `Authorization`
+ * header.
+ *
+ * The write half of `authorizedGet`, and here for the same reason it is: the cookie
+ * becomes a bearer token in one place. It sits beside that function rather than in
+ * `lib/backend.ts` on the split PET-30 established - **by credential, not by HTTP verb** -
+ * because `SESSION_COOKIE` lives in this file and importing it into `backend.ts` would
+ * make a cycle. `postAccepted` over there stays where it is: its two callers are
+ * pre-session and send no credential at all.
+ *
+ * It takes a `path` and so must not become a Server Action, exactly as
+ * `lib/backend.ts` records about itself: `'use server'` here would publish an endpoint
+ * accepting an arbitrary path. The actions that wrap it are the public surface, and each
+ * one names a fixed route.
+ *
+ * **A missing cookie reports 401 rather than a reason of its own.** `authorizedGet` keeps
+ * the two apart only to collapse them again in every caller; for a write the advice is
+ * identical either way - the session is gone, sign in again - so one status keeps the
+ * caller's table to four rows instead of five.
+ *
+ * `cache: 'no-store'` is explicit for `postAccepted`'s reason: a POST Next decided to
+ * cache would silently swallow a second attempt.
+ *
+ * @param path the backend path including its `/api` prefix
+ */
+export async function authorizedPost(path: string, body: unknown): Promise<AuthorizedWriteResult> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
+    return { ok: false, status: 401 };
+  }
+
+  try {
+    const response = await fetch(`${process.env.BACKEND_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+
+    // Any 2xx. See the type's note: the row exists by now, so nothing below this line may
+    // turn a created transaction into a reported failure.
+    return response.ok ? { ok: true } : { ok: false, status: response.status };
+  } catch {
+    // Unreachable backend, DNS, or a dropped connection. No status, which is what "the
+    // request never completed" looks like - and the one case where the caller genuinely
+    // cannot know whether the write landed.
+    return { ok: false };
+  }
+}
+
+/**
  * The cookie's write options, or `null` when the session is already dead.
  *
  * **The lifetime is derived from the backend's own `expiresAt` rather than mirroring
