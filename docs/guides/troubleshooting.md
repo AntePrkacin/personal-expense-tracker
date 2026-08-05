@@ -45,5 +45,6 @@ Fixes are in [Deployment](deployment.md); this table only maps the symptom.
 | The first request after a quiet spell takes ~15 seconds       | A cold start. The machine autostops when idle and boots on demand; later requests are ~200ms                                                        |
 | `fly config show` errors with "no machines configured"        | It reads from a running machine, so it cannot work on an app that has never deployed                                                                |
 | The deployed API rejects the frontend's browser request        | `FRONTEND_URL` allows exactly one CORS origin, and no Vercel preview URL will ever match it                                                        |
-| A login email arrives but its link goes nowhere                | `FRONTEND_URL` is also the base of every login link, not just the CORS origin. It is still the placeholder domain                                   |
+| A login email arrives but its link 404s                       | Expected until PET-52: the domain resolves but `/auth/verify` is not built yet. `FRONTEND_URL` is the base of every link, not just the CORS origin   |
+| CORS fails only for visitors without `www`                    | Exactly one origin is allowed and it is the `www` form. The apex must redirect to `www`, not serve the app                                          |
 

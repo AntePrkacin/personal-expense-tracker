@@ -39,6 +39,12 @@ Backend variables:
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
 
+The defaults above are the **local development** values. What the deployed backend sets instead
+lives in `backend/fly.toml`, and [Deployment](deployment.md) explains the two that carry
+consequences: `FRONTEND_URL`, which is both the single allowed CORS origin and the base of every
+emailed login link, and `TRUST_PROXY_HOPS`, which is what makes `req.ip` the real caller rather
+than Fly's proxy.
+
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`.
 A typo or a bad value fails at **boot**, not at first use: the backend validates its environment
 with a Joi schema (`backend/src/config/env.validation.ts`) and the message names the variable.

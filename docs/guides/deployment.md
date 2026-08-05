@@ -194,20 +194,29 @@ fly deploy --image <previous-image-ref>
 Worth doing once deliberately, while nothing is at stake, so the procedure is known before it is
 needed. It requires at least two releases to exist.
 
-## `FRONTEND_URL` is load-bearing, and it is currently a placeholder
+## `FRONTEND_URL` is load-bearing
 
-`fly.toml` sets it to `https://spendifico.vercel.app`, which does not exist yet. It has **two**
-consumers, and the second is easy to miss:
+The production frontend is **`https://www.spendifico.eu`**, and that is what `fly.toml` sets.
+Local development does not use this value: the default there is `http://localhost:4200`, per
+[Configuration](configuration.md).
+
+It has **two** consumers, and the second is the one that gets missed:
 
 - `main.ts` uses it as the only allowed CORS origin.
 - `auth.service.ts` uses it as the **base of every emailed login link**.
 
-So the placeholder is not cosmetic. Every login email currently points at a host that does not
-resolve, which means nobody can complete the access flow from their inbox - the flow only
-completes today by posting the token straight to `POST /api/auth/verify`. Joi validates only that
-the value parses as a URI, so a wrong-but-valid one fails silently rather than at boot.
+So a wrong value does not fail at boot - Joi checks only that it parses as a URI - it fails as
+login emails pointing at a dead host, with a 202 and nothing usable in the inbox. Getting it
+exactly right matters more than it looks.
 
-Fix it the moment the real Vercel domain exists:
+Three consequences of "exactly one origin", all live:
+
+- **`www` is not interchangeable with the apex.** A browser on `https://spendifico.eu` sends that
+  as its `Origin`, and it will not match `https://www.spendifico.eu`. The apex has to **redirect**
+  to `www` rather than serve the app, or those visitors get CORS failures and login links they
+  cannot use.
+- **No Vercel preview deployment will ever pass CORS**, since each preview gets its own hostname.
+- Changing it is an edit plus a deploy:
 
 ```sh
 cd backend
@@ -215,15 +224,22 @@ cd backend
 fly deploy --remote-only --ha=false
 ```
 
-Separately, the CORS half allows exactly one origin, so no Vercel preview URL will ever pass it.
+One thing still missing, so nobody reads this as finished: links now point at
+`https://www.spendifico.eu/auth/verify?token=...`, and that **route does not exist yet**. The
+frontend half of verification is PET-52. Until it ships, a link resolves to the domain and then
+404s, and the flow can only be completed by posting the token to `POST /api/auth/verify` directly.
 
 ## The Vercel side
 
-Two settings, both in the Vercel project whose root directory is `frontend/`:
+Three settings, all in the Vercel project whose root directory is `frontend/`:
 
 - **`BACKEND_URL`** points at `https://spendifico-api.fly.dev`.
 - **The function region is `lhr1`**, pinned by `frontend/vercel.json` and confirmable under
   Settings, Functions, Function Regions.
+- **The production domain is `www.spendifico.eu`**, with the apex `spendifico.eu` **redirecting**
+  to it rather than serving the app. That is not cosmetic: the backend allows exactly one CORS
+  origin and it is the `www` form, so an apex that serves the app directly breaks both CORS and
+  every login link. See the `FRONTEND_URL` section above.
 
 **Match Fly, not Turso.** This is easy to get backwards, because Vercel's own guidance is "run
 functions close to your database". The frontend's data source is not Turso, it is this API: the

@@ -50,18 +50,22 @@ swap_size_mb = 512
   # ./databases default is resolved from the process cwd.
   DATABASE_DIR = "/data/databases"
 
-  # PLACEHOLDER until the production Vercel domain exists, and the single most
-  # load-bearing wrong value in this file. It has TWO consumers, not one:
-  # main.ts uses it as the only allowed CORS origin, and auth.service.ts uses it
-  # as the base of every emailed login link. So while it is wrong, every login
-  # email points at a host that does not resolve and nobody can complete the
-  # access flow in a browser - verified by receiving one. Joi only checks that it
-  # parses as a URI, so a wrong-but-valid value fails silently rather than at
-  # boot. Update it the moment the real domain exists.
+  # The production frontend origin, and the most load-bearing single value in
+  # this file, because it has TWO consumers rather than one: main.ts uses it as
+  # the only allowed CORS origin, and auth.service.ts uses it as the base of
+  # every emailed login link. A wrong value here does not fail at boot - Joi
+  # checks only that it parses as a URI - it fails as login emails pointing
+  # somewhere dead, which is why it is worth being exact about.
   #
-  # The CORS half has a consequence worth knowing separately: exactly one origin
-  # is allowed, so no Vercel preview URL will ever pass it.
-  FRONTEND_URL = "https://spendifico.vercel.app"
+  # Three consequences of "exactly one origin", all of them live:
+  #   - `www` is not interchangeable with the apex. A browser on
+  #     https://spendifico.eu sends that as its Origin and it will NOT match, so
+  #     the apex has to redirect to www rather than serve the app.
+  #   - No Vercel preview deployment will ever pass CORS, since each gets its own
+  #     hostname.
+  #   - Local development does not use this value at all: the default is
+  #     http://localhost:4200 (docs/guides/configuration.md).
+  FRONTEND_URL = "https://www.spendifico.eu"
 
   TURSO_GROUP = "decode-pet"
 
