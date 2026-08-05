@@ -76,10 +76,11 @@ condition this paragraph already set for deleting the line rather than leaving i
 about nothing.
 
 `(app)/layout.test.tsx` now asserts the _absence_ of that export rather than its value, so
-nobody restores it, plus that `requireSession()` is called and that the footer shows the read
-profile rather than sample data. The session call was the sharper assertion while it was a
-documented no-op; it still earns its place, because the gate is one line whose deletion no
-rendering assertion would notice.
+nobody restores it, plus that `requireProfile()` is called exactly once and that the footer
+shows the read profile rather than sample data. The gate call was the sharper assertion while it
+was a documented no-op; it still earns its place, because the gate is one line whose deletion no
+rendering assertion would notice - and the call _count_ now matters too, since two reads is the
+shape the loop came from.
 
 **`jest.mock()` cannot resolve the `@/` alias, anywhere.** `jest.mock('@/lib/session')` fails
 with `Cannot find module` from any directory - PET-8 reproduced it from `src/app/` and
@@ -98,18 +99,25 @@ The access screens below, which is where the screen it renders is documented. (T
 used to say `/` was a bare `redirect('/dashboard')`, which was PET-19's version of the route
 and stopped being true when PET-8 put Welcome behind the gate.)
 
-**`lib/session.ts` held two stubs for four tickets, and PET-52 filled them in.**
-`requireSession()` is called once, by the `(app)` layout, and redirects to Log in when there is
-no live session - PET-19's AC5, deferred until the cookie existed. `hasSession()` is called by
-`app/page.tsx`, `app/login/page.tsx` and `app/setup/layout.tsx`, and answers the same read as a
-plain boolean. Both go through one private `readSession()`, which is the shared helper the stubs'
-own doc comments asked for rather than two round trips.
+**`lib/session.ts` held two stubs for four tickets, and PET-52 resolved both - one by filling
+it in, one by deleting it.** `hasSession()` is real and is called by `app/page.tsx`,
+`app/login/page.tsx` and `app/setup/layout.tsx`, which want a fact to branch on because both of
+their destinations are legitimate. `requireSession()` is **gone**: it was the `(app)` shell's
+gate, and the shell also needed the profile, so it made two guarded requests where the second
+already implied the first's answer. `lib/profile.ts`'s `requireProfile()` does both in one call,
+and nothing else ever called `requireSession()`.
 
-They are two functions rather than one because the callers want opposite things from the same
-read: the shell wants "let me through or send me away" and answers nothing itself, while the
-three routes outside it want a fact to branch on, since both of their destinations are
-legitimate. The full account of the cookie, the derived lifetime and the amended clear-on-401
-step is under The access screens below, next to the handler that writes it.
+**That collapse fixed a redirect loop, which is the reason to know about it.** With two reads the
+layout treated any absent profile as "not signed in" and sent the user to `/login` - which
+redirects a signed-in visitor to `/dashboard`, which bounced again. A live session whose profile
+read failed for any reason (the broken-invariant 500, a timeout, a restart mid-render) therefore
+made **the whole app unreachable**, including the login screen. `lib/profile.ts` now separates
+"not signed in" from "could not ask": only a 401 or a missing cookie redirects, and an
+unavailable backend throws so Next's error boundary renders something a reload can retry. Its
+suite pins that an `unavailable` backend never redirects, which is the regression that matters.
+
+The full account of the cookie, the derived lifetime and the un-clearable stale cookie is under
+The access screens below, next to the handler that writes it.
 
 **The sidebar footer's profile is real as of PET-52.** `PLACEHOLDER_PROFILE` in
 `(app)/layout.tsx` was Figma's own sample data ("Marko", "Kovač", "marko@email.com") for three
@@ -594,21 +602,19 @@ fixed endpoint.
 
 **`lib/session.ts` is no longer stubs, and the cookie is `spendifico.session`.** One private
 `readSession()` reads the cookie and calls `GET /api/auth/session` with the value lifted into
-`Authorization: Bearer <token>`, because the backend reads no cookies at all; `requireSession()`
-redirects to Log in on a null and otherwise returns the session, and `hasSession()` answers the
-same read as a boolean. `sameSite: 'lax'` is required rather than chosen, for the reason
+`Authorization: Bearer <token>`, because the backend reads no cookies at all, and `hasSession()`
+answers it as a boolean. `sameSite: 'lax'` is required rather than chosen, for the reason
 `lib/pendingEmail.ts` gives. **The cookie's `Max-Age` is derived from the verify response's
 `expiresAt`** rather than mirroring `SESSION_TTL_D`, which is the one place this improves on the
 cookie beside it - there is nothing to drift. `__Host-` was rejected because it demands `Secure`
 unconditionally and would silently fail to set under `npm run dev`.
 
-**`requireSession()` deliberately does not clear a stale cookie, which amends the spec the stub
-shipped with.** Its step 4 said "clear the cookie and redirect"; it cannot, because a Server
-Component's cookie jar is read-only and `.delete()` throws `ReadonlyRequestCookiesError` at
-runtime with nothing in the types to warn you. It costs almost nothing, since the cookie's own
-`Max-Age` now tracks the session's expiry, and the only state that leaves a live cookie holding a
-dead token is a manual revocation tombstone. `layout.test.tsx` pins that no delete is attempted,
-so nobody "completes" the spec and breaks the shell.
+**Nothing clears a stale cookie on a 401, which amends the spec the stub shipped with.** Step 4
+of `requireSession()`'s doc comment said "clear the cookie and redirect"; no Server Component can,
+because its cookie jar is read-only and `.delete()` throws `ReadonlyRequestCookiesError` at
+runtime with nothing in the types to warn you - the trap `lib/pendingEmail.ts` records for `.set`.
+It costs almost nothing, since the cookie's own `Max-Age` now tracks the session's expiry, so the
+only state that leaves a live cookie holding a dead token is a manual revocation tombstone.
 
 **`/setup` and `/login` are gated now, and `/check-email` deliberately is not.** Both were
 ungated only because a third and fourth call into the stubs would have been claims nothing could
@@ -626,14 +632,13 @@ that, at which point the export became a claim about nothing rather than a safeg
 the condition this file already set for deleting it. `layout.test.tsx` inverted its assertion
 rather than dropping it, so nobody restores it.
 
-**`PLACEHOLDER_PROFILE` is gone too, and the shell makes two reads.** `lib/profile.ts` calls
-`GET /api/profile`, which stitches the names from the per-user `profile` row together with the
-email from the central `users` row - the seam that made the footer unfixable by the session read
-alone. The gate and the profile stay separate concerns with different callers, so the layout runs
-them through one `Promise.all`: an extra request, not an extra round trip. A null profile behind
-a live session is a broken invariant rather than an empty state, because verification writes the
-row before it clears the onboarding payload, so the layout redirects instead of rendering a
-sidebar with holes in it.
+**`PLACEHOLDER_PROFILE` is gone too, and the shell makes exactly one read.** `requireProfile()`
+in `lib/profile.ts` calls `GET /api/profile`, which stitches the names from the per-user
+`profile` row together with the email from the central `users` row - the seam that made the
+footer unfixable by the session read alone. Because that route is guarded, the same call answers
+"is this a live session" on its way to answering "whose", so the layout has nothing left to
+decide and deliberately carries no branch of its own. A second opinion is exactly what produced
+the loop described under The app shell.
 
 ## Not built here
 
@@ -643,7 +648,7 @@ shell's content, and every read a screen needs for its own data. That list is th
 single home, so nothing is restated here.
 
 The one trap to carry into every file in this directory: **the session is real now, and the
-screens behind it are still empty.** `requireSession()` and `hasSession()` both do what they say
+screens behind it are still empty.** `requireProfile()` and `hasSession()` both do what they say
 as of PET-52, so a route that reads as authenticated is, and the sidebar footer shows a real
 person - but all four `<main>` elements below the header are empty, and no screen fetches its own
 data. A screen that renders is still not evidence that its data path exists; what changed is that

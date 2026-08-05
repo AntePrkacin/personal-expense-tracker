@@ -43,23 +43,36 @@ minutes on the deployed values. The third route to inherit this, after register 
 login-link, and the reason the failure screen has a `busy` reason at all. The fix is the same
 two-sided one described under "The auth throttler is in-memory", and neither half works alone.
 
-**A stale session cookie survives a manual revocation.** `requireSession()` cannot clear it:
-its only caller is a layout, a Server Component, where the cookie jar is read-only and
-`.delete()` throws `ReadonlyRequestCookiesError` at runtime with nothing in the types to warn
-you. This amends the stub's own step 4, which said "clear the cookie and redirect", and
+**A stale session cookie survives a manual revocation.** Nothing on the read path can clear
+it: the gate runs in a Server Component, where the cookie jar is read-only and `.delete()`
+throws `ReadonlyRequestCookiesError` at runtime with nothing in the types to warn you. This amends the stub's own step 4, which said "clear the cookie and redirect", and
 `layout.test.tsx` pins that no delete is attempted so nobody "completes" the spec and breaks
 the shell. It costs almost nothing, because the cookie's `Max-Age` is derived from the
 session's own `expiresAt`, so an *expired* session's cookie is gone from the browser before
 the backend would reject it. Only a hand-written tombstone reaches the state, and only until
 the cookie expires.
 
-**The shell makes two backend requests per render**, the session gate and the profile, run
-concurrently through one `Promise.all` so it costs a request rather than a round trip. One
-guarded `GET /api/profile` would have answered both, since a 401 from it means exactly "no
-live session" - rejected because `/`, `/login` and `/setup` want the gate and have no use for
-a profile, and folding them would make `lib/session.ts` depend on a Settings-shaped endpoint.
-Same trade the dashboard already accepts on the backend. The tidy end state is a single
-`requireProfile()`, and it belongs to whichever ticket first measures this as slow.
+**The shell makes one backend request per render, and briefly made two - which had a loop in
+it.** Review of the PR caught it before merge; recorded because the shape is easy to
+reintroduce. With a session gate *and* a profile read, the layout treated any absent profile as
+"not signed in" and redirected to `/login` - which sends a signed-in visitor to `/dashboard`,
+whose layout bounced straight back. A live session whose profile read failed for any reason (the
+broken-invariant 500, a timeout, a restart mid-render) therefore made **the whole app
+unreachable, including the login screen**, until the backend settled.
+
+Two things fixed it, and both are worth keeping. `GET /api/profile` is guarded, so one call
+answers "is this a live session" on its way to answering "whose" - there is no second read to
+disagree with the first, and the layout carries no branch of its own. And `lib/profile.ts`
+separates **"not signed in" from "could not ask"**: only a 401 or a missing cookie redirects,
+while an unavailable backend throws so Next's error boundary renders something a reload retries.
+`profile.test.ts` pins that an unavailable backend never redirects.
+
+**The rule to carry forward: never answer "the backend did not respond" with a redirect into the
+access flow.** Any route that both gates and reads has the same trap available to it.
+
+The residue is that the design draws no error screen anywhere (A19, A29), so what a reader sees
+when the throw fires is Next's own. A custom `error.tsx` is a designer conversation rather than
+a gap PET-52 could close.
 
 **The wait behind the verify click was measured on 2026-08-05, and the blank page stands.**
 This was the open question A33/A19 left: verify is one blocking POST with no loading state
