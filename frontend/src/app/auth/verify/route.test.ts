@@ -2,6 +2,8 @@
  * @jest-environment node
  */
 
+import { NextRequest } from 'next/server';
+
 import { PENDING_EMAIL_COOKIE } from '../../../lib/pendingEmail';
 import { SESSION_COOKIE } from '../../../lib/session';
 
@@ -28,8 +30,15 @@ const originalBackendUrl = process.env.BACKEND_URL;
 
 const thirtyDaysOut = () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-/** The emailed link, as `login-link.template.ts` builds it. */
-const linkWith = (query: string) => new Request(`http://localhost:4200/auth/verify${query}`);
+/**
+ * The emailed link, as `login-link.template.ts` builds it.
+ *
+ * A `NextRequest`, because the handler takes one: it reads `nextUrl` rather than `url` so
+ * the absolute redirects it builds carry the public host rather than whatever origin the
+ * server was reached on internally.
+ */
+const linkWith = (query: string, origin = 'http://localhost:4200') =>
+  new NextRequest(`${origin}/auth/verify${query}`);
 
 function respondWith(status: number, body: unknown = {}) {
   const fetchMock = jest.fn().mockResolvedValue({
@@ -46,7 +55,9 @@ function verifies(expiresAt = thirtyDaysOut()) {
   return respondWith(200, { token: SESSION_TOKEN, expiresAt });
 }
 
-const locationOf = (response: Response) => new URL(response.headers.get('location') ?? '');
+/** Resolves the relative Location the handler emits, so paths and query stay assertable. */
+const locationOf = (response: Response) =>
+  new URL(response.headers.get('location') ?? '', 'http://localhost:4200');
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -132,6 +143,50 @@ describe('AC1: a valid link signs the user in', () => {
     const response = await GET(linkWith(`?token=${TOKEN}`));
 
     expect(response.cookies.get(PENDING_EMAIL_COOKIE)?.value).toBe('');
+  });
+});
+
+describe('the redirect Location is relative, so no origin can be got wrong', () => {
+  // The gap that let a real defect through: every other assertion here reads only the
+  // path, so the handler passed while building *absolute* URLs from `request.url` -
+  // which behind a proxy that does not rewrite Host is the internal origin, sending a
+  // freshly verified user to a dead host. Neither `request.url` nor `request.nextUrl`
+  // fixes that reliably (a NextRequest built with x-forwarded-host keeps the original
+  // origin, which is how this test first failed). A relative reference has no origin to
+  // be wrong about.
+
+  it.each([
+    ['the success redirect', `?token=${TOKEN}`, '/dashboard'],
+    ['the failure redirect', '', '/auth/verify/failed?reason=invalid'],
+  ])('sends %s as a bare path', async (_label, query, expected) => {
+    verifies();
+
+    const response = await GET(linkWith(query));
+
+    expect(response.headers.get('location')).toBe(expected);
+  });
+
+  it.each([
+    ['a public https origin', 'https://www.spendifico.eu'],
+    ['a local dev origin', 'http://localhost:4200'],
+    ['an internal origin a proxy would hand over', 'http://localhost:3000'],
+  ])('emits the same Location whatever origin the request arrived on (%s)', async (_l, origin) => {
+    verifies();
+
+    const response = await GET(linkWith(`?token=${TOKEN}`, origin));
+
+    expect(response.headers.get('location')).toBe('/dashboard');
+  });
+
+  it('names no host at all, so the browser resolves it against the address it used', async () => {
+    verifies();
+
+    const response = await GET(linkWith(`?token=${TOKEN}`, 'http://localhost:3000'));
+    const location = response.headers.get('location') ?? '';
+
+    expect(location.startsWith('/')).toBe(true);
+    expect(location).not.toMatch(/^https?:\/\//);
+    expect(location).not.toContain('localhost');
   });
 });
 
