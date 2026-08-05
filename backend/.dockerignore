@@ -1,0 +1,26 @@
+# Load-bearing for correctness and for data safety, not housekeeping. Paths are
+# relative to backend/, which is the build context (see Dockerfile).
+
+# The builder's `COPY . ./` runs AFTER `npm ci`, so without these the host tree
+# would overwrite the clean dependency layer just installed for this image - and
+# a linux-x64 image would inherit whatever platform the host resolved.
+node_modules
+dist
+
+# Real local user database files, one per developer. Without this line a
+# development machine's user data ships inside a deployed image.
+databases
+
+# Local secrets. ignoreEnvFile is true only for NODE_ENV=test and OPENAPI_EMIT,
+# so a .env inside the image WOULD be read at boot and would silently win over
+# `fly secrets`. .env.example goes too - it is no use in an image, and one fewer
+# pattern to keep correct.
+.env
+.env.*
+
+# Nothing the image needs. The whole context is tarred and uploaded to the remote
+# builder on every deploy, so this is per-deploy time rather than a one-off.
+coverage
+test
+fly.toml
+*.md

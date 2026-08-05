@@ -16,6 +16,7 @@ in [`agents/conventions.md`](agents/conventions.md).
 | [`guides/configuration.md`](guides/configuration.md) | Every environment variable, its default, and what a missing or half-filled value does |
 | [`guides/database.md`](guides/database.md) | Local database files, trying the access flow with curl, changing the schema, Turso Cloud |
 | [`guides/email.md`](guides/email.md) | Turning on real MailPace sends, and the smoke-test procedure |
+| [`guides/deployment.md`](guides/deployment.md) | Deploying the backend to Fly.io, verifying a deploy, and the two Vercel settings |
 | [`guides/troubleshooting.md`](guides/troubleshooting.md) | One symptom-to-cause table for the whole repo |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Branch naming, Conventional Commits, the two hooks, stacked branches, what CI checks |
 

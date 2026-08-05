@@ -517,6 +517,31 @@ The amendment is recorded on PET-20 itself, per `docs/agents/conventions.md`'s n
 acceptance criteria are amendable on engineering merit; this one is in the wrong ticket rather
 than wrong.
 
+### The Fly MCP server is declined; the flyctl workflow becomes a repo skill instead
+
+`flyctl` ships an experimental MCP server behind `fly mcp server --claude`, evaluated on
+2026-08-04 while PET-53 was being set up. Probed over stdio it identifies as `FlyMCP 🚀 0.4.77`
+and exposes 60 tools: `fly-apps-*`, `fly-machine-*` (19 of them), `fly-volumes-*`,
+`fly-secrets-*`, `fly-certs-*`, `fly-ips-*`, `fly-orgs-*`, `fly-platform-*`, plus `fly-status`
+and `fly-logs`.
+
+Declined, for three reasons. It has no `fly deploy` and no `fly launch` tool, so the deploy
+itself goes through `flyctl` in a shell either way, and `scale`, `config`, `proxy`, `ssh` and
+`mpg` are absent too. Sixty tool schemas would enter every request's context to buy only the
+reads that remain. And it flattens the permission surface: `fly-apps-destroy`,
+`fly-orgs-delete` and `fly-volumes-destroy` arrive as ordinary tool calls, whereas
+`Bash(flyctl status:*)` in `.claude/settings.json` can allowlist the safe reads on their own.
+
+This is the exact inverse of the Turso CLI entry under `## Operational`, and worth holding both
+in mind together: there the CLI is broken and the MCP server is the way through, here the CLI is
+complete and the MCP server is the partial one. "Is there an MCP server" is not the question;
+"which of the two is whole" is. Fly publishes no official skill either, and the `flyio-pack`
+results that surface in a search are third-party and unvetted.
+
+**Queued:** a repo skill wrapping `flyctl` via Bash, written once PET-53's deploy actually works
+and there is a real sequence to encode. Writing it earlier would invent the workflow rather than
+record it.
+
 ---
 
 - **A generated HTTP client is not decided.** Types are shared and that part is settled:
@@ -549,6 +574,25 @@ from the 401 every other dead token gets, so the verify page can say "this link 
 by a newer one, open the most recent email". If inbox confusion persists anyway, varying the
 subject - appending a short local time is the usual trick - remains available, and costs
 only a slightly uglier subject line.
+
+### A real send can land in spam, despite correct DKIM
+
+Observed on 2026-08-05: a login email delivered to the project inbox (`spendifico@gmail.com`)
+landed in the inbox, the same email to a personal Gmail address landed in spam. Checked at the
+DNS level rather than by header, since the Gmail API this project can reach exposes no
+`Authentication-Results`: `ohmysmtp._domainkey.spendifico.eu` carries a real DKIM public key -
+MailPace's engine descends from OhMySMTP, hence the selector name - so DKIM is correctly
+configured and `docs/guides/email.md` step 1 is genuinely done. SPF
+(`v=spf1 include:_spf.porkbun.com ~all`) does not authorize MailPace, which is not a gap: without
+MailPace's "Advanced Verification" CNAME, sends carry a `Return-Path` on MailPace's own domain, so
+SPF authenticates there instead - and DMARC needs only one of SPF or DKIM aligned with the visible
+`From:`, which DKIM already satisfies (`d=spendifico.eu`). `_dmarc.spendifico.eu` is
+`v=DMARC1; p=none; sp=none;`, monitor-only.
+
+So authentication is not the cause. The likely one is plain sender reputation on a domain that has
+sent a handful of emails ever, which is largely orthogonal to DNS and improves with real volume
+over time - not something a repo config fixes. Worth knowing before reading a spam-foldered smoke
+test as a broken setup.
 
 ### In cloud mode the remote is a schema behind, briefly
 
@@ -598,18 +642,24 @@ same single-instance reasoning as the throttler and the migration lock. If it ev
 the shape of the fix is a per-user in-process queue around provisioning, which is the
 `issueQueue` pattern `LoginTokenService` already uses.
 
-### The auth throttler is in-memory, and blind behind a proxy
+### The auth throttler is in-memory
 
 `@nestjs/throttler` uses its default in-memory storage, so the limit is **per backend
 instance**: two instances give an attacker twice the budget. Same single-instance
-assumption as the migration lock below.
+assumption as the migration lock below, and one more reason the deployment runs exactly one
+machine.
 
-Separately, the per-IP limiter (and the fallback key for bodies with no usable address)
-keys on `req.ip`, which behind a reverse proxy or load balancer is the proxy's address
-unless Express `trust proxy` is set. Every caller would then share one per-IP bucket, which
-throttles everybody at once and protects nobody in particular; the per-email limiter is
-unaffected either way. Set it when the deployment topology is known, not before - trusting
-the header without a proxy in front lets a client spoof its own key.
+The proxy half of this entry is resolved, but not on the first try: `TRUST_PROXY_HOPS` shipped
+as `1`, and a phone-tether check against an exhausted bucket got 429 - proof every caller was
+still landing in one shared bucket. Fly's real topology puts two hops in front of the app for a
+direct client (the real address, then the app's own IP, appended by Fly's internal routing
+before the request reaches the machine), confirmed by capturing the raw header through a
+throwaway diagnostic route and replaying it offline against the same Express stack. The value is
+now `2`, and it is exact rather than a safe margin: replaying a client-forged prefix through the
+same stack showed 2 correctly ignores it while 3 or higher trusts it, so raising this number
+"to be safe" does the opposite. See `backend/CLAUDE.md` for why it is a hop count rather than a
+boolean and the full replay methodology, `backend/fly.toml`'s comment for the value, and
+`docs/guides/deployment.md`'s per-IP check for how to catch a regression here.
 
 ### Token rotation is manual
 
@@ -686,12 +736,6 @@ The `.notNull()` stays in the schemas so a future drizzle-kit that fixes the gen
 picks it up on the next diff. If that lands, expect a table-recreate migration for both
 scopes; review it rather than being surprised by it.
 
-### Deployment must ship `backend/drizzle/`
-
-Migration folders are resolved from `process.cwd()`, because `nest build` emits only
-JavaScript into `dist/` and leaves the SQL behind. Any future Dockerfile has to `COPY` the
-`drizzle/` directory next to `dist/`, or the app boots and fails to migrate.
-
 ### Changing an email address leaves three loose ends, all accepted
 
 `PATCH /api/profile` moves the login identifier, and PET-45 took three residuals knowingly
@@ -718,6 +762,67 @@ session quietly moving the login identifier is a notification to the previous ad
 there is none: the change answers 200 and only the new address ever hears about it. A39
 designs no logout and no security-alert mail, so adding one is a product decision before it
 is a code one.
+
+### Autostop is available as a cost lever, and was measured before being rejected
+
+`auto_stop_machines = "stop"` would take the machine charge from roughly $3.32/month to near
+zero, leaving only the $0.15 volume. It was configured, deployed and measured on 2026-08-05,
+then reverted, and the numbers are recorded so nobody has to repeat the experiment.
+
+It works correctly. The proxy logs `has excess capacity, autostopping machine`, sends the
+configured `kill_signal`, and the shutdown flush completes - both bracket lines were observed.
+The 30s health check does not keep the machine alive. It does not breach the single-instance
+rule either, since autostart starts *the* machine rather than adding one.
+
+Three reasons it was rejected. The resume costs about **15 seconds** to serve the first request
+after idling, against ~200ms warm. Fly exposes **no way to tune the idle delay** - the stop loop
+runs on its own schedule and decides on excess capacity, and `idle_timeout` is an HTTP
+connection setting rather than this one. And `register` floats its token issue and mail send
+while `onApplicationShutdown` does not await that promise, so a stop landing in that window
+answers 202 and never sends the email, recoverable only through "Resend link".
+
+Reconsider it if the bill matters more than a first impression, or pair it with a scheduled
+warm-up ping during the hours that matter.
+
+### Nothing verifies the `Dockerfile` or `fly.toml` after they were written
+
+This repo is otherwise strict about drift, with two CI jobs whose only purpose is failing on a
+stale generated artifact - yet CI never builds the image and never runs `fly config validate`,
+so both files can rot silently until the next manual deploy discovers it. A build step, or even
+just the validate, would match how the rest of the repo treats this class of problem. It belongs
+with the CI deploy job, PET-55, because that job has to build the image anyway.
+
+**Four things PET-55 has to get right, learned by deploying by hand first.** Recorded here
+because they are the reason the manual deploy came first, and none of them is guessable from
+Fly's docs alone:
+
+- **`--ha=false` on every deploy**, which is the highest-stakes line in that workflow. The flag
+  defaults to true and has no `fly.toml` equivalent, so a bare `fly deploy` in CI creates a spare
+  machine, and a second machine is a second replica set with its own unpushed writes.
+- **A post-deploy assertion, not just a green step.** `fly deploy` does not start a *stopped*
+  machine - it updates the config and leaves it stopped - and `auto_start_machines` is false. So a
+  deploy can report success while every request 503s. Assert exactly one machine, assert it is
+  started, then curl `/api/hello`.
+- **The trigger should be `workflow_dispatch` or a tag, not push to `main`.** Every deploy stops
+  the machine, so every trigger is a full replica-flush plus a cold start plus brief downtime. The
+  flush is proven to complete, including on redeploys, so this is safer than it first looked - but
+  push-to-`main` still multiplies how often the one path with a silent-data-loss failure mode runs,
+  on a backend that changes rarely and has no availability target.
+- **Auth is `fly tokens create deploy`** (app-scoped, better than an org token) stored as a
+  `FLY_API_TOKEN` repository secret. Needed by the *verification* half too, since both
+  `fly config validate` and `fly deploy --build-only` reach the platform. No repo admin is
+  required: `gh secret set` works at write level. Fly has no GitHub App or repo picker, so a
+  hand-written workflow is the only path.
+
+### The Swagger UI is public on the deployed API
+
+`SwaggerModule.setup` registers its routes on the HTTP adapter rather than as Nest controllers,
+so the global `SessionGuard` never sees them and `/api/docs` needs no bearer. That was harmless
+while the only reader was a developer on localhost; it is a deliberate exposure now that
+`https://spendifico-api.fly.dev/api/docs` answers 200 to anyone. It leaks no data, only the shape
+of the API, and it is genuinely useful to the frontend - but it should be a decision rather than
+something discovered. Gating it would mean serving the document behind a route that the guard does
+cover, or not serving it in production at all.
 
 ---
 

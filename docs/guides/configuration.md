@@ -36,8 +36,15 @@ Backend variables:
 | `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per submitted address       |
 | `AUTH_RATE_IP_LIMIT`     | `30`                    | Auth requests per window, per caller IP               |
 | `AUTH_RATE_TTL_S`        | `900`                   | Window length in seconds, shared by both limiters     |
+| `TRUST_PROXY_HOPS`       | `0`                     | Reverse proxies in front; 0 means `req.ip` is the socket |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
+
+The defaults above are the **local development** values. What the deployed backend sets instead
+lives in `backend/fly.toml`, and [Deployment](deployment.md) explains the two that carry
+consequences: `FRONTEND_URL`, which is both the single allowed CORS origin and the base of every
+emailed login link, and `TRUST_PROXY_HOPS`, which is what makes `req.ip` the real caller rather
+than Fly's proxy.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`.
 A typo or a bad value fails at **boot**, not at first use: the backend validates its environment

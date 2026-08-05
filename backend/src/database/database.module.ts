@@ -93,11 +93,28 @@ export class DatabaseModule implements OnApplicationShutdown {
     private readonly userDatabases: UserDatabaseService,
   ) {}
 
-  /** Requires `app.enableShutdownHooks()` in main.ts to fire on SIGINT/SIGTERM. */
+  /**
+   * Requires `app.enableShutdownHooks()` in main.ts to fire on SIGINT/SIGTERM.
+   *
+   * The two `log` calls bracket the flush deliberately. In cloud mode every
+   * `close()` here does a final `push()`, so this is the last chance for a
+   * locally-committed write to reach Turso Cloud, and the deployed app is given
+   * a long `kill_timeout` precisely so it lands. Both failure paths below only
+   * `warn`, so without a line on the success path a stop that was SIGKILLed
+   * half-way through looks exactly like one that finished - which is the
+   * failure this whole deployment is shaped around. Two lines mean a truncated
+   * log is legible as truncated: an opening line with no closing line.
+   */
   async onApplicationShutdown(): Promise<void> {
+    this.logger.log(
+      `Flushing and closing ${this.userDatabases.openCount()} user database(s) and the central replica...`,
+    );
+
     await this.userDatabases.closeAll();
     await this.centralHandle.close().catch((error) => {
       this.logger.warn(`Closing the central database failed: ${String(error)}`);
     });
+
+    this.logger.log('Databases flushed and closed');
   }
 }

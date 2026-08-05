@@ -36,9 +36,13 @@ const DEFAULT_RATE_TTL_S = 900;
  * here rather than trusting the transform. Nest's default key also includes the
  * handler and the throttler name, so each route gets its own pair of buckets.
  *
- * Known limitation: behind a reverse proxy `req.ip` is the proxy's address
- * unless Express `trust proxy` is set, which would collapse the per-IP buckets
- * (the per-address ones are unaffected). See docs/TODO.md.
+ * `req.ip` is only the real caller if Express has been told how many proxies sit
+ * in front, which is what `TRUST_PROXY_HOPS` configures in `main.ts`. Get it
+ * wrong in either direction and this tracker breaks silently: too low behind a
+ * proxy collapses every caller into one bucket and makes the limit global, too
+ * high with nothing in front lets a caller pick a fresh bucket per request. The
+ * per-address limiter is unaffected either way. See
+ * `docs/guides/configuration.md` for the value.
  */
 export function trackByIp(req: Record<string, unknown>): string {
   return typeof req.ip === 'string' ? req.ip : '';

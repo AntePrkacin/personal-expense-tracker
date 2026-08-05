@@ -1,0 +1,201 @@
+# Fly.io configuration for the Spendifico API. Deployed from THIS directory:
+#
+#   fly config validate --strict
+#   fly deploy --remote-only --ha=false
+#
+# --ha=false is not optional and has no key in this file. `fly deploy --ha`
+# defaults to TRUE, so a bare `fly deploy` creates a spare machine - and a second
+# machine is a second replica set with its own pending writes, which breaks the
+# per-replica atomicity LoginTokenService.issue() and consume() rely on, gives
+# the in-memory throttler a second budget, and races the same migrations. None of
+# the settings below prevent it, because it is a flag on every deploy.
+#
+# Why one instance at all, why the long kill_timeout, and why root: see
+# backend/CLAUDE.md, Deployment. How to run a deploy: docs/guides/deployment.md.
+
+app = "spendifico-api"
+
+# Nearest to our users (Central and Southeast Europe), because sync mode takes
+# Turso off the request path.
+#
+# This deliberately reverses an earlier `lhr` choice, which was justified as the
+# nearest Fly hop to the Turso group in aws-eu-west-1. That reasoning was weak:
+# the backend reads and writes an embedded replica, and `turso-client.factory.ts`
+# is the only thing that calls `sync()`, on a TURSO_SYNC_INTERVAL_S timer. No read
+# or write endpoint waits on Turso, and even the bootstrap pull is once per user
+# per process because connections are cached. Turso distance therefore belongs to
+# background paths, so the region should track users instead.
+#
+# One exception, accepted: `POST /api/auth/verify` blocks on Turso provisioning
+# with nothing floated, so Frankfurt costs it tens of milliseconds - once per
+# account, ever.
+#
+# The Turso group stays in aws-eu-west-1; there is no reason to move it. `ams` is
+# the fallback if `fra` is ever capacity-constrained.
+primary_region = "fra"
+
+# Fly sends SIGINT by default, which Nest's enableShutdownHooks() already
+# handles. The default grace is only 5 SECONDS, and DatabaseModule's
+# onApplicationShutdown flushes every open user replica plus the central one
+# before it returns, each doing a final push() to Turso Cloud, unbounded in time.
+# 60s is cheap insurance against exactly the silent write loss that ruled out a
+# serverless host. Quoted: KillTimeout is a duration, and a bare integer risks
+# being read as nanoseconds. Confirm with `fly config show` after any change.
+kill_signal = "SIGINT"
+kill_timeout = "60s"
+
+# 512MB of RAM with a deliberately unbounded user-replica cache can reach an OOM
+# kill, and SIGKILL skips onApplicationShutdown entirely, so the final push()
+# never runs. Swap is here to keep the process STOPPABLE, not to make it fast; it
+# is not a substitute for the LRU in docs/TODO.md if memory pressure shows up.
+swap_size_mb = 512
+
+[deploy]
+  # One volume-bound machine gives a rolling deploy nothing to roll to. A few
+  # seconds of downtime per deploy is accepted; there is no availability target.
+  strategy = "immediate"
+
+[env]
+  # PORT deliberately NOT set here. The Joi schema defaults it to 3000, which is
+  # also internal_port below - restating it would be one fact with two homes that
+  # must always agree, and disagreeing means the app listens somewhere Fly's
+  # proxy never routes to, failing the health check with nothing in the app logs
+  # to explain why. Change internal_port and PORT together if either ever moves.
+
+  # On the mounted volume, so replicas survive a restart. Absolute, because the
+  # ./databases default is resolved from the process cwd.
+  DATABASE_DIR = "/data/databases"
+
+  # The production frontend origin, and the most load-bearing single value in
+  # this file, because it has TWO consumers rather than one: main.ts uses it as
+  # the only allowed CORS origin, and auth.service.ts uses it as the base of
+  # every emailed login link. A wrong value here does not fail at boot - Joi
+  # checks only that it parses as a URI - it fails as login emails pointing
+  # somewhere dead, which is why it is worth being exact about.
+  #
+  # Three consequences of "exactly one origin", all of them live:
+  #   - `www` is not interchangeable with the apex. A browser on
+  #     https://spendifico.eu sends that as its Origin and it will NOT match, so
+  #     the apex has to redirect to www rather than serve the app.
+  #   - No Vercel preview deployment will ever pass CORS, since each gets its own
+  #     hostname.
+  #   - Local development does not use this value at all: the default is
+  #     http://localhost:4200 (docs/guides/configuration.md).
+  FRONTEND_URL = "https://www.spendifico.eu"
+
+  TURSO_GROUP = "decode-pet"
+
+  # Auth rate limits, tightened below the Joi defaults (5 email / 30 IP) for the
+  # deployed app: 3 login-link/register knocks per 15 minutes per email address,
+  # 15 per 15 minutes per caller IP. The window is AUTH_RATE_TTL_S, left at its
+  # 900s (15 min) default. Local, CI and the e2e suite never read this file, so
+  # they keep the looser defaults - only production is tightened.
+  #
+  # DEMO/SHOWCASE WARNING - read "Showcase / demo day" in
+  # docs/guides/deployment.md before an event. The per-IP limit is the trap: a
+  # room full of people on one venue WiFi all share a single caller IP, and a
+  # full signup spends TWO of that IP's knocks (register, then verify), so 15
+  # allows only ~7 signups per 15 min for the whole room. Raise this value for
+  # the event and put it back to 15 afterwards.
+  AUTH_RATE_LIMIT = "3"
+  AUTH_RATE_IP_LIMIT = "15"
+
+  # Paired with the MAILPACE_API_TOKEN secret by Joi's .and(). Note the sharp
+  # edge: `fly secrets unset MAILPACE_API_TOKEN` on its own leaves this half of
+  # the pair set, and the app then REFUSES TO BOOT rather than falling back to
+  # logging links. Remove both together or the machine crash-loops.
+  MAIL_FROM = "login@spendifico.eu"
+  MAIL_FROM_NAME = "Spendifico"
+
+  # TWO hops, not one - empirically determined on 2026-08-05 after "1" shipped
+  # and demonstrably failed: a phone tether got 429 against an already-exhausted
+  # bucket, proving every caller was landing in one shared bucket rather than
+  # each getting their own.
+  #
+  # Captured the real X-Forwarded-For Fly delivers to this app via a throwaway
+  # diagnostic route, then replayed it offline through the same Express/proxy-addr
+  # stack the app uses. For a direct client with no external proxy, the header
+  # already carries TWO addresses - `<real client>, <this app's own assigned
+  # IP>` - because Fly's internal routing appends the app's own address as it
+  # hands the request to the machine. Express's numeric trust proxy counts
+  # trusted hops from the SERVER end of the chain, so "1" strips only the
+  # rightmost entry (the app's own IP, a constant) and resolves every request to
+  # that same constant - the exact one-shared-bucket failure. "2" strips both
+  # and correctly resolves the real client.
+  #
+  # This number is exact, not a safe-ish estimate, and getting it wrong in
+  # either direction reopens a hole: confirmed by replaying a client-forged
+  # X-Forwarded-For prefix (e.g. attacker-IP prepended to the real chain)
+  # through the same stack. At 2 the forged entry is correctly ignored either
+  # way - trust proxy counts from the server end, so a client can only push its
+  # own junk further left, never move the boundary. At 3 or higher, the same
+  # forged prefix is trusted as if it were the real client, letting anyone pick
+  # their own rate-limit bucket - reopening the exact hole TRUST_PROXY_HOPS
+  # exists to close. So this value tracks Fly's own topology, not a margin of
+  # safety: raise it only if Fly's request path is confirmed to have gained a
+  # hop, never as a guess.
+  TRUST_PROXY_HOPS = "2"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+
+  # The machine runs continuously. Autostop was tried, measured and deliberately
+  # rejected: it works correctly - an autostop does send the kill_signal above
+  # and does run the shutdown flush - but the resume costs about 15 seconds on
+  # the first request, and Fly gives NO way to tune the idle delay (the proxy
+  # stop loop runs on its own schedule, and `idle_timeout` is an HTTP connection
+  # setting, not this). An always-instant API is worth ~$3.32/month here. The
+  # measured numbers are in backend/CLAUDE.md so the option is not re-litigated
+  # from scratch.
+  auto_stop_machines = "off"
+
+  # Deliberately false, which is only meaningful because autostop is off: with
+  # nothing stopping the machine, autostart has no job to do, and false is what
+  # makes `fly machine stop` STAY stopped - so the graceful-shutdown check, which
+  # is the whole point of this deployment, is deterministic rather than racing the
+  # next request. The cost is honest: a machine stopped by hand, or stopped and
+  # not restarted after some incident, stays down until `fly machine start`.
+  # Crashes are covered separately by Fly's own machine restart policy.
+  auto_start_machines = false
+
+  # One, in the primary region. Note this only governs autostart/autostop
+  # behaviour, so with autostop off it is documentation rather than enforcement -
+  # and it does NOT stop `fly deploy --ha` from adding a second machine.
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+
+  # Must cover the WHOLE boot, because Nest serves nothing until app.listen(),
+  # which is after the central replica is opened and its migrations run - on a
+  # fresh volume that includes a full bootstrap pull from Turso Cloud. Too short
+  # turns a slow first boot into a boot loop. Replace with roughly 3x the
+  # observed machine-start-to-listening time from `fly logs`.
+  grace_period = "30s"
+  method = "GET"
+
+  # One of the four @Public() routes, so the check needs no bearer. Liveness
+  # only: it is a constant and touches no database, which is deliberate - a
+  # DB-touching check would flap the machine on a transient Turso blip. Boot
+  # ordering covers the rest, since an unreachable database means the process
+  # never listens at all.
+  path = "/api/hello"
+
+[[mounts]]
+  source = "spendifico_data"
+  destination = "/data"
+  # 1GB, which is Fly's minimum and still enormous here: the central database is
+  # a few KB and each user replica a few hundred. Sized down from 3GB once the
+  # real usage was visible. Volumes can only be EXTENDED, never shrunk, so
+  # getting this wrong upward means destroy and recreate - cheap only because the
+  # volume holds a replica that connectSync re-pulls, never the system of record.
+  # initial_size is deliberately omitted: the volume is created explicitly before
+  # the first deploy, so a failure provisioning it cannot be mistaken for a
+  # failure deploying. A volume also cannot move between orgs, so it is worth
+  # creating by hand with --org spelled out.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

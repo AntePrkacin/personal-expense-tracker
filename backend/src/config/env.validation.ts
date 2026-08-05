@@ -99,6 +99,17 @@ export const envValidationSchema = Joi.object({
   AUTH_RATE_LIMIT: Joi.number().integer().positive().default(5),
   AUTH_RATE_IP_LIMIT: Joi.number().integer().positive().default(30),
   AUTH_RATE_TTL_S: Joi.number().integer().positive().default(900),
+
+  // How many reverse proxies sit in front of this process, which is what Express
+  // needs to know before req.ip can mean the caller rather than the proxy. The
+  // per-IP limiter above keys on req.ip, so this is not cosmetic in either
+  // direction: left at 0 behind a proxy, every caller shares one bucket and
+  // AUTH_RATE_IP_LIMIT silently becomes a global cap; set above 0 with nothing in
+  // front, X-Forwarded-For is believed and a client can pick its own bucket per
+  // request. Default 0 because local development, CI and the e2e suite have
+  // nothing in front - only a proxied deployment raises it. `.min(0)` rather than
+  // `.positive()`, because 0 is the default and has to validate.
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(0),
 })
   .and(
     'TURSO_ORG',

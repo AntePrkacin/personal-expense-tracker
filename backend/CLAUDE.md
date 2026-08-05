@@ -506,6 +506,92 @@ What the test setup works around), and
 `npm ci` resolving the `@tursodatabase/*` native bindings on `ubuntu-latest` is itself the
 check that those platform binaries are available there. Both are confirmed working.
 
+## Deployment
+
+The commands, the first-time setup and how to verify a deploy are in
+`docs/guides/deployment.md`. What follows is why the deployment has the shape it has, because
+almost every constraint here is one the persistence design imposed rather than a hosting
+preference.
+
+**Exactly one instance, and it is not a preference.** The architecture is a local replica synced
+to the cloud, so a second process is a second replica set with its own unpushed writes.
+`LoginTokenService.issue()` wraps supersede-then-insert in a transaction and `consume()` is a
+single conditional `UPDATE ... RETURNING`, but both are atomic only _within_ one replica - two
+instances mean two live login links, or one token consumed twice. The throttler's storage is
+in-memory, so the auth rate limits would also become per-instance, and nothing holds a
+cross-process lock while migrations run. This is what ruled out a serverless host, and it is why
+`fly deploy` is always run with **`--ha=false`**: that flag defaults to true, creates a spare
+machine, and no setting in `fly.toml` overrides it. A volume can only attach to one machine, so
+the platform partly enforces the rule, but relying on that rather than on the flag is relying on
+an accident.
+
+**The machine runs continuously, and autostop was rejected on evidence rather than on
+principle.** It was configured, deployed and measured, so the numbers are recorded here to save
+anyone repeating it. It is _not_ a breach of the single-instance rule, which is the obvious
+objection and a wrong one: stopping and starting are operations on _the_ one machine, while a
+second replica set only ever comes from `--ha` or autoscaling. It also does not skip the flush -
+an autostop sends the configured `kill_signal` and honours `kill_timeout`, and the shutdown
+bracket was observed completing on an autostop, with the health check not keeping the machine
+alive either. What killed it was the resume: about **15 seconds** to serve the first request
+after idling, of which roughly 9 is the app and the rest is Fly starting the machine, against
+about 200ms warm. And Fly exposes **no way to tune the idle delay** - the proxy's stop loop runs
+on its own schedule and decides on excess capacity, while `idle_timeout` is an HTTP connection
+setting rather than this. So the choice was 15-second first impressions or roughly $3.32 a month,
+and the money won. One further wrinkle if it is ever reconsidered: `register` floats its token
+issue and mail send rather than awaiting them, and `onApplicationShutdown` does not await that
+promise, so a stop landing in that window answers 202 and sends nothing.
+
+**The kill timeout is raised far past Fly's default of 5 seconds** because
+`DatabaseModule.onApplicationShutdown` closes every open user replica and then the central one,
+each `close()` doing a final `push()` over the network, with no timeout of its own. That final
+push is the last chance for a locally-committed write to reach Turso Cloud. A stop cut off
+half-way through loses those writes silently, which is the same failure a serverless host would
+have had, arriving by a different door - so the shutdown brackets itself with two log lines. An
+opening line with no closing line is the signal, and it is the only reason the ticket's central
+check is observable at all: both failure paths inside only `warn`, so before those lines a
+truncated flush and a clean one looked identical.
+
+**The image must carry `drizzle/` at the working directory.** `CENTRAL_MIGRATIONS_DIR` and
+`USER_MIGRATIONS_DIR` resolve from `process.cwd()`, and `nest build` emits only JavaScript, so
+the SQL has to be copied beside `dist/`. Forgetting it does not break the build or the boot: the
+migrator throws on the first migration instead, which for a user database means one person's
+first authenticated request rather than a failed deploy.
+
+**The container runs as root, deliberately for now.** Note the trap before "fixing" it: Fly
+mounts volumes root-owned, so adding `USER node` without a `chown` or an init step turns the
+`mkdir(DATABASE_DIR)` at boot into a permission error. Either change both together or leave it
+alone on purpose. Observed on the first deploy: as root, `mkdir /data/databases` succeeds and the
+sync engine writes its `-wal`, `-info` and `-log` siblings there without complaint.
+
+**Trusting the proxy is configuration that defaults to off.** `TRUST_PROXY_HOPS` exists because
+the per-IP throttler keys on `req.ip`, which behind a proxy is the proxy. It is a hop count
+rather than a boolean because Express's `trust proxy: true` trusts every hop, which lets a client
+prepend its own `X-Forwarded-For` and pick a fresh bucket per request - so the careless value is
+worse than the bug. It defaults to 0 because local development, CI and the e2e suite have nothing
+in front, and only the deployment raises it. Nothing tests the wiring: no suite boots `main.ts`,
+which is also true of CORS and the Swagger setup, and it cannot move into `AppModule` (where this
+repo puts globals so e2e sees them) because it needs the HTTP adapter that exists only after
+`NestFactory.create`.
+
+**The count is exact, and it shipped wrong once.** Fly's deployed value is 2, not the 1 that first
+went out - discovered when a phone tether got a 429 against an already-exhausted bucket, meaning
+every caller was landing in one shared one regardless of source. Captured via a throwaway
+diagnostic route echoing the raw `X-Forwarded-For` Fly delivers, then confirmed by replaying it
+offline through the same Express/proxy-addr stack: a direct client with nothing in front already
+produces two addresses, `<real client>, <this app's own IP>`, because Fly's internal routing
+appends the app's own address before the request reaches the machine. Numeric trust proxy counts
+hops from the **server** end of the chain, which is what makes an exact value safe rather than
+merely convenient: replaying a client-forged `X-Forwarded-For` prefix through the same stack, 2
+correctly ignores it - a client can only push its own junk further left, never move the boundary -
+while 3 or higher trusts the forged entry as if it were real, reopening the exact hole this
+variable exists to close. So the number tracks Fly's real topology, not a margin of safety; see
+`backend/fly.toml`'s comment on `TRUST_PROXY_HOPS` and `docs/guides/deployment.md`'s per-IP
+verification step for the check that catches a regression here.
+
+**The deploy is manual, and that order was deliberate.** Automating it is PET-55. Automating
+before a manual `fly deploy` had ever succeeded would make a red CI run indistinguishable from a
+bad `fly.toml`, a bad Dockerfile or a missing secret.
+
 ## Not built here
 
 Treat these as planned, not available. This list exists so you do not build on something that

@@ -86,6 +86,7 @@ curl http://localhost:3000/api/hello
 | [Configuration](docs/guides/configuration.md) | Every environment variable and what a missing one does |
 | [Database](docs/guides/database.md) | Local files, trying the access flow, schema changes, Turso Cloud |
 | [Sending real email](docs/guides/email.md) | MailPace setup and the smoke test |
+| [Deployment](docs/guides/deployment.md) | Deploying the backend to Fly.io, and the Vercel settings |
 | [Troubleshooting](docs/guides/troubleshooting.md) | Symptom to cause, for the whole repo |
 | [Contributing](docs/CONTRIBUTING.md) | Branches, commits, the hooks, what CI checks |
 

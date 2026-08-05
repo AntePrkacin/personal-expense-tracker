@@ -62,10 +62,17 @@ This is a multi-app repo, so Vercel must build only this folder:
 1. Import the Git repo into Vercel.
 2. Set **Root Directory** to `frontend` in Project Settings.
 3. Vercel auto-detects the Next.js preset (build `next build`, no extra config).
-4. Add `BACKEND_URL`, and any other variables from
-   [Configuration](../docs/guides/configuration.md), under **Environment Variables**, pointing at
-   the deployed backend.
+4. Add `BACKEND_URL=https://api.spendifico.eu` under **Environment Variables**, for Production
+   and Preview. Other variables, and their defaults, are in
+   [Configuration](../docs/guides/configuration.md).
+5. Add `www.spendifico.eu` as the production domain, with the apex `spendifico.eu` **redirecting**
+   to it - the backend allows exactly one CORS origin and it is the `www` form.
 
 Every push to a connected branch then gets a preview deployment, and merges to the production
 branch promote automatically. The NestJS backend is **not** deployed to Vercel; it ships
 separately.
+
+`vercel.json` in this directory pins the function region to `fra1` to match where the backend
+runs, because the default is Washington and would put a transatlantic round trip on every
+server-side fetch. [Deployment](../docs/guides/deployment.md) has the reasoning and the backend
+half.

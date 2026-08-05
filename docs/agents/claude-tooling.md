@@ -22,6 +22,7 @@ matching phrases, not registered commands.
 | `repo-jira`       | Creates/estimates/transitions Jira issues over MCP. Needs a Jira MCP server; see `.claude/skills/repo-jira/references/jira-access.md` for the two supported setups       |
 | `repo-review-prs` | Fetches open PRs via `gh` and reviews unreviewed ones                                                                                                                    |
 | `repo-stack`      | This repo's stacked-branch wiring: the layers of truth, the worktree trap, the conventions. CLI mechanics live in the committed official `gh-stack` skill                |
+| `repo-fly`        | Driving the Fly.io deploy through `flyctl` in Bash: when it loads and the traps that bit the initial deploy. The runbook and config themselves live in `docs/guides/deployment.md` and `backend/fly.toml` |
 | `backend-nestjs`  | Passive reference library of NestJS rules, vendored from upstream. Consulted when writing backend code                                                                    |
 | `frontend-nextjs` | Passive reference library of Next.js/React rules, vendored from upstream. Consulted when writing frontend code                                                            |
 | `backend-drizzle` | How Drizzle and Turso are wired in **this** repo: the two migration scopes, the database-per-user consequences, the Turso drivers. Deliberately not a drizzle-kit manual |

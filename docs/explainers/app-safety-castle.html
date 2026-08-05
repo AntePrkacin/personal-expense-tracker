@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>How we keep the app safe</title>
+    <style>
+      :root {
+        --bg: #eef4ff;
+        --card: #ffffff;
+        --ink: #1f2a44;
+        --muted: #5a6784;
+        --moat: #2f80ed;
+        --gold: #f2b705;
+        --green: #2fb572;
+        --pink: #ef5da8;
+        --purple: #8b5cf6;
+        --stone: #cfd8ea;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: linear-gradient(180deg, #dcecff 0%, #eef4ff 40%, #fef6e6 100%);
+        color: var(--ink);
+        line-height: 1.5;
+        padding: 24px 16px 64px;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        font-size: clamp(1.6rem, 4vw, 2.4rem);
+        margin: 8px 0 4px;
+      }
+      .sub {
+        text-align: center;
+        color: var(--muted);
+        margin: 0 0 24px;
+        font-size: 1.05rem;
+      }
+      .castle {
+        display: block;
+        margin: 0 auto 28px;
+        width: 100%;
+        max-width: 560px;
+        height: auto;
+      }
+      .layers {
+        display: grid;
+        gap: 16px;
+      }
+      .layer {
+        background: var(--card);
+        border-radius: 18px;
+        padding: 18px 20px;
+        box-shadow: 0 6px 18px rgba(31, 42, 68, 0.1);
+        display: grid;
+        grid-template-columns: 64px 1fr;
+        gap: 16px;
+        align-items: center;
+        border-left: 10px solid var(--stone);
+      }
+      .layer .emoji {
+        font-size: 2.6rem;
+        text-align: center;
+        line-height: 1;
+      }
+      .layer h2 {
+        margin: 0 0 4px;
+        font-size: 1.15rem;
+      }
+      .layer p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.98rem;
+      }
+      .layer.moat {
+        border-left-color: var(--moat);
+      }
+      .layer.bouncer {
+        border-left-color: var(--gold);
+      }
+      .layer.ticket {
+        border-left-color: var(--pink);
+      }
+      .layer.doorman {
+        border-left-color: var(--purple);
+      }
+      .layer.room {
+        border-left-color: var(--green);
+      }
+      .tag {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #eef1f8;
+        color: var(--muted);
+        margin-left: 8px;
+        vertical-align: middle;
+      }
+      .buckets {
+        margin-top: 28px;
+        background: #fff8e6;
+        border: 2px dashed var(--gold);
+        border-radius: 18px;
+        padding: 20px 22px;
+      }
+      .buckets h2 {
+        margin: 0 0 10px;
+        font-size: 1.25rem;
+      }
+      .bucket-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 12px;
+      }
+      .bucket {
+        background: #fff;
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 4px 12px rgba(31, 42, 68, 0.08);
+      }
+      .bucket .big {
+        font-size: 1.9rem;
+      }
+      .bucket .count {
+        font-weight: 800;
+        font-size: 1.5rem;
+        color: var(--ink);
+      }
+      .bucket small {
+        color: var(--muted);
+      }
+      .note {
+        margin-top: 28px;
+        background: #eafaf1;
+        border-radius: 18px;
+        padding: 18px 22px;
+        border-left: 10px solid var(--green);
+      }
+      .note h2 {
+        margin: 0 0 6px;
+        font-size: 1.1rem;
+      }
+      .note p {
+        margin: 0;
+        color: #2b6b4b;
+      }
+      @media (max-width: 520px) {
+        .bucket-grid {
+          grid-template-columns: 1fr;
+        }
+        .layer {
+          grid-template-columns: 48px 1fr;
+        }
+        .layer .emoji {
+          font-size: 2rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>How we keep the app safe</h1>
+      <p class="sub">Our castle has more than one wall. Throttling is just the first guard.</p>
+
+      <svg class="castle" viewBox="0 0 560 360" role="img" aria-label="A castle behind a moat with four gates">
+        <!-- sky already handled by body gradient; draw hills -->
+        <ellipse cx="120" cy="330" rx="220" ry="60" fill="#bfe3c6" />
+        <ellipse cx="460" cy="335" rx="220" ry="55" fill="#cceccf" />
+
+        <!-- moat -->
+        <rect x="0" y="286" width="560" height="34" rx="8" fill="#2f80ed" />
+        <rect x="0" y="286" width="560" height="10" rx="6" fill="#5aa0f2" />
+        <text x="280" y="309" text-anchor="middle" font-size="13" fill="#eaf3ff" font-weight="700">
+          the moat: a locked glass tube (HTTPS)
+        </text>
+
+        <!-- bridge -->
+        <rect x="248" y="286" width="64" height="34" fill="#c98a3a" />
+        <rect x="248" y="286" width="64" height="6" fill="#e0a862" />
+
+        <!-- main keep -->
+        <rect x="150" y="120" width="260" height="170" rx="6" fill="#f4c95d" />
+        <rect x="150" y="120" width="260" height="24" fill="#f2b705" />
+
+        <!-- battlements -->
+        <g fill="#f2b705">
+          <rect x="150" y="104" width="26" height="20" />
+          <rect x="190" y="104" width="26" height="20" />
+          <rect x="230" y="104" width="26" height="20" />
+          <rect x="270" y="104" width="26" height="20" />
+          <rect x="310" y="104" width="26" height="20" />
+          <rect x="350" y="104" width="26" height="20" />
+          <rect x="384" y="104" width="26" height="20" />
+        </g>
+
+        <!-- towers -->
+        <g>
+          <rect x="112" y="86" width="56" height="204" rx="4" fill="#f4c95d" />
+          <rect x="392" y="86" width="56" height="204" rx="4" fill="#f4c95d" />
+          <polygon points="112,86 140,52 168,86" fill="#ef5da8" />
+          <polygon points="392,86 420,52 448,86" fill="#ef5da8" />
+          <circle cx="140" cy="58" r="4" fill="#fff" />
+          <circle cx="420" cy="58" r="4" fill="#fff" />
+        </g>
+
+        <!-- gate -->
+        <path d="M248 290 v-70 a32 32 0 0 1 64 0 v70 z" fill="#8b5cf6" />
+        <path d="M258 290 v-64 a22 22 0 0 1 44 0 v64 z" fill="#6d3fd6" />
+        <line x1="280" y1="230" x2="280" y2="290" stroke="#4b2aa3" stroke-width="3" />
+
+        <!-- little visitor -->
+        <g>
+          <circle cx="280" cy="332" r="9" fill="#1f2a44" />
+          <rect x="273" y="338" width="14" height="16" rx="6" fill="#2fb572" />
+        </g>
+
+        <text x="280" y="160" text-anchor="middle" font-size="15" fill="#5a3d00" font-weight="800">
+          your money diary
+        </text>
+        <text x="280" y="182" text-anchor="middle" font-size="12" fill="#7a5a1a">
+          safe inside
+        </text>
+      </svg>
+
+      <div class="layers">
+        <div class="layer moat">
+          <div class="emoji">🔒</div>
+          <div>
+            <h2>The moat <span class="tag">HTTPS</span></h2>
+            <p>Everything between your phone and the app travels in a locked glass tube. Nobody on the road can peek at it.</p>
+          </div>
+        </div>
+
+        <div class="layer bouncer">
+          <div class="emoji">🛡️</div>
+          <div>
+            <h2>Guard 1: the counting bouncer <span class="tag">throttling</span></h2>
+            <p>Counts how often you knock and says "come back later" if you knock too much. See the two buckets below.</p>
+          </div>
+        </div>
+
+        <div class="layer ticket">
+          <div class="emoji">🎫</div>
+          <div>
+            <h2>Guard 2: the one-time magic ticket <span class="tag">login link</span></h2>
+            <p>No passwords exist to steal. Your emailed link works exactly once, expires in 15 minutes, then turns to dust.</p>
+          </div>
+        </div>
+
+        <div class="layer doorman">
+          <div class="emoji">🤐</div>
+          <div>
+            <h2>Guard 3: the silent doorman <span class="tag">no peeking</span></h2>
+            <p>Says the same thing to everyone, so a stranger cannot find out who is or is not a member.</p>
+          </div>
+        </div>
+
+        <div class="layer room">
+          <div class="emoji">🏠</div>
+          <div>
+            <h2>Guard 4: everyone gets their own room <span class="tag">a database each</span></h2>
+            <p>Your things live in your own separate room. You cannot see into anyone else's, because their stuff is simply not in yours.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="buckets">
+        <h2>🪣 The bouncer keeps TWO buckets, not one</h2>
+        <p>You are turned away if <strong>either</strong> bucket is empty. Two buckets catch two different tricks.</p>
+        <div class="bucket-grid">
+          <div class="bucket">
+            <div class="big">🎫</div>
+            <div class="count">3</div>
+            <div><strong>Letter bucket</strong> <small>per 15 min</small></div>
+            <p><small>Counted per <strong>email address</strong> typed in. Stops flooding <em>one inbox</em>, no matter where the knocks come from.</small></p>
+          </div>
+          <div class="bucket">
+            <div class="big">🌐</div>
+            <div class="count">15</div>
+            <div><strong>Doorstep bucket</strong> <small>per 15 min</small></div>
+            <p><small>Counted per <strong>visitor's network address</strong>. Stops one machine trying <em>many different inboxes</em>.</small></p>
+          </div>
+        </div>
+        <p style="margin-top:14px"><small><strong>The bug we fixed on 2026-08-05:</strong> the bouncer was watching the big front gate instead of the people, so the whole crowd shared one doorstep bucket. Now everyone gets their own.</small></p>
+        <p style="margin-top:8px"><small><strong>For a big event</strong> where lots of friends sign up together on the same WiFi, we can turn the doorstep bucket <em>up</em> for the day, then back down after.</small></p>
+      </div>
+
+      <div class="note">
+        <h2>🌱 One thing that is NOT a broken guard</h2>
+        <p>Login emails sometimes land in spam. That is not a hole in the castle. Our castle is brand new, so the postman does not recognise our address yet. It gets better on its own as we send more real mail.</p>
+      </div>
+    </div>
+  </body>
+</html>

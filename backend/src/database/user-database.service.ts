@@ -171,6 +171,18 @@ export class UserDatabaseService {
     );
   }
 
+  /**
+   * How many user databases are currently open.
+   *
+   * Only the shutdown log reads this, to say how much work the flush is about to
+   * do. The count is also the size of the deliberately unbounded connection
+   * cache, so a deployed instance reporting a large number here is the signal
+   * that the LRU in `docs/TODO.md` has stopped being theoretical.
+   */
+  openCount(): number {
+    return this.connections.size;
+  }
+
   /** Closes every open connection. Called on application shutdown. */
   async closeAll(): Promise<void> {
     const handles = [...this.connections.values()];
