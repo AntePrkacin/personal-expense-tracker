@@ -250,6 +250,29 @@ All four parts hard-code `en-US` and its separators. When the currency chosen du
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
 that, and PET-9 made the amount input its third consumer.
 
+**`components/EmptyState.tsx` is the fifth direct child, and it arrived before its second
+consumer rather than after.** `AccessCard` above records the usual sequence: chrome lives beside
+one route until a second screen turns out to draw the identical box, then moves. This one skipped
+the wait because the second consumer is already measurable in the design file - frame 07
+Transactions (node `45:1044`) and frame 16 AI Insights (node `39:665`) are the same card, same
+72px accent-soft circle, same `Display/S` heading, same 440px `Body/L` body, same primary button,
+differing only in glyph and copy, and DSH-7 describes the same shape a third time inside the
+dashboard's recent-list card. Waiting for PET-44 to prove what PET-30 could already see would
+have bought a move commit and nothing else. It takes `icon`, `heading`, `body`, an optional
+`action` and `SectionHeader`'s `headingLevel`, defaulting to 2 because `PageHeader` owns the
+page's `h1`.
+
+**Two of its values are the ones a reader will try to correct, so both are pinned by its
+suite.** It is `rounded-lg`, Radius/LG at 16px, where every other card in the app is
+`rounded-xl` at 20 - Figma binds a raw 16 on this frame. And it carries **no `shadow-card`**,
+which makes it the first card here without one; `frontend/CLAUDE.md` calls that token "the centred
+card every access frame and every dashboard card draws", and this frame simply has no shadow at
+all. Reaching for `AccessCard`'s box string, which is the obvious move, is therefore wrong twice
+over - and both mistakes look like the design until somebody opens Figma. The one deliberate
+deviation is `max-w-110` where the frame fixes 440px: identical at the designed 1440 width, and
+a narrower window wraps instead of overflowing the card's `px-10`, the same call `AccessCard`'s
+`py-10` makes about a viewport Figma never draws.
+
 ## The screens
 
 The signed-in shell, its four routed views and the access screens outside it are documented in
@@ -303,11 +326,19 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   the shape from.
 - **The shell's content.** The `(app)` group, the four routes and the page header exist, every
   screen renders its designed header, and the shell is really gated and really shows the signed-in
-  user's profile as of PET-52. What is missing is everything below the header: all four `<main>`
-  elements are empty. The month select and the search field are drawn but inert by design.
-- **Every read except the two the access flow needed.** PET-52 ended the "nothing reads at all"
-  era: `lib/session.ts` calls `GET /api/auth/session` and `lib/profile.ts` calls
-  `GET /api/profile`, both lifting the session cookie into an `Authorization` header
-  server-side, and both are the pattern to copy. What no screen fetches yet is its own data -
-  the dashboard summary, the transaction list and its detail, the categories and their month
-  stats all exist on the backend and are read by nobody.
+  user's profile as of PET-52. What is missing is everything below the header on **three** of the
+  four: the Dashboard, AI Insights and Settings `<main>` elements are empty. Transactions is the
+  exception as of PET-30 - it renders the tab bar, its real count badge and both empty states,
+  leaving the table body and the filter bar as slots PET-29 fills, so a `filterBar` or `table`
+  prop that goes nowhere is a seam rather than a stub. The month select and the search field are
+  drawn but inert by design, and so are both of the transactions tabs.
+- **Every read a screen needs for its own data, bar the transactions list.** PET-52 ended the
+  "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and `lib/profile.ts`
+  calls `GET /api/profile`, both lifting the session cookie into an `Authorization` header
+  server-side. PET-30 added the third, `lib/transactions.ts`, and it is the first read a _screen_
+  makes for its own data - so it, rather than the two access reads, is the one to copy: it shows
+  the classified-failure policy, and it shows what to do when the API's answer is ambiguous.
+  All three now go through `authorizedGet` in `lib/session.ts`, which is where the cookie becomes
+  a bearer token; do not inline a fourth copy of that. What no screen fetches yet is the
+  dashboard summary, the transaction _detail_, and the categories with their month stats: all
+  three exist on the backend and are read by nobody.

@@ -632,6 +632,54 @@ that, at which point the export became a claim about nothing rather than a safeg
 the condition this file already set for deleting it. `layout.test.tsx` inverted its assertion
 rather than dropping it, so nobody restores it.
 
+**`/transactions` is the first screen with content under its header, and the shape it uses is
+the one the other three should copy.** `page.tsx` is async, awaits `readTransactionsView()` and
+hands the result to `TransactionsScreen`, which is synchronous and takes the whole state as one
+prop. The split is not stylistic: Storybook cannot render an async Server Component that reads
+cookies, which is the same reason `WelcomeScreen` and `CheckEmailScreen` are their own files, and
+it is what lets both empty states be diffed against Figma with no request scope and no mocks. It
+also means `(app)/pages.test.tsx` now renders every page through `await Page()` - awaiting a
+synchronous component's return value is a no-op, so one call site covers all four - and mocks
+`../../lib/transactions` for the one that fetches.
+
+**The screen has three states, and the API cannot tell them apart on its own.** `total` is the
+count _after_ filters and `period` defaults to `current`, and PET-28 deliberately publishes no
+account-wide count, so a `total` of 0 means one of: the account is empty, a filter matched
+nothing, or the account's transactions are all in an earlier month. The third is the one that
+forces the design: treating it as the first renders "Log your first expense" over a real history
+_and_, because TRN-3 removes the filter bar in that state, leaves no control on screen that could
+change the period to go and find it. So `lib/transactions.ts` resolves the ambiguity with a
+second read - `period=all`, no other filter, fired **only** when the first read returns zero -
+rather than inferring from whether a filter looks active, which gets that third case wrong by
+construction because that case _has_ no active filter. Every page load with data on it still
+costs exactly one request.
+
+**`TransactionsScreen` owns the `filterBar` conditional, and that is why it was built before the
+filter bar.** TRN-3 says the bar is deliberately absent in the empty state, which is a statement
+about a conditional rather than about a component - so the slot and its test exist now, and PET-29
+fills something that already knows when to disappear. Built the other way round, nothing would
+have failed if the bar rendered unconditionally. `table` is the same shape for the populated
+branch.
+
+**Both tabs are inert, and "Categories" specifically must not become a link.** It opens frame 13,
+which is PET-36's route and has no `page.tsx` behind it, and `lib/routes.test.ts` asserts with
+`fs` that every declared route does - its `PENDING` list is empty and stays. So a link here would
+either 404 or force exactly the kind of exemption that turns that check into a lie. Neither label
+is a `<button>`, `<a>` or `role="tab"`, matching the month and search pills, and both
+`pages.test.tsx` and `TransactionsScreen.test.tsx` pin it. Making them real controls is PET-29's
+AC2. The count badge beside "All transactions" is the one real thing in the bar, and it reads
+`total` rather than `transactions.length` because the contract says to: a future page size must
+not silently turn TRN-2's badge into a page count.
+
+**The no-results copy is ours, and it amends A15 and PET-30's AC5.** Both said to reuse frame
+07's message until a variant is designed. That message reads "Log your first expense and it'll
+show up here" - shown to somebody with a hundred transactions whose search matched nothing, that
+is not thin copy but wrong copy, reporting the account as empty when it is full. So the
+no-results state keeps the card, the glyph and the button and changes the two strings, and
+`docs/TODO.md` records the amendment plus these two strings joining what A29 owes a designer.
+The designed state keeps Figma's UK "categorised" (A30). `TransactionsEmpty.tsx` exports both
+copy objects so no test or story restates a shipped string.
+
 **`PLACEHOLDER_PROFILE` is gone too, and the shell makes exactly one read.** `requireProfile()`
 in `lib/profile.ts` calls `GET /api/profile`, which stitches the names from the per-user
 `profile` row together with the email from the central `users` row - the seam that made the
@@ -647,9 +695,10 @@ alongside this file whenever the work is in a route: the `/api/chat` route handl
 shell's content, and every read a screen needs for its own data. That list is the
 single home, so nothing is restated here.
 
-The one trap to carry into every file in this directory: **the session is real now, and the
-screens behind it are still empty.** `requireProfile()` and `hasSession()` both do what they say
-as of PET-52, so a route that reads as authenticated is, and the sidebar footer shows a real
-person - but all four `<main>` elements below the header are empty, and no screen fetches its own
-data. A screen that renders is still not evidence that its data path exists; what changed is that
-the _authentication_ path finally is.
+The one trap to carry into every file in this directory: **the session is real now, and three of
+the four screens behind it are still empty.** `requireProfile()` and `hasSession()` both do what
+they say as of PET-52, so a route that reads as authenticated is, and the sidebar footer shows a
+real person. PET-30 then filled one `<main>`: `/transactions` reads its own data and renders it.
+The Dashboard, AI Insights and Settings `<main>` elements are still empty and still fetch nothing.
+A screen that renders is not evidence that its data path exists - `/transactions` is now the only
+one where it does, and it is the file to copy rather than the new normal.

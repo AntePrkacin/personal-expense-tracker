@@ -272,6 +272,62 @@ search input, so this one is a chosen behaviour rather than a read one: a box th
 typing and filters nothing is a worse lie than one that plainly does nothing. PET-28's
 transaction list is what turns it into an `<input>` plus the state that owns the query.
 
+**Amended 2026-08-05 by PET-30.** The list it filters exists now: `/transactions` reads
+`GET /api/transactions` and renders three states. So the reason above has moved on - what is
+missing is not the data but the query, and **PET-29** is the ticket that owns it, not PET-28.
+`readTransactionsView()` already takes the filters as its one argument, so turning this real is
+the `<div>` becoming an `<input>`, plus whichever of `searchParams` or client state PET-29 picks
+to hold the term. A third inert control joined them in the same ticket, and it is inert for a
+different reason again: the transactions **tab bar**. "Categories" points at frame 13, which is
+PET-36's route and has no `page.tsx`, and `lib/routes.test.ts` asserts with `fs` that every
+declared route has one - so a link there would either 404 or force a hole into that check.
+`pages.test.tsx` now pins `queryByRole('tab')` and `queryByRole('link')` empty on that page too.
+
+### A15's no-results state is amended, and its copy is ours until a variant is designed
+
+A15 said: no search-or-filter no-results state is designed, so show frame 07's "No transactions
+yet" message without hiding the controls until a designed variant exists. PET-30 kept the second
+half and **amended the first**, which also amends its own AC5.
+
+The reason is that the placeholder is not merely thin, it is wrong. Frame 07's body reads "Log
+your first expense and it'll show up here, sorted and categorised automatically." Shown to
+somebody with a hundred transactions whose search matched nothing, that reports the account as
+empty when it is full, and the button it offers does not address what went wrong. A15 was a
+default for an undesigned state rather than a decision about this one, so the two strings changed:
+the no-results state reads **"No matching transactions"** over **"Try a different search term,
+category or period."** Everything else - the card, the glyph, the "Add transaction" button - is
+identical, and the controls stay on screen exactly as A15 asked.
+
+**What is owed.** A designed no-results variant, at which point these two strings are replaced
+rather than kept. Until then they join the list under A29's item above: copy that ships, was not
+read off a frame, and needs a designer's sign-off. `Screens/07 Transactions — No results` is the
+quickest thing to put in front of them, next to the `Empty` story it should be diffed against.
+The designed state keeps Figma's UK "categorised" untouched, which is A30's copy pass and not
+this.
+
+### Telling an empty account from an empty filter costs a second request
+
+`GET /api/transactions` returns `total` **after** filters and no account-wide count beside it -
+PET-28 considered the second count and dropped it, because no frame draws two numbers. Combined
+with `period` defaulting to `current`, that leaves a `total` of 0 meaning any of three things: the
+account is empty, a filter matched nothing, or the account's transactions are all in an earlier
+month.
+
+The third is the one that forces a decision rather than a preference. Treating it as the first
+renders "Log your first expense" over a real history and, because TRN-3 removes the filter bar in
+that state, leaves no control on screen that could change the period to go and find it - the user
+is told they have no data and given no way to disagree. Inferring the state from whether a filter
+looks active gets exactly that case wrong, because that case has no active filter.
+
+So `lib/transactions.ts` reads a second time when the first read returns zero: `period=all`, no
+other filter, and only then. Every page load with data on it still costs one request, and the
+extra round trip is spent only on the state that has nothing to render. **What would remove it is
+a count the API does not publish** - an unfiltered total beside the filtered one, which is a
+backend change reversing a recorded PET-28 decision, so it wants a real reason rather than tidiness.
+One reason may arrive on its own: if the period select ever offers "All time" (A16 leaves its
+options unknown), a caller already asking for `period=all` pays one redundant request in the empty
+case, and `readTransactionsView` should short-circuit rather than probe.
+
 ### The header period ignores the profile's month start day
 
 `monthOverline()` and `monthLabel()` in `lib/format.ts` format the **calendar** month, and
@@ -282,6 +338,14 @@ value, which no user can set yet.
 Fixing it is not just threading a number through: with `monthStartDay = 15`, the period
 spanning 15 Aug to 14 Sep has no single month name, and the design draws no label for that
 case. So this needs a designer answer alongside PET-45's read, not only the value.
+
+**PET-30 gave the mismatch a visible symptom rather than only a wrong label.** The transactions
+header formats the calendar month while the list read's `period=current` resolves against
+`monthStartDay`, so for any value other than 1 the two disagree about which window the page is
+showing. A transaction dated inside the calendar month but outside the budgeting period is then
+absent from a page whose overline names that month - and if it is the only one, the page reports
+no matching transactions under a heading that says otherwise. Nothing new is broken here; what
+changed is that the disagreement now has rows to hide.
 
 The same two functions also hard-code the `en-US` locale, matching `formatCurrency`. When
 onboarding's chosen currency is finally threaded through, the locale should follow it. PET-9
@@ -522,6 +586,17 @@ number** because there is no frame - which also makes opening them the only revi
 get. The card and both controls are screen 24's, so what actually needs the designer's eye is the
 copy rather than the layout.
 
+**PET-30 raised it a fifth time, with two strings, and this pair is different from the twelve
+above.** Every earlier addition filled a state the design simply never drew. These two *replace* a
+string the design does draw: A15 instructed the no-results state to reuse frame 07's "No
+transactions yet" copy, and PET-30 shipped **"No matching transactions"** over **"Try a different
+search term, category or period."** instead. So the sign-off asked for here is not "is this
+acceptable copy for a gap" but "was overriding your instruction right" - the argument being that
+frame 07's body tells a user with a full history to log their first expense. The reasoning is under
+A15's own item above, and `Screens/07 Transactions — No results` sits beside the `Empty` story it
+should be compared against. If the answer is no, reverting is two strings in
+`TransactionsEmpty.tsx` and the assertions naming them.
+
 ### Screen 24's no-address arrival is new copy and a reworded AC
 
 `/check-email` shows the address the user submitted, and PET-12 carries it in a fifteen-minute
@@ -650,6 +725,13 @@ native build per platform, and `test-e2e` runs against the embedded driver on a 
 
 Until then the DTO's own description says so, which is at least honest to a frontend developer
 reading the generated types.
+
+**PET-30 is what makes this reachable by a user rather than by a caller.** The transactions page
+now renders a no-results state, so a search for `kovačić` against a merchant stored as `Kovačić`
+produces a screen saying there are no matching transactions - which is, from the reader's side,
+indistinguishable from having none. The copy that ships tells them to try a different search term,
+which happens to be correct advice for the wrong reason. Worth revisiting together with the
+normalized column rather than separately.
 
 ### The Fly MCP server is declined; the flyctl workflow becomes a repo skill instead
 
