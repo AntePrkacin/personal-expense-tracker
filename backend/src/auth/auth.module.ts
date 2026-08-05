@@ -43,6 +43,17 @@ const DEFAULT_RATE_TTL_S = 900;
  * high with nothing in front lets a caller pick a fresh bucket per request. The
  * per-address limiter is unaffected either way. See
  * `docs/guides/configuration.md` for the value.
+ *
+ * Getting that right is necessary and, as of PET-11, no longer sufficient - and
+ * this is an active limitation rather than a future one. `req.ip` is now the
+ * *frontend server*: register (and PET-12's login-link) reach this API from a Next
+ * Server Action, so the real browser never connects here at all and every user
+ * shares one per-IP bucket. This limiter therefore distinguishes nobody on those
+ * two routes, and the per-address ones are what still protects the flow. Note the
+ * two problems are separate: `TRUST_PROXY_HOPS` fixes reading the caller through a
+ * proxy chain, while this needs the frontend to forward the browser's address
+ * *and* a reason to trust that header, which is more than a config line. See
+ * docs/TODO.md.
  */
 export function trackByIp(req: Record<string, unknown>): string {
   return typeof req.ip === 'string' ? req.ip : '';

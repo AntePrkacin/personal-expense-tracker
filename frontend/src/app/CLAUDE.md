@@ -409,6 +409,27 @@ message appears synchronously beside the field the user just left, while this on
 network round trip with nothing else on screen changing, so nothing else would tell a screen reader
 the submit failed. Five new strings come with it, and `docs/TODO.md` adds them to what A29 owes.
 
+**Step 3 validates step 1's budget too, and the redirect is the error message.** The form owns
+three fields and submits six values, so checking only its own would let a draft with no budget
+through: `parseAmountInput('')` is `NaN`, `JSON.stringify` writes that as `null`, and
+`RegisterDto`'s `@IsNumber` answers 400 - surfaced as the generic failure line, on a screen with
+no control that could fix a budget. Not a hypothetical path, and not a bug anywhere else: the
+draft is per tab and `/setup/register` is not gated, so opening it in a new tab starts empty.
+An invalid budget pushes to `/setup` rather than rendering a message, because the design has no
+copy for a budget that went missing and step 1 is where it is set; the draft survives the trip,
+so the three fields are still filled on the way back. The categories need no such check - an
+empty selection is legal (A4). This screen's own three fields are checked **first**, so an empty
+form says what is wrong here instead of silently bouncing.
+
+**The card freezes its values on the way out, and `pending` stays true after a success.**
+`clearDraft()` re-renders this form synchronously while the `router.push` it precedes takes a
+moment, so the three fields would visibly empty themselves before the next screen arrived. The
+form snapshots them into state first and renders that snapshot instead. Two things fall out of
+it: `change()` early-returns once frozen, because the draft is gone and a keystroke would write a
+fresh one holding a single field, and the submit button is deliberately never re-enabled on
+success - the account exists by then, so offering a second registration of the same address
+would be wrong even though the backend would handle it (REG-6).
+
 **Onboarding runs to the end now, and the dead end moved rather than closed.** Step 3's "Finish
 setup" creates a real account and pushes to `/check-email?email=...`, which 404s until PET-12. The
 address travels in the query string because the draft is gone by then and VER-1 interpolates it into

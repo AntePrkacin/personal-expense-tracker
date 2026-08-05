@@ -701,6 +701,23 @@ same stack showed 2 correctly ignores it while 3 or higher trusts it, so raising
 boolean and the full replay methodology, `backend/fly.toml`'s comment for the value, and
 `docs/guides/deployment.md`'s per-IP check for how to catch a regression here.
 
+**PET-11 made that second half real, and it is no longer a deployment-time worry.** The
+register call goes through a Next Server Action, so the backend sees the *frontend server's*
+address on every registration and there is exactly one per-IP bucket for the whole
+application. At the default of 30 per 15 minutes, thirty registrations from anywhere lock
+out everybody; as an abuse control it now does nothing at all. PET-12's login-link actions
+inherit the same shape. The per-email limiter still works correctly, and it is the one that
+actually protects this flow, which is why this is degraded rather than broken.
+
+The fix is two-sided and neither half works alone: the frontend has to forward the real
+client address, and the backend has to be told how many hops to trust. **Do not bolt on
+either half in isolation.** Forwarding a client-supplied `X-Forwarded-For` and then trusting
+it makes the limiter *spoofable*, which is worse than blind - and the backend is publicly
+reachable, so a custom header like `X-Client-IP` is no better without authentication between
+the two apps, which does not exist. Getting this right means deciding the hop count against
+the real topology (PET-53's Fly.io deploy, plus whatever sits in front) and probably
+authenticating the frontend to the backend. That is its own ticket, not a line in a form.
+
 ### Token rotation is manual
 
 By MVP decision every Turso token is created with **Expires: NEVER**: the control-plane
