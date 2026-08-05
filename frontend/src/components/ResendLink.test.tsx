@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import type { ResendResult } from './actions';
+import type { ResendResult } from '../lib/resend';
+
 import { ResendLink } from './ResendLink';
 
 // AC5, plus the states A36 says do not exist. No mocks: the action is a prop.

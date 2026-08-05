@@ -1,6 +1,6 @@
 import { readPendingEmail } from '@/lib/pendingEmail';
+import { resendLoginLink } from '@/lib/resend';
 
-import { resendLoginLink } from './actions';
 import { CheckEmailScreen } from './CheckEmailScreen';
 
 // 24 Check your email, served here rather than under `/setup`: LOG-3 reaches it from

@@ -4,19 +4,32 @@ import { postAccepted } from '@/lib/backend';
 import { readPendingEmail } from '@/lib/pendingEmail';
 import type { components } from '@/types/api';
 
-// "Resend link" on screen 24 (VER-2): asks the backend for a fresh link to the
-// address this browser last submitted.
+// "Resend link" (VER-2): asks the backend for a fresh link to the address this browser
+// last submitted.
 //
 // Safe to call repeatedly by design rather than by luck: the backend sends a new link
 // and invalidates the previous one instead of duplicating (REG-6, A35), which is what
 // makes this the only recovery the design gives (A36) and why it needs no confirmation
 // step.
+//
+// **In `lib/` rather than beside a route, which breaks this repo's actions-live-in-
+// `actions.ts` habit for a concrete reason.** PET-52 gave it a second caller: the verify
+// failure screen offers the same recovery A38 asks for, so two route segments now need
+// it. Left in `app/check-email/actions.ts`, the `ResendResult` type would have to be
+// imported into `components/ResendLink.tsx`, pointing a shared component at a route -
+// the layering inversion moving that component to `components/` exists to remove.
+//
+// **The objection `lib/backend.ts` raises against `'use server'` does not apply here.**
+// That file must not become an action because it takes a `path`, so publishing it would
+// expose an endpoint that POSTs anywhere. This one takes nothing and hits one fixed
+// path, which is exactly the shape that is safe to publish - and it was already
+// published as an action, so moving the file changes nothing about its exposure.
 
 /**
  * What a resend reports back.
  *
  * Three outcomes rather than two, because **"there is no address" is reachable while
- * this screen is open** and needs different advice from a failure. The cookie carrying
+ * the screen is open** and needs different advice from a failure. The cookie carrying
  * the address expires after fifteen minutes, and screen 24 is precisely the screen a
  * user leaves open while waiting for mail - so a resend twenty minutes in finds nothing
  * to send to. Told "please try again" the user would retry forever, on a screen whose

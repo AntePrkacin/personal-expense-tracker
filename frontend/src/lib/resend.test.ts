@@ -1,6 +1,5 @@
-import { readPendingEmail } from '../../lib/pendingEmail';
-
-import { resendLoginLink } from './actions';
+import { readPendingEmail } from './pendingEmail';
+import { resendLoginLink } from './resend';
 
 // What this action does that the login one does not: it reads the address instead of
 // being handed one. The request mechanics are lib/backend.test.ts's.
@@ -9,7 +8,7 @@ import { resendLoginLink } from './actions';
 // directory - see the note in frontend/src/app/CLAUDE.md - and the import above names
 // the same one. Mocked rather than exercised because `cookies()` has no request scope
 // under Jest.
-jest.mock('../../lib/pendingEmail', () => ({ readPendingEmail: jest.fn() }));
+jest.mock('./pendingEmail', () => ({ readPendingEmail: jest.fn() }));
 
 const ADDRESS = 'marko@email.com';
 

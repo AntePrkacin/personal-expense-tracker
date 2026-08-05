@@ -10,7 +10,7 @@ import { SELECT_CONTROL } from './Select';
 import { NAV_ITEM_ICON, NAV_ITEM_LABEL, NAV_ITEM_SURFACE } from './Sidebar';
 import { TAG_TONES } from './Tag';
 // Outside this folder, like the shell's maps: see the note on coverage above.
-import { RESEND_MESSAGE } from '../../app/check-email/ResendLink';
+import { RESEND_MESSAGE } from '../ResendLink';
 import { CHIP_LABEL, CHIP_SURFACE } from '../../app/setup/categories/CategoryChip';
 import { STEP_DOT, STEP_WIDTH } from '../../app/setup/SetupShell';
 

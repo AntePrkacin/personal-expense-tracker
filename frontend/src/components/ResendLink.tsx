@@ -2,12 +2,12 @@
 
 import { useState, useTransition } from 'react';
 
+import { LogInAgain } from '@/components/LogInAgain';
 import { Button } from '@/components/ui/Button';
+import type { ResendResult } from '@/lib/resend';
 
-import type { ResendResult } from './actions';
-import { LogInAgain } from './LogInAgain';
-
-// "Resend link" (VER-2), the only action screen 24 has (AC6).
+// "Resend link" (VER-2), the only action screen 24 has (AC6), and the recovery A38 asks
+// for on PET-52's verify failure screen.
 //
 // **The design draws no states for it at all** - A36 says outright that no cooldown,
 // counter or success confirmation exists - so the ones below are ours, and they are the
@@ -22,8 +22,10 @@ import { LogInAgain } from './LogInAgain';
 // own line telling the user to wait, rather than the generic failure claiming the send
 // broke.
 //
-// This is the whole client boundary on screen 24. Everything else about the screen
-// renders on the server, which is what keeps the address out of client-side JavaScript.
+// **In `components/` rather than beside a route**, for the reason `LogInAgain` records:
+// PET-52 gave it a second screen, and a shared control belongs beside `AccessCard`. It
+// is still the whole client boundary on both screens - everything else renders on the
+// server, which is what keeps the address out of client-side JavaScript.
 
 /** All four owing designer sign-off under A29, alongside PET-11's five and Log in's three. */
 const MESSAGES = {

@@ -9,7 +9,7 @@ import { CheckEmailScreen } from './CheckEmailScreen';
 // Both mocks use relative specifiers, because `jest.mock` cannot resolve the `@/`
 // alias from any directory - see the note in frontend/src/app/CLAUDE.md.
 jest.mock('../../lib/pendingEmail', () => ({ readPendingEmail: jest.fn() }));
-jest.mock('./actions', () => ({ resendLoginLink: jest.fn() }));
+jest.mock('../../lib/resend', () => ({ resendLoginLink: jest.fn() }));
 
 const ADDRESS = 'marko@email.com';
 

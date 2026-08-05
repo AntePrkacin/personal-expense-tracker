@@ -1,8 +1,7 @@
 import { AccessCard } from '@/components/AccessCard';
-
-import type { ResendResult } from './actions';
-import { LogInAgain } from './LogInAgain';
-import { ResendLink } from './ResendLink';
+import { LogInAgain } from '@/components/LogInAgain';
+import { ResendLink } from '@/components/ResendLink';
+import type { ResendResult } from '@/lib/resend';
 
 // 24 Check your email (node 134:1142), where both entry points end: "Finish setup" on
 // 22 Register (REG-4) and "Log in" on 23 (LOG-3).
