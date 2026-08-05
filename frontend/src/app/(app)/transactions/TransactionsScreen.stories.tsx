@@ -27,17 +27,23 @@ import { TransactionsScreen } from './TransactionsScreen';
 // centring frame 07 draws cannot be seen at all. The real app gets that column from the root
 // layout's `min-h-full flex flex-col` plus the shell's own `flex-1`.
 //
-// There is no populated story: the table is PET-29's, and a screen with an empty `<main>` below
-// the tabs is not worth a frame to diff. The filter-bar slot is likewise left empty in both
-// stories rather than filled with a stand-in - inventing three selects here would put
-// undesigned controls in a screenshot, and the conditional itself is pinned in
-// TransactionsScreen.test.tsx, which is the right place for it.
+// **The populated frame is `TransactionsList.stories.tsx`**, a separate module because a
+// module carries one title and this one is frame 07's. The filter-bar slot stays empty in both
+// stories here rather than being filled with a stand-in: the empty state must not draw one at
+// all, and the no-results state's real bar needs a category list this module has no read for.
+//
+// **`nextjs: { appDirectory: true }` is mandatory as of PET-29, and no gate will tell you.**
+// The header's search field reaches `useRouter`, which throws `invariant expected app router
+// to be mounted` outside one - but `build-storybook` bundles stories without running them and
+// `screens.stories.test.tsx` renders this module with `next/navigation` already mocked, so
+// both gates stay green and only opening the story finds it. This parameter is what makes
+// @storybook/nextjs-vite mount its mock router.
 
 const meta: Meta<typeof TransactionsScreen> = {
   title: 'Screens/07 Transactions — Empty',
   component: TransactionsScreen,
   tags: ['autodocs'],
-  parameters: { layout: 'fullscreen' },
+  parameters: { layout: 'fullscreen', nextjs: { appDirectory: true } },
 };
 
 export default meta;
@@ -63,7 +69,7 @@ function Frame({ view }: { view: TransactionsView }) {
   return (
     <AddTransactionProvider>
       <div className="bg-surface-canvas flex h-screen flex-col">
-        <TransactionsScreen view={view} />
+        <TransactionsScreen view={view} filters={{}} />
       </div>
     </AddTransactionProvider>
   );
@@ -93,7 +99,8 @@ export const Empty: Story = {
  * story above; everything else should be pixel-identical.
  *
  * In the running app this state also keeps the search field and the filter bar, which is A15's
- * other half. The bar is PET-29's, so there is nothing to show here yet.
+ * other half. The field is here and real; the bar needs a category list this module does not
+ * read, so `Screens/06 Transactions — List` is where it is diffed.
  */
 export const NoResults: Story = {
   render: () => <Frame view={NO_RESULTS} />,

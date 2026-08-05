@@ -3,7 +3,7 @@ import path from 'node:path';
 import { compile } from 'tailwindcss';
 
 import { BUTTON_BASE, BUTTON_VARIANTS } from './Button';
-import { CATEGORY_TILE } from './categoryColour';
+import { CATEGORY_TILE, CATEGORY_TILE_NEUTRAL } from './categoryColour';
 import { FIELD_CONTROL_BASE, FIELD_CONTROL_BORDER, FIELD_CONTROL_SURFACE } from './Field';
 import { INPUT_VARIANTS } from './Input';
 import { SELECT_CONTROL } from './Select';
@@ -20,6 +20,10 @@ import {
   DATE_TRIGGER,
 } from '../../app/(app)/DateField';
 import { MODAL_BACKDROP, MODAL_BOX, MODAL_CLOSE, MODAL_DIVIDER } from '../../app/(app)/Modal';
+import {
+  FILTER_PILL_BOX,
+  FILTER_PILL_CONTROL,
+} from '../../app/(app)/transactions/TransactionFilterBar';
 import { STEP_DOT, STEP_WIDTH } from '../../app/setup/SetupShell';
 
 // Proves every utility the components, the app shell and the access screens rely
@@ -360,6 +364,45 @@ const HARDCODED = [
   'disabled:opacity-60',
   'disabled:text-text-tertiary',
   'placeholder:text-text-tertiary',
+
+  // PET-29's transactions table and filter bar.
+  //
+  // `table-fixed` is what lets the `<thead>` declare each column width once for the whole
+  // table, and `align-middle` is not decoration: a `<td>`'s initial `vertical-align` is
+  // `baseline`, which sits 13px type on the baseline of a 36px tile.
+  'table-fixed',
+  'align-middle',
+  // The rules between rows, moved out of STORY_CHROME now a component hard-codes them.
+  'divide-y',
+  'divide-border-subtle',
+  'border-b',
+  // The fallback tile for a category colour outside the eight. `bg-text-tertiary` looks like
+  // a category token used wrongly and is not: --color-text-tertiary is #98a0ae, which is
+  // exactly FALLBACK_CATEGORY.color in the backend's starter-categories.ts.
+  CATEGORY_TILE_NEUTRAL,
+  // The table's own spacing: 13px rows, a 14/12 header, the card's 24px inset, and the 16px
+  // between columns that a table cannot express as a gap.
+  'py-3.25',
+  'pt-3.5',
+  'pb-3',
+  'pt-1.5',
+  'pr-4',
+  'px-6',
+  // The 36px tile, the 18px glyph inside it and the 8px category dot.
+  'size-9',
+  'size-4.5',
+  'size-2',
+  'w-8',
+  // The search field's 132px input, which is the frame's own measurement.
+  'w-33',
+  'gap-2.25',
+  'gap-2.5',
+  // The pending affordance, which has no Figma counterpart (A29).
+  'opacity-60',
+  'transition-opacity',
+  // The search pill's focus treatment, borrowed from ui/Field because the input inside the
+  // box is borderless and the box is what turns accent.
+  'focus-within:border-brand-accent',
 ];
 
 // The three shadows in HARDCODED above (`shadow-card`, `shadow-panel`, `shadow-chip`)
@@ -484,8 +527,6 @@ const DATE_FIELD_CLASSES = [
  * with no token lookup, so there is nothing about them a token change could break.
  */
 const STORY_CHROME = [
-  'divide-border-subtle',
-  'divide-y',
   'p-8',
   'px-7',
   'py-6',
@@ -504,7 +545,19 @@ const STORY_CHROME = [
 // three - the card, its radius, and the pitch block's stacking gap. And
 // `border-border-default` followed them when components/AccessCard.tsx took over the
 // card box: three of the four classes on that one element were already in HARDCODED,
-// so its border being the outlier here was the anomaly.
+// so its border being the outlier here was the anomaly. `divide-y` and
+// `divide-border-subtle` are the latest pair to move, for the identical reason:
+// PET-29's transactions table hard-codes both on its `<tbody>`, so they stopped
+// being decoration around a story and became the rules between the rows.
+
+/**
+ * The transactions filter bar's two strings, split like SELECT_CONTROL's.
+ *
+ * Two rather than one for the reason `ui/Field` gives: the box owns the border and the fill,
+ * the control owns every pixel of padding, and merging them would put the padding on the box -
+ * which turns the pill's own 9-14px band into a dead zone that opens no list.
+ */
+const FILTER_PILL_CLASSES = [...FILTER_PILL_BOX.split(' '), ...FILTER_PILL_CONTROL.split(' ')];
 
 const EXPECTED = [
   ...Object.values(TAG_TONES).flatMap(({ pill, dot }) => [...pill.split(' '), dot]),
@@ -520,6 +573,7 @@ const EXPECTED = [
   ...RESEND_MESSAGE_CLASSES,
   ...MODAL_CLASSES,
   ...DATE_FIELD_CLASSES,
+  ...FILTER_PILL_CLASSES,
   ...HARDCODED,
   ...STORY_CHROME,
 ];

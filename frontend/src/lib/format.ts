@@ -1,10 +1,10 @@
 import { dateFromIso } from './date';
 
 // Display formatting: money, the two forms a stored name takes on screen, the
-// two forms the current period takes in the page header, a single calendar date,
-// and the amount field as it is being typed into.
+// two forms the current period takes in the page header, the two forms a single
+// calendar date takes, and the amount field as it is being typed into.
 //
-// All five are here for the same reason. Transactions are stored as positive
+// All six are here for the same reason. Transactions are stored as positive
 // magnitudes and rendered as negative amounts, a profile stores two names while
 // the UI shows initials and a shortened form, the header shows a month that
 // nothing stores at all, and a half-typed budget is a display string before it
@@ -120,9 +120,11 @@ export function monthLabel(date: Date): string {
   return MONTH_ONLY.format(date);
 }
 
-// A single calendar date, as the Date field's closed trigger shows it: "Oct 8, 2025"
-// (09 node 28:402, and the same string on 11). The calendar popover's own header
-// reuses monthOverline above rather than adding a sixth formatter.
+// A single calendar date, in the two lengths the design draws it. Long is the Date
+// field's closed trigger, "Oct 8, 2025" (09 node 28:402, and the same string on 11).
+// Short is the transactions table's DATE column, "Oct 8" (06 node 27:157), which drops
+// the year because every row in a period filtered to one month repeats it. The calendar
+// popover's own header reuses monthOverline above rather than adding a third.
 
 const SHORT_DATE = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -147,6 +149,30 @@ const SHORT_DATE = new Intl.DateTimeFormat('en-US', {
 export function formatIsoDate(iso: string): string {
   const date = dateFromIso(iso);
   return date === null ? '' : SHORT_DATE.format(date);
+}
+
+const DAY_AND_MONTH = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+});
+
+/**
+ * The same date without its year, e.g. `'2025-10-08'` -> `"Oct 8"` (TRN-5).
+ *
+ * A second formatter rather than a `slice` off the one above: `"Oct 8, 2025".split(',')[0]`
+ * reads as equivalent and is a separator assumption, which is exactly the kind of thing
+ * that stops being true the moment the locale does - and the locale is already tracked as
+ * something the stored currency will eventually drag along.
+ *
+ * Every note on `formatIsoDate` applies unchanged: through `dateFromIso` rather than
+ * `new Date(iso)`, because the date-only grammar parses as UTC midnight and prints the
+ * previous day anywhere behind UTC, and `''` rather than "Invalid Date" for a string that
+ * is not a calendar date - here that leaves the DATE cell blank, which is the same call
+ * the row makes for a category it could not resolve.
+ */
+export function formatIsoDayMonth(iso: string): string {
+  const date = dateFromIso(iso);
+  return date === null ? '' : DAY_AND_MONTH.format(date);
 }
 
 // The amount field as it is being typed into (02 Setup's "Monthly budget", and

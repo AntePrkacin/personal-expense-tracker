@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 
-import { readCategoryOptions } from './categories';
+import { readCategoryLabels, readCategoryOptions } from './categories';
 
 // Exercised through the real `authorizedGet` rather than by mocking it, which is
 // `transactions.test.ts`'s call and the reason these assertions are worth anything: the
@@ -181,6 +181,64 @@ describe('the narrowing', () => {
     respondWith(200, { categories: [], allocation: ALLOCATION });
 
     await expect(readCategoryOptions()).resolves.toEqual({ ok: true, data: [] });
+  });
+});
+
+describe('readCategoryLabels, the table’s projection', () => {
+  it('keeps the colour, which is the only reason it exists', async () => {
+    respondWith(200, { categories: [GROCERIES], allocation: ALLOCATION });
+
+    await expect(readCategoryLabels()).resolves.toEqual({
+      ok: true,
+      data: [{ id: GROCERIES.id, name: 'Groceries', color: '#57b368' }],
+    });
+  });
+
+  it('still drops everything the table does not draw', async () => {
+    // Widened by three fields, not opened up: the month stats and the cap belong to the
+    // Categories screen, and a row shows neither.
+    respondWith(200, { categories: [GROCERIES], allocation: ALLOCATION });
+
+    const result = await readCategoryLabels();
+    const label = (result as { ok: true; data: unknown[] }).data[0]!;
+
+    expect(Object.keys(label as object).sort()).toEqual(['color', 'id', 'name']);
+    expect(JSON.stringify(result)).not.toContain('monthlyBudget');
+  });
+
+  it('preserves the backend’s order', async () => {
+    respondWith(200, { categories: [UNCATEGORIZED, GROCERIES], allocation: ALLOCATION });
+
+    const result = await readCategoryLabels();
+
+    expect(
+      (result as { ok: true; data: { name: string }[] }).data.map((category) => category.name),
+    ).toEqual(['Uncategorized', 'Groceries']);
+  });
+
+  it('shares one request with readCategoryOptions', async () => {
+    // The property the module comment claims: exactly one `authorizedGet('/api/categories')`
+    // exists in the app, and the two exports differ only in what survives.
+    const fetchMock = respondWith(200, { categories: [GROCERIES], allocation: ALLOCATION });
+
+    await readCategoryLabels();
+
+    expect(fetchMock).toHaveBeenCalledWith('http://backend.test/api/categories', {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      cache: 'no-store',
+    });
+  });
+
+  it.each([
+    [401, 'unauthenticated'],
+    [500, 'unavailable'],
+  ])('passes a %d through as %s rather than redirecting', async (status, reason) => {
+    // The failure stays data here even though this projection's only caller redirects.
+    // The policy lives at the call site, because the other caller is a route handler that
+    // must never be handed an HTML login page with a 200 on it.
+    respondWith(status, {});
+
+    await expect(readCategoryLabels()).resolves.toEqual({ ok: false, reason });
   });
 });
 

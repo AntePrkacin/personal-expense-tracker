@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
 import * as AddTransactionModal from './(app)/AddTransactionModal.stories';
+import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
 import * as CheckEmailScreen from './check-email/CheckEmailScreen.stories';
@@ -20,7 +21,12 @@ import * as WelcomeScreen from './WelcomeScreen.stories';
 // wrapper whose only job is reading the pathname, while 02 Setup is a whole frame
 // to diff against Figma. So here the router is mocked rather than the story
 // skipped. The two notes are halves of one decision.
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+//
+// `replace` joins `push` as of PET-29: frame 06's search field and its three filter selects
+// all write the query string with it.
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+}));
 
 // Smoke-tests the Screens section's stories, the same job
 // src/components/ui/ui.stories.test.tsx does for Components,
@@ -59,6 +65,9 @@ const MODULES: [name: string, module: StoryModule][] = [
   // whole frame, where `Shell/Page header` is one band of chrome shared by four - so
   // the section follows what the story is for, not which folder it sits in.
   ['TransactionsScreen', TransactionsScreen as StoryModule],
+  // Frame 06, the populated half of the same screen. A second module rather than two more
+  // stories in the one above, because a module carries one title and that one is frame 07's.
+  ['TransactionsList', TransactionsList as StoryModule],
   // Frame 09, and the first *modal* in this section. Filed under Screens for the same
   // reason frame 07 is - it is a whole frame worth diffing - while `Shell/Modal` holds
   // the empty box those frames share. The two are not duplicates: one is the chrome,

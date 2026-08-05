@@ -3,6 +3,7 @@ import {
   formatAmountInput,
   formatCurrency,
   formatIsoDate,
+  formatIsoDayMonth,
   formatNegative,
   initials,
   monthLabel,
@@ -188,6 +189,49 @@ describe('formatIsoDate', () => {
     'is empty for %p, so the trigger shows its placeholder rather than "Invalid Date"',
     (iso) => {
       expect(formatIsoDate(iso)).toBe('');
+    },
+  );
+});
+
+describe('formatIsoDayMonth', () => {
+  it('renders the string the table draws', () => {
+    // Node 27:157's own value. The DATE column drops the year, which the trigger keeps.
+    expect(formatIsoDayMonth('2025-10-08')).toBe('Oct 8');
+  });
+
+  it.each([
+    ['2025-10-02', 'Oct 2'],
+    ['2025-01-05', 'Jan 5'],
+    ['2024-02-29', 'Feb 29'],
+  ])('renders %s as %s', (iso, expected) => {
+    expect(formatIsoDayMonth(iso)).toBe(expected);
+  });
+
+  it('differs from the long form only by the year', () => {
+    // Pinned as a relationship rather than two strings, because the pair is the point:
+    // two formatters exist so nothing slices a separator out of the other's output.
+    expect(formatIsoDate('2025-10-08')).toBe(`${formatIsoDayMonth('2025-10-08')}, 2025`);
+  });
+
+  // The same regression formatIsoDate's suite pins, and it has to be pinned separately:
+  // this function has its own `dateFromIso` call, so a new `new Date(iso)` here would
+  // print the previous day in every zone behind UTC with the other test still green.
+  it('keeps the day it was given in a zone behind UTC', () => {
+    const original = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+
+    try {
+      expect(formatIsoDayMonth('2025-10-08')).toBe('Oct 8');
+      expect(formatIsoDayMonth('2025-01-01')).toBe('Jan 1');
+    } finally {
+      process.env.TZ = original;
+    }
+  });
+
+  it.each(['', '2025-02-30', 'not a date', '2025-10-08T00:00:00Z'])(
+    'is empty for %p, so the cell is blank rather than "Invalid Date"',
+    (iso) => {
+      expect(formatIsoDayMonth(iso)).toBe('');
     },
   );
 });

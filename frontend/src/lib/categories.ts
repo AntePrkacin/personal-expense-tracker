@@ -48,6 +48,25 @@ type CategoriesResponse = components['schemas']['CategoriesResponseDto'];
 export type CategoryOption = Pick<components['schemas']['CategoryResponseDto'], 'id' | 'name'>;
 
 /**
+ * One category as the transactions table needs it (TRN-5).
+ *
+ * **A second projection rather than a widened `CategoryOption`**, and the difference is the
+ * whole reason this file exists. The narrowing above is justified by keeping the cap, the
+ * month's spend and the colour out of a browser bundle that only draws an option list -
+ * widening it would put the colour into the Add transaction modal too, which has no use for
+ * it. The table has the opposite need and the opposite delivery: it renders on the server,
+ * and a row carries only a `categoryId`, so the name and the colour have to be joined onto
+ * it from here.
+ *
+ * Still `Pick` off the contract rather than a fresh shape, for the reason above it: a rename
+ * upstream is a typecheck away from being visible.
+ */
+export type CategoryLabel = Pick<
+  components['schemas']['CategoryResponseDto'],
+  'id' | 'name' | 'color'
+>;
+
+/**
  * The select's options, or why they could not be read.
  *
  * `AuthorizedResult` reused rather than a result type of its own: the two failures are
@@ -55,6 +74,19 @@ export type CategoryOption = Pick<components['schemas']['CategoryResponseDto'], 
  * union would only mean mapping one onto the other for no new information.
  */
 export type CategoryOptionsResult = AuthorizedResult<CategoryOption[]>;
+
+export type CategoryLabelsResult = AuthorizedResult<CategoryLabel[]>;
+
+/**
+ * The one request, shared by both projections.
+ *
+ * There is still exactly one `authorizedGet('/api/categories')` in this app, which is the
+ * property the module comment above is about. What differs between the two exports is only
+ * which fields survive.
+ */
+async function readCategories(): Promise<AuthorizedResult<CategoriesResponse>> {
+  return authorizedGet<CategoriesResponse>('/api/categories');
+}
 
 /**
  * Reads the account's categories as select options.
@@ -66,7 +98,7 @@ export type CategoryOptionsResult = AuthorizedResult<CategoryOption[]>;
  * with diacritics.
  */
 export async function readCategoryOptions(): Promise<CategoryOptionsResult> {
-  const result = await authorizedGet<CategoriesResponse>('/api/categories');
+  const result = await readCategories();
 
   if (!result.ok) {
     return result;
@@ -75,5 +107,28 @@ export async function readCategoryOptions(): Promise<CategoryOptionsResult> {
   return {
     ok: true,
     data: result.data.categories.map(({ id, name }) => ({ id, name })),
+  };
+}
+
+/**
+ * Reads the account's categories as the table's name-and-colour lookup.
+ *
+ * Same preserved order, same inherited failure classification, and the same deliberate
+ * absence of a `redirect()` - the module comment gives that reason in full, and it holds
+ * here even though this projection's only caller today *is* a Server Component that
+ * redirects. The policy belongs at the call site rather than in the read, because the two
+ * callers of this file answer a dead session differently and one of them cannot be handed
+ * an HTML login page with a 200 on it.
+ */
+export async function readCategoryLabels(): Promise<CategoryLabelsResult> {
+  const result = await readCategories();
+
+  if (!result.ok) {
+    return result;
+  }
+
+  return {
+    ok: true,
+    data: result.data.categories.map(({ id, name, color }) => ({ id, name, color })),
   };
 }

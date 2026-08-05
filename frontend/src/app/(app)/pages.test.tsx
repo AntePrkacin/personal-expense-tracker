@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
+import { readCategoryLabels } from '../../lib/categories';
 import { readTransactionsView } from '../../lib/transactions';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
@@ -23,6 +24,11 @@ import TransactionsPage from './transactions/page';
 // anywhere in this repo - see the note in frontend/src/app/CLAUDE.md.
 jest.mock('../../lib/transactions', () => ({ readTransactionsView: jest.fn() }));
 
+// PET-29 gives that page a second read: a row carries only a `categoryId`, so the name and
+// colour the table draws are joined on from the category list. Same relative specifier, same
+// reason.
+jest.mock('../../lib/categories', () => ({ readCategoryLabels: jest.fn() }));
+
 // Two of these screens now hold an "Add transaction" trigger that calls
 // `useAddTransaction`, which throws outside its provider by design - so every render
 // here goes through `renderScreen()` below rather than through `render()` directly. The
@@ -32,13 +38,27 @@ jest.mock('../../lib/transactions', () => ({ readTransactionsView: jest.fn() }))
 //
 // `next/navigation` is mocked because the modal the provider mounts reaches useRouter
 // for its refresh. Nothing here opens it, but the provider's subtree is rendered.
-jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: jest.fn() }) }));
+// `replace` joins it as of PET-29: the transactions header's search field writes the query
+// string, and the filter bar's three selects do the same.
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: jest.fn(), replace: jest.fn(), push: jest.fn() }),
+}));
+
+/**
+ * The props every page here is called with.
+ *
+ * Only Transactions reads `searchParams`, and it is a promise in Next 16. The other three
+ * take no props and ignore it, which is what keeps one call site covering all four.
+ */
+const PAGE_PROPS = { searchParams: Promise.resolve({}) };
 
 /** Renders a page inside the shell's provider, awaiting it whether or not it is async. */
-async function renderScreen(Page: () => React.ReactNode | Promise<React.ReactNode>) {
+async function renderScreen(
+  Page: (props: typeof PAGE_PROPS) => React.ReactNode | Promise<React.ReactNode>,
+) {
   // Awaiting a synchronous component's return value is a no-op, so one call site covers
   // all four - which is the property PET-30 relied on when Transactions became async.
-  return render(<AddTransactionProvider>{await Page()}</AddTransactionProvider>);
+  return render(<AddTransactionProvider>{await Page(PAGE_PROPS)}</AddTransactionProvider>);
 }
 
 // The populated state deliberately, even though the empty one is PET-30's subject.
@@ -47,11 +67,21 @@ async function renderScreen(Page: () => React.ReactNode | Promise<React.ReactNod
 // are TransactionsScreen.test.tsx's, where they can be asserted without a page around
 // them. No `table` is passed, so main holds only the tab bar.
 beforeEach(() => {
+  // Calls accumulate across cases otherwise, which no assertion here noticed until PET-29
+  // started counting them. Implementations survive `clearAllMocks`, and both are re-set
+  // immediately below in any case.
+  jest.clearAllMocks();
+
   (readTransactionsView as jest.Mock).mockResolvedValue({
     state: 'populated',
     transactions: [],
     total: 128,
   });
+
+  // An empty list is enough: the rows are `TransactionsTable.test.tsx`'s subject, and this
+  // file asserts the header. The read still has to succeed, because the page throws on an
+  // unavailable one rather than rendering a table with every category cell blank.
+  (readCategoryLabels as jest.Mock).mockResolvedValue({ ok: true, data: [] });
 });
 
 // October 2025 is the month the whole Figma file is drawn in, so pinning the
@@ -115,9 +145,12 @@ describe('the header action, which differs on every screen', () => {
   it('Transactions offers the search field and Add transaction, and no month select', async () => {
     // The ticket's AC3 claims a month select here too. TRN-1 and Figma node
     // 26:137 both draw a search field instead, and this pins which one shipped.
+    //
+    // By role rather than by text as of PET-29: the placeholder used to be a text node in an
+    // inert <div>, and `getByText` on it now silently finds nothing.
     await renderScreen(TransactionsPage);
 
-    expect(screen.getByText('Search transactions')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search transactions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
     expect(screen.queryByText('October')).not.toBeInTheDocument();
   });
@@ -150,13 +183,16 @@ describe('the inert header controls', () => {
     expect(screen.getByText('October').tagName).toBe('DIV');
   });
 
-  it('does not expose the search field as a text box', async () => {
-    // Same reasoning, applied to a control TRN-1 does describe as real. The list it
-    // filters exists now, as of PET-30, but the query that would drive it does not -
-    // PET-29 owns turning this into an `<input>` plus the state behind it.
+  it('does expose the search field as a text box, which reverses PET-30', async () => {
+    // This asserted the opposite for three tickets, and the reason it did has gone: the
+    // field was inert because there was no list to filter and then because there was no
+    // query to drive it. PET-29 is the ticket that owned both, so the assertion inverts
+    // rather than being deleted - a `<div>` creeping back here would be a regression.
     await renderScreen(TransactionsPage);
 
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search transactions' })).toBeInTheDocument();
+    // Still not `type="search"`: Chrome and Safari draw their own cancel button on one, and
+    // this frame does not.
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 
@@ -164,11 +200,28 @@ describe('the inert header controls', () => {
     // "Categories" opens frame 13, which is PET-36's route and has no page.tsx behind
     // it - and routes.test.ts asserts with `fs` that every declared route does. So a
     // link here would 404 or force a hole into that check.
+    //
+    // **This still holds by decision rather than by absence of features.** PET-29 made every
+    // other control on the page real and deliberately left these two, so the assertion is
+    // now the record of that choice rather than a description of an unbuilt screen. The same
+    // is true of the `link` query: a row is not clickable, because the detail page is
+    // PET-34's.
     await renderScreen(TransactionsPage);
 
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.getByText('Categories').tagName).toBe('SPAN');
+  });
+
+  it('exposes exactly the three filter selects the design draws', async () => {
+    // The Dashboard assertion above pins that a `combobox` on *that* page would be a bug.
+    // Here three of them are the feature, so the count is what is worth holding: a fourth
+    // means a control nobody designed.
+    await renderScreen(TransactionsPage);
+
+    expect(
+      screen.getAllByRole('combobox').map((select) => select.getAttribute('aria-label')),
+    ).toEqual(['Category', 'Period', 'Sort']);
   });
 
   it.each(SCREENS)('%s mounts no modal until a trigger is used', async (_name, Page) => {
@@ -187,5 +240,45 @@ describe('the inert header controls', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+  });
+});
+
+describe('the query string reaching the list read', () => {
+  // The one seam nothing else covers: `filters.test.ts` proves the parser and
+  // `lib/transactions.test.ts` proves the read, but only this file renders the page that
+  // joins them. It matters because the failure is not a filter that does nothing - an
+  // invalid value is a 400, which `readTransactions` throws on, and there is no `error.tsx`
+  // in this app for it to land in.
+
+  async function renderWith(searchParams: Record<string, string | string[]>) {
+    return render(
+      <AddTransactionProvider>
+        {await TransactionsPage({ searchParams: Promise.resolve(searchParams) })}
+      </AddTransactionProvider>,
+    );
+  }
+
+  it('forwards the filters the URL carries', async () => {
+    await renderWith({ search: 'Whole', sort: 'date_asc' });
+
+    expect(readTransactionsView).toHaveBeenCalledWith({ search: 'Whole', sort: 'date_asc' });
+  });
+
+  it('forwards nothing at all for a bare /transactions', async () => {
+    await renderWith({});
+
+    expect(readTransactionsView).toHaveBeenCalledWith({});
+  });
+
+  it('drops every value the backend would reject rather than passing it on', async () => {
+    await renderWith({ sort: 'lol', period: 'yearly', categoryId: 'groceries' });
+
+    expect(readTransactionsView).toHaveBeenCalledWith({});
+  });
+
+  it('reads the categories the rows are joined against', async () => {
+    await renderWith({});
+
+    expect(readCategoryLabels).toHaveBeenCalledTimes(1);
   });
 });
