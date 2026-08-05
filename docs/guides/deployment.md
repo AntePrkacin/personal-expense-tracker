@@ -226,10 +226,19 @@ cd backend
 fly deploy --remote-only --ha=false
 ```
 
-One thing still missing, so nobody reads this as finished: links now point at
-`https://www.spendifico.eu/auth/verify?token=...`, and that **route does not exist yet**. The
-frontend half of verification is PET-52. Until it ships, a link resolves to the domain and then
-404s, and the flow can only be completed by posting the token to `POST /api/auth/verify` directly.
+**Two separate things are still missing, so nobody reads this as finished.** Links now point at
+`https://www.spendifico.eu/auth/verify?token=...`, and as of 2026-08-05 that URL fails to connect
+at all rather than 404ing:
+
+1. **There is no Vercel project.** `spendifico.eu` is registered at Porkbun and its DNS still
+   points at Porkbun parking, with no HTTPS. `spendifico.vercel.app` answers
+   `DEPLOYMENT_NOT_FOUND`, which is what Vercel's wildcard DNS returns for any unclaimed name - so
+   a name resolving there proves nothing.
+2. **`/auth/verify` does not exist** even once the site is up. The frontend half of verification is
+   PET-52.
+
+Until both land, the access flow can only be completed by posting the token to
+`POST /api/auth/verify` directly.
 
 ## The Vercel side
 

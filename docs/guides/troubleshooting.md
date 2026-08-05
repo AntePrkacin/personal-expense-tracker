@@ -45,6 +45,7 @@ Fixes are in [Deployment](deployment.md); this table only maps the symptom.
 | Every request 503s and the machine reads `stopped`             | Same cause, and a deploy does **not** start a stopped machine - it only updates its config. `fly machine start <id>`                                |
 | `fly config show` errors with "no machines configured"        | It reads from a running machine, so it cannot work on an app that has never deployed                                                                |
 | The deployed API rejects the frontend's browser request        | `FRONTEND_URL` allows exactly one CORS origin, and no Vercel preview URL will ever match it                                                        |
-| A login email arrives but its link 404s                       | Expected until PET-52: the domain resolves but `/auth/verify` is not built yet. `FRONTEND_URL` is the base of every link, not just the CORS origin   |
+| A login email arrives but its link does not connect            | Expected: there is no Vercel project yet and `spendifico.eu` DNS still points at Porkbun parking. `FRONTEND_URL` is the base of every link, not just the CORS origin |
+| The link connects but `/auth/verify` 404s                      | Expected until PET-52 builds that route. Post the token to `POST /api/auth/verify` in the meantime                                                   |
 | CORS fails only for visitors without `www`                    | Exactly one origin is allowed and it is the `www` form. The apex must redirect to `www`, not serve the app                                          |
 
