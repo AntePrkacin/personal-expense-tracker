@@ -478,6 +478,27 @@ described above, and the further from `Europe/Zagreb` they are the worse it gets
 Note the config value fails silently when wrong, the same failure class as `use_tursodb` in
 `backend/src/database/CLAUDE.md`: nothing crashes, the months are just quietly off.
 
+### Transaction search is case-insensitive for ASCII only
+
+`GET /api/transactions?search=` is a `LIKE '%term%'` on `transactions.merchant`. SQLite's `LIKE`
+folds case for ASCII and **only** for ASCII, so `konzum` finds `Konzum` while `kovačić` does not
+find `Kovačić`. That is not an exotic edge here: this project's persona is Croatian and its own
+example data carries diacritics, so the first realistic search that fails is a plausible one.
+
+**The fix is a normalized search column, which is why it is not in PET-28.** SQLite ships no
+`unaccent`, and `PRAGMA case_sensitive_like` would not help - the problem is folding, not
+sensitivity. Doing it properly means a `merchant_normalized` column written on every insert and
+update, a user-scope migration to add and backfill it, and the search predicate moved onto it.
+That is a schema change in a ticket whose whole point was that it stores nothing, and it would
+have to be kept in step with `merchant` at three write sites.
+
+Two cheaper things were considered and rejected. Normalizing in JS and comparing in JS means
+loading every row to filter it, which is the one thing the index is for. An `ICU` extension is a
+native build per platform, and `test-e2e` runs against the embedded driver on a CI runner.
+
+Until then the DTO's own description says so, which is at least honest to a frontend developer
+reading the generated types.
+
 ---
 
 - **A generated HTTP client is not decided.** Types are shared and that part is settled:
@@ -728,6 +749,14 @@ than discovered.
   integer and simply relabels it, which is arguably the least surprising behaviour but is a
   decision nobody made - whatever the exponent table does, it also has to say what a
   currency change means for existing rows.
+- **The transaction list is unbounded, by design and only for now.** `GET /api/transactions`
+  returns every match in one response, because A11 and TRN-6 record that the design has no
+  pager anywhere and the table simply scrolls. Fine at a few hundred rows a month and not fine
+  forever: nothing caps the response, so a long-lived account eventually serializes its whole
+  history on every page load. The natural next step is a `limit` with a `hasMore` flag, and
+  `total` already exists as its own field precisely so that day does not silently turn TRN-2's
+  badge into a page count - a frontend reading `transactions.length` would do exactly that.
+  Whoever adds it also has to decide what the period filter's default means for a first page.
 - **Offline conflict policy is undecided.** The schema is shaped for last-write-wins
   (UUIDv7 keys, epoch-ms timestamps, tombstones), but no client syncs yet and clock skew is
   unaddressed.
@@ -736,6 +765,17 @@ than discovered.
 
 ## Housekeeping
 
+- **The month window is reached through `CategoriesService`, and a third caller should promote
+  it.** `currentWindow`, `previousWindow` and `monthStatsFor` are public on that service so the
+  transaction reads and PET-20's dashboard compose one aggregation instead of writing three -
+  the right outcome, reached by the slightly wrong route, since a transaction read now injects a
+  categories service to learn what month it is. The tidy end state is a small `PeriodService`
+  under `src/common/` owning the profile read and the two windows, with `CategoriesService`
+  keeping only `withSpend` and the status bands. It was not done in PET-28 because that branch
+  sits in a three-branch stack on top of the branch that had just landed the code, and moving
+  `period()` would have dragged the churn through two rebases to buy a seam nothing yet needed.
+  Do it when a third feature needs a window, or the moment the stack has merged and there is no
+  rebase to pay for.
 - **Repo-wide `prettier --check` is commented out in CI.** 55 files predate the Prettier
   config and the step would fail on a fresh clone. To enable: run `npx prettier --write .`
   once, commit that, then uncomment the step in `.github/workflows/ci.yml`. Note that
