@@ -794,6 +794,16 @@ of the API, and it is genuinely useful to the frontend - but it should be a deci
 something discovered. Gating it would mean serving the document behind a route that the guard does
 cover, or not serving it in production at all.
 
+### `/api/hello` stands in for a real health check
+
+`.github/workflows/deploy.yml`'s post-deploy assertion curls `/api/hello` because it was already
+the one public, DB-free route - not because anyone designed it as a health check. It only proves
+the process answers HTTP; it says nothing about DB reachability, migration state or which commit
+is actually running, so a deploy can go green while the database connection is broken. A real
+`/api/status` endpoint (DB ping plus the deployed commit SHA or version, still unauthenticated so
+the assertion needs no token) should replace it in both `deploy.yml`'s assertion step and
+`docs/guides/deployment.md`'s verification section.
+
 ---
 
 ## Scaling, when it is actually needed

@@ -17,6 +17,10 @@ jobs:
   deploy:
     name: deploy
     runs-on: ubuntu-latest
+    # Bounds how long a stuck `flyctl deploy` or remote builder can hold the
+    # `fly-deploy` concurrency group (cancel-in-progress: false above) before a
+    # retry is even possible.
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -24,11 +28,23 @@ jobs:
       # App-scoped deploy token from `fly tokens create deploy -a spendifico-api`.
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
+      # workflow_dispatch can be run against any branch/tag from the Actions UI's
+      # "Use workflow from" picker, not just main. Refuse anything else so a
+      # misclick can't deploy unreviewed code to production.
+      - name: Refuse to deploy from a non-main ref
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::dispatched from '${{ github.ref }}', not refs/heads/main - re-run selecting the main branch"
+          exit 1
+
       - uses: actions/checkout@v7
 
       # Pin flyctl so a release cannot change deploy behaviour under us. Bump this
-      # deliberately, never implicitly.
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # deliberately, never implicitly. The action itself is pinned to a major
+      # version tag too, matching this repo's convention for actions/checkout and
+      # actions/setup-node elsewhere - @master would let its install behaviour
+      # change under a job that holds FLY_API_TOKEN.
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
         with:
           version: 0.4.77
 

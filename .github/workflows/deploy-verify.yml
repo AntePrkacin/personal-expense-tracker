@@ -21,6 +21,7 @@ jobs:
   verify:
     name: validate config and build image
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -32,7 +33,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pinned to a major version tag, matching deploy.yml and the rest of this
+      # repo's actions - @master would let the install step change under us.
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
         with:
           version: 0.4.77
 
