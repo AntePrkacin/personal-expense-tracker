@@ -419,11 +419,10 @@ for, answered by the generic 500.
 
 ## Insights
 
-**`GET /api/insights` stores and reads a generated set; it does not generate one.** `src/insights/`
-owns two user-scope tables (`insight_sets` and its child `insights`) and one read. Writing a set -
-the `POST` trigger and the four content rules - is PET-40, stacked on top; until it lands the read
-answers `empty` for every account. `InsightsService` is exported because the dashboard composes it
-and PET-40 will too.
+**`src/insights/` owns two user-scope tables (`insight_sets` and its child `insights`), one read
+and one asynchronous generate.** `GET /api/insights` serves the screen in all three states;
+`POST /api/insights/generate` produces a fresh set. `InsightsService` is exported because the
+dashboard composes it for the teaser.
 
 **The API's `empty`/`generating`/`ready` state is derived, never stored.** A row carries a `status`
 of `generating`, `ready` or `failed`; the read turns the rows into one state - a run in flight wins
@@ -447,6 +446,32 @@ way `transactions.category_id` is), because a set and its cards are only ever wr
 `DashboardResponseDto.insight` the latest ready set's summary headline, which honoured PET-20's
 committed `string | null` with no shape change. If frame 04's teaser ever needs a tone or title, that
 is a contract change to weigh at PET-25, not one taken here unasked.
+
+**Generation is genuinely asynchronous, and one run at a time.** `POST /api/insights/generate`
+writes the `generating` row, commits it, and returns **202** before floating the work with a logging
+`.catch`, the same shape `AuthService` uses - so the state is observable and a future slow generator
+(an LLM) needs no reshaping. Rule-based generation is fast, so `generating` is rarely caught in
+practice, but the lifecycle is the design's contract (INS-5), not a performance workaround. A second
+request while a run is in flight is a **409**: regenerate is disabled during a run (A26), and it keeps
+the one completion transaction the only writer on the cached connection. On completion the row becomes
+`ready` and its cards are inserted in **one** `db.transaction()`; on any failure the row is set
+`failed` and nothing else is touched, so the previous set stays readable (AC6).
+
+**An empty account produces no set, via insert-then-remove.** Emptiness is only known once the
+generator has run, so the placeholder `generating` row is written first and then deleted when the
+generator returns `null` (no transactions, AC7). The account flickers `generating` for a
+sub-millisecond and settles back to `empty`; it never leaves a bare `ready` set behind.
+
+**The four content rules live behind an `InsightGenerator` seam.** `RuleBasedInsightGenerator` is the
+only implementation: deterministic detectors filling templated copy, composing `CategoriesService`
+and `TransactionsService` rather than querying their tables (it reads `profile.currency` directly, the
+one static field neither surfaces). Each rule yields at most one card and is omitted when it has
+nothing to say, so a set can carry fewer than four. Over-cap is `warning`, a favourable
+month-over-month move is `positive` (an unfavourable one `neutral`), the projection is `info`,
+recurring merchants are `neutral`. **Recurring** means a merchant seen in at least **three** distinct
+calendar months (`RECURRING_MONTHS`), the number most likely to be tuned - which is the point of the
+seam: a later `LlmInsightGenerator` replaces the whole class through the one `INSIGHT_GENERATOR`
+provider binding in `InsightsModule`, storage, the read and the frontend untouched.
 
 ## Profile and preferences
 
@@ -637,7 +662,7 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Insight generation has no endpoint.** PET-41 added the `insight_sets`/`insights` tables and
-  `GET /api/insights`, but nothing writes a set yet: the `POST /api/insights/generate` trigger and
-  the four content rules are PET-40. Until it lands every account reads the `empty` state, and the
-  dashboard teaser is always `null`.
+- **No LLM behind the insights.** Generation is deterministic rules
+  (`RuleBasedInsightGenerator`); the "AI" is branding. An `LlmInsightGenerator` can replace it
+  through the `INSIGHT_GENERATOR` binding without touching storage, the read or the frontend, but
+  no such implementation exists and none is wired.
