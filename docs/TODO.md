@@ -671,7 +671,7 @@ the trigger is invented.
 What the design does fix, and what PET-31 matched exactly: the resting field is `ui/Select`'s box,
 padding and chevron, so it is pixel-identical to the Category select above it. What is ours: a 280px
 popover; a **six-row** grid, fixed so paging cannot change the popover's height under the user's
-cursor; Sunday-first single-letter column headings; the three day-cell states (selected, today,
+cursor; **Monday-first** single-letter column headings; the three day-cell states (selected, today,
 default), none of which the file colours; the two month chevrons, which are `ui/Select`'s own leaf
 rotated a quarter turn; and the whole keyboard model - arrows by day and week, PageUp and PageDown
 by month with the day clamped rather than rolled, Enter to pick.
@@ -681,6 +681,17 @@ control**: paging December forward reaches January, which makes the two chevrons
 makes a date two years back twenty-four clicks away. And the trigger is a `<button>` rather than a
 `<select>`, which is what makes the popover possible at all and is the reason
 `(app)/DateField.tsx` carries three ARIA decisions the two real fields beside it do not need.
+
+**The week starts on Monday, which is a product decision and not the app's locale.** Every other
+formatter in the frontend is pinned to `en-US`, where the week starts on Sunday - so this one
+deliberately disagrees with its neighbours, on the grounds that a spending week reads better ending
+at the weekend. Two things follow that are easy to get wrong later. `leadingBlanks` in
+`lib/calendar.ts` is the **only** place `getDay()`'s Sunday-first numbering is converted, and its
+suite pins that the two schemes coincide on no day of the week at all - so a stray `getDay()` used
+as a column index is always wrong rather than occasionally right. And the grid's worst case moved
+with the first day: it is now a 31-day month starting on **Sunday** (37 cells) where it used to be
+one starting on Saturday. If the locale work `lib/format.ts` defers ever arrives, this is a
+deliberate exception to it rather than an oversight to sweep up.
 
 **The popover is `position: fixed` and that is not cosmetic.** A modal `<dialog>` gets
 `overflow: auto` and a `max-height` from the user agent, so an `absolute` popover anchored to the

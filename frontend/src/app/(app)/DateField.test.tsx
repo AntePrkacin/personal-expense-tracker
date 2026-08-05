@@ -402,7 +402,7 @@ describe('the grid’s ARIA structure', () => {
 
     const strip = popover().querySelector('[aria-hidden="true"].flex');
     expect(strip).not.toBeNull();
-    expect(strip?.textContent).toBe('SMTWTFS');
+    expect(strip?.textContent).toBe('MTWTFSS');
   });
 });
 

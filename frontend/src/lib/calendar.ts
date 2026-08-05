@@ -14,22 +14,29 @@
 //
 //   - **Months are 1-12**, never 0-11. The conversion happens only where a `Date` is
 //     actually constructed, which in this file is two places.
-//   - **Weekdays are 0-6, Sunday first**, matching `Date.prototype.getDay()` and the
-//     `en-US` convention the rest of the app is pinned to. A Monday-first locale is
-//     the same change as the locale work `lib/format.ts` already defers.
+//   - **The week starts on Monday**, so column 0 is Monday and column 6 is Sunday. That is
+//     deliberately *not* `Date.prototype.getDay()`, which numbers from Sunday, and not the
+//     `en-US` convention the rest of the app is pinned to either - it is a product decision,
+//     since a spending week reads better ending at the weekend. `leadingBlanks` below is the
+//     one place the two numberings meet, and nothing else in this file or in `DateField` may
+//     use `getDay()` directly. Mixing the two is the classic calendar bug: it renders a grid
+//     that is off by one column and looks plausible.
 
 import { isoFromParts, partsFromIso } from './date';
 
 /**
- * The column headings, Sunday first.
+ * The column headings, **Monday first**.
  *
  * Single letters because the popover is 280px wide and three-letter names do not fit
- * seven columns at a readable size. They are ambiguous by design - S and T each
+ * seven columns at a readable size. They are ambiguous by design - T and S each
  * appear twice - which is why `DateField` renders them `aria-hidden` and gives each
- * day button its own full accessible date instead. A screen reader reading "S, M, T,
+ * day button its own full accessible date instead. A screen reader reading "M, T, W,
  * T, F, S, S" would be worse than reading nothing.
+ *
+ * The order has to match `leadingBlanks` below, and this is the pair to change together
+ * if the week ever starts somewhere else.
  */
-export const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
+export const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 
 /** How many rows every grid has. See `monthMatrix` for why it is fixed. */
 export const WEEKS_IN_GRID = 6;
@@ -50,10 +57,18 @@ export function daysInMonth(year: number, month: number): number {
 }
 
 /**
- * Which column the 1st of a 1-12 month falls in, 0-6 with Sunday at 0.
+ * How many empty cells come before the 1st of a 1-12 month, 0-6.
+ *
+ * **Named for what it is rather than for the weekday**, because that is the whole hazard here:
+ * `getDay()` numbers from Sunday and this grid numbers from Monday, so a function called
+ * `firstWeekdayOfMonth` returning a *column* invites somebody to compare it against `getDay()`
+ * and be wrong by one for six days out of seven. `(getDay() + 6) % 7` is the conversion, and
+ * this is the only place in the codebase that performs it.
+ *
+ * So: Monday answers 0 and needs no blanks, Sunday answers 6 and needs six.
  */
-export function firstWeekdayOfMonth(year: number, month: number): number {
-  return new Date(year, month - 1, 1).getDay();
+export function leadingBlanks(year: number, month: number): number {
+  return (new Date(year, month - 1, 1).getDay() + 6) % 7;
 }
 
 /**
@@ -104,7 +119,9 @@ export function addDays(iso: string, delta: number): string | null {
  * shift the footer buttons under the user's cursor mid-click, and stabilising it in
  * CSS instead would mean a magic min-height that silently stops matching when the
  * cell size changes. Six is always enough and never too few: the worst case is a
- * 31-day month starting on Saturday, which needs 37 cells, and six rows give 42.
+ * 31-day month starting on **Sunday** - six leading blanks plus 31 days is 37 cells -
+ * and six rows give 42. (Sunday rather than Saturday because the week starts on
+ * Monday here, which is exactly the sort of detail that moves when the first day does.)
  *
  * ISO strings rather than day numbers, so `DateField` never re-derives one and cannot
  * disagree with `lib/date.ts` about what day a cell is. `null` rather than the
@@ -112,7 +129,7 @@ export function addDays(iso: string, delta: number): string | null {
  * day and inventing one would be inventing more than the file contains.
  */
 export function monthMatrix(year: number, month: number): (string | null)[][] {
-  const lead = firstWeekdayOfMonth(year, month);
+  const lead = leadingBlanks(year, month);
   const days = daysInMonth(year, month);
 
   const cells: (string | null)[] = [];
