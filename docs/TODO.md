@@ -145,10 +145,10 @@ guard, no schema change.
 
 ### The rest of the data model
 
-`users`, `login_links` and `sessions` (central) and `profile`, `categories` and
-`transactions` (per user) exist. `insights` arrives with its own feature as an ordinary
-migration under `backend/drizzle/user/`. `categories` has its table and a
-`STARTER_CATEGORIES` constant but no CRUD, no per-category stats and no allocation summary.
+`users`, `login_links` and `sessions` (central) and `profile`, `categories`,
+`transactions` and the insights tables (per user) exist. PET-41 added `insight_sets` and
+`insights` under `backend/drizzle/user/`; writing a set is PET-40. `categories` has its table
+and a `STARTER_CATEGORIES` constant but no CRUD, no per-category stats and no allocation summary.
 
 `transactions` has its three write endpoints (PET-27) and **no reads whatsoever**. The list,
 the month windows, the trend buckets, the donut and every card are PET-28's and the
@@ -636,24 +636,6 @@ native build per platform, and `test-e2e` runs against the embedded driver on a 
 
 Until then the DTO's own description says so, which is at least honest to a frontend developer
 reading the generated types.
-
-### The dashboard's insight teaser ships as `null` until PET-41
-
-PET-20's AC6 wants the dashboard to show the teaser from the most recently generated insight
-set. There is no `insights` table - it arrives with PET-41 as an ordinary user-scope migration -
-so no branch before that one can satisfy AC6 as written.
-
-Three options were on the table, and the third is the one taken. Building the table on PET-20
-would duplicate a schema decision that belongs to the feature that actually needs it. Omitting
-the `insight` field entirely would mean PET-41 changes the dashboard's response shape when it
-lands, which is a second `api:sync` churn and a second frontend change for a field that was
-always going to exist. Shipping `insight: null`, documented as always null until PET-41 fills it
-in, costs one line there and no shape change anywhere - so that is what `DashboardResponseDto`
-does.
-
-The amendment is recorded on PET-20 itself, per `docs/agents/conventions.md`'s note that
-acceptance criteria are amendable on engineering merit; this one is in the wrong ticket rather
-than wrong.
 
 ### The Fly MCP server is declined; the flyctl workflow becomes a repo skill instead
 

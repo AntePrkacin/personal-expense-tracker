@@ -401,11 +401,12 @@ Five things about the figures are easy to get wrong:
   wants it excluded from this tile is an open question recorded on the ticket, not one this branch
   answers unasked.
 
-**`insight` is always `null`.** AC6 wants the teaser from the most recently generated insight
-set, and there is no `insights` table yet - `## Not built here` below still lists it. The field
-ships in the contract now so PET-41 fills it in without a second `api:sync` churn and a second
-frontend change for a field that was always going to exist. The amendment is recorded on the
-ticket, per `docs/agents/conventions.md`.
+**`insight` is the latest insight set's headline, or `null`.** PET-41 filled the field the
+dashboard shipped as `string | null`: `DashboardService` composes `InsightsService.latestReadyTeaser`,
+so the teaser is the summary headline of the most recent `ready` set and `null` when none has been
+generated (including while the first run is still in flight). It stayed a plain string rather than
+growing into an object, which is what kept PET-41 a one-field fill with no shape change - see
+`## Insights`.
 
 **`TransactionsModule` exports `TransactionsService`, the same reason `CategoriesModule`
 exports `CategoriesService`.** Without it, `DashboardModule` importing `TransactionsModule` for
@@ -415,6 +416,37 @@ that provides something is not the same as a module that shares it.
 Like `ProfileController`, there is no 404: a verified session implies a profile row, and its
 absence is the broken invariant `CategoriesService.period()` already throws a plain `Error`
 for, answered by the generic 500.
+
+## Insights
+
+**`GET /api/insights` stores and reads a generated set; it does not generate one.** `src/insights/`
+owns two user-scope tables (`insight_sets` and its child `insights`) and one read. Writing a set -
+the `POST` trigger and the four content rules - is PET-40, stacked on top; until it lands the read
+answers `empty` for every account. `InsightsService` is exported because the dashboard composes it
+and PET-40 will too.
+
+**The API's `empty`/`generating`/`ready` state is derived, never stored.** A row carries a `status`
+of `generating`, `ready` or `failed`; the read turns the rows into one state - a run in flight wins
+(skeletons), else the newest `ready` set, else empty. A `failed` row is simply skipped, and that is
+the whole of AC6: the previous `ready` set stays the answer with no restore step, because a run only
+becomes visible content once it reaches `ready`. The newest set wins by `generated_at` (AC5).
+
+**Content is returned independently of state, and that is deliberate.** The read always carries the
+latest `ready` set's content alongside `state`. On a regenerate the page renders skeletons off
+`state`, while the dashboard teaser keeps reading this same last-good content rather than blanking
+mid-run. `empty` alone carries null content.
+
+**Insight content is stored as rendered prose - the one place in this database that does.** Every
+other read formats on the way out; a set is a snapshot of what the generator wrote at `generated_at`,
+so `month_label`, the summary and each card body are stored strings that re-read byte-for-byte (AC2).
+Do not "fix" this toward the format-at-the-DTO convention: a persisted generation is not a derived
+view. The tables are FK-less like the rest of the schema (`insights.set_id` is a plain column, the
+way `transactions.category_id` is), because a set and its cards are only ever written together.
+
+**The dashboard teaser is a `string`, by inheritance.** `latestReadyTeaser` hands
+`DashboardResponseDto.insight` the latest ready set's summary headline, which honoured PET-20's
+committed `string | null` with no shape change. If frame 04's teaser ever needs a tone or title, that
+is a contract change to weigh at PET-25, not one taken here unasked.
 
 ## Profile and preferences
 
@@ -605,4 +637,7 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Insights has no table.** It arrives with its feature, as an ordinary user-scope migration.
+- **Insight generation has no endpoint.** PET-41 added the `insight_sets`/`insights` tables and
+  `GET /api/insights`, but nothing writes a set yet: the `POST /api/insights/generate` trigger and
+  the four content rules are PET-40. Until it lands every account reads the `empty` state, and the
+  dashboard teaser is always `null`.
