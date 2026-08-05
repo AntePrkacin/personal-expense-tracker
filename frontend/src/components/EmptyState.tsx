@@ -30,8 +30,12 @@ type EmptyStateProps = {
    * The circle and its colour belong to this component; the mark inside it belongs to the
    * screen, which is exactly the seam between frames 07 and 16.
    *
-   * It must be `aria-hidden`, and every glyph in the repo already is - the heading carries the
-   * meaning, so an announced icon here is noise.
+   * **The caller does not have to hide it**, and that is deliberate rather than lax. The
+   * heading carries the meaning, so an announced icon here is noise - but a prop whose contract
+   * is "remember to set `aria-hidden` yourself" is one every future caller can forget, and no
+   * test of this component could catch it. The circle below is hidden instead, which takes the
+   * whole subtree out of the accessible tree and makes the guarantee this component's own.
+   * Every glyph in the repo still sets the attribute itself, which is belt and braces.
    */
   icon: React.ReactNode;
   heading: string;
@@ -67,8 +71,17 @@ export function EmptyState({ icon, heading, body, action, headingLevel = 2 }: Em
     <div className="bg-surface-card border-border-default flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border px-10">
       {/* size-18 is 72px, and the circle is the one place brand-accent-soft appears outside a
           Tag. text-brand-accent sets the colour the glyph inherits through currentColor,
-          which is how every glyph in the repo takes its colour. */}
-      <div className="bg-brand-accent-soft text-brand-accent flex size-18 shrink-0 items-center justify-center rounded-full">
+          which is how every glyph in the repo takes its colour.
+
+          aria-hidden covers the circle *and* whatever glyph is passed in, so the guarantee
+          belongs to this component rather than to each caller's memory. It is also correct on
+          its own terms: unhidden, the circle is an unlabelled generic announcing nothing. Note
+          this does not remove focusable descendants from the tab order - the trap
+          app/DecorativePanel.tsx records - but nothing focusable belongs in an icon. */}
+      <div
+        aria-hidden="true"
+        className="bg-brand-accent-soft text-brand-accent flex size-18 shrink-0 items-center justify-center rounded-full"
+      >
         {icon}
       </div>
 

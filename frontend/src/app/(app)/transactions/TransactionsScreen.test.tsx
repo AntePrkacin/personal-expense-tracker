@@ -29,6 +29,22 @@ const POPULATED: TransactionsView = { state: 'populated', transactions: [ROW], t
 const FILTER_BAR = <div data-testid="filter-bar">All categories</div>;
 const TABLE = <table data-testid="table" />;
 
+/**
+ * Asserts the count badge reads exactly `total`, and that it is the badge rather than any
+ * other element carrying that string.
+ *
+ * `getByText` is an exact match by default, so a badge showing 40 fails to find "0" instead of
+ * quietly satisfying it. That is the whole reason this is a helper: the obvious version,
+ * `expect(tab.parentElement).toHaveTextContent('0')`, does a **substring** match on the row's
+ * concatenated "All transactions0" - so it passes for 40, 10 and 100 as well, and the one
+ * assertion covering AC3 could not fail for the thing it names.
+ */
+function expectBadge(total: string) {
+  const label = screen.getByText('All transactions');
+
+  expect(label.parentElement).toContainElement(screen.getByText(total));
+}
+
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8));
 });
@@ -58,7 +74,7 @@ describe('the empty state (frame 07)', () => {
   it('shows a badge of 0 (AC3)', () => {
     render(<TransactionsScreen view={EMPTY} />);
 
-    expect(screen.getByText('All transactions').parentElement).toHaveTextContent('0');
+    expectBadge('0');
   });
 
   it('renders the empty card instead of the table, even when handed one', () => {
@@ -108,7 +124,7 @@ describe('the populated state', () => {
     // 128 against one row on purpose: the badge reads `total`, never `transactions.length`.
     render(<TransactionsScreen view={POPULATED} />);
 
-    expect(screen.getByText('All transactions').parentElement).toHaveTextContent('128');
+    expectBadge('128');
   });
 
   it('renders the filter bar', () => {
