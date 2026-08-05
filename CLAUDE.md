@@ -130,6 +130,7 @@ read the file before you write the change, not after.
 | add or change a profile or preferences endpoint                     | `backend/CLAUDE.md`, Profile and preferences |
 | add or change a category endpoint, or touch the fallback category   | `backend/CLAUDE.md`, Category endpoints |
 | add or change the dashboard endpoint                                | `backend/CLAUDE.md`, Dashboard   |
+| add or change the insights endpoint                                 | `backend/CLAUDE.md`, Insights    |
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |

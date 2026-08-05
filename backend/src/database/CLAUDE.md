@@ -132,6 +132,5 @@ production infrastructure.
 ## Not built here
 
 `backend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
-alongside this file whenever the work is in the backend: the `insights` table and transaction
-reads. That list is the single home, so nothing is restated here. One of those two is a gap in
-this directory rather than in a controller - `insights` has no table at all.
+alongside this file whenever the work is in the backend. That list is the single home, so
+nothing is restated here.

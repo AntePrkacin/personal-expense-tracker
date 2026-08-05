@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CategoriesService } from '../categories/categories.service';
+import { InsightsService } from '../insights/insights.service';
 import { fromCents, toCents } from '../common/money';
 import {
   addDays,
@@ -48,6 +49,7 @@ export class DashboardService {
   constructor(
     private readonly categories: CategoriesService,
     private readonly transactions: TransactionsService,
+    private readonly insights: InsightsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -67,6 +69,13 @@ export class DashboardService {
     );
     const { categories: categoryRows, allocation } =
       await this.categories.list(userId);
+
+    // The teaser from the latest ready insight set, or null when none has been
+    // generated. Composed like everything else here rather than read from the
+    // insights tables directly. Sequential, not a Promise.all, for the same
+    // reason the rest of this method is: the embedded driver prefers one
+    // statement at a time on the cached connection.
+    const insight = await this.insights.latestReadyTeaser(userId);
 
     // The source of truth for the account-wide total, deliberately not a sum
     // of `categoryRows`' own `spent` fields. A transaction whose category was
@@ -103,8 +112,7 @@ export class DashboardService {
       weeklyBuckets: weeklyBucketsOf(window, periodTransactions),
       categories: categoriesOf(categoryRows, totalCents),
       recentTransactions: periodTransactions.slice(0, RECENT_LIMIT),
-      // Always null until PET-41 ships the insights table. See docs/TODO.md.
-      insight: null,
+      insight,
     };
   }
 }

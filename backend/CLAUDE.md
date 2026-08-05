@@ -401,11 +401,12 @@ Five things about the figures are easy to get wrong:
   wants it excluded from this tile is an open question recorded on the ticket, not one this branch
   answers unasked.
 
-**`insight` is always `null`.** AC6 wants the teaser from the most recently generated insight
-set, and there is no `insights` table yet - `## Not built here` below still lists it. The field
-ships in the contract now so PET-41 fills it in without a second `api:sync` churn and a second
-frontend change for a field that was always going to exist. The amendment is recorded on the
-ticket, per `docs/agents/conventions.md`.
+**`insight` is the latest insight set's headline, or `null`.** PET-41 filled the field the
+dashboard shipped as `string | null`: `DashboardService` composes `InsightsService.latestReadyTeaser`,
+so the teaser is the summary headline of the most recent `ready` set and `null` when none has been
+generated (including while the first run is still in flight). It stayed a plain string rather than
+growing into an object, which is what kept PET-41 a one-field fill with no shape change - see
+`## Insights`.
 
 **`TransactionsModule` exports `TransactionsService`, the same reason `CategoriesModule`
 exports `CategoriesService`.** Without it, `DashboardModule` importing `TransactionsModule` for
@@ -415,6 +416,106 @@ that provides something is not the same as a module that shares it.
 Like `ProfileController`, there is no 404: a verified session implies a profile row, and its
 absence is the broken invariant `CategoriesService.period()` already throws a plain `Error`
 for, answered by the generic 500.
+
+## Insights
+
+**`src/insights/` owns two user-scope tables (`insight_sets` and its child `insights`), one read
+and one asynchronous generate.** `GET /api/insights` serves the screen in all three states;
+`POST /api/insights/generate` produces a fresh set. `InsightsService` is exported because the
+dashboard composes it for the teaser.
+
+**The API's `empty`/`generating`/`ready` state is derived, never stored.** A row carries a `status`
+of `generating`, `ready` or `failed`; the read turns the rows into one state - a run in flight wins
+(skeletons), else the newest `ready` set, else empty. A `failed` row is simply skipped, and that is
+the whole of AC6: the previous `ready` set stays the answer with no restore step, because a run only
+becomes visible content once it reaches `ready`. The newest set wins by `generated_at` (AC5).
+
+**Content is returned independently of state, and that is deliberate.** The read always carries the
+latest `ready` set's content alongside `state`. On a regenerate the page renders skeletons off
+`state`, while the dashboard teaser keeps reading this same last-good content rather than blanking
+mid-run. `empty` alone carries null content.
+
+**Insight content is stored as rendered prose - the one place in this database that does.** Every
+other read formats on the way out; a set is a snapshot of what the generator wrote at `generated_at`,
+so `month_label`, the summary and each card body are stored strings that re-read byte-for-byte (AC2).
+Do not "fix" this toward the format-at-the-DTO convention: a persisted generation is not a derived
+view. The tables are FK-less like the rest of the schema (`insights.set_id` is a plain column, the
+way `transactions.category_id` is), because a set and its cards are only ever written together.
+
+**The dashboard teaser is a `string`, by inheritance.** `latestReadyTeaser` hands
+`DashboardResponseDto.insight` the latest ready set's summary headline, which honoured PET-20's
+committed `string | null` with no shape change. If frame 04's teaser ever needs a tone or title, that
+is a contract change to weigh at PET-25, not one taken here unasked.
+
+**Generation is genuinely asynchronous, and one run at a time.** `POST /api/insights/generate`
+writes the `generating` row, commits it, and returns **202** before floating the work with a logging
+`.catch`, the same shape `AuthService` uses - so the state is observable and a future slow generator
+(an LLM) needs no reshaping. Rule-based generation is fast, so `generating` is rarely caught in
+practice, but the lifecycle is the design's contract (INS-5), not a performance workaround. A second
+request while a run is in flight is a **409**: regenerate is disabled during a run (A26), and it keeps
+the one completion transaction the only writer on the cached connection. On completion the row becomes
+`ready` and its cards are inserted in **one** `db.transaction()`; on any failure the row is set
+`failed` and nothing else is touched, so the previous set stays readable (AC6).
+
+**An empty account produces no set, via insert-then-remove.** Emptiness is only known once the
+generator has run, so the placeholder `generating` row is written first and then deleted when the
+generator returns `null` (no transactions, AC7). The account flickers `generating` for a
+sub-millisecond and settles back to `empty`; it never leaves a bare `ready` set behind.
+
+**The four content rules live behind an `InsightGenerator` seam.** `RuleBasedInsightGenerator` is the
+only implementation: deterministic detectors filling templated copy, composing `CategoriesService`
+and `TransactionsService` rather than querying their tables (it reads `profile.currency` directly, the
+one static field neither surfaces). Each rule yields at most one card and is omitted when it has
+nothing to say, so a set can carry fewer than four. Over-cap is `warning`, a favourable
+month-over-month move is `positive` (an unfavourable one `neutral`), the projection is `info`,
+recurring merchants are `neutral`. **Recurring** means a merchant seen in at least **three** distinct
+calendar months (`RECURRING_MONTHS`), the number most likely to be tuned - which is the point of the
+seam: a later `LlmInsightGenerator` replaces the whole class through the one `INSIGHT_GENERATOR`
+provider binding in `InsightsModule`, storage, the read and the frontend untouched.
+
+**The single-run guard is enforced at the database, and an abandoned run self-heals.** The
+409 is not left to a check-then-insert: a partial unique index on `status = 'generating'` (the
+`categories_fallback_idx` shape) makes a second concurrent insert fail at the database, and that
+failure is translated to the same 409, so two racing POSTs cannot both start a run. Because that
+index would otherwise let one dead run wedge the feature forever, `generate()` first reclaims any
+`generating` row older than a staleness cutoff by marking it `failed` - the run whose process died
+mid-flight, or whose own failing catch threw. Past the cutoff the read stops reporting `generating`
+and a new POST is accepted, so skeletons-forever cannot outlive a crash. The cutoff is generous
+against rule-based generation and exists for a future slow `LlmInsightGenerator`; its value lives in
+`insights.service.ts`.
+
+**A reclaimed run writes nothing, and every write in `runGeneration` says so.** The reclaim buys
+self-healing at the price of the guarantee the completion path used to rest on: past the cutoff a
+second run starts while the first may still be working, so "the single-run guard keeps this the only
+transaction on the connection" stopped being true. Hence `status = 'generating'` in the `WHERE` of
+all three writes there, not just the row id. A run that lost its claim cannot flip a row already
+declared `failed` back to `ready`, cannot stamp a fresh `generated_at` on content generated minutes
+ago and win AC5's newest-set ordering with it, and cannot leave cards hanging off a set the read will
+never serve; it logs a warning and drops its result. Two runs' transactions genuinely overlapping is
+still reachable and still degrades one of them to `failed`, which is in `docs/TODO.md` rather than
+fixed here.
+
+**A `ready` row missing its content is skipped in SQL, not patched up in the DTO.**
+`latestReadySet` filters `summary_headline`/`summary_body IS NOT NULL` alongside the status, so a
+half-written set behaves like a `failed` one: the previous complete set stays the answer, which is
+AC6's rule applied to a different way of being broken. Doing it in the query rather than in `getSet`
+is what keeps `latestReadyTeaser` honest too, since the dashboard teaser reads the same row through
+the same helper and would otherwise need its own copy of the check.
+
+**Translating a unique-constraint failure means reading `cause`, never `error.message`.** Drizzle
+wraps every driver error, so the top-level message is the failed SQL and the constraint text is one
+level down; `@tursodatabase/database` then wraps SQLite's own wording rather than replacing it.
+`src/common/unique-violation.ts` walks that chain and is shared by the single-run 409 and
+registration's converge-on-the-winner path, which both previously kept a local copy that read only
+`error.message` and therefore never fired. Note how quietly that failed: the wrapper's message is
+the SQL, so it contains the table and the column the predicate was looking for, and only the word
+"unique" was missing. It matches `table.column` rather than the table, because a primary-key clash
+on the same table is a broken invariant and belongs in the generic 500. **The walk is duck-typed on
+`message` and `cause` and must not use `instanceof Error`**: the driver builds its error inside its
+own ESM module, so under Jest's module registry that is a different realm with a different `Error`
+global and `cause instanceof Error` is `false` for an object that prints as one. The only test that
+catches any of this is one that forces a real collision, which is why `test/insights.e2e-spec.ts`
+races two runs rather than asserting a hand-written message.
 
 ## Profile and preferences
 
@@ -605,4 +706,7 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Insights has no table.** It arrives with its feature, as an ordinary user-scope migration.
+- **No LLM behind the insights.** Generation is deterministic rules
+  (`RuleBasedInsightGenerator`); the "AI" is branding. An `LlmInsightGenerator` can replace it
+  through the `INSIGHT_GENERATOR` binding without touching storage, the read or the frontend, but
+  no such implementation exists and none is wired.

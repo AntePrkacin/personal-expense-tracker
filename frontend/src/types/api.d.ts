@@ -234,11 +234,51 @@ export interface paths {
         };
         /**
          * Every figure the dashboard draws, for the current period.
-         * @description `remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is always null until PET-41 ships the insights table. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.
+         * @description `remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.
          */
         get: operations["DashboardController_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your latest insight set, with the state to render it in.
+         * @description One call serves the whole screen in all three states. `state` is `empty` before anything has generated, `generating` while a run is in flight (render skeletons), or `ready` when a set is available. The content fields always carry the most recent **ready** set, independent of `state`, so a regenerate shows skeletons while the dashboard teaser keeps its last-good content. A failed run is invisible: the previous ready set stays returned.
+         */
+        get: operations["InsightsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/insights/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start generating a fresh insight set.
+         * @description Asynchronous: this returns **202** as soon as the run is registered, and the set is produced in the background. Poll `GET /api/insights` and render skeletons while `state` is `generating`; the new set replaces the old one when it finishes. A **409** means a run is already in flight - regenerate is disabled until it ends. An account with no transactions produces no set and stays in the empty state.
+         */
+        post: operations["InsightsController_generate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -555,8 +595,43 @@ export interface components {
             categories: components["schemas"]["DashboardCategoryDto"][];
             /** @description Up to 3 most recent transactions in the current period, newest first. */
             recentTransactions: components["schemas"]["TransactionResponseDto"][];
-            /** @description The teaser from the most recently generated insight set. Always null until PET-41 ships the insights table and starts filling this in. */
+            /** @description The headline of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). */
             insight: string | null;
+        };
+        InsightSummaryDto: {
+            /** @example You are on track this month */
+            headline: string;
+            /** @example You've spent $1,240 of your $2,000 budget with 11 days to go. */
+            body: string;
+        };
+        InsightCardDto: {
+            /**
+             * @description Maps to the Status palette the frontend draws the card in.
+             * @enum {string}
+             */
+            tone: "warning" | "positive" | "info" | "neutral";
+            /** @example Dining out is over budget */
+            title: string;
+            /** @example $312 of $300 - $12 over */
+            body: string;
+        };
+        InsightSetResponseDto: {
+            /**
+             * @description Whether a run is in flight (`generating`), a completed set exists (`ready`), or nothing has ever generated (`empty`). Independent of the content fields, which always carry the latest `ready` set.
+             * @enum {string}
+             */
+            state: "empty" | "generating" | "ready";
+            /**
+             * @description The period the latest ready set covers, rendered when it was generated. Null in the empty state.
+             * @example October 2025
+             */
+            monthLabel: string | null;
+            /** @description The summary banner of the latest ready set. Null when empty. */
+            summary: components["schemas"]["InsightSummaryDto"] | null;
+            /** @description The cards of the latest ready set, in their generated order. Empty until a set is ready. */
+            insights: components["schemas"]["InsightCardDto"][];
+            /** @description ISO 8601, when the latest ready set finished generating. Null when empty. */
+            generatedAt: string | null;
         };
     };
     responses: never;
@@ -1272,6 +1347,69 @@ export interface operations {
             };
             /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InsightsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsightSetResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    InsightsController_generate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The request conflicts with the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

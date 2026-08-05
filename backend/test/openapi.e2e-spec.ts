@@ -80,6 +80,8 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/categories/{id}`,
       `/${API_PREFIX}/dashboard`,
       `/${API_PREFIX}/hello`,
+      `/${API_PREFIX}/insights`,
+      `/${API_PREFIX}/insights/generate`,
       `/${API_PREFIX}/profile`,
       `/${API_PREFIX}/transactions`,
       `/${API_PREFIX}/transactions/{id}`,
@@ -585,14 +587,14 @@ describe('openapi.json', () => {
       ]);
     });
 
-    it('publishes insight as a nullable string, always null until PET-41', () => {
+    it('publishes insight as a nullable string filled from the latest insight set', () => {
       expect(schema('DashboardResponseDto').properties!.insight).toMatchObject({
         type: 'string',
         nullable: true,
       });
       expect(
         schema('DashboardResponseDto').properties!.insight.description,
-      ).toMatch(/PET-41/);
+      ).toMatch(/insight set/i);
     });
 
     it('publishes topCategory as a nullable reference, not a bare object', () => {
