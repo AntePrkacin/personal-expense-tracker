@@ -47,10 +47,12 @@ Two smaller traps. `--radius-full` is ignored by the compiler, so Radius/Full is
 Tailwind's built-in `rounded-full`; and clearing `--radius-*` also removes the bare
 `rounded` utility, so use `rounded-md` explicitly.
 
-**Foundations declares three shadows, and they are the one group with no Figma swatch behind
+**Foundations declares four shadows, and they are the one group with no Figma swatch behind
 them.** `--shadow-card` is the centred card every access frame and every dashboard card draws;
 `--shadow-panel` and `--shadow-chip` are Welcome's decorative panel, which shipped them as
-arbitrary literals before PET-9 gave them names. All four shadow namespaces are cleared -
+arbitrary literals before PET-9 gave them names; `--shadow-modal` is the lifted box behind every
+dialog, and it is deliberately not `--shadow-panel` - close enough to read as a duplicate in a
+diff, far enough apart that reusing either would be visibly wrong. All four shadow namespaces are cleared -
 `--shadow-*`, `--inset-shadow-*`, `--drop-shadow-*` and `--text-shadow-*` - for the same reason
 the palette is, so `shadow-lg` and `drop-shadow-md` generate nothing. Bare `shadow` disappears
 with the namespace exactly as bare `rounded` does; `shadow-none` is the one survivor, because it
@@ -155,6 +157,17 @@ state-dependent colour comes from its own `Record` (`FIELD_CONTROL_SURFACE` for 
 makes the winner depend on stylesheet order. Classes carrying a variant prefix
 (`focus-within:`, `disabled:`) are exempt, since the extra pseudo-class settles it.
 
+**Every field label is `self-start`, and that is a bug fix rather than alignment.** `ui/Field`'s
+column is `w-full` and a flex item stretches by default, so a label used to be a full-width block -
+472px of it inside the Add transaction modal against about 55px of text. Clicking anywhere in that
+invisible strip activated the control, which is `<label for>` behaving exactly as specified and
+reads as a glitch. It was worst on a `<select>`: Chrome focuses the control from a forwarded label
+click but does **not** open the list, so the border turned accent and nothing else happened.
+Shrinking the label to its own text makes the hit area what a reader would guess it is, and
+`Field.test.tsx` pins the class because jsdom computes no layout to measure. `ui/Select`'s control
+also carries `cursor-pointer` now, for the reason `BUTTON_BASE` does: the user agent draws an arrow
+over a `<select>`, so the one control on a form that opens a list read as unclickable.
+
 **Padding sits on the control, never on the bordered box.** Both `Input` and `Select` put it
 on the `<input>` / `<select>`, and `Input`'s `$` prefix and `Select`'s chevron are absolutely
 positioned over the control with `pointer-events-none`. A padded box turns its own 14-16px
@@ -225,7 +238,7 @@ consumer at all.
   so the design file is the only holdout left; `docs/TODO.md` records that, and the one
   constraint the rename leaves on any future change to the per-user database naming.
 
-`frontend/src/lib/format.ts` owns display formatting, in four parts. Money: amounts are
+`frontend/src/lib/format.ts` owns display formatting, in six parts. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
 rather than the hyphen `Intl.NumberFormat` emits, matching the design. Names: `initials()`
 and `shortName()` derive the sidebar footer's "MK" and "Marko K." from the two stored name
@@ -244,11 +257,49 @@ every one of which is wrong mid-keystroke, where a user typing `24.` would watch
 `$24.00` under the caret. So none of the three touches `Number` on the way out, the fraction is
 truncated rather than rounded, and the `$` belongs to `Input variant="currency"` instead of to
 the string. `formatAmountInput` is **idempotent**, which the controlled input in
-`app/setup/BudgetForm.tsx` depends on rather than merely benefits from.
+`app/setup/BudgetForm.tsx` depends on rather than merely benefits from. Calendar date:
+`formatIsoDate()` turns the `YYYY-MM-DD` a transaction is stored under into the "Oct 8, 2025" the
+Date field's trigger draws, and it goes through `lib/date.ts`'s `dateFromIso` rather than
+`new Date(iso)` - which parses a date-only string as **UTC midnight**, so any zone behind UTC
+formats it as the day before. Short calendar date: PET-29 added `formatIsoDayMonth()`, the same
+date without its year - the "Oct 8" the transactions table's DATE column draws, where every row
+in a period filtered to one month would otherwise repeat it. A second formatter rather than a
+slice off the first, because `"Oct 8, 2025".split(',')[0]` is an assumption about a separator
+that stops holding the moment the locale does.
 
-All four parts hard-code `en-US` and its separators. When the currency chosen during onboarding
+**`lib/date.ts` is the other half of that and is deliberately not this file.** It owns the wire
+form - today's date, the parts either side of a `YYYY-MM-DD` string, calendar-date arithmetic -
+and touches neither `Intl` nor UTC, because a calendar date is a day rather than an instant and
+must never follow a locale. That file records the two directions the mistake runs in;
+`lib/calendar.ts` builds the picker's month grid on top of it.
+
+All six parts hard-code `en-US` and its separators. When the currency chosen during onboarding
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
-that, and PET-9 made the amount input its third consumer.
+that, and PET-9 made the amount input its third consumer. The one thing that must **not** follow
+it is `lib/date.ts`, for the reason above.
+
+**`components/EmptyState.tsx` is the fifth direct child, and it arrived before its second
+consumer rather than after.** `AccessCard` above records the usual sequence: chrome lives beside
+one route until a second screen turns out to draw the identical box, then moves. This one skipped
+the wait because the second consumer is already measurable in the design file - frame 07
+Transactions (node `45:1044`) and frame 16 AI Insights (node `39:665`) are the same card, same
+72px accent-soft circle, same `Display/S` heading, same 440px `Body/L` body, same primary button,
+differing only in glyph and copy, and DSH-7 describes the same shape a third time inside the
+dashboard's recent-list card. Waiting for PET-44 to prove what PET-30 could already see would
+have bought a move commit and nothing else. It takes `icon`, `heading`, `body`, an optional
+`action` and `SectionHeader`'s `headingLevel`, defaulting to 2 because `PageHeader` owns the
+page's `h1`.
+
+**Two of its values are the ones a reader will try to correct, so both are pinned by its
+suite.** It is `rounded-lg`, Radius/LG at 16px, where every other card in the app is
+`rounded-xl` at 20 - Figma binds a raw 16 on this frame. And it carries **no `shadow-card`**,
+which makes it the first card here without one; `frontend/CLAUDE.md` calls that token "the centred
+card every access frame and every dashboard card draws", and this frame simply has no shadow at
+all. Reaching for `AccessCard`'s box string, which is the obvious move, is therefore wrong twice
+over - and both mistakes look like the design until somebody opens Figma. The one deliberate
+deviation is `max-w-110` where the frame fixes 440px: identical at the designed 1440 width, and
+a narrower window wraps instead of overflowing the card's `px-10`, the same call `AccessCard`'s
+`py-10` makes about a viewport Figma never draws.
 
 ## The screens
 
@@ -303,11 +354,46 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   the shape from.
 - **The shell's content.** The `(app)` group, the four routes and the page header exist, every
   screen renders its designed header, and the shell is really gated and really shows the signed-in
-  user's profile as of PET-52. What is missing is everything below the header: all four `<main>`
-  elements are empty. The month select and the search field are drawn but inert by design.
-- **Every read except the two the access flow needed.** PET-52 ended the "nothing reads at all"
-  era: `lib/session.ts` calls `GET /api/auth/session` and `lib/profile.ts` calls
-  `GET /api/profile`, both lifting the session cookie into an `Authorization` header
-  server-side, and both are the pattern to copy. What no screen fetches yet is its own data -
-  the dashboard summary, the transaction list and its detail, the categories and their month
-  stats all exist on the backend and are read by nobody.
+  user's profile as of PET-52. What is missing is everything below the header on **three** of the
+  four: the Dashboard, AI Insights and Settings `<main>` elements are empty. Transactions is the
+  exception, and as of PET-29 it is a **complete** screen rather than a partial one: the tab bar
+  and its real count badge, both empty states, the filter bar and the table are all built, and the
+  two slots PET-30 left are filled by `page.tsx`. They are still slots rather than direct imports,
+  because both need reads the screen cannot make and Storybook has to be able to hand it
+  stand-ins. The search field is a real `<input>` now and the three filter selects are real
+  `<select>`s; what stays inert there is the Dashboard's month select (A8 wants a designed control
+  first) and **both transactions tabs**, because "Categories" opens frame 13, which is PET-36's
+  route with no `page.tsx` behind it. Every "Add transaction" button is real as of PET-31, and as
+  of PET-29 a save finally shows its effect in the list rather than only in the badge - unless the
+  date is backdated out of the current period, which the period select can now go and find.
+  What the transactions screen still does not do is **navigate**: a row click opens nothing
+  (PET-34's detail page) and the kebab opens nothing (PET-33's row menu). Both are drawn and
+  deliberately inoperable, the same call the inert tabs make.
+- **Every read a screen needs for its own data, bar the transactions list and the categories.**
+  PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and
+  `lib/profile.ts` calls `GET /api/profile`, both lifting the session cookie into an
+  `Authorization` header server-side. PET-30 added the third, `lib/transactions.ts`, and it is the
+  first read a _screen_ makes for its own data - so it, rather than the two access reads, is the
+  one to copy: it shows the classified-failure policy, and it shows what to do when the API's
+  answer is ambiguous. PET-31 added `lib/categories.ts`, narrowed to what a picker needs.
+  All four now go through `authorizedGet` in `lib/session.ts`, which is where the cookie becomes
+  a bearer token; do not inline a fifth copy of that. What no screen fetches yet is the
+  dashboard summary, the transaction _detail_, and the categories' **month stats**.
+  `lib/categories.ts` now holds **two** projections over one shared request: `readCategoryOptions`
+  for the modal's `<select>`, and PET-29's `readCategoryLabels`, which adds `color` because a
+  transaction row carries only a `categoryId` and the table joins the name and the tile colour
+  onto it. A screen wanting a cap or a spend widens the right one or adds a third; do not open
+  either up, since the point of the narrowing is that a cap and a month's spend never reach a
+  browser bundle drawing neither. Note that module deliberately **never redirects** - its
+  route-handler caller would be handed an HTML login page with a 200 on it - so a Server
+  Component using it applies the 401 policy at the call site, which
+  `app/(app)/transactions/page.tsx` is the worked example of.
+- **Every write except creating a transaction.** PET-31 is the app's first authenticated write:
+  `lib/createTransaction.ts` is a Server Action over `authorizedPost` in `lib/session.ts`, the
+  write half of `authorizedGet` and the second thing to reuse rather than re-derive. Two of its
+  decisions generalise to the writes still to come. It **surfaces the status on rejection** where
+  the read helper collapses everything non-401 into `unavailable`, because 400, 404 and 401 need
+  three different messages from a form and one of them must not say "try again". And it **does not
+  parse the created row**: a 2xx whose body will not parse still means the write landed, so
+  reporting failure there would have the user create a duplicate. Editing, deleting, and every
+  category and profile write are still unbuilt.

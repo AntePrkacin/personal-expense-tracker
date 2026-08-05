@@ -3,7 +3,7 @@ import path from 'node:path';
 import { compile } from 'tailwindcss';
 
 import { BUTTON_BASE, BUTTON_VARIANTS } from './Button';
-import { CATEGORY_TILE } from './categoryColour';
+import { CATEGORY_TILE, CATEGORY_TILE_NEUTRAL } from './categoryColour';
 import { FIELD_CONTROL_BASE, FIELD_CONTROL_BORDER, FIELD_CONTROL_SURFACE } from './Field';
 import { INPUT_VARIANTS } from './Input';
 import { SELECT_CONTROL } from './Select';
@@ -12,6 +12,18 @@ import { TAG_TONES } from './Tag';
 // Outside this folder, like the shell's maps: see the note on coverage above.
 import { RESEND_MESSAGE } from '../ResendLink';
 import { CHIP_LABEL, CHIP_SURFACE } from '../../app/setup/categories/CategoryChip';
+import {
+  DATE_DAY,
+  DATE_DAY_BASE,
+  DATE_PAGER,
+  DATE_POPOVER,
+  DATE_TRIGGER,
+} from '../../app/(app)/DateField';
+import { MODAL_BACKDROP, MODAL_BOX, MODAL_CLOSE, MODAL_DIVIDER } from '../../app/(app)/Modal';
+import {
+  FILTER_PILL_BOX,
+  FILTER_PILL_CONTROL,
+} from '../../app/(app)/transactions/TransactionFilterBar';
 import { STEP_DOT, STEP_WIDTH } from '../../app/setup/SetupShell';
 
 // Proves every utility the components, the app shell and the access screens rely
@@ -72,6 +84,11 @@ const HARDCODED = [
   'text-white',
   'bg-surface-muted',
   'bg-brand-accent',
+  // The empty-state card's 72px icon circle and the tab bar's count badge. TAG_TONES
+  // reaches the same token for its indigo pill, so this is listed for the reason
+  // `text-brand-accent-pressed` below is: both of those spell it into JSX directly
+  // rather than through a map.
+  'bg-brand-accent-soft',
   'bg-status-danger',
   'bg-transparent',
   // The card and the two floating chips on the Welcome panel, and the story chrome
@@ -84,6 +101,10 @@ const HARDCODED = [
   'text-text-on-dark-subtle',
   // radius, whose namespace is cleared: `rounded` on its own does not exist
   'rounded-md',
+  // Radius/LG, 16px, and the empty-state card is the first thing in the app to use it.
+  // Node 45:1044 binds a raw 16 where the access card binds 20, so `rounded-xl` beside
+  // it is a different card rather than the same one written two ways.
+  'rounded-lg',
   'rounded-xl',
   'rounded-full',
   // elevation, whose four namespaces are cleared the same way: `shadow` and
@@ -119,12 +140,18 @@ const HARDCODED = [
   'size-2.75',
   'size-4',
   'size-5',
+  // 30px, the empty-state glyph. Fractional, so a redefined scale drops it silently.
+  'size-7.5',
   'size-8.5',
   'size-9',
   'size-9.5',
   'size-10',
+  // 72px, the empty-state card's accent circle, on frames 07 and 16 alike.
+  'size-18',
   'size-90',
   'size-130',
+  // 2px, the active tab's underline.
+  'h-0.5',
   'h-1.25',
   // 6px, the height of the selected chip's checkmark. Its 8.5px width is a literal
   // rather than a step, for the reason MonthPill's chevron is: a three-decimal step
@@ -144,6 +171,11 @@ const HARDCODED = [
   // 440px, the setup card's content box. Only the register story needs it as a
   // class, to show its two-column row at the designed width outside the card.
   'w-110',
+  // The same 440px as a ceiling rather than a fixed width. Frames 07 and 16 draw the
+  // empty-state copy at exactly 440, and at the designed 1440 the two are identical -
+  // but `max-w-` is what makes a narrower window wrap instead of overflowing the
+  // card's px-10, which is the deviation EmptyState.tsx records.
+  'max-w-110',
   'w-115',
   // 520px and 600px, the setup card on frames 02 and 22 and on frame 03. Both are
   // reached through STEP_WIDTH below, and both are listed because a spacing step is
@@ -164,25 +196,43 @@ const HARDCODED = [
   'gap-2.75',
   'gap-3',
   'gap-3.5',
+  // 16px, between all four children of the empty-state card. It used to sit in
+  // STORY_CHROME below and moved for exactly the reason `gap-3` did: a component now
+  // hard-codes it, so it stopped being a class only a decorator draws. Guarded either
+  // way, but the two lists mean different things.
+  'gap-4',
   'gap-4.5',
   'gap-5',
   'gap-5.5',
   'gap-6',
+  // 28px, between the two tabs on frames 06 and 07.
+  'gap-7',
   'gap-px',
+  // 7px, the count badge's horizontal inset.
+  'px-1.75',
   'px-2.5',
   'px-3',
   'px-3.5',
   'px-5',
+  // 24px, the horizontal padding on all three of the modal's bands (node 28:384).
+  'px-6',
   'px-6.5',
   'px-20',
+  // 2px, the count badge's vertical inset.
+  'py-0.5',
   'py-1',
   'py-2.75',
   'py-3',
+  // 22px, the modal body's vertical padding (node 28:390).
+  'py-5.5',
   'py-10',
   'pt-1',
   // 6px, the gap above both setup cards' Back-and-Continue row.
   'pt-1.5',
   'pt-3',
+  // 18px above the modal's footer row and 22px above its title (nodes 28:416, 28:385).
+  'pt-4.5',
+  'pt-5.5',
   'pt-6',
   'pt-7',
   'pt-8',
@@ -190,12 +240,33 @@ const HARDCODED = [
   'pt-16',
   'pb-0.5',
   'pb-2',
+  // 12px, under each tab's label, which is what lifts both labels off the bar's rule.
+  'pb-3',
+  // 18px under the modal's title and 22px under its footer row.
+  'pb-4.5',
+  'pb-5.5',
   'pb-6',
   'pb-6.5',
   'pb-8',
   'pb-14',
   'pl-2',
   'pl-3',
+  // The modal header's asymmetric inset: 24 left against 20 right, because the close
+  // target carries its own visual padding inside a 34px box (node 28:385).
+  'pl-6',
+  'pr-5',
+  // 20px, and the one class here derived from two Figma numbers rather than read off
+  // one. The empty-state action sits 36px below the copy; the card's gap-4 supplies 16
+  // of that, because Figma spends a 4px spacer frame inside a 16px-gap column to get
+  // there. EmptyState.tsx shows the arithmetic.
+  'mt-5',
+  // 8px under the date picker's month header, above its grid.
+  'mb-2',
+  // The date picker's two month chevrons, which reuse ui/Select's leaf: it points down at
+  // rest, so a quarter turn clockwise points it left for Previous and anticlockwise right for
+  // Next. A negated utility, which is a shape nothing else in this list has.
+  'rotate-90',
+  '-rotate-90',
   'min-w-0',
   'right-3.5',
   'left-4',
@@ -263,6 +334,9 @@ const HARDCODED = [
   // would put a lone child at the start instead. Every other access footer has two
   // children and takes `justify-between`.
   'justify-end',
+  // What keeps every field label as narrow as its own text. A flex item stretches by default,
+  // so without this a label is a full-width invisible click target for the control below it.
+  'self-start',
   'shrink-0',
   'flex-1',
   'truncate',
@@ -290,6 +364,45 @@ const HARDCODED = [
   'disabled:opacity-60',
   'disabled:text-text-tertiary',
   'placeholder:text-text-tertiary',
+
+  // PET-29's transactions table and filter bar.
+  //
+  // `table-fixed` is what lets the `<thead>` declare each column width once for the whole
+  // table, and `align-middle` is not decoration: a `<td>`'s initial `vertical-align` is
+  // `baseline`, which sits 13px type on the baseline of a 36px tile.
+  'table-fixed',
+  'align-middle',
+  // The rules between rows, moved out of STORY_CHROME now a component hard-codes them.
+  'divide-y',
+  'divide-border-subtle',
+  'border-b',
+  // The fallback tile for a category colour outside the eight. `bg-text-tertiary` looks like
+  // a category token used wrongly and is not: --color-text-tertiary is #98a0ae, which is
+  // exactly FALLBACK_CATEGORY.color in the backend's starter-categories.ts.
+  CATEGORY_TILE_NEUTRAL,
+  // The table's own spacing: 13px rows, a 14/12 header, the card's 24px inset, and the 16px
+  // between columns that a table cannot express as a gap.
+  'py-3.25',
+  'pt-3.5',
+  'pb-3',
+  'pt-1.5',
+  'pr-4',
+  'px-6',
+  // The 36px tile, the 18px glyph inside it and the 8px category dot.
+  'size-9',
+  'size-4.5',
+  'size-2',
+  'w-8',
+  // The search field's 132px input, which is the frame's own measurement.
+  'w-33',
+  'gap-2.25',
+  'gap-2.5',
+  // The pending affordance in `FilterNavigation.tsx`, which has no Figma counterpart (A29).
+  'opacity-60',
+  'transition-opacity',
+  // The search pill's focus treatment, borrowed from ui/Field because the input inside the
+  // box is borderless and the box is what turns accent.
+  'focus-within:border-brand-accent',
 ];
 
 // The three shadows in HARDCODED above (`shadow-card`, `shadow-panel`, `shadow-chip`)
@@ -368,6 +481,42 @@ const CHIP_CLASSES = [CHIP_SURFACE, CHIP_LABEL].flatMap((map) => Object.values(m
 const RESEND_MESSAGE_CLASSES = Object.values(RESEND_MESSAGE).flatMap(split);
 
 /**
+ * The modal's box, scrim and close target (app/(app)/Modal.tsx).
+ *
+ * Three of these are exactly what this harness exists for, because each one fails silently
+ * and invisibly:
+ *
+ * - **`m-auto`** is what centres the dialog, because Tailwind's preflight zeroes the user
+ *   agent's own `dialog { margin: auto }`. Compiled away, the modal pins to the top-left
+ *   corner and no other test notices.
+ * - **`open:flex`** carries a variant prefix, so a change to how Tailwind spells the `open`
+ *   variant would drop the whole declaration and leave the box's children unstacked.
+ * - **`backdrop:bg-[rgba(10,15,23,0.5)]`** is a variant *and* an arbitrary value with parens
+ *   and commas in it - the exact shape this file's `selector()` grew its escaping for - and
+ *   it is the only scrim in the app. Losing it leaves a modal floating over an undimmed page.
+ */
+const MODAL_CLASSES = [MODAL_BOX, MODAL_BACKDROP, MODAL_CLOSE, MODAL_DIVIDER].flatMap(split);
+
+/**
+ * The date picker's trigger, popover, month pagers and day cells (app/(app)/DateField.tsx).
+ *
+ * The whole control is undesigned - ADD-7 draws a closed select and Figma contains no calendar
+ * - so every one of these is ours, which makes this the only thing standing between a token
+ * rename and a popover that renders as unstyled text on top of the field below it.
+ *
+ * `DATE_DAY` is a `Record` for `ui/Field`'s reason rather than for tidiness: its three states
+ * each set a colour, so a component emitting two of them would depend on stylesheet order.
+ * Each value therefore has to compile on its own, which is what this checks.
+ */
+const DATE_FIELD_CLASSES = [
+  ...split(DATE_TRIGGER),
+  ...split(DATE_POPOVER),
+  ...split(DATE_PAGER),
+  ...split(DATE_DAY_BASE),
+  ...Object.values(DATE_DAY).flatMap(split),
+];
+
+/**
  * Classes used only by the stories, to frame a component against a card.
  *
  * Worth guarding for the same reason as the components: Storybook is where
@@ -378,12 +527,9 @@ const RESEND_MESSAGE_CLASSES = Object.values(RESEND_MESSAGE).flatMap(split);
  * with no token lookup, so there is nothing about them a token change could break.
  */
 const STORY_CHROME = [
-  'divide-border-subtle',
-  'divide-y',
   'p-8',
   'px-7',
   'py-6',
-  'gap-4',
   // Separates the three shells in the 02 Setup step-indicator story.
   'gap-8',
   'gap-12',
@@ -399,7 +545,19 @@ const STORY_CHROME = [
 // three - the card, its radius, and the pitch block's stacking gap. And
 // `border-border-default` followed them when components/AccessCard.tsx took over the
 // card box: three of the four classes on that one element were already in HARDCODED,
-// so its border being the outlier here was the anomaly.
+// so its border being the outlier here was the anomaly. `divide-y` and
+// `divide-border-subtle` are the latest pair to move, for the identical reason:
+// PET-29's transactions table hard-codes both on its `<tbody>`, so they stopped
+// being decoration around a story and became the rules between the rows.
+
+/**
+ * The transactions filter bar's two strings, split like SELECT_CONTROL's.
+ *
+ * Two rather than one for the reason `ui/Field` gives: the box owns the border and the fill,
+ * the control owns every pixel of padding, and merging them would put the padding on the box -
+ * which turns the pill's own 9-14px band into a dead zone that opens no list.
+ */
+const FILTER_PILL_CLASSES = [...FILTER_PILL_BOX.split(' '), ...FILTER_PILL_CONTROL.split(' ')];
 
 const EXPECTED = [
   ...Object.values(TAG_TONES).flatMap(({ pill, dot }) => [...pill.split(' '), dot]),
@@ -413,6 +571,9 @@ const EXPECTED = [
   ...STEP_WIDTH_CLASSES,
   ...CHIP_CLASSES,
   ...RESEND_MESSAGE_CLASSES,
+  ...MODAL_CLASSES,
+  ...DATE_FIELD_CLASSES,
+  ...FILTER_PILL_CLASSES,
   ...HARDCODED,
   ...STORY_CHROME,
 ];

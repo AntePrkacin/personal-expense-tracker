@@ -101,7 +101,14 @@
 
      Only the two dark-panel values are bound to Figma variables. Card's
      rgba(13, 18, 31, 0.06) is a raw fill in the frame, one row up from the
-     unbound circle colour recorded in docs/TODO.md. */
+     unbound circle colour recorded in docs/TODO.md.
+
+     Modal is the lifted card behind every dialog (node 28:384, frame 09), and it
+     is a raw fill too. It is deliberately not --shadow-panel: that one is 50px of
+     blur at 0.35 black for a decorative dark panel, this is 60px at 0.28 of the
+     same near-black the card uses, over a dimmed page. Close enough to look like
+     a duplicate in a diff, far enough apart that reusing either would be visibly
+     wrong. */
   --shadow-*: initial;
   --inset-shadow-*: initial;
   --drop-shadow-*: initial;
@@ -110,6 +117,7 @@
   --shadow-card: 0 12px 32px rgba(13, 18, 31, 0.06);
   --shadow-panel: 0 24px 50px rgba(0, 0, 0, 0.35);
   --shadow-chip: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-modal: 0 24px 60px rgba(13, 18, 31, 0.28);
 }
 
 /* `inline` makes the `font-display` / `font-sans` utilities inline the whole

@@ -27,11 +27,38 @@ import { Field, fieldControlClass, fieldErrorId } from './Field';
  * layered over the select, and without it a click on the arrow - the most
  * obvious place to click - would land on the decoration and do nothing.
  */
-function Chevron() {
+export function Chevron() {
   return (
     <svg
       viewBox="0 0 10 5"
       className="text-text-tertiary pointer-events-none absolute top-1/2 right-3.5 h-1.25 w-2.5 -translate-y-1/2 overflow-visible"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path d="M0 0L5 5L10 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/**
+ * The same leaf, free of this component's absolute positioning.
+ *
+ * `Chevron` above is pinned to the right edge of a field box, which is right for a select and
+ * wrong for anything that needs the mark inline - the date picker's month chevrons sit in a
+ * row and are rotated a quarter turn each. Exported as a second component rather than a prop
+ * because the two differ in every positioning class and share only the path.
+ *
+ * The path, the 10x5 viewBox and `overflow-visible` are all the same, and that last one is
+ * the reason to reuse this at all rather than redrawing it: the designed leaf is 10x5 with a
+ * 1.5 round-capped stroke, so half the stroke falls outside the box along all three ends, and
+ * an SVG viewport clips its own overflow by default. Redrawn from the export, both tips and
+ * the elbow render shorn flat - the trap `ui/ListRow`'s glyph documents first.
+ */
+export function ChevronLeaf({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 10 5"
+      className={`h-1.25 w-2.5 overflow-visible ${className ?? ''}`}
       fill="none"
       aria-hidden="true"
     >
@@ -48,8 +75,13 @@ function Chevron() {
  * designed right padding, the 10px chevron, and the 10px gap the tile draws
  * between value and chevron.
  */
+// `cursor-pointer` for the reason `BUTTON_BASE` carries it, and it is not redundant here either:
+// the user agent draws an arrow over a `<select>`, so the one control on the form that opens a
+// list read as unclickable on hover. `(app)/DateField.tsx` wears this same box and already had a
+// pointer, so without this the two disagreed - which is exactly the drift that field exists not
+// to cause. `disabled:cursor-not-allowed` still wins through its pseudo-class.
 export const SELECT_CONTROL =
-  'text-body-m text-text-primary disabled:text-text-tertiary w-full appearance-none bg-transparent py-3 pr-8.5 pl-3.5 outline-none disabled:cursor-not-allowed';
+  'text-body-m text-text-primary disabled:text-text-tertiary w-full cursor-pointer appearance-none bg-transparent py-3 pr-8.5 pl-3.5 outline-none disabled:cursor-not-allowed';
 
 type SelectProps = {
   /** Wired to the label and the error message; see Field for why it is required. */

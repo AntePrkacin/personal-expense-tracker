@@ -61,6 +61,41 @@ would have no way to tell a validation rejection from an unreachable backend. `r
 answers a discriminated `{ ok: true } | { ok: false; status? }`, and the absent status is what
 "the request never completed" looks like.
 
+**PET-30 lifted the cookie-to-bearer read into one helper, and PET-31 added its write half.**
+`authorizedGet` and `authorizedPost` both live in `frontend/src/lib/session.ts` - not beside
+`postAccepted` in `lib/backend.ts` - and the split is **by credential, not by HTTP verb**: they
+need `SESSION_COOKIE`, which lives in that file, so putting them in `backend.ts` would point its
+dependency back and make a cycle. `lib/backend.ts` keeps the two pre-session writes, which send no
+credential at all. Do not inline a fresh copy of either; there were three copies of the read before
+PET-30 collapsed them.
+
+**The two helpers classify failure differently, and that is the design rather than an
+inconsistency.** `authorizedGet` answers `unauthenticated` for a 401 or a missing cookie and
+`unavailable` for everything else, because a caller that could not get its data has one thing to
+say about it. A write cannot afford that: `POST /api/transactions` answers 400 when the body is
+rejected, 404 when the `categoryId` names no category of the caller's, and 401 when the session
+died with the form open, and those want three different messages - one of which must not say "try
+again", because a body the DTO rejects will be rejected again forever. So `authorizedPost` passes
+the status through and the calling action maps it, which is what `lib/createTransaction.ts` does.
+
+**A write must not be told apart from its own success by a parse error.** `authorizedPost`
+deliberately does **not** read the response body: `POST /api/transactions` answers 201 with the
+created row, and returning it looked obviously right until the failure mode showed up - a 2xx
+arriving with a body that will not parse means the transaction *exists*, so a result saying
+otherwise sends the user to press the button again and create a second one. A 2xx is success on the
+status alone. Parse the body when something actually reads it.
+
+**A fourth shape exists as of PET-31: a route handler the client fetches.** `app/api/categories/
+route.ts` serves the Add transaction modal's Category options from the frontend's own origin,
+because the caller is an already-open modal - which an action cannot serve as a read and a Server
+Component cannot serve at all. Two things make it worth the endpoint. It costs nothing on a page
+nobody opens the modal from, where a `page.tsx` read would pay on every load; and it narrows a
+response built for a whole screen down to the two fields a `<select>` needs, so the month stats and
+the caps never reach the browser. The module behind it, `lib/categories.ts`, deliberately does
+**not** `redirect()` on a dead session, unlike `lib/transactions.ts` beside it: a redirect from a
+handler answering a `fetch()` would hand the modal an HTML login page with a 200 on it, so the
+failure has to stay data.
+
 ## One contract, generated, and the frontend types come out of it
 
 The backend is the source of truth and nothing restates it. `nest build` runs `@nestjs/swagger`'s CLI

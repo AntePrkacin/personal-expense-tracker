@@ -35,6 +35,48 @@ describe('Field', () => {
     expect(screen.queryByText(/./, { selector: 'p' })).toBeNull();
   });
 
+  it('keeps the label as narrow as its text rather than stretching it', () => {
+    // A real bug this pins rather than a preference. The column is `w-full` and a flex item
+    // stretches by default, so the label used to be a full-width block - 472px inside the Add
+    // transaction modal against about 55px of text - and clicking anywhere in that invisible
+    // strip activated the control. That is `<label for>` behaving exactly as specified, and it
+    // reads as a glitch: worst on a `<select>`, where Chrome focuses the control from a forwarded
+    // label click but does not open the list, so the border turned accent and nothing happened.
+    //
+    // jsdom computes no layout, so width cannot be measured here - the class is the assertion,
+    // and `ui/utilities.test.ts` proves it compiles to real CSS.
+    render(
+      <Field id="merchant" label="Merchant">
+        <input id="merchant" />
+      </Field>,
+    );
+
+    expect(screen.getByText('Merchant')).toHaveClass('self-start');
+  });
+
+  it('gives the label a pointer, because clicking it does something', () => {
+    render(
+      <Field id="merchant" label="Merchant">
+        <input id="merchant" />
+      </Field>,
+    );
+
+    expect(screen.getByText('Merchant')).toHaveClass('cursor-pointer');
+  });
+
+  it('gives the label an id, which the date field needs and the other two do not', () => {
+    // `(app)/DateField.tsx`'s control is a <button>, and HTML-AAM computes a button's name from
+    // its own subtree - so a `<label for>` alone would never be announced. That field composes
+    // `aria-labelledby` from this id plus its value span.
+    render(
+      <Field id="date" label="Date">
+        <button type="button" id="date" />
+      </Field>,
+    );
+
+    expect(screen.getByText('Date')).toHaveAttribute('id', 'date-label');
+  });
+
   it('renders the message with an id the control can point at', () => {
     render(
       <Field id="amount" label="Amount" error="Enter an amount greater than 0.">

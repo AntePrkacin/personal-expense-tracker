@@ -98,11 +98,13 @@ const RADIUS_TOKENS: [token: string, value: string][] = [
 
 // Foundations draws no shadow swatches, so unlike every other table here these
 // are read off the frames that use them rather than from a variable: card from
-// 02's centred card (42:709), panel and chip from Welcome's decorative panel.
+// 02's centred card (42:709), panel and chip from Welcome's decorative panel,
+// modal from frame 09's dialog (28:384).
 const SHADOW_TOKENS: [token: string, value: string][] = [
   ['card', '0 12px 32px rgba(13, 18, 31, 0.06)'],
   ['panel', '0 24px 50px rgba(0, 0, 0, 0.35)'],
   ['chip', '0 10px 24px rgba(0, 0, 0, 0.25)'],
+  ['modal', '0 24px 60px rgba(13, 18, 31, 0.28)'],
 ];
 
 // [utility, family token, size, weight, tracking, leading]
@@ -159,7 +161,7 @@ describe('Foundations shadows', () => {
     expect(css).toContain(`--shadow-${token}: ${value};`);
   });
 
-  it('declares exactly these three shadows and nothing else', () => {
+  it('declares exactly these four shadows and nothing else', () => {
     // The negative lookahead keeps the three sibling namespaces out, so their
     // `initial` resets are not counted as declarations.
     const declared = [...raw.matchAll(/^\s*--shadow-(?!\*)([a-z0-9-]+):/gm)].map((m) => m[1]);
@@ -278,7 +280,7 @@ describe('compiled output', () => {
     // radius, including the built-in pill
     ...RADIUS_TOKENS.map(([token]) => `rounded-${token}`),
     'rounded-full',
-    // the three shadows, plus the static utility that survives the reset
+    // the four shadows, plus the static utility that survives the reset
     ...SHADOW_TOKENS.map(([token]) => `shadow-${token}`),
     'shadow-none',
     // every type style

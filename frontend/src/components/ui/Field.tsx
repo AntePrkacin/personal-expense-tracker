@@ -118,7 +118,25 @@ type FieldProps = {
 export function Field({ id, label, children, error }: FieldProps) {
   return (
     <div className="flex w-full flex-col gap-1.75">
-      <label htmlFor={id} className="text-label-m text-text-secondary">
+      {/* The label carries an id as well as `htmlFor`, and the id is for one consumer:
+          `(app)/DateField.tsx`, whose control is a <button> rather than an input. A
+          `<label for>` is **not** part of a button's accessible-name computation in
+          HTML-AAM - the name comes from its own subtree - so that field composes
+          `aria-labelledby` from this id plus the button, and announces "Date, Oct 8,
+          2025" instead of just the value. Input and Select need none of this, because
+          `htmlFor` works normally on a real form control. */}
+      {/* **`self-start` is a bug fix, not alignment.** This column is `w-full` and a flex item
+          stretches by default, so the label was a full-width block - 472px of it inside the Add
+          transaction modal, against about 55px of text. Clicking anywhere in that invisible strip
+          activated the field, which is `<label for>` working exactly as specified and reads as a
+          glitch: worst on a `<select>`, where Chrome focuses the control from a forwarded label
+          click but does **not** open the list, so the border turned accent and nothing happened.
+          Shrinking the label to its text makes the hit area what a reader would guess it is. */}
+      <label
+        id={`${id}-label`}
+        htmlFor={id}
+        className="text-label-m text-text-secondary cursor-pointer self-start"
+      >
         {label}
       </label>
       {children}

@@ -1,5 +1,6 @@
 import { requireProfile } from '@/lib/profile';
 
+import { AddTransactionProvider } from './AddTransactionProvider';
 import { SidebarNav } from './SidebarNav';
 
 // The app shell: the fixed dark sidebar beside a content column, which every
@@ -49,7 +50,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <SidebarNav firstName={profile.firstName} lastName={profile.lastName} email={profile.email} />
       {/* min-w-0 so a wide child - the transactions table, later - overflows
           itself rather than pushing the 260px sidebar off-screen. */}
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* **One Add transaction modal for the whole shell**, which is a correctness
+            requirement rather than a tidiness one: Transactions draws two triggers (its header
+            and its empty card), and a component owning its own modal would mount two dialogs
+            there - two focus traps and two copies of every `ui/Field` id, which makes
+            `getByLabelText` ambiguous. `AddTransactionProvider` records the whole of it.
+
+            This layout stays a Server Component, and the provider carries the `'use client'`
+            boundary, so neither this file nor any of the four pages joins the client bundle.
+            Same shape `app/setup/layout.tsx` uses for `SetupDraftProvider`, and the same rule
+            `SidebarNav` follows: push the boundary into the smallest wrapper.
+
+            Inside the content column rather than around it, so the provider's own subtree does
+            not sit between the two flex children above. The modal itself renders in the top
+            layer regardless of where it is mounted. */}
+        <AddTransactionProvider>{children}</AddTransactionProvider>
+      </div>
     </div>
   );
 }

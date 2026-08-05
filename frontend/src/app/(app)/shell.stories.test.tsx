@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
+import * as Modal from './Modal.stories';
 import * as PageHeader from './PageHeader.stories';
 
 // Smoke-tests the shell's stories, the same job src/components/ui/ui.stories.test.tsx
@@ -23,7 +24,10 @@ type Story = { render?: (args: Args, context: never) => React.ReactNode; args?: 
 type Meta = { title?: string; component?: React.ElementType; args?: Args };
 type StoryModule = Record<string, unknown> & { default: Meta };
 
-const MODULES: [name: string, module: StoryModule][] = [['PageHeader', PageHeader as StoryModule]];
+const MODULES: [name: string, module: StoryModule][] = [
+  ['PageHeader', PageHeader as StoryModule],
+  ['Modal', Modal as StoryModule],
+];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {
   const meta = module.default;

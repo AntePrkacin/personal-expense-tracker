@@ -1,8 +1,7 @@
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { ACCESS_ROUTES } from '@/lib/routes';
-import { SESSION_COOKIE } from '@/lib/session';
+import { authorizedGet } from '@/lib/session';
 import type { components } from '@/types/api';
 
 // The signed-in user's own profile, and the gate on the `(app)` shell - one read doing
@@ -29,64 +28,6 @@ import type { components } from '@/types/api';
 type Profile = components['schemas']['ProfileResponseDto'];
 
 /**
- * Why a profile read did not produce a profile.
- *
- * The distinction is the whole point rather than extra structure: the two failures want
- * opposite handling. `unauthenticated` is an ordinary signed-out visitor and belongs in
- * the access flow; `unavailable` is a backend that could not answer, where redirecting
- * anywhere is a guess - and redirecting to `/login` specifically is the loop above.
- */
-type ProfileFailure = 'unauthenticated' | 'unavailable';
-
-type ProfileResult = { ok: true; profile: Profile } | { ok: false; reason: ProfileFailure };
-
-/**
- * Reads the caller's profile, classifying failure.
- *
- * A **401 is the only status that means signed out**, because the route is guarded and
- * the guard answers nothing else. Everything else - a 500 (the broken invariant of a
- * verified session with no profile row), an unreachable backend, a body that will not
- * parse - is `unavailable`: something is wrong that the user cannot fix by signing in
- * again.
- *
- * `cache: 'no-store'` because the Settings form can change every field here, and a
- * cached footer would keep showing the old name. It is also the rule
- * `docs/agents/api-contract.md` sets for every read: the credential never leaves the
- * server, so nothing about this response may be reused across requests.
- */
-async function readProfile(): Promise<ProfileResult> {
-  const store = await cookies();
-  const token = store.get(SESSION_COOKIE)?.value;
-
-  if (!token) {
-    return { ok: false, reason: 'unauthenticated' };
-  }
-
-  try {
-    const response = await fetch(`${process.env.BACKEND_URL}/api/profile`, {
-      // Never forwarded as a cookie: the backend reads none, so the value moves into the
-      // header here, server-side, where the browser cannot see it happen.
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    });
-
-    if (response.status === 401) {
-      return { ok: false, reason: 'unauthenticated' };
-    }
-
-    if (!response.ok) {
-      return { ok: false, reason: 'unavailable' };
-    }
-
-    return { ok: true, profile: (await response.json()) as Profile };
-  } catch {
-    // Unreachable backend, a dropped connection, or a body that would not parse. All
-    // "could not ask", none of them "not signed in".
-    return { ok: false, reason: 'unavailable' };
-  }
-}
-
-/**
  * The signed-in user's profile, or the access flow.
  *
  * **This is the `(app)` shell's gate as well as its data**, which is AC5 and PET-19's
@@ -99,12 +40,19 @@ async function readProfile(): Promise<ProfileResult> {
  * one that terminates. Note the design draws no error screen anywhere (A19, A29), so what
  * the reader sees is the framework's own; `docs/TODO.md` records that a custom `error.tsx`
  * is a designer conversation rather than a gap this ticket could close.
+ *
+ * **The read itself is `authorizedGet` in `lib/session.ts`**, which owns the cookie, the
+ * bearer lift, `cache: 'no-store'` and the 401-versus-everything-else classification - all
+ * of which this file used to inline. What stays here is the only part that was ever this
+ * module's own: the *policy* over that classification. The no-store matters for a reason
+ * specific to this endpoint, which is worth keeping written down: the Settings form can
+ * change every field it returns, and a cached footer would keep showing the old name.
  */
 export async function requireProfile(): Promise<Profile> {
-  const result = await readProfile();
+  const result = await authorizedGet<Profile>('/api/profile');
 
   if (result.ok) {
-    return result.profile;
+    return result.data;
   }
 
   if (result.reason === 'unauthenticated') {

@@ -44,6 +44,166 @@ export const SESSION_COOKIE = 'spendifico.session';
 type Session = components['schemas']['SessionResponseDto'];
 
 /**
+ * Why an authorized read did not produce a body.
+ *
+ * The distinction is the whole point rather than extra structure, and `lib/profile.ts`
+ * documents the loop that came from collapsing it: `unauthenticated` is an ordinary
+ * signed-out visitor and belongs in the access flow, while `unavailable` is a backend that
+ * could not answer, where redirecting anywhere is a guess. Each caller keeps its own policy
+ * over the two - `hasSession()` answers false to both, `requireProfile()` redirects on the
+ * first and throws on the second.
+ */
+export type AuthorizedFailure = 'unauthenticated' | 'unavailable';
+
+export type AuthorizedResult<T> = { ok: true; data: T } | { ok: false; reason: AuthorizedFailure };
+
+/**
+ * GETs a guarded endpoint with the session lifted into an `Authorization` header.
+ *
+ * **The one place the cookie becomes a bearer token**, which is why it lives in this file
+ * rather than beside `postAccepted` in `lib/backend.ts`: that module serves the two
+ * pre-session writes and sends no credential at all, and importing `SESSION_COOKIE` into it
+ * would point the dependency back at this file and make a cycle. The split is by credential,
+ * not by HTTP verb.
+ *
+ * **It exists because there were about to be three copies of it.** `readSession()` below and
+ * `readProfile()` in `lib/profile.ts` each inlined the same six lines, and
+ * `components/ui/utilities.test.ts` sets this repo's rule for that situation: duplicated
+ * rather than shared, and lifted into a helper when a third consumer appears.
+ * `lib/transactions.ts` is the third.
+ *
+ * **A 401 is the only status that means signed out**, because every caller's route is guarded
+ * and the guard answers nothing else. Everything else - a 500, an unreachable backend, a body
+ * that will not parse - is `unavailable`: something is wrong that the user cannot fix by
+ * signing in again.
+ *
+ * `cache: 'no-store'` on every read, without exception. The credential never leaves the
+ * server, so nothing about any of these responses may be reused across requests - the rule
+ * `docs/agents/api-contract.md` sets - and a cached session read would keep answering for one
+ * that has since expired or been revoked.
+ *
+ * A missing cookie costs no round trip, which is the common case for every signed-out
+ * visitor.
+ *
+ * @param path the backend path including its `/api` prefix and any query string
+ */
+export async function authorizedGet<T>(path: string): Promise<AuthorizedResult<T>> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
+    return { ok: false, reason: 'unauthenticated' };
+  }
+
+  try {
+    const response = await fetch(`${process.env.BACKEND_URL}${path}`, {
+      // Never forwarded as a cookie: the backend reads none, so the value moves into the
+      // header here, server-side, where the browser cannot see it happen.
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+
+    if (response.status === 401) {
+      return { ok: false, reason: 'unauthenticated' };
+    }
+
+    if (!response.ok) {
+      return { ok: false, reason: 'unavailable' };
+    }
+
+    return { ok: true, data: (await response.json()) as T };
+  } catch {
+    // Unreachable backend, DNS, a dropped connection, or a body that would not parse. All
+    // "could not ask", none of them "not signed in".
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/**
+ * What a guarded write reports back.
+ *
+ * **Deliberately not `AuthorizedResult`**, and the difference is the reason this type
+ * exists. That one collapses every non-401 into `unavailable`, which is right for a read -
+ * a caller that could not get its data has one thing to say about it - and wrong for a
+ * write, where the statuses mean genuinely different things to the person who pressed the
+ * button. `POST /api/transactions` answers 400 when the body was rejected, 404 when the
+ * `categoryId` names no category of theirs, and 401 when the session died with the form
+ * open; those want three different messages, and one of them must not say "try again"
+ * because retrying an unacceptable body loops forever.
+ *
+ * So the status travels, and the caller classifies. **An absent `status` means the request
+ * never completed** - the convention `lib/backend.ts` sets for `AcceptedResult` and the one
+ * thing about that type its own doc calls out as not being an oversight.
+ *
+ * **No parsed body, which is a decision rather than laziness.** `POST /api/transactions`
+ * answers 201 with the created row, and returning it looked obviously right until the
+ * failure mode showed up: if a 2xx arrives with a body that will not parse - a proxy's
+ * error page, a truncated response - then the transaction *exists*, and a result saying
+ * otherwise would send the user to press the button again and create a second one. A write
+ * that cannot be told apart from its own success is the one failure worth engineering
+ * against here, so a 2xx is success on the status alone. Nothing needs the row today: the
+ * modal closes and `router.refresh()` re-reads the page. PET-32 can parse it when
+ * something actually reads it.
+ */
+export type AuthorizedWriteResult = { ok: true } | { ok: false; status?: number };
+
+/**
+ * POSTs a JSON body to a guarded endpoint with the session lifted into an `Authorization`
+ * header.
+ *
+ * The write half of `authorizedGet`, and here for the same reason it is: the cookie
+ * becomes a bearer token in one place. It sits beside that function rather than in
+ * `lib/backend.ts` on the split PET-30 established - **by credential, not by HTTP verb** -
+ * because `SESSION_COOKIE` lives in this file and importing it into `backend.ts` would
+ * make a cycle. `postAccepted` over there stays where it is: its two callers are
+ * pre-session and send no credential at all.
+ *
+ * It takes a `path` and so must not become a Server Action, exactly as
+ * `lib/backend.ts` records about itself: `'use server'` here would publish an endpoint
+ * accepting an arbitrary path. The actions that wrap it are the public surface, and each
+ * one names a fixed route.
+ *
+ * **A missing cookie reports 401 rather than a reason of its own.** `authorizedGet` keeps
+ * the two apart only to collapse them again in every caller; for a write the advice is
+ * identical either way - the session is gone, sign in again - so one status keeps the
+ * caller's table to four rows instead of five.
+ *
+ * `cache: 'no-store'` is explicit for `postAccepted`'s reason: a POST Next decided to
+ * cache would silently swallow a second attempt.
+ *
+ * @param path the backend path including its `/api` prefix
+ */
+export async function authorizedPost(path: string, body: unknown): Promise<AuthorizedWriteResult> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
+    return { ok: false, status: 401 };
+  }
+
+  try {
+    const response = await fetch(`${process.env.BACKEND_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+
+    // Any 2xx. See the type's note: the row exists by now, so nothing below this line may
+    // turn a created transaction into a reported failure.
+    return response.ok ? { ok: true } : { ok: false, status: response.status };
+  } catch {
+    // Unreachable backend, DNS, or a dropped connection. No status, which is what "the
+    // request never completed" looks like - and the one case where the caller genuinely
+    // cannot know whether the write landed.
+    return { ok: false };
+  }
+}
+
+/**
  * The cookie's write options, or `null` when the session is already dead.
  *
  * **The lifetime is derived from the backend's own `expiresAt` rather than mirroring
@@ -90,36 +250,17 @@ export function sessionCookieOptions(expiresAt: string) {
  * opposite call from `lib/profile.ts`, which does separate the two: that one gates the
  * shell, where "could not ask" must not be answered by sending somebody to Log in.
  *
- * `cache: 'no-store'` is explicit. A session read Next decided to cache would keep
- * answering for a session that has since expired or been revoked, which is the one
- * response in this app that must never be served from a cache.
+ * `authorizedGet` above owns the cookie read, the bearer lift, `cache: 'no-store'` and the
+ * classification; this function's whole remaining job is **discarding** that classification,
+ * which is the decision worth reading here rather than the six lines that used to be.
  *
  * Not exported: `hasSession()` below is the surface, and a caller wanting the raw
  * session should say so rather than reaching past it.
  */
 async function readSession(): Promise<Session | null> {
-  const store = await cookies();
-  const token = store.get(SESSION_COOKIE)?.value;
+  const result = await authorizedGet<Session>('/api/auth/session');
 
-  if (!token) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/session`, {
-      // The cookie is never forwarded as a cookie. The backend reads no cookies, so the
-      // value has to move into the header here, server-side, where the browser cannot
-      // see it happen.
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    });
-
-    return response.ok ? ((await response.json()) as Session) : null;
-  } catch {
-    // Backend unreachable, DNS, a dropped connection, or a body that will not parse.
-    // Indistinguishable from signed out as far as this function's caller is concerned.
-    return null;
-  }
+  return result.ok ? result.data : null;
 }
 
 /**
