@@ -373,6 +373,39 @@ describe('Escape', () => {
   });
 });
 
+describe('the grid’s ARIA structure', () => {
+  it('keeps the weekday initials outside the grid, so no row owns nothing', async () => {
+    // A `role="row"` must own gridcell/cell/columnheader/rowheader children. The initials are all
+    // aria-hidden by design - S and T each appear twice, so announcing them is worse than silence
+    // - which made a row containing them a row that owns nothing: a screen reader is entitled to
+    // announce an empty row or to miscount the grid's columns. `jsx-a11y` does not check ARIA
+    // ownership, so nothing failed until it was read.
+    render(<Harness initial="2025-10-08" />);
+
+    await user().click(trigger());
+
+    const grid = screen.getByRole('grid');
+    // Every row inside the grid owns at least one cell.
+    const rows = screen.getAllByRole('row');
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.querySelectorAll('[role="gridcell"]').length).toBeGreaterThan(0);
+    }
+    // And the initials are not among the grid's descendants at all.
+    expect(grid.textContent).not.toContain('S');
+  });
+
+  it('still renders the initials, just not as grid structure', async () => {
+    render(<Harness initial="2025-10-08" />);
+
+    await user().click(trigger());
+
+    const strip = popover().querySelector('[aria-hidden="true"].flex');
+    expect(strip).not.toBeNull();
+    expect(strip?.textContent).toBe('SMTWTFS');
+  });
+});
+
 describe('the popover escapes the modal rather than scrolling it', () => {
   it('is positioned fixed, so the dialog’s overflow cannot clip or count it', async () => {
     // Measured in Chrome before this was written: a `<dialog>` gets `overflow: auto` and a

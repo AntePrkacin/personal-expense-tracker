@@ -165,6 +165,13 @@ export function AddTransactionModal({
     // close the modal and lose everything typed while looking like a flicker.
     event.preventDefault();
 
+    // **Before the field checks, not after, and the order is the whole point.** There is nothing
+    // to submit against, and the `role="alert"` line already says why - so running validation
+    // first would additionally tell the user to "Choose a category." from a disabled select with
+    // no options in it, blaming them for something they have no way to do. It also has to be a
+    // real guard rather than decoration, because Enter in any other field submits the form.
+    if (categoriesFailed) return;
+
     // Every field at once rather than the first failure, so an empty form shows four messages
     // (AC3). `invalidFields` owns that rule so a fast, jsdom-free test can pin it.
     const invalid = invalidFields(values);
@@ -173,10 +180,6 @@ export function AddTransactionModal({
       setErrors(Object.fromEntries(invalid.map((field) => [field, MESSAGES[field]])));
       return;
     }
-
-    // Nothing to submit against. The select is already disabled and the line already showing;
-    // this is the guard that stops Enter in another field getting past it.
-    if (categoriesFailed) return;
 
     setFailure(null);
     setPending(true);
@@ -214,13 +217,15 @@ export function AddTransactionModal({
       footer={
         <>
           {/* Its default type is `button`, which is what stops it submitting the form -
-              exactly the case ui/Button's own doc cites this modal for. */}
-          <Button
-            label="Cancel"
-            variant="secondary"
-            onClick={() => modalRef.current?.close()}
-            disabled={pending}
-          />
+              exactly the case ui/Button's own doc cites this modal for.
+
+              **Deliberately not disabled while the request is out.** Disabling it prevented
+              nothing - it cannot double-submit - and the X, Escape and a backdrop click all stay
+              live regardless, so it was the one dead exit sitting next to three working ones. No
+              fetch in this app carries a timeout, so a hung request is exactly when a visible
+              way out matters most. Only the submit is disabled, and only to stop a second
+              transaction being created. */}
+          <Button label="Cancel" variant="secondary" onClick={() => modalRef.current?.close()} />
           {/* Disabled while the request is out. A19 designs no pending state, but a double
               submit here creates two transactions the user then has to find and delete -
               a sharper reason than the throttled attempt RegisterForm guards against. */}

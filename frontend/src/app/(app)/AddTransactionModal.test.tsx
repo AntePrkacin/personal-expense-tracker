@@ -288,9 +288,12 @@ describe('AC5: a successful save', () => {
     expect(refresh.mock.invocationCallOrder[0]!).toBeLessThan(onClose.mock.invocationCallOrder[0]!);
   });
 
-  it('disables both footer controls while the request is out', async () => {
+  it('disables the submit while the request is out, and leaves every exit live', async () => {
     // A19 designs no pending state, but a double submit here creates two transactions the user
-    // then has to find and delete.
+    // then has to find and delete - so the submit is disabled and nothing else is. Cancel used to
+    // be disabled too, which prevented nothing and left one dead control beside three working
+    // ones: the X, Escape and a backdrop click are all unaffected by `pending`, and no fetch here
+    // carries a timeout, so a hung request is when a way out matters most.
     let settle: (result: CreateTransactionResult) => void = () => {};
     create.mockImplementation(() => new Promise((resolve) => (settle = resolve)));
 
@@ -300,7 +303,25 @@ describe('AC5: a successful save', () => {
     await u.click(submit());
 
     await waitFor(() => expect(submit()).toBeDisabled());
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
+
+    settle({ ok: true });
+  });
+
+  it('can still be cancelled while the request is out', async () => {
+    let settle: (result: CreateTransactionResult) => void = () => {};
+    create.mockImplementation(() => new Promise((resolve) => (settle = resolve)));
+
+    const u = user();
+    open();
+    await fill(u);
+    await u.click(submit());
+    await waitFor(() => expect(submit()).toBeDisabled());
+
+    await u.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
 
     settle({ ok: true });
   });
@@ -482,6 +503,36 @@ describe('the categories read', () => {
     await u.click(submit());
 
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('does not also tell the user to choose a category they cannot choose', async () => {
+    // The guard on `categoriesFailed` runs **before** field validation for exactly this reason.
+    // With the two the other way round, `categoryId` is '' so `invalidFields` reported it and the
+    // user got "Choose a category." beside the real explanation - from a disabled select with no
+    // options in it. One message, and it is the true one.
+    open({ categories: null, categoriesFailed: true });
+
+    const u = user();
+    await u.type(amount(), '24');
+    await u.type(merchant(), 'Whole Foods');
+    await u.click(submit());
+
+    expect(screen.queryByText('Choose a category.')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('still blocks a submit driven by Enter in another field', async () => {
+    // The guard has to be real rather than decorative: the submit button is reachable, but so is
+    // Enter from any field, which is what a `<form>` gives us.
+    open({ categories: null, categoriesFailed: true });
+
+    const u = user();
+    await u.type(amount(), '24');
+    await u.type(merchant(), 'Whole Foods{Enter}');
+
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('leaves the select live but empty for an account with no categories', async () => {

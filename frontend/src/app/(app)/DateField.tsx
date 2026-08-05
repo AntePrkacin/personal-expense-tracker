@@ -419,22 +419,28 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
               </button>
             </div>
 
-            <div ref={gridRef} role="grid" aria-label={monthLabel}>
-              <div role="row" className="flex">
-                {WEEKDAY_INITIALS.map((initial, column) => (
-                  // aria-hidden because the initials are ambiguous by design - S and T each
-                  // appear twice - so a reader announcing "S M T W T F S" is worse than
-                  // nothing. Each day button carries its own full date instead.
-                  <span
-                    key={column}
-                    aria-hidden="true"
-                    className="text-caption text-text-tertiary inline-flex size-9 items-center justify-center"
-                  >
-                    {initial}
-                  </span>
-                ))}
-              </div>
+            {/* **Outside the grid, and that is a correctness fix rather than a layout choice.**
+                A `role="row"` must own `gridcell`, `cell`, `columnheader` or `rowheader`
+                children; these initials are all `aria-hidden`, so a row containing them owns
+                nothing and a screen reader is entitled to announce an empty row or to miscount
+                the grid's columns. `jsx-a11y` does not check ARIA ownership, so nothing failed.
 
+                Hidden for the reason the initials are ambiguous by design - S and T each appear
+                twice, so "S M T W T F S" is worse than silence - and each day button carries its
+                own full date instead. `aria-hidden` sits on the container rather than on all
+                seven children, which is the same thing said once. */}
+            <div aria-hidden="true" className="flex">
+              {WEEKDAY_INITIALS.map((initial, column) => (
+                <span
+                  key={column}
+                  className="text-caption text-text-tertiary inline-flex size-9 items-center justify-center"
+                >
+                  {initial}
+                </span>
+              ))}
+            </div>
+
+            <div ref={gridRef} role="grid" aria-label={monthLabel}>
               {grid.map((week, row) => (
                 <div role="row" key={row} className="flex">
                   {week.map((iso, column) =>

@@ -249,6 +249,13 @@ export function Modal({
    *
    * Re-focusing an element the browser already restored is a no-op, so this is safe when it
    * happens to be redundant.
+   *
+   * **Expect one focus bounce in development and none in production.** `next.config.ts` sets no
+   * `reactStrictMode`, so it defaults to true, and StrictMode double-invokes effects as
+   * mount -> cleanup -> mount. That cleanup runs this restore, so focus goes trigger -> Amount ->
+   * trigger -> Amount before settling. The end state is correct and the build is unaffected;
+   * it is written down so nobody spends an afternoon chasing a flicker that only exists behind
+   * `npm run dev`.
    */
   useEffect(
     () => () => {
