@@ -55,9 +55,26 @@ jobs:
       - name: Deploy
         run: flyctl deploy --remote-only --ha=false
 
-      # A green deploy step is not enough. `fly deploy` does not start a *stopped*
-      # machine, so it can report success while every request 503s; and a missed
-      # --ha would leave two machines. Assert the invariant before going green.
+      # `fly deploy` updates config but does NOT start a *stopped* machine, and
+      # auto_start_machines = false means Fly never starts it either - so a deploy
+      # onto a machine left stopped by a graceful-stop test reports success while
+      # the API stays down (the machines=1 started=0 this workflow first hit).
+      # Start it explicitly. `machine start` is idempotent - a no-op on an
+      # already-started machine - and blocks until the started state, so the
+      # assertion below reads the settled result. Only the single expected machine
+      # is started; a stray second one is caught by the count check, not woken.
+      - name: Start the machine
+        run: |
+          id="$(flyctl machine list --json | jq -r '.[0].id // empty')"
+          if [ -z "$id" ]; then
+            echo "::error::no machine found to start"
+            exit 1
+          fi
+          flyctl machine start "$id"
+
+      # A green deploy step is not enough: a missed --ha would leave two machines,
+      # and the start above could itself fail. Assert the invariant - exactly one
+      # machine, started - before going green.
       - name: Assert exactly one started machine
         run: |
           machines="$(flyctl machine list --json)"
