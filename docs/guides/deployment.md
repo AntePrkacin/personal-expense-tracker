@@ -178,6 +178,32 @@ caller, and every request everywhere is landing in one shared bucket - exactly w
 initially with the value set to `1`. See `backend/fly.toml`'s comment on that variable for how the
 correct value was determined and why it must be exact rather than a safe-feeling guess.
 
+## Showcase / demo day
+
+**Raise the per-IP auth limit before any event where a group signs up together, and put it back
+after.** This is an operational toggle, not a code change: the value lives in `fly.toml`'s `[env]`.
+
+The trap is the per-IP limiter. A room full of people on **one venue WiFi** all share a single
+caller IP, so they share a single per-IP bucket. And a full signup spends **two** of that IP's
+knocks - `register`, then `verify` when the emailed link is opened (`verify` is exempt from the
+per-email limiter but **not** the per-IP one; `session` is exempt from both). So at the production
+value of 15, one shared network completes only about **7 signups per 15 minutes** before everyone
+else gets a `429`. The per-email limiter (3) is not the constraint here, because each person uses
+their own address and knocks it once.
+
+For an event, estimate two-to-four knocks per attendee (signup plus retries), and set the limit
+with headroom - roughly `10 x attendees`:
+
+```sh
+cd backend
+# edit AUTH_RATE_IP_LIMIT in fly.toml's [env], e.g. "500" for a 50-person room
+fly deploy --remote-only --ha=false
+```
+
+Afterwards, set it back to `15` and redeploy. `AUTH_RATE_LIMIT` (per-email) and `AUTH_RATE_TTL_S`
+(the 15-minute window) rarely need touching. The alternative - asking attendees to use mobile data
+instead of the shared WiFi, giving each their own IP - works but is fragile to rely on.
+
 ## The machine runs continuously, and autostop was rejected
 
 `auto_stop_machines = "off"`, so responses are always warm (~200ms) and there is never a cold

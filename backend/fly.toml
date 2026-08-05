@@ -85,6 +85,21 @@ swap_size_mb = 512
 
   TURSO_GROUP = "decode-pet"
 
+  # Auth rate limits, tightened below the Joi defaults (5 email / 30 IP) for the
+  # deployed app: 3 login-link/register knocks per 15 minutes per email address,
+  # 15 per 15 minutes per caller IP. The window is AUTH_RATE_TTL_S, left at its
+  # 900s (15 min) default. Local, CI and the e2e suite never read this file, so
+  # they keep the looser defaults - only production is tightened.
+  #
+  # DEMO/SHOWCASE WARNING - read "Showcase / demo day" in
+  # docs/guides/deployment.md before an event. The per-IP limit is the trap: a
+  # room full of people on one venue WiFi all share a single caller IP, and a
+  # full signup spends TWO of that IP's knocks (register, then verify), so 15
+  # allows only ~7 signups per 15 min for the whole room. Raise this value for
+  # the event and put it back to 15 afterwards.
+  AUTH_RATE_LIMIT = "3"
+  AUTH_RATE_IP_LIMIT = "15"
+
   # Paired with the MAILPACE_API_TOKEN secret by Joi's .and(). Note the sharp
   # edge: `fly secrets unset MAILPACE_API_TOKEN` on its own leaves this half of
   # the pair set, and the app then REFUSES TO BOOT rather than falling back to
