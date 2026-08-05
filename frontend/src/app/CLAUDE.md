@@ -68,17 +68,19 @@ search filters a list that does not exist until PET-28. Neither is a `<select>`,
 `<button>`, so neither announces itself as operable, and `(app)/pages.test.tsx` pins that -
 `queryByRole('combobox')` and `queryByRole('textbox')` both have to stay empty.
 
-**`export const dynamic = 'force-dynamic'` on the layout is load-bearing today.** The pages
-read `new Date()` for the overline; without it Next prerenders them and every screen shows
-whatever month the build ran in, a bug that only appears a month after deploying. PET-52's
-`cookies()` read makes the segment dynamic on its own, at which point the line becomes
-redundant and should be deleted rather than left as a claim about nothing.
+**`export const dynamic = 'force-dynamic'` was on the layout and is deliberately gone.** It
+existed because the pages read `new Date()` for the overline, and without it Next prerendered
+them and every screen showed whatever month the build ran in - a bug that only appears a month
+after deploying. PET-52's `cookies()` read makes the segment dynamic on its own, which is the
+condition this paragraph already set for deleting the line rather than leaving it as a claim
+about nothing.
 
-`(app)/layout.test.tsx` asserts both that export and that `requireSession()` is called, because
-the layout is three lines long and every one of them fails silently when deleted. The session
-call is the sharper of the two: it is a documented no-op today, so without the assertion the
-call site could be dropped with the suite green, and PET-52's deferral would quietly become an
-omission.
+`(app)/layout.test.tsx` now asserts the _absence_ of that export rather than its value, so
+nobody restores it, plus that `requireProfile()` is called exactly once and that the footer
+shows the read profile rather than sample data. The gate call was the sharper assertion while it
+was a documented no-op; it still earns its place, because the gate is one line whose deletion no
+rendering assertion would notice - and the call _count_ now matters too, since two reads is the
+shape the loop came from.
 
 **`jest.mock()` cannot resolve the `@/` alias, anywhere.** `jest.mock('@/lib/session')` fails
 with `Cannot find module` from any directory - PET-8 reproduced it from `src/app/` and
@@ -97,73 +99,98 @@ The access screens below, which is where the screen it renders is documented. (T
 used to say `/` was a bare `redirect('/dashboard')`, which was PET-19's version of the route
 and stopped being true when PET-8 put Welcome behind the gate.)
 
-**`lib/session.ts` holds two stubs, and they are PET-19's and PET-8's deferrals.**
-`requireSession()` is called once, by the `(app)` layout, and lets every request through, so
-the shell is browsable with no backend - PET-19's deferral of its AC5. `hasSession()` is called
-once, by `app/page.tsx`, and answers `false` for everybody, which is what puts Welcome at `/`;
-that is PET-8's. Both doc comments are the specification PET-52 fills in: read the httpOnly
-cookie, lift it into `Authorization: Bearer <token>`, call `GET /api/auth/session`, then either
-redirect or answer. They deliberately do **not** name the cookie, because that name is not
-decided anywhere in the repo and choosing it here would hand PET-52 a contract it did not pick.
-Both return a promise from a non-`async` function so the signatures are already the real ones.
+**`lib/session.ts` held two stubs for four tickets, and PET-52 resolved both - one by filling
+it in, one by deleting it.** `hasSession()` is real and is called by `app/page.tsx`,
+`app/login/page.tsx` and `app/setup/layout.tsx`, which want a fact to branch on because both of
+their destinations are legitimate. `requireSession()` is **gone**: it was the `(app)` shell's
+gate, and the shell also needed the profile, so it made two guarded requests where the second
+already implied the first's answer. `lib/profile.ts`'s `requireProfile()` does both in one call,
+and nothing else ever called `requireSession()`.
 
-They are two functions rather than one because the callers want opposite things from the same
-read: the shell wants "let me through or send me away" and answers nothing itself, while the
-root route wants a fact to branch on, since both of its destinations are legitimate. PET-52
-should give them a shared helper for the fetch rather than two round trips.
+**That collapse fixed a redirect loop, which is the reason to know about it.** With two reads the
+layout treated any absent profile as "not signed in" and sent the user to `/login` - which
+redirects a signed-in visitor to `/dashboard`, which bounced again. A live session whose profile
+read failed for any reason (the broken-invariant 500, a timeout, a restart mid-render) therefore
+made **the whole app unreachable**, including the login screen. `lib/profile.ts` now separates
+"not signed in" from "could not ask": only a 401 or a missing cookie redirects, and an
+unavailable backend throws so Next's error boundary renders something a reload can retry. Its
+suite pins that an `unavailable` backend never redirects, which is the regression that matters.
 
-**The sidebar footer's profile is fabricated.** `PLACEHOLDER_PROFILE` in `(app)/layout.tsx`
-is Figma's own sample data ("Marko", "Kovač", "marko@email.com"), so the shell diffs against
-the design rather than against invented copy - which also means it looks entirely real in a
-screenshot. It cannot be fixed here: names live in the per-user database's `profile` row and
-the email on the central `users` row, so it needs PET-45's read reached with PET-52's cookie.
-`ui/Sidebar` itself stays clean; its test pins that those three strings appear nowhere in the
-component.
+The full account of the cookie, the derived lifetime and the un-clearable stale cookie is under
+The access screens below, next to the handler that writes it.
+
+**The sidebar footer's profile is real as of PET-52.** `PLACEHOLDER_PROFILE` in
+`(app)/layout.tsx` was Figma's own sample data ("Marko", "Kovač", "marko@email.com") for three
+tickets, so the shell diffed against the design rather than against invented copy - which also
+meant it looked entirely real in a screenshot, and is why the constant was named that loudly.
+`lib/profile.ts` replaced it: names live in the per-user database's `profile` row and the email
+on the central `users` row, and `GET /api/profile` is what stitches them. `ui/Sidebar` itself
+always stayed clean; its test pins that those three strings appear nowhere in the component, and
+`layout.test.tsx` now asserts a _different_ person's name so the placeholder cannot creep back.
 
 ## The access screens
 
 The six frames outside the shell (01 Welcome, 02 and 03 Setup, 22 Register, 23 Log in, 24
-Check your email). **Three of them are built**: Welcome at `/`, Setup step 1 at `/setup`, and
-Setup step 2 at `/setup/categories`.
+Check your email). **All six are built** as of PET-12: Welcome at `/`, the three onboarding steps
+at `/setup`, `/setup/categories` and `/setup/register`, then `/login` and `/check-email`. PET-52
+closed the flow with the two routes the design draws no frames for at all: `/auth/verify`, which
+consumes the emailed link, and `/auth/verify/failed`, which says why one did not work.
 
 **`/` is the front door and its one job is choosing which door.** `app/page.tsx` awaits
 `hasSession()`; a signed-out visitor gets `<WelcomeScreen />` and a signed-in one is redirected
 to `/dashboard`, because VER-4 lands both a new and a returning account there. The rule is here
-rather than in a middleware matcher so it has one home. Until PET-52 fills the seam in,
-`hasSession()` answers `false` for everybody, so **every visitor lands on Welcome and
-`/dashboard` is reached by typed URL only** - the same shape of deferral the shell's own gate
-already carries.
+rather than in a middleware matcher so it has one home. PET-52 made `hasSession()` real, so that
+branch actually fires now; before it, every visitor landed on Welcome and `/dashboard` was
+reached by typed URL only.
 
 Two consequences of that gate being async. The screen is a **separate component**
 (`app/WelcomeScreen.tsx`) rather than inlined, because Storybook cannot render an async Server
 Component that awaits a session, and it keeps the screen's own test free of mocks. And `/`
-currently prerenders **static**, correctly, since nothing in the path reads a request yet;
-PET-52's `cookies()` read opts it out on its own, so no `export const dynamic` belongs there
-now or then. That is the opposite of `(app)/layout.tsx`, whose `force-dynamic` is load-bearing
-today - do not copy it here by reflex.
+prerendered **static** while nothing in the path read a request; PET-52's `cookies()` read opts
+it out on its own, so no `export const dynamic` belongs there - which is now true of every
+route in the app, `(app)/layout.tsx` included, since its `force-dynamic` went with the same
+change.
 
-**`lib/routes.ts` declares where the other screens will live**, and only the two Welcome links
+**`lib/routes.ts` declares where the access screens live**, including the two Welcome links
 out to: `/setup` and `/login`. Same single-declaration reasoning as `SIDEBAR_HREFS`, and the
 two sets must not restate each other - app routes stay in `ui/Sidebar.tsx`, access routes here.
 Welcome is deliberately absent, because it is served at `/` and there is no path to declare.
-`/setup` and `/setup/categories` now answer; `/setup/register` and `/login` **404 today**, which
-is as far as a frontend-only ticket reaches: the href is the contract its criterion describes,
-and an inert control would fail that criterion outright while hiding it. `lib/routes.test.ts` asserts with
+Every key now answers, and for four tickets some did not: a declared-but-unbuilt route was as far
+as a frontend-only ticket reached, because the href is the contract its criterion describes and an
+inert control would fail that criterion outright while hiding it. `lib/routes.test.ts` asserts with
 `fs` that every built route has a `page.tsx` behind it, the way `SidebarNav.test.tsx` does for
-the four app routes; it classifies each key as built or pending rather than sweeping them all,
-so adding a route forces a decision instead of silently escaping the check.
+the four app routes; it classifies each key rather than sweeping them all, so adding a route
+forces a decision instead of silently escaping the check. **Its `PENDING` list is
+empty now and stays**, because a blanket sweep would pass today and then quietly accept the next
+unbuilt route - which is the state `/login` and `/check-email` were in the whole time. PET-52
+added a third list, `HANDLERS`, for the one route answered by a `route.ts` rather than a
+`page.tsx`; a filename exemption inside `BUILT` is exactly the sort of exception that quietly
+becomes "this one is unchecked", and this is the route whose path a login email depends on.
 
 **There is no `(access)` route group, and Welcome is still the odd one out.** It is a
-two-column split with a left-aligned logo, where 02, 03 and 22 are centred cards with a step
-indicator, so a group whose one member shares nothing with the rest would carry no decision.
+two-column split with a left-aligned logo, where the other five are centred cards, so a group
+whose one member shares nothing with the rest would carry no decision.
 
 **PET-9 answered the shared-layout question, and the answer is "yes, but not as a layout".**
 Frames 02, 03 and 22 draw identical chrome - the centred column, the lockup, the three-dot
 indicator, the card - varying only in which dot is filled and the column width (520 / 600 /
-520). That chrome is `app/setup/SetupShell.tsx`, a Server Component taking `step`, **not** a
+520). That chrome is a Server Component taking `step`, **not** a
 route layout: the active step differs per route, and an App Router layout cannot read the
 pathname on the server, which is the same trap `ui/Sidebar`'s `active` prop was built around.
 A layout would have to become a client component just to know which dot to fill.
+
+**PET-12 then split that component in two, and the split is along "is this onboarding?".** Frames
+23 and 24 draw the same 520px card box with **no indicator and no overline**, so the column, the
+lockup and the box moved to `components/AccessCard.tsx` - beside `LogoLockup`, for the reason that
+file gives, now that five frames share them - while `app/setup/SetupShell.tsx` kept `SETUP_STEPS`,
+`STEP_DOT`, `STEP_WIDTH` and the indicator itself and renders `AccessCard` with them. `AccessCard`
+takes the indicator through an `aboveCard` slot named for its position rather than its contents,
+and an omitted node renders nothing, so the column's two `gap-6` gaps collapse to one with no
+conditional anywhere. Two things to know before touching it. **The width class has to stay on the
+element carrying `shadow-card`**, because `SetupShell.test.tsx` finds the card by that class and
+then looks for the step's width on it - moving the width to a wrapper is the one change that breaks
+a suite the extraction was meant to leave alone. And that suite passing **unchanged** is what
+proved the DOM stayed byte-identical, which is worth repeating rather than re-deriving.
 
 **The right half of Welcome is `aria-hidden`, and that is load-bearing.**
 `app/DecorativePanel.tsx` is a dark panel with two accent washes, a sample budget card and two
@@ -259,10 +286,10 @@ rejected alternatives so nobody "improves" it into one: a second `role="progress
 the design never draws). The `aria-hidden` footgun applies here as it does on Welcome, so the
 test pins that the subtree contains nothing focusable.
 
-**`/setup` is deliberately not gated on a session.** `/` redirects a signed-in visitor and the
-`(app)` shell gates itself, but this route does neither: PET-9 has no session to read, and a
-third call into the `lib/session.ts` stubs would be a claim it cannot test. Whether onboarding
-stays reachable with a live session is PET-52's.
+**`/setup` is gated on a session as of PET-52, and the gate sits on its layout.** It was ungated
+because PET-9 had no session to read and a third call into the `lib/session.ts` stubs would have
+been a claim it could not test; that reason went away with the stubs. One call site on
+`app/setup/layout.tsx` covers all three steps, which is three fewer places to forget one.
 
 **Storybook gains a third section, `Screens/`.** Named after the Figma page the frames live on,
 exactly as `Components` and `Foundations` are. It needs its own story smoke test
@@ -363,15 +390,266 @@ this screen does not offer. Nothing fetches and no request shape changes, so thi
 `api:sync`. The colours cannot come from the same place, because the backend publishes names
 only: they are `CategoryColour` keys, so no hex value enters the frontend.
 
+**Step 3's two name fields are a `grid`, not a flex row, and the 214px in the frame is a
+consequence rather than a measurement.** Frame 22 draws them at 214px each with a 12px gutter
+inside the card's 440px content box, and `(440 - 12) / 2` is exactly 214 - so `grid grid-cols-2
+gap-3` reproduces the design without restating any of its numbers. A flex row would not: `ui/Field`
+is `w-full`, which spans a grid cell correctly and overflows a flex row, so the fix there would
+have been a `flex-1` on each child to re-derive what the grid already gives. The email field is a
+sibling of the grid rather than a third cell, which is what makes it full width.
+
+**The draft now carries all six values, and step 3's three are the reason it was always going to.**
+`draft.ts` said from the start that it held "everything screens 02, 03 and 22 collect", and its
+choice of sessionStorage is justified in that file by not offering the next person on a shared
+machine a half-finished registration carrying somebody's name and email. The three are stored
+**untrimmed**, unlike the budget, which `parseDraft` re-canonicalises: trimming on read would
+delete the space the moment somebody typed one between two words. Trimming happens once, in
+`toRegisterBody`, which is also where `budget` stops being the display string `'2,000'` and becomes
+`monthlyBudget: 2000`. That function is the only boundary, and it deliberately does **not**
+lowercase the email, because `RegisterDto` carries `@Transform(normalizeEmail)` and a second
+normaliser is one that can drift from the first.
+
+**`clearDraft` is a third member of the context, and it could not have been anything else.** Step 3
+calls it once, after a 202. `SetupDraftProvider`'s snapshot cache is invalidated only by a write
+through the provider, so a bare `sessionStorage.removeItem` at the call site would empty storage
+while every field kept rendering the values it had cached - and the next `patchDraft` would merge
+onto the stale snapshot and bring the cleared draft back. `layout.test.tsx` pins both halves.
+`docs/TODO.md` records what clearing costs: the browser's own Back button still reaches
+`/setup/register`, so it renders empty, which is accepted because the account exists by then.
+
+**The register call is a Server Action, and `RegisterForm` takes it as a prop.** The mechanism and
+the reasoning belong to `docs/agents/api-contract.md`, which now covers writes. What belongs here is
+the prop: `SetupRegisterScreen` imports `registerAccount` and passes it down, which is the ordinary
+way a Server Component hands an action to a client component, and it means `RegisterForm.test.tsx`
+injects a `jest.fn()` and needs no module mock at all - so the alias trap above never comes up.
+`SetupRegisterScreen.test.tsx` does mock `./actions`, with a relative specifier, purely so no
+assertion about the card can reach a real `fetch`.
+
+**Step 3 adds two states the design does not draw, and they are the fifth and sixth of their kind.**
+A19 designs no pending state and A29 no error surface - the spec says outright that a failed
+account creation has none - so both are ours, alongside the details `frontend/CLAUDE.md` lists for
+`ui/`. The submit button is `disabled` while the request is out, because a double submit spends one
+of the five per-address attempts the backend's throttler allows and the second comes back a 429. And
+one failure message sits above the footer row in the same `text-body-s text-status-danger-text`
+treatment `ui/Field` uses, with **`role="alert"`, which `ui/Field` deliberately omits**: Field's
+message appears synchronously beside the field the user just left, while this one appears after a
+network round trip with nothing else on screen changing, so nothing else would tell a screen reader
+the submit failed. Five new strings come with it, and `docs/TODO.md` adds them to what A29 owes.
+
+**Step 3 validates step 1's budget too, and the redirect is the error message.** The form owns
+three fields and submits six values, so checking only its own would let a draft with no budget
+through: `parseAmountInput('')` is `NaN`, `JSON.stringify` writes that as `null`, and
+`RegisterDto`'s `@IsNumber` answers 400 - surfaced as the generic failure line, on a screen with
+no control that could fix a budget. Not a hypothetical path, and not a bug anywhere else: the
+draft is per tab and `/setup/register` is not gated, so opening it in a new tab starts empty.
+An invalid budget pushes to `/setup` rather than rendering a message, because the design has no
+copy for a budget that went missing and step 1 is where it is set; the draft survives the trip,
+so the three fields are still filled on the way back. The categories need no such check - an
+empty selection is legal (A4). This screen's own three fields are checked **first**, so an empty
+form says what is wrong here instead of silently bouncing.
+
+**The card freezes its values on the way out, and `pending` stays true after a success.**
+`clearDraft()` re-renders this form synchronously while the `router.push` it precedes takes a
+moment, so the three fields would visibly empty themselves before the next screen arrived. The
+form snapshots them into state first and renders that snapshot instead. Two things fall out of
+it: `change()` early-returns once frozen, because the draft is gone and a keystroke would write a
+fresh one holding a single field, and the submit button is deliberately never re-enabled on
+success - the account exists by then, so offering a second registration of the same address
+would be wrong even though the backend would handle it (REG-6).
+
+**Onboarding runs to the end now, and the flow closes.** Step 3's "Finish
+setup" creates a real account and pushes to `/check-email`, which PET-12 built. Screen 24 is
+deliberately **not** nested under `/setup`: LOG-3 reaches it from Log in
+too, so it does not belong to onboarding and must not sit inside the draft provider. And it gets
+**no "Back" button**, which amends A37, VER-3 and PET-12's AC6 - by the time it renders the account
+exists and the link is sent, so there is nowhere backwards to go.
+
+**The submitted address reaches screen 24 in a short-lived httpOnly cookie, and the reason is the
+access log.** PET-11 pushed `/check-email?email=<encoded>`, and Next's own request log plus any
+proxy or CDN in front of it record the full path including the query string - so every registration
+wrote a user's email address into logs on the host and everywhere upstream. That is the argument,
+not the address bar, and it is why `history.replaceState` was rejected outright: the value is
+already logged by the time the page could strip it. `lib/pendingEmail.ts` owns the cookie end to
+end, both entry points' actions stash into it, and `/check-email` reads it with `cookies()` and so
+**stays a Server Component** - nothing about the address touches client-side JavaScript. A
+sessionStorage handoff would have kept it out of the logs equally well and was rejected for a
+different reason: it does not exist on the server, so the interpolated address would force a client
+boundary plus the `useSyncExternalStore` hydration dance `SetupDraftProvider` documents.
+
+Four things about that cookie are decisions rather than defaults. **The action stashes and does not
+`redirect()`**: a redirect from inside an action does carry the cookie, but it throws, so
+`await register(body)` would never resolve and `clearDraft()` would never run. **The read
+validates**, because httpOnly stops script and not devtools, and the value is both interpolated
+into copy and POSTed as the resend address - the same call `parseDraft` makes about sessionStorage.
+**`sameSite: 'lax'` is what PET-52 needs too**, since the emailed verify link arrives as a
+cross-site top-level GET that `strict` withholds cookies from. And it is **not** the session
+cookie, which is still unnamed anywhere in the repo.
+
+**Screen 24's `page.tsx` owns every server-only import, which is deliberately not PET-11's
+precedent.** It reads the cookie and passes both `email` and the resend action down, so
+`CheckEmailScreen` imports nothing reaching `next/headers` - which is what lets Storybook render it
+and its suite mount it with no mocks and no request scope. PET-11 had `SetupRegisterScreen` import
+its own action, and that precedent is exactly what dragged `next/headers` into the Storybook bundle
+once `registerAccount` started setting a cookie. `.storybook/main.ts` now aliases `next/headers` to
+the framework's browser-safe mock for that reason, and both halves are worth keeping: the alias
+covers screens that already do it, and prop-drilling keeps new ones from needing it.
+
+**Screen 24's footer is `justify-end`, and it is the only access footer that is.** Every other one
+has two children and takes `justify-between`; with Back deleted this one has a single control that
+the frame puts flush right, and `justify-between` puts a lone child at the _start_. A one-class
+difference that looks like an inconsistency and is not.
+
+**Screen 24 adds the seventh and eighth details with no Figma counterpart, and both are A36's.**
+That assumption says outright that no cooldown, counter or success confirmation is designed for
+"Resend link" - so a click had no observable effect whatsoever, and repeat clicks would spend the
+backend's five-per-address budget and surface the 429 as nothing at all. `ResendLink.tsx` is
+therefore the screen's one client boundary: the button disables while the request is out, a
+confirmation line follows a success with `role="status"` where the failures use `role="alert"` (the
+difference between polite and assertive), and **a 429 gets its own line telling the user to wait**
+rather than the generic "please try again", which would be actively wrong advice. There is
+deliberately **no client-side cooldown**, which A36 does mention: the backend's throttler is the
+real limit and a timer here would be a second, weaker authority that a reload defeats.
+
+**The no-address arrival is real copy and a real exit, and it amends AC6's wording.** With no cookie
+the body drops the address clause instead of leaving "...login link to . Open the link" or a literal
+placeholder, and the control becomes a secondary "Log in again". AC6 asks for Resend to be the only
+action; a disabled Resend would satisfy that literally and leave a screen with no Back, no working
+control and no way out, reachable by nothing worse than a reload twenty minutes later. What AC6
+defends is that there is no way _backwards_ into a form the user already completed, and that still
+holds - this goes forward.
+
+**That state is reached two ways, and the second one is why `resendLoginLink` has three outcomes.**
+The screen can render without an address, and the address can expire _while the screen is open_ -
+which is the likelier of the two, because a fifteen-minute cookie sits on the one screen a user
+leaves open watching for mail. Reported as an ordinary failure it produced advice that could never
+work: "please try again", forever, on a screen with no other exit. So the action answers
+`{ ok: false, reason: 'expired' }` and `ResendLink` swaps the button for the same `LogInAgain`
+control the server-rendered branch uses. Two details of that are deliberate. It is a `reason` rather
+than a fabricated 410, because `lib/backend.ts` documents an absent status as "the request never
+completed" and nothing was asked of the backend at all. And the message takes the quiet treatment
+rather than the danger one, because a cookie reaching its own expiry is not a fault - the control
+underneath it is the fix. `docs/TODO.md` records the focus consequence of swapping a control in
+place.
+
+**`CheckEmailScreen`'s props are an exclusive union**, the same `never` technique `ui/Button` uses
+for `href` versus `onClick`: `resend` is required with an address and rejected without one, because
+there is nothing to send to without one. `page.tsx` therefore narrows before rendering rather than
+spreading one object. Worth knowing that **`npm run build` does not enforce this in the suites** -
+see the CI note in `frontend/CLAUDE.md` - so `npx tsc --noEmit` is what catches a test that
+constructs the impossible combination by hand.
+
+**`/login` is gated too, and PET-52 answered it in the same breath as `/setup`**, which is what
+`docs/TODO.md` asked for. It was ungated because a fourth call into the `lib/session.ts` stubs
+would have been a claim nothing could test, and because LOG-5 makes Welcome's "I already have an
+account" the only designed entry - but a signed-in visitor could still reach it by typed URL and
+request a link they did not need. `/check-email` keeps no gate, deliberately: its entire premise
+is that no session exists yet. Note `npm run build` used to report `/login` static and
+`/check-email` dynamic, and now reports **every route dynamic**, with **not one
+`export const dynamic` anywhere** - the cookie read opts each route out on its own, exactly as
+`lib/session.ts` predicted for `/`.
+
+**`LoginForm` holds its value in `useState`, not in the onboarding draft.** `/login` is outside
+`app/setup/layout.tsx`, so `useSetupDraft` would throw, and a returning user's address has nothing
+to do with a half-finished onboarding payload. Nothing needs to survive a round trip either: LOG-4's
+Back goes to Welcome, which is a way out rather than a step to come back from. Its two field
+messages are the same strings `RegisterForm` uses, copied rather than shared - there is no copy
+module in this repo and two overlapping strings are the wrong reason to invent one.
+
+**The emailed link lands on `app/auth/verify/route.ts`, and the navigation is what makes it a
+route handler.** A Server Action sets a cookie perfectly well - `registerAccount` does - but the
+browser _arrives at_ this URL by following a link, and an action cannot answer a GET navigation.
+A page could not do it either: a Server Component cannot write a cookie, and POSTing the token
+from a client component would drag a live credential into client-side JavaScript. It is the
+repo's first route handler, so it is the shape to copy. **The path is not ours**:
+`backend/src/mail/login-link.template.ts` builds `${FRONTEND_URL}/auth/verify?token=<raw>`, so
+this folder's name is a contract with another application, and nothing checks the two agree -
+`routes.test.ts` pins our half and `docs/TODO.md` records the rest.
+
+The handler spends the token immediately and always answers a redirect, so the token leaves the
+address bar on the first paint. A 200 sets the session cookie, deletes the pending-address cookie
+
+- which nothing did before, and which `docs/TODO.md` asked this ticket for - and goes to
+  `/dashboard` (VER-4, which lands a new and a returning account in the same place). Everything
+  else goes to `/auth/verify/failed` with a `?reason=`: 401 and 400 are `invalid`, 409 is
+  `superseded`, 429 is `busy`, and a fault or an unreachable backend is `failed`. 400 folds in with
+  401 because a malformed token is indistinguishable from a dead link to the person holding the
+  email.
+
+**A query parameter is safe there in a way it was not on `/check-email`.** What drove the address
+into a cookie was this server's own request log; `?reason=superseded` is not personal data and
+identifies nobody. It is still validated on the way back out, in
+`app/auth/verify/failed/reason.ts`, because the value is typed by whoever holds the address bar
+and lands in a heading - the same call `parseDraft` makes about sessionStorage. An unrecognised
+value falls back to `failed`, deliberately the copy that claims the least.
+
+**The verify failure screen is the one screen in the app with no Figma frame behind it.** The
+Screens page holds exactly 24 and none of them is this: A38 says nothing is designed for opening
+the link, only that it should be handled "with plain messages and a way to request a new link".
+So its four headings and four body lines are ours and owe A29 sign-off with the rest, and its
+`Screens/Verify link failed` stories carry **no frame number** because there is no frame - which
+also makes opening them the only review available. It borrows screen 24's card through
+`AccessCard`, and its control is `ResendLink` or `LogInAgain` exactly as screen 24's is, which is
+what keeps a screen the designer never drew looking like the flow it interrupts.
+
+**`ResendLink`, `LogInAgain` and `resendLoginLink` moved out of `app/check-email/` for that
+screen.** The two components went to `components/`, beside `AccessCard` and for the reason that
+file gives. The action went to `lib/resend.ts`, which breaks this repo's actions-live-in-
+`actions.ts` habit on purpose: left where it was, `components/ResendLink.tsx` would have had to
+import `ResendResult` from a route, pointing a shared component at `app/` - the layering
+inversion the move exists to remove. The objection `lib/backend.ts` raises against `'use server'`
+does not apply to it, because that one takes a `path` and this one takes nothing and hits one
+fixed endpoint.
+
+**`lib/session.ts` is no longer stubs, and the cookie is `spendifico.session`.** One private
+`readSession()` reads the cookie and calls `GET /api/auth/session` with the value lifted into
+`Authorization: Bearer <token>`, because the backend reads no cookies at all, and `hasSession()`
+answers it as a boolean. `sameSite: 'lax'` is required rather than chosen, for the reason
+`lib/pendingEmail.ts` gives. **The cookie's `Max-Age` is derived from the verify response's
+`expiresAt`** rather than mirroring `SESSION_TTL_D`, which is the one place this improves on the
+cookie beside it - there is nothing to drift. `__Host-` was rejected because it demands `Secure`
+unconditionally and would silently fail to set under `npm run dev`.
+
+**Nothing clears a stale cookie on a 401, which amends the spec the stub shipped with.** Step 4
+of `requireSession()`'s doc comment said "clear the cookie and redirect"; no Server Component can,
+because its cookie jar is read-only and `.delete()` throws `ReadonlyRequestCookiesError` at
+runtime with nothing in the types to warn you - the trap `lib/pendingEmail.ts` records for `.set`.
+It costs almost nothing, since the cookie's own `Max-Age` now tracks the session's expiry, so the
+only state that leaves a live cookie holding a dead token is a manual revocation tombstone.
+
+**`/setup` and `/login` are gated now, and `/check-email` deliberately is not.** Both were
+ungated only because a third and fourth call into the stubs would have been claims nothing could
+test, and `docs/TODO.md` asked for them to be answered in the same breath - they were, with the
+same `hasSession()` branch `app/page.tsx` uses. `/setup`'s gate sits on its layout, so one call
+site covers all three steps. `/check-email` keeps none because its entire premise is that no
+session exists yet, and gating it would add a round trip to the pre-session wait for a state
+nobody reaches by accident. **Every route in the app is dynamic now** and **not one carries an
+`export const dynamic`**: the cookie read opts each one out on its own, exactly as
+`lib/session.ts` predicted for `/`.
+
+**`export const dynamic = 'force-dynamic'` is gone from `(app)/layout.tsx`.** It existed so the
+pages' `new Date()` was not frozen at build time; the `cookies()` read behind the gate now does
+that, at which point the export became a claim about nothing rather than a safeguard - which is
+the condition this file already set for deleting it. `layout.test.tsx` inverted its assertion
+rather than dropping it, so nobody restores it.
+
+**`PLACEHOLDER_PROFILE` is gone too, and the shell makes exactly one read.** `requireProfile()`
+in `lib/profile.ts` calls `GET /api/profile`, which stitches the names from the per-user
+`profile` row together with the email from the central `users` row - the seam that made the
+footer unfixable by the session read alone. Because that route is guarded, the same call answers
+"is this a live session" on its way to answering "whose", so the layout has nothing left to
+decide and deliberately carries no branch of its own. A second opinion is exactly what produced
+the loop described under The app shell.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
-alongside this file whenever the work is in a route: three of the six access screens, the
-shell's content and its authentication, and any call to the backend at all. That list is the
+alongside this file whenever the work is in a route: the `/api/chat` route handler, the
+shell's content, and every read a screen needs for its own data. That list is the
 single home, so nothing is restated here.
 
-The one trap to carry into every file in this directory: **both session seams are stubs that
-answer optimistically.** `requireSession()` lets every request through and `hasSession()`
-returns `false` for everybody, so a route that reads as authenticated is not, and a screen
-that renders is not evidence that its data path exists. Both are PET-52's, and the stubs are
-documented above under The app shell.
+The one trap to carry into every file in this directory: **the session is real now, and the
+screens behind it are still empty.** `requireProfile()` and `hasSession()` both do what they say
+as of PET-52, so a route that reads as authenticated is, and the sidebar footer shows a real
+person - but all four `<main>` elements below the header are empty, and no screen fetches its own
+data. A screen that renders is still not evidence that its data path exists; what changed is that
+the _authentication_ path finally is.

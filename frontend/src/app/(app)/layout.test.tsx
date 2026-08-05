@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 
-// Relative rather than the `@/lib/session` alias every other file uses, and it
-// has to be: `jest.mock('@/lib/session')` fails with "Cannot find module". A plain
+// Relative rather than the `@/lib/*` alias every other file uses, and it
+// has to be: `jest.mock('@/lib/profile')` fails with "Cannot find module". A plain
 // `import` through the alias works fine, which is what makes the failure confusing.
 //
 // This comment used to blame the parentheses of the `(app)` route group. It is not
@@ -14,47 +14,87 @@ import { render, screen } from '@testing-library/react';
 //
 // The relative path resolves to the same module, and Jest's registry keys on the
 // resolved path, so this still intercepts layout.tsx's own aliased import.
-import { requireSession } from '../../lib/session';
+import { requireProfile } from '../../lib/profile';
 
-import AppLayout, { dynamic } from './layout';
+import AppLayout from './layout';
 
-// The shell layout is three lines long and every one of them fails silently if
-// deleted, which is why it has a test at all. Two of the three are invisible to
-// any rendering assertion, so they are asserted on the module.
+// The shell layout's two jobs: gate the segment and lay the two columns out. The gate is
+// one line whose deletion no rendering assertion would notice, so it is asserted
+// directly.
 //
 // SidebarNav is a client component that calls usePathname(), and jsdom has no
 // App Router, so the mock below is what lets the layout render here at all.
 jest.mock('next/navigation', () => ({ usePathname: () => '/dashboard' }));
 
-jest.mock('../../lib/session', () => ({
-  requireSession: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
+
+const PROFILE = {
+  firstName: 'Ana',
+  lastName: 'Horvat',
+  email: 'ana@email.com',
+  currency: 'USD',
+  monthlyBudget: 2000,
+  monthStartDay: 1,
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  (requireProfile as jest.Mock).mockResolvedValue(PROFILE);
+});
 
 describe('the (app) segment configuration', () => {
-  it('renders dynamically, so the month is read per request', () => {
-    // Delete `export const dynamic` from layout.tsx and nothing else in this
-    // suite notices: Next then prerenders the four pages at build time and every
-    // header shows whatever month the build ran in, until somebody looks a month
-    // later. That is the entire reason this assertion exists.
-    //
-    // It becomes redundant once PET-52's cookies() read forces the segment
-    // dynamic on its own - safe to delete then, and worth deleting rather than
-    // leaving as a claim about something that is no longer load-bearing.
-    expect(dynamic).toBe('force-dynamic');
+  it('declares no `dynamic` export, because the cookie read forces it', async () => {
+    // This used to assert `export const dynamic === 'force-dynamic'`, which existed so
+    // the pages' `new Date()` was not frozen at build time. PET-52's `cookies()` read
+    // opts the segment out on its own, so the export became a claim about something no
+    // longer load-bearing and was deleted - the exact condition the old assertion's own
+    // comment set for removing it. Inverted rather than dropped, so nobody restores it.
+    const layout = await import('./layout');
+
+    expect(layout).not.toHaveProperty('dynamic');
+  });
+});
+
+describe('AC5: the shell is gated', () => {
+  it('asks for the profile before rendering anything', async () => {
+    // One call, not two. The gate and the footer data come from the same guarded read,
+    // which is what makes it impossible for them to disagree.
+    render(await AppLayout({ children: null }));
+
+    expect(requireProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves both the redirect and the throw to requireProfile', async () => {
+    // Deliberately no branching here. The layout used to inspect a nullable profile and
+    // redirect on it, and that second opinion is exactly what produced a loop with
+    // /login. Anything this layout can see, requireProfile has already decided.
+    const failure = new Error('Could not load the profile: the backend did not answer.');
+    (requireProfile as jest.Mock).mockRejectedValue(failure);
+
+    await expect(AppLayout({ children: null })).rejects.toThrow(/Could not load the profile/);
+  });
+});
+
+describe('the sidebar footer profile', () => {
+  it('shows the signed-in user, not Figma sample data', async () => {
+    // PLACEHOLDER_PROFILE lived here for three tickets and looked entirely real in a
+    // screenshot, which is why it was named that loudly. Asserting on a *different*
+    // person than the sample one is what makes this test able to fail.
+    render(await AppLayout({ children: null }));
+
+    expect(screen.getByText('Ana H.')).toBeInTheDocument();
+    expect(screen.getByText('ana@email.com')).toBeInTheDocument();
+  });
+
+  it('shows no trace of the placeholder it replaced', async () => {
+    render(await AppLayout({ children: null }));
+
+    expect(screen.queryByText(/Marko/)).not.toBeInTheDocument();
+    expect(screen.queryByText('marko@email.com')).not.toBeInTheDocument();
   });
 });
 
 describe('AppLayout', () => {
-  it('gates the shell on a session', async () => {
-    // The single call that will be the whole of AC5 once PET-52 implements it.
-    // Today requireSession is a documented no-op, so without this assertion the
-    // call site could be dropped with the suite green, and the deferral would
-    // quietly become an omission.
-    render(await AppLayout({ children: null }));
-
-    expect(requireSession).toHaveBeenCalled();
-  });
-
   it('mounts the sidebar', async () => {
     render(await AppLayout({ children: null }));
 

@@ -85,10 +85,18 @@ feature folder yet, so `ui/` is currently the only child - the app shell's own c
 took the second option and live under `app/(app)/`, documented in
 `frontend/src/app/CLAUDE.md`.
 
-`components/` has exactly one direct child of its own, and it is worth knowing why:
-**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark. It is not a
-Components-page tile, so `ui/` is wrong; it belongs to six screens rather than one, so beside
-a route is wrong too. Note `ui/Sidebar.tsx` holds a _second_, smaller copy of the same lockup
+`components/` has four direct children of its own, and all four are there for one reason:
+**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark,
+**`AccessCard.tsx`**, the centred column and card box under it, and **`ResendLink.tsx`** with
+**`LogInAgain.tsx`**, the pair of recovery controls. None is a Components-page tile,
+so `ui/` is wrong; each belongs to more screens than one route segment holds, so beside a route is
+wrong too - the lockup to all six access frames, the card to the five that are centred cards, and
+the two controls to screen 24 plus PET-52's verify failure screen.
+`AccessCard` arrived late, in PET-12, and the sequence is the useful part: the chrome lived in
+`app/setup/SetupShell.tsx` while only the three onboarding steps drew it, and moved here when Log
+in and Check your email turned out to draw the identical box with no step indicator. That shell
+still exists and still owns the indicator and the per-step width, which really are onboarding's.
+Note `ui/Sidebar.tsx` holds a _second_, smaller copy of the same lockup
 (34px, `rounded-[10px]`, `text-on-dark` against `surface-ink`) and that is deliberate for now:
 unifying them is not a refactor of one file, it needs a size and a tone pair, and it would
 drag a merged, pinned component through whichever ticket happens to notice.
@@ -267,6 +275,18 @@ includes `.storybook/**` and the story files, so `next build` already typechecks
 The extra step catches what typechecking cannot, such as a broken framework option or a
 CSS import that no longer resolves.
 
+**`npm run build` is the typecheck for shipped code, but it does not reach `*.test.ts(x)`.**
+Root `CLAUDE.md` states the short rule; this is the exception to know. `tsconfig.json` includes
+every `.tsx` in the project, so a test file with a type error is in scope on paper - and yet
+`next build` passes with one, because Next typechecks the module graph its routes actually pull
+in and nothing imports a test. PET-12 found this the direct way: an exclusive-union prop was
+being violated in four places in one suite while `build`, `lint` and `test` were all green,
+because Jest transpiles without checking types and the build never looked. **`npx tsc --noEmit`
+from `frontend/` is what covers them**, and running it reports pre-existing errors in
+`src/components/ui/Sidebar.test.tsx` that no gate has ever failed on. Reach for it after
+changing a prop type, a discriminated union or anything a test constructs by hand; CI does not,
+which is why the errors are still there.
+
 ## Not built here
 
 Treat these as planned, not available. This list exists so you do not build on something that
@@ -274,28 +294,20 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **Three of the six access screens**, meaning the three that are missing: Register, Log in and
-  Check your email are PET-11 and PET-12, so `/setup/register` and `/login` **404 until they
-  land** - which means onboarding currently dead-ends at step 2's "Continue". Welcome at `/`,
-  Setup step 1 at `/setup` and Setup step 2 at `/setup/categories` do exist (see "The access
-  screens" in `frontend/src/app/CLAUDE.md`), which is why the count reads the same either way.
-  The verify page that consumes an emailed link is PET-52's, along with filling in
-  `hasSession()` so `/` can send a signed-in visitor to the Dashboard instead of showing
-  everyone the pitch.
-- **The `/api/chat` route handler.** No route handler exists, and the env template deliberately
-  declares no model-provider key. Add whichever variable your provider needs when you build the
-  route, server-side only and never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once
-  present in `frontend/node_modules` while absent from `package.json`, so a clean install
-  removes it. Declare any SDK properly rather than relying on a leftover install.
-- **The shell's content, and its authentication.** The `(app)` group, the four routes and the
-  page header exist and every screen renders its designed header. What is missing is everything
-  below the header - all four `<main>` elements are empty - plus the two things the shell fakes:
-  `requireSession()` lets every request through (PET-52), and the sidebar footer shows
-  `PLACEHOLDER_PROFILE` rather than a real profile (PET-45 reached with PET-52's cookie). The
-  month select and the search field are drawn but inert by design.
-- **Any call to the backend at all, which is the single biggest gap.** **Nothing in
-  `frontend/src` fetches the backend**: no verify page, no session cookie, no reads. The backend
-  half is complete, so what is missing is this side. The session cookie is the frontend's own
-  httpOnly first-party one, forwarded server-side; the backend reads no cookies, and the
-  cookie's name is still undecided. Everything above inherits from this: both session seams are
-  stubs and the shell's profile is a placeholder.
+- **The `/api/chat` route handler.** The env template deliberately declares no model-provider
+  key. Add whichever variable your provider needs when you build the route, server-side only and
+  never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once present in
+  `frontend/node_modules` while absent from `package.json`, so a clean install removes it.
+  Declare any SDK properly rather than relying on a leftover install. Note this is no longer the
+  repo's _first_ route handler either - `app/auth/verify/route.ts` is, and it is the one to copy
+  the shape from.
+- **The shell's content.** The `(app)` group, the four routes and the page header exist, every
+  screen renders its designed header, and the shell is really gated and really shows the signed-in
+  user's profile as of PET-52. What is missing is everything below the header: all four `<main>`
+  elements are empty. The month select and the search field are drawn but inert by design.
+- **Every read except the two the access flow needed.** PET-52 ended the "nothing reads at all"
+  era: `lib/session.ts` calls `GET /api/auth/session` and `lib/profile.ts` calls
+  `GET /api/profile`, both lifting the session cookie into an `Authorization` header
+  server-side, and both are the pattern to copy. What no screen fetches yet is its own data -
+  the dashboard summary, the transaction list and its detail, the categories and their month
+  stats all exist on the backend and are read by nobody.

@@ -27,15 +27,15 @@ user their own database**, and the interface is built from a Figma-derived desig
 browse in Storybook on **6006**. The repo is also a Decode Academy final project, which is why
 the team tooling is real rather than illustrative.
 
-The two halves are each substantially built and **currently do not talk to each other at all**.
-The backend has the whole access flow, the transaction endpoints in full, the profile read and
-update, the category endpoints with their month stats, and the dashboard summary; the frontend
-has the design system, the app shell with its four routed views, and the first three of the six
-access screens (01 Welcome at `/`, 02 Setup step 1 at `/setup`, and 03 Setup step 2 at
-`/setup/categories`). What is missing between them is the session cookie (PET-52), which every
-authenticated read needs. PET-19 deleted the scaffold greeting page that fetched
-`GET /api/hello`, and it had been the only wire between them, so every screen renders real
-markup over placeholder data.
+The two halves are each substantially built and **the access flow now runs end to end between
+them**. The backend has the whole access flow, the transaction endpoints in full, the profile read
+and update, the category endpoints with their month stats, and the dashboard summary; the frontend
+has the design system, the app shell with its four routed views, all six access screens, and
+PET-52's verify handler at `/auth/verify` with the httpOnly `spendifico.session` cookie behind it.
+So a person can register, click the emailed link, and land signed in on a Dashboard that knows who
+they are - the sidebar footer reads a real `GET /api/profile`. What is missing is every read a
+*screen* needs for its own data: all four `<main>` elements below the page header are empty, and
+the dashboard summary, transaction and category endpoints are called by nobody.
 
 ## Repository map
 

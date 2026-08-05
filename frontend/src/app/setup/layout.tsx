@@ -1,3 +1,7 @@
+import { redirect } from 'next/navigation';
+
+import { hasSession } from '@/lib/session';
+
 import { SetupDraftProvider } from './SetupDraftProvider';
 
 // The layout the three onboarding steps share: /setup (02, step 1),
@@ -23,10 +27,27 @@ import { SetupDraftProvider } from './SetupDraftProvider';
 // the provider element across sibling navigation either way, so nothing about
 // AC5 depends on which of the two files holds the directive.
 //
-// No `export const dynamic`. Nothing in this segment reads a request, so it
-// prerenders static and correctly - the opposite of `(app)/layout.tsx`, whose
-// `force-dynamic` is load-bearing because its pages read `new Date()`. Do not
-// copy that here by reflex.
-export default function SetupLayout({ children }: { children: React.ReactNode }) {
+// **Its second job, as of PET-52, is the session gate**, which the previous version of
+// this comment recorded as PET-52's to decide. Onboarding was reachable by typed URL
+// with a live session, so a signed-in user could re-run it - harmless, because nothing
+// persists until step 3 and the account already exists, but pointless. `docs/TODO.md`
+// asked for this and `/login` to be answered together, and they are.
+//
+// It sits here rather than on the three step pages because one call site covers all
+// three, in the file they already share. The cost is a session read per step navigation,
+// which is what `GET /api/auth/session` skipping both throttlers exists for - the
+// backend documents it as "a whoami the frontend calls on navigation".
+//
+// No `export const dynamic`, and now for a second reason on top of the first: the
+// `cookies()` read behind `hasSession()` opts this segment out of static rendering on
+// its own, so the export would be a claim about nothing. That is still the opposite of
+// `(app)/layout.tsx` - do not copy anything from it here by reflex.
+export default async function SetupLayout({ children }: { children: React.ReactNode }) {
+  if (await hasSession()) {
+    // Hard-coded rather than read from SIDEBAR_HREFS, the same call `app/page.tsx` and
+    // `app/login/page.tsx` make, and for the reason the first of those records.
+    redirect('/dashboard');
+  }
+
   return <SetupDraftProvider>{children}</SetupDraftProvider>;
 }

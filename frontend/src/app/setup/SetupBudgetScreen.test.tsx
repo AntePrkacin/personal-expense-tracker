@@ -334,10 +334,18 @@ describe('AC5: the draft survives leaving and coming back', () => {
 
     await user.type(budgetField(), '2000');
 
-    // `categories` rides along empty because patchDraft merges over the whole
-    // draft, which is what stops step 2's selection clobbering this budget and
-    // vice versa.
-    expect(storedDraft()).toEqual({ currency: 'USD', budget: '2,000', categories: [] });
+    // The other four fields ride along empty because patchDraft merges over the
+    // whole draft, which is what stops step 2's selection and step 3's name
+    // clobbering this budget and vice versa. Asserted exactly, rather than on the
+    // budget alone, because that merge is the property under test.
+    expect(storedDraft()).toEqual({
+      currency: 'USD',
+      budget: '2,000',
+      categories: [],
+      firstName: '',
+      lastName: '',
+      email: '',
+    });
   });
 
   it('comes back filled in after the screen unmounts', async () => {

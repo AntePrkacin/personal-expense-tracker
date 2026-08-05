@@ -145,7 +145,7 @@ UI elements and behavior:
 
 - **VER-1.** Centered Spendifico logo and a card with heading "Check your email" and body "We've sent a secure login link to marko@email.com. Open the link on this device to access your account." The address is interpolated from whatever was submitted on 22 or 23, and the copy commits to a same-device link.
 - **VER-2.** Secondary button "Resend link" sends a fresh link and invalidates the previous one. No cooldown, counter, or success confirmation is designed (assumption A36).
-- **VER-3.** Text button "Back" returns to whichever screen opened this one, 22 or 23 (assumption A37).
+- **VER-3.** ~~Text button "Back" returns to whichever screen opened this one, 22 or 23 (assumption A37).~~ **Withdrawn by PET-11: 24 has no "Back" control.** By the time this screen renders the account exists and the link is sent, so there is nowhere backwards to go, and "Resend link" is the only recovery the design offers (A36). The deciding case is the 22 path: PET-11 clears the onboarding draft on a successful register, so reopening 22 would show an empty card and invite a user who already has an account to re-type everything. Dropped for the 23 path too, rather than kept on one exit and not the other. See the revised A37.
 - **VER-4.** Opening the link signs the user in and lands them in the app: Dashboard - Empty (05) for a new account, Dashboard (04) for a returning one. The link-opening step has no frame of its own (assumption A33).
 - **VER-5.** Link and session rules are not designed. Working decision: single use, short expiry, and a normal session afterwards, so the user does not repeat this flow on every visit (assumption A34). An expired, reused, or wrong-device link has no designed screen (assumption A38).
 
@@ -153,7 +153,7 @@ Validation: none (no inputs).
 
 States: default only. No resent, expired, or error variant is designed.
 
-Navigation: entry from REG-4 or LOG-3. Exits: "Back" → 22 or 23, opening the emailed link → 05 or 04.
+Navigation: entry from REG-4 or LOG-3, both of which pass the submitted address to this screen so VER-1 can interpolate it. Exits: opening the emailed link → 05 or 04. There is no in-app exit backwards (revised VER-3).
 
 Edge cases: this screen is a dead end inside the app until the user leaves for their inbox, so the session must survive the round trip. Nothing is designed for a user who never opens the link.
 
@@ -583,7 +583,7 @@ Assumptions A31 to A44 cover the access screens (22, 23, 24) and the category ed
 - **A34.** Login link and session rules are not designed. Working decision: single-use token, short expiry (minutes, not days), invalidated when a new link is requested, and a normal persistent session afterwards so the flow is not repeated on every visit.
 - **A35.** Neither an unknown email on 23 nor an already-registered email on 22 has a designed response. Both land on 24 with the same copy, so the screens never disclose whether an account exists; 22 sends a login link instead of creating a duplicate.
 - **A36.** "Resend link" (24) has no designed cooldown, attempt counter, or confirmation. Add a simple cooldown and server-side rate limit, and confirm the visual treatment with the designer.
-- **A37.** "Back" (24) returns to whichever screen opened it, 22 or 23. Not drawn.
+- **A37.** ~~"Back" (24) returns to whichever screen opened it, 22 or 23. Not drawn.~~ **Revised by PET-11: there is no "Back" on 24.** The assumption was never drawn, and building it turned out to contradict something that is: clearing the onboarding draft on a successful register (REG-4) leaves nothing for 22 to reopen with. So 24 offers only "Resend link", and PET-12 builds it that way. Note what removing the control does not remove - the browser's own Back button still reaches 22, which renders empty. Accepted rather than worked around: nothing is lost because the account exists and the link is sent, an accidental empty re-submit produces inline required-field messages rather than a bad request, and a deliberate re-submit of the same address is explicitly safe because 22 sends a fresh link instead of duplicating (REG-6, A35).
 - **A38.** Nothing is designed for opening the link itself: no success landing, expired-link, already-used-link, or wrong-device screen. Handle these with plain messages and a way to request a new link.
 - **A39.** No logout control exists on any frame, including Settings, even though the build now has sessions. Changing the email on 17 also has no re-verification step designed. Both need a designer answer before shipping.
 - **A40.** The "Color" and "Icon" selects (19, 21) are never shown open. Color is assumed to be the eight Category tokens from Foundations (see 5.1); the icon set is unknown beyond the single example "Repeat".

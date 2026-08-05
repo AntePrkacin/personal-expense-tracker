@@ -1,7 +1,11 @@
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
+import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
+import * as CheckEmailScreen from './check-email/CheckEmailScreen.stories';
+import * as LoginScreen from './login/LoginScreen.stories';
 import * as SetupCategoriesScreen from './setup/categories/SetupCategoriesScreen.stories';
+import * as SetupRegisterScreen from './setup/register/SetupRegisterScreen.stories';
 import * as SetupBudgetScreen from './setup/SetupBudgetScreen.stories';
 import * as WelcomeScreen from './WelcomeScreen.stories';
 
@@ -42,6 +46,12 @@ const MODULES: [name: string, module: StoryModule][] = [
   ['WelcomeScreen', WelcomeScreen as StoryModule],
   ['SetupBudgetScreen', SetupBudgetScreen as StoryModule],
   ['SetupCategoriesScreen', SetupCategoriesScreen as StoryModule],
+  ['SetupRegisterScreen', SetupRegisterScreen as StoryModule],
+  ['LoginScreen', LoginScreen as StoryModule],
+  ['CheckEmailScreen', CheckEmailScreen as StoryModule],
+  // The one module here with no Figma frame behind it (A38), which is also what makes
+  // its stories the only place the screen can be looked at.
+  ['VerifyFailedScreen', VerifyFailedScreen as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

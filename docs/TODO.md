@@ -14,72 +14,105 @@ paragraph or two probably deserve their own plan in this directory.
 These were decided against deliberately. Reasons are recorded so the decision is not
 relitigated by accident.
 
-### The frontend half of verification: the verify page, the cookie, the dashboard
+### The verify page's inherited constraints, now that it exists
 
-The backend is done: `POST /api/auth/verify` spends a link, provisions the account and
-returns a session, and `GET /api/auth/session` answers who the bearer is. Nothing on the
-frontend calls either yet - there is no verify page and no session cookie. There _is_ now a
-dashboard to land on: PET-19 built the `(app)` shell and the four routed views. The
-session-scoped read that replaces the deleted proof-of-stack `GET /api/users/:id` also
-exists now: PET-45 shipped `GET /api/profile` and `PATCH /api/profile`. What is left here is
-entirely the frontend's half.
+PET-52 built the frontend half: `app/auth/verify/route.ts` spends the emailed link,
+`spendifico.session` carries the result, and `lib/session.ts` plus `lib/profile.ts` are the
+app's first two reads. Four things that ticket could not close, and one it deliberately did
+not.
 
-**The frontend no longer calls the backend at all.** PET-19 replaced the scaffold greeting
-page with a `redirect('/dashboard')`, and its `GET /api/hello` fetch was the only wire between
-the two apps. `BACKEND_URL` is consequently read by nothing, and no frontend test exercises
-the generated contract. The drift gates still run, so `api.d.ts` cannot rot silently, but the
-end-to-end proof is gone until this item lands. **This is the first thing the work here
-restores.**
+**The live token reaches the frontend's own access log.** The backend moved verify's token
+into a POST body precisely so a live credential never hit *its* logs, and the handler puts it
+straight into Next's request log and anything upstream - the same class of leak PET-12 removed
+when it replaced `/check-email?email=`. Not fixable here: the URL is chosen by
+`backend/src/mail/login-link.template.ts` and the token has to arrive somehow. What bounds it
+is that the token is single-use and is consumed by the very request that logged it, so the
+line is dead before anyone reads it, and the handler always answers a redirect so it leaves
+the address bar on the first paint. This is the same accepted exposure as browser history and
+the `Referer` header, one door further along.
 
-**Three things in the shell are stubs waiting on this, all deliberate and all loud.**
+**The route path is declared in two apps and nothing checks they agree.**
+`login-link.template.ts` builds `/auth/verify` and `app/auth/verify/route.ts` answers it.
+Change either and every login email in production points at a 404, with no gate failing and no
+test noticing. `routes.test.ts` pins the frontend's half against the literal string, which is
+as far as one repo half can reach. Same shape as the `LOGIN_LINK_TTL_M` coupling below.
 
-`frontend/src/lib/session.ts` holds `requireSession()`, called once by `app/(app)/layout.tsx`
-and currently letting every request through - which is PET-19's explicit deferral of its own
-AC5. Its doc comment is the specification: read the cookie, lift it into
-`Authorization: Bearer <token>`, call `GET /api/auth/session`, redirect to the access flow on
-401 or absence. **The cookie's name is still undecided and this work picks it**; PET-19
-deliberately did not, so as not to hand over a contract it had not chosen.
+**Verify's per-IP throttler now sees one address for the whole deployment.** The handler POSTs
+from the frontend server, so every verify in the application lands in one bucket - 15 per 15
+minutes on the deployed values. The third route to inherit this, after register and
+login-link, and the reason the failure screen has a `busy` reason at all. The fix is the same
+two-sided one described under "The auth throttler is in-memory", and neither half works alone.
 
-The same file now holds a second seam, `hasSession()`, called once by `app/page.tsx` and
-currently answering `false` for everybody - PET-8's equivalent deferral. `/` is the app's
-front door and branches on it: no session renders 01 Welcome, a live session redirects to
-`/dashboard`. Until this work lands, that means **every visitor lands on Welcome and
-`/dashboard` is reached by typed URL only**. The two functions are separate because the
-shell wants "let me through or send me away" while the root route wants a fact it can branch
-on, but they want the same underlying read, so give them a shared helper rather than two
-fetches. The redirect target `requireSession()` needs is no longer unnamed either: `ACCESS_ROUTES`
-in `frontend/src/lib/routes.ts` declares `/login`, and Welcome is at `/`.
+**A stale session cookie survives a manual revocation.** Nothing on the read path can clear
+it: the gate runs in a Server Component, where the cookie jar is read-only and `.delete()`
+throws `ReadonlyRequestCookiesError` at runtime with nothing in the types to warn you. This amends the stub's own step 4, which said "clear the cookie and redirect", and
+`layout.test.tsx` pins that no delete is attempted so nobody "completes" the spec and breaks
+the shell. It costs almost nothing, because the cookie's `Max-Age` is derived from the
+session's own `expiresAt`, so an *expired* session's cookie is gone from the browser before
+the backend would reject it. Only a hand-written tombstone reaches the state, and only until
+the cookie expires.
 
-`PLACEHOLDER_PROFILE` in `app/(app)/layout.tsx` feeds the sidebar footer Figma's own sample
-data. It cannot be fixed without both halves: names live in the per-user `profile` row and the
-email on the central `users` row, which is exactly what `GET /api/profile` stitches together -
-so the endpoint is no longer the blocker, only the cookie above is.
-`ui/Sidebar` itself is clean - its test pins that those sample strings appear nowhere in the
-component - so this is one constant in one file.
+**The shell makes one backend request per render, and briefly made two - which had a loop in
+it.** Review of the PR caught it before merge; recorded because the shape is easy to
+reintroduce. With a session gate *and* a profile read, the layout treated any absent profile as
+"not signed in" and redirected to `/login` - which sends a signed-in visitor to `/dashboard`,
+whose layout bounced straight back. A live session whose profile read failed for any reason (the
+broken-invariant 500, a timeout, a restart mid-render) therefore made **the whole app
+unreachable, including the login screen**, until the backend settled.
 
-Three constraints that work inherits.
+Two things fixed it, and both are worth keeping. `GET /api/profile` is guarded, so one call
+answers "is this a live session" on its way to answering "whose" - there is no second read to
+disagree with the first, and the layout carries no branch of its own. And `lib/profile.ts`
+separates **"not signed in" from "could not ask"**: only a 401 or a missing cookie redirects,
+while an unavailable backend throws so Next's error boundary renders something a reload retries.
+`profile.test.ts` pins that an unavailable backend never redirects.
 
-The token travels in a **query string**, so it lands in browser history and potentially a
-`Referer` header - the accepted norm for magic links, bounded by the short single-use
-window, but it means the verify page must load no third-party resources and must consume
-the token immediately. (It no longer reaches backend access logs: verify takes the token in
-a POST body.)
+**The rule to carry forward: never answer "the backend did not respond" with a redirect into the
+access flow.** Any route that both gates and reads has the same trap available to it.
 
-A failed send leaves the user with **zero** live links rather than the one they had, because
-`issue()` supersedes the previous link before sending; "Resend link" (VER-2) is the only
-recovery, and it is the design's own answer (A36).
+The residue is that the design draws no error screen anywhere (A19, A29), so what a reader sees
+when the throw fires is Next's own. A custom `error.tsx` is a designer conversation rather than
+a gap PET-52 could close.
 
-**The wait behind the verify click is undesigned on purpose, and blank until measured.**
-A33/A19 design no loading state, and verify is one blocking POST: on a first verify the
-user who clicked the email link sits on a blank tab with only the browser's own loading
-affordances while provisioning runs (estimated seconds; a returning user's verify is
-effectively instant). A blank-and-brief wait after clicking a link is the normalized
-OAuth/SSO-redirect experience and needs no design if the number stays small. The frontend
-branch's first job is therefore to measure real cloud-mode provisioning latency, then
-choose: keep the plain page-load wait, or take a designed waiting state to the designer.
-A streamed "Signing you in..." shell is technically cheap (Suspense), but it is an
-in-page loading state, exactly what the design deliberately lacks, so that path is a
-design conversation before it is code.
+**The wait behind the verify click was measured on 2026-08-05, and the blank page stands.**
+This was the open question A33/A19 left: verify is one blocking POST with no loading state
+designed, so the number decided whether a waiting state had to go to the designer. Measured
+in cloud mode against Turso (group `decode-pet`, `aws-eu-west-1`), with a throwaway central
+database so nothing touched the real directory:
+
+- **First verification, which provisions:** 2.10s and 1.83s across two accounts. That covers
+  creating the Turso database, minting its token, persisting the pointer, opening and
+  migrating it, inserting the profile and seeding the categories.
+- **Returning verification:** 4.1ms, 4.3ms and 4.8ms across three links for one account.
+  Effectively instant, as the design assumed.
+- `POST /api/auth/register` answers in 14ms, because it floats the token issue and the mail
+  send rather than awaiting them.
+
+**So no designed waiting state is needed.** Roughly two seconds of blank tab after clicking a
+link in an email is the normalized OAuth and SSO redirect experience, and it happens once per
+account, ever. A streamed "Signing you in..." shell remains technically cheap but is an
+in-page loading state, which is exactly what the design deliberately lacks - so it stays a
+design conversation rather than a gap.
+
+Two honesty notes on the number. It is the **backend POST alone**, timed from the same
+machine as the server, so it excludes the browser's own navigation, the frontend route
+handler's overhead and the redirected Dashboard render; the figure a user experiences is
+larger by whatever the network adds. And it was taken against a group that had already been
+used that session - `TursoPlatformService` warns in its own comment that creating a database
+is slower on a cold group, so treat 2s as a floor for the provisioning case rather than a
+worst case.
+
+### `/check-email` is the one access route with no session gate
+
+PET-52 gated `/setup` and `/login`, which `docs/TODO.md` had asked it to answer in the same
+breath, and deliberately left this one alone. Its entire premise is that no session exists
+yet - it is the screen a user sits on while waiting for mail - so a gate would add a round
+trip to the pre-session wait to defend against a state nobody reaches by accident. The way to
+reach it signed in is to verify in a second tab and come back, at which point the screen says
+something true and harmless.
+
+Recorded so the asymmetry reads as a decision rather than an oversight. If it ever needs
+answering differently, it is the same three-line `hasSession()` branch the other three carry.
 
 ### Handing a browser a token to sync with directly
 
@@ -175,7 +208,8 @@ note.
 
 **One constraint the rename leaves behind.** `USER_DB_NAME_PREFIX` was renamed while it was
 still free, verified against live Turso: no per-user database existed and no `users` row
-named one. That window is closed the moment PET-52 lets a real account verify. `userDbName(id)`
+named one. **That window is now shut**: PET-52 shipped the verify page, so a real account can
+verify and the first per-user database can exist. `userDbName(id)`
 derives the name and `users.db_name` persists it, so a second rename would strand every
 existing account silently - `getUserDb` creates a fresh empty file instead of opening the
 synced one, and `deleteUserDb`, which derives the name from the id on purpose because its
@@ -330,9 +364,21 @@ The write is **best effort**: a `QuotaExceededError` or Safari's historical priv
 is swallowed, and the in-memory cache is updated before the write is attempted, so the field
 still shows what was typed. Persisting degrades; the form does not.
 
-**Nothing clears the draft.** Back must not, because AC5 forbids it, and no reset control is
-designed anywhere. So an abandoned onboarding shows stale values in that tab until it closes.
-PET-11 should clear it on a successful register, which is the only natural moment.
+**A successful register clears it, and nothing else does.** Back must not, because every step's
+AC5 forbids it, and no reset control is designed anywhere - so an *abandoned* onboarding still
+shows stale values in that tab until it closes. PET-11 took the one natural moment: `clearDraft`
+runs after the 202, which is when the values have a real account behind them.
+
+That leaves one accepted consequence, recorded here because it looks like a bug and is a
+decision. **The browser's own Back button from screen 24 reaches an empty Register.** PET-11
+deleted screen 24's own "Back" control for this reason - amending A37, VER-3 and PET-12's AC6 -
+but deleting a control does not delete the history entry, and the draft is gone by then. Accepted
+on three grounds: the account exists and the login link is sent, so nothing is lost; the form's
+own validation turns an accidental empty re-submit into three inline messages rather than a bad
+request; and a deliberate re-submit of the same address is explicitly safe, because the backend
+sends a fresh link instead of duplicating (REG-6, A35). Both alternatives are worse - keeping the
+draft alive defeats the clearing, and suppressing the history entry means `router.replace` on the
+way to screen 24, which would also swallow the legitimate Back from Register to step 2.
 
 ### The budget field's caret has two rough edges, and jsdom cannot see either
 
@@ -355,17 +401,6 @@ called with the computed offset, and the visible behaviour is a Storybook or man
 real browser test (Playwright, or Storybook's own test runner) is what would close this
 properly, and nothing in the repo runs one yet.
 
-### `/setup` is not gated on a session
-
-`/` sends a signed-in visitor to the Dashboard and the `(app)` shell gates itself, but `/setup`
-deliberately does neither. PET-9 had no session to read - both `lib/session.ts` seams are still
-stubs - and a third call site would have been a claim it could not test.
-
-So a signed-in user can reach onboarding by typed URL and re-run it. Harmless today, because
-nothing is persisted until step 3 and the account already exists; worth a decision when PET-52
-makes a session readable. The cheapest answer is the same `hasSession()` branch `app/page.tsx`
-already uses.
-
 ### The currency select has one option, and two things wait on A6
 
 `frontend/src/app/setup/BudgetForm.tsx` renders `CURRENCY_OPTIONS` with the single
@@ -381,10 +416,13 @@ leave step 1's budget alone.
 And a stored `currency` is not checked against the option list. `parseDraft` canonicalises
 the budget but only type-checks the currency, so a draft carrying `EUR` - devtools, or a
 build that offered more options - lands on a `<select>` with nothing matching. The browser
-then shows the first option while the draft still says `EUR`, and step 3 would post it.
-Harmless while one option exists; the fix, when the list grows, is for `parseDraft` to fall
-back to `DEFAULT_CURRENCY` for a code it does not recognise, which means the allowlist has
-to move out of the form and into `draft.ts` beside the rest of the shape.
+then shows the first option while the draft still says `EUR`, and step 3 **does** post it -
+`toRegisterBody` passes the stored code straight through, and the DTO's
+`@IsISO4217CurrencyCode()` accepts `EUR`, so the account would be created in a currency nobody
+picked. Still harmless while one option exists, since nothing can put a second code in there
+except devtools; the fix, when the list grows, is for `parseDraft` to fall back to
+`DEFAULT_CURRENCY` for a code it does not recognise, which means the allowlist has to move out of
+the form and into `draft.ts` beside the rest of the shape.
 
 ### A29's inline error pattern is now live rather than illustrative
 
@@ -397,6 +435,106 @@ That raises the priority of the designer sign-off A29 already owed. The pattern 
 users see, and every remaining form ticket (PET-11, PET-12, Settings, the transaction forms)
 will copy it. PET-10 did not: A4 enforces no minimum selection, so step 2 has nothing to
 validate and deliberately ships no error state at all.
+
+**PET-11 raised it again, with five strings and a second shape.** Step 3 is the first screen with
+more than one thing to validate, so it needed copy the design file does not contain: `Enter your
+first name.`, `Enter your last name.`, `Enter your email address.`, `Enter a valid email
+address.`, and for a failed request `We couldn't create your account. Please try again.` All five
+follow the shape of the one live message rather than inventing a voice, but none was read off a
+frame. The `Screens/22 Register` story's `WithMessages` case renders all of them at once, which is
+the quickest thing to put in front of the designer.
+
+The second shape is the one that needs an actual decision rather than a sign-off: **a form-level
+message, which `ui/Field` has no concept of.** Field owns per-field messages and deliberately
+carries no `role="alert"`; a failed request belongs to no field and arrives after a network round
+trip with nothing else on screen changing, so PET-11's line sits above the footer row in Field's
+own treatment *with* `role="alert"`. If a second form ever needs one, that is the moment it
+belongs in `ui/` rather than in a screen.
+
+Two things the same screen does not validate, both deliberate. `@MaxLength(100)` on the two names
+is **not** mirrored client-side: no `maxlength` is drawn in the frame, so a longer name gets a 400
+rendered as the generic form-level message rather than an inline one. And `isEmailValid` is looser
+than the DTO's `@IsEmail()`, which is validator.js, so a handful of addresses pass here and come
+back a 400 the same way - `lib/email.test.ts` pins `marko@email.com.` as the example. Closing either
+gap means shipping a validation dependency for one field, or copying validator.js's expression
+into the frontend where it would rot silently.
+
+**PET-12 raised it a third time, with five more strings and one that is a decision rather than a
+sign-off.** Screen 23's failure line is `We couldn't send your login link. Please try again.`,
+shaped like PET-11's. Screen 24's four are all A36's, which says outright that no cooldown, counter
+or confirmation is designed for "Resend link": `A new link is on its way.` after a success,
+`We couldn't send a new link. Please try again.` after a failure,
+`Too many requests. Please wait a few minutes and try again.` for a 429, and
+`This page has been open too long to resend.` when the address cookie has expired. The
+`Screens/24 Check your email` stories reach all four by clicking the button - the last one through
+its own `ResendAfterExpiry` story, because fifteen minutes of waiting is not something a
+click-through finds.
+
+Two decisions inside that worth a designer's eye rather than a rubber stamp. **A resend now confirms
+itself**, which A36 says nothing is designed for - and the alternative is worse rather than
+cheaper: with no confirmation a click has no observable effect at all, so a user cannot tell whether
+it worked and clicks until the backend's five-per-address limiter answers 429, which without the
+third string would also render as nothing. **And there is deliberately no cooldown**, which A36 does
+mention. The backend's per-address throttler is the real limit and a client-side timer would be a
+second, weaker authority that a reload defeats, so the 429 message replaces it. If the designer
+wants a visible cooldown, it belongs on top of that message rather than instead of it.
+
+**One accepted a11y consequence of the expiry state.** When the resend reports an expired address,
+the button the user just pressed is replaced by the "Log in again" link, so keyboard focus falls back
+to the document rather than following to the new control. The message carries `role="alert"` partly
+for that reason - it announces what replaced the button - but a user tabbing from where they were will
+re-enter the card from the top. Moving focus deliberately needs a focus-management pattern this repo
+does not have yet, and inventing one for a single control is the wrong first mover; the day a second
+screen swaps a control in place, it belongs in `ui/`.
+
+**PET-52 raised it a fourth time, with eight more strings and a whole screen behind them.** A38 says
+outright that nothing is designed for opening the link - "no success landing, expired-link,
+already-used-link, or wrong-device screen" - only that these should be handled "with plain messages
+and a way to request a new link". So `/auth/verify/failed` is the one screen in the app with no Figma
+frame at all, and its four headings and four body lines are ours:
+
+- `This link no longer works` / `Login links can only be used once and expire after a short time.
+  Send yourself a new one.` for a 401 or a 400.
+- `A newer link was sent` / `This link was replaced when a newer one was requested. Open the most
+  recent email to sign in.` for the 409.
+- `Too many attempts` / `Please wait a few minutes and then request a new link.` for a 429.
+- `We couldn't sign you in` / `Something went wrong on our end. Please try again.` for a fault, an
+  unreachable backend, or a reason the URL claims that does not exist.
+
+Four rather than one generic apology, because three of the four would be misleading if collapsed: a
+replaced link wants the newest email, a throttled one wants waiting, and a fault leaves the link
+itself still live. The `Screens/Verify link failed` stories reach all four, and they carry **no frame
+number** because there is no frame - which also makes opening them the only review this screen can
+get. The card and both controls are screen 24's, so what actually needs the designer's eye is the
+copy rather than the layout.
+
+### Screen 24's no-address arrival is new copy and a reworded AC
+
+`/check-email` shows the address the user submitted, and PET-12 carries it in a fifteen-minute
+cookie rather than a query string. So there is a real state where the screen has no address: the
+cookie expired, the screen was opened in a second browser, or its value was not something the field
+could have produced. AC7 asked for copy that "still reads correctly rather than leaving an empty gap
+or the literal placeholder" and noted A29 designs none, so the sentence drops the address clause
+entirely - `We've sent you a secure login link. Open the link on this device to access your
+account.` - chosen over filling the slot with a generic phrase.
+
+**The control in that state is `Log in again`, and that amends AC6's wording.** AC6 requires "Resend
+link" to be the only action, and with no address there is nothing to resend. A disabled button
+satisfies the letter of it and leaves a screen with no Back, no working control and no way out,
+which a reload twenty minutes later reaches - and a permanently disabled button announces as
+"Resend link, dimmed" with no reason given. What AC6 defends is that there is no way *backwards*
+into a form the user has already completed, and a link forward to Log in does not touch that. The
+Jira ticket records the amendment; the alternative is recorded here so nobody re-proposes it.
+
+### The pending-address cookie's lifetime is coupled to a backend variable it cannot read
+
+`lib/pendingEmail.ts` expires its cookie after fifteen minutes to mirror the login link's own
+lifetime, which the backend takes from `LOGIN_LINK_TTL_M` (see `docs/guides/configuration.md`). The
+frontend has no channel to that value, so the two can drift: raise it and a still-valid link gets
+the no-address fallback, lower it and the cookie outlives the link it describes. Both degrade to
+copy that reads correctly rather than to anything misleading, which is why the duplication was
+accepted rather than fixed. Closing it properly means either publishing the value in the API or
+giving the frontend its own environment variable, and neither is worth it for a display string.
 
 ### The starter category list exists in two files, linked only by a generated type
 
@@ -660,6 +798,23 @@ same stack showed 2 correctly ignores it while 3 or higher trusts it, so raising
 "to be safe" does the opposite. See `backend/CLAUDE.md` for why it is a hop count rather than a
 boolean and the full replay methodology, `backend/fly.toml`'s comment for the value, and
 `docs/guides/deployment.md`'s per-IP check for how to catch a regression here.
+
+**PET-11 made that second half real, and it is no longer a deployment-time worry.** The
+register call goes through a Next Server Action, so the backend sees the *frontend server's*
+address on every registration and there is exactly one per-IP bucket for the whole
+application. At the default of 30 per 15 minutes, thirty registrations from anywhere lock
+out everybody; as an abuse control it now does nothing at all. PET-12's login-link actions
+inherit the same shape. The per-email limiter still works correctly, and it is the one that
+actually protects this flow, which is why this is degraded rather than broken.
+
+The fix is two-sided and neither half works alone: the frontend has to forward the real
+client address, and the backend has to be told how many hops to trust. **Do not bolt on
+either half in isolation.** Forwarding a client-supplied `X-Forwarded-For` and then trusting
+it makes the limiter *spoofable*, which is worse than blind - and the backend is publicly
+reachable, so a custom header like `X-Client-IP` is no better without authentication between
+the two apps, which does not exist. Getting this right means deciding the hop count against
+the real topology (PET-53's Fly.io deploy, plus whatever sits in front) and probably
+authenticating the frontend to the backend. That is its own ticket, not a line in a form.
 
 ### Token rotation is manual
 
