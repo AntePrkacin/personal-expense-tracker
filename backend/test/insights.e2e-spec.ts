@@ -1,0 +1,313 @@
+import { INestApplication } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { eq } from 'drizzle-orm';
+import { rm } from 'node:fs/promises';
+import request from 'supertest';
+import { App } from 'supertest/types';
+import { AppModule } from './../src/app.module';
+import { LoginTokenService } from './../src/auth/login-token.service';
+import { newId } from './../src/common/ids';
+import type { DashboardResponseDto } from './../src/dashboard/dto/dashboard-response.dto';
+import type { InsightSetResponseDto } from './../src/insights/dto/insight-set-response.dto';
+import { users } from './../src/database/central/schema';
+import { APP_DB } from './../src/database/database.constants';
+import type { CentralDatabase } from './../src/database/database.types';
+import { UserDatabaseService } from './../src/database/user-database.service';
+import { insightSets, insights } from './../src/database/user/schema';
+import { MAILER } from './../src/mail/mailer';
+import { MemoryMailer } from './memory-mailer';
+
+/**
+ * The insights read, against real databases.
+ *
+ * PET-41 owns storage and the read but not generation (PET-40), so this suite
+ * seeds `insight_sets`/`insights` rows directly and proves what only a real
+ * database can: that `status = 'ready'` skips a failed run, that the newest set
+ * wins by `generated_at`, that a `generating` row flips the state while the last
+ * ready content still comes back, and that the dashboard teaser reads the same
+ * newest set.
+ */
+describe('Insight endpoints (e2e)', () => {
+  let app: INestApplication<App>;
+  let centralDb: CentralDatabase;
+  let loginTokens: LoginTokenService;
+  let userDatabases: UserDatabaseService;
+  const databaseDir = process.env.DATABASE_DIR!;
+
+  let bearer: string;
+  let userId: string;
+  let otherBearer: string;
+
+  const insightsBody = (response: request.Response) =>
+    response.body as InsightSetResponseDto;
+
+  const dashboardBody = (response: request.Response) =>
+    response.body as DashboardResponseDto;
+
+  let emailCounter = 0;
+  const nextEmail = () => `Insighter${++emailCounter}@Example.COM`;
+
+  const get = (token = bearer) =>
+    request(app.getHttpServer())
+      .get('/api/insights')
+      .set('Authorization', `Bearer ${token}`);
+
+  const dashboard = (token = bearer) =>
+    request(app.getHttpServer())
+      .get('/api/dashboard')
+      .set('Authorization', `Bearer ${token}`);
+
+  /** Inserts one set row and returns its id. Content is null unless given. */
+  const seedSet = async (fields: {
+    status: 'generating' | 'ready' | 'failed';
+    monthLabel?: string;
+    summaryHeadline?: string;
+    summaryBody?: string;
+    generatedAt?: Date;
+  }) => {
+    const db = await userDatabases.getUserDb(userId);
+    const id = newId();
+    await db.insert(insightSets).values({
+      id,
+      status: fields.status,
+      monthLabel: fields.monthLabel ?? null,
+      summaryHeadline: fields.summaryHeadline ?? null,
+      summaryBody: fields.summaryBody ?? null,
+      generatedAt: fields.generatedAt ?? null,
+    });
+    return id;
+  };
+
+  /** Inserts cards for a set, `sortOrder` following array order. */
+  const seedCards = async (
+    setId: string,
+    cards: { tone: string; title: string; body: string }[],
+  ) => {
+    const db = await userDatabases.getUserDb(userId);
+    await db.insert(insights).values(
+      cards.map((card, index) => ({
+        id: newId(),
+        setId,
+        tone: card.tone,
+        title: card.title,
+        body: card.body,
+        sortOrder: index,
+      })),
+    );
+  };
+
+  /** A complete ready set, the common seed. */
+  const seedReadySet = async (headline: string, generatedAt: Date) => {
+    const id = await seedSet({
+      status: 'ready',
+      monthLabel: 'October 2025',
+      summaryHeadline: headline,
+      summaryBody: "You've spent $1,240 of your $2,000 budget.",
+      generatedAt,
+    });
+    await seedCards(id, [
+      {
+        tone: 'warning',
+        title: 'Dining out is over budget',
+        body: '$312 of $300 - $12 over',
+      },
+      {
+        tone: 'info',
+        title: 'On pace for $1,980',
+        body: 'Just under your $2,000 target',
+      },
+    ]);
+    return id;
+  };
+
+  /** Empties the primary user's insight tables, so each test starts clean. */
+  const reset = async () => {
+    const db = await userDatabases.getUserDb(userId);
+    await db.delete(insights);
+    await db.delete(insightSets);
+  };
+
+  let mailer: MemoryMailer;
+
+  const provision = async () => {
+    const email = nextEmail();
+    await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        firstName: 'Marko',
+        lastName: 'Kovac',
+        email,
+        currency: 'eur',
+        monthlyBudget: 2000,
+        categories: ['Transport', 'Groceries'],
+      })
+      .expect(202);
+    await mailer.waitFor(email.toLowerCase(), 1);
+
+    const [user] = await centralDb
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase()));
+
+    const rawToken = await loginTokens.issue(user.id);
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/verify')
+      .send({ token: rawToken })
+      .expect(200);
+
+    return { id: user.id, token: (response.body as { token: string }).token };
+  };
+
+  beforeAll(async () => {
+    mailer = new MemoryMailer();
+
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(MAILER)
+      .useValue(mailer)
+      .compile();
+
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    await app.init();
+
+    centralDb = app.get<CentralDatabase>(APP_DB);
+    loginTokens = app.get(LoginTokenService);
+    userDatabases = app.get(UserDatabaseService);
+
+    const primary = await provision();
+    userId = primary.id;
+    bearer = primary.token;
+    otherBearer = (await provision()).token;
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await rm(databaseDir, { recursive: true, force: true });
+  });
+
+  beforeEach(reset);
+
+  it('refuses a request with no bearer', async () => {
+    await request(app.getHttpServer()).get('/api/insights').expect(401);
+  });
+
+  it('reports the empty state before anything has generated', async () => {
+    const body = insightsBody(await get().expect(200));
+
+    expect(body).toEqual({
+      state: 'empty',
+      monthLabel: null,
+      summary: null,
+      insights: [],
+      generatedAt: null,
+    });
+  });
+
+  it('returns a ready set with its summary and cards in order', async () => {
+    await seedReadySet(
+      'You are on track this month',
+      new Date('2025-10-20T09:00:00.000Z'),
+    );
+
+    const body = insightsBody(await get().expect(200));
+
+    expect(body.state).toBe('ready');
+    expect(body.monthLabel).toBe('October 2025');
+    expect(body.summary).toEqual({
+      headline: 'You are on track this month',
+      body: "You've spent $1,240 of your $2,000 budget.",
+    });
+    expect(body.insights.map((card) => card.title)).toEqual([
+      'Dining out is over budget',
+      'On pace for $1,980',
+    ]);
+    expect(body.generatedAt).toBe('2025-10-20T09:00:00.000Z');
+  });
+
+  it('reports generating during a regenerate while still returning the last ready content', async () => {
+    await seedReadySet(
+      'Last month was steady',
+      new Date('2025-10-20T09:00:00.000Z'),
+    );
+    await seedSet({ status: 'generating' });
+
+    const body = insightsBody(await get().expect(200));
+
+    expect(body.state).toBe('generating');
+    // The page renders skeletons off `state`; the content is still here so the
+    // dashboard teaser does not blank mid-run.
+    expect(body.summary?.headline).toBe('Last month was steady');
+    expect(body.insights).toHaveLength(2);
+  });
+
+  it('reports generating with no content while the very first run is in flight', async () => {
+    await seedSet({ status: 'generating' });
+
+    const body = insightsBody(await get().expect(200));
+
+    expect(body).toEqual({
+      state: 'generating',
+      monthLabel: null,
+      summary: null,
+      insights: [],
+      generatedAt: null,
+    });
+  });
+
+  it('leaves the previous ready set readable after a failed run (AC6)', async () => {
+    await seedReadySet(
+      'Groceries held steady',
+      new Date('2025-10-20T09:00:00.000Z'),
+    );
+    // A regenerate that failed: its row is `failed`, not `ready`, and carries no
+    // content. Nothing was overwritten, so the read simply skips it.
+    await seedSet({ status: 'failed' });
+
+    const body = insightsBody(await get().expect(200));
+
+    expect(body.state).toBe('ready');
+    expect(body.summary?.headline).toBe('Groceries held steady');
+  });
+
+  it('returns the newest ready set when more than one exists (AC5)', async () => {
+    await seedReadySet('Older set', new Date('2025-09-20T09:00:00.000Z'));
+    await seedReadySet('Newer set', new Date('2025-10-20T09:00:00.000Z'));
+
+    const body = insightsBody(await get().expect(200));
+
+    expect(body.summary?.headline).toBe('Newer set');
+    expect(body.generatedAt).toBe('2025-10-20T09:00:00.000Z');
+  });
+
+  it('feeds the dashboard teaser from the newest ready set', async () => {
+    await seedReadySet('Older set', new Date('2025-09-20T09:00:00.000Z'));
+    await seedReadySet(
+      'You are on track this month',
+      new Date('2025-10-20T09:00:00.000Z'),
+    );
+
+    const body = dashboardBody(await dashboard().expect(200));
+
+    expect(body.insight).toBe('You are on track this month');
+  });
+
+  it('gives the dashboard teaser null when nothing has generated', async () => {
+    const body = dashboardBody(await dashboard().expect(200));
+
+    expect(body.insight).toBeNull();
+  });
+
+  it('does not leak one user’s set to another', async () => {
+    await seedReadySet(
+      'Private to the first user',
+      new Date('2025-10-20T09:00:00.000Z'),
+    );
+
+    // The second account provisioned its own database and never generated.
+    const body = insightsBody(await get(otherBearer).expect(200));
+
+    expect(body.state).toBe('empty');
+  });
+});

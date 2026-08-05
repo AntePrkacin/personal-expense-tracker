@@ -12,9 +12,9 @@ import {
  * this schema is instantiated once per person and its migrations run on first
  * open of each file (see UserDatabaseService).
  *
- * `profile`, `categories` and `transactions` exist so far. `insights` arrives
- * with its own feature as an ordinary later migration - adding a migration here
- * upgrades every existing user database the next time it opens.
+ * `profile`, `categories`, `transactions` and the insights tables live here.
+ * Adding a migration upgrades every existing user database the next time it
+ * opens, so a user-scope migration must be safe to apply to live data.
  */
 export const profile = sqliteTable('profile', {
   // Single-row table. The id is the user's central `users.id` rather than a
@@ -182,3 +182,94 @@ export const transactions = sqliteTable(
 
 export type TransactionRow = typeof transactions.$inferSelect;
 export type NewTransactionRow = typeof transactions.$inferInsert;
+
+/**
+ * A generated insight set: the header of one generation run.
+ *
+ * A set is a **snapshot of generated prose**, not a derived view, which makes it
+ * the one table in this database whose text columns hold rendered strings rather
+ * than data the API formats on read. `month_label`, `summary_headline` and
+ * `summary_body` are what the generator wrote at `generated_at`; re-reading a set
+ * must return them byte-for-byte (PET-41 AC2), never re-derive them from
+ * transactions that have since moved. See `backend/CLAUDE.md`, Insights.
+ *
+ * `status` drives a lifecycle the read resolves into the three designed frames:
+ * a `generating` run is in flight (skeletons), a `ready` set is the latest good
+ * content, a `failed` run is skipped so the previous `ready` set stays the read's
+ * answer (AC6). PET-41 stores and reads sets; PET-40 is what moves a row from
+ * `generating` to `ready`/`failed`. A `generating` or `failed` row carries null
+ * content columns, which is why they are nullable: a run's row exists before its
+ * content does.
+ */
+export const insightSets = sqliteTable('insight_sets', {
+  // Same primary-key caveat as everywhere else; see docs/TODO.md. Caller-supplied
+  // newId() like every other table in both scopes.
+  id: text('id').primaryKey().notNull(),
+
+  // `generating` | `ready` | `failed`. A plain text column, not a DB enum: the
+  // repo constrains such closed sets in TypeScript (see the API's InsightState
+  // and CategoryStatus) rather than in SQLite.
+  status: text('status').notNull(),
+
+  // Rendered content, set when the row reaches `ready` and null until then.
+  monthLabel: text('month_label'),
+  summaryHeadline: text('summary_headline'),
+  summaryBody: text('summary_body'),
+
+  // When the run completed, set as the row flips to `ready`. Null while
+  // generating or after a failure.
+  generatedAt: integer('generated_at', { mode: 'timestamp_ms' }),
+
+  createdAt: integer('created_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+
+  // Tombstone, like every table here. Every read filters isNull(deletedAt).
+  deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+});
+
+export type InsightSetRow = typeof insightSets.$inferSelect;
+export type NewInsightSetRow = typeof insightSets.$inferInsert;
+
+/**
+ * One insight card belonging to a set: its tone, title and body, in render order.
+ *
+ * Written once with its parent set and never updated on its own, which is why it
+ * carries `created_at` but no `updated_at`. Content is rendered prose for the
+ * same reason `insight_sets`' is.
+ */
+export const insights = sqliteTable(
+  'insights',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // No .references(): the schema is FK-less throughout, exactly like
+    // transactions.categoryId. The index below serves the by-set lookup the read
+    // does; cross-set integrity is the service's, since a set and its cards are
+    // only ever written together in one transaction.
+    setId: text('set_id').notNull(),
+
+    // `warning` | `positive` | `info` | `neutral`, mapping to the Status palette.
+    // A plain text column for the same reason as `insight_sets.status`.
+    tone: text('tone').notNull(),
+
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+
+    // The designed card order (INS-4), stored so the read returns cards as
+    // generated rather than in whatever order the query planner picks.
+    sortOrder: integer('sort_order').notNull(),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object.
+  (table) => [index('insights_set_id_idx').on(table.setId)],
+);
+
+export type InsightRow = typeof insights.$inferSelect;
+export type NewInsightRow = typeof insights.$inferInsert;

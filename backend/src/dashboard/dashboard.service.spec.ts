@@ -1,6 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import type { CategoriesService } from '../categories/categories.service';
 import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
+import type { InsightsService } from '../insights/insights.service';
 import type { TransactionResponseDto } from '../transactions/dto/transaction-response.dto';
 import type { TransactionsService } from '../transactions/transactions.service';
 import { DashboardService } from './dashboard.service';
@@ -19,6 +20,7 @@ describe('DashboardService', () => {
   let currentWindow: jest.Mock;
   let categoriesList: jest.Mock;
   let transactionsList: jest.Mock;
+  let insightTeaser: jest.Mock;
 
   const category = (
     overrides: Partial<CategoryResponseDto> = {},
@@ -59,6 +61,7 @@ describe('DashboardService', () => {
     categories?: CategoryResponseDto[];
     transactions?: TransactionResponseDto[];
     monthlyBudget?: number;
+    insight?: string | null;
   }) => {
     currentWindow = jest
       .fn()
@@ -77,10 +80,12 @@ describe('DashboardService', () => {
       transactions: options?.transactions ?? [],
       total: options?.transactions?.length ?? 0,
     });
+    insightTeaser = jest.fn().mockResolvedValue(options?.insight ?? null);
 
     service = new DashboardService(
       { currentWindow, list: categoriesList } as unknown as CategoriesService,
       { list: transactionsList } as unknown as TransactionsService,
+      { latestReadyTeaser: insightTeaser } as unknown as InsightsService,
       { get: () => 'Europe/Zagreb' } as unknown as ConfigService,
     );
   };
@@ -329,9 +334,21 @@ describe('DashboardService', () => {
     });
   });
 
-  it('always answers insight: null', async () => {
+  it('passes the insight teaser through from the composed InsightsService', async () => {
     at('2026-08-15T12:00:00Z');
-    buildService();
+    buildService({ insight: 'You are on track this month' });
+
+    const result = await service.get(USER_ID);
+
+    // Composed like everything else here, not read from the insights tables:
+    // the field is exactly what latestReadyTeaser returned.
+    expect(insightTeaser).toHaveBeenCalledWith(USER_ID);
+    expect(result.insight).toBe('You are on track this month');
+  });
+
+  it('leaves insight null when no set has been generated', async () => {
+    at('2026-08-15T12:00:00Z');
+    buildService({ insight: null });
 
     const result = await service.get(USER_ID);
 

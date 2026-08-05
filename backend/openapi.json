@@ -936,7 +936,7 @@
     },
     "/api/dashboard": {
       "get": {
-        "description": "`remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is always null until PET-41 ships the insights table. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.",
+        "description": "`remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.",
         "operationId": "DashboardController_get",
         "parameters": [],
         "responses": {
@@ -969,6 +969,44 @@
         "summary": "Every figure the dashboard draws, for the current period.",
         "tags": [
           "dashboard"
+        ]
+      }
+    },
+    "/api/insights": {
+      "get": {
+        "description": "One call serves the whole screen in all three states. `state` is `empty` before anything has generated, `generating` while a run is in flight (render skeletons), or `ready` when a set is available. The content fields always carry the most recent **ready** set, independent of `state`, so a regenerate shows skeletons while the dashboard teaser keeps its last-good content. A failed run is invisible: the previous ready set stays returned.",
+        "operationId": "InsightsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsightSetResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your latest insight set, with the state to render it in.",
+        "tags": [
+          "insights"
         ]
       }
     }
@@ -1737,7 +1775,7 @@
           "insight": {
             "type": "string",
             "nullable": true,
-            "description": "The teaser from the most recently generated insight set. Always null until PET-41 ships the insights table and starts filling this in."
+            "description": "The headline of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight)."
           }
         },
         "required": [
@@ -1752,6 +1790,100 @@
           "categories",
           "recentTransactions",
           "insight"
+        ]
+      },
+      "InsightSummaryDto": {
+        "type": "object",
+        "properties": {
+          "headline": {
+            "type": "string",
+            "example": "You are on track this month"
+          },
+          "body": {
+            "type": "string",
+            "example": "You've spent $1,240 of your $2,000 budget with 11 days to go."
+          }
+        },
+        "required": [
+          "headline",
+          "body"
+        ]
+      },
+      "InsightCardDto": {
+        "type": "object",
+        "properties": {
+          "tone": {
+            "enum": [
+              "warning",
+              "positive",
+              "info",
+              "neutral"
+            ],
+            "type": "string",
+            "description": "Maps to the Status palette the frontend draws the card in."
+          },
+          "title": {
+            "type": "string",
+            "example": "Dining out is over budget"
+          },
+          "body": {
+            "type": "string",
+            "example": "$312 of $300 - $12 over"
+          }
+        },
+        "required": [
+          "tone",
+          "title",
+          "body"
+        ]
+      },
+      "InsightSetResponseDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "enum": [
+              "empty",
+              "generating",
+              "ready"
+            ],
+            "type": "string",
+            "description": "Whether a run is in flight (`generating`), a completed set exists (`ready`), or nothing has ever generated (`empty`). Independent of the content fields, which always carry the latest `ready` set."
+          },
+          "monthLabel": {
+            "type": "string",
+            "nullable": true,
+            "example": "October 2025",
+            "description": "The period the latest ready set covers, rendered when it was generated. Null in the empty state."
+          },
+          "summary": {
+            "nullable": true,
+            "description": "The summary banner of the latest ready set. Null when empty.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InsightSummaryDto"
+              }
+            ]
+          },
+          "insights": {
+            "description": "The cards of the latest ready set, in their generated order. Empty until a set is ready.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InsightCardDto"
+            }
+          },
+          "generatedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO 8601, when the latest ready set finished generating. Null when empty."
+          }
+        },
+        "required": [
+          "state",
+          "monthLabel",
+          "summary",
+          "insights",
+          "generatedAt"
         ]
       }
     }

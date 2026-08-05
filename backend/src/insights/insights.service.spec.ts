@@ -1,0 +1,165 @@
+import { Test } from '@nestjs/testing';
+import { argsOf, queryChain, toSql } from '../../test/query-chain';
+import { UserDatabaseService } from '../database/user-database.service';
+import { InsightsService } from './insights.service';
+
+/**
+ * Unit cover for the state-derivation logic `test/insights.e2e-spec.ts` cannot
+ * isolate cleanly.
+ *
+ * The e2e suite is the real proof of the SQL: that `status = 'ready'` skips a
+ * failed run, that `generated_at DESC` picks the newest set, and that a
+ * generating row is seen against a migrated database. What is left for here is
+ * the pure composition on top of those reads - how `empty`, `generating` and
+ * `ready` combine, and that a run in flight reports `generating` while the last
+ * ready set's content still comes back - plus a check that the newest-ready query
+ * really filters and orders the way AC5 and AC6 depend on.
+ */
+describe('InsightsService', () => {
+  let service: InsightsService;
+  let getUserDb: jest.Mock;
+  let db: { select: jest.Mock };
+
+  const readyRow = () => ({
+    id: 'set-1',
+    status: 'ready',
+    monthLabel: 'October 2025',
+    summaryHeadline: 'You are on track this month',
+    summaryBody: "You've spent $1,240 of your $2,000 budget.",
+    generatedAt: new Date('2025-10-20T09:00:00.000Z'),
+    createdAt: new Date('2025-10-20T09:00:00.000Z'),
+    deletedAt: null,
+  });
+
+  const cardRows = () => [
+    {
+      tone: 'warning',
+      title: 'Dining out is over budget',
+      body: '$312 of $300 - $12 over',
+    },
+    {
+      tone: 'info',
+      title: 'On pace for $1,980',
+      body: 'Just under your $2,000 target',
+    },
+  ];
+
+  const build = async () => {
+    getUserDb = jest.fn().mockResolvedValue(db);
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        InsightsService,
+        { provide: UserDatabaseService, useValue: { getUserDb } },
+      ],
+    }).compile();
+
+    service = moduleRef.get(InsightsService);
+  };
+
+  beforeEach(async () => {
+    db = { select: jest.fn() };
+    await build();
+  });
+
+  describe('getSet', () => {
+    it('reports empty with null content when nothing has ever generated', async () => {
+      // latestReadySet: none. hasRunInFlight: none. cardsFor is never reached.
+      db.select
+        .mockReturnValueOnce(queryChain([]))
+        .mockReturnValueOnce(queryChain([]));
+
+      await expect(service.getSet('user-id')).resolves.toEqual({
+        state: 'empty',
+        monthLabel: null,
+        summary: null,
+        insights: [],
+        generatedAt: null,
+      });
+    });
+
+    it('reports ready with the set content and cards in order', async () => {
+      db.select
+        .mockReturnValueOnce(queryChain([readyRow()]))
+        .mockReturnValueOnce(queryChain([])) // no run in flight
+        .mockReturnValueOnce(queryChain(cardRows()));
+
+      await expect(service.getSet('user-id')).resolves.toEqual({
+        state: 'ready',
+        monthLabel: 'October 2025',
+        summary: {
+          headline: 'You are on track this month',
+          body: "You've spent $1,240 of your $2,000 budget.",
+        },
+        insights: cardRows(),
+        generatedAt: '2025-10-20T09:00:00.000Z',
+      });
+    });
+
+    it('reports generating during a regenerate but still returns the last ready content', async () => {
+      // The whole point of decision 3: the page renders skeletons off `state`,
+      // while the dashboard teaser keeps reading this same last-good content.
+      db.select
+        .mockReturnValueOnce(queryChain([readyRow()]))
+        .mockReturnValueOnce(queryChain([{ id: 'set-2' }])) // a run in flight
+        .mockReturnValueOnce(queryChain(cardRows()));
+
+      const result = await service.getSet('user-id');
+
+      expect(result.state).toBe('generating');
+      expect(result.summary).not.toBeNull();
+      expect(result.monthLabel).toBe('October 2025');
+      expect(result.insights).toHaveLength(2);
+    });
+
+    it('reports generating with null content while the very first run is in flight', async () => {
+      // No ready set yet, so there is no last-good content to carry - just the
+      // generating state the empty-to-first-set transition shows.
+      db.select
+        .mockReturnValueOnce(queryChain([])) // no ready set
+        .mockReturnValueOnce(queryChain([{ id: 'set-1' }])); // run in flight
+
+      await expect(service.getSet('user-id')).resolves.toEqual({
+        state: 'generating',
+        monthLabel: null,
+        summary: null,
+        insights: [],
+        generatedAt: null,
+      });
+    });
+
+    it('asks only for ready sets, newest first, so a failed run is skipped (AC5, AC6)', async () => {
+      const readyQuery = queryChain([readyRow()]);
+      db.select
+        .mockReturnValueOnce(readyQuery)
+        .mockReturnValueOnce(queryChain([]))
+        .mockReturnValueOnce(queryChain(cardRows()));
+
+      await service.getSet('user-id');
+
+      // The failure path needs no restore step precisely because this read only
+      // ever considers `ready` rows and takes the newest by `generated_at`.
+      const [where] = argsOf(readyQuery, 'where');
+      const [orderBy] = argsOf(readyQuery, 'orderBy');
+      expect(toSql(where)).toContain('"status" = ?');
+      expect(toSql(where)).toContain('"deleted_at" is null');
+      expect(toSql(orderBy)).toContain('"generated_at" desc');
+    });
+  });
+
+  describe('latestReadyTeaser', () => {
+    it('returns the latest ready set headline for the dashboard', async () => {
+      db.select.mockReturnValueOnce(queryChain([readyRow()]));
+
+      await expect(service.latestReadyTeaser('user-id')).resolves.toBe(
+        'You are on track this month',
+      );
+    });
+
+    it('returns null when there is no ready set', async () => {
+      db.select.mockReturnValueOnce(queryChain([]));
+
+      await expect(service.latestReadyTeaser('user-id')).resolves.toBeNull();
+    });
+  });
+});

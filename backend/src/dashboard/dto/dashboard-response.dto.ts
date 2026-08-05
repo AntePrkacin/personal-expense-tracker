@@ -130,7 +130,7 @@ export class DashboardResponseDto {
     type: String,
     nullable: true,
     description:
-      'The teaser from the most recently generated insight set. Always null until PET-41 ships the insights table and starts filling this in.',
+      'The headline of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight).',
   })
   insight!: string | null;
 }
