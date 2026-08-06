@@ -72,10 +72,12 @@ wrapper; the ticket that needs shared behaviour can extract one then.
 - **`ui/Input` and `ui/Select` own the field pattern, on the shell `ui/FieldShell` renders for
   both**: the `fieldset` / `label` pair and the inline `text-error` message are the shell's one
   copy, and each control keeps its own `aria-invalid` / `aria-describedby` wiring, pointed at
-  the shell's `fieldErrorId`. daisyUI's `validator` class is deliberately unused: it
-  colours from the HTML validation API, and every form here is `noValidate` with controlled
-  messages. `id` is a required prop because `useId()` is a hook and would force `'use client'`
-  onto the field layer. There is deliberately no `type="number"` - the currency variant would
+  the shell's `fieldErrorId`. The shell also puts an `id` on its label, because a `<button>`
+  trigger (the modal's Date field) is named from its own subtree under HTML-AAM and needs
+  `aria-labelledby` to reach the label at all. daisyUI's `validator` class is deliberately
+  unused: it colours from the HTML validation API, and every form here is `noValidate` with
+  controlled messages. `id` is a required prop because `useId()` is a hook and would force
+  `'use client'` onto the field layer. There is deliberately no `type="number"` - the currency variant would
   render spinners and discard a half-typed `24.` mid-keystroke; `inputMode="decimal"` gets the
   numeric keypad without either problem.
 
@@ -93,11 +95,12 @@ wrapper; the ticket that needs shared behaviour can extract one then.
   and the picker use; only the rendered hue follows the theme. Do not "fix" the collision by
   reaching for a raw palette value.
 
-`components/` has four direct children, all belonging to the access screens: `LogoLockup.tsx`
+`components/` has five direct children. Four belong to the access screens: `LogoLockup.tsx`
 (the accent tile and wordmark), `AccessCard.tsx` (the centred column and `card` box, with an
 `aboveCard` slot the onboarding step indicator drops into), and `ResendLink.tsx` with
-`LogInAgain.tsx`, the recovery controls. Each is shared by more screens than one route segment
-holds, which is why they are neither in `ui/` nor beside a route.
+`LogInAgain.tsx`, the recovery controls. The fifth is `EmptyState.tsx`, the shared empty-state
+card, documented after `lib/format.ts` below. Each is shared by more screens
+than one route segment holds, which is why they are neither in `ui/` nor beside a route.
 
 Three conventions, all of which existing files demonstrate:
 

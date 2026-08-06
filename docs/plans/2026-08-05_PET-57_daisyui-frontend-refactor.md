@@ -84,3 +84,29 @@ The four in-app views stay header-only. No backend contract changes, so `npm run
 not involved and no generated artifact is touched. No new routes. `frontend/src/lib/format.ts`
 is untouched. A named theme pair and a visible theme toggle are deferred; the automatic OS
 behaviour ships instead.
+
+## Incorporating main, 2026-08-06
+
+While this branch was in review, `main` merged three frontend tickets built on the token system
+this branch deletes: PET-30 (the transactions empty state and the first screen read), PET-31
+(the add transaction modal, the app's first write) and PET-29 (the transactions table and its
+filter bar). That amends two statements above - the four views no longer keep an empty `<main>`,
+and `lib/format.ts` gained date formatters on main - and the resolution is to run the same
+instructions over the new surface rather than to re-plan: Figma still governs structure, layout
+and content; stock daisyUI governs colour, type, radius and shadow; behaviour is preserved
+exactly.
+
+- [x] Merge `origin/main`, resolving conflicts in favour of the daisyUI system while keeping
+      every behaviour main added (delete/keep conflicts on the token-pinning tests and
+      `ui/Field` resolve as deletions; `layout.tsx` keeps the drawer and gains
+      `AddTransactionProvider`; `SearchPill` becomes a real daisyUI `input`)
+- [x] Convert the PET-29/30/31 surface to default daisyUI through the Blueprint chain
+      (`modal`/`modal-box` for `(app)/Modal`, `select` for the date trigger and filter pills,
+      `table` for the transactions table, `badge` for the tab count, base surfaces for
+      `EmptyState`), keeping every aria decision and deliberately-inert control
+- [x] Re-key the category tile map with paired `-content` colours and a `base-300` neutral
+- [x] Keep the merged behaviour suites green with class-pinned assertions dropped
+- [x] Run `quality_inspector` with `auditIntent` `fix_changes` over the converted files
+- [x] Smoke-check the transactions screen and modal in both themes at two widths in Chrome
+- [x] Reconcile the merged docs (both frontend `CLAUDE.md` files, root `CLAUDE.md`'s stale
+      table sentence, `docs/TODO.md`) and re-run every gate

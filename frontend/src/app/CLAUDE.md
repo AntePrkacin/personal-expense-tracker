@@ -65,11 +65,13 @@ both times: **AC3 claimed the month select appears on Transactions too** (TRN-1 
 `26:137` draw a search field there instead), and **the ticket never mentioned "Regenerate"**
 (INS-1 and node `38:542` both do). The Jira description was corrected rather than the code.
 
-**The month select and the search field are inert `div`s, not controls.** A8 says the select
-renders the current period and does nothing until month navigation is designed, and the
-search filters a list that does not exist until PET-28. Neither is a `<select>`, `<input>` or
-`<button>`, so neither announces itself as operable, and `(app)/pages.test.tsx` pins that -
-`queryByRole('combobox')` and `queryByRole('textbox')` both have to stay empty.
+**The month select is an inert `div`, not a control - and the search field stopped being one in
+PET-29.** A8 says the select renders the current period and does nothing until month navigation
+is designed, so on the Dashboard it is not a `<select>` or `<button>` and does not announce
+itself as operable; `(app)/pages.test.tsx` pins that `queryByRole('combobox')` stays empty on
+that page. The Transactions search is a real `<input>` now (`TransactionSearch` owns it, under
+The access screens' sibling section below), so the old "both stay empty" pin narrowed to the
+page that still means it.
 
 **`export const dynamic = 'force-dynamic'` was on the layout and is deliberately gone.** It
 existed because the pages read `new Date()` for the overline, and without it Next prerendered
@@ -792,23 +794,28 @@ and not in `components/` because `AccessCard`'s reason for being there is spanni
 in _different_ trees, whereas frames 09, 11, 19, 21 and both delete confirmations all sit inside
 this group.
 
-**Two of its Tailwind classes are load-bearing and invisible on reading.** `m-auto` is mandatory:
-preflight sets `margin: 0` on `*` and `::backdrop`, which overrides the user agent's own
-`dialog { margin: auto }` - the entire centring mechanism - so without it the box pins to the
-top-left corner with nothing in the markup looking wrong. And the display class must be
-`open:flex`, never a bare `flex`, which would outrank `dialog:not([open]) { display: none }` and
-show the box for the frame between mount and the effect. There is deliberately **no**
-`overflow-clip`, although Figma reports it: it would clip the footer buttons'
-`focus-visible:outline-offset-2`, which is the reason `components/AccessCard.tsx` omits it too,
-and the UA's own `dialog:modal` max-height survives preflight so a short viewport scrolls the box
-instead of losing its footer.
+**Its chrome is daisyUI's `modal` / `modal-box` / `modal-action`, and the plumbing that used to
+be hand-held is the plugin's now.** The first version of this file documented `m-auto` (preflight
+kills the UA's `dialog { margin: auto }`) and `open:flex` (a bare `flex` would outrank
+`dialog:not([open]) { display: none }` and flash the box before `showModal()`); daisyUI's
+`.modal` owns centring, the closed state (`visibility: hidden; pointer-events: none`) and the
+dimmed backdrop, so none of that is written here any more and none of it should come back. The
+box's radius, shadow, padding and max-height are `modal-box`'s, which also means a short
+viewport scrolls the box instead of losing its footer. One pair of utilities on the box is
+load-bearing: `translate-none scale-none`. daisyUI animates `modal-box` open through the
+`scale` property, and any non-`none` `scale` makes the box the containing block for
+`position: fixed` descendants - so DateField's calendar popover laid out inside the box and was
+scrolled by its `overflow-y: auto` instead of overlaying the modal, which a Chrome walk of
+PET-31's flow caught after every Jest suite passed. The entrance animation is the price, paid
+deliberately; `Modal.tsx` carries the full account.
 
 **Every close affordance funnels through one exit**, and `ref.close()` is a way _in_ to it rather
 than a second way out. Cancel, the X and a backdrop click all call `close()`, whose `close` event
 is `onClose`; Escape reaches the same place through the UA's default action, so the component
 carries no keydown handler at all. The backdrop test is `event.target === dialogRef.current`,
-which works because a click on `::backdrop` reports the dialog itself while any child reports
-itself, and because the box carries no padding of its own. The `ref` handle exists so a successful
+which works because daisyUI dims the dialog element itself and the padding lives on `modal-box`,
+a child - so a click anywhere outside the box, padding included, reports the dialog while any
+click inside reports a descendant. The `ref` handle exists so a successful
 save closes the dialog rather than merely unmounting it, which keeps every exit on the one path the
 owner listens to - the `close` event.
 
@@ -836,7 +843,7 @@ trigger every entry point renders, and `useAddTransaction()` throws outside the 
 than returning a no-op. Three triggers exist - the Dashboard header, the Transactions header and
 the Transactions empty card - and the last two are on **one page**: a component owning its own
 modal would mount two `<dialog>` elements there, with two focus traps and two copies of every
-`ui/Field` id, which is a required literal prop precisely because `useId` would force
+field id, which `ui/FieldShell` requires as a literal prop precisely because `useId` would force
 `'use client'` onto the field layer. Duplicate ids make `getByLabelText` ambiguous, which is the
 failure PET-30's own `pages.test.tsx` comment already names. The payoff is that PET-20's DSH-9
 teaser and PET-44's INS-7 card each add a trigger in two lines with no prop threading through
@@ -863,20 +870,22 @@ does not declare it.
 **`(app)/DateField.tsx` is the one place in this feature where Escape needs code.** ADD-7 draws
 the Date field as a closed select and Figma opens it nowhere, so the trigger is read off the
 design and the mini-calendar is entirely ours (A14 owes it a confirmation, and `lib/calendar.ts`
-records what "ours" covers). It is a `<button>` wearing `ui/Select`'s box, padding and chevron,
-because a native `<select>` cannot host a popover - and the popover's keydown handler must
+records what "ours" covers). It is a `<button>` wearing daisyUI's `select` class - the box,
+padding and chevron all come with it - because a native `<select>` cannot host a popover; and
+the popover's keydown handler must
 `preventDefault()` the Escape, or the surrounding `<dialog>` treats it as a close request and
 shuts the whole modal, discarding everything typed. First Escape closes the popover, second
 closes the modal.
 
 Three smaller decisions in that field are worth not re-litigating. Its trigger is named by
-`aria-labelledby` pointing at `ui/Field`'s label **and a value span inside the button**, because
-HTML-AAM computes a button's name from its own subtree and would ignore the `<label for>`
-entirely - which is why `Field` gained a label id. `aria-selected` sits on the `gridcell` rather
-than on the day button, since the `button` role does not support it, and today is marked with
-`aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `Input` and `Select`:
-those are real form controls whose roles support it, a button's does not, and this repo keeps no
-eslint-disable comments - so the red border and `aria-describedby` carry the state.
+`aria-labelledby` pointing at `ui/FieldShell`'s label **and a value span inside the button**,
+because HTML-AAM computes a button's name from its own subtree and would ignore the `<label for>`
+entirely - which is why the shell puts an id on its label. `aria-selected` sits on the `gridcell`
+rather than on the day button, since the `button` role does not support it, and today is marked
+with `aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `Input` and
+`Select`: those are real form controls whose roles support it, a button's does not, and this repo
+keeps no eslint-disable comments - so `select-error`'s border and `aria-describedby` carry the
+state.
 
 ## Not built here
 

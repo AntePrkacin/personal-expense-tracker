@@ -33,11 +33,12 @@ and update, the category endpoints with their month stats, and the dashboard sum
 has the design system, the app shell with its four routed views, all six access screens, and
 PET-52's verify handler at `/auth/verify` with the httpOnly `spendifico.session` cookie behind it.
 So a person can register, click the emailed link, and land signed in on a Dashboard that knows who
-they are - the sidebar footer reads a real `GET /api/profile`. Two things beyond access work now:
-`/transactions` reads and renders its own list state, and every "Add transaction" button opens a
-modal that really writes. What is still missing is most of what a screen *shows*: three of the four
-`<main>` elements below the page header are empty, the transactions table is a slot waiting to be
-filled, and the dashboard summary and transaction detail are called by nobody.
+they are - the sidebar footer reads a real `GET /api/profile`. Three things beyond access work
+now: `/transactions` reads and renders its own list state, the table under it draws the rows with
+their filters live in the URL, and every "Add transaction" button opens a modal that really
+writes. What is still missing is most of what the other screens *show*: the Dashboard, AI
+Insights and Settings `<main>` elements below the page header are empty, and the dashboard
+summary and transaction detail are called by nobody.
 
 ## Repository map
 
