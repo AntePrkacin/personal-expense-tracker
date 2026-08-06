@@ -165,11 +165,11 @@ and `UpdateTransactionDto` are already in both committed artifacts.
 
 ## Copy, all of it ours
 
-The four field messages are reused **verbatim** from frame 09 — they state rules rather than
-operations, so `Enter an amount greater than 0.` is as true of an edit as of a create. The five
-failure lines are new or adapted, and every one of them joins what assumption A29 owes a designer,
-since no form error visual exists anywhere in the Figma file. The `WithMessages` story is the
-artifact to review them on.
+Ten messages: **six reused verbatim from frame 09, four new.** The four field messages are among the
+reused — they state rules rather than operations, so `Enter an amount greater than 0.` is as true of
+an edit as of a create. The four new ones each join what assumption A29 owes a designer, since no
+form error visual exists anywhere in the Figma file. The `WithMessages` story is the artifact to
+review them on.
 
 | case | string |
 | --- | --- |
@@ -180,9 +180,11 @@ artifact to review them on.
 | generic or never completed | We couldn't save this transaction. Please try again. |
 | categories would not load | We couldn't load your categories. Please close this and try again. |
 
-The 401 and the categories line are reused verbatim; the other three are frame 09's shapes with the
-verb changed, because "add" is wrong about an edit and "check the values" must never become "try
-again" for a body the DTO will reject just as firmly the second time.
+The 401 and the categories line are reused verbatim, which with the four field messages makes six. Of
+the four that remain, the 400 and the generic failure are frame 09's own sentences with the verb
+changed, because "add" is wrong about an edit and "check the values" must never become "try again"
+for a body the DTO will reject just as firmly the second time. The two 404 lines have no counterpart
+in frame 09 at all: that endpoint's 404 could only ever mean a missing category.
 
 ## Verification
 

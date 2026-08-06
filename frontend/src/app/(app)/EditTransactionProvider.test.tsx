@@ -161,6 +161,65 @@ describe('opening', () => {
     expect(screen.getAllByLabelText('Amount')).toHaveLength(1);
   });
 
+  /** The second row, for the two re-seeding cases below. */
+  const SECOND: Transaction = {
+    ...TRANSACTION,
+    id: 'second',
+    merchant: 'Uber',
+    amount: 18.5,
+    note: null,
+  };
+
+  it('re-seeds the form when it is opened for a different row while already open', async () => {
+    // The `key={transaction.id}` on the modal. Without it the form keeps the first row's values -
+    // seeded once per mount, deliberately, so a refresh cannot overwrite what is being typed - and
+    // then diffs them against the second row, which is a write to the wrong transaction rather than
+    // a visual glitch. Not reachable through the UI while the dialog is modal; reachable by any
+    // second entry point that calls `open()`, which is what PET-34's detail page will be.
+    //
+    // **Two separate clicks, and that is the whole design of this test.** The first version put both
+    // `open()` calls in one handler, where React batches them and the modal mounts once with the
+    // second row - so it passed with the `key` deleted, which is no test at all. jsdom has no top
+    // layer, so a second trigger really is clickable here even though a browser would not allow it.
+    render(
+      <Shell>
+        <Trigger />
+        <Trigger transaction={SECOND} />
+      </Shell>,
+    );
+    const triggers = screen.getAllByRole('button', { name: 'Edit it' });
+
+    await userEvent.click(triggers[0]!);
+    expect(screen.getByLabelText('Merchant')).toHaveValue('Whole Foods');
+
+    await userEvent.click(triggers[1]!);
+
+    expect(screen.getByLabelText('Merchant')).toHaveValue('Uber');
+    expect(screen.getByLabelText('Amount')).toHaveValue('18.50');
+    expect(screen.getByLabelText('Note (optional)')).toHaveValue('');
+  });
+
+  it('diffs a save against the row the fields are showing, not the one opened first', async () => {
+    // The half that actually matters: the wrong-row write. The body must name the second row's id
+    // and carry only what changed relative to *it*.
+    render(
+      <Shell>
+        <Trigger />
+        <Trigger transaction={SECOND} />
+      </Shell>,
+    );
+    const triggers = screen.getAllByRole('button', { name: 'Edit it' });
+
+    await userEvent.click(triggers[0]!);
+    await userEvent.click(triggers[1]!);
+
+    await userEvent.type(screen.getByLabelText('Merchant'), ' Eats');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update).toHaveBeenCalledWith('second', { merchant: 'Uber Eats' });
+  });
+
   it("shows the second trigger's row when the second one opens it", async () => {
     render(
       <Shell>

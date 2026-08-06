@@ -618,26 +618,65 @@ describe('the categories read', () => {
     expect(merchant()).toBeEnabled();
   });
 
-  it('explains a failed read and blocks the save', async () => {
-    // The guard runs before validation, deliberately: with no options loaded, telling the user to
-    // "Choose a category." from a disabled select blames them for something they cannot do.
-    const u = user();
+  it('explains a failed read', async () => {
     open({ categories: null, categoriesFailed: true });
-
-    await u.click(save());
 
     expect(screen.getByRole('alert')).toHaveTextContent(
       "We couldn't load your categories. Please close this and try again.",
     );
-    expect(update).not.toHaveBeenCalled();
   });
 
-  it('does not close on a blocked save, so nothing is silently discarded', async () => {
+  it('still saves a change to another field while the options are unavailable', async () => {
+    // **This is the inverse of what the first version of this file asserted, and the assertion was
+    // pinning a defect.** The submit handler copied `AddTransactionModal`'s
+    // `if (categoriesFailed) return;`, whose premise does not hold here: an edit already has a
+    // valid category, so a failed read leaves every other field saveable. With the guard in place,
+    // pressing Save did nothing observable - the categories line was already on screen from the
+    // read, so there was no new message and no state change either.
     const u = user();
     open({ categories: null, categoriesFailed: true });
 
+    await u.type(merchant(), ' Market');
     await u.click(save());
 
-    expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(sentBody()).toEqual({ merchant: 'Whole Foods Market' });
+  });
+
+  it('closes on that save, rather than leaving the form open over a completed write', async () => {
+    const u = user();
+    open({ categories: null, categoriesFailed: true });
+
+    await u.type(merchant(), ' Market');
+    await u.click(save());
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('never sends a categoryId when the picker never offered one', async () => {
+    // What made the guard unnecessary as well as harmful: the select is disabled, so the id cannot
+    // change, so nothing the backend could reject on a 404 reaches the body.
+    const u = user();
+    open({ categories: null, categoriesFailed: true });
+
+    await u.type(merchant(), ' Market');
+    await u.click(save());
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect('categoryId' in (sentBody() as object)).toBe(false);
+  });
+
+  it('still refuses an invalid field with the options unavailable', async () => {
+    // Removing the guard must not remove validation with it: the fields the user *can* edit are
+    // still checked, and the two messages coexist.
+    const u = user();
+    open({ categories: null, categoriesFailed: true });
+
+    await u.clear(merchant());
+    await u.click(save());
+
+    expect(screen.getByText('Enter a merchant.')).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
   });
 });

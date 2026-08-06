@@ -41,16 +41,21 @@ import {
 /**
  * Every message this screen can show (A29).
  *
- * The four field messages are **reused verbatim** from frame 09, and that is a decision rather
- * than a copy-paste: each states the *rule* rather than the operation, so "Enter an amount
- * greater than 0." is as true of an edit as of a create. Changing them here would put two
- * wordings of one rule one modal apart.
+ * **Ten entries: six reused verbatim from frame 09, four new.** The counts are spelled out because
+ * an earlier version of this comment got them wrong in three different ways, and `docs/TODO.md`'s
+ * A29 entry restated the same muddle - which is exactly how three facts in this repo have gone
+ * silently wrong before.
  *
- * The five failure lines are this ticket's, and every one of them joins what A29 owes a
- * designer - no form error visual exists anywhere in the Figma file. Three are frame 09's shapes
- * with the verb changed, because "add" is wrong about an edit; two are reused verbatim, because
- * an expired session and an unreadable category list say nothing about which operation was
- * attempted.
+ * Reused verbatim, six: the four field messages, `unauthenticated` and `categoriesUnavailable`.
+ * That is a decision rather than a copy-paste. Each field message states the *rule* rather than the
+ * operation, so "Enter an amount greater than 0." is as true of an edit as of a create, and an
+ * expired session or an unreadable category list says nothing about which operation was attempted.
+ * Rewording any of them here would put two wordings of one fact a modal apart.
+ *
+ * New, four, and all of them join what A29 owes a designer since no form error visual exists
+ * anywhere in the Figma file: `invalid` and `failed` are frame 09's own sentences with the verb
+ * changed, because "add" is wrong about an edit; the two 404 lines have no counterpart there at
+ * all, because that endpoint's 404 could only ever mean one thing.
  *
  * **`invalid` must not say "try again"**, for `createTransaction`'s reason: a body the DTO
  * rejects will be rejected again forever.
@@ -200,11 +205,20 @@ export function EditTransactionModal({
     // close the modal and lose every edit while looking like a flicker.
     event.preventDefault();
 
-    // Before the field checks, for `AddTransactionModal`'s reason: with no options loaded there
-    // is nothing to submit against, and running validation first would tell the user to "Choose
-    // a category." from a disabled select they cannot operate. Note the prefilled category is
-    // already valid, so this guard is what stops a save that would otherwise look fine.
-    if (categoriesFailed) return;
+    // **There is deliberately no `if (categoriesFailed) return;` here, and that is the one place
+    // this form must not copy `AddTransactionModal`.** That guard exists there because a create
+    // has no category until the options arrive, so there is genuinely nothing to submit. An edit
+    // has one: `values.categoryId` is prefilled from the row, `invalidFields` passes on it, and
+    // `toUpdateTransactionBody` omits the key entirely while it is untouched - so a failed
+    // categories read leaves every other field perfectly saveable, and fixing a typo in Merchant
+    // while the picker is unavailable is a reasonable thing to do.
+    //
+    // The guard was here and was a real defect rather than a redundancy: it returned before any
+    // state changed, and the "We couldn't load your categories" line was already on screen from
+    // the read itself, so pressing Save did nothing observable at all - the dead control every
+    // provider in this shell throws to avoid. Note it could never have prevented a bad request
+    // either: when the read fails the select is `disabled`, so no `categoryId` the backend could
+    // reject can reach the body.
 
     // Every field at once rather than the first failure, so a form with two fields cleared shows
     // two messages (AC4). `invalidFields` is frame 09's, unchanged.

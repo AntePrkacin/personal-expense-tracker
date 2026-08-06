@@ -119,6 +119,18 @@ export function EditTransactionProvider({
           forever. `(app)/pages.test.tsx` depends on it. */}
       {transaction !== null ? (
         <EditTransactionModal
+          // **`key` is a correctness requirement, not a reconciliation hint.** The modal seeds its
+          // form state from `transaction` once per mount, deliberately, so a `router.refresh()`
+          // cannot overwrite what the user is halfway through typing. The cost is that swapping
+          // `transaction` while it stays mounted would leave row A's values in the fields and diff
+          // them against row B - a write to the wrong row, silent rather than visible. Keying on the
+          // id makes that a remount instead.
+          //
+          // Unreachable today, because the open dialog is modal and no other kebab can be clicked.
+          // It is here for the entry point this file advertises as costing PET-34 two lines: a
+          // detail page calling `open()` for a different row is exactly the caller that reaches it,
+          // and one word now is cheaper than the bug report then.
+          key={transaction.id}
           transaction={transaction}
           categories={categories}
           categoriesFailed={failed}

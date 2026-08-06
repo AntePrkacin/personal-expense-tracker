@@ -691,12 +691,12 @@ forever on a body the DTO will always reject, and a 404 has an obvious next move
 hides. `Screens/09 Add transaction`'s `WithMessages` story renders the four field messages at once,
 and `CategoriesUnavailable` shows the ninth.
 
-**PET-32 raised it a seventh time, with five strings, and four of the nine above are reused rather
-than restated.** The edit modal's four field messages are frame 09's **verbatim** - each states a
-rule rather than an operation, so "Enter an amount greater than 0." is as true of an edit as of a
-create, and a second wording of one rule a modal apart would be the defect rather than the
-consistency. So are the 401 and the categories-read lines, which say nothing about which operation
-was attempted. The five new ones are:
+**PET-32 raised it a seventh time, with four new strings over six reused ones.** Its modal holds ten
+messages: **six are frame 09's verbatim** - the four field messages, the 401 and the categories-read
+line - and **four are new**. Each field message states a rule rather than an operation, so "Enter an
+amount greater than 0." is as true of an edit as of a create, and a second wording of one rule a
+modal apart would be the defect rather than the consistency; the 401 and the categories line say
+nothing about which operation was attempted. The four new ones are:
 `We couldn't save this transaction. Please check the values and try again.` for a 400,
 `This transaction no longer exists. Close this and refresh the list.` for a 404 on a patch that did
 not touch the category, `This transaction or that category no longer exists. Close this and try
