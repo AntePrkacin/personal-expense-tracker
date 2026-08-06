@@ -3,10 +3,10 @@
 Guidance for Claude Code inside `frontend/src/app/`: the routed screens themselves. This file
 is the authority for the signed-in shell and for the access screens outside it.
 
-It does not repeat the design system. `frontend/CLAUDE.md` owns the tokens, the `ui/`
+It does not repeat the design system. `frontend/CLAUDE.md` owns the daisyUI theme, the `ui/`
 primitives and their conventions, and it loads alongside this file, so read it before writing
-any class: Tailwind's own palette and type scale are cleared, and an unknown utility generates
-no CSS while failing no build.
+any class: theme-aware colour is daisyUI semantic colour only, and Tailwind's full palette is
+back as of PET-57, so a raw `text-red-600` compiles and quietly bypasses the theme.
 
 This file exists because `frontend/CLAUDE.md` passed 400 lines when PET-8 landed, which is the
 promotion trigger `docs/agents/conventions.md` sets. It is one directory deeper, so it loads
@@ -25,9 +25,9 @@ sit outside it and inherit none of it.
 these is a tile - they are the shell's own. The visible consequence is that `PageHeader`'s
 stories are filed under **Shell**, not **Components**, so they cannot join
 `ui.stories.test.tsx` (which asserts every module's title starts with `Components/`);
-`(app)/shell.stories.test.tsx` is one copy of that smoke test for them. Their
-hard-coded classes are still guarded by `ui/utilities.test.ts`, because a _fourth_ copy of
-the Tailwind compile harness was worse than one list covering both folders.
+`(app)/shell.stories.test.tsx` is one copy of that smoke test for them. The compile harness
+that used to guard their hard-coded classes went with the token system in PET-57; classes are
+stock daisyUI plus Tailwind defaults now, and review is what guards them.
 
 **`SidebarNav` is the shell's only `'use client'` file, and it exists for exactly one
 reason.** `Sidebar` takes `active` as a prop so it can stay a Server Component, and an App
@@ -186,18 +186,18 @@ file gives, now that five frames share them - while `app/setup/SetupShell.tsx` k
 `STEP_DOT`, `STEP_WIDTH` and the indicator itself and renders `AccessCard` with them. `AccessCard`
 takes the indicator through an `aboveCard` slot named for its position rather than its contents,
 and an omitted node renders nothing, so the column's two `gap-6` gaps collapse to one with no
-conditional anywhere. Two things to know before touching it. **The width class has to stay on the
-element carrying `shadow-card`**, because `SetupShell.test.tsx` finds the card by that class and
-then looks for the step's width on it - moving the width to a wrapper is the one change that breaks
-a suite the extraction was meant to leave alone. And that suite passing **unchanged** is what
-proved the DOM stayed byte-identical, which is worth repeating rather than re-deriving.
+conditional anywhere. One thing to know before touching it. **The step's width classes have to stay on the element
+carrying `card`**, because `SetupShell.test.tsx` locates the card by those width classes and
+asserts the children land inside it - moving the width to a wrapper is the one change that
+breaks the suite. (It located the card by `shadow-card` until PET-57 deleted that token.)
 
 **The right half of Welcome is `aria-hidden`, and that is load-bearing.**
 `app/DecorativePanel.tsx` is a dark panel with two accent washes, a sample budget card and two
 floating chips - WEL-4's "display only", every figure fabricated and permanently so. It is
-hidden because `ui/ProgressBar` publishes `role="progressbar"` with `aria-valuenow`, so
-unhidden it announces a real progressbar reporting 62% of a budget that is not the reader's,
-and `ui/Tag` announces "On track" as if it described their finances. Two notes: `aria-hidden`
+hidden because its native `<progress>` publishes `role="progressbar"`, so unhidden it announces
+a real progressbar reporting a budget that is not the reader's, and its badge announces "On
+track" as if it described their finances. (PET-57 inlined daisyUI `progress` and `badge` where
+`ui/ProgressBar` and `ui/Tag` used to render; the reasoning did not move.) Two notes: `aria-hidden`
 does **not** remove focusable descendants from the tab order, so the screen's test pins that
 the subtree contains none; and it is a plain `div`, never an `<aside>`, because an
 `aria-hidden` landmark is self-contradictory.
@@ -222,8 +222,7 @@ when the tab closes, and it never leaves the browser, so A32 (nothing persisted 
 until "Finish setup") holds literally. Three things about it are load-bearing. It is
 sessionStorage rather than layout state because AC5's round trip out to Welcome and back
 **unmounts the layout**, so no in-memory option can satisfy it. It is `useSyncExternalStore`
-rather than a mount effect for the reason `stories/foundations/Reference.tsx` already records
-about the stylesheet, plus two sharper ones: `react-hooks/set-state-in-effect` rejects the
+rather than a mount effect for two reasons: `react-hooks/set-state-in-effect` rejects the
 effect version and this repo carries no eslint-disable comments, and the hook is
 hydration-correct by construction where a `typeof window` guard in a `useState` initialiser
 would make the client's first render disagree with the server HTML about a controlled input's
@@ -281,7 +280,7 @@ behaviour is a Storybook or manual check. docs/TODO.md records the gap.
 so three unlabelled shapes carry nothing a reader is missing - unhidden they announce as three
 empty generics. Same call `ui/Input` makes on its `$` prefix. `SetupShell.tsx` records the two
 rejected alternatives so nobody "improves" it into one: a second `role="progressbar"`
-(restating the overline, and `ui/ProgressBar` is the repo's one progressbar), and an `<ol>` with
+(restating the overline, and Welcome's decorative `<progress>` is the repo's only one), and an `<ol>` with
 `aria-current="step"` (the textbook pattern, but it invents list semantics and three step names
 the design never draws). The `aria-hidden` footgun applies here as it does on Welcome, so the
 test pins that the subtree contains nothing focusable.
@@ -292,11 +291,12 @@ been a claim it could not test; that reason went away with the stubs. One call s
 `app/setup/layout.tsx` covers all three steps, which is three fewer places to forget one.
 
 **Storybook gains a third section, `Screens/`.** Named after the Figma page the frames live on,
-exactly as `Components` and `Foundations` are. It needs its own story smoke test
+exactly as `Components` is. It needs its own story smoke test
 (`app/screens.stories.test.tsx`) because each of those suites asserts its own title prefix,
-which is the one thing each exists to make unambiguous - that is now the fourth copy of the
-same harness, and docs/TODO.md records the helper it should become. PET-9 added a module to it
-rather than a fifth section, exactly as that item predicted.
+which is the one thing each exists to make unambiguous - that is one of three copies of the
+same harness (PET-57 deleted the Foundations copy with its section), and docs/TODO.md records
+the helper it should become. PET-9 added a module to it rather than a fifth section, exactly as
+that item predicted.
 
 Two things about that harness bite anyone adding a screen story. **It builds each story from
 `render` or `meta.component` and never applies the meta's `decorators`**, so a provider in a
@@ -317,12 +317,11 @@ So the story threw in the browser with a green suite and a green build, and only
 Storybook found it. **Open the story after adding one** - that is what the Verification section
 of every plan means by eyeballing it.
 
-`app/WelcomeScreen.tsx`, `app/DecorativePanel.tsx`, `app/setup/` and
-`components/LogoLockup.tsx` are all covered by `components/ui/utilities.test.ts`, which guards
-their hard-coded classes alongside `ui/`'s and the shell's. That now includes the box shadows,
-which PET-9 turned into Foundations tokens (`frontend/CLAUDE.md` owns them) and which had been
-excluded for two reasons that are both gone: there was no token to check them against, and
-that file's `selector()` could not escape their parens and commas.
+The compile guard that used to cover `app/WelcomeScreen.tsx`, `app/DecorativePanel.tsx`,
+`app/setup/` and `components/LogoLockup.tsx` is gone as of PET-57, along with the token
+shadows it had just learned to check. Classes are stock daisyUI plus Tailwind defaults, and
+the trap inverted: a wrong class now compiles instead of compiling to nothing, so review is
+what holds the semantic-colours-only line.
 
 **Step 2 has no `<form>`, and both of its exits are links.** That is deliberately the opposite
 of step 1, and the reasoning is the same rule applied to a different fact: an exit that always
@@ -339,17 +338,17 @@ no `aria-pressed`, `aria-checked` or `type="checkbox"` anywhere in `frontend/src
 The ARIA toggle-button pattern, which is also what the design draws: a chip that presses. Space
 and Enter both activate it, each chip is one ordinary tab stop, and the colour dot and the
 checkmark are both `aria-hidden` because `aria-pressed` already carries the state - the same
-call `ui/Tag`'s dot and `ui/Input`'s `$` prefix make. That file records the rejected
-`<input type="checkbox">` alternative, and two appearance decisions with no Figma counterpart:
-`border-[1.5px]` in both states, and the checkmark stroked `text-brand-accent` rather than
-`currentColor`.
+call the Welcome panel's chip dots and `ui/Input`'s `$` prefix make. That file records the rejected
+`<input type="checkbox">` alternative; PET-57 rebuilt the chip on daisyUI's `btn` (soft primary
+when pressed, outline at rest) with the checkmark stroked `currentColor`, so its states come
+from the theme rather than from appearance decisions of its own.
 
 **The three onboarding cards differ only in width, and `STEP_WIDTH` is where that lives.** Frame
 03 is 600px against 02's and 22's 520. PET-9 hard-coded `w-130` with a note saying PET-10 either
 changes it or lifts it to a prop; a second width appeared, so `SetupShell` now holds a
 `Record<SetupStep, string>` beside `STEP_DOT`. No prop, every class still a complete literal
-string for Tailwind's scanner, guarded by `components/ui/utilities.test.ts` like its neighbour,
-and frame 22's width recorded now rather than left for PET-11 to rediscover.
+string for Tailwind's scanner - and as of PET-57 the widths are `w-full` plus `max-w-*`
+ceilings, so the cards shrink on a small screen instead of overflowing it.
 
 **The draft's third field is `categories`, and it holds names.** `RegisterDto.categories` is
 `@IsIn(STARTER_CATEGORY_NAMES)`, so names are what cross the wire and an id would be a
@@ -393,8 +392,8 @@ only: they are `CategoryColour` keys, so no hex value enters the frontend.
 **Step 3's two name fields are a `grid`, not a flex row, and the 214px in the frame is a
 consequence rather than a measurement.** Frame 22 draws them at 214px each with a 12px gutter
 inside the card's 440px content box, and `(440 - 12) / 2` is exactly 214 - so `grid grid-cols-2
-gap-3` reproduces the design without restating any of its numbers. A flex row would not: `ui/Field`
-is `w-full`, which spans a grid cell correctly and overflows a flex row, so the fix there would
+gap-3` reproduces the design without restating any of its numbers. A flex row would not: the field
+components are `w-full`, which spans a grid cell correctly and overflows a flex row, so the fix there would
 have been a `flex-1` on each child to re-derive what the grid already gives. The email field is a
 sibling of the grid rather than a third cell, which is what makes it full width.
 
@@ -430,8 +429,8 @@ A19 designs no pending state and A29 no error surface - the spec says outright t
 account creation has none - so both are ours, alongside the details `frontend/CLAUDE.md` lists for
 `ui/`. The submit button is `disabled` while the request is out, because a double submit spends one
 of the five per-address attempts the backend's throttler allows and the second comes back a 429. And
-one failure message sits above the footer row in the same `text-body-s text-status-danger-text`
-treatment `ui/Field` uses, with **`role="alert"`, which `ui/Field` deliberately omits**: Field's
+one failure message sits above the footer row in the same `text-error` treatment the field
+components use, with **`role="alert"`, which their inline error line deliberately omits**: a field's
 message appears synchronously beside the field the user just left, while this one appears after a
 network round trip with nothing else on screen changing, so nothing else would tell a screen reader
 the submit failed. Five new strings come with it, and `docs/TODO.md` adds them to what A29 owes.

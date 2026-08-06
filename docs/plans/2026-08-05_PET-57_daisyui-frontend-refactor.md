@@ -65,17 +65,17 @@ requires backticked repo-rooted paths to resolve, and these files are being dele
 ## Checklist
 
 - [x] Commit this plan alone, push, open a draft PR against `main` with this checklist in the body
-- [ ] Install `daisyui` and register the plugin in `frontend/src/app/globals.css`; strip the
+- [x] Install `daisyui` and register the plugin in `frontend/src/app/globals.css`; strip the
       token layer, keeping the two font families as `@theme` tokens
-- [ ] Delete the dead surface: token-pinning tests, Foundations, story-only components
-- [ ] Run the Blueprint convert workflow over the app shell, the seven access screens and the
+- [x] Delete the dead surface: token-pinning tests, Foundations, story-only components
+- [x] Run the Blueprint convert workflow over the app shell, the seven access screens and the
       four view headers, to the fidelity and scope boundaries above
-- [ ] Remap the eight category colours onto their nearest theme colours
-- [ ] Drop the class-coupled assertions, keep the behaviour tests green, fix surviving stories
-- [ ] Run `quality_inspector` with `auditIntent` `fix_changes` and clear its findings
-- [ ] Smoke-check every screen in light and dark, at a mobile and a desktop width, through Chrome
-- [ ] Rewrite `frontend/CLAUDE.md`, revisit `frontend/src/app/CLAUDE.md`, update `docs/TODO.md`
-- [ ] Green `npm run lint`, `npm test`, `npm run build`, `npm run build-storybook`, and
+- [x] Remap the eight category colours onto their nearest theme colours
+- [x] Drop the class-coupled assertions, keep the behaviour tests green, fix surviving stories
+- [x] Run `quality_inspector` with `auditIntent` `fix_changes` and clear its findings
+- [x] Smoke-check every screen in light and dark, at a mobile and a desktop width, through Chrome
+- [x] Rewrite `frontend/CLAUDE.md`, revisit `frontend/src/app/CLAUDE.md`, update `docs/TODO.md`
+- [x] Green `npm run lint`, `npm test`, `npm run build`, `npm run build-storybook`, and
       `npm run docs:check`
 
 ## Out of scope

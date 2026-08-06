@@ -171,8 +171,11 @@ computes one. Both indexes the transaction reads want (`date`, `category_id`) sh
 migration. The one deliberate exception is insight content, which is stored as rendered prose
 because a persisted generation is a snapshot rather than a derived view - see `backend/CLAUDE.md`.
 
-Starter category colors are the real ones, read per chip from the design's variable
-bindings in Figma frame 03 (node 43:705) and checked against a render. Two open design
+Starter category colors were read per chip from the design's variable bindings in Figma frame
+03 (node 43:705); PET-57 then remapped each colour word onto its nearest daisyUI theme colour
+(`frontend/src/components/ui/categoryColour.ts`), so the words stay the stored identity while
+the rendered hue follows the active theme - and orange and yellow now share `warning`, a
+collision the PET-57 plan accepted because category colours are decoration. Two open design
 questions remain, both for the designer rather than for code:
 
 - **The palette has eight colors for ten chips**, so Subscriptions reuses Transport's blue
@@ -233,27 +236,6 @@ applying to new users only, which costs `deleteUserDb` that no-row compensation 
 a real change to `UserDatabaseService` rather than a rename, and infrastructure naming no user
 ever sees does not need to follow the brand a second time.
 
-### The logo tile and nav pills use radii that are not on the scale
-
-Figma bound the logo tile and the four nav pills to a raw **10px** corner rather than to a
-radius variable, and Foundations offers only `Radius/SM` (8) and `Radius/MD` (12).
-`ui/Sidebar.tsx` therefore uses a literal `rounded-[10px]`, which matches the design exactly
-and is registered in `utilities.test.ts` so it is findable.
-
-Worth a designer answer: either 10 joins the scale as a token, or these two corners snap to
-8 or 12. Nothing breaks either way, since a literal compiles without a token lookup, so this
-is a consistency question rather than a bug.
-
-The **two header pills** (the month select and the search field) bind the same raw 10px, so
-`app/(app)/dashboard/MonthPill.tsx` and `transactions/SearchPill.tsx` carry the literal too.
-
-**PET-8 found a third value, which is what turns this from a nit into an answerable
-question.** The access screens draw the same logo lockup at 38px instead of the sidebar's
-34px, and Figma binds that larger tile to a raw **11px** - so `components/LogoLockup.tsx`
-carries `rounded-[11px]`. One lockup at two sizes with two different off-scale radii is much
-more readily a pair of slips than a designed progression, which makes "snap both to 12" the
-likely answer. Whatever the designer decides covers all five places at once.
-
 ### The page header's two inert controls
 
 The month select (04, node 21:61) and the search field (06, node 26:142) are drawn but do
@@ -302,22 +284,6 @@ Note the tests are not exposed to this. `format.test.ts` builds every fixture wi
 local-time `Date` constructor rather than an ISO string, and says why: `new Date('2025-10-08')`
 parses as UTC, so west of Greenwich a date on the 1st formats as the month before.
 
-### The Welcome panel's circles are filled with an unbound hex
-
-Figma fills both decorative circles on frame 01 (nodes 41:712 and 41:713) with `#4F45E6` at
-28% and 18% opacity, bound to no variable. That is one hex digit off `--color-brand-accent`
-(`#4F46E5`), which makes it a slip rather than a decision.
-
-`DecorativePanel.tsx` ships `bg-brand-accent` under those opacities instead. Hard-coding
-`bg-[#4F45E6]` would be the first raw colour in the entire frontend and would defeat the
-point of clearing Tailwind's palette, and the difference is one unit of green seen through
-28% opacity over `#101720`.
-
-Recorded so the designer can confirm and bind the layer, and so nobody later "corrects" the
-code back to the raw hex from a screenshot. The exported SVGs were inspected while
-implementing: plain solid circles, no blur and no gradient, which is why they are `div`s with
-a background rather than assets - worth knowing before somebody reaches for `blur-*`.
-
 ### The design shows whole dollars and `formatCurrency` always emits cents
 
 `formatCurrency(1240)` returns `"$1,240.00"`, pinned in `frontend/src/lib/format.test.ts`,
@@ -325,7 +291,7 @@ while frame 01's sample card and frame 04's real budget card both draw `"$1,240"
 shared formatter cannot produce the string the design asks for.
 
 Welcome sidesteps it: its figures are permanent marketing copy, so `SAMPLE_BUDGET` holds
-literal strings and `ui/Stat.stories.tsx` already hard-codes `'$1,240'` for the same reason.
+literal strings.
 **The dashboard's budget card cannot sidestep it**, because its numbers are real. That ticket
 needs either a no-cents variant beside `formatCurrency` or a designer answer on whether the
 app shows cents at all - and the answer probably differs by context, since a transaction of
@@ -339,28 +305,13 @@ emits no symbol at all. So the two still disagree - the field shows `2,000` whil
 `formatCurrency(2000)` is `$2,000.00` - and the dashboard's budget card still needs the answer
 above.
 
-### The frontend is desktop-only, and Welcome is the first genuinely public page
+### A visible theme toggle is deferred, and adding one costs the automatic behaviour
 
-There is not one responsive utility in `frontend/src` - no `sm:`, `md:` or `lg:` anywhere -
-which is a consistent decision for an app behind a login, drawn at 1440x1024.
-
-Welcome is the one screen a stranger might open on a phone. Its 560px fixed panel plus 80px
-gutters squeezes badly below roughly 900px, and the panel's contents are absolutely
-positioned so they clip rather than reflow. Staying consistent with the repo was the right
-call for PET-8 and this is out of its scope, but the gap is recorded here so it is known
-rather than discovered by a visitor. The cheapest first move, if it matters, is hiding the
-decorative panel below a breakpoint - it carries no information the left column lacks, which
-is also why it is `aria-hidden`.
-
-### Figma's page header is 2px shorter on two of the four screens
-
-Bottom padding is 20px on 04 Dashboard and 14 AI Insights, and 18px on 06 Transactions and 17
-Settings. `PageHeader` uses 20px everywhere, on the reading that this is a Figma inconsistency
-rather than a designed distinction - nothing else about the four headers differs, and no
-plausible reason for the two screens to be shorter exists.
-
-Cheap to confirm and cheap to change if the answer is no; recorded so nobody re-derives it
-from a screenshot.
+PET-57 ships daisyUI's built-in `light` / `dark` pair selected by `prefers-color-scheme`, with
+no manual toggle anywhere. That is not an oversight: daisyUI's own rule is that a toggle and
+automatic prefers-dark selection must not coexist, because a browser already in dark mode makes
+the control switch dark to dark. Whoever adds a toggle removes `--prefersdark` from
+`frontend/src/app/globals.css` in the same change and decides where the preference is stored.
 
 ### The onboarding draft is per tab, and four things follow from that
 
@@ -440,10 +391,11 @@ the form and into `draft.ts` beside the rest of the shape.
 
 ### A29's inline error pattern is now live rather than illustrative
 
-`ui/Field`'s red-border-plus-one-line treatment shipped with PET-17 but nothing rendered it in
-a real flow - only `Input.stories.tsx`'s `WithError` story. PET-9's budget validation is the
-first live use, with the string `Enter an amount greater than 0.` taken verbatim from that
-story and from `Field`'s own doc comment rather than invented.
+The inline error treatment (an error-state control plus one line of copy beneath, owned by
+`ui/Field` until PET-57 folded it into `ui/Input` and `ui/Select`) shipped with PET-17 but
+nothing rendered it in a real flow - only `Input.stories.tsx`'s `WithError` story. PET-9's
+budget validation is the first live use, with the string `Enter an amount greater than 0.`
+taken verbatim from that story rather than invented.
 
 That raises the priority of the designer sign-off A29 already owed. The pattern is now what
 users see, and every remaining form ticket (PET-11, PET-12, Settings, the transaction forms)
@@ -459,11 +411,11 @@ frame. The `Screens/22 Register` story's `WithMessages` case renders all of them
 the quickest thing to put in front of the designer.
 
 The second shape is the one that needs an actual decision rather than a sign-off: **a form-level
-message, which `ui/Field` has no concept of.** Field owns per-field messages and deliberately
-carries no `role="alert"`; a failed request belongs to no field and arrives after a network round
-trip with nothing else on screen changing, so PET-11's line sits above the footer row in Field's
-own treatment *with* `role="alert"`. If a second form ever needs one, that is the moment it
-belongs in `ui/` rather than in a screen.
+message, which the field components have no concept of.** A field's inline line is per-field and
+deliberately carries no `role="alert"`; a failed request belongs to no field and arrives after a
+network round trip with nothing else on screen changing, so PET-11's line sits above the footer
+row in the same `text-error` treatment *with* `role="alert"`. If a second form ever needs one,
+that is the moment it belongs in `ui/` rather than in a screen.
 
 Two things the same screen does not validate, both deliberate. `@MaxLength(100)` on the two names
 is **not** mirrored client-side: no `maxlength` is drawn in the frame, so a longer name gets a 400
@@ -1113,15 +1065,14 @@ than discovered.
   type is `string` either way - but if PET-28's read DTOs want the published contract to
   say what the string is, each instant field needs an explicit
   `@ApiProperty({ format: 'date-time' })`.
-- **The Storybook story smoke harness is now duplicated four times.** The same ~30 lines of
+- **The Storybook story smoke harness is duplicated three times** (down from four: PET-57
+  deleted the Foundations copy with its section). The same ~30 lines of
   story discovery and `renders without throwing` live in
-  `frontend/src/components/ui/ui.stories.test.tsx`, `src/app/(app)/shell.stories.test.tsx`,
-  `src/stories/foundations/foundations.stories.test.tsx` and, since PET-8,
-  `src/app/screens.stories.test.tsx`. Each exists because it asserts its own section's title
-  prefix - `/^Components\//`, `/^Shell\//`, `/^Foundations\//`, `/^Screens\//` - and that
-  assertion is the one thing each is there to make unambiguous. Four copies is past the rule
-  `utilities.test.ts` sets for its own harness ("if a third consumer appears, lift it into a
-  helper then"). The shape: one exported function taking the `MODULES` array and a
+  `frontend/src/components/ui/ui.stories.test.tsx`, `src/app/(app)/shell.stories.test.tsx`
+  and, since PET-8, `src/app/screens.stories.test.tsx`. Each exists because it asserts its own
+  section's title prefix - `/^Components\//`, `/^Shell\//`, `/^Screens\//` - and that
+  assertion is the one thing each is there to make unambiguous. Three copies is at the
+  lift-it-into-a-helper threshold. The shape: one exported function taking the `MODULES` array and a
   title-prefix `RegExp`, returning nothing and registering the three `describe` blocks, so each
   suite shrinks to an import, a `MODULES` literal and one call. Lifting three existing suites
   was out of scope for the ticket that added the fourth; do it before a fifth section appears,
