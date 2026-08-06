@@ -21,11 +21,20 @@ const TARGET: DeleteTarget = {
 };
 
 /** A trigger inside the provider, so opening is a real interaction rather than a mount. */
-function Trigger({ target = TARGET }: { target?: DeleteTarget }) {
+function Trigger({
+  target = TARGET,
+  onDeleted,
+}: {
+  target?: DeleteTarget;
+  onDeleted?: () => void;
+}) {
   const { open } = useDeleteTransaction();
 
   return (
-    <button type="button" onClick={() => open(target)}>
+    <button
+      type="button"
+      onClick={() => open(target, onDeleted === undefined ? undefined : { onDeleted })}
+    >
       Open it
     </button>
   );
@@ -105,6 +114,62 @@ describe('what it renders', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Open it' })[1]!);
 
     expect(screen.getByText(/Uber - \$18\.50/)).toBeInTheDocument();
+  });
+});
+
+describe('the open options', () => {
+  // PET-32's `onDeleted`, threaded from the call site through to the dialog. The dialog's own
+  // suite pins when it fires; these pin that it arrives at all, and that it belongs to the open it
+  // came with.
+
+  it('passes onDeleted through to the dialog', async () => {
+    const onDeleted = jest.fn();
+    const remove = jest.fn().mockResolvedValue({ ok: true });
+    render(
+      <DeleteTransactionProvider remove={remove}>
+        <Trigger onDeleted={onDeleted} />
+      </DeleteTransactionProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open it' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onDeleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('forgets it when the dialog closes, so the next open starts clean', async () => {
+    // The reason it lives in the same state object as the target rather than in a ref: an
+    // `onDeleted` left behind by a cancelled open would fire for somebody else's delete.
+    const onDeleted = jest.fn();
+    const remove = jest.fn().mockResolvedValue({ ok: true });
+    render(
+      <DeleteTransactionProvider remove={remove}>
+        <Trigger onDeleted={onDeleted} />
+        <Trigger target={{ ...TARGET, merchant: 'Uber' }} />
+      </DeleteTransactionProvider>,
+    );
+    const triggers = screen.getAllByRole('button', { name: 'Open it' });
+
+    await userEvent.click(triggers[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(triggers[1]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  it('stays optional, so the row menu opens it with a target alone', async () => {
+    const remove = jest.fn().mockResolvedValue({ ok: true });
+    render(
+      <DeleteTransactionProvider remove={remove}>
+        <Trigger />
+      </DeleteTransactionProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open it' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(remove).toHaveBeenCalledWith(TARGET.id);
   });
 });
 

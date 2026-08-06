@@ -6,6 +6,7 @@ import { useRef, useState } from 'react';
 import type { Transaction } from '@/lib/transactions';
 
 import { useDeleteTransaction } from '../DeleteTransactionProvider';
+import { useEditTransaction } from '../EditTransactionProvider';
 
 // 10 Row menu (node 30:257): the kebab on a list row, and the two actions behind it (MNU-1,
 // MNU-2, TRN-8).
@@ -55,6 +56,7 @@ type TransactionRowMenuProps = {
 
 export function TransactionRowMenu({ transaction }: TransactionRowMenuProps) {
   const { open } = useDeleteTransaction();
+  const { open: openEdit } = useEditTransaction();
 
   /**
    * The popover's id and its anchor name, both derived from the transaction's own id.
@@ -121,17 +123,37 @@ export function TransactionRowMenu({ transaction }: TransactionRowMenuProps) {
         // would drift the moment a dismissal happened any other way.
         onToggle={(event) => setMenuOpen(event.newState === 'open')}
       >
-        {/* **Edit is disabled, and that amends AC2 rather than ignoring it.** MNU-2 opens the
-            edit modal, which is PET-32 and does not exist. The alternatives were a live item
-            that does nothing - the failure every inert control on this screen was built to
-            avoid - or dropping the item, which makes frame 10 a different design and costs
-            PET-32 a re-layout instead of a flag. `menu-disabled` dims it and `aria-disabled`
-            says so; PET-32 turns this `<span>` into a `<button>` and deletes both. */}
-        <li className="menu-disabled">
-          <span aria-disabled="true">
+        {/* **Edit is live as of PET-32, and this is the `<span>` its predecessor predicted
+            becoming a `<button>`.** It shipped `menu-disabled` with `aria-disabled` because the
+            edit modal did not exist - honest about being unavailable, rather than one more
+            control on this screen that looks operable and is not. Both attributes are gone with
+            the flag, which closes PET-33's amended AC2.
+
+            **It passes the whole transaction where Delete passes four fields**, and that
+            asymmetry is the point rather than an oversight. A row already carries `note` and
+            `categoryId`, so the modal prefills every field with no second read (AC1); the
+            confirmation takes four because a dialog quoting a note would be rendering something
+            it has no business knowing. */}
+        <li>
+          <button
+            type="button"
+            popoverTarget={menuId}
+            popoverTargetAction="hide"
+            onClick={() => {
+              // Same fix as Delete's below, and the same reason: `Modal` captures
+              // `document.activeElement` on mount, React flushes this click synchronously, and
+              // without this line the element it captures is *this* menu item - which
+              // `popovertargetaction="hide"` then hides inside a closed popover, still
+              // `isConnected` and no longer focusable. Focus would land on `<body>` on the way
+              // out, including after Cancel.
+              triggerRef.current?.focus();
+
+              openEdit(transaction);
+            }}
+          >
             <Pencil className="size-4" aria-hidden="true" />
             Edit
-          </span>
+          </button>
         </li>
 
         <li>

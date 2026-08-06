@@ -1,5 +1,7 @@
 import { formatAmountInput } from '@/lib/format';
 
+import type { Transaction } from '@/lib/transactions';
+
 import {
   invalidFields,
   isAmountValid,
@@ -7,6 +9,8 @@ import {
   isDateValid,
   isMerchantValid,
   toCreateTransactionBody,
+  toTransactionFormValues,
+  toUpdateTransactionBody,
   type TransactionFormValues,
 } from './transactionForm';
 
@@ -20,6 +24,21 @@ const FILLED: TransactionFormValues = {
   date: '2025-10-08',
   merchant: 'Whole Foods',
   note: 'Weekly groceries',
+};
+
+/**
+ * The same row as `FILLED`, as the API stores it - so the two are a round trip and frame
+ * 11's prefill is asserted against frame 09's own values.
+ */
+const STORED: Transaction = {
+  id: '0198c2a1-0000-7000-8000-0000000000b1',
+  amount: 24,
+  categoryId: FILLED.categoryId,
+  date: '2025-10-08',
+  merchant: 'Whole Foods',
+  note: 'Weekly groceries',
+  createdAt: '2025-10-08T09:30:00.000Z',
+  updatedAt: '2025-10-08T09:30:00.000Z',
 };
 
 describe('isAmountValid', () => {
@@ -182,5 +201,212 @@ describe('toCreateTransactionBody', () => {
       'date',
       'merchant',
     ]);
+  });
+});
+
+describe('toTransactionFormValues', () => {
+  it('prefills every field from the stored row (AC1)', () => {
+    expect(toTransactionFormValues(STORED)).toEqual(FILLED);
+  });
+
+  it('is the inverse of toCreateTransactionBody for the designed row', () => {
+    // The round trip stated as its own assertion: whatever the create sent is what the edit
+    // form comes back showing, which is the whole of EDT-1.
+    const body = toCreateTransactionBody(toTransactionFormValues(STORED));
+
+    expect(body).toMatchObject({
+      amount: STORED.amount,
+      categoryId: STORED.categoryId,
+      date: STORED.date,
+      merchant: STORED.merchant,
+      note: STORED.note,
+    });
+  });
+
+  it('shows a whole amount with its cents, as frame 11 draws it', () => {
+    // The reason `toFixed(2)` is in there: `String(24)` is `'24'`, and node 29:196 draws
+    // `24.00`. This is the assertion that fails if somebody simplifies it away.
+    expect(toTransactionFormValues({ ...STORED, amount: 24 }).amount).toBe('24.00');
+  });
+
+  it('groups thousands and keeps a single trailing cent digit', () => {
+    expect(toTransactionFormValues({ ...STORED, amount: 1240.5 }).amount).toBe('1,240.50');
+  });
+
+  it.each([
+    [0.05, '0.05'],
+    [0.5, '0.50'],
+    [1000, '1,000.00'],
+    [1234567.89, '1,234,567.89'],
+  ])('renders %p as %p', (amount, expected) => {
+    expect(toTransactionFormValues({ ...STORED, amount }).amount).toBe(expected);
+  });
+
+  it('turns a null note into an empty string, which a controlled input can hold', () => {
+    expect(toTransactionFormValues({ ...STORED, note: null }).note).toBe('');
+  });
+
+  it('passes a backdated date through verbatim, with no Date anywhere in the path', () => {
+    expect(toTransactionFormValues({ ...STORED, date: '2025-09-30' }).date).toBe('2025-09-30');
+  });
+
+  it('does not trim the merchant, so the diff cannot report a change nobody made', () => {
+    expect(toTransactionFormValues({ ...STORED, merchant: ' Whole Foods ' }).merchant).toBe(
+      ' Whole Foods ',
+    );
+  });
+
+  it('produces exactly the five form fields', () => {
+    // Notably not `id`, `createdAt` or `updatedAt`: the form holds what the user can edit,
+    // and `forbidNonWhitelisted` makes any of those three a 400 if one leaked into a body.
+    expect(Object.keys(toTransactionFormValues(STORED)).sort()).toEqual([
+      'amount',
+      'categoryId',
+      'date',
+      'merchant',
+      'note',
+    ]);
+  });
+
+  it('round-trips a value the amount field could have produced', () => {
+    // Idempotence, the property `BudgetForm` depends on, applied to the prefill: the value
+    // this hands the field must be one the field would leave alone.
+    const prefilled = toTransactionFormValues(STORED).amount;
+
+    expect(formatAmountInput(prefilled)).toBe(prefilled);
+  });
+});
+
+describe('toUpdateTransactionBody', () => {
+  it('sends nothing at all when nothing changed', () => {
+    // The empty body is a legitimate answer meaning "no change", and the caller must close
+    // without submitting it - the endpoint answers 400 `Provide at least one field to
+    // update.` for a body with no keys. `EditTransactionModal` pins the closing half.
+    expect(toUpdateTransactionBody(STORED, toTransactionFormValues(STORED))).toEqual({});
+  });
+
+  it('sends only the field that changed', () => {
+    const values = { ...toTransactionFormValues(STORED), amount: '31.50' };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({ amount: 31.5 });
+  });
+
+  it('parses a grouped amount, which Number() cannot', () => {
+    const values = { ...toTransactionFormValues(STORED), amount: '1,240.50' };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({ amount: 1240.5 });
+  });
+
+  it('does not send an amount that only looks different as a string', () => {
+    // `'24.00'` and `'24'` are the same number, and the comparison is numeric for exactly
+    // this case: retyping a value must not count as an edit.
+    const values = { ...toTransactionFormValues(STORED), amount: '24' };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({});
+  });
+
+  it('sends a changed category', () => {
+    const categoryId = '0198c2a1-0000-7000-8000-0000000000a2';
+    const values = { ...toTransactionFormValues(STORED), categoryId };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({ categoryId });
+  });
+
+  it('sends a changed date verbatim, including one that moves the row out of the period', () => {
+    // The row then leaves a `period=current` list, which `docs/TODO.md` records for a
+    // backdated create and now for an edit. Verified here rather than prevented: bounding the
+    // date field would contradict the DTO, which supports backdating on purpose.
+    const values = { ...toTransactionFormValues(STORED), date: '2025-09-30' };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({ date: '2025-09-30' });
+  });
+
+  it('trims a changed merchant once, at the boundary', () => {
+    const values = { ...toTransactionFormValues(STORED), merchant: '  Trader Joe  ' };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({ merchant: 'Trader Joe' });
+  });
+
+  it('normalises a stored merchant that carried whitespace', () => {
+    // A change the user did not type, and the preferred half of the trade: the alternative is
+    // that stray whitespace on a row can never be cleaned up by editing anything else.
+    const stored = { ...STORED, merchant: ' Whole Foods ' };
+    const values = toTransactionFormValues(stored);
+
+    expect(toUpdateTransactionBody(stored, values)).toEqual({ merchant: 'Whole Foods' });
+  });
+
+  it('clears a note with null, which is the only way to clear one', () => {
+    const values = { ...toTransactionFormValues(STORED), note: '' };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({ note: null });
+  });
+
+  it.each(['   ', '\t\n'])('treats a note of %p as cleared', (note) => {
+    const values = { ...toTransactionFormValues(STORED), note };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({ note: null });
+  });
+
+  it('leaves a blank note alone when the row never had one', () => {
+    // The third arm of the tri-state, and the one a truthiness test would get wrong: absent
+    // means "do not touch", and there is nothing here to touch.
+    const stored = { ...STORED, note: null };
+    const values = toTransactionFormValues(stored);
+
+    expect(toUpdateTransactionBody(stored, values)).toEqual({});
+    expect('note' in toUpdateTransactionBody(stored, values)).toBe(false);
+  });
+
+  it('sends a note added to a row that had none', () => {
+    const stored = { ...STORED, note: null };
+    const values = { ...toTransactionFormValues(stored), note: 'Weekly groceries' };
+
+    expect(toUpdateTransactionBody(stored, values)).toEqual({ note: 'Weekly groceries' });
+  });
+
+  it('trims a changed note', () => {
+    const values = { ...toTransactionFormValues(STORED), note: '  Weekly shop  ' };
+
+    expect(toUpdateTransactionBody(STORED, values)).toEqual({ note: 'Weekly shop' });
+  });
+
+  it('sends every field when every field changed', () => {
+    const body = toUpdateTransactionBody(STORED, {
+      amount: '31.50',
+      categoryId: '0198c2a1-0000-7000-8000-0000000000a2',
+      date: '2025-10-09',
+      merchant: 'Trader Joe',
+      note: 'Weekly shop',
+    });
+
+    expect(body).toEqual({
+      amount: 31.5,
+      categoryId: '0198c2a1-0000-7000-8000-0000000000a2',
+      date: '2025-10-09',
+      merchant: 'Trader Joe',
+      note: 'Weekly shop',
+    });
+  });
+
+  it('contributes no key for an unchanged field, rather than a key set to undefined', () => {
+    // What `lib/updateTransaction.ts` reads with `'categoryId' in body` to narrow the
+    // ambiguous 404, and what `forbidNonWhitelisted` cares about. A key set to `undefined`
+    // would survive `Object.keys` and break the first of those.
+    const values = { ...toTransactionFormValues(STORED), amount: '31.50' };
+
+    expect(Object.keys(toUpdateTransactionBody(STORED, values))).toEqual(['amount']);
+  });
+
+  it('never sends a key the DTO does not have', () => {
+    const body = toUpdateTransactionBody(STORED, {
+      amount: '31.50',
+      categoryId: '0198c2a1-0000-7000-8000-0000000000a2',
+      date: '2025-10-09',
+      merchant: 'Trader Joe',
+      note: 'Weekly shop',
+    });
+
+    expect(Object.keys(body).sort()).toEqual(['amount', 'categoryId', 'date', 'merchant', 'note']);
   });
 });

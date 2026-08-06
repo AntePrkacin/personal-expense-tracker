@@ -44,6 +44,12 @@ type CategoriesResponse = components['schemas']['CategoriesResponseDto'];
  * unreachable by construction. The select opens on a `Select…` placeholder instead.
  * Whoever implements PET-32's Edit modal, or reverses that decision, adds the field
  * back here.
+ *
+ * **PET-32 declined it, and the reason is that an edit form has nothing to preselect.**
+ * Its select is prefilled with the row's own `categoryId`, which is a real category by
+ * construction - so a flag naming the fallback would have arrived with no reader, which is
+ * the same objection that kept `onDeleted` off `useDeleteTransaction().open` until a caller
+ * existed. Both modals now share this projection unchanged.
  */
 export type CategoryOption = Pick<components['schemas']['CategoryResponseDto'], 'id' | 'name'>;
 

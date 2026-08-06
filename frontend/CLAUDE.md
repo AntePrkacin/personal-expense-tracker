@@ -339,6 +339,10 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   popover menu whose "Delete" really deletes. The one thing still inert inside it is "Edit",
   which renders `menu-disabled` with `aria-disabled` because PET-32's edit modal does not
   exist - a different claim from the drawn-but-dead controls around it, since this one says so.
+  **PET-32 built that modal, so nothing in the menu is inert any more**: "Edit" is a real button
+  opening frame 11 prefilled from the row, and the `menu-disabled` and `aria-disabled` above are
+  gone with it. A **row click** is now the only dead affordance left on the screen, which makes it
+  the one a reviewer is most likely to try; it is PET-34's.
 - **Every read a screen needs for its own data, bar the transactions list and the categories.**
   PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and
   `lib/profile.ts` calls `GET /api/profile`, both lifting the session cookie into an
@@ -358,7 +362,7 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   route-handler caller would be handed an HTML login page with a 200 on it - so a Server
   Component using it applies the 401 policy at the call site, which
   `app/(app)/transactions/page.tsx` is the worked example of.
-- **Every write except creating and deleting a transaction.** PET-31 is the app's first authenticated write:
+- **Every write except creating, editing and deleting a transaction.** PET-31 is the app's first authenticated write:
   `lib/createTransaction.ts` is a Server Action over `authorizedPost` in `lib/session.ts`, the
   write half of `authorizedGet` and the second thing to reuse rather than re-derive. Two of its
   decisions generalise to the writes still to come. It **surfaces the status on rejection** where
@@ -371,3 +375,13 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   publishes **three** reasons where the create publishes four, because a 400 there is a body the
   user can fix and a 400 here is only a malformed id. Editing and every category and profile
   write are still unbuilt.
+  PET-32 added the third, `lib/updateTransaction.ts` over a new `authorizedPatch`, and it is the
+  one whose classification generalises furthest: it publishes **five** reasons where the create
+  publishes four and the delete three, because `PATCH /api/transactions/:id` answers 404 for a
+  missing transaction **and** for a missing category and distinguishes them only in the message
+  text. It splits them on whether the body it sent carried a `categoryId`, which is a fact the
+  caller already has - rather than matching backend error prose, which nothing pins across the two
+  apps. Its other reusable half is the **diffed body**: `(app)/transactionForm.ts`'s
+  `toUpdateTransactionBody` sends only the fields that changed, `null` to clear a note, and an
+  empty object when nothing did - which the caller must treat as "close without asking", because
+  the endpoint rejects an empty patch. Every **category and profile** write is still unbuilt.

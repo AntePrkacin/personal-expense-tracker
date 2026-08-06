@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 // Relative rather than the `@/lib/*` alias every other file uses, and it
 // has to be: `jest.mock('@/lib/profile')` fails with "Cannot find module". A plain
@@ -16,6 +17,7 @@ import { render, screen } from '@testing-library/react';
 // resolved path, so this still intercepts layout.tsx's own aliased import.
 import { requireProfile } from '../../lib/profile';
 
+import { useEditTransaction } from './EditTransactionProvider';
 import AppLayout from './layout';
 
 // The shell layout's two jobs: gate the segment and lay the two columns out. The gate is
@@ -24,7 +26,13 @@ import AppLayout from './layout';
 //
 // SidebarNav is a client component that calls usePathname(), and jsdom has no
 // App Router, so the mock below is what lets the layout render here at all.
-jest.mock('next/navigation', () => ({ usePathname: () => '/dashboard' }));
+// `useRouter` joined it for PET-32: the layout now mounts a third provider whose modal calls it,
+// so rendering the shell with that modal open reaches the hook. `refresh` is never asserted here -
+// `EditTransactionModal.test.tsx` owns that - it just has to exist.
+jest.mock('next/navigation', () => ({
+  usePathname: () => '/dashboard',
+  useRouter: () => ({ refresh: jest.fn() }),
+}));
 
 jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
 
@@ -41,6 +49,29 @@ beforeEach(() => {
   jest.clearAllMocks();
   (requireProfile as jest.Mock).mockResolvedValue(PROFILE);
 });
+
+/** Frame 11's row, for the provider-nesting test at the bottom of this file. */
+const TRANSACTION = {
+  id: '0198c2a1-0000-7000-8000-0000000000b1',
+  amount: 24,
+  categoryId: '0198c2a1-0000-7000-8000-0000000000a1',
+  date: '2025-10-08',
+  merchant: 'Whole Foods',
+  note: 'Weekly groceries',
+  createdAt: '2025-10-08T09:30:00.000Z',
+  updatedAt: '2025-10-08T09:30:00.000Z',
+};
+
+/** A page-shaped child that opens the edit modal, standing in for the row menu's kebab. */
+function OpenEditModal() {
+  const { open } = useEditTransaction();
+
+  return (
+    <button type="button" onClick={() => open(TRANSACTION)}>
+      Edit it
+    </button>
+  );
+}
 
 describe('the (app) segment configuration', () => {
   it('declares no `dynamic` export, because the cookie read forces it', async () => {
@@ -128,5 +159,34 @@ describe('AppLayout', () => {
     render(await AppLayout({ children: null }));
 
     expect(screen.queryAllByRole('heading')).toHaveLength(0);
+  });
+
+  it('mounts the three modal providers, with the edit one inside the delete one', async () => {
+    // **PET-32 made the nesting order load-bearing**, where PET-33's comment could still say it
+    // carried nothing. `EditTransactionProvider` calls `useDeleteTransaction()` in its own body, so
+    // mounted outside that provider it throws while rendering - on every page, not on the first
+    // Edit click. Every other test in this file would fail too, which is a fine safety net and a
+    // terrible explanation, so this is the one that says why.
+    //
+    // A child that opens the edit modal is what proves all three are really here: the hook
+    // resolving means the edit provider is mounted, and its own render having succeeded means the
+    // delete provider is outside it.
+    render(await AppLayout({ children: <OpenEditModal /> }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit it' }));
+
+    expect(screen.getByRole('dialog', { name: 'Edit transaction' })).toBeInTheDocument();
+  });
+
+  it('renders none of the three dialogs until something opens one', async () => {
+    // The property `(app)/pages.test.tsx` leans on, asserted here at the layout that mounts them:
+    // a closed `<dialog>` is invisible to `queryByRole` and entirely visible to
+    // `queryAllByLabelText`, so three always-mounted dialogs would make every text and label query
+    // on every screen ambiguous forever.
+    render(await AppLayout({ children: null }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+    expect(screen.queryByText('Delete this transaction?')).not.toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ import { readTransactionsView } from '../../lib/transactions';
 import { AddTransactionProvider } from './AddTransactionProvider';
 import { DeleteTransactionProvider } from './DeleteTransactionProvider';
 import DashboardPage from './dashboard/page';
+import { EditTransactionProvider } from './EditTransactionProvider';
 import InsightsPage from './insights/page';
 import SettingsPage from './settings/page';
 import TransactionsPage from './transactions/page';
@@ -66,14 +67,21 @@ async function renderScreen(
   // Awaiting a synchronous component's return value is a no-op, so one call site covers
   // all four - which is the property PET-30 relied on when Transactions became async.
   //
-  // Both providers, in the layout's own order, as of PET-33. The second is not decoration: a
-  // populated transactions table draws a kebab per row whose `useDeleteTransaction()` throws
-  // outside it. The `beforeEach` below hands this page an empty `transactions` array and no
-  // `table`, so no row reaches it today - which is exactly why it is wired now rather than
-  // when a future edit to that mock makes the whole file fail at once.
+  // All three providers, in the layout's own order, as of PET-32. The second and third are not
+  // decoration: a populated transactions table draws a kebab per row whose
+  // `useDeleteTransaction()` and `useEditTransaction()` both throw outside them. The `beforeEach`
+  // below hands this page an empty `transactions` array and no `table`, so no row reaches them
+  // today - which is exactly why they are wired now rather than when a future edit to that mock
+  // makes the whole file fail at once.
+  //
+  // The order is load-bearing for the third one specifically: `EditTransactionProvider` calls
+  // `useDeleteTransaction()` in its own body, so outside that provider it throws while rendering
+  // rather than on a click.
   return render(
     <AddTransactionProvider>
-      <DeleteTransactionProvider>{await Page(PAGE_PROPS)}</DeleteTransactionProvider>
+      <DeleteTransactionProvider>
+        <EditTransactionProvider>{await Page(PAGE_PROPS)}</EditTransactionProvider>
+      </DeleteTransactionProvider>
     </AddTransactionProvider>,
   );
 }
@@ -256,10 +264,15 @@ describe('the inert header controls', () => {
     // PET-33 adds a second dialog to the shell and the same requirement to it, which is why
     // the text query below joins the label one: the delete confirmation has no form, so
     // `queryByLabelText` would never have noticed an always-mounted copy of it.
+    // PET-32 adds a third, and it is the sharpest case of all: the edit modal draws the *same
+    // five labels* as the Add modal, so an always-mounted one would make `getByLabelText('Amount')`
+    // ambiguous rather than merely present - which is why the count is asserted below rather than
+    // only the absence.
     await renderScreen(Page);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+    expect(screen.queryAllByLabelText('Amount')).toHaveLength(0);
+    expect(screen.queryAllByText('Note (optional)')).toHaveLength(0);
     expect(screen.queryByText('Delete this transaction?')).not.toBeInTheDocument();
   });
 });

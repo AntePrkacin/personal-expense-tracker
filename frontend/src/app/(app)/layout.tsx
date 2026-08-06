@@ -5,6 +5,7 @@ import { requireProfile } from '@/lib/profile';
 import { AddTransactionProvider } from './AddTransactionProvider';
 import { DeleteTransactionProvider } from './DeleteTransactionProvider';
 import { DRAWER_TOGGLE_ID } from './drawer';
+import { EditTransactionProvider } from './EditTransactionProvider';
 import { SidebarNav } from './SidebarNav';
 
 // The app shell: the dark sidebar beside a content column, which every
@@ -102,10 +103,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             (PET-33). Its trigger is per *row*, so a dialog owned by the row menu would mount
             one `<dialog>` per transaction. Nesting order between the two providers carries
             nothing: neither reads the other, and each renders its dialog into the top layer.
-            The pairing is what lets PET-32's edit modal open the confirmation over itself. */}
+            The pairing is what lets PET-32's edit modal open the confirmation over itself.
+
+            **`EditTransactionProvider` is PET-32's, and its nesting order does carry
+            something** - which is the one way the paragraph above stopped being true of all
+            three. It calls `useDeleteTransaction()` to open the confirmation over itself, so it
+            must sit *inside* that provider; swapping the two throws on the first Edit. Its own
+            trigger is per row as well, so the one-instance argument is `DeleteTransactionProvider`'s
+            rather than `AddTransactionProvider`'s. */}
         <div className="flex flex-1 flex-col px-4 sm:px-6 lg:px-10">
           <AddTransactionProvider>
-            <DeleteTransactionProvider>{children}</DeleteTransactionProvider>
+            <DeleteTransactionProvider>
+              <EditTransactionProvider>{children}</EditTransactionProvider>
+            </DeleteTransactionProvider>
           </AddTransactionProvider>
         </div>
       </div>

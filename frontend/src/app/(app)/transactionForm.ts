@@ -1,9 +1,19 @@
-import { parseAmountInput } from '@/lib/format';
+import { formatAmountInput, parseAmountInput } from '@/lib/format';
 import { partsFromIso } from '@/lib/date';
+import type { Transaction } from '@/lib/transactions';
 import type { components } from '@/types/api';
 
 // The Add transaction form's shape, its validity rules, and the single boundary where
 // five display strings become a `CreateTransactionDto`.
+//
+// **PET-32 made this module serve frame 11 as well as frame 09, and that is why the
+// `lib/amount.ts` this file used to predict never happened.** The edit modal draws the
+// same five fields under the same four rules, so it imports `invalidFields` and the four
+// predicates rather than restating any of them - which means `isAmountValid` still has
+// exactly two copies in the repo, not the three that would have triggered the lift.
+// `docs/TODO.md` carries the amended entry. What the edit modal did add is the two
+// boundaries at the end of this file: one turning a stored row into form values, one
+// turning form values back into the *changed* subset of an `UpdateTransactionDto`.
 //
 // React-free on purpose, the same split `app/setup/draft.ts` makes: the rules and the
 // conversion are plain functions whose suite needs no jsdom, and
@@ -52,6 +62,12 @@ export type TransactionFormField = 'amount' | 'categoryId' | 'date' | 'merchant'
  * and two overlapping strings are the wrong reason to invent one". PET-32's Edit
  * transaction modal will make it a third copy, which is the point at which a shared
  * `lib/amount.ts` earns its place; `docs/TODO.md` records that.
+ *
+ * **PET-32 did not make it a third copy**, and that prediction is left standing above
+ * rather than deleted so the reasoning survives: the edit modal calls `invalidFields`
+ * below instead of restating the rule, so it still lives in exactly two places and the
+ * lift is still unearned. The trigger to watch for is now a third *form* that validates
+ * an amount without coming through this module.
  *
  * `NaN > 0` is `false`, so an empty field, a bare `'.'` and unparseable junk all fail
  * on the same comparison as `'0'` and `'0.00'` - which is why AC3's "missing amount"
@@ -173,4 +189,97 @@ export function toCreateTransactionBody(
     categoryId: values.categoryId,
     ...(note === '' ? {} : { note }),
   };
+}
+
+/**
+ * A stored transaction as the edit form's five fields (EDT-1, and AC1).
+ *
+ * The inverse of `toCreateTransactionBody`, and two of the four conversions are decisions
+ * rather than plumbing.
+ *
+ * **`amount` goes through `formatAmountInput(amount.toFixed(2))`**, not `String(amount)`
+ * and not `formatCurrency`. The stored value is a number of major units, so a `24` would
+ * render as `24` where frame 11 draws `24.00` - and `toFixed(2)` is what supplies the
+ * cents before the grouping separator goes in, so `1240.5` becomes `1,240.50` rather than
+ * `1240.5`. `formatCurrency` is the wrong tool for the same reason it is wrong in
+ * `BudgetForm`: it emits a `$`, which belongs to `Input variant="currency"` here, and it
+ * is `Intl`-based, so it would fight every subsequent keystroke.
+ *
+ * **`note` becomes `''` when it is `null`**, because a controlled input's value cannot be
+ * `null` without React warning about it - the same boundary `TransactionFormValues`
+ * documents from the other side. The distinction between "no note" and "empty note" is
+ * restored on the way out, in `toUpdateTransactionBody` below.
+ *
+ * `date` and `merchant` pass through verbatim. `date` is the same `YYYY-MM-DD` string in
+ * the database, on the wire and in the form, so there is nothing to convert and any
+ * `Date` here would be the bug `lib/date.ts` describes. `merchant` is **not** trimmed on
+ * the way in: a stored value is what it is, and trimming here would make the diff below
+ * report a change the user did not make.
+ */
+export function toTransactionFormValues(transaction: Transaction): TransactionFormValues {
+  return {
+    amount: formatAmountInput(transaction.amount.toFixed(2)),
+    categoryId: transaction.categoryId,
+    date: transaction.date,
+    merchant: transaction.merchant,
+    note: transaction.note ?? '',
+  };
+}
+
+/**
+ * The request body for `PATCH /api/transactions/:id`: **only the fields that changed**.
+ *
+ * Read off the contract rather than declared, which is the rule
+ * `docs/agents/api-contract.md` sets for every caller.
+ *
+ * **A diff rather than all five fields, because the DTO is a real partial patch** - absent
+ * leaves a field alone, `null` clears the note, a value sets it. Sending everything every
+ * time would work and would rewrite four fields the user never touched, which is a worse
+ * answer to the same question. Two things follow that callers have to know:
+ *
+ * - **An empty object is a legitimate return value**, and it means nothing changed. The
+ *   endpoint answers 400 `Provide at least one field to update.` for a body with no keys,
+ *   so the caller must close without submitting rather than send it. `EditTransactionModal`
+ *   does exactly that, and its suite pins it.
+ * - **Callers must check `invalidFields` first**, as they must for
+ *   `toCreateTransactionBody` and for the same reason: `parseAmountInput('')` is `NaN`,
+ *   `JSON.stringify` writes that as `null`, and `@IsNumber` answers 400.
+ *
+ * Two comparisons are worth their comments. **`note` is compared against
+ * `original.note ?? ''`**, so a blank field over a stored `null` is *no change* and a
+ * blank field over a stored note sends `null` - the only way to clear one, and the reason
+ * this cannot reuse `toCreateTransactionBody`'s omit-when-blank rule. And **`merchant` is
+ * compared trimmed**, so a stored value carrying stray whitespace normalises the first
+ * time anything else about the row is saved; that is a change the user did not type, and
+ * it is preferred to the alternative of never being able to trim it.
+ *
+ * Keys are assigned rather than spread conditionally. `toCreateTransactionBody` uses a
+ * spread because it has one optional field among four required ones; here every field is
+ * optional, and five nested spreads would obscure the one thing this function is for. The
+ * property that matters is the same and `Object.keys` still sees it: a field that did not
+ * change contributes no key at all, rather than a key set to `undefined`.
+ */
+export function toUpdateTransactionBody(
+  original: Transaction,
+  values: TransactionFormValues,
+): components['schemas']['UpdateTransactionDto'] {
+  const body: components['schemas']['UpdateTransactionDto'] = {};
+
+  const amount = parseAmountInput(values.amount);
+  if (amount !== original.amount) body.amount = amount;
+
+  if (values.categoryId !== original.categoryId) body.categoryId = values.categoryId;
+
+  if (values.date !== original.date) body.date = values.date;
+
+  const merchant = values.merchant.trim();
+  if (merchant !== original.merchant) body.merchant = merchant;
+
+  // Trimmed for merchant's reason: a note of nothing but spaces is a blank note, and a
+  // blank note is `null` rather than `''` - `TransactionResponseDto.note` promises "null
+  // when the transaction has no note, never absent", so `''` would invent a third state.
+  const note = values.note.trim();
+  if (note !== (original.note ?? '')) body.note = note === '' ? null : note;
+
+  return body;
 }

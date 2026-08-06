@@ -145,6 +145,12 @@ export async function authorizedGet<T>(path: string): Promise<AuthorizedResult<T
  * against here, so a 2xx is success on the status alone. Nothing needs the row today: the
  * modal closes and `router.refresh()` re-reads the page. PET-32 can parse it when
  * something actually reads it.
+ *
+ * **PET-32 was offered exactly that and declined**, which is worth recording so the next
+ * ticket does not read the sentence above as an outstanding task. `PATCH /api/transactions/:id`
+ * answers 200 with the updated row, and the edit modal closes and calls `router.refresh()`
+ * just as the create does - so parsing it would have produced a value with no reader, and
+ * the 2xx-is-success-on-the-status rule above would have had to be argued a second time.
  */
 export type AuthorizedWriteResult = { ok: true } | { ok: false; status?: number };
 
@@ -246,6 +252,63 @@ export async function authorizedDelete(path: string): Promise<AuthorizedWriteRes
     // Unreachable backend, DNS, or a dropped connection. No status, which is what "the
     // request never completed" looks like - and here that genuinely matters, because a
     // delete that may or may not have landed is one the user will come back and retry.
+    return { ok: false };
+  }
+}
+
+/**
+ * PATCHes a JSON body to a guarded endpoint with the session lifted into an `Authorization`
+ * header.
+ *
+ * The fourth verb, and the third to reuse `AuthorizedWriteResult` rather than grow a shape of
+ * its own. Same reasoning as the two above it, so what is worth reading here is the one way
+ * `PATCH /api/transactions/:id` differs from both: **its 404 is ambiguous**. The create's could
+ * only ever mean the `categoryId` named no category, and the delete's could only ever mean the
+ * id named no transaction; this endpoint answers 404 for either, and tells them apart only in
+ * the message text. That is deliberately not resolved here - this function's whole job is
+ * moving the status - and `lib/updateTransaction.ts` narrows it from the body it built, which
+ * is the one place that knows whether a `categoryId` was in play.
+ *
+ * A partial body is the endpoint's contract rather than this helper's business: `undefined`
+ * leaves a field alone, `null` clears the note, and `JSON.stringify` drops the first of those
+ * for us, so the caller expresses "do not touch" by omitting a key.
+ *
+ * It takes a `path` and so must not become a Server Action, for the reason `authorizedPost`
+ * and `lib/backend.ts` both record: `'use server'` here would publish an endpoint accepting an
+ * arbitrary path. The action that wraps it names one fixed route.
+ *
+ * `cache: 'no-store'` for `authorizedPost`'s reason: a write Next decided to cache would
+ * silently swallow a second attempt.
+ *
+ * @param path the backend path including its `/api` prefix
+ */
+export async function authorizedPatch(path: string, body: unknown): Promise<AuthorizedWriteResult> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
+    return { ok: false, status: 401 };
+  }
+
+  try {
+    const response = await fetch(`${process.env.BACKEND_URL}${path}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+
+    // Any 2xx. The row is edited by now, so nothing below this line may turn a saved change
+    // into a reported failure - see `AuthorizedWriteResult`, and note the stakes are gentler
+    // here than for the create: a retried edit is idempotent where a retried create is a
+    // duplicate the user then has to find and delete.
+    return response.ok ? { ok: true } : { ok: false, status: response.status };
+  } catch {
+    // Unreachable backend, DNS, or a dropped connection. No status, which is what "the
+    // request never completed" looks like.
     return { ok: false };
   }
 }

@@ -5,6 +5,7 @@ import type { Transaction, TransactionFilters, TransactionsView } from '@/lib/tr
 
 import { AddTransactionProvider } from '../AddTransactionProvider';
 import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
+import { EditTransactionProvider } from '../EditTransactionProvider';
 import { TransactionFilterBar } from './TransactionFilterBar';
 import { TransactionsScreen } from './TransactionsScreen';
 import { TransactionsTable } from './TransactionsTable';
@@ -97,16 +98,25 @@ function Frame({ filters }: { filters: TransactionFilters }) {
           click. Resolving `ok` lets the whole flow be walked; nothing is deleted, and the list
           does not change because no server answered. */}
       <DeleteTransactionProvider remove={async () => ({ ok: true })}>
-        {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
-            gutter the `(app)` shell owns, since neither wraps a story. */}
-        <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-          <TransactionsScreen
-            view={view}
-            filters={filters}
-            filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
-            table={<TransactionsTable transactions={TRANSACTIONS} categories={CATEGORIES} />}
-          />
-        </div>
+        {/* PET-32's, inside the delete provider because it consumes that context, and with a stub
+            action for the identical reason: the real `updateTransaction` is `'use server'`, and
+            Storybook would bundle it as a browser module and reach `cookies()` on Save changes.
+            Resolving `ok` lets the whole edit flow be walked here - which is the only review it
+            gets, since `build-storybook` never runs a story and the four `(app)` screens sit
+            behind the session gate. Nothing is saved, and the row does not change because no
+            server answered. */}
+        <EditTransactionProvider update={async () => ({ ok: true })}>
+          {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
+              gutter the `(app)` shell owns, since neither wraps a story. */}
+          <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+            <TransactionsScreen
+              view={view}
+              filters={filters}
+              filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
+              table={<TransactionsTable transactions={TRANSACTIONS} categories={CATEGORIES} />}
+            />
+          </div>
+        </EditTransactionProvider>
       </DeleteTransactionProvider>
     </AddTransactionProvider>
   );
@@ -130,11 +140,26 @@ function Frame({ filters }: { filters: TransactionFilters }) {
  * **The kebab is live as of PET-33, and this story is where its two browser-only behaviours are
  * checked** - jsdom implements no Popover API at all and `jest.setup.ts` deliberately fakes
  * none of it, so nothing in the suite can see either. Open a row's menu: it should sit anchored
- * under that kebab, close on a click anywhere else and close on Escape. "Edit" reads dimmed and
- * does nothing, which is PET-32's to finish. "Delete" closes the menu and opens the
- * confirmation over the page. In **Firefox**, where CSS anchor positioning is unsupported,
- * daisyUI's own fallback centres the menu behind a dimmed backdrop instead - degraded and
- * expected, not a bug to fix here.
+ * under that kebab, close on a click anywhere else and close on Escape. "Delete" closes the menu
+ * and opens the confirmation over the page. In **Firefox**, where CSS anchor positioning is
+ * unsupported, daisyUI's own fallback centres the menu behind a dimmed backdrop instead -
+ * degraded and expected, not a bug to fix here.
+ *
+ * **"Edit" is live as of PET-32**, and it used to read dimmed here. It opens frame 11 prefilled
+ * from that row, which makes this story the place to check three more things no suite can see:
+ * that the focus trap keeps Tab inside the modal, that Escape closes it, and that with the
+ * confirmation opened over it from "Delete transaction" only the top dialog is interactive - jsdom
+ * has no top layer, so its suites can reach both. `Screens/11 Edit transaction` is where the box
+ * itself is diffed against the frame.
+ *
+ * **Expect the Category picker to be disabled in both modals here, under "We couldn't load your
+ * categories."** That is this story being honest rather than a defect: both providers read the
+ * options from `app/api/categories/route.ts` when the modal opens, and Storybook serves no route
+ * handlers at all, so the fetch fails and the designed unavailable state is what renders. It has
+ * been true of "Add transaction" on this story since PET-31 and went unremarked until a browser walk
+ * of PET-32 put a screenshot next to it. Every other field is still prefilled, which is the useful
+ * half: the row carries its own values and only the *options* need the network. Review the populated
+ * picker on `Screens/11 Edit transaction`, whose categories are a literal.
  *
  * A row click still does nothing, because the detail page is PET-34's.
  */

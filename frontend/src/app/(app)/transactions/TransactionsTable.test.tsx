@@ -5,6 +5,7 @@ import type { CategoryLabel } from '../../../lib/categories';
 import type { Transaction } from '../../../lib/transactions';
 
 import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
+import { EditTransactionProvider } from '../EditTransactionProvider';
 import { TransactionsTable } from './TransactionsTable';
 
 // The card, the columns and the join (TRN-4 to TRN-6).
@@ -37,13 +38,16 @@ const UBER = transaction({
 });
 
 /**
- * The provider is required as of PET-33, for the reason `TransactionRow.test.tsx` gives: every
- * row draws a kebab whose `useDeleteTransaction()` throws outside it.
+ * The providers are required as of PET-33, for the reason `TransactionRow.test.tsx` gives: every
+ * row draws a kebab whose `useDeleteTransaction()` throws outside it. PET-32 added the second and
+ * the nesting the layout uses, since the edit provider consumes the delete one.
  */
 function renderTable(transactions: Transaction[] = [transaction()]) {
   return render(
     <DeleteTransactionProvider>
-      <TransactionsTable transactions={transactions} categories={CATEGORIES} />
+      <EditTransactionProvider>
+        <TransactionsTable transactions={transactions} categories={CATEGORIES} />
+      </EditTransactionProvider>
     </DeleteTransactionProvider>,
   );
 }

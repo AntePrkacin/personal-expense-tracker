@@ -44,6 +44,11 @@ function Harness({
    * independent optionals reconstructs exactly the impossible pair the union exists to reject.
    * `npx tsc --noEmit` is what caught that here - `npm run build` never reads this file, which
    * is the gap `frontend/CLAUDE.md` records.
+   *
+   * PET-32's `footerStart` joined the same union for the same reason and arrives the same way,
+   * as `DELETE_BUTTON` below. Passing it as a separate harness prop was tried first and
+   * `npx tsc --noEmit` rejected it outright, which is the union working: spread beside a `shape`
+   * that might be the centred arm, it reconstructs the pairing the `never` exists to forbid.
    */
   shape?: ModalShape;
 }) {
@@ -220,6 +225,104 @@ describe('the centred shape', () => {
     await userEvent.click(openIt());
 
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+});
+
+describe('the footer', () => {
+  // PET-32's `footerStart`, and frame 11's. Two of these assert a layout class, which this file
+  // otherwise refuses to do - the exception `frontend/src/components/CLAUDE.md` allows is where a
+  // class *is* the behaviour, and each is paired with its negative so neither can pass vacuously.
+
+  const cancel = () => screen.getByRole('button', { name: 'Cancel' });
+  const del = () => screen.getByRole('button', { name: 'Delete transaction' });
+
+  /**
+   * Frame 11's left-hand control, declared once.
+   *
+   * `type="button"` is the whole reason frame 11's Delete does not submit the edit it sits inside
+   * - `ui/Button`'s default is the same - and the last test here is what pins the consequence.
+   */
+  const DELETE_BUTTON = <button type="button">Delete transaction</button>;
+
+  it('renders a left-hand control before the footer’s own', async () => {
+    // DOM order rather than visual position, which is what a screen reader and the keyboard
+    // follow - and frame 11 draws the same order left to right.
+    render(<Harness shape={{ footerStart: DELETE_BUTTON }} />);
+    await userEvent.click(openIt());
+
+    expect(del().compareDocumentPosition(cancel())).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('groups the footer’s controls so they stay together', async () => {
+    // The reason the right-hand pair gets a wrapper at all: with three children in a
+    // `justify-between` row, Cancel would sit alone in the middle of the box.
+    render(<Harness shape={{ footerStart: DELETE_BUTTON }} />);
+    await userEvent.click(openIt());
+
+    const save = screen.getByRole('button', { name: 'Add transaction' });
+
+    expect(cancel().parentElement).toBe(save.parentElement);
+    expect(del().parentElement).not.toBe(cancel().parentElement);
+  });
+
+  it('spreads the row when there is a left-hand control, and does not otherwise', async () => {
+    const { unmount } = render(<Harness shape={{ footerStart: DELETE_BUTTON }} />);
+    await userEvent.click(openIt());
+
+    expect(del().parentElement).toHaveClass('modal-action', 'justify-between');
+
+    unmount();
+
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(cancel().parentElement).toHaveClass('modal-action');
+    expect(cancel().parentElement).not.toHaveClass('justify-between');
+  });
+
+  it('leaves the footer’s controls as direct children when there is no left-hand control', async () => {
+    // The negative of the grouping test above: no `footerStart` means no wrapper, so the row is
+    // exactly what every existing caller already renders.
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(cancel().parentElement).toHaveClass('modal-action');
+  });
+
+  it('keeps the centred shape’s split footer, which cannot have a left-hand control', async () => {
+    // `footerStart` is `never` in that arm of the union, so this pairing is a build error rather
+    // than a case to handle - and `npx tsc --noEmit` is the gate, since `npm run build` never
+    // reads this file. What is assertable here is that the centred row is unchanged.
+    render(<Harness shape={{ align: 'center' }} />);
+    await userEvent.click(openIt());
+
+    expect(cancel().parentElement).toHaveClass('modal-action', '*:flex-1');
+    expect(cancel().parentElement).not.toHaveClass('justify-between');
+  });
+
+  it('still closes through the one exit with a left-hand control present', async () => {
+    // The regression the new branch could plausibly cause: the footer row is inside `content`,
+    // which is inside the optional `<form>`, so a change there is a change to the exit path.
+    const onClose = jest.fn();
+    render(<Harness shape={{ footerStart: DELETE_BUTTON }} onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not submit the form when the left-hand control is clicked', async () => {
+    // Frame 11's Delete opens a confirmation; submitting the edit on the way would save changes
+    // the user was in the middle of abandoning. It rests on the control's own `type="button"`,
+    // which is `ui/Button`'s default and the harness's too.
+    const onSubmit = jest.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
+    render(<Harness shape={{ footerStart: DELETE_BUTTON }} onSubmit={onSubmit} />);
+    await userEvent.click(openIt());
+
+    await userEvent.click(del());
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });
 

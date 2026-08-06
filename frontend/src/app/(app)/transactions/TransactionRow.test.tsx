@@ -5,6 +5,7 @@ import { formatIsoDayMonth, formatNegative } from '../../../lib/format';
 import type { Transaction } from '../../../lib/transactions';
 
 import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
+import { EditTransactionProvider } from '../EditTransactionProvider';
 import { TransactionRow, type RowCategory } from './TransactionRow';
 
 // One row, in isolation from the join that resolves its category (TRN-5).
@@ -45,19 +46,25 @@ const GROCERIES: RowCategory = {
 /**
  * A `<tr>` is invalid outside a table, and React warns about it.
  *
- * **The provider is required rather than convenient** as of PET-33: the row's kebab is
+ * **The providers are required rather than convenient** as of PET-33: the row's kebab is
  * `TransactionRowMenu`, whose `useDeleteTransaction()` throws outside it - deliberately, so a
- * Delete that quietly stops working fails a test instead of shipping. Wrapped in the real one
+ * Delete that quietly stops working fails a test instead of shipping. Wrapped in the real ones
  * rather than mocking the menu away, so this suite still renders what the page renders.
+ *
+ * PET-32 made it two, and in the same nesting the layout uses: the menu's Edit calls
+ * `useEditTransaction()`, and the edit provider itself calls `useDeleteTransaction()`, so it has
+ * to be the inner one here too.
  */
 function renderRow(category: RowCategory | null = GROCERIES, transaction = TRANSACTION) {
   return render(
     <DeleteTransactionProvider>
-      <table>
-        <tbody>
-          <TransactionRow transaction={transaction} category={category} />
-        </tbody>
-      </table>
+      <EditTransactionProvider>
+        <table>
+          <tbody>
+            <TransactionRow transaction={transaction} category={category} />
+          </tbody>
+        </table>
+      </EditTransactionProvider>
     </DeleteTransactionProvider>,
   );
 }

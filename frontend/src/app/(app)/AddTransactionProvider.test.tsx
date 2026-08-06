@@ -11,6 +11,14 @@ import { AddTransactionProvider, useAddTransaction } from './AddTransactionProvi
 // `next/navigation` is a package specifier, so the `@/` alias trap does not apply. The create
 // action is not mocked at all - the modal is never submitted here, and `AddTransactionModal`'s
 // own suite injects it as a prop.
+//
+// **Four of the cases below now cover shared code rather than this provider's own**, since PET-32
+// lifted the read into `(app)/useCategoryOptions.ts`: the exact path, the nothing-before-open
+// case, the failure line and the late-read guard. They stay here rather than moving to a suite of
+// their own, because there is no `renderHook` anywhere in `frontend/src` - hooks are asserted
+// through the components that use them - and `EditTransactionProvider.test.tsx` pins the same four
+// through the other consumer. Two suites over one hook is the point: the read is shared now, so a
+// change that breaks it should fail in both places rather than in a harness.
 jest.mock('next/navigation', () => ({ useRouter: jest.fn() }));
 
 const CATEGORIES = [
