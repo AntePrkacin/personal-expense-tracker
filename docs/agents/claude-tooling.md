@@ -76,6 +76,34 @@ mcp`, exposing `generate`, `push`, `pull`, `check`, `export` and `up` as tools. 
 per-developer. Note that `push` applies schema changes directly to a database without
 writing a migration, which is the opposite of this repo's committed-migrations workflow.
 
+**The daisyUI Blueprint MCP drives frontend UI work, and its three stages earn three
+different levels of trust.** It is a per-developer server rather than a committed one, and
+PET-57's plan is what made it this repo's method: run `daisyui_setup_expert`,
+`daisyui_rules_enforcer` and `daisyui_component_syntax_expert` before writing daisyUI markup,
+and `daisyui_quality_inspector` with `auditIntent` `fix_changes` after. What PET-57's
+incorporation of main established, verified finding by finding:
+
+- **Follow the syntax stage verbatim.** Every canonical structure it returned matched the
+  installed daisyUI's own CSS, and it is what keeps parallel work consistent. Double-checking
+  it is wasted effort.
+- **Adjudicate the inspector's automated findings; never auto-apply its fixes.** On this
+  codebase it produces confident false positives: it cannot see a label association that goes
+  through component composition (`frontend/src/components/ui/FieldShell.tsx`'s `htmlFor` names
+  every field control it flags as unlabelled), it reports the repo's variant-map convention -
+  whole literal class strings selected from a `Record`, the pattern `frontend/CLAUDE.md`
+  mandates - as "dynamic classes", and it can anchor a finding on a comment line while the
+  code it asks for sits lower in the same file. It repeated fifteen identical false findings
+  across two runs of PET-57's incorporation, so a clean automated pass may simply be
+  unreachable here; the suite's `getByLabelText` assertions pin the associations it cannot
+  see. Check each finding against source, fix the real ones, and record the verdict on the
+  rest.
+- **Nothing it does replaces opening the app.** The one real defect of that incorporation -
+  daisyUI animating `modal-box` through `scale`, which made the box the containing block for
+  the date popover's `position: fixed` - was invisible to the inspector and to a fully green
+  test suite, and only a Chrome walk of the changed flow caught it. The inspector's
+  manual-check protocol demands that walk; treat the walk, not the findings list, as the
+  stage's real value.
+
 `.claude/commit-checks.md` is a generated cache read by `repo-commit`. Regenerate it
 with `/repo-commit refresh-checks` when it goes stale.
 
