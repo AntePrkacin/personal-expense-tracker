@@ -65,8 +65,33 @@ like the design.
 **One condition drives the whole screen, and it is `transactionCount === 0`.** Not five independent
 per-card emptiness checks, and not `spent === 0`: those two differ, because a period could in
 principle hold transactions summing to zero, and more importantly five conditions can disagree and
-produce a screen that is half empty and half zeroed. `DashboardScreen` resolves the state once and
-each card takes a boolean, so the frame is either drawn or not.
+produce a screen that is half empty and half zeroed. The state is resolved once and each card takes a
+boolean, so the frame is either drawn or not.
+
+**It is resolved in `page.tsx`, not in `DashboardScreen`, and that is forced rather than chosen.**
+PET-21's plan records why and this plan originally had it wrong. The cards are **slots** typed
+`React.ReactNode`, the same as `TransactionsScreen`'s two, so `page.tsx` constructs each card and
+hands the finished node to the screen. A screen holding a built node cannot pass a prop into it;
+`cloneElement` over a typed slot would be the only way and it is not a seam worth inheriting. Since
+`page.tsx` is where the read lands and therefore where `transactionCount` already is, the condition
+is resolved there and travels as a prop on each card as that card is constructed. `DashboardScreen`
+never sees it, which is also the right division on its own terms: the screen does not know what a
+card's empty state looks like, and nothing on frame 05 is the screen's decision to make.
+
+So the test that pins "this is one condition, not five" belongs in `(app)/pages.test.tsx`, beside
+the other assertions about what this page hands its screen, rather than in the screen's own suite.
+
+**The donut is the one card whose empty input is not the screen's empty state, so its guard is
+`categories.length === 0`.** PET-23's plan sets this out in full and it is carried out here. The
+trend card's `[]` and the recent card's `[]` both occur exactly when `transactionCount === 0`,
+because both are derived straight from the period's transaction list. `categories` is not: it comes
+from `CategoriesService.list()` filtered on `spent > 0`, so an account with transactions whose
+categories are all gone - the dangling-category race `dashboard.service.ts` documents - yields an
+empty `categories` on a populated screen, and the donut would render blank with nothing explaining
+it. Guarding that card on its own input closes the gap, and it does not reopen the disagreement this
+section's first decision exists to prevent: an empty screen *always* has empty `categories`, so the
+guard is a strict superset of the screen condition rather than a competing opinion about whether the
+account is new. Every other card keeps the screen's flag.
 
 **AC2's "Full month ahead" proves the point.** `daysLeft` is documented as never 0 and counting
 today, so it carries no signal about emptiness at all - there is no value of it that means "empty".
@@ -109,9 +134,9 @@ first one flipping and the rest going stale.
 
 ## Shape
 
-`(app)/dashboard/DashboardScreen.tsx` - resolves `isEmpty` once and passes it down. The cards stay
-slots, so the flag travels as a prop on each card rather than as a branch in the screen: the screen
-does not know what a card's empty state looks like, and a screen that swapped whole nodes would put
+`(app)/dashboard/page.tsx` - resolves `isEmpty` once off the summary it already holds, and passes it
+to each card as that card is constructed. `DashboardScreen.tsx` is **untouched**: the cards stay
+slots, so the flag cannot travel through the screen, and a screen that swapped whole nodes would put
 frame 05's design decisions in the wrong file.
 
 `(app)/dashboard/BudgetCard.tsx` - the zero readout, the empty bar, `$2,000 left`, "Full month
@@ -126,19 +151,21 @@ designed treatment where it currently renders nothing.
 ## Tasks
 
 - [ ] Commit this plan alone and open the draft PR against `feat/PET-25-insight-teaser-card`
-- [ ] `DashboardScreen.tsx`: resolve `isEmpty` once, thread it to the four cards, and pin in its
-      suite that it is not five separate conditions
+- [ ] `page.tsx`: resolve `isEmpty` once, thread it to the four cards as they are constructed, and
+      pin in `(app)/pages.test.tsx` that it is one condition and not five
 - [ ] `BudgetCard.tsx`: the "Full month ahead" caption and the Top category dash, with cases
 - [ ] `TrendCard.tsx`: the bar glyph and "No spending to chart yet", with cases
 - [ ] `RecentTransactionsCard.tsx`: the icon, "No transactions yet" and its body line, with cases
-- [ ] `CategoryDonut.tsx`: the gray ring, the `$0 spent` centre and its caption, with cases
+- [ ] `CategoryDonut.tsx`: the gray ring, the `$0 spent` centre and its caption, guarded on
+      `categories.length === 0` rather than on the screen's flag, with cases for both routes into it
 - [ ] Verify the teaser card already renders its unlock state from PET-25; change nothing if it does
 - [ ] Stories: `Screens/05 Dashboard — Empty` against node `44:706`, plus an empty variant on each
       of the four card stories
-- [ ] Docs: `frontend/src/app/CLAUDE.md` (the one-condition decision, and why `EmptyState` is not
-      used), root `CLAUDE.md` - **this is the ticket that empties the Dashboard entry in
-      `frontend/CLAUDE.md`'s `## Not built here`**, so delete that bullet's dashboard clause rather
-      than editing around it
+- [ ] Docs: `frontend/src/app/CLAUDE.md` (the one-condition decision, where it is resolved and why,
+      the donut's wider guard, and why `EmptyState` is not used), root `CLAUDE.md` - **this is the
+      ticket that empties the Dashboard entry in `frontend/CLAUDE.md`'s `## Not built here`**, so
+      delete that bullet's dashboard clause rather than editing around it. The bullet itself stays:
+      it is "The shell's content", and AI Insights and Settings are still empty below the header
 - [ ] `docs/TODO.md`: the five designed strings, and PET-21's chip threshold if still open
 - [ ] Comment on PET-26 recording that the teaser clause was satisfied in PET-25
 
@@ -148,8 +175,11 @@ PET-25's regenerated artifacts through the stack and must not regenerate them ag
 ## Verification
 
 From `frontend/`: `npm run lint`, `npm test`, `npm run build` and `npx tsc --noEmit`. From the repo
-root: `npm run docs:check` - which matters more than usual on this branch, since it is the gate that
-fails if a `## Not built here` section is emptied to nothing.
+root: `npm run docs:check`, which is the gate on the `## Not built here` edit above. Note it is not
+in danger of firing here, an earlier draft of this plan implied otherwise: that check fails when a
+scoped file has no such section at all, and this branch deletes a **clause** from a bullet whose
+subject is "The shell's content" - a bullet that survives, because AI Insights and Settings are still
+empty below their headers. Nothing in this stack empties that section.
 
 Then the app itself, in **Chrome**, and this one needs a genuinely fresh account rather than a
 cleared one: register a new address, open the emailed link, and land on `/dashboard` for the first
