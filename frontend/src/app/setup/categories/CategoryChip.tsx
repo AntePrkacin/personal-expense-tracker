@@ -9,44 +9,42 @@ import { CATEGORY_TILE, type CategoryColour } from '@/components/ui/categoryColo
 // QA asks.
 
 /**
- * The chip's fill and border, per state.
+ * The chip's treatment, per state.
  *
- * Two maps rather than one conditional string, per `ui/Field.tsx`'s rule:
- * `border-border-strong` and `border-brand-accent` have equal specificity, so a
- * component emitting both would let stylesheet order pick the winner.
+ * A daisyUI `btn` in both states, which is what the element already was: `btn-soft
+ * btn-primary` is the frame's tinted selected chip and `btn-outline` its bordered
+ * unselected one, so the tint, the border and the label colour all come from one
+ * modifier pair rather than from three maps of hand-picked colours. That also
+ * retires the specificity split the two old maps existed for - a single modifier
+ * cannot emit two competing border colours.
  *
- * The selected pair is byte-identical to `TAG_TONES.indigo` by coincidence, not as a
- * reason to reuse `ui/Tag`: Tag is a non-interactive `span` at a different radius,
- * padding, type style and dot size, and its tones are *status* tones.
+ * A colour modifier is legitimate here rather than decoration: `primary` on the
+ * pressed chip *is* the selection state, and the checkmark carries the same state
+ * without colour for anyone who cannot see it.
+ *
+ * Complete literal class strings in a `Record`, per the rule every variant map in
+ * the repo follows: Tailwind's scanner reads this file as raw text, so a class
+ * assembled by interpolation is found by nobody and compiles to nothing.
  */
-export const CHIP_SURFACE: Record<'on' | 'off', string> = {
-  on: 'bg-brand-accent-soft border-brand-accent',
-  off: 'bg-surface-card border-border-strong',
-};
-
-/** The label colour, per state. Split from the fill for the specificity reason above. */
-export const CHIP_LABEL: Record<'on' | 'off', string> = {
-  on: 'text-brand-accent-pressed',
-  off: 'text-text-primary',
+export const CHIP_STATE: Record<'on' | 'off', string> = {
+  on: 'btn-soft btn-primary',
+  off: 'btn-outline',
 };
 
 /**
  * Everything both states share.
  *
- * **`border-[1.5px]` in both states is the one deviation from the frame**, where the
- * unselected chip draws 1px. The chip is auto-sized rather than `w-full`, so a border
- * that thickens on selection makes it a pixel wider and taller and nudges - or
- * rewraps - the whole row under the pointer. Half a pixel of border is invisible; a
- * row that jumps when you click it is not.
+ * `btn` rather than `btn-sm`: the frame draws a 40px chip, which is the default
+ * size, and CAT-1's "tap to toggle" makes the tap target the point.
  *
- * `cursor-pointer` for the reason `BUTTON_BASE` records, and it matters more here: a
- * chip does not look like a button, and CAT-1 says "tap to toggle", so the cursor is
- * what identifies the pills as the thing to tap.
+ * Both states are the same `btn`, so neither can be a pixel wider than the other -
+ * which is the property the old `border-[1.5px]` deviation bought by hand, and the
+ * reason a row of ten chips does not rewrap under the pointer when one is clicked.
+ *
+ * No `cursor-pointer` and no focus ring here: `btn` carries both, where a bare
+ * `<button>` carries neither.
  */
-const CHIP_BASE =
-  'text-label-l focus-visible:outline-brand-accent inline-flex cursor-pointer items-center ' +
-  'gap-2.25 rounded-md border-[1.5px] px-3.5 py-2.75 focus-visible:outline-2 ' +
-  'focus-visible:outline-offset-2';
+const CHIP_BASE = 'btn gap-2 font-normal';
 
 /**
  * The checkmark a selected chip shows (node 43:723).
@@ -54,16 +52,17 @@ const CHIP_BASE =
  * The path is the exported vector translated to its own 8.5x6 bounding box, so half
  * of the 2-wide round-capped stroke falls outside the viewBox and `overflow-visible`
  * is what stops the tips and the elbow rendering shorn flat - the trap `ui/Select`'s
- * and `ui/ListRow`'s glyphs document.
+ * glyph documents.
  *
- * `text-brand-accent`, not `currentColor`: Figma strokes this with Brand/Accent while
- * the label beside it is Brand/Accent Pressed, so inheriting would quietly darken it.
+ * `currentColor` now: Figma strokes the tick one shade lighter than the label beside
+ * it, and the theme publishes one accent, so inheriting the pressed chip's own
+ * colour is both correct and theme-aware.
  */
 function CheckGlyph() {
   return (
     <svg
       viewBox="0 0 8.5 6"
-      className="text-brand-accent h-1.5 w-[8.5px] shrink-0 overflow-visible"
+      className="h-1.5 w-[8.5px] shrink-0 overflow-visible"
       fill="none"
       aria-hidden="true"
     >
@@ -89,14 +88,15 @@ export function CategoryChip({ label, colour, selected, onToggle }: CategoryChip
       type="button"
       aria-pressed={selected}
       onClick={onToggle}
-      className={`${CHIP_BASE} ${CHIP_SURFACE[state]} ${CHIP_LABEL[state]}`}
+      className={`${CHIP_BASE} ${CHIP_STATE[state]}`}
     >
       {/* Hidden because two of the ten colours repeat, so the dot cannot identify a
-          category even to a reader who can see it. The name always sits beside it. */}
-      <span
-        aria-hidden="true"
-        className={`size-2.75 shrink-0 rounded-full ${CATEGORY_TILE[colour]}`}
-      />
+          category even to a reader who can see it. The name always sits beside it.
+
+          daisyUI's `status` is the dot: it is exactly this - a small round shape
+          whose only job is a colour - and the fill still comes from CATEGORY_TILE,
+          which documents that these are category colours rather than status ones. */}
+      <span aria-hidden="true" className={`status status-lg shrink-0 ${CATEGORY_TILE[colour]}`} />
       {label}
       {selected ? <CheckGlyph /> : null}
     </button>

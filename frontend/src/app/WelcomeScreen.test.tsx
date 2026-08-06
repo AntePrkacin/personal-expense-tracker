@@ -59,18 +59,6 @@ describe('the Welcome screen', () => {
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
-
-  it('draws the overline in the pressed accent, not the plain one', () => {
-    // The one class assertion worth making here: `text-brand-accent` instead of
-    // `text-brand-accent-pressed` is the exact mistake a reader makes, it is what
-    // Figma binds, and no other test in the repo would notice.
-    render(<WelcomeScreen />);
-
-    expect(screen.getByText('PERSONAL FINANCE, SIMPLIFIED')).toHaveClass(
-      'text-overline',
-      'text-brand-accent-pressed',
-    );
-  });
 });
 
 describe('the two entry routes', () => {
@@ -112,8 +100,8 @@ describe('the decorative panel', () => {
   it('is hidden from assistive technology', () => {
     // AC4, WEL-4, and a real assertion rather than a formality. Role queries only
     // match the accessibility tree, so queryByRole('progressbar') passing null is
-    // exactly the proof that aria-hidden is in place: ui/ProgressBar publishes
-    // role="progressbar" with aria-valuenow, and unhidden it would announce a
+    // exactly the proof that aria-hidden is in place: the sample card's native
+    // <progress> carries that role implicitly, and unhidden it would announce a
     // real-sounding 62% of a budget that is not the reader's.
     render(<WelcomeScreen />);
 
@@ -160,7 +148,7 @@ describe('the decorative panel', () => {
  * "whatever is hiding this fabricated content" - and cannot drift onto another
  * hidden node.
  *
- * Not keyed off a class either (`.bg-surface-ink`), which would couple the panel's
+ * Not keyed off a class either (`.bg-neutral`), which would couple the panel's
  * identity to its fill.
  */
 function panel(): HTMLElement {

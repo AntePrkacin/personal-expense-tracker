@@ -26,7 +26,10 @@ export function LogInAgain() {
   return (
     // justify-end, not justify-between: this is the one access footer with a single
     // control, and the frame puts it flush to the content box's right edge.
-    <div className="flex items-center justify-end pt-1.5">
+    // Plain flex rather than daisyUI's `card-actions`: the `card` root is in
+    // `AccessCard`, and a part class in a file without its root is what the
+    // component rules reject.
+    <div className="flex flex-wrap items-center justify-end gap-2 pt-1.5">
       <Button href={ACCESS_ROUTES.login} variant="secondary" label="Log in again" />
     </div>
   );

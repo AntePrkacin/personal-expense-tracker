@@ -64,14 +64,9 @@ type SidebarNavProps = {
 export function SidebarNav({ firstName, lastName, email }: SidebarNavProps) {
   const active = matchItem(usePathname()) ?? FALLBACK_ITEM;
 
-  return (
-    // Sidebar is `h-full` and pins its footer with justify-between, so it needs
-    // a constrained height from whatever mounts it - its own comment names this
-    // exact shape. sticky keeps it in place while the content column scrolls,
-    // which is what AC4's "the sidebar persists" means on a page taller than the
-    // viewport; shrink-0 stops a wide table squeezing its 260px.
-    <div className="sticky top-0 h-screen shrink-0">
-      <Sidebar active={active} firstName={firstName} lastName={lastName} email={email} />
-    </div>
-  );
+  // No wrapper of its own: the layout's `drawer-side` is what constrains the
+  // panel's height and keeps it in place while the content column scrolls,
+  // which is what AC4's "the sidebar persists" means on a page taller than the
+  // viewport.
+  return <Sidebar active={active} firstName={firstName} lastName={lastName} email={email} />;
 }

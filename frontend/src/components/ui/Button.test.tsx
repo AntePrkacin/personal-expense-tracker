@@ -1,38 +1,33 @@
 import { render, screen } from '@testing-library/react';
 
-import { BUTTON_BASE, BUTTON_VARIANTS, Button, TrashGlyph, type ButtonVariant } from './Button';
+import { Button, TrashGlyph, type ButtonVariant } from './Button';
 
 // next/jest maps every .css import to an empty object, so jsdom never receives a
-// stylesheet and no test here can assert a rendered colour or size. These assert
-// the class names instead; that the classes generate real CSS is proved
-// separately in utilities.test.ts.
+// stylesheet and no test here can assert a rendered colour or size. Styling is
+// daisyUI's as of PET-57, so these assert behaviour and semantics; the one class
+// assertion left is `btn`, the component-defining hook both renderings share.
 
-const VARIANTS = Object.keys(BUTTON_VARIANTS) as ButtonVariant[];
+const VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'danger', 'text', 'textDanger'];
 
 describe('Button', () => {
-  it('exposes the three designed variants plus the two text ones', () => {
-    // Guards the it.each blocks below: dropping a variant would otherwise shrink
-    // them to silent cases and still pass. The order is the Components tile's
-    // (Primary, Secondary, Danger) followed by the two the tile does not draw.
-    expect(VARIANTS).toEqual(['primary', 'secondary', 'danger', 'text', 'textDanger']);
-  });
-
   it.each(VARIANTS)('%s renders a button carrying its label', (variant) => {
     render(<Button variant={variant} label="Add transaction" />);
 
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
   });
 
-  it.each(VARIANTS)('%s applies its designed fill, border and padding', (variant) => {
+  it.each(VARIANTS)('%s renders as a daisyUI button', (variant) => {
     render(<Button variant={variant} label="Add transaction" />);
 
-    expect(screen.getByRole('button')).toHaveClass(...BUTTON_VARIANTS[variant].split(' '));
+    expect(screen.getByRole('button')).toHaveClass('btn');
   });
 
   it('defaults to the primary variant', () => {
+    // btn-primary is the semantic modifier for the one emphasized action per
+    // screen, which is what `primary` means here.
     render(<Button label="Continue" />);
 
-    expect(screen.getByRole('button')).toHaveClass(...BUTTON_VARIANTS.primary.split(' '));
+    expect(screen.getByRole('button')).toHaveClass('btn-primary');
   });
 
   it('defaults to type=button rather than submit', () => {
@@ -55,19 +50,6 @@ describe('Button', () => {
     render(<Button label="Generating..." variant="secondary" disabled />);
 
     expect(screen.getByRole('button')).toBeDisabled();
-  });
-
-  it('shows a pointer on hover, and not-allowed when disabled', () => {
-    // Neither the user agent nor Tailwind's preflight gives a <button> a pointer, so
-    // this class is the only reason one appears - and the compile guard cannot notice
-    // it being deleted, because the candidate would still generate CSS from the list
-    // in utilities.test.ts. The anchor branch inherits it through BUTTON_BASE and is
-    // covered by the drift assertion further down.
-    const { rerender } = render(<Button label="Continue" />);
-    expect(screen.getByRole('button')).toHaveClass('cursor-pointer');
-
-    rerender(<Button label="Continue" disabled />);
-    expect(screen.getByRole('button')).toHaveClass('cursor-pointer', 'disabled:cursor-not-allowed');
   });
 
   it('calls onClick', () => {
@@ -115,27 +97,19 @@ describe('Button as a link', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it.each(VARIANTS)('%s applies the same designed fill, border and padding', (variant) => {
-    // The point of the whole exercise: one BUTTON_VARIANTS, whichever element
-    // renders. A second copy of these strings in a link component is exactly what
-    // this asserts does not exist.
+  it.each(VARIANTS)('%s wears the same button dressing on the anchor', (variant) => {
+    // The point of the whole exercise: one variant map, whichever element
+    // renders. A second copy of the classes in a link-shaped component is
+    // exactly what this asserts does not exist.
     render(<Button variant={variant} label="Get started" href="/setup" />);
 
-    expect(screen.getByRole('link')).toHaveClass(...BUTTON_VARIANTS[variant].split(' '));
-  });
-
-  it('applies the shared base classes too', () => {
-    // Guards the BUTTON_BASE extraction: the two renderings could otherwise drift
-    // apart on the focus ring or the radius while every variant test stayed green.
-    render(<Button label="Get started" href="/setup" />);
-
-    expect(screen.getByRole('link')).toHaveClass(...BUTTON_BASE.split(' '));
+    expect(screen.getByRole('link')).toHaveClass('btn');
   });
 
   it('defaults to the primary variant', () => {
     render(<Button label="Get started" href="/setup" />);
 
-    expect(screen.getByRole('link')).toHaveClass(...BUTTON_VARIANTS.primary.split(' '));
+    expect(screen.getByRole('link')).toHaveClass('btn-primary');
   });
 
   it('carries no type attribute', () => {

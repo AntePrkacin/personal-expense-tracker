@@ -43,21 +43,21 @@ type Outcome = keyof typeof MESSAGES;
  * A `Record` of complete literal class strings, per the rule every variant map in the
  * repo follows: Tailwind's scanner reads this file as raw text, so a class assembled
  * by interpolation is found by nobody and compiles to nothing, with no build error and
- * no failing test. `components/ui/utilities.test.ts` compiles these.
+ * no failing test.
  *
  * `failed` and `throttled` share a treatment on purpose - both are failures, and the
  * difference between them is what the sentence says, not how it looks. `sent` and
  * `expired` share the quieter one, because neither reports a fault: nothing broke when
  * a cookie reached its own expiry, and the control below the line is the fix. The
- * success line is `text-text-secondary` rather than a green, because `status-success`
- * means an over-or-under-budget condition in this design system, and reaching for the
- * hue because it reads as "good" would say something the interface did not intend.
+ * success line is dimmed `base-content` rather than `success`, because `success` means
+ * an over-or-under-budget condition on the screens to come, and reaching for the hue
+ * because it reads as "good" would say something the interface did not intend.
  */
 export const RESEND_MESSAGE: Record<Outcome, string> = {
-  sent: 'text-body-s text-text-secondary text-right',
-  failed: 'text-body-s text-status-danger-text text-right',
-  throttled: 'text-body-s text-status-danger-text text-right',
-  expired: 'text-body-s text-text-secondary text-right',
+  sent: 'text-base-content/70 text-right text-sm',
+  failed: 'text-error text-right text-sm',
+  throttled: 'text-error text-right text-sm',
+  expired: 'text-base-content/70 text-right text-sm',
 };
 
 export function ResendLink({ resend }: { resend: () => Promise<ResendResult> }) {
@@ -113,7 +113,7 @@ export function ResendLink({ resend }: { resend: () => Promise<ResendResult> }) 
           the difference between assertive and polite. A failed send interrupts because
           the user has to act on it, and so does an expiry, because the control they
           were using has just been replaced. "A new link is on its way" is exactly the
-          kind of confirmation that should wait for a pause in speech. `ui/Field` omits
+          kind of confirmation that should wait for a pause in speech. `ui/Input` omits
           both, for the reason PET-11 records - its message appears synchronously beside
           the field the user just left, where these follow a network round trip with
           nothing else on screen changing. */}
@@ -126,7 +126,7 @@ export function ResendLink({ resend }: { resend: () => Promise<ResendResult> }) 
       {expired ? (
         <LogInAgain />
       ) : (
-        <div className="flex items-center justify-end pt-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-1.5">
           <Button
             type="button"
             variant="secondary"

@@ -23,7 +23,7 @@ const meta: Meta<typeof Sidebar> = {
     // constrained one to pin the footer to the bottom. 1024px is the Figma frame,
     // so this frames the component exactly as the design draws it.
     (Story) => (
-      <div className="bg-surface-canvas flex h-[1024px]">
+      <div className="bg-base-200 flex h-[1024px]">
         <Story />
       </div>
     ),

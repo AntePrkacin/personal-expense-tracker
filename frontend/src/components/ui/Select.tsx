@@ -1,58 +1,23 @@
-import { Field, fieldControlClass, fieldErrorId } from './Field';
-
-// Select / Field (Figma "Components", node 14:17).
+// Select, on daisyUI's `select` inside a `fieldset`/`label` pair (PET-57). The
+// pair replaced ui/Field; see Input for the shared reasoning, including why
+// daisyUI's `validator` class is not used for the controlled `error` prop.
 //
-// The dropdown on Setup step 1 ("Currency", 02), Add and Edit transaction
-// ("Category", "Date", 09 and 11), Add and Edit category ("Color", "Icon", 19 and
-// 21) and Settings ("Currency", "Month starts on", 17).
-//
-// Built on a native <select>. Figma never draws one open (assumptions A16, A40),
-// so there is no designed list to match, and the native control brings keyboard
-// handling, screen-reader semantics and the platform picker on a phone for free -
-// none of which a hand-rolled listbox gets without several hundred lines and its
-// own 'use client' boundary. What it cannot do is render anything but text in the
-// list, so the "Color" picker on 19, whose options are the eight Category tokens,
-// will need a control of its own when that ticket lands.
+// The dropdown on Setup step 1 ("Currency", 02) and the forms to come. Built on
+// a native <select>: Figma never draws one open (assumptions A16, A40), so
+// there is no designed list to match, and the native control brings keyboard
+// handling, screen-reader semantics and the platform picker on a phone for
+// free. daisyUI's `select` class draws its own chevron, which retired the
+// hand-traced one this file used to carry.
 
-/**
- * The trailing chevron, traced from the Figma export (node 14:16) and re-pointed
- * at `currentColor`.
- *
- * The designed leaf is 10x5 with a 1.5 round-capped stroke, which means half the
- * stroke falls outside the box along all three ends. An SVG viewport clips its
- * own overflow by default, so without `overflow-visible` both tips and the elbow
- * render shorn flat - the same trap ListRow's glyph documents.
- *
- * `pointer-events-none` is what keeps the whole box clickable: the chevron is
- * layered over the select, and without it a click on the arrow - the most
- * obvious place to click - would land on the decoration and do nothing.
- */
-function Chevron() {
-  return (
-    <svg
-      viewBox="0 0 10 5"
-      className="text-text-tertiary pointer-events-none absolute top-1/2 right-3.5 h-1.25 w-2.5 -translate-y-1/2 overflow-visible"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path d="M0 0L5 5L10 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/**
- * The control's own padding, which sits on the <select> rather than on the box.
- *
- * Input puts padding on the box; this cannot, because the select has to span the
- * full box for every part of it to open the list. `pr-8.5` is 34px: 14px of
- * designed right padding, the 10px chevron, and the 10px gap the tile draws
- * between value and chevron.
- */
-export const SELECT_CONTROL =
-  'text-body-m text-text-primary disabled:text-text-tertiary w-full appearance-none bg-transparent py-3 pr-8.5 pl-3.5 outline-none disabled:cursor-not-allowed';
+// State-keyed complete literals, the repo's Record convention: Tailwind's
+// scanner reads whole class strings, never halves assembled at runtime.
+const SELECT_CONTROL: Record<'valid' | 'invalid', string> = {
+  valid: 'select w-full',
+  invalid: 'select select-error w-full',
+};
 
 type SelectProps = {
-  /** Wired to the label and the error message; see Field for why it is required. */
+  /** Wired to the label and the error message; see Input for why it is required. */
   id: string;
   /** The Figma "Label" property, e.g. "Category". */
   label: string;
@@ -72,7 +37,7 @@ type SelectProps = {
   onChange?: (event: React.ChangeEvent<HTMLSelectElement>) => void;
   required?: boolean;
   disabled?: boolean;
-  /** One line of validation copy. See Field for the pattern and its status. */
+  /** One line of validation copy, rendered beneath the control. */
   error?: string;
 };
 
@@ -89,39 +54,41 @@ export function Select({
   disabled,
   error,
 }: SelectProps) {
+  const errorId = error ? `${id}-error` : undefined;
+
   return (
-    <Field id={id} label={label} error={error}>
-      {/* The box keeps no padding of its own - see SELECT_CONTROL - and gets the
-          `relative` the chevron positions against from FIELD_CONTROL_BASE. */}
-      <div className={fieldControlClass(error, disabled)}>
-        <select
-          id={id}
-          name={name ?? id}
-          value={value}
-          defaultValue={defaultValue ?? (placeholder && value === undefined ? '' : undefined)}
-          onChange={onChange}
-          required={required}
-          disabled={disabled}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={fieldErrorId(id, error)}
-          // outline-none for the same reason as Input: the box's accent border is
-          // the focus indicator, a second ring inside it looks like a bug, and
-          // FIELD_CONTROL_BASE restores a real outline under forced-colors.
-          className={SELECT_CONTROL}
-        >
-          {placeholder ? (
-            <option value="" disabled hidden>
-              {placeholder}
-            </option>
-          ) : null}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <Chevron />
-      </div>
-    </Field>
+    <fieldset className="fieldset w-full">
+      <label className="label" htmlFor={id}>
+        {label}
+      </label>
+      <select
+        id={id}
+        name={name ?? id}
+        value={value}
+        defaultValue={defaultValue ?? (placeholder && value === undefined ? '' : undefined)}
+        onChange={onChange}
+        required={required}
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={errorId}
+        className={SELECT_CONTROL[error ? 'invalid' : 'valid']}
+      >
+        {placeholder ? (
+          <option value="" disabled hidden>
+            {placeholder}
+          </option>
+        ) : null}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {error ? (
+        <p id={errorId} className="text-error text-sm">
+          {error}
+        </p>
+      ) : null}
+    </fieldset>
   );
 }

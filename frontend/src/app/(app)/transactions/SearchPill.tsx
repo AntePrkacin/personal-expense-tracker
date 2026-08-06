@@ -37,10 +37,10 @@ function MagnifierGlyph() {
 
 export function SearchPill({ placeholder }: { placeholder: string }) {
   return (
-    // Body/M in Text/Tertiary, not Label/L in Text/Primary: Figma draws this as
-    // placeholder copy rather than as a value, which is the one styling
-    // difference from the month pill beyond the swapped padding.
-    <div className="bg-surface-card border-border-strong text-body-m text-text-tertiary flex items-center gap-2 rounded-[10px] border py-2.5 pr-3.5 pl-3">
+    // The muted text is what says "placeholder copy rather than a value", which
+    // is the one styling difference from the month pill beyond the swapped
+    // padding. Same field dressing as MonthPill, same refusal to be a control.
+    <div className="bg-base-100 border-base-300 rounded-field text-base-content/50 flex items-center gap-2 border px-3 py-2 text-sm">
       <MagnifierGlyph />
       {placeholder}
     </div>

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
-import { SETUP_STEPS, SetupShell, STEP_DOT, STEP_WIDTH } from './SetupShell';
+import { SETUP_STEPS, SetupShell, type SetupStep, STEP_DOT, STEP_WIDTH } from './SetupShell';
 
 // The chrome frames 02, 03 and 22 share: the lockup, the step indicator and the
 // card box.
@@ -22,9 +22,9 @@ const CEDI = '₵';
  * WelcomeScreen.test.tsx records for its own `panel()` helper.
  *
  * And the pill is matched on **every** class in `STEP_DOT.active`, not just the
- * colour. `bg-brand-accent` alone hits the lockup's 38px tile first, so the walk
- * upwards then finds no hidden ancestor and this helper throws - which it did.
- * The compound selector is what makes the pill's geometry part of its identity.
+ * colour. The accent fill alone hits the lockup's tile first, so the walk upwards
+ * then finds no hidden ancestor and this helper throws - which it did. The compound
+ * selector is what makes the pill's geometry part of its identity.
  */
 function indicator(container: HTMLElement): HTMLElement {
   const pill = container.querySelector(`.${STEP_DOT.active.split(' ').join('.')}`);
@@ -33,6 +33,28 @@ function indicator(container: HTMLElement): HTMLElement {
     throw new Error('no aria-hidden ancestor above the active step dot');
   }
   return wrapper;
+}
+
+/**
+ * The card, found by the step's own width classes.
+ *
+ * This replaced a `querySelector('.shadow-card')` lookup, which the token layer's
+ * removal deleted from under it. Not swapped for another of `AccessCard`'s classes on
+ * purpose: that component is somebody else's file, and keying this suite off its
+ * surface or its radius is what made the old lookup fragile. The width is the one
+ * class this shell puts there itself, so it is the honest handle - and the
+ * `toContainElement` below is what keeps the assertion meaningful rather than a
+ * tautology about a string appearing twice.
+ *
+ * A compound selector over both classes, so `w-full` and the ceiling have to land on
+ * the same element.
+ */
+function card(container: HTMLElement, step: SetupStep): HTMLElement {
+  const found = container.querySelector(`.${STEP_WIDTH[step].split(' ').join('.')}`);
+  if (!(found instanceof HTMLElement)) {
+    throw new Error(`no element carries the step ${step} width, ${STEP_WIDTH[step]}`);
+  }
+  return found;
 }
 
 describe('the step tables', () => {
@@ -49,18 +71,27 @@ describe('the step tables', () => {
     // than through the render below, because "the middle step is the wide one" is
     // the design fact, and a map that widened all three would still satisfy every
     // per-step render assertion.
-    expect(STEP_WIDTH[1]).toBe('w-130');
-    expect(STEP_WIDTH[2]).toBe('w-150');
-    expect(STEP_WIDTH[3]).toBe('w-130');
+    expect(STEP_WIDTH[1]).toBe(STEP_WIDTH[3]);
+    expect(STEP_WIDTH[2]).not.toBe(STEP_WIDTH[1]);
   });
 
-  it('fills the active dot with brand-accent, not the overline colour', () => {
-    // The two sit 60px apart on the frame and are easy to conflate: Figma binds
-    // the pill to Brand/Accent and the card's "STEP 1 OF 3" to Brand/Accent
-    // Pressed. Getting it wrong is a one-token diff nothing else would catch.
-    expect(STEP_DOT.active).toContain('bg-brand-accent');
-    expect(STEP_DOT.active).not.toContain('brand-accent-pressed');
-    expect(STEP_DOT.inactive).toContain('bg-border-strong');
+  it('caps the card rather than fixing its width', () => {
+    // The responsive half of the same fact: a fixed width overflows a viewport
+    // narrower than the card, and only `max-w-*` lets it shrink. Every entry, so
+    // one step cannot regress on its own.
+    for (const width of Object.values(STEP_WIDTH)) {
+      expect(width).toContain('w-full');
+      expect(width).toContain('max-w-');
+    }
+  });
+
+  it('distinguishes the two dot states by more than a colour', () => {
+    // The active one is a pill and the inactive ones are dots, which is what makes
+    // the indicator readable at all - three shapes in three shades of one accent
+    // would not be. The colours themselves are the theme's.
+    expect(STEP_DOT.active).not.toBe(STEP_DOT.inactive);
+    expect(STEP_DOT.active).toContain('w-7');
+    expect(STEP_DOT.inactive).toContain('size-2');
   });
 });
 
@@ -76,8 +107,10 @@ describe('SetupShell', () => {
     expect(dots).toHaveLength(3);
 
     // The active one is at the step's own index, so a shell that always fills the
-    // first dot fails on steps 2 and 3 rather than passing everywhere.
-    const active = dots.filter((dot) => dot.className.includes('bg-brand-accent'));
+    // first dot fails on steps 2 and 3 rather than passing everywhere. Matched
+    // against the map rather than a copy of its value, since the shell interpolates
+    // the whole string verbatim.
+    const active = dots.filter((dot) => dot.className.includes(STEP_DOT.active));
     expect(active).toHaveLength(1);
     expect(dots.indexOf(active[0]!)).toBe(step - 1);
   });
@@ -122,36 +155,18 @@ describe('SetupShell', () => {
     expect(screen.queryByText(/Expensa/)).not.toBeInTheDocument();
   });
 
-  it('renders its children inside the card', () => {
-    const { container } = render(
-      <SetupShell step={1}>
-        <p>card body</p>
-      </SetupShell>,
-    );
-
-    const card = container.querySelector('.shadow-card');
-    expect(card).not.toBeNull();
-    expect(card).toContainElement(screen.getByText('card body'));
-  });
-
-  it.each(SETUP_STEPS)('carries the designed card treatment at step %s', (step) => {
-    // The class assertions worth making here, because `shadow-card` is a token
-    // PET-9 added and re-inlining it as an arbitrary literal would look identical
-    // on screen while escaping the compile guard - which is exactly the state the
-    // Welcome panel's two shadows were in before that ticket.
+  it.each(SETUP_STEPS)('renders its children inside the step %s card', (step) => {
+    // Per step, so a shell that hard-codes one width again fails on the step it is
+    // wrong for rather than passing everywhere. The card's own surface, border and
+    // radius are AccessCard's and are asserted in AccessCard.test.tsx; this suite
+    // owns only the width and the indicator.
     const { container } = render(
       <SetupShell step={step}>
         <p>card body</p>
       </SetupShell>,
     );
 
-    const card = container.querySelector('.shadow-card')!;
-    expect(card.className).toContain('bg-surface-card');
-    expect(card.className).toContain('border-border-default');
-    expect(card.className).toContain('rounded-xl');
-    // Per step, so a shell that hard-codes one width again fails on the step it is
-    // wrong for rather than passing everywhere.
-    expect(card.className).toContain(STEP_WIDTH[step]);
+    expect(card(container, step)).toContainElement(screen.getByText('card body'));
   });
 
   it('renders no heading of its own', () => {

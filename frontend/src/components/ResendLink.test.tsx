@@ -77,7 +77,7 @@ describe('the states A36 designs none of', () => {
 
     const confirmation = await screen.findByRole('status');
     expect(confirmation).toHaveTextContent('A new link is on its way.');
-    expect(confirmation.className).toContain('text-text-secondary');
+    expect(confirmation.className).toContain('text-base-content/70');
   });
 
   it('disables the button while the request is out', async () => {
@@ -115,7 +115,7 @@ describe('the states A36 designs none of', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("We couldn't send a new link. Please try again.");
-    expect(alert.className).toContain('text-status-danger-text');
+    expect(alert.className).toContain('text-error');
   });
 
   it('tells a throttled user to wait rather than that it failed', async () => {
@@ -196,8 +196,8 @@ describe('when the address has expired', () => {
     await user.click(resendButton());
 
     const alert = await screen.findByRole('alert');
-    expect(alert.className).toContain('text-text-secondary');
-    expect(alert.className).not.toContain('text-status-danger-text');
+    expect(alert.className).toContain('text-base-content/70');
+    expect(alert.className).not.toContain('text-error');
   });
 });
 

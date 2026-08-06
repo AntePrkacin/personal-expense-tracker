@@ -31,14 +31,17 @@ export function SetupBudgetScreen() {
         {/* A <p>, not a heading: it labels the card's position in the flow rather
             than titling the content, and a second heading here would compete with
             the h1 below it. It is also the reason the step indicator above can be
-            aria-hidden - this line is where "step 1 of 3" is actually readable. */}
-        <p className="text-overline text-brand-accent-pressed">STEP 1 OF 3</p>
+            aria-hidden - this line is where "step 1 of 3" is actually readable.
+
+            The eyebrow treatment is utilities, and identical on all three steps;
+            daisyUI draws no overline component. */}
+        <p className="text-primary text-xs font-semibold tracking-widest uppercase">STEP 1 OF 3</p>
 
         {/* The screen's one h1. There is no PageHeader outside the (app) shell,
             so each access screen owns its own, exactly as WelcomeScreen does. */}
-        <h1 className="text-display-s text-text-primary">Set your monthly budget</h1>
+        <h1 className="font-display text-2xl font-bold">Set your monthly budget</h1>
 
-        <p className="text-body-m text-text-secondary">{SUPPORTING_COPY}</p>
+        <p className="text-base-content/70">{SUPPORTING_COPY}</p>
       </div>
 
       <BudgetForm />

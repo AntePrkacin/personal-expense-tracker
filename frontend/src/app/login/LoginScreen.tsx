@@ -7,8 +7,8 @@ import { LoginForm } from './LoginForm';
 //
 // **No step indicator and no overline** (LOG-1), which is the whole reason the card
 // chrome had to come out of `app/setup/SetupShell.tsx`: this is not a step in
-// anything. The card is the same 520px box as frames 02 and 22, so `AccessCard`'s
-// default width is the one this screen wants.
+// anything. The card is the same box as frames 02 and 22, so `AccessCard`'s default
+// width is the one this screen wants.
 //
 // No password field exists anywhere in the frame, which is A31 - passwordless access
 // is the design - rather than an omission.
@@ -25,8 +25,8 @@ export function LoginScreen() {
           block on the onboarding steps has an overline above the heading; this one
           starts at the heading. */}
       <div className="flex flex-col gap-2">
-        <h1 className="text-display-s text-text-primary">Log in</h1>
-        <p className="text-body-m text-text-secondary">{SUPPORTING_COPY}</p>
+        <h1 className="font-display text-2xl font-bold">Log in</h1>
+        <p className="text-base-content/70">{SUPPORTING_COPY}</p>
       </div>
 
       {/* The action, imported here and handed down, which is the ordinary way a Server

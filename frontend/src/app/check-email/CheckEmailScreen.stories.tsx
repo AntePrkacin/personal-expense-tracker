@@ -51,7 +51,7 @@ export const CheckYourEmail: Story = {
   render: () => (
     // The height and the canvas the root layout would supply: the card takes
     // `flex flex-1`, so it needs a flex column with a height to centre within.
-    <div className="bg-surface-canvas flex h-[1024px] flex-col">
+    <div className="bg-base-200 flex h-[1024px] flex-col">
       <CheckEmailScreen email="marko@email.com" resend={resend} />
     </div>
   ),
@@ -70,7 +70,7 @@ export const CheckYourEmail: Story = {
  */
 export const NoAddress: Story = {
   render: () => (
-    <div className="bg-surface-canvas flex h-[1024px] flex-col">
+    <div className="bg-base-200 flex h-[1024px] flex-col">
       {/* No `resend` prop, and the props are an exclusive union so passing one here
           would not compile: there is nothing to send to without an address. */}
       <CheckEmailScreen email={null} />
@@ -91,7 +91,7 @@ export const NoAddress: Story = {
  */
 export const ResendAfterExpiry: Story = {
   render: () => (
-    <div className="bg-surface-canvas flex h-[1024px] flex-col">
+    <div className="bg-base-200 flex h-[1024px] flex-col">
       <CheckEmailScreen email="marko@email.com" resend={expiredResend} />
     </div>
   ),

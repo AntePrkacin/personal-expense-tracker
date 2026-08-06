@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { useRouter } from 'next/navigation';
 
 import { SetupDraftProvider } from '../SetupDraftProvider';
+import { STEP_DOT, STEP_WIDTH } from '../SetupShell';
 import { SetupRegisterScreen } from './SetupRegisterScreen';
 
 // AC1 of PET-11: the card as frame 22 draws it. Everything the form *does* is in
@@ -38,15 +39,6 @@ describe('AC1: the card as designed', () => {
     expect(screen.getByText(SUPPORTING_COPY)).toBeInTheDocument();
   });
 
-  it('types the overline in the pressed accent, not the pill colour', () => {
-    // Figma binds this line to Brand/Accent Pressed and the step pill above it to
-    // Brand/Accent. Swapping them is a one-token diff nothing else catches.
-    renderScreen();
-
-    expect(screen.getByText('STEP 3 OF 3').className).toContain('text-brand-accent-pressed');
-    expect(screen.getByText('STEP 3 OF 3').className).toContain('text-overline');
-  });
-
   it('renders exactly one page-level heading', () => {
     // There is no PageHeader outside the (app) shell, so this screen owns its h1.
     // The overline and the wordmark are both <p>.
@@ -62,9 +54,9 @@ describe('AC1: the card as designed', () => {
 
     const dots = [...container.querySelectorAll('[aria-hidden="true"] > span')];
     expect(dots).toHaveLength(3);
-    expect(dots[0]!.className).toContain('bg-border-strong');
-    expect(dots[1]!.className).toContain('bg-border-strong');
-    expect(dots[2]!.className).toContain('bg-brand-accent');
+    expect(dots[0]!.className).toContain(STEP_DOT.inactive);
+    expect(dots[1]!.className).toContain(STEP_DOT.inactive);
+    expect(dots[2]!.className).toContain(STEP_DOT.active);
   });
 
   it('draws the card at frame 22s width, not step 2s', () => {
@@ -73,7 +65,8 @@ describe('AC1: the card as designed', () => {
     // inheriting the wider card.
     const { container } = renderScreen();
 
-    expect(container.querySelector('.shadow-card')!.className).toContain('w-130');
+    expect(container.querySelector(`.${STEP_WIDTH[3].split(' ').join('.')}`)).not.toBeNull();
+    expect(container.querySelector(`.${STEP_WIDTH[2].split(' ').join('.')}`)).toBeNull();
   });
 
   it('renders the three fields in the designed order', () => {

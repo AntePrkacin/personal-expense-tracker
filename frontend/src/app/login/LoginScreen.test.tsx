@@ -52,19 +52,19 @@ describe('LoginScreen', () => {
     expect(screen.queryByText(/step \d of \d/i)).not.toBeInTheDocument();
   });
 
-  it('draws the 520px card', () => {
-    // Frame 132:1139 is 520px, the same as frames 02 and 22, which is `AccessCard`'s
-    // default - so this screen passes no width and this assertion is what pins that
-    // the default is the right one for it.
+  it('draws the shared access card', () => {
+    // Frame 132:1139 draws the same box as frames 02 and 22, which is `AccessCard`'s
+    // default - so this screen passes no width and the card it gets is the shared
+    // one rather than a second copy of the chrome.
     const { container } = render(<LoginScreen />);
 
-    expect(container.querySelector('.shadow-card')!.className).toContain('w-130');
+    expect(container.querySelector('.card')).not.toBeNull();
   });
 
   it('renders the form inside the card', () => {
     const { container } = render(<LoginScreen />);
 
-    const card = container.querySelector('.shadow-card')!;
+    const card = container.querySelector('.card')!;
     expect(card).toContainElement(screen.getByLabelText('Email'));
     expect(card).toContainElement(screen.getByRole('button', { name: 'Log in' }));
   });

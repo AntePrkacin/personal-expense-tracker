@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 
 import { CATEGORY_TILE } from '@/components/ui/categoryColour';
 
-import { CategoryChip, CHIP_LABEL, CHIP_SURFACE } from './CategoryChip';
+import { CategoryChip, CHIP_STATE } from './CategoryChip';
 
 // The repo's first toggle control, so this file is where its semantics are pinned
 // rather than left to the screen test.
@@ -17,28 +17,18 @@ function renderChip(selected: boolean, onToggle = jest.fn()) {
   return { chip: screen.getByRole('button', { name: 'Groceries' }), onToggle };
 }
 
-describe('the chip state maps', () => {
-  it('carries a fill and a label colour for each of the two states', () => {
-    // Guards the it.each blocks below, and the split itself: fill and label are
-    // separate maps because border-border-strong and border-brand-accent have equal
-    // specificity, so a single string emitting both would let stylesheet order pick.
+describe('the chip state map', () => {
+  it('carries a treatment for each of the two states, and two different ones', () => {
+    // Guards the render assertions below: a map whose two entries were equal would
+    // leave the selected chip visually identical to an unselected one while every
+    // aria-pressed assertion still passed.
     //
     // Membership and count rather than a key array, which would also pin insertion
     // order and fail on a reorder that changes nothing.
-    for (const map of [CHIP_SURFACE, CHIP_LABEL]) {
-      expect(Object.keys(map)).toHaveLength(2);
-      expect(map).toHaveProperty('on');
-      expect(map).toHaveProperty('off');
-    }
-  });
-
-  it('tints the selected chip and types it in the pressed accent', () => {
-    // The design's selected treatment, asserted as values so a token swap is a
-    // failure here rather than a silently different screen.
-    expect(CHIP_SURFACE.on).toContain('bg-brand-accent-soft');
-    expect(CHIP_SURFACE.on).toContain('border-brand-accent');
-    expect(CHIP_LABEL.on).toBe('text-brand-accent-pressed');
-    expect(CHIP_SURFACE.off).toContain('border-border-strong');
+    expect(Object.keys(CHIP_STATE)).toHaveLength(2);
+    expect(CHIP_STATE).toHaveProperty('on');
+    expect(CHIP_STATE).toHaveProperty('off');
+    expect(CHIP_STATE.on).not.toBe(CHIP_STATE.off);
   });
 });
 
@@ -72,17 +62,6 @@ describe('CategoryChip', () => {
       <CategoryChip label="Bills" colour="orange" selected onToggle={jest.fn()} />,
     );
     expect(withCheck.container.querySelector('svg')).not.toBeNull();
-  });
-
-  it('strokes the checkmark in the accent, not the label colour', () => {
-    // Figma strokes the tick with Brand/Accent while the label beside it is Brand
-    // Accent Pressed, so `currentColor` would quietly darken it. The two sit
-    // millimetres apart and are indistinguishable in a diff.
-    const { container } = render(
-      <CategoryChip label="Bills" colour="orange" selected onToggle={jest.fn()} />,
-    );
-
-    expect(container.querySelector('svg')!.getAttribute('class')).toContain('text-brand-accent');
   });
 
   it('keeps the checkmark from being shorn flat by its own viewBox', () => {
@@ -121,20 +100,18 @@ describe('CategoryChip', () => {
   });
 
   it.each([
-    ['unselected', false],
-    ['selected', true],
-  ])('applies the %s treatment', (_label, selected) => {
+    ['unselected', false, 'off'],
+    ['selected', true, 'on'],
+  ] as const)('applies the %s treatment', (_label, selected, state) => {
+    // The state's own treatment and not the other one's, which is what catches the
+    // two being swapped - a mistake nothing else here could see, since aria-pressed
+    // would still report correctly. The classes themselves are daisyUI's `btn`
+    // modifiers rather than hand-picked colours, so this pins the mapping only.
     const { chip } = renderChip(selected);
-    const state = selected ? 'on' : 'off';
+    const other = state === 'on' ? 'off' : 'on';
 
-    expect(chip).toHaveClass(...CHIP_SURFACE[state].split(' '));
-    expect(chip).toHaveClass(...CHIP_LABEL[state].split(' '));
-    // The width that does not change with the state, which is the deviation from
-    // the frame: a border that thickened on selection would rewrap the row.
-    expect(chip).toHaveClass('border-[1.5px]');
-    // A <button> gets an arrow from the user agent, and a chip does not look like a
-    // button, so the pointer is what says these pills are the thing to tap (CAT-1).
-    expect(chip).toHaveClass('cursor-pointer');
+    expect(chip.className).toContain(CHIP_STATE[state]);
+    expect(chip.className).not.toContain(CHIP_STATE[other]);
   });
 
   it('toggles on a click', async () => {

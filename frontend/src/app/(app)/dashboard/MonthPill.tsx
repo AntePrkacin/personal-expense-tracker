@@ -34,7 +34,7 @@ function Chevron() {
   return (
     <svg
       viewBox="0 0 9 4.5"
-      className="text-text-tertiary h-[4.5px] w-[9px] shrink-0 overflow-visible"
+      className="text-base-content/50 h-[4.5px] w-[9px] shrink-0 overflow-visible"
       fill="none"
       aria-hidden="true"
     >
@@ -44,8 +44,11 @@ function Chevron() {
 }
 
 export function MonthPill({ label }: { label: string }) {
+  // Styled like a field without being one: `rounded-field` and `border-base-300`
+  // are what daisyUI's own select wears, minus the operable semantics the
+  // comment above rules out.
   return (
-    <div className="bg-surface-card border-border-strong text-label-l text-text-primary flex items-center gap-2 rounded-[10px] border py-2.5 pr-3 pl-3.5">
+    <div className="bg-base-100 border-base-300 rounded-field flex items-center gap-2 border px-3 py-2 text-sm font-medium">
       {label}
       <Chevron />
     </div>

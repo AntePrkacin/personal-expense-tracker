@@ -18,7 +18,7 @@ const meta: Meta<typeof Select> = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div className="bg-surface-card border-border-default w-[520px] rounded-xl border p-8">
+      <div className="bg-base-100 border-base-300 rounded-box w-[520px] border p-8">
         <Story />
       </div>
     ),

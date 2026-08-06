@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SETUP_DRAFT_KEY } from './draft';
 import { SetupBudgetScreen } from './SetupBudgetScreen';
 import { SetupDraftProvider } from './SetupDraftProvider';
+import { STEP_DOT } from './SetupShell';
 
 // AC1 to AC5 of PET-9.
 //
@@ -78,15 +79,6 @@ describe('AC1: the card as designed', () => {
     expect(screen.getByText(SUPPORTING_COPY)).toBeInTheDocument();
   });
 
-  it('types the overline in the pressed accent, not the pill colour', () => {
-    // Figma binds this line to Brand/Accent Pressed and the step pill 60px above
-    // it to Brand/Accent. Swapping them is a one-token diff nothing else catches.
-    renderScreen();
-
-    expect(screen.getByText('STEP 1 OF 3').className).toContain('text-brand-accent-pressed');
-    expect(screen.getByText('STEP 1 OF 3').className).toContain('text-overline');
-  });
-
   it('renders exactly one page-level heading', () => {
     // There is no PageHeader outside the (app) shell, so this screen owns its h1.
     // The overline and the wordmark are both <p>.
@@ -102,8 +94,8 @@ describe('AC1: the card as designed', () => {
 
     const dots = [...container.querySelectorAll('[aria-hidden="true"] > span')];
     expect(dots).toHaveLength(3);
-    expect(dots[0]!.className).toContain('bg-brand-accent');
-    expect(dots[1]!.className).toContain('bg-border-strong');
+    expect(dots[0]!.className).toContain(STEP_DOT.active);
+    expect(dots[1]!.className).toContain(STEP_DOT.inactive);
   });
 });
 
@@ -130,19 +122,19 @@ describe('the currency field', () => {
 });
 
 describe('AC2: the budget field', () => {
-  it('takes focus and carries the designed focus treatment', async () => {
-    // The designed 1.5px accent border is a focus-within rule, and next/jest gives
-    // jsdom no stylesheet, so what is assertable here is that the box carries the
-    // rule and the input suppresses the browser's own ring. The visual check is
-    // Storybook's.
+  it('takes focus inside the box that draws the focus ring', async () => {
+    // The focus treatment is daisyUI's now: the `input` class on the wrapping label
+    // owns the border and the ring, and the `<input>` inside it is a bare `grow`
+    // control. next/jest gives jsdom no stylesheet, so what is assertable is the
+    // wiring - focus lands on the field, and the field sits inside that box. The
+    // visual check is Storybook's.
     const user = userEvent.setup();
     renderScreen();
 
     await user.click(budgetField());
 
     expect(budgetField()).toHaveFocus();
-    expect(budgetField().className).toContain('outline-none');
-    expect(budgetField().parentElement!.className).toContain('focus-within:border-brand-accent');
+    expect(budgetField().parentElement!.className).toContain('input');
   });
 
   it('groups thousands as they are typed', async () => {
@@ -235,7 +227,7 @@ describe('AC3: an empty or zero budget', () => {
   });
 
   it('wires the message to the field for assistive technology', async () => {
-    // ui/Field owns this pairing; the assertion is that the screen actually passes
+    // ui/Input owns this pairing; the assertion is that the screen actually passes
     // its error through rather than rendering its own line of copy.
     const user = userEvent.setup();
     renderScreen();
@@ -248,7 +240,7 @@ describe('AC3: an empty or zero budget', () => {
   });
 
   it('shows no message before a submit is attempted', async () => {
-    // Validation on submit only, matching ui/Field's own note. Typing a zero must
+    // Validation on submit only, matching ui/Input's own note. Typing a zero must
     // not scold the user mid-keystroke.
     const user = userEvent.setup();
     renderScreen();

@@ -28,6 +28,11 @@ import { LogoLockup } from '@/components/LogoLockup';
  * coupling this extraction exists to remove. Callers pass either the default or a
  * value from a `Record` in their own file, both of which the scanner sees.
  *
+ * **The default is a maximum rather than a fixed width.** PET-57 replaced Figma's
+ * `w-130` (520px) with `w-full max-w-lg`: a fixed 520px card is wider than a phone
+ * viewport, so the frame's one width was also the app's one broken layout. The
+ * column's `px-4` is what keeps the card off the edges below that maximum.
+ *
  * **`aboveCard` is named for its position, not its contents.** It is the slot
  * between the lockup and the card, which onboarding fills with its three dots and
  * screens 23 and 24 leave empty. An omitted `React.ReactNode` renders nothing at
@@ -35,14 +40,14 @@ import { LogoLockup } from '@/components/LogoLockup';
  * and no second copy of the column anywhere - which is what makes the two shapes
  * one component rather than two.
  *
- * **The width has to stay on the element carrying `shadow-card`.** That is not a
- * style preference: `app/setup/SetupShell.test.tsx` finds the card with
- * `querySelector('.shadow-card')` and then asserts the step's width is in that
- * element's `className`, so moving the width onto a wrapper is the one change here
- * that would break a suite this component is meant to leave untouched.
+ * **The width has to stay on the element carrying `card`.** That is not a style
+ * preference: `app/setup/SetupShell.test.tsx` finds the card by class and then
+ * asserts the step's width is in that element's `className`, so moving the width
+ * onto a wrapper is the one change here that would break a suite this component is
+ * meant to leave untouched.
  */
 export function AccessCard({
-  width = 'w-130',
+  width = 'w-full max-w-lg',
   aboveCard,
   children,
 }: {
@@ -51,10 +56,10 @@ export function AccessCard({
   children: React.ReactNode;
 }) {
   return (
-    // The canvas is not painted here: globals.css already gives `body`
-    // `bg-surface-canvas`, so repeating it would be a second declaration of one
-    // fact. flex-1 is what makes the column centre in the viewport, matching the
-    // root layout's `min-h-full flex flex-col` - the same hook WelcomeScreen uses.
+    // The canvas is not painted here: the theme paints the page, so repeating it
+    // would be a second declaration of one fact. flex-1 is what makes the column
+    // centre in the viewport, matching the root layout's `min-h-full flex flex-col`
+    // - the same hook WelcomeScreen uses.
     //
     // gap-6 is the designed 24px: lockup to indicator and indicator to card on the
     // three onboarding frames, lockup straight to card on the two this ticket adds.
@@ -65,23 +70,30 @@ export function AccessCard({
     // instead, because `justify-center` overflows in both directions. The padding
     // is what turns that into a scroll. Same class of deliberate deviation as the
     // form details `frontend/CLAUDE.md` lists.
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 py-10">
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-10">
       <LogoLockup />
 
       {aboveCard}
 
-      {/* rounded-xl is Radius/20. shadow-card is the Foundations token PET-9 added
-          for exactly this card; before it, the only two shadows in the repo were
-          arbitrary literals on the Welcome panel.
+      {/* Stock `card`: its radius and its shadow are the theme's rather than the
+          frame's measured 20px and PET-9's own shadow token, which is PET-57's
+          fidelity boundary. `text-base-content` is paired with the surface
+          explicitly, because the card is the one element here that repaints it.
+
+          The caller's width is appended whole rather than assembled - no daisyUI
+          class name is built by interpolation, which is what the rule protects, and
+          `card` has to stay in this attribute for the pair with `card-body` below
+          to be readable as one structure.
 
           Deliberately no overflow-hidden, even though Figma reports overflow-clip
           on these frames: nothing is positioned outside the box, and it would clip
-          the submit button's focus-visible outline-offset - and step 2's ten chips
-          each carry the same ring. */}
-      <div
-        className={`bg-surface-card border-border-default shadow-card flex ${width} flex-col gap-5 rounded-xl border px-10 pt-9 pb-8`}
-      >
-        {children}
+          the submit button's focus-visible ring - and step 2's ten chips each carry
+          the same one.
+
+          gap-5 on the body is the designed 20px between card children; daisyUI's
+          own `card-body` gap is 8px. */}
+      <div className={`card bg-base-100 text-base-content shadow-sm ${width}`}>
+        <div className="card-body gap-5">{children}</div>
       </div>
     </div>
   );

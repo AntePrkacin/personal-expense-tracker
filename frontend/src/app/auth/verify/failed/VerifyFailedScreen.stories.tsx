@@ -33,7 +33,7 @@ type Story = StoryObj<typeof VerifyFailedScreen>;
 
 /** The chrome every story shares: the canvas and height the root layout would supply. */
 function Canvas({ children }: { children: React.ReactNode }) {
-  return <div className="bg-surface-canvas flex h-[1024px] flex-col">{children}</div>;
+  return <div className="bg-base-200 flex h-[1024px] flex-col">{children}</div>;
 }
 
 /**

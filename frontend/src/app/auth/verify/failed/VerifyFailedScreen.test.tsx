@@ -133,6 +133,6 @@ describe('what the screen deliberately does not show', () => {
       <VerifyFailedScreen reason="invalid" hasAddress resend={resend} />,
     );
 
-    expect(container.querySelector('.shadow-card')).not.toBeNull();
+    expect(container.querySelector('.card')).not.toBeNull();
   });
 });

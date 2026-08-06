@@ -11,8 +11,8 @@ import { MonthPill } from './MonthPill';
 // dashboard tickets'; the shell below is where they land.
 
 export default function DashboardPage() {
-  // The server clock. `force-dynamic` on the (app) layout is what stops this
-  // being evaluated once at build time.
+  // The server clock. The layout's `cookies()` read is what keeps this segment
+  // dynamic, so this is evaluated per request rather than once at build time.
   const now = new Date();
 
   return (
@@ -29,7 +29,7 @@ export default function DashboardPage() {
           </>
         }
       />
-      <main className="flex-1 px-10 pb-10" />
+      <main className="flex-1 px-4 pb-10 sm:px-6 lg:px-10" />
     </>
   );
 }

@@ -3,13 +3,8 @@ import { render } from '@testing-library/react';
 
 import * as Button from './Button.stories';
 import * as Input from './Input.stories';
-import * as ListRow from './ListRow.stories';
-import * as ProgressBar from './ProgressBar.stories';
-import * as SectionHeader from './SectionHeader.stories';
 import * as Select from './Select.stories';
 import * as Sidebar from './Sidebar.stories';
-import * as Stat from './Stat.stories';
-import * as Tag from './Tag.stories';
 
 // Smoke-tests the component stories.
 //
@@ -22,11 +17,8 @@ import * as Tag from './Tag.stories';
 // Jest, but the story files import it for types alone, so the import is erased
 // at compile time and the modules pull in nothing but React.
 //
-// Unlike the Foundations reference stories, these are ordinary CSF3 stories
-// that mostly carry `args` and no `render`. Filtering on a render function -
-// which is what src/stories/foundations/foundations.stories.test.tsx does -
-// would therefore find almost nothing here and still pass. The element is built
-// from the meta's `component` instead whenever `render` is absent.
+// PET-57 shrank the module list to the four primitives that survived the
+// daisyUI migration; the deleted components' stories went with them.
 //
 // Decorators and parameters are Storybook's concern and are not applied here;
 // this test is about the story content not throwing.
@@ -37,11 +29,6 @@ type Meta = { title?: string; component?: React.ElementType; args?: Args };
 type StoryModule = Record<string, unknown> & { default: Meta };
 
 const MODULES: [name: string, module: StoryModule][] = [
-  ['Tag', Tag as StoryModule],
-  ['ProgressBar', ProgressBar as StoryModule],
-  ['Stat', Stat as StoryModule],
-  ['SectionHeader', SectionHeader as StoryModule],
-  ['ListRow', ListRow as StoryModule],
   ['Button', Button as StoryModule],
   ['Input', Input as StoryModule],
   ['Select', Select as StoryModule],

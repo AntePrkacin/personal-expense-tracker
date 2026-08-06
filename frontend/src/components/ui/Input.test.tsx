@@ -1,82 +1,47 @@
 import { render, screen } from '@testing-library/react';
 
-import { FIELD_CONTROL_SURFACE } from './Field';
-import { INPUT_VARIANTS, Input, type InputVariant } from './Input';
+import { Input, type InputVariant } from './Input';
 
-const VARIANTS = Object.keys(INPUT_VARIANTS) as InputVariant[];
+// Styling is daisyUI's as of PET-57, so these assert the behaviour the component
+// owns - labelling, naming, the error wiring, the currency prefix - rather than
+// class strings.
+
+const VARIANTS: InputVariant[] = ['default', 'currency'];
 
 const renderInput = (props: Partial<React.ComponentProps<typeof Input>> = {}) =>
   render(<Input id="merchant" label="Merchant" {...props} />);
 
 describe('Input', () => {
-  it('exposes exactly the two designed variants', () => {
-    expect(VARIANTS).toEqual(['default', 'currency']);
-  });
-
   it.each(VARIANTS)('%s is reachable by its label', (variant) => {
     renderInput({ variant });
 
     expect(screen.getByLabelText('Merchant')).toBe(screen.getByRole('textbox'));
   });
 
-  it.each(VARIANTS)('%s applies its designed type style and padding', (variant) => {
-    renderInput({ variant });
-
-    const input = screen.getByRole('textbox');
-    expect(input).toHaveClass(...INPUT_VARIANTS[variant].split(' '));
-  });
-
-  it.each(VARIANTS)('%s keeps every padded pixel on the control, not the box', (variant) => {
-    // A padded wrapper makes its own 14-16px band a dead zone: clicking the left
-    // edge of the Amount field would hit the div and place no caret. Select made
-    // this choice already; this asserts Input matches it.
-    renderInput({ variant });
-
-    const box = screen.getByRole('textbox').parentElement;
-    expect(box?.className).not.toMatch(/(^|\s)(p|px|py|pt|pr|pb|pl)-/);
-  });
-
-  it('defaults to the default variant and renders no prefix', () => {
+  it('renders no prefix by default', () => {
     renderInput();
 
-    const input = screen.getByRole('textbox');
-    expect(input).toHaveClass(...INPUT_VARIANTS.default.split(' '));
     expect(screen.queryByText('$')).toBeNull();
   });
 
-  it('renders the "$" prefix over the input rather than beside it', () => {
+  it('renders the "$" prefix inside the currency field box', () => {
     renderInput({ variant: 'currency', label: 'Amount' });
 
     const prefix = screen.getByText('$');
+    // Hidden: the label already says "Amount", and a screen reader announcing a
+    // bare "dollar sign" before the value is noise. It also keeps the wrapping
+    // label from adding "$" to the field's accessible name.
     expect(prefix).toHaveAttribute('aria-hidden', 'true');
-    // Inside the bordered box, not floating beside the field.
+    // Inside the box: the wrapper is a label, so a click on the glyph focuses
+    // the control instead of doing nothing.
     expect(prefix.parentElement).toBe(screen.getByRole('textbox').parentElement);
-    // Layered and click-through, so the glyph places a caret like the rest of the
-    // field instead of swallowing the click.
-    expect(prefix).toHaveClass('absolute', 'pointer-events-none');
+    expect(prefix.parentElement?.tagName).toBe('LABEL');
   });
 
-  it('looks inert when disabled, not merely refuse input', () => {
-    // Author styles beat the user agent's own disabled treatment, so without an
-    // explicit disabled fill the field renders identically to an editable one and
-    // a user types into it expecting something to happen.
+  it('refuses input when disabled', () => {
     renderInput({ disabled: true });
 
-    const input = screen.getByRole('textbox');
-    expect(input).toBeDisabled();
-    expect(input).toHaveClass('disabled:text-text-tertiary', 'disabled:cursor-not-allowed');
-    expect(input.parentElement).toHaveClass(...FIELD_CONTROL_SURFACE.disabled.split(' '));
-    // Never both fills at once: they have equal specificity, so the winner would
-    // depend on stylesheet order.
-    expect(input.parentElement).not.toHaveClass('bg-surface-card');
-  });
-
-  it('carries the editable fill when enabled', () => {
-    renderInput();
-
-    expect(screen.getByRole('textbox').parentElement).toHaveClass(
-      ...FIELD_CONTROL_SURFACE.default.split(' '),
-    );
+    expect(screen.getByRole('textbox')).toBeDisabled();
   });
 
   it('gives the currency variant a numeric keypad without a number input', () => {
@@ -126,14 +91,13 @@ describe('Input', () => {
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(input).toHaveAttribute('aria-describedby', 'amount-error');
     expect(screen.getByText('Enter an amount.')).toHaveAttribute('id', 'amount-error');
-    expect(input.parentElement).toHaveClass('border-status-danger');
   });
 
-  it('carries no browser focus ring of its own', () => {
-    // The wrapper's accent border is the focus indicator; a second ring drawn
-    // just inside it reads as a rendering bug.
-    renderInput();
+  it('marks the default variant invalid through the daisyUI error state', () => {
+    // input-error is semantic state, not decoration, which is why it survives
+    // the no-class-assertions rework: it is the visible half of aria-invalid.
+    renderInput({ error: 'Enter a merchant.' });
 
-    expect(screen.getByRole('textbox')).toHaveClass('outline-none');
+    expect(screen.getByRole('textbox')).toHaveClass('input-error');
   });
 });

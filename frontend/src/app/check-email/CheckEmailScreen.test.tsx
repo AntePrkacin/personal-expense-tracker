@@ -144,10 +144,10 @@ describe('the card', () => {
     expect(screen.queryByText(/step \d of \d/i)).not.toBeInTheDocument();
   });
 
-  it('draws the 520px card', () => {
+  it('draws the shared access card', () => {
     const { container } = renderScreen(ADDRESS);
 
-    expect(container.querySelector('.shadow-card')!.className).toContain('w-130');
+    expect(container.querySelector('.card')).not.toBeNull();
   });
 
   it('has no field to fill in', () => {

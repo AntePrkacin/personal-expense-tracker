@@ -48,10 +48,13 @@ type Story = StoryObj<typeof WelcomeScreen>;
  *
  * Things worth checking here rather than in a test, because next/jest gives jsdom no
  * stylesheet and none of them is visible to an assertion: the cedi glyph really
- * renders from Plus Jakarta Sans rather than a fallback, the two shadows (now
- * `shadow-panel` and `shadow-chip`, so this frame is the visual check that PET-9's
- * retro-fit onto tokens changed nothing), the 460px heading and 430px intro line
- * breaks, and the em dash in "on plan — all in one".
+ * renders from Plus Jakarta Sans rather than a fallback, the two elevations on the
+ * dark panel, the 460px heading and 430px intro line breaks, and the em dash in
+ * "on plan — all in one".
+ *
+ * Also the responsive boundary this frame is the only one to have: below `lg` the
+ * split collapses to the copy column alone, because the right half is decoration and
+ * hides itself. Narrow the viewport here rather than reasoning about it.
  */
 export const Welcome: Story = {};
 
@@ -62,6 +65,9 @@ export const Welcome: Story = {};
  *
  * Check that the two circles read as two distinct washes - 28% and 18% of the same
  * accent - and that both are clipped rather than overflowing.
+ *
+ * The panel hides itself below `lg`, so this story is blank on a narrow viewport by
+ * design rather than broken.
  */
 export const Panel: Story = {
   render: () => <DecorativePanel />,
@@ -76,7 +82,7 @@ export const Panel: Story = {
  */
 export const Lockup: Story = {
   render: () => (
-    <div className="bg-surface-card p-8">
+    <div className="bg-base-100 p-8">
       <LogoLockup />
     </div>
   ),

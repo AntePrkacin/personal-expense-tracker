@@ -172,12 +172,16 @@ export function RegisterForm({ register }: RegisterFormProps) {
         required
       />
 
-      {/* role="alert" here, where ui/Field deliberately has none. Field's message
-          appears synchronously beside the field the user just left; this one appears
-          after a network round trip with nothing else on screen changing, so nothing
-          would otherwise tell a screen reader the submit failed. */}
+      {/* role="alert" here, where ui/Input's own message deliberately has none.
+          That one appears synchronously beside the field the user just left; this one
+          appears after a network round trip with nothing else on screen changing, so
+          nothing would otherwise tell a screen reader the submit failed.
+
+          The same `text-error text-sm` treatment ui/Input gives a field message, so
+          the two read as one error language rather than two. Not a daisyUI `alert`
+          box: that is a filled banner with an icon, and neither is drawn here. */}
       {submitFailed ? (
-        <p role="alert" className="text-body-s text-status-danger-text">
+        <p role="alert" className="text-error text-sm">
           {MESSAGES.submitFailed}
         </p>
       ) : null}

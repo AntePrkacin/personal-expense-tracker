@@ -26,8 +26,8 @@ import { AccessCard } from '@/components/AccessCard';
 /**
  * The three onboarding steps, as a literal union rather than a count.
  *
- * `npm run build` is what rejects a fourth step, the same call `ui/Button`'s and
- * `ui/ProgressBar`'s prop unions make. A `{ current, total }` pair would accept
+ * `npm run build` is what rejects a fourth step, the same call `ui/Button`'s prop
+ * union makes. A `{ current, total }` pair would accept
  * `step={7}` and render an indicator with no filled dot at all.
  */
 export const SETUP_STEPS = [1, 2, 3] as const;
@@ -40,37 +40,39 @@ export type SetupStep = (typeof SETUP_STEPS)[number];
  * Complete literal class strings in a `Record`, per the rule every variant map in
  * `components/ui/` follows: Tailwind's scanner reads this file as raw text, so a
  * class assembled by interpolation is found by nobody and compiles to nothing,
- * with no build error and no failing test. `components/ui/utilities.test.ts`
- * compiles both of these.
+ * with no build error and no failing test.
  *
- * The active pill is `bg-brand-accent`, **not** the `brand-accent-pressed` the
- * overline inside the card uses. The two are easy to conflate because they sit
- * 60px apart on the frame; Figma binds the pill to Brand/Accent.
+ * The two are the theme's `primary` and `base-300`. The frame binds the pill to
+ * Brand/Accent and the card's overline to Brand/Accent Pressed, which used to be
+ * two tokens 60px apart that were easy to conflate; the theme publishes one accent,
+ * so that particular trap is gone rather than moved.
  */
 export const STEP_DOT: Record<'active' | 'inactive', string> = {
   // 28x8, the designed pill.
-  active: 'bg-brand-accent h-2 w-7',
+  active: 'bg-primary h-2 w-7',
   // 8x8.
-  inactive: 'bg-border-strong size-2',
+  inactive: 'bg-base-300 size-2',
 };
 
 /**
  * The card's width, which is the one thing about this chrome that is not shared.
  *
  * Frames 02 and 22 are 520px and frame 03 is 600px (node 43:706), so the width is
- * per step rather than per shell. PET-9 shipped a hard-coded `w-130` with a
- * comment saying PET-10 either changes it or lifts it to a prop; a second width
- * has now appeared, and this map is the cheaper of the two. It needs no prop, it
- * keeps every class a complete literal string for Tailwind's scanner, and it
- * records frame 22's width now rather than leaving PET-11 to rediscover it.
+ * per step rather than per shell.
+ *
+ * A **ceiling** rather than a width: `w-full max-w-*` reproduces the frame on a wide
+ * viewport and lets the card shrink instead of overflowing on a narrow one, which a
+ * fixed `w-130` cannot. Step 2 stays the wide one, so the one thing the three frames
+ * disagree about survives the change.
  *
  * A `Record` over the step union, so `npm run build` rejects a missing entry -
- * the same reason `SETUP_STEPS` is a union rather than a count.
+ * the same reason `SETUP_STEPS` is a union rather than a count. Every entry is a
+ * complete literal string for Tailwind's scanner, per the note above.
  */
 export const STEP_WIDTH: Record<SetupStep, string> = {
-  1: 'w-130',
-  2: 'w-150',
-  3: 'w-130',
+  1: 'w-full max-w-130',
+  2: 'w-full max-w-150',
+  3: 'w-full max-w-130',
 };
 
 /**
@@ -84,9 +86,10 @@ export const STEP_WIDTH: Record<SetupStep, string> = {
  * Two alternatives were considered and rejected, recorded here so nobody
  * "improves" this into one of them:
  *
- *   - `role="progressbar"` with `aria-valuenow`. It restates the overline, and
- *     `ui/ProgressBar` is the repo's one progressbar - a second implementation,
- *     announcing a wizard as a progress bar, is worse than none.
+ *   - `role="progressbar"` with `aria-valuenow`. It restates the overline, and the
+ *     only progressbar in the app is the one Welcome's decorative panel draws with
+ *     a native `<progress>` - announcing a wizard as a progress bar is worse than
+ *     announcing nothing.
  *   - An `<ol>` with `aria-current="step"`. Genuinely the textbook wizard
  *     pattern, but it invents list semantics and three step *names* the design
  *     never draws. This is the one to reach for if a designer or QA asks.
@@ -94,6 +97,11 @@ export const STEP_WIDTH: Record<SetupStep, string> = {
  * Note `aria-hidden` does **not** remove focusable descendants from the tab
  * order. There are none here - three bare spans - and SetupShell.test.tsx pins
  * that so a later ticket cannot add one.
+ *
+ * daisyUI's `steps` component is the third rejected alternative, and it fails on
+ * the same ground as the `<ol>`: it *is* an `<ol>` of named steps, so it needs
+ * three step names the design never draws, and its dots are numbered circles
+ * rather than the pill and two dots Figma places here.
  *
  * Private to this file, following `Chevron()` inside `ui/Select.tsx`: only the
  * shell renders it, and keeping it unexported means no caller can draw an
@@ -119,9 +127,9 @@ export function SetupShell({ step, children }: { step: SetupStep; children: Reac
     // and 22 disagree about; the indicator goes in the slot AccessCard leaves
     // between the lockup and the card, which screens 23 and 24 leave empty.
     //
-    // This renders exactly the DOM this component rendered before the chrome moved,
-    // which is why SetupShell.test.tsx needed no change: same element order, same
-    // class strings, and the width still on the element carrying `shadow-card`.
+    // SetupShell.test.tsx finds the card by that width class and asserts the
+    // children are inside it, which is what replaced its old `.shadow-card` lookup -
+    // so the width has to stay on the element that wraps the children.
     <AccessCard width={STEP_WIDTH[step]} aboveCard={<StepIndicator step={step} />}>
       {children}
     </AccessCard>
