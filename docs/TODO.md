@@ -714,6 +714,23 @@ another tab that "this transaction or that category" is missing, on the path use
 form, which is the only way a user reaches validation in an edit, and its `Saving` and
 `CategoriesUnavailable` stories cover the two undesigned states around them.
 
+**PET-34 raised it an eighth time, with five new strings and no reused ones**, because a read
+screen shares no failure vocabulary with a form. They are `{over} over {cap}` on the budget bar for
+a category past its cap, `Nothing else in {category} yet.` where the recent list would be, and the
+not-found boundary's three: `That transaction is gone`, `It may have been deleted. Everything else
+is still on your transactions list.` and `Back to transactions`.
+
+Two things about that set are worth the designer's eye more than the wording is. **The largest
+undesigned surface here is the one with no string at all**: an uncapped category renders no chip,
+no bar and no remaining line, and the deliberate choice was absence rather than an explanation of
+absence - no "No cap set" placeholder. That is the *common* case, since caps are optional and the
+preselected fallback ships without one, so the frame draws the rarer state and
+`Screens/08 Transaction detail`'s `Uncapped` story is the one to review. And **the not-found copy
+claims a cause it cannot verify** - "It may have been deleted" - which is hedged deliberately: the
+backend answers one 404 for an unknown id, another user's id and a tombstoned row alike, so
+anything more definite would be invented. `OverBudget`, `WithoutANote` and `NoRecent` cover the
+other three undrawn states on the same story module.
+
 ### The Add transaction modal's date picker has no Figma counterpart at all
 
 ADD-7 draws the Date field as a **closed select** showing "Oct 8, 2025", and assumption A14 says to
@@ -832,6 +849,16 @@ unmounts and restores focus onward to the kebab - which died with its row. So fo
 for the same single reason as before, through one more hop. The ordering that makes the first hop
 work is deliberate and pinned (`DeleteTransactionDialog` calls `onDeleted` **after** its own
 `close()`); what is unfixed is unchanged, and this is not a second entry.
+
+**PET-34 was asked to look at this and adds no fourth route, which is the useful result.** The
+paragraph above predicted that "whoever builds PET-34's detail page should look at it: deleting
+from there navigates, which sidesteps the problem for that entry point". That held exactly:
+`TransactionDetailActions` passes an `onDeleted` that calls `router.replace`, so the page the
+focus would have been restored *into* is gone before the question arises, and there is nothing
+here to restore onto. So the count of routes to the surviving case stays at three and the row
+menu is still the one that reaches it. **The fix has not become cheaper and has not become
+likelier** - what changed is only that the app's newest delete entry point does not need it,
+which is worth knowing before somebody reads the absence as the gap having been closed.
 
 ### A delete cannot be cancelled once it is sent, and Cancel no longer implies otherwise
 

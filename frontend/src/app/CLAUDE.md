@@ -1013,6 +1013,48 @@ with `aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `I
 keeps no eslint-disable comments - so `select-error`'s border and `aria-describedby` carry the
 state.
 
+**`/transactions/[id]` is the app's first dynamic route, and PET-34's detail page fills it.** Same
+split as `/transactions`: `page.tsx` is async and fetches, `TransactionDetailScreen` is
+synchronous and takes the resolved response, which is what lets `Screens/08 Transaction detail`
+render five states with no request scope. **One read serves the whole frame** -
+`GET /api/transactions/:id` answers the transaction, its category with that category's month
+stats, and up to five siblings - so nothing here calls `lib/categories.ts`, and `SIDEBAR_HREFS`
+gains no entry: it declares the four sidebar destinations, and `SidebarNav` already matches by
+prefix with a trailing-slash boundary, which is why `/transactions/abc` keeps Transactions lit.
+
+**It brings the app's first `not-found.tsx`, scoped to that segment rather than the root.** Placed
+here it renders inside the shell, so a stale link keeps the sidebar and a way back; at the root it
+would replace the page and leave the reader nowhere. There is still **no `error.tsx` anywhere** and
+this does not change that - a backend that cannot answer still throws. What changed is that
+"deleted" and "unreachable" stopped being the same answer: `authorizedGet` grew a `missing` arm for
+a 404, and `readTransactionDetail` turns it into `notFound()`. A **non-UUID** id is a 400, not a
+404, so it still reaches the error page - the two mean genuinely different things, and `?sort=lol`
+on the list is the existing precedent for the second.
+
+**`PageHeader` has a second shape, and it is the same call PET-33 made for `Modal`.** Frame 08
+draws a breadcrumb where the four routed views draw an overline, plus a caption row under the
+title, so `PageHeaderShape` is an exclusive union with `never` on the opposite arm - the technique
+`ui/Button`, `Modal` and `CheckEmailScreen` already use. A second component would have duplicated
+the one thing that must not exist twice: the page's `h1`. The paragraph above saying the header
+"owns the overline, the title and a slot - nothing else" is still the rule for the four screens;
+this is a second shape rather than a fourth slot on the first.
+
+**The list's filters round-trip through the URL, and that is what the merchant link carries.**
+`TransactionsTable` builds `toQuery(filters)` once for the table, each row appends it to
+`/transactions/{id}`, and the detail page parses it back with `parseTransactionFilters` and
+rebuilds the target with `filterHref` - so the breadcrumb and Delete both return the user to the
+list they were actually looking at. Two things not to re-derive. The parser **validates and does
+not canonicalise**, so `?period=current` survives the trip rather than being tidied to nothing;
+the "a default is the absent key" rule belongs to the filter controls, which reset by passing
+`undefined`. And the detail page drops an invalid value rather than forwarding it, so a
+hand-edited `?sort=lol` costs the user their sort here where on the list it 400s the whole screen.
+
+**Deleting from the detail page navigates, and that is the caller `onDeleted` was added for.**
+`TransactionDetailActions` is the page's one client boundary and passes
+`router.replace(backHref)` - **replace**, not push, because this page is about to describe a
+transaction that no longer exists and Back would land on its 404. It is also why this entry point
+sidesteps the focus-restore gap rather than adding a fourth route to it: the whole page goes away.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
@@ -1086,3 +1128,23 @@ with the confirmation open is ambiguous and has to say which dialog it means. An
 gets a third route to it**: deleting from inside the edit modal unwinds two dialogs onto a kebab that
 died with its row, so focus still lands on `<body>`. It joins the existing entry rather than opening
 a second one.
+
+**PET-34 closes the row click, and with it the last of that chain.** `/transactions/[id]` exists,
+the merchant cell links to it, and the trap those four paragraphs kept restating is gone: there is
+no drawn-but-dead control left on the transactions screen. It also closes four criteria other
+tickets could not - PET-32's AC1 and AC3 (this page is the second entry point, and
+`router.refresh()` re-reads this route after a save) and PET-33's AC3 and AC7 (the confirmation
+opens from this header, and deleting lands back on the list). Both were two-line call sites
+exactly as forecast, which is the argument for building the parameter in the ticket that has a
+caller.
+
+Three things PET-34 leaves for the next ticket here. **Three of its own acceptance criteria are
+amended rather than met**, and all three shrink the frame: AC1 loses the time from the caption,
+AC3 renders no chip, bar or remaining figure for an uncapped category, and AC6 is removed outright
+because Time, Payment and Status are no longer on the screen to render as empty - DET-8 and A20
+answered by dropping the rows rather than blanking them. **The uncapped state is the one owing a
+designer's answer**: caps are optional and the preselected fallback ships without one, so it is
+the _common_ case that no frame draws, and `Screens/08 Transaction detail`'s `Uncapped` story is
+what to put in front of them. And **the dashboard and the Categories tab are still the two screens
+this page's figures cannot be cross-checked against**, since PET-21 to PET-26 are an open stack and
+PET-36 has no route - the same disposition PET-32 and PET-33 both recorded.
