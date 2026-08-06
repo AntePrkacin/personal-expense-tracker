@@ -266,6 +266,70 @@ describe('the three failures', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('does refresh on a 404, because the row really is gone', async () => {
+    // The one failure arm that re-reads. `missing` means the server no longer has the row, so
+    // the list behind this dialog is stale - and the copy tells the user closing it will show
+    // the current list, which was untrue until this. Reached by deleting the same transaction
+    // from two tabs.
+    const remove = jest.fn().mockResolvedValue({ ok: false, reason: 'missing' });
+    renderDialog({ remove });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays open on a 404 rather than closing on a refresh', async () => {
+    // The refresh above must not be mistaken for success: the message still has to be read.
+    const remove = jest.fn().mockResolvedValue({ ok: false, reason: 'missing' });
+    const { onClose } = renderDialog({ remove });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+});
+
+describe('when the request itself rejects', () => {
+  // **The gap a code review found, and the reason every test above could not see it.** They all
+  // mock a *resolved* result, which is what `deleteTransaction` promises - but that promise
+  // covers the action's body, not the RPC carrying it. Offline, a dropped connection or a
+  // deployment that moves the action id all reject instead, and without a catch the handler
+  // died mid-flight leaving Delete disabled forever with nothing on screen.
+
+  it('reports it as a failure rather than hanging', async () => {
+    const remove = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    renderDialog({ remove });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "We couldn't delete this transaction. Please try again.",
+    );
+  });
+
+  it('re-enables Delete, so the user can retry', async () => {
+    // The half that actually bit: `setPending(false)` never ran, so the only control that could
+    // retry stayed disabled and the centred shape has no X to leave by.
+    const remove = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    renderDialog({ remove });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
+  });
+
+  it('neither refreshes nor closes', async () => {
+    const remove = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    const { onClose } = renderDialog({ remove });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('clears a stale message when Delete is pressed again', async () => {
     const remove = jest
       .fn()

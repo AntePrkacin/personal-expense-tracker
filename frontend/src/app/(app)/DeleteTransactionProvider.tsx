@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useState } from 'react';
 
-import { deleteTransaction } from '@/lib/deleteTransaction';
+import { deleteTransaction, type DeleteTransactionResult } from '@/lib/deleteTransaction';
 
 import { DeleteTransactionDialog, type DeleteTarget } from './DeleteTransactionDialog';
 
@@ -52,7 +52,30 @@ export function useDeleteTransaction(): DeleteTransaction {
   return value;
 }
 
-export function DeleteTransactionProvider({ children }: { children: React.ReactNode }) {
+type DeleteTransactionProviderProps = {
+  children: React.ReactNode;
+  /**
+   * The delete action, defaulting to the real one. Overridden only by Storybook.
+   *
+   * **This exists because a story was one click from running a Server Action in the browser.**
+   * `Screens/06 Transactions — List` mounts this provider so its kebabs work, and its own text
+   * invites a reviewer to open the confirmation and press Delete. Storybook's Vite build has no
+   * notion of `'use server'`, so it bundles `lib/deleteTransaction.ts` as an ordinary module and
+   * that press would call `cookies()` from `next/headers` in the browser rather than making an
+   * RPC. The dialog already took its action as a prop for the same class of reason; the gap was
+   * that the provider above it did not, so the delete-dialog stories were safe and the screen
+   * story was not. A code review found it.
+   *
+   * Defaulted rather than required, so the app's three call sites - the layout today, PET-32 and
+   * PET-34 later - stay a bare `<DeleteTransactionProvider>` with no action threaded through.
+   */
+  remove?: (id: string) => Promise<DeleteTransactionResult>;
+};
+
+export function DeleteTransactionProvider({
+  children,
+  remove = deleteTransaction,
+}: DeleteTransactionProviderProps) {
   /**
    * Which transaction is being asked about, or `null` for "the dialog is closed".
    *
@@ -74,11 +97,7 @@ export function DeleteTransactionProvider({ children }: { children: React.ReactN
           always-mounted dialog would put "Delete this transaction?" into every screen's tree
           forever. `(app)/pages.test.tsx` depends on it. */}
       {target !== null ? (
-        <DeleteTransactionDialog
-          target={target}
-          remove={deleteTransaction}
-          onClose={() => setTarget(null)}
-        />
+        <DeleteTransactionDialog target={target} remove={remove} onClose={() => setTarget(null)} />
       ) : null}
     </DeleteTransactionContext.Provider>
   );

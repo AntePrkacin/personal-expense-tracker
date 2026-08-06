@@ -100,11 +100,39 @@ export function DeleteTransactionDialog({ target, remove, onClose }: DeleteTrans
     setFailure(null);
     setPending(true);
 
-    const result = await remove(target.id);
+    /**
+     * **The `try` is load-bearing, and `deleteTransaction`'s "never throws" does not cover it.**
+     * That guarantee is about the action's own body: it classifies every status and every fetch
+     * rejection into a result. What it cannot classify is the RPC *carrying* the call - the
+     * client-to-Server-Action request itself rejects when the browser is offline, the connection
+     * drops, or a deployment moves the action id out from under an open tab. Without this catch
+     * the rejection escapes the handler, `setPending(false)` never runs, and Delete stays
+     * disabled with no message and no way back except Escape: the exact state the `failed` copy
+     * exists for, never reached. A code review found it, and the suite could not - every test
+     * here mocks a *resolved* value, so nothing exercised the rejecting path until
+     * `rejects with a network error` was added beside them.
+     */
+    let result: DeleteTransactionResult;
+
+    try {
+      result = await remove(target.id);
+    } catch {
+      result = { ok: false, reason: 'failed' };
+    }
 
     if (!result.ok) {
       setPending(false);
       setFailure(MESSAGES[result.reason]);
+
+      // **A 404 refreshes even though it failed**, which is the one failure arm that does.
+      // `missing` means the row is gone from the server, so the list behind this dialog is
+      // showing something that no longer exists - which is precisely what its copy tells the
+      // user closing the dialog will fix. Without this the promise is false until a manual
+      // reload: delete a row in one tab, then delete it again from a second, and the second
+      // tab keeps rendering it. The other two arms change nothing on the server and so have
+      // nothing to re-read.
+      if (result.reason === 'missing') router.refresh();
+
       return;
     }
 
@@ -130,10 +158,23 @@ export function DeleteTransactionDialog({ target, remove, onClose }: DeleteTrans
       onClose={onClose}
       footer={
         <>
-          {/* Cancel closes and does nothing (DEL-2, AC5). Deliberately not disabled while the
-              request is out, which is `AddTransactionModal`'s call: no fetch in this app
-              carries a timeout, so a hung request is exactly when a visible way out matters
-              most - and here there is no X beside it to fall back on. */}
+          {/* Cancel closes and does nothing (DEL-2, AC5) - **before Delete is pressed**, which
+              is the whole of what AC5 asks for and the only thing this control promises.
+
+              **It does not abort a delete already in flight, and it deliberately does not
+              pretend to.** A code review asked for an `AbortController` here; that would abort
+              the RPC without un-deleting anything, because by then the server may already have
+              removed the row - so it would report a cancellation that did not happen, which is
+              worse than the honest version. There is no cancel to offer until the operation
+              itself is cancellable.
+
+              What follows from that is the refresh in `onDelete` staying outside this
+              component's lifetime: cancel mid-flight and the delete still lands, and the list
+              still re-reads, so the screen agrees with the database rather than keeping a row
+              the server dropped. Still not disabled while pending, which is
+              `AddTransactionModal`'s call - no fetch in this app carries a timeout, so a hung
+              request is when a visible way out matters most, and the centred shape has no X
+              beside it. `docs/TODO.md` records what a real cancel would take. */}
           <Button label="Cancel" variant="secondary" onClick={() => modalRef.current?.close()} />
           {/* `danger` is `btn btn-error`, already in ui/Button for both confirmation dialogs.
               Disabled while the request is out: a second delete cannot remove a second row,

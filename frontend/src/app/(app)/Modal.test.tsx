@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 
-import { Modal, type ModalHandle } from './Modal';
+import { Modal, type ModalHandle, type ModalShape } from './Modal';
 
 // What this suite can and cannot see is the thing to understand before adding to it.
 //
@@ -31,14 +31,21 @@ function Harness({
   onClose,
   initialFocusId,
   onSubmit,
-  align,
-  icon,
+  shape = { align: 'start' },
 }: {
   onClose?: () => void;
   initialFocusId?: string;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
-  align?: 'start' | 'center';
-  icon?: React.ReactNode;
+  /**
+   * The header shape, spread into `Modal` as one value rather than two loose props.
+   *
+   * It has to be the union's own type: `Modal`'s `align` and `icon` became exclusive so that
+   * `icon` without `align="center"` is a build error, and a harness holding them as two
+   * independent optionals reconstructs exactly the impossible pair the union exists to reject.
+   * `npx tsc --noEmit` is what caught that here - `npm run build` never reads this file, which
+   * is the gap `frontend/CLAUDE.md` records.
+   */
+  shape?: ModalShape;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -51,8 +58,7 @@ function Harness({
       {open ? (
         <Modal
           title="Add transaction"
-          align={align}
-          icon={icon}
+          {...shape}
           onClose={() => {
             setOpen(false);
             onClose?.();
@@ -148,7 +154,7 @@ describe('the centred shape', () => {
     // The one deliberate removal. A confirmation whose footer already names the way out does
     // not need a third way to say no - and Escape and the backdrop still reach the same exit,
     // which the two assertions after this one prove.
-    render(<Harness align="center" />);
+    render(<Harness shape={{ align: 'center' }} />);
     await userEvent.click(openIt());
 
     expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
@@ -156,7 +162,7 @@ describe('the centred shape', () => {
 
   it('still closes on a scrim click with no X present', async () => {
     const onClose = jest.fn();
-    render(<Harness align="center" onClose={onClose} />);
+    render(<Harness shape={{ align: 'center' }} onClose={onClose} />);
     await userEvent.click(openIt());
 
     await userEvent.click(dialog());
@@ -169,7 +175,7 @@ describe('the centred shape', () => {
     // same stand-in the default shape uses, repeated because dropping the X is exactly the
     // change that could plausibly have taken the exit with it.
     const onClose = jest.fn();
-    render(<Harness align="center" onClose={onClose} />);
+    render(<Harness shape={{ align: 'center' }} onClose={onClose} />);
     await userEvent.click(openIt());
 
     await act(async () => {
@@ -182,7 +188,7 @@ describe('the centred shape', () => {
   it('keeps the dialog named by its title', async () => {
     // aria-labelledby points at the h2 either way. Worth its own assertion because the h2
     // moved into a different wrapper.
-    render(<Harness align="center" />);
+    render(<Harness shape={{ align: 'center' }} />);
     await userEvent.click(openIt());
 
     expect(screen.getByRole('dialog', { name: 'Add transaction' })).toBeInTheDocument();
@@ -192,7 +198,7 @@ describe('the centred shape', () => {
   it('renders the icon and hides it from the accessibility tree', async () => {
     // The circle is decoration beside a heading that already says what this is - the same call
     // the step indicator, the chip dots and ui/Input's `$` prefix all make.
-    render(<Harness align="center" icon={<svg data-testid="glyph" />} />);
+    render(<Harness shape={{ align: 'center', icon: <svg data-testid="glyph" /> }} />);
     await userEvent.click(openIt());
 
     expect(screen.getByTestId('glyph').parentElement).toHaveAttribute('aria-hidden', 'true');
@@ -201,7 +207,7 @@ describe('the centred shape', () => {
   it('renders no circle when no icon is given', async () => {
     // An empty tinted disc above the title would be worse than nothing, so the wrapper is
     // conditional rather than always present.
-    const { container } = render(<Harness align="center" />);
+    const { container } = render(<Harness shape={{ align: 'center' }} />);
     await userEvent.click(openIt());
 
     expect(container.querySelector('[aria-hidden="true"]')).toBeNull();

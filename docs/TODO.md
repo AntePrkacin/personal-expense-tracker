@@ -825,6 +825,37 @@ one for a single control, but the frequency has changed enough that whoever buil
 detail page should look at it: deleting from there navigates, which sidesteps the problem for
 that entry point and leaves the row menu as the only one with it.
 
+**A code review then found this was wider than described, and the wider half is fixed.** It was
+not only the delete path: `Modal` captures `document.activeElement` on mount, React flushes the
+menu item's click synchronously, and `popovertargetaction="hide"` then hides that item - so the
+captured element was a button inside a closed popover, still `isConnected` and no longer
+focusable. **Cancel** therefore dropped focus to `<body>` too, on a path where nothing had been
+destroyed and the restore should simply have worked. `TransactionRowMenu` now focuses the kebab
+before opening the dialog, so the captured element is the right one. What survives is only the
+original case: a successful delete removes the row and its kebab with it, and there is genuinely
+nothing left to focus.
+
+### A delete cannot be cancelled once it is sent, and Cancel no longer implies otherwise
+
+A code review asked for an `AbortController` behind the confirmation dialog's Cancel, because
+clicking it mid-request closes the box while the delete carries on and the row disappears
+anyway. The request is real: AC5 says Cancel leaves the transaction unchanged, and the comment
+there presented it as the way out of a hung request.
+
+**An abort was rejected, and the reason is that it would lie.** Aborting the client-to-Server-
+Action RPC does not un-delete anything - by the time the user reaches for Cancel the server may
+already have removed the row - so the dialog would report a cancellation that did not happen and
+then show a list with the row gone. That is strictly worse than the honest version. What shipped
+instead is the honesty: Cancel promises only what it can do before Delete is pressed, the
+comment says so, and the refresh deliberately outlives the component so the list still agrees
+with the database.
+
+A real cancel needs the operation to be cancellable, not the request: a soft delete with an undo
+window is the usual shape, and DEL-3's copy ("permanently", "can't be undone") rules it out at
+the design level before the engineering starts. Note the backend already tombstones rather than
+hard-deleting, so the capability is closer than the copy suggests - which makes this a question
+for the designer rather than a limitation to route around.
+
 ### A category colour outside the eight renders grey, and nothing can produce one yet
 
 `CategoryResponseDto.color` is a hex string and `CreateCategoryDto` validates it with

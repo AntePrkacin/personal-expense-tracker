@@ -100,31 +100,6 @@ type ModalProps = {
    */
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   /**
-   * How the header reads, and therefore which frame this is.
-   *
-   * `'start'` is frames 09, 11, 19 and 21: a left-aligned title with the X beside it, which is
-   * what a form in a box wants. `'center'` is frame 12 and the category delete confirmation:
-   * the `icon` below in a circle, the title centred under it, and the two footer buttons split
-   * evenly across the box. The body's own alignment stays the caller's, because this component
-   * has never had an opinion about what goes in `children`.
-   *
-   * **`'center'` also drops the X, which is the half worth arguing.** Frame 12 draws none, and
-   * the reason it can is that its footer is Cancel and Delete rather than a form's Cancel and
-   * Save - so the dismissing control is already on screen, named, and the wider of the two.
-   * Nothing is lost: Escape and the backdrop still close it, and both go through the same
-   * single exit. A confirmation with three ways to say no and one to say yes is also the wrong
-   * shape; the X was the third.
-   */
-  align?: 'start' | 'center';
-  /**
-   * The glyph above the title, in a tinted circle. `align="center"` only.
-   *
-   * Drawn by the caller rather than named by a prop, so this file needs no icon vocabulary and
-   * the category delete confirmation can pass a different mark. The circle, its size and its
-   * tint are here, because they are the box's chrome rather than the caller's.
-   */
-  icon?: React.ReactNode;
-  /**
    * Exposes `close()` so a caller can dismiss the dialog itself.
    *
    * **The point is that it closes the dialog rather than unmounting it**, and the difference
@@ -136,7 +111,47 @@ type ModalProps = {
    * one-exit rule still holds and this adds a way in, not a second way out.
    */
   ref?: React.Ref<ModalHandle>;
-};
+} & ModalShape;
+
+/**
+ * The two header shapes, as an exclusive union rather than two loose optional props.
+ *
+ * `'start'` is frames 09, 11, 19 and 21: a left-aligned title with the X beside it, which is
+ * what a form in a box wants. `'center'` is frame 12 and the category delete confirmation: the
+ * `icon` in a tinted circle, the title centred under it, and the two footer buttons split evenly
+ * across the box. The body's own alignment stays the caller's, because this component has never
+ * had an opinion about what goes in `children`.
+ *
+ * **`'center'` also drops the X, which is the half worth arguing.** Frame 12 draws none, and the
+ * reason it can is that its footer is Cancel and Delete rather than a form's Cancel and Save -
+ * so the dismissing control is already on screen, named, and the wider of the two. Nothing is
+ * lost: Escape and the backdrop still close it, and both go through the same single exit. A
+ * confirmation with three ways to say no and one to say yes is also the wrong shape; the X was
+ * the third.
+ *
+ * **A union rather than `align?` beside `icon?`, and a code review is why.** With two loose
+ * props, `<Modal icon={...} />` at the default alignment typechecked and then silently rendered
+ * no glyph - the caller's mistake was unrepresentable in the types and invisible at runtime. The
+ * `never` is the same technique `ui/Button` uses for `href` versus `onClick` and
+ * `CheckEmailScreen` for its resend action, and `npm run build` is the gate that rejects it.
+ * Note that gate does **not** read `*.test.tsx`, so `npx tsc --noEmit` is what catches a suite
+ * constructing the impossible pair by hand.
+ */
+export type ModalShape =
+  | { align?: 'start'; icon?: never }
+  | {
+      align: 'center';
+      /**
+       * The glyph above the title, in a tinted circle.
+       *
+       * Drawn by the caller rather than named by a prop, so this file needs no icon vocabulary
+       * and the category delete confirmation can pass a different mark. The circle, its size and
+       * its tint are here, because they are the box's chrome rather than the caller's. Optional
+       * even in this arm: a centred confirmation with no glyph is a coherent thing to draw, and
+       * the circle is skipped rather than rendered empty.
+       */
+      icon?: React.ReactNode;
+    };
 
 /** What `ref` exposes. One method, because there is one thing a caller cannot already do. */
 export type ModalHandle = { close: () => void };

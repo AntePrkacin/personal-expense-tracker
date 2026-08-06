@@ -90,7 +90,13 @@ function Frame({ filters }: { filters: TransactionFilters }) {
           the reason the header note gives - the smoke harness never applies `meta.decorators`.
           This is also what makes the row menu and the delete dialog reviewable here at all,
           which is the only review either gets: `build-storybook` never runs a story. */}
-      <DeleteTransactionProvider>
+      {/* A stub action, and it is not decoration: without it this provider imports the real
+          `'use server'` `deleteTransaction`, which Storybook's Vite build bundles as an ordinary
+          browser module - so pressing Delete in the confirmation would run `cookies()` from
+          `next/headers` in the page instead of an RPC. The story text below invites exactly that
+          click. Resolving `ok` lets the whole flow be walked; nothing is deleted, and the list
+          does not change because no server answered. */}
+      <DeleteTransactionProvider remove={async () => ({ ok: true })}>
         {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
             gutter the `(app)` shell owns, since neither wraps a story. */}
         <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
