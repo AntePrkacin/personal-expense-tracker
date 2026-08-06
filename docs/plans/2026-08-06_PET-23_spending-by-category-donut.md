@@ -31,7 +31,23 @@ from real totals and consistent with the amounts beside them" is satisfied by re
 and computing `spent / total` here would be a fourth place in this codebase that divides a month -
 which `backend/src/dashboard/dto/dashboard-response.dto.ts` calls out as a bug by the backend's own
 money note. The percentages are rounded for **display** only, and the arc lengths use the unrounded
-values so the ring closes exactly.
+values.
+
+**The ring is built to tolerate not closing, because the backend documents that it sometimes will
+not.** The obvious implementation - give the last slice whatever arc is left over - is wrong here.
+`categoriesOf` computes each `percent` against `totalCents`, the account-wide total summed from the
+transaction list, rather than against the sum of the slices themselves, and its own comment says why
+and what it costs: a transaction whose category was deleted moments after it was created "inflates
+`totalCents` without appearing in any row here, so the slices can sum to just under 100%".
+`backend/CLAUDE.md`'s Dashboard section makes the same trade explicitly, preferring a visible
+shortfall in one slice over one hidden inside every percentage.
+
+So each arc is computed from its own `percent` and the ring is allowed to leave a gap. A gap means
+spend that belongs to no live category, which is information rather than a rendering bug, and it
+appears in the one place a reader can act on. What must **not** happen is the last slice silently
+absorbing that shortfall, which would draw a closed ring that lies. The suite pins arcs summing to
+the circumference for the ordinary case where the percentages do total 100, and pins a
+deliberately-short set staying short rather than being stretched.
 
 **AC5 is already true and this ticket must not re-implement it.** `dashboard.service.ts` filters
 `spent > 0` before responding, and the field is documented as "every nonzero category this period".
@@ -95,6 +111,23 @@ which is worse than a grey dot.
 draws a specific treatment - a gray ring, a `$0 spent` centre and an explanatory caption - and it
 is not what this card produces by rendering zero slices. Same division as PET-22's.
 
+**Unlike PET-22's, though, this card's empty input is not the screen's empty state, and PET-26 has
+to know that.** The trend card's `[]` and the recent card's `[]` both occur exactly when
+`transactionCount === 0`, because both are derived straight from the period's transaction list. This
+card's does not: `categories` comes from `CategoriesService.list()` filtered on `spent > 0`, so
+`categories: []` is *implied* by an empty period but also reachable on its own, through the same
+dangling-category race the arc decision above is written around, or through amounts small enough to
+round to zero cents. An account with transactions but no live category holding any of them yields an
+empty `categories` on a screen that is otherwise populated.
+
+The consequence is a **blank card**, not a wrong one, and it lands between two tickets: this card
+renders nothing, and PET-26 draws the treatment only when the screen is empty. So PET-26's guard for
+this one card is `categories.length === 0` rather than the screen-wide condition. That is a strict
+superset - an empty screen always has empty `categories` - so it cannot disagree with the rest of
+frame 05 or produce a half-empty screen, and it closes the gap without giving this card a second
+opinion about whether the account is new. Recorded here because this is where the divergence is
+visible, and carried out there because that is where the designed treatment lives.
+
 ## Shape
 
 `(app)/dashboard/donut.ts` - the sort, the tiebreak, and the cumulative arc geometry as pure
@@ -114,15 +147,18 @@ rows. A Server Component.
 - [ ] `ui/categoryColour.ts`: `categoryDotClass()`, with its cases (the eight, an unpalette hex,
       the fallback grey, a lowercase hex, a prototype key)
 - [ ] `(app)/dashboard/donut.ts` and its suite: the sort, the name tiebreak, arcs summing to the
-      circumference, one hundred percent in a single slice
+      circumference when the percentages total 100, a short set staying short rather than being
+      stretched closed, one hundred percent in a single slice
 - [ ] `(app)/dashboard/CategoryDonut.tsx` and its suite: slice count and order, the centre total,
       legend rows largest first, the grey fallback row, the `role="img"` name, dots hidden
 - [ ] `(app)/dashboard/page.tsx`: fill the donut slot
 - [ ] Stories: `Shell/Spending by category` with the mock's five categories, a single-category
       month, and one unpalette colour; re-check `Screens/04 Dashboard` against node `21:4`
 - [ ] Docs: `frontend/src/components/CLAUDE.md` (the second function on `categoryColour`),
-      `frontend/src/app/CLAUDE.md` (the sort and its tiebreak, the arc geometry), root `CLAUDE.md`
-- [ ] Comment on PET-23 with the sort decision and the AC5 note that the backend already filters
+      `frontend/src/app/CLAUDE.md` (the sort and its tiebreak, the arc geometry and why the ring is
+      allowed not to close), root `CLAUDE.md`
+- [ ] Comment on PET-23 with the sort decision, the AC5 note that the backend already filters, and
+      the empty-`categories` guard PET-26 owes this card
 
 No `npm run api:sync`: nothing here changes a request or response body.
 
@@ -137,7 +173,11 @@ Then the app itself, signed in, in **Chrome**, with spending across several cate
 2. The centre reads the period total over "Total spent", and it is **character-identical** to the
    budget card's spent figure on the same screen (AC2)
 3. The legend runs largest to smallest with a dot, name, amount and percentage on every row (AC3)
-4. The percentages are consistent with the amounts beside them and sum to 100 (AC4)
+4. The percentages are consistent with the amounts beside them (AC4). That is AC4's own wording and
+   the check stops there: they will normally also total 100, but "must sum to 100" is not a property
+   this response guarantees - display rounding can put five slices at 99 or 101, and the arc
+   decision above records the rarer case where the unrounded values genuinely fall short. A total
+   that is off by a point is not a defect to chase here
 5. A category with nothing spent this period appears in neither the ring nor the legend (AC5) -
    which the backend guarantees, so this is confirming the guarantee rather than testing our filter
 
