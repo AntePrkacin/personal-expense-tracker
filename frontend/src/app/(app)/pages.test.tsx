@@ -4,6 +4,7 @@ import { readCategoryLabels } from '../../lib/categories';
 import { readTransactionsView } from '../../lib/transactions';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
+import { DeleteTransactionProvider } from './DeleteTransactionProvider';
 import DashboardPage from './dashboard/page';
 import InsightsPage from './insights/page';
 import SettingsPage from './settings/page';
@@ -58,13 +59,23 @@ jest.mock('next/navigation', () => ({
  */
 const PAGE_PROPS = { searchParams: Promise.resolve({}) };
 
-/** Renders a page inside the shell's provider, awaiting it whether or not it is async. */
+/** Renders a page inside the shell's providers, awaiting it whether or not it is async. */
 async function renderScreen(
   Page: (props: typeof PAGE_PROPS) => React.ReactNode | Promise<React.ReactNode>,
 ) {
   // Awaiting a synchronous component's return value is a no-op, so one call site covers
   // all four - which is the property PET-30 relied on when Transactions became async.
-  return render(<AddTransactionProvider>{await Page(PAGE_PROPS)}</AddTransactionProvider>);
+  //
+  // Both providers, in the layout's own order, as of PET-33. The second is not decoration: a
+  // populated transactions table draws a kebab per row whose `useDeleteTransaction()` throws
+  // outside it. The `beforeEach` below hands this page an empty `transactions` array and no
+  // `table`, so no row reaches it today - which is exactly why it is wired now rather than
+  // when a future edit to that mock makes the whole file fail at once.
+  return render(
+    <AddTransactionProvider>
+      <DeleteTransactionProvider>{await Page(PAGE_PROPS)}</DeleteTransactionProvider>
+    </AddTransactionProvider>,
+  );
 }
 
 // The populated state deliberately, even though the empty one is PET-30's subject.
@@ -242,10 +253,14 @@ describe('the inert header controls', () => {
     // `queryByRole` cannot see inside it, but `queryAllByText` and `queryAllByLabelText`
     // **can** - which is why "renders nothing" rather than "is closed" is the requirement,
     // and why the label query is here beside the role one.
+    // PET-33 adds a second dialog to the shell and the same requirement to it, which is why
+    // the text query below joins the label one: the delete confirmation has no form, so
+    // `queryByLabelText` would never have noticed an always-mounted copy of it.
     await renderScreen(Page);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+    expect(screen.queryByText('Delete this transaction?')).not.toBeInTheDocument();
   });
 });
 

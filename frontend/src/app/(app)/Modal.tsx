@@ -36,6 +36,13 @@ import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 // signed-in shell's own component, beside the layout. Its stories are filed under **Shell**
 // for that reason.
 //
+// **PET-33 gave it a second shape rather than a second component.** Frame 12 is a centred icon
+// circle over a centred title with no X, where every frame before it was a left-aligned title
+// with one - so `align` and `icon` arrived. The alternative, a `ConfirmDialog` of its own, would
+// have re-implemented the single-exit `close()`, the focus capture and restore below, and the
+// backdrop target test: the three least obvious things in this file, duplicated so that one
+// dialog could be centred. See `align`'s own note for why the centred shape drops the X.
+//
 // **Two behaviours this component's suite cannot see**, because jsdom implements neither and
 // `jest.setup.ts` deliberately does not fake them: Escape and the focus trap. Both are
 // Storybook and manual checks, recorded in `frontend/src/app/CLAUDE.md` and `docs/TODO.md` -
@@ -116,6 +123,31 @@ type ModalProps = {
    */
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   /**
+   * How the header reads, and therefore which frame this is.
+   *
+   * `'start'` is frames 09, 11, 19 and 21: a left-aligned title with the X beside it, which is
+   * what a form in a box wants. `'center'` is frame 12 and the category delete confirmation:
+   * the `icon` below in a circle, the title centred under it, and the two footer buttons split
+   * evenly across the box. The body's own alignment stays the caller's, because this component
+   * has never had an opinion about what goes in `children`.
+   *
+   * **`'center'` also drops the X, which is the half worth arguing.** Frame 12 draws none, and
+   * the reason it can is that its footer is Cancel and Delete rather than a form's Cancel and
+   * Save - so the dismissing control is already on screen, named, and the wider of the two.
+   * Nothing is lost: Escape and the backdrop still close it, and both go through the same
+   * single exit. A confirmation with three ways to say no and one to say yes is also the wrong
+   * shape; the X was the third.
+   */
+  align?: 'start' | 'center';
+  /**
+   * The glyph above the title, in a tinted circle. `align="center"` only.
+   *
+   * Drawn by the caller rather than named by a prop, so this file needs no icon vocabulary and
+   * the category delete confirmation can pass a different mark. The circle, its size and its
+   * tint are here, because they are the box's chrome rather than the caller's.
+   */
+  icon?: React.ReactNode;
+  /**
    * Exposes `close()` so a caller can dismiss the dialog itself.
    *
    * **The point is that it closes the dialog rather than unmounting it**, and the difference
@@ -139,6 +171,8 @@ export function Modal({
   footer,
   initialFocusId,
   onSubmit,
+  align = 'start',
+  icon,
   ref,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -241,8 +275,14 @@ export function Modal({
       {/* `modal-action` is daisyUI's footer row: right-aligned, gapped, spaced off the body.
           Frame 11 is what will change that - it puts a "Delete transaction" text button at the
           left of this row, which is `modal-action` plus a `justify-between`, and a Record keyed
-          by alignment is the shape then. One consumer, one literal, for now. */}
-      <div className="modal-action">{footer}</div>
+          by alignment is the shape then. One consumer, one literal, for now.
+
+          Frame 12 does not change it either, though it looks as if it should: it draws two
+          equal buttons filling the box's width, which `modal-action` plus `*:flex-1` gives
+          without a second alignment. `align` carries that rather than a third prop, because the
+          two always travel together - a centred confirmation is exactly the one with a split
+          footer. */}
+      <div className={align === 'center' ? 'modal-action *:flex-1' : 'modal-action'}>{footer}</div>
     </>
   );
 
@@ -264,25 +304,46 @@ export function Modal({
           outranks daisyUI's component layer, which is what lets two utilities beat the
           open-state rule. */}
       <div className="modal-box translate-none scale-none">
-        <div className="flex items-center justify-between gap-4">
-          {/* An h2, not an h1. PageHeader owns the page's only h1, and (app)/pages.test.tsx
-              asserts there is exactly one - so a modal heading has to sit below it. */}
-          <h2 id={titleId} className="text-lg font-bold">
-            {title}
-          </h2>
+        {align === 'center' ? (
+          // Frame 12's header: the glyph in its circle, the title under it, both centred, and
+          // no X - see `align`'s note for why losing it costs nothing. `bg-error/10` is the
+          // frame's own tinted circle expressed as the theme's error colour at a tenth, so it
+          // follows light and dark instead of pinning the frame's pink; `text-error` is what
+          // the caller's `currentColor` glyph then picks up.
+          <div className="flex flex-col items-center gap-4 text-center">
+            {icon === undefined ? null : (
+              <span
+                aria-hidden="true"
+                className="bg-error/10 text-error flex size-14 items-center justify-center rounded-full"
+              >
+                {icon}
+              </span>
+            )}
+            <h2 id={titleId} className="text-lg font-bold">
+              {title}
+            </h2>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-4">
+            {/* An h2, not an h1. PageHeader owns the page's only h1, and (app)/pages.test.tsx
+                asserts there is exactly one - so a modal heading has to sit below it. */}
+            <h2 id={titleId} className="text-lg font-bold">
+              {title}
+            </h2>
 
-          {/* Not a `ui/Button`. Its `label` prop is required and renders as visible text, and
-              its own doc says "nothing in the design is icon-only" - this is the exception that
-              proves it, so forcing it through would mean either a visible label or weakening a
-              prop that is right for every other control. daisyUI's own close-corner idiom
-              instead, minus the absolute positioning, because the header row already has a slot
-              for it. A visually hidden span rather than `aria-label`, which keeps
-              getByRole('button', { name: 'Close' }) true. */}
-          <button type="button" onClick={close} className="btn btn-sm btn-circle btn-ghost">
-            <CloseGlyph />
-            <span className="sr-only">Close</span>
-          </button>
-        </div>
+            {/* Not a `ui/Button`. Its `label` prop is required and renders as visible text, and
+                its own doc says "nothing in the design is icon-only" - this is the exception that
+                proves it, so forcing it through would mean either a visible label or weakening a
+                prop that is right for every other control. daisyUI's own close-corner idiom
+                instead, minus the absolute positioning, because the header row already has a slot
+                for it. A visually hidden span rather than `aria-label`, which keeps
+                getByRole('button', { name: 'Close' }) true. */}
+            <button type="button" onClick={close} className="btn btn-sm btn-circle btn-ghost">
+              <CloseGlyph />
+              <span className="sr-only">Close</span>
+            </button>
+          </div>
+        )}
 
         {onSubmit ? (
           <form noValidate onSubmit={onSubmit}>

@@ -4,6 +4,7 @@ import { CATEGORY_TILE_NEUTRAL } from '../../../components/ui/categoryColour';
 import { formatIsoDayMonth, formatNegative } from '../../../lib/format';
 import type { Transaction } from '../../../lib/transactions';
 
+import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
 import { TransactionRow, type RowCategory } from './TransactionRow';
 
 // One row, in isolation from the join that resolves its category (TRN-5).
@@ -41,14 +42,23 @@ const GROCERIES: RowCategory = {
   tileClass: `${TILE.background} ${TILE.content}`,
 };
 
-/** A `<tr>` is invalid outside a table, and React warns about it. */
+/**
+ * A `<tr>` is invalid outside a table, and React warns about it.
+ *
+ * **The provider is required rather than convenient** as of PET-33: the row's kebab is
+ * `TransactionRowMenu`, whose `useDeleteTransaction()` throws outside it - deliberately, so a
+ * Delete that quietly stops working fails a test instead of shipping. Wrapped in the real one
+ * rather than mocking the menu away, so this suite still renders what the page renders.
+ */
 function renderRow(category: RowCategory | null = GROCERIES, transaction = TRANSACTION) {
   return render(
-    <table>
-      <tbody>
-        <TransactionRow transaction={transaction} category={category} />
-      </tbody>
-    </table>,
+    <DeleteTransactionProvider>
+      <table>
+        <tbody>
+          <TransactionRow transaction={transaction} category={category} />
+        </tbody>
+      </table>
+    </DeleteTransactionProvider>,
   );
 }
 
@@ -151,21 +161,26 @@ describe('the category', () => {
 });
 
 describe('the kebab', () => {
-  it('is not operable, because the menu behind it is PET-33’s', () => {
-    // MNU-1's menu does not exist, so a button here would announce itself and do nothing -
-    // the call SearchPill, MonthPill and both tabs already make. `pages.test.tsx`'s "no
-    // operable controls" assertions depend on this staying true.
+  // **These two assertions are inverted rather than deleted**, the call PET-29 made when the
+  // search field stopped being inert. For one ticket this was a `<span>` and the suite pinned
+  // that it announced nothing, because MNU-1's menu did not exist and a control that does
+  // nothing is worse than no control. PET-33 built the menu, so a `<span>` creeping back here
+  // would now be the regression - which is only visible if the assertion turns round.
+
+  it('is a real control now, which reverses PET-29', () => {
     renderRow();
 
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: `Actions for ${TRANSACTION.merchant}` }),
+    ).toBeInTheDocument();
   });
 
-  it('draws three dots, hidden from the accessible tree', () => {
-    const { container } = renderRow();
-    const kebab = container.querySelector('[aria-hidden="true"].flex-col');
+  it('still publishes no menu role, because the keyboard contract behind one is not built', () => {
+    // The half of the old assertion that survives unchanged. `role="menu"` promises arrow-key
+    // navigation; `TransactionRowMenu.tsx` records why this is a list of buttons instead.
+    renderRow();
 
-    expect(kebab?.children).toHaveLength(3);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });
 

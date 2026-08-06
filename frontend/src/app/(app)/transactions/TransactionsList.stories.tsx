@@ -4,6 +4,7 @@ import type { CategoryLabel } from '@/lib/categories';
 import type { Transaction, TransactionFilters, TransactionsView } from '@/lib/transactions';
 
 import { AddTransactionProvider } from '../AddTransactionProvider';
+import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
 import { TransactionFilterBar } from './TransactionFilterBar';
 import { TransactionsScreen } from './TransactionsScreen';
 import { TransactionsTable } from './TransactionsTable';
@@ -84,16 +85,23 @@ function Frame({ filters }: { filters: TransactionFilters }) {
 
   return (
     <AddTransactionProvider>
-      {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
-          gutter the `(app)` shell owns, since neither wraps a story. */}
-      <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-        <TransactionsScreen
-          view={view}
-          filters={filters}
-          filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
-          table={<TransactionsTable transactions={TRANSACTIONS} categories={CATEGORIES} />}
-        />
-      </div>
+      {/* Both providers, and the second is not optional: every row draws a kebab whose
+          `useDeleteTransaction()` throws outside it. Inside `render` with the first one, for
+          the reason the header note gives - the smoke harness never applies `meta.decorators`.
+          This is also what makes the row menu and the delete dialog reviewable here at all,
+          which is the only review either gets: `build-storybook` never runs a story. */}
+      <DeleteTransactionProvider>
+        {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
+            gutter the `(app)` shell owns, since neither wraps a story. */}
+        <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+          <TransactionsScreen
+            view={view}
+            filters={filters}
+            filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
+            table={<TransactionsTable transactions={TRANSACTIONS} categories={CATEGORIES} />}
+          />
+        </div>
+      </DeleteTransactionProvider>
     </AddTransactionProvider>
   );
 }
@@ -113,8 +121,16 @@ function Frame({ filters }: { filters: TransactionFilters }) {
  * `overflow-x-auto`, so the table scrolls inside its own box; the page body must not scroll
  * sideways with it, and the filter bar should wrap rather than crush its selects.
  *
- * The kebab is drawn and does nothing: MNU-1's menu is PET-33's, and a row click does nothing
- * either because the detail page is PET-34's.
+ * **The kebab is live as of PET-33, and this story is where its two browser-only behaviours are
+ * checked** - jsdom implements no Popover API at all and `jest.setup.ts` deliberately fakes
+ * none of it, so nothing in the suite can see either. Open a row's menu: it should sit anchored
+ * under that kebab, close on a click anywhere else and close on Escape. "Edit" reads dimmed and
+ * does nothing, which is PET-32's to finish. "Delete" closes the menu and opens the
+ * confirmation over the page. In **Firefox**, where CSS anchor positioning is unsupported,
+ * daisyUI's own fallback centres the menu behind a dimmed backdrop instead - degraded and
+ * expected, not a bug to fix here.
+ *
+ * A row click still does nothing, because the detail page is PET-34's.
  */
 export const List: Story = {
   render: () => <Frame filters={{}} />,

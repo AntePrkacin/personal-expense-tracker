@@ -2,14 +2,18 @@ import { CATEGORY_TILE_NEUTRAL } from '@/components/ui/categoryColour';
 import { formatIsoDayMonth, formatNegative } from '@/lib/format';
 import type { Transaction } from '@/lib/transactions';
 
+import { TransactionRowMenu } from './TransactionRowMenu';
+
 // One row of the transactions table (TRN-4, TRN-5, Figma node 27:146).
 //
-// **Its own file rather than a function inside `TransactionsTable`, and the reason is
-// PET-33.** The kebab becomes a popover with open state, which makes whatever holds it a
-// client component. Split, that is a `'use client'` on this file alone; merged, it drags the
-// card, the header row and the category join into the client bundle with it. Same rule
-// `SidebarNav` and `AddTransactionProvider` follow - push the boundary into the smallest
-// wrapper - applied before the boundary exists rather than after.
+// **Its own file rather than a function inside `TransactionsTable`, and the reason was
+// PET-33.** The prediction was that the kebab would need open state, making whatever held it a
+// client component, and that splitting kept the `'use client'` off the card, the header row and
+// the category join. PET-33 landed and the prediction was pessimistic in the useful direction:
+// the menu is a popover, which needs no state at all, so the directive went one level smaller
+// still - onto `TransactionRowMenu.tsx` - and **this file is still a Server Component**. The
+// split earns its place anyway, since the row would otherwise import a client component from
+// inside `TransactionsTable`'s own file, but do not read the boundary as being here.
 //
 // **It takes a resolved category rather than a lookup**, so the join happens once in the
 // table instead of once per row, and this file needs no category list to test.
@@ -50,32 +54,6 @@ function CategoryGlyph() {
         strokeLinecap="round"
       />
     </svg>
-  );
-}
-
-/**
- * The row's kebab, drawn and deliberately inert (TRN-8).
- *
- * **A `<span>`, not a `<button>.** MNU-1's menu is PET-33's and does not exist, so a button
- * here would announce itself as operable and do nothing - the call `SearchPill`, `MonthPill`
- * and both tabs already make, and the one `(app)/pages.test.tsx`'s "no operable controls"
- * assertions depend on. No `title`, no `cursor-pointer`, and `aria-hidden` because three
- * unlabelled dots describe nothing a reader is missing.
- *
- * PET-33's diff is this span becoming `btn btn-ghost btn-square btn-sm` with an
- * `aria-label="More actions"`, plus an `sr-only` label on the header's empty cell. Nothing
- * about the column has to move.
- *
- * The dots are `base-content/40`: quieter than the row's own text and quieter than the column
- * headers, which is the weight the frame's grey had against everything around it.
- */
-function KebabGlyph() {
-  return (
-    <span aria-hidden="true" className="flex flex-col items-center gap-[3px]">
-      <span className="bg-base-content/40 size-[3.2px] rounded-full" />
-      <span className="bg-base-content/40 size-[3.2px] rounded-full" />
-      <span className="bg-base-content/40 size-[3.2px] rounded-full" />
-    </span>
   );
 }
 
@@ -157,7 +135,7 @@ export function TransactionRow({ transaction, category }: TransactionRowProps) {
       </td>
 
       <td>
-        <KebabGlyph />
+        <TransactionRowMenu transaction={transaction} />
       </td>
     </tr>
   );

@@ -205,6 +205,52 @@ export async function authorizedPost(path: string, body: unknown): Promise<Autho
 }
 
 /**
+ * DELETEs a guarded endpoint with the session lifted into an `Authorization` header.
+ *
+ * The third verb, and it reuses `AuthorizedWriteResult` rather than growing a shape of its
+ * own: `DELETE /api/transactions/:id` answers 404 when the id names nothing of theirs and
+ * 401 when the session died with the dialog open, which is the same "the caller has to tell
+ * these apart" argument that type was written for. `lib/deleteTransaction.ts` is the
+ * classifier.
+ *
+ * **A 204 is what success looks like here, and nothing about that needs handling.**
+ * `response.ok` covers the whole 2xx range, and the body is never read - which is
+ * `authorizedPost`'s decision arrived at from the other direction: there, a 2xx with an
+ * unparseable body still means the row exists; here there is no body at all.
+ *
+ * It takes a `path` and so must not become a Server Action, for the reason `authorizedPost`
+ * above and `lib/backend.ts` both record: `'use server'` here would publish an endpoint
+ * accepting an arbitrary path. The action that wraps it names one fixed route.
+ *
+ * @param path the backend path including its `/api` prefix
+ */
+export async function authorizedDelete(path: string): Promise<AuthorizedWriteResult> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
+    return { ok: false, status: 401 };
+  }
+
+  try {
+    const response = await fetch(`${process.env.BACKEND_URL}${path}`, {
+      method: 'DELETE',
+      // No `Content-Type`: there is no body. Sending one on a bodiless request is the sort
+      // of thing a strict proxy is entitled to complain about, and nothing needs it.
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+
+    return response.ok ? { ok: true } : { ok: false, status: response.status };
+  } catch {
+    // Unreachable backend, DNS, or a dropped connection. No status, which is what "the
+    // request never completed" looks like - and here that genuinely matters, because a
+    // delete that may or may not have landed is one the user will come back and retry.
+    return { ok: false };
+  }
+}
+
+/**
  * The cookie's write options, or `null` when the session is already dead.
  *
  * **The lifetime is derived from the backend's own `expiresAt` rather than mirroring

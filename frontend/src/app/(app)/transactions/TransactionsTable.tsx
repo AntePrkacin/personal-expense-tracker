@@ -91,14 +91,17 @@ export function TransactionsTable({ transactions, categories }: TransactionsTabl
                 {column.label}
               </th>
             ))}
-            {/* The kebab column's header: present and deliberately empty.
+            {/* The kebab column's header. It was present and deliberately empty until PET-33,
+                because naming a column after a control that did not exist is the lie the inert
+                kebab existed to avoid; the actions are real now, so the name is too.
 
-                No `sr-only` "Actions" label, because there are no actions yet - naming a
-                column after a control PET-33 has not built is the lie the inert kebab exists
-                to avoid. And no `aria-hidden` either: hiding the header while every row still
-                renders a cell would leave a table whose two halves disagree about how many
-                columns it has. */}
-            <th scope="col" />
+                `sr-only` rather than visible: the frame draws no fifth heading, and the other
+                four are the design's own. Still no `aria-hidden`, for the reason it never had
+                one - hiding the header while every row renders a cell would leave a table whose
+                two halves disagree about how many columns it has. */}
+            <th scope="col">
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
 

@@ -31,10 +31,14 @@ function Harness({
   onClose,
   initialFocusId,
   onSubmit,
+  align,
+  icon,
 }: {
   onClose?: () => void;
   initialFocusId?: string;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  align?: 'start' | 'center';
+  icon?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -47,6 +51,8 @@ function Harness({
       {open ? (
         <Modal
           title="Add transaction"
+          align={align}
+          icon={icon}
           onClose={() => {
             setOpen(false);
             onClose?.();
@@ -131,6 +137,83 @@ describe('the header', () => {
     // A visually hidden span rather than aria-label, and the glyph hidden from the tree.
     expect(close).toBeInTheDocument();
     expect(close.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+describe('the centred shape', () => {
+  // PET-33's addition, and frame 12's. The default shape above is unchanged; these pin the
+  // three differences and, more importantly, that everything else survives them.
+
+  it('draws no close control, because Cancel is the designed dismissal', async () => {
+    // The one deliberate removal. A confirmation whose footer already names the way out does
+    // not need a third way to say no - and Escape and the backdrop still reach the same exit,
+    // which the two assertions after this one prove.
+    render(<Harness align="center" />);
+    await userEvent.click(openIt());
+
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+  });
+
+  it('still closes on a scrim click with no X present', async () => {
+    const onClose = jest.fn();
+    render(<Harness align="center" onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    await userEvent.click(dialog());
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('still reports a native close event, which is the path Escape arrives through', async () => {
+    // Escape itself is unassertable here for the reason at the top of this file. This is the
+    // same stand-in the default shape uses, repeated because dropping the X is exactly the
+    // change that could plausibly have taken the exit with it.
+    const onClose = jest.fn();
+    render(<Harness align="center" onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    await act(async () => {
+      dialog().dispatchEvent(new Event('close'));
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the dialog named by its title', async () => {
+    // aria-labelledby points at the h2 either way. Worth its own assertion because the h2
+    // moved into a different wrapper.
+    render(<Harness align="center" />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByRole('dialog', { name: 'Add transaction' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Add transaction' })).toBeInTheDocument();
+  });
+
+  it('renders the icon and hides it from the accessibility tree', async () => {
+    // The circle is decoration beside a heading that already says what this is - the same call
+    // the step indicator, the chip dots and ui/Input's `$` prefix all make.
+    render(<Harness align="center" icon={<svg data-testid="glyph" />} />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByTestId('glyph').parentElement).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('renders no circle when no icon is given', async () => {
+    // An empty tinted disc above the title would be worse than nothing, so the wrapper is
+    // conditional rather than always present.
+    const { container } = render(<Harness align="center" />);
+    await userEvent.click(openIt());
+
+    expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it("leaves the default shape's X in place", async () => {
+    // The regression that matters most: `align` defaults to 'start', so every existing caller
+    // - frame 09 today, 11 and 21 later - keeps the header it had.
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   });
 });
 

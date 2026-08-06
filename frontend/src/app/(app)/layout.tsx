@@ -1,6 +1,7 @@
 import { requireProfile } from '@/lib/profile';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
+import { DeleteTransactionProvider } from './DeleteTransactionProvider';
 import { DRAWER_TOGGLE_ID } from './drawer';
 import { SidebarNav } from './SidebarNav';
 
@@ -103,9 +104,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
             Inside the gutter wrapper rather than around the drawer, so the provider's own
             subtree does not sit between the drawer's two children. The modal itself renders
-            in the top layer regardless of where it is mounted. */}
+            in the top layer regardless of where it is mounted.
+
+            **`DeleteTransactionProvider` is here for a sharper version of the same reason**
+            (PET-33). Its trigger is per *row*, so a dialog owned by the row menu would mount
+            one `<dialog>` per transaction. Nesting order between the two providers carries
+            nothing: neither reads the other, and each renders its dialog into the top layer.
+            The pairing is what lets PET-32's edit modal open the confirmation over itself. */}
         <div className="flex flex-1 flex-col px-4 sm:px-6 lg:px-10">
-          <AddTransactionProvider>{children}</AddTransactionProvider>
+          <AddTransactionProvider>
+            <DeleteTransactionProvider>{children}</DeleteTransactionProvider>
+          </AddTransactionProvider>
         </div>
       </div>
       <div className="drawer-side">

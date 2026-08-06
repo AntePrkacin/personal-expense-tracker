@@ -4,6 +4,7 @@ import { categoryTileClass } from '../../../components/ui/categoryColour';
 import type { CategoryLabel } from '../../../lib/categories';
 import type { Transaction } from '../../../lib/transactions';
 
+import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
 import { TransactionsTable } from './TransactionsTable';
 
 // The card, the columns and the join (TRN-4 to TRN-6).
@@ -35,8 +36,16 @@ const UBER = transaction({
   date: '2025-10-08',
 });
 
+/**
+ * The provider is required as of PET-33, for the reason `TransactionRow.test.tsx` gives: every
+ * row draws a kebab whose `useDeleteTransaction()` throws outside it.
+ */
 function renderTable(transactions: Transaction[] = [transaction()]) {
-  return render(<TransactionsTable transactions={transactions} categories={CATEGORIES} />);
+  return render(
+    <DeleteTransactionProvider>
+      <TransactionsTable transactions={transactions} categories={CATEGORIES} />
+    </DeleteTransactionProvider>,
+  );
 }
 
 /**
@@ -76,20 +85,34 @@ describe('the columns', () => {
       'CATEGORY',
       'DATE',
       'AMOUNT',
-      '',
+      'Actions',
     ]);
   });
 
-  it('keeps a fifth, empty header over the kebab column', () => {
-    // Present and unlabelled on purpose: an `sr-only` "Actions" would name a control PET-33
-    // has not built, and `aria-hidden` would leave the header and the rows disagreeing about
-    // how many columns the table has.
-    const headers = screen.queryAllByRole('columnheader');
-
-    expect(headers).toHaveLength(0);
+  it('names the fifth header now that there are actions under it', () => {
+    // **Inverted rather than deleted.** It asserted an *empty* fifth header for one ticket,
+    // because an `sr-only` "Actions" would have named a control PET-33 had not built. PET-33
+    // built it, so the name is honest and its absence would be the bug.
+    //
+    // The rest of the old reasoning stands: still five headers, and still no `aria-hidden`,
+    // which would leave the header and the rows disagreeing about how many columns there are.
     renderTable();
-    expect(screen.getAllByRole('columnheader')).toHaveLength(5);
-    expect(screen.getAllByRole('columnheader')[4]).toBeEmptyDOMElement();
+
+    const headers = screen.getAllByRole('columnheader');
+
+    expect(headers).toHaveLength(5);
+    expect(headers[4]).toHaveTextContent('Actions');
+    expect(headers[4]).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('keeps the fifth header out of the visible design, which draws four', () => {
+    // `sr-only`, because frame 26:172 draws no fifth heading. A visible one would add a column
+    // title the design does not have.
+    renderTable();
+
+    expect(screen.getAllByRole('columnheader')[4]!.querySelector('.sr-only')).toHaveTextContent(
+      'Actions',
+    );
   });
 
   it('names every header as a column rather than as a row', () => {
