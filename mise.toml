@@ -5,6 +5,12 @@
 node = "26"
 "npm:npm-check-updates" = "latest"
 
+# The binary behind the typescript-lsp Claude Code plugin, which ships a declaration and
+# expects `typescript-language-server` on PATH. Neither app needs it to build, lint or
+# test, so it is optional tooling that happens to be easiest to pin here; the reasoning
+# is in .claude/SETTINGS.md and the non-mise route is in docs/guides/installation.md.
+"npm:typescript-language-server" = "latest"
+
 # Audit
 #
 # `npm audit` exits 1 whenever it finds anything at all, so a plain `run` array aborts on

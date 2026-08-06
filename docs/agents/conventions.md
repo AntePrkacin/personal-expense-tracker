@@ -204,7 +204,29 @@ commits land.
 
 This is a **multi-app repo, not a workspace-managed monorepo**. There is no npm
 workspaces, turbo, or nx setup. The root `package.json` owns only repo-wide dev tooling
-(Husky, commitlint, lint-staged, Prettier) and does **not** manage the two apps.
+(Husky, commitlint, lint-staged, Prettier, TypeScript) and does **not** manage the two apps.
+
+**TypeScript is the odd one in that list, and it is a pin rather than a dependency.**
+Nothing at the root compiles: both apps carry their own TypeScript and build with it. It is
+here because `typescript-language-server`, which the `typescript-lsp` plugin runs, resolves a
+TypeScript installation from the workspace root at startup, and the workspace root an editor
+opens is this directory, not `backend/` or `frontend/`.
+
+The part worth knowing is what happens with no pin, because the root was in exactly that
+state until PET-58 and it did not look broken. Root TypeScript was already being installed,
+at **7.0.2**, chosen by nobody: commitlint's config loader peer-depends on `typescript >=5`
+(`cosmiconfig-typescript-loader`), and npm installs peers automatically, so the resolver took
+the newest major that satisfied it. TypeScript 7 is the native port, and its `lib/` holds
+`getExePath.js` and `tsc.js` where the language server expects `tsserver.js`, so the server
+refuses to initialise with "Could not find a valid TypeScript installation" and the plugin
+silently does nothing. Verified 2026-08-06, before and after, by driving an `initialize`
+handshake at the server by hand.
+
+So the entry pins TypeScript to the backend's major and minor, which keeps one server
+serving both apps and still satisfies the `>=5` peer. Expect the lock file to drop twenty
+`@typescript/typescript-*` platform packages, the optional native binaries of the 7.x line;
+that deletion is the point, not collateral. If the apps ever move to a shared TypeScript,
+this is the entry that should absorb it rather than a fourth copy appearing.
 
 Two consequences that trip people up:
 

@@ -166,3 +166,13 @@ mid-flow, or their saved logins. Verifying this app's own CSS and semantics is n
 `.claude/commit-checks.md` is a generated cache read by `repo-commit`. Regenerate it
 with `/repo-commit refresh-checks` when it goes stale.
 
+**Three plugins are enabled repo-wide**, from Anthropic's official marketplace, and they
+extend the two inventories above rather than replacing anything in them. From
+`pr-review-toolkit`, four agents with no local twin - `comment-analyzer`,
+`pr-test-analyzer`, `silent-failure-hunter`, `type-design-analyzer` - and
+`/pr-review-toolkit:review-pr` alongside this repo's `repo-review-prs`. From
+`typescript-lsp`, a TypeScript language server, which needs a binary installed before it
+does anything (`docs/guides/installation.md`). From `security-guidance`, hooks rather
+than anything you invoke. Which three, why those, what each costs, and why the plugin's
+own `code-reviewer` never loads: `.claude/SETTINGS.md`.
+

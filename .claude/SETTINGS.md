@@ -92,6 +92,51 @@ setting is what actually enforces it.
 > Note: the older `includeCoAuthoredBy` key does the same job but is deprecated. Use
 > `attribution`.
 
+### `extraKnownMarketplaces` and `enabledPlugins`
+
+Three plugins from Anthropic's official marketplace, chosen once for everyone instead of
+left to each person to find. Be clear about what enabling one does: as of Claude Code
+v2.1.195, a plugin that only the project's `settings.json` enables does **not** install
+itself on a teammate's machine. Claude Code lists it as not installed and prints the
+`claude plugin install` command to run. So these two keys register the marketplace and
+record the decision; the install itself stays a per-person act.
+
+`typescript-lsp` is the plainest win of the three. Both apps are TypeScript and neither
+has a standalone typecheck script, so `npm run build` is the only thing that finds a type
+error today, long after it was written; a language server finds it while the file is
+still open. It ships no binary of its own. The marketplace entry launches
+`typescript-language-server --stdio`, which has to be on your `PATH` or the plugin's
+Errors tab reads `Executable not found in $PATH`, and installing that is a step in
+`docs/guides/installation.md`. It was not free, either: it is the reason the root
+`package.json` now pins TypeScript, which `docs/agents/conventions.md` explains.
+
+`security-guidance` is here for what this repo is: passwordless access, a session cookie,
+a standing rule against `NEXT_PUBLIC_` secrets, and a public teaching repo where a
+committed key is published rather than merely leaked. It is also the one that costs
+something, so enable it knowing that. It ships Python hooks rather than prompt text, on
+`SessionStart` (with a 180 second timeout, while it fetches the Agent SDK),
+`UserPromptSubmit`, and `PostToolUse` for every `Edit`, `Write` and `MultiEdit`, and it
+spends tokens reviewing the git diff whenever a session stops. If sessions start feeling
+slow or expensive, this is the first thing to switch back off.
+
+`pr-review-toolkit` suits a workflow that is already PR-centric, but part of what it
+ships is here already, and the overlaps resolve in two opposite ways. **A subagent in
+`.claude/agents/` beats a plugin subagent of the same name**, so `code-reviewer` stays
+this repo's own and the plugin's copy never loads; deleting the local file is what would
+swap them, which is worth knowing before someone deletes it by accident. **Skills never
+collide at all**, because a plugin's are namespaced under the plugin, so
+`/pr-review-toolkit:review-pr` sits beside `repo-review-prs` rather than shadowing it.
+What is genuinely new is the four agents with no local twin: `comment-analyzer`,
+`pr-test-analyzer`, `silent-failure-hunter` and `type-design-analyzer`.
+
+What was considered and deliberately left out, so the question need not be reopened every
+few months: `commit-commands` duplicates the `repo-commit` skill, `github` duplicates the
+`gh` CLI this repo already standardises on, `playwright` duplicates Claude in Chrome,
+`context7` duplicates the two `*-specialist` agents, and `frontend-design` would compete
+with the daisyUI Blueprint MCP workflow rather than add to it.
+
+A plugin only you want goes in `settings.local.json` under the same two keys, never here.
+
 ---
 
 ## Personal preferences go in `settings.local.json`

@@ -232,3 +232,37 @@ cp .mcp.json.example .mcp.json
 `.mcp.json` is gitignored, so this part is per-developer and optional. One caution: `push`
 applies schema changes straight to a database without writing a migration file, which is
 the opposite of how this repo works. Prefer `npm run db:generate`.
+
+## Optional: the TypeScript language server
+
+`.claude/settings.json` enables the `typescript-lsp` Claude Code plugin for everyone, but that
+plugin is only a declaration. It launches `typescript-language-server`, and nothing installs
+that binary for you: not the plugin, not `npm install`, not this repo. Until it is on your
+`PATH`, the plugin's Errors tab in `/plugin` reads `Executable not found in $PATH` and you get
+no code intelligence.
+
+If you use mise it is declared in `mise.toml`, so it arrives with everything else. mise scopes
+it to this project, so the shim resolves inside the repo and nowhere else, which is the only
+place it is used:
+
+```bash
+mise install
+```
+
+Otherwise install the server globally:
+
+```bash
+npm install -g typescript-language-server
+```
+
+Only the server. The TypeScript it needs comes from the root `npm install` you have already
+run, and the reason it has to come from the root rather than from `backend/` or `frontend/` is
+in `docs/agents/conventions.md`. If you skipped that install, the server starts and then
+refuses the connection with "Could not find a valid TypeScript installation".
+
+Verify both halves, then reopen Claude Code:
+
+```bash
+which typescript-language-server
+node -p "require('typescript/package.json').version"
+```
