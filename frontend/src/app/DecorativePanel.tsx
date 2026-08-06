@@ -1,4 +1,4 @@
-import { CATEGORY_TILE, type CategoryColour } from '@/components/ui/categoryColour';
+import { CATEGORY_DOT, type CategoryColour } from '@/components/ui/categoryColour';
 
 // The right half of 01 Welcome (Figma node 41:711): a dark panel with two washes
 // of accent, a sample budget card and two floating category chips.
@@ -45,10 +45,10 @@ const SAMPLE_BUDGET = {
  * The position classes are complete literal strings in the data rather than built
  * from the numbers, because Tailwind's scanner reads this file as raw text: a class
  * assembled by interpolation is found by nobody and compiles to nothing, with no
- * build error. Same rule as CATEGORY_TILE itself.
+ * build error. Same rule as CATEGORY_DOT itself.
  *
  * `colour` is typed `CategoryColour` so a typo is a build error, and the fill comes
- * from CATEGORY_TILE rather than being written inline, which documents that these
+ * from CATEGORY_DOT rather than being written inline, which documents that these
  * two dots are category colours rather than arbitrary ones. Figma binds them to
  * Category/1 Coral and Category/6 Blue.
  */
@@ -113,7 +113,11 @@ function SampleChip({ label, amount, colour, position }: (typeof SAMPLE_CHIPS)[n
     <div
       className={`bg-base-100 text-base-content absolute flex items-center gap-2 rounded-full py-2.5 pr-3.5 pl-3 shadow-lg ${position}`}
     >
-      <span className={`status status-md shrink-0 ${CATEGORY_TILE[colour]}`} />
+      {/* `CATEGORY_DOT`, not `CATEGORY_TILE`: `.status` draws its drop shadow from
+          `currentColor` and sets `color` to a translucent black for it, so a tile's
+          `text-*-content` half makes that shadow an opaque coloured smudge.
+          `ui/categoryColour.ts` records it. */}
+      <span className={`status status-md shrink-0 ${CATEGORY_DOT[colour]}`} />
       <p className="text-sm font-semibold">{label}</p>
       <p className="text-base-content/60 text-xs">{amount}</p>
     </div>

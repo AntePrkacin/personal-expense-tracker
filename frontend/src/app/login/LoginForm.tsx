@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { isEmailValid } from '@/lib/email';
@@ -115,16 +116,10 @@ export function LoginForm({ sendLink }: LoginFormProps) {
         required
       />
 
-      {/* One line for a failed request, in the treatment `ui/Input` uses for its own
-          message, with `role="alert"` - which Input deliberately omits. Input's message
-          appears synchronously beside the field the user just left; this one appears
-          after a network round trip with nothing else on screen changing, so nothing
-          else would tell a screen reader the submit failed. Same call PET-11 made. */}
-      {submitFailed ? (
-        <p role="alert" className="text-error text-sm">
-          {MESSAGES.submitFailed}
-        </p>
-      ) : null}
+      {/* One line for a failed request. `components/FormError.tsx` owns the treatment and the
+          `role="alert"` reasoning for all four of the app's form-level messages; this file's
+          only decision is which copy and when. */}
+      <FormError message={submitFailed ? MESSAGES.submitFailed : null} />
 
       {/* pt-1.5 is the designed 6px above this row: the footer frame is 49px tall
           with its button inset 6px from the top (node 132:1152). */}

@@ -104,10 +104,19 @@ export function WelcomeScreen() {
 
                 The focus-visible outline is kept explicit, like every other
                 interactive element here: no focus state is drawn, and a keyboard
-                user needs one. */}
+                user needs one.
+
+                **`outline-solid` is what makes that outline exist**, and it is the
+                same daisyUI cascade trap `ui/Sidebar.tsx` records for its menu
+                links. daisyUI's `.link:focus` sets `--tw-outline-style: none`, and
+                Tailwind's `outline-2` emits `outline-style: var(--tw-outline-style)`
+                - so `outline-2` alone computes to a 2px outline of style `none`,
+                which paints nothing at all. `outline-solid` sets the variable back.
+                Nothing in a build, a lint or a Jest run can see this; the class is
+                present, the colour is right, and the ring is simply absent. */}
             <Link
               href={ACCESS_ROUTES.login}
-              className="link link-hover link-primary font-semibold focus-visible:outline-primary focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="link link-hover link-primary font-semibold focus-visible:outline-primary focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               I already have an account
             </Link>

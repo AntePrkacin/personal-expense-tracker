@@ -511,6 +511,14 @@ describe('today', () => {
     expect(day('Oct 8, 2025')).toHaveAttribute('aria-current', 'date');
     expect(day('Oct 8, 2025')).toHaveClass('btn-outline');
 
+    // **And not `btn-ghost` beside it**, which is the assertion that was missing while this
+    // marker painted nothing at all. The two modifiers both set `--btn-border` at equal
+    // specificity, daisyUI emits ghost second, so `btn-ghost btn-outline` resolved to a
+    // transparent border and today looked exactly like a plain day - with `toHaveClass
+    // ('btn-outline')` green the whole time. Nothing but this negative can see it from Jest.
+    expect(day('Oct 8, 2025')).not.toHaveClass('btn-ghost');
+    expect(day('Oct 20, 2025')).not.toHaveClass('btn-ghost');
+
     expect(day('Oct 20, 2025').closest('[role="gridcell"]')).toHaveAttribute(
       'aria-selected',
       'true',

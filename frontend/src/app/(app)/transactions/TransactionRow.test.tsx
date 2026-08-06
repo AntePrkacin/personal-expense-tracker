@@ -106,8 +106,9 @@ describe('the category', () => {
   });
 
   it('hides the tile and the dot from the accessible tree', () => {
-    // Neither carries anything the CATEGORY cell does not say in words, and two starter
-    // categories share a colour, so the mark cannot identify one on its own.
+    // Neither carries anything the CATEGORY cell does not say in words, and the colour cannot
+    // identify a category on its own: two of the ten starters share a colour word, and
+    // `ui/categoryColour.ts` maps orange and yellow both onto `warning` on top of that.
     const { container } = renderRow();
 
     for (const mark of container.querySelectorAll(`.${TILE.background}`)) {
@@ -179,16 +180,19 @@ describe('the row makes no navigation claim', () => {
 });
 
 describe('a long merchant name', () => {
-  it('truncates rather than widening the column', () => {
+  it('stays on one line and lets the card scroll instead', () => {
     renderRow(GROCERIES, { ...TRANSACTION, merchant: 'A'.repeat(120) });
 
-    // jsdom computes no layout, so the class is the assertion - as it is for every other
-    // truncation in this repo. `min-w-0` beside it is the load-bearing half: a flex item's
-    // default minimum size is its content, so `truncate` alone does nothing here.
+    // jsdom computes no layout, so the class is the assertion. **This asserted `truncate` and
+    // `min-w-0`, and both were dead**: they were written for the `table-fixed` layout PET-57
+    // removed, and with the browser measuring the columns there is no box for `overflow: hidden`
+    // and `text-overflow: ellipsis` to clip against. What the row actually needs is to stay one
+    // line - the card's own `overflow-x-auto` is what a long name reaches for - so the negative
+    // below is the half that would have caught the drift.
     const merchant = screen.getByText('A'.repeat(120));
 
-    expect(merchant).toHaveClass('truncate');
-    expect(merchant).toHaveClass('min-w-0');
+    expect(merchant).toHaveClass('whitespace-nowrap');
+    expect(merchant).not.toHaveClass('truncate');
   });
 });
 

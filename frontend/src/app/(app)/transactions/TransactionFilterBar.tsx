@@ -57,7 +57,10 @@ function FilterPill<T extends string>({ label, value, options, onChange }: Filte
       // ships `width: clamp(3rem, 20rem, 100%)`, sized for a form field standing alone in a
       // column, and three of those side by side is 960px of filter bar. Sizing to content is
       // what makes these read as the pills the frame draws.
-      className="select select-sm w-auto"
+      //
+      // `cursor-pointer` for the reason `ui/Select.tsx` records: daisyUI sets no cursor on a
+      // resting select, so without it three obviously clickable pills hover as an arrow.
+      className="select select-sm w-auto cursor-pointer"
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>

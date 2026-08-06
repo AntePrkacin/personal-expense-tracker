@@ -1,5 +1,6 @@
 import {
   CATEGORY_COLOUR_BY_HEX,
+  CATEGORY_DOT,
   CATEGORY_TILE,
   CATEGORY_TILE_NEUTRAL,
   categoryTileClass,
@@ -44,6 +45,32 @@ describe('CATEGORY_TILE', () => {
     // PET-57 accepted the collision because category colours are decoration, not
     // semantics. Pinned so it cannot be "fixed" by inventing a ninth theme colour.
     expect(CATEGORY_TILE.orange).toBe(CATEGORY_TILE.yellow);
+  });
+});
+
+describe('CATEGORY_DOT', () => {
+  it('is every tile without its content colour', () => {
+    // The two maps are written out separately, because this file's first rule is that a class
+    // is never assembled at runtime. This is what stops them drifting: a dot is exactly the
+    // background half of its tile, so adding a ninth colour to one and not the other fails
+    // here rather than rendering a transparent dot somewhere.
+    for (const colour of Object.keys(CATEGORY_TILE) as CategoryColour[]) {
+      expect(CATEGORY_TILE[colour].split(' ')[0]).toBe(CATEGORY_DOT[colour]);
+    }
+  });
+
+  it('covers the same eight colours as the tile', () => {
+    expect(Object.keys(CATEGORY_DOT)).toEqual(Object.keys(CATEGORY_TILE));
+  });
+
+  it('carries no text colour, which is the whole reason it exists', () => {
+    // daisyUI's `.status` draws its drop shadow from `currentColor` and sets `color` to a
+    // translucent black for that purpose. A `text-*-content` class overrides it with a fully
+    // opaque colour and the shadow becomes an opaque smudge under every dot - which is why the
+    // chips and the Welcome panel take this map and not the tile.
+    for (const colour of Object.keys(CATEGORY_DOT) as CategoryColour[]) {
+      expect(CATEGORY_DOT[colour]).not.toMatch(/text-/);
+    }
   });
 });
 

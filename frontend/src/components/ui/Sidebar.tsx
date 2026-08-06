@@ -159,11 +159,19 @@ const NAV_SECTIONS = [
  * aria-current that the tests pin; the utilities beside it are what make it
  * visible on this panel, and they win because Tailwind emits them unlayered
  * inside `utilities` while daisyUI's rules sit in a nested sub-layer.
+ *
+ * **The idle wash is deliberately lighter than the active one.** Both were
+ * `neutral-content/10`, which made a hovered item pixel-identical to the open one -
+ * so a mouse user pointing at Transactions from the Dashboard saw two items in the
+ * same state and neither said which page they were on. The fill that marks "you are
+ * here" has to outweigh the one that marks "you could click this", and /5 against
+ * /10 is that with no third colour introduced. Invisible to the suite, which asserts
+ * `menu-active` and `aria-current` rather than hover weights.
  */
 const LINK_STATE: Record<'active' | 'idle', string> = {
   active:
     'menu-active bg-neutral-content/10 text-neutral-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-content',
-  idle: 'hover:bg-neutral-content/10 focus-visible:bg-neutral-content/10 focus-visible:text-neutral-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-content',
+  idle: 'hover:bg-neutral-content/5 focus-visible:bg-neutral-content/5 focus-visible:text-neutral-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-content',
 };
 
 type SidebarProps = {
@@ -183,9 +191,19 @@ type SidebarProps = {
   firstName: string;
   lastName: string;
   email: string;
+  /**
+   * Called when any nav link is clicked, before the navigation.
+   *
+   * Optional and unused by this component itself, which is why it does not make this a client
+   * component: it is `(app)/SidebarNav.tsx`'s hook for closing the off-canvas drawer, and it
+   * exists because the pathname effect that used to be the only closer cannot see a click on
+   * the section already open. A Server Component cannot pass a function prop, so only a client
+   * parent may supply it - which is exactly the one caller that does.
+   */
+  onNavigate?: () => void;
 };
 
-export function Sidebar({ active, firstName, lastName, email }: SidebarProps) {
+export function Sidebar({ active, firstName, lastName, email, onNavigate }: SidebarProps) {
   return (
     // min-h-full rather than a height of its own, because the drawer's side
     // column is what constrains it; justify-between pins the footer to the
@@ -242,6 +260,7 @@ export function Sidebar({ active, firstName, lastName, email }: SidebarProps) {
                         <Link
                           href={SIDEBAR_HREFS[key]}
                           aria-current={isActive ? 'page' : undefined}
+                          onClick={onNavigate}
                           className={LINK_STATE[isActive ? 'active' : 'idle']}
                         >
                           <Glyph />

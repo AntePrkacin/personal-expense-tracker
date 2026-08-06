@@ -56,6 +56,35 @@ describe('FieldShell', () => {
     expect(screen.getByRole('button')).toHaveAccessibleName('Date Oct 8, 2025');
   });
 
+  it('keeps the label as narrow as its text rather than stretching it', () => {
+    // Inherited from the deleted `ui/Field`, whose own suite pinned this, and re-pinned here
+    // because the axis changed with the element: daisyUI's `fieldset` is a one-column grid, so
+    // a full-width label needs `justify-self-start` where the old flex column needed
+    // `self-start`. Without it the label spans the whole field and every click in the empty
+    // strip beside the word is forwarded to the control - which on a `<select>` focuses it
+    // without opening the list, so the field lights up and nothing happens.
+    render(
+      <FieldShell id="merchant" label="Merchant">
+        <input id="merchant" />
+      </FieldShell>,
+    );
+
+    expect(screen.getByText('Merchant')).toHaveClass('justify-self-start');
+  });
+
+  it('publishes no ARIA group, because one field is not a set of fields', () => {
+    // The shell wears daisyUI's `fieldset` class on a `div`. The real `<fieldset>` element
+    // publishes `role="group"`, and with no `legend` that group is nameless - one around every
+    // field in the app, five of them in the Add transaction modal alone.
+    render(
+      <FieldShell id="merchant" label="Merchant">
+        <input id="merchant" />
+      </FieldShell>,
+    );
+
+    expect(screen.queryByRole('group')).toBeNull();
+  });
+
   it('renders no message element at all without an error', () => {
     const { container } = render(
       <FieldShell id="merchant" label="Merchant">

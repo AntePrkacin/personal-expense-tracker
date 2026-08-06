@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 
+import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -303,22 +304,14 @@ export function AddTransactionModal({
         onChange={(event) => set('note', event.currentTarget.value)}
       />
 
-      {/* The same `text-error` treatment `ui/FieldShell` gives its inline message, with
-          role="alert" where the shell deliberately has none: a field's message appears
-          synchronously beside the field the user just left, while these two appear after a
-          network round trip with nothing else on screen changing - so nothing else would tell
-          a screen reader anything happened. Same call RegisterForm makes. */}
-      {categoriesFailed ? (
-        <p role="alert" className="text-error text-sm">
-          {MESSAGES.categoriesUnavailable}
-        </p>
-      ) : null}
-
-      {failure !== null ? (
-        <p role="alert" className="text-error text-sm">
-          {failure}
-        </p>
-      ) : null}
+      {/* Two form-level lines rather than one, because they answer different questions and can
+          both be true: the picker had nothing to offer, and the save was rejected.
+          `components/FormError.tsx` owns the treatment and the `role="alert"` argument for both,
+          and renders nothing when its message is absent - so neither needs a conditional here
+          and a closed modal still contributes no text to the page, which
+          `(app)/pages.test.tsx` depends on. */}
+      <FormError message={categoriesFailed ? MESSAGES.categoriesUnavailable : null} />
+      <FormError message={failure} />
     </Modal>
   );
 }

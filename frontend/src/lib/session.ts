@@ -67,10 +67,11 @@ export type AuthorizedResult<T> = { ok: true; data: T } | { ok: false; reason: A
  * not by HTTP verb.
  *
  * **It exists because there were about to be three copies of it.** `readSession()` below and
- * `readProfile()` in `lib/profile.ts` each inlined the same six lines, and
- * `components/ui/utilities.test.ts` sets this repo's rule for that situation: duplicated
- * rather than shared, and lifted into a helper when a third consumer appears.
- * `lib/transactions.ts` is the third.
+ * `readProfile()` in `lib/profile.ts` each inlined the same six lines, and this repo's rule for
+ * that situation - duplicated rather than shared, and lifted into one owner when a third
+ * consumer appears - is written down in `frontend/CLAUDE.md` under Shared components.
+ * `lib/transactions.ts` is the third. (This used to cite `components/ui/utilities.test.ts`,
+ * which PET-57 deleted with the token layer it pinned.)
  *
  * **A 401 is the only status that means signed out**, because every caller's route is guarded
  * and the guard answers nothing else. Everything else - a 500, an unreachable backend, a body

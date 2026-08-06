@@ -107,6 +107,21 @@ describe('AppLayout', () => {
     expect(screen.getByText('page content')).toBeInTheDocument();
   });
 
+  it('names the drawer toggle exactly once, whichever state it is in', async () => {
+    // The toggle is one checkbox with two `<label>`s pointing at it - the hamburger and the
+    // scrim - and a label's `aria-label` replaces its subtree in that checkbox's own name
+    // computation. With "Open sidebar" on one and "Close sidebar" on the other, Chrome computed
+    // the name as "Open sidebar Close sidebar" once the drawer was open: a self-contradiction
+    // announced at the moment a screen-reader user is trying to close it. One stable name that
+    // is true in both states is the fix, and `checked` is what carries the state.
+    render(await AppLayout({ children: null }));
+
+    const toggle = screen.getByRole('checkbox', { name: 'Toggle sidebar' });
+
+    expect(toggle).toHaveAccessibleName('Toggle sidebar');
+    expect(screen.queryByLabelText(/Open sidebar|Close sidebar/)).toBeNull();
+  });
+
   it('renders no heading of its own', async () => {
     // The h1 belongs to PageHeader, which each page renders. A heading here
     // would compete with it, and ui/Sidebar deliberately renders none either.

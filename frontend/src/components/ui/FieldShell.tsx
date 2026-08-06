@@ -37,7 +37,15 @@ type FieldShellProps = {
 
 export function FieldShell({ id, label, error, children }: FieldShellProps) {
   return (
-    <fieldset className="fieldset w-full">
+    // **A `div` wearing daisyUI's `fieldset` class, not a `<fieldset>` element.** The class is
+    // pure CSS - a one-column grid with a row gap - and works on any element, while the element
+    // publishes `role="group"`. daisyUI's own idiom is one `<fieldset>` around a *set* of
+    // fields, named by a `legend.fieldset-legend`; this shell wraps exactly one control, so the
+    // element form put a nameless group boundary around every Input, Select and DateField in
+    // the app - five of them inside the Add transaction modal alone - each announced as an
+    // unnamed group entered and left. Reach for the real element, with a legend, if a screen
+    // ever draws a genuine group.
+    <div className="fieldset w-full">
       {/* The label carries an id as well as `htmlFor`, for the one consumer that cannot use
           the latter. `htmlFor` names a form control, and HTML-AAM computes a **button's** name
           from its own subtree instead - so `(app)/DateField.tsx`, whose trigger is a `<button>`
@@ -46,7 +54,20 @@ export function FieldShell({ id, label, error, children }: FieldShellProps) {
           the pattern needs an id it can name. Derived from `id` rather than passed, so no
           caller can hand out one that matches nothing. Harmless to `ui/Input` and `ui/Select`,
           which keep using `htmlFor` and ignore this. */}
-      <label id={`${id}-label`} className="label" htmlFor={id}>
+      {/* **`justify-self-start` is a bug fix, not alignment**, and it is `justify-self` rather
+          than the `self-start` the old `ui/Field` carried because the axis moved. That column
+          was `flex flex-col`, where `align-self` is the horizontal axis; daisyUI's `fieldset`
+          is `display: grid` with `grid-template-columns: 1fr`, where the horizontal axis is
+          `justify-self` and `align-self` does nothing at all. Without it the label is a
+          full-width grid item - about 400px of it inside the Add transaction modal, against
+          some 55px of text - and clicking anywhere in that invisible strip activates the field,
+          which is `<label for>` working exactly as specified and reads as a glitch: worst on a
+          `<select>`, where Chrome focuses the control from a forwarded label click but does
+          **not** open the list, so the field lights up and nothing happens. `cursor-pointer`
+          for the other half of the same thing - daisyUI's `.label` sets a pointer only via
+          `:has(input)`, which is the label-wraps-the-control shape rather than this one - so the
+          hit area that is left is also the one a reader would guess. */}
+      <label id={`${id}-label`} className="label cursor-pointer justify-self-start" htmlFor={id}>
         {label}
       </label>
       {children}
@@ -55,6 +76,6 @@ export function FieldShell({ id, label, error, children }: FieldShellProps) {
           {error}
         </p>
       ) : null}
-    </fieldset>
+    </div>
   );
 }

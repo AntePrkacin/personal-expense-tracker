@@ -38,9 +38,16 @@ export function ChevronLeaf({ className }: { className?: string }) {
 
 // State-keyed complete literals, the repo's Record convention: Tailwind's
 // scanner reads whole class strings, never halves assembled at runtime.
+//
+// **`cursor-pointer` is not redundant, and dropping it silently reverted PET-10.** daisyUI's
+// `select` sets a cursor on exactly two things, verified against `daisyui/components/select.css`
+// (5.7.16): `not-allowed` when the control is disabled, and `pointer` on an `<option>` inside
+// the CSS-styleable picker. A resting, enabled select gets none, so it keeps the user agent's
+// arrow and reads as inert - the app-wide defect PET-10 fixed. `(app)/DateField.tsx` states the
+// same fact for its `<button>` trigger, and this constant exists so the two cannot drift.
 const SELECT_CONTROL: Record<'valid' | 'invalid', string> = {
-  valid: 'select w-full',
-  invalid: 'select select-error w-full',
+  valid: 'select w-full cursor-pointer',
+  invalid: 'select select-error w-full cursor-pointer',
 };
 
 type SelectProps = {

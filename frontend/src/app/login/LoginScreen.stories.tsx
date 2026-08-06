@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
+import { FormError } from '@/components/FormError';
 import { Input } from '@/components/ui/Input';
 
 import { LoginScreen } from './LoginScreen';
@@ -72,9 +73,9 @@ export const WithMessages: Story = {
         error="Enter a valid email address."
       />
 
-      <p role="alert" className="text-error text-sm">
-        We couldn&apos;t send your login link. Please try again.
-      </p>
+      {/* The real component, not a copy of its markup: it is what the form renders, so a change
+          to the treatment reaches this story rather than leaving it illustrating the old one. */}
+      <FormError message="We couldn't send your login link. Please try again." />
     </div>
   ),
 };

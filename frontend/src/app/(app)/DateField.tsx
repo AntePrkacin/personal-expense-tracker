@@ -115,10 +115,20 @@ const DATE_PAGER = 'btn btn-ghost btn-sm btn-square';
  * None of the three is designed. `today` takes the outline rather than a fill, so it reads as
  * a marker beside a selected day rather than competing with it, and `aria-current` carries the
  * same fact to a screen reader.
+ *
+ * **`today` was `btn-ghost btn-outline` and painted nothing**, which is the trap the paragraph
+ * above warns about happening in one class string rather than between two. Both modifiers set
+ * `--btn-border` at equal specificity in the same cascade layer, and `daisyui/components/
+ * button.css` (5.7.16) emits `.btn-outline` before `.btn-ghost` - so ghost's transparent border
+ * won and today's cell was pixel-identical to a plain day. `btn-outline btn-primary` instead:
+ * outline supplies the transparent fill and the border, and the colour modifier only sets
+ * `--btn-color`, which outline's border reads. The lesson generalises past this file - **two
+ * `btn-*` modifiers in one string are resolved by daisyUI's emission order, not by the order
+ * you wrote them** - and `frontend/CLAUDE.md` carries it for the whole app.
  */
 const DATE_DAY: Record<'selected' | 'today' | 'default', string> = {
   selected: 'btn btn-primary btn-square size-9',
-  today: 'btn btn-ghost btn-outline btn-square size-9',
+  today: 'btn btn-outline btn-primary btn-square size-9',
   default: 'btn btn-ghost btn-square size-9',
 };
 
@@ -219,6 +229,16 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
    * closed the popover on mousedown the click would immediately reopen it and the button would
    * appear dead.
    *
+   * **`ui/FieldShell`'s label is excluded for exactly the same reason**, which is less obvious
+   * because the label is not this component's markup. The shell carries `htmlFor={id}` for
+   * `ui/Input` and `ui/Select`, and the id here belongs to the `<button>` trigger - so a click on
+   * the word "Date" is forwarded to that button by the user agent. Without this line the mousedown
+   * dismissed the popover and the forwarded click reopened it a task later, so the label could
+   * never close the field and produced a visible flicker when it was open. With it, the label
+   * behaves exactly like the trigger: one toggle per click. Found by clicking the label in Chrome;
+   * jsdom does not forward a label click to a `<button>`, so no suite can see either the flicker
+   * or the fix.
+   *
    * Resize **closes** rather than repositions, because the coordinates are computed once on open
    * and a resize invalidates them. Cheap, honest, and a resize with the calendar open is rare;
    * repositioning would mean tracking the trigger's rect continuously for no real gain.
@@ -241,6 +261,10 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
       if (target === null) return;
       if (popoverRef.current?.contains(target)) return;
       if (triggerRef.current?.contains(target)) return;
+      // The shell's label, whose `htmlFor` names the trigger, so a click on it arrives at the
+      // trigger anyway. Looked up rather than held in a ref, because the element belongs to
+      // `ui/FieldShell` and this component never sees it.
+      if (document.getElementById(`${id}-label`)?.contains(target)) return;
 
       dismiss();
     }
@@ -252,7 +276,7 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
       document.removeEventListener('mousedown', onPointerDown);
       window.removeEventListener('resize', dismiss);
     };
-  }, [open]);
+  }, [open, id]);
 
   function openPopover() {
     const next = value || today;

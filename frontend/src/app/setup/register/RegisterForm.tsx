@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { isEmailValid } from '@/lib/email';
@@ -172,19 +173,10 @@ export function RegisterForm({ register }: RegisterFormProps) {
         required
       />
 
-      {/* role="alert" here, where ui/Input's own message deliberately has none.
-          That one appears synchronously beside the field the user just left; this one
-          appears after a network round trip with nothing else on screen changing, so
-          nothing would otherwise tell a screen reader the submit failed.
-
-          The same `text-error text-sm` treatment ui/Input gives a field message, so
-          the two read as one error language rather than two. Not a daisyUI `alert`
-          box: that is a filled banner with an icon, and neither is drawn here. */}
-      {submitFailed ? (
-        <p role="alert" className="text-error text-sm">
-          {MESSAGES.submitFailed}
-        </p>
-      ) : null}
+      {/* `components/FormError.tsx` owns this line's treatment, its `role="alert"` and the
+          argument against daisyUI's filled `alert` box. This screen's decision is only which
+          copy and when - and A29 still owes the copy a sign-off. */}
+      <FormError message={submitFailed ? MESSAGES.submitFailed : null} />
 
       {/* pt-1.5 is the designed 6px above this row (node 129:1148). Back is a link
           and Finish setup a submit button, step 1's split: the forward exit is

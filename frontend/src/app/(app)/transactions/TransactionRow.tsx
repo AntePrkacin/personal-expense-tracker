@@ -96,8 +96,10 @@ export function TransactionRow({ transaction, category }: TransactionRowProps) {
       <td>
         <div className="flex items-center gap-3">
           {/* Hidden because it carries nothing the CATEGORY cell does not already say in
-              words, and two starter categories share a colour, so the mark cannot identify
-              one on its own.
+              words, and the colour cannot identify a category on its own: two of the ten
+              starters share a colour *word* (Subscriptions with Transport, Other with Bills),
+              and `ui/categoryColour.ts` then maps orange and yellow both onto `warning`, so
+              Shopping, Bills and Other render one hue and Transport and Subscriptions another.
 
               No text colour stated here: `ui/categoryColour.ts` pairs each background with
               its `-content` partner, so the glyph's `currentColor` is legible on all eight
@@ -110,10 +112,16 @@ export function TransactionRow({ transaction, category }: TransactionRowProps) {
             <CategoryGlyph />
           </span>
 
-          {/* min-w-0 is what lets `truncate` work on a flex item, whose default minimum size
-              is its content - without it a long merchant name widens the cell instead of
-              ellipsing. `base-content` is inherited rather than restated. */}
-          <span className="min-w-0 truncate text-sm font-semibold">{transaction.merchant}</span>
+          {/* **`whitespace-nowrap`, and deliberately not `truncate`.** It was `min-w-0 truncate`,
+              which came from the `table-fixed` layout this file used to have: with the column
+              widths declared, an over-long merchant had a box to be clipped inside. PET-57 let
+              the browser measure the columns instead, so there is no box - `overflow: hidden`
+              and `text-overflow: ellipsis` had nothing to act on and never fired, and the
+              comment claiming they did was wrong from the moment the widths went. Keeping the
+              rows one line each is the part that was actually load-bearing, and the card's own
+              `overflow-x-auto` is what a long name reaches for now. `base-content` is inherited
+              rather than restated. */}
+          <span className="text-sm font-semibold whitespace-nowrap">{transaction.merchant}</span>
         </div>
       </td>
 
@@ -124,13 +132,16 @@ export function TransactionRow({ transaction, category }: TransactionRowProps) {
             wrong. Blank is visibly absent instead. */}
         {category === null ? null : (
           <div className="flex items-center gap-2.25">
-            {/* The same class string the tile takes, whose `text-*` half is simply inert on a
-                dot with no content. Both marks are one colour by design. */}
+            {/* The same class string the tile takes, whose `text-*` half really is inert here:
+                this is a plain `rounded-full` span with no content and nothing reading
+                `currentColor`. That is *not* true of daisyUI's own `status` dot, which draws a
+                shadow from it - `ui/categoryColour.ts` exports `CATEGORY_DOT` for those. Both
+                marks in this row are one colour by design. */}
             <span
               aria-hidden="true"
               className={`size-2 shrink-0 rounded-full ${category.tileClass}`}
             />
-            <span className="text-base-content/70 min-w-0 truncate text-sm">{category.name}</span>
+            <span className="text-base-content/70 text-sm whitespace-nowrap">{category.name}</span>
           </div>
         )}
       </td>

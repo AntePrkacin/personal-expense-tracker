@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { CATEGORY_TILE } from '@/components/ui/categoryColour';
+import { CATEGORY_DOT } from '@/components/ui/categoryColour';
 
 import { CategoryChip, CHIP_STATE } from './CategoryChip';
 
@@ -75,19 +75,27 @@ describe('CategoryChip', () => {
     expect(container.querySelector('svg')!.getAttribute('class')).toContain('overflow-visible');
   });
 
-  it('fills the dot from the shared category palette', () => {
+  it('fills the dot from the shared category palette, background only', () => {
     const { container } = render(
       <CategoryChip label="Housing" colour="teal" selected={false} onToggle={jest.fn()} />,
     );
 
+    // `CATEGORY_DOT`, not `CATEGORY_TILE`, and the negative is the half worth having: daisyUI's
+    // `.status` draws its drop shadow from `currentColor` and sets `color` to a translucent
+    // black for it, so a tile's `text-*-content` half turns that shadow into an opaque coloured
+    // smudge under every chip. `ui/categoryColour.ts` records it, and its own suite pins that
+    // the two maps agree on the background.
     const dot = container.querySelector('span[aria-hidden="true"]')!;
-    expect(dot.className).toContain(CATEGORY_TILE.teal);
+
+    expect(dot.className).toContain(CATEGORY_DOT.teal);
+    expect(dot.className).not.toContain('text-accent-content');
   });
 
   it('hides the dot and the checkmark from assistive technology', () => {
-    // Neither carries information: aria-pressed already reports the state, and two
-    // of the ten chips share a colour with another, so the dot cannot even identify
-    // the category to a reader who can see it.
+    // Neither carries information: aria-pressed already reports the state, and the dot cannot
+    // even identify the category to a reader who can see it - two of the ten chips share a
+    // colour word, and `ui/categoryColour.ts` maps orange and yellow both onto `warning` on top
+    // of that, so five of the ten are in a rendered tie.
     const { container } = render(
       <CategoryChip label="Bills" colour="orange" selected onToggle={jest.fn()} />,
     );

@@ -68,6 +68,18 @@ type SidebarNavProps = {
   email: string;
 };
 
+/**
+ * Unchecks the drawer's toggle, which is what closes the off-canvas panel.
+ *
+ * Written onto the DOM node rather than lifted into state, so the checkbox stays
+ * uncontrolled and *opening* the drawer stays JavaScript-free - the reason the
+ * layout can be a Server Component at all.
+ */
+function closeDrawer() {
+  const toggle = document.getElementById(DRAWER_TOGGLE_ID);
+  if (toggle instanceof HTMLInputElement) toggle.checked = false;
+}
+
 export function SidebarNav({ firstName, lastName, email }: SidebarNavProps) {
   const pathname = usePathname();
   const active = matchItem(pathname) ?? FALLBACK_ITEM;
@@ -75,17 +87,25 @@ export function SidebarNav({ firstName, lastName, email }: SidebarNavProps) {
   // Close the off-canvas drawer once a navigation lands. The (app) layout - the
   // checkbox included - persists across a soft navigation, so nothing else ever
   // unchecks it: below lg, following a sidebar link left the drawer and its
-  // overlay open over the new page. Written onto the DOM node rather than lifted
-  // into state, so the checkbox stays uncontrolled and opening the drawer stays
-  // JavaScript-free.
+  // overlay open over the new page.
   useEffect(() => {
-    const toggle = document.getElementById(DRAWER_TOGGLE_ID);
-    if (toggle instanceof HTMLInputElement) toggle.checked = false;
+    closeDrawer();
   }, [pathname]);
 
-  // No wrapper of its own: the layout's `drawer-side` is what constrains the
-  // panel's height and keeps it in place while the content column scrolls,
-  // which is what AC4's "the sidebar persists" means on a page taller than the
-  // viewport.
-  return <Sidebar active={active} firstName={firstName} lastName={lastName} email={email} />;
+  // **And on the click itself, which is not the same thing.** The effect above is
+  // keyed on the pathname, so tapping the link for the section already open changes
+  // nothing, the effect never re-runs, and the drawer plus its scrim stay over the
+  // page - a dead-end tap on the one item a user is most likely to reach for while
+  // looking at that page. Both are kept rather than the click alone: a navigation can
+  // arrive from somewhere other than these five links (the browser's Back button, a
+  // redirect out of a page), and only the pathname read sees those.
+  return (
+    <Sidebar
+      active={active}
+      firstName={firstName}
+      lastName={lastName}
+      email={email}
+      onNavigate={closeDrawer}
+    />
+  );
 }

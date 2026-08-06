@@ -35,6 +35,32 @@ export const CATEGORY_TILE: Record<CategoryColour, string> = {
   pink: 'bg-secondary text-secondary-content',
 };
 
+/**
+ * The background alone, for a mark with no content on it.
+ *
+ * **A second map rather than a substring of the one above, because daisyUI's `status` reads
+ * `color`.** `.status` is a dot whose only job is a colour, which is exactly what the category
+ * chips and the Welcome panel's list want - but it draws itself a small drop shadow from
+ * `currentColor`, and it sets `color` to a 30%-opacity black for that purpose. Handing it a
+ * `CATEGORY_TILE` value overrides that with a fully opaque `-content` colour, and the subtle
+ * shadow becomes an opaque coloured smudge under every dot. The `text-*-content` half is not
+ * inert on a dot after all; it is only inert where nothing reads `currentColor`.
+ *
+ * Two maps rather than one derived from the other, because this file's first rule is that
+ * every class is written out in full - and `categoryColour.test.ts` pins that each tile begins
+ * with its dot, so the pair cannot drift.
+ */
+export const CATEGORY_DOT: Record<CategoryColour, string> = {
+  coral: 'bg-error',
+  orange: 'bg-warning',
+  yellow: 'bg-warning',
+  green: 'bg-success',
+  teal: 'bg-accent',
+  blue: 'bg-info',
+  violet: 'bg-primary',
+  pink: 'bg-secondary',
+};
+
 // Everything below is the bridge from what the API stores to what the map above is keyed
 // by, and it exists because the two speak different languages on purpose.
 //
@@ -80,9 +106,9 @@ export const CATEGORY_COLOUR_BY_HEX: Record<string, CategoryColour> = {
  * to spend. `text-base-content` is the paired content colour, the same pairing every entry
  * in `CATEGORY_TILE` above carries.
  *
- * A bare string rather than a ninth entry in the map above, because `CategoryColour` stays
- * eight keys: widening it would offer this grey to the onboarding chips and to `ui/ListRow`
- * as if it were a colour somebody could pick.
+ * A bare string rather than a ninth entry in the maps above, because `CategoryColour` stays
+ * eight keys: widening it would offer this grey to the onboarding chips and to the colour picker
+ * frame 19 draws, as if it were a colour somebody could pick.
  */
 export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
 

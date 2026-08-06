@@ -1,4 +1,4 @@
-import { CATEGORY_TILE, type CategoryColour } from '@/components/ui/categoryColour';
+import { CATEGORY_DOT, type CategoryColour } from '@/components/ui/categoryColour';
 
 // One starter category chip on screen 03 (node 43:720), which toggles.
 //
@@ -90,13 +90,20 @@ export function CategoryChip({ label, colour, selected, onToggle }: CategoryChip
       onClick={onToggle}
       className={`${CHIP_BASE} ${CHIP_STATE[state]}`}
     >
-      {/* Hidden because two of the ten colours repeat, so the dot cannot identify a
-          category even to a reader who can see it. The name always sits beside it.
+      {/* Hidden because the dot cannot identify a category even to a reader who can
+          see it, so the name always sits beside it. Two of the ten chips repeat a
+          colour *word* - Subscriptions reuses Transport's blue, Other reuses Bills'
+          orange - and under daisyUI the rendered hues collapse further, because
+          `CATEGORY_TILE` maps orange and yellow both onto `warning`: Shopping, Bills
+          and Other are one colour on screen, and Transport and Subscriptions another.
+          Five of the ten chips are in a tie.
 
           daisyUI's `status` is the dot: it is exactly this - a small round shape
-          whose only job is a colour - and the fill still comes from CATEGORY_TILE,
-          which documents that these are category colours rather than status ones. */}
-      <span aria-hidden="true" className={`status status-lg shrink-0 ${CATEGORY_TILE[colour]}`} />
+          whose only job is a colour. **`CATEGORY_DOT`, not `CATEGORY_TILE`**: that
+          class carries a `text-*-content` half, and `.status` draws its drop shadow
+          from `currentColor`, so a tile value turns the shadow into an opaque
+          coloured smudge. `categoryColour.ts` records the whole of it. */}
+      <span aria-hidden="true" className={`status status-lg shrink-0 ${CATEGORY_DOT[colour]}`} />
       {label}
       {selected ? <CheckGlyph /> : null}
     </button>

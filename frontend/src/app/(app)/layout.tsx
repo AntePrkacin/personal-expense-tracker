@@ -67,9 +67,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* The mobile-only bar whose whole job is reaching the collapsed
             sidebar; at lg and up the drawer is fixed open and this disappears. */}
         <div className="navbar bg-base-100 border-base-300 border-b lg:hidden">
+          {/* **"Toggle sidebar" rather than "Open sidebar", and the overlay below carries no
+              label at all.** One checkbox has two `<label>`s pointing at it, and a label's
+              `aria-label` replaces its subtree in the checkbox's own name computation - so with
+              the drawer open Chrome computed the name as "Open sidebar Close sidebar", a
+              self-contradiction announced at exactly the moment a screen-reader user is trying
+              to close it. A toggle gets one stable name that is true in both states; the two
+              halves of the state are `checked` and unchecked, which the control already
+              publishes. */}
           <label
             htmlFor={DRAWER_TOGGLE_ID}
-            aria-label="Open sidebar"
+            aria-label="Toggle sidebar"
             className="btn btn-square btn-ghost drawer-button"
           >
             <HamburgerGlyph />
@@ -101,11 +109,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </div>
       <div className="drawer-side">
-        <label
-          htmlFor={DRAWER_TOGGLE_ID}
-          aria-label="Close sidebar"
-          className="drawer-overlay"
-        ></label>
+        {/* The scrim, and deliberately nameless: it is a second label for the toggle above, and
+            an `aria-label` here is appended to that one control's accessible name rather than
+            describing a control of its own. Empty content contributes nothing, which is what
+            leaves the toggle named once. It is not focusable and needs no name; the labelled
+            hamburger is the reachable affordance. */}
+        <label htmlFor={DRAWER_TOGGLE_ID} className="drawer-overlay"></label>
         {/* The footer's name and email are real as of PET-52. They take two rows
             in two databases to assemble - the names from the per-user `profile`
             row, the email from the central `users` row - which is exactly what
