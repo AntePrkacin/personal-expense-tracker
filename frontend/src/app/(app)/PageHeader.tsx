@@ -23,10 +23,10 @@ type PageHeaderProps = {
    * The screen's action block, rendered right-aligned. Omit it and nothing
    * renders there at all, which is Settings (SET-1, AC2).
    *
-   * Presence is the switch rather than a separate boolean, following
-   * SectionHeader's reasoning: Figma models optional content as two properties
-   * because its component properties cannot be optional, and collapsing the pair
-   * removes the state where they contradict each other.
+   * Presence is the switch rather than a separate boolean: Figma models
+   * optional content as two properties because its component properties cannot
+   * be optional, and collapsing the pair removes the state where they
+   * contradict each other.
    *
    * A ReactNode rather than a `{ label, onClick }` shape because the four
    * screens do not agree on what an action is: two of them draw a control beside
@@ -41,7 +41,10 @@ export function PageHeader({ overline, title, action }: PageHeaderProps) {
     // flex-wrap plus the gap is the small-screen behaviour: the action block
     // drops below the title instead of clipping, on frames that were only ever
     // drawn at 1440px.
-    <header className="flex flex-wrap items-center justify-between gap-3 px-4 pt-6 pb-5 sm:px-6 lg:px-10">
+    //
+    // No horizontal padding, deliberately: the (app) layout owns the shared
+    // gutter, once, for this header and the <main> below it together.
+    <header className="flex flex-wrap items-center justify-between gap-3 pt-6 pb-5">
       <div className="flex flex-col gap-1">
         <p className="text-base-content/60 text-sm">{overline}</p>
         {/* An h1, which has no Figma counterpart - Figma has no document

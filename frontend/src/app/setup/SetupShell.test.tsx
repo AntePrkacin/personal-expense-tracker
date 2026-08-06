@@ -7,8 +7,8 @@ import { SETUP_STEPS, SetupShell, type SetupStep, STEP_DOT, STEP_WIDTH } from '.
 //
 // next/jest maps every .css import to an empty object, so jsdom never receives a
 // stylesheet and nothing here can assert a rendered colour or size. Class names
-// are the only appearance signal; that they generate real CSS is proved in
-// components/ui/utilities.test.ts.
+// are the only appearance signal, and nothing proves they generate real CSS
+// since PET-57 retired the compile guard.
 
 const CEDI = '₵';
 
@@ -60,7 +60,8 @@ function card(container: HTMLElement, step: SetupStep): HTMLElement {
 describe('the step tables', () => {
   it('declares three steps, two dot states and a width per step', () => {
     // Guards the it.each below: an emptied table still passes an iteration over
-    // itself, which is the failure mode utilities.test.ts sets the precedent for.
+    // itself, the self-asserting failure mode every table-driven suite here
+    // guards the same way.
     expect(SETUP_STEPS).toHaveLength(3);
     expect(Object.keys(STEP_DOT)).toHaveLength(2);
     expect(Object.keys(STEP_WIDTH)).toHaveLength(3);

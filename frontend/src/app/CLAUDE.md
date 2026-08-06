@@ -29,11 +29,14 @@ stories are filed under **Shell**, not **Components**, so they cannot join
 that used to guard their hard-coded classes went with the token system in PET-57; classes are
 stock daisyUI plus Tailwind defaults now, and review is what guards them.
 
-**`SidebarNav` is the shell's only `'use client'` file, and it exists for exactly one
-reason.** `Sidebar` takes `active` as a prop so it can stay a Server Component, and an App
-Router layout cannot read the pathname on the server, so something has to call
-`usePathname()`. It matches by **prefix with a trailing-slash boundary**, so
+**`SidebarNav` is the shell's only `'use client'` file, and it owns both of the shell's
+reactions to a navigation.** `Sidebar` takes `active` as a prop so it can stay a Server
+Component, and an App Router layout cannot read the pathname on the server, so something has to
+call `usePathname()`. It matches by **prefix with a trailing-slash boundary**, so
 `/transactions/abc` keeps Transactions lit while `/settings-import` does not light Settings.
+The same pathname read closes the off-canvas drawer: the drawer's checkbox is uncontrolled and
+the layout - checkbox included - persists across a soft navigation, so without that effect
+following a sidebar link below `lg` left the drawer and its overlay open over the new page.
 
 Two details of it are testability decisions rather than style, and both were review findings:
 
@@ -201,6 +204,10 @@ track" as if it described their finances. (PET-57 inlined daisyUI `progress` and
 does **not** remove focusable descendants from the tab order, so the screen's test pins that
 the subtree contains none; and it is a plain `div`, never an `<aside>`, because an
 `aria-hidden` landmark is self-contradictory.
+The panel also pins `data-theme="light"` on itself, daisyUI's own mechanism for a subtree that
+must not follow the page: the art is a bright `base-100` card on a `neutral` panel, a pairing
+only the light theme's values keep legible, and every figure in it is fabricated, so there is
+nothing for the reader's theme to adapt.
 
 **Onboarding is three nested routes under one layout**: `/setup` (02, step 1),
 `/setup/categories` (03, step 2) and `/setup/register` (22, step 3, PET-11). PET-9
@@ -293,9 +300,9 @@ been a claim it could not test; that reason went away with the stubs. One call s
 **Storybook gains a third section, `Screens/`.** Named after the Figma page the frames live on,
 exactly as `Components` is. It needs its own story smoke test
 (`app/screens.stories.test.tsx`) because each of those suites asserts its own title prefix,
-which is the one thing each exists to make unambiguous - that is one of three copies of the
-same harness (PET-57 deleted the Foundations copy with its section), and docs/TODO.md records
-the helper it should become. PET-9 added a module to it rather than a fifth section, exactly as
+which is the one thing each exists to make unambiguous - each section's suite carries a copy of
+the same harness (PET-57 deleted the Foundations copy with its section), and docs/TODO.md owns
+the count and records the helper it should become. PET-9 added a module to it rather than a fifth section, exactly as
 that item predicted.
 
 Two things about that harness bite anyone adding a screen story. **It builds each story from

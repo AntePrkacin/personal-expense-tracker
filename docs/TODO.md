@@ -174,8 +174,8 @@ because a persisted generation is a snapshot rather than a derived view - see `b
 Starter category colors were read per chip from the design's variable bindings in Figma frame
 03 (node 43:705); PET-57 then remapped each colour word onto its nearest daisyUI theme colour
 (`frontend/src/components/ui/categoryColour.ts`), so the words stay the stored identity while
-the rendered hue follows the active theme - and orange and yellow now share `warning`, a
-collision the PET-57 plan accepted because category colours are decoration. Two open design
+the rendered hue follows the active theme - the mapping is nearest-match and lossy on purpose,
+and which words collide is `frontend/CLAUDE.md`'s to state. Two open design
 questions remain, both for the designer rather than for code:
 
 - **The palette has eight colors for ten chips**, so Subscriptions reuses Transport's blue
@@ -1076,8 +1076,8 @@ than discovered.
   title-prefix `RegExp`, returning nothing and registering the three `describe` blocks, so each
   suite shrinks to an import, a `MODULES` literal and one call. Lifting three existing suites
   was out of scope for the ticket that added the fourth; do it before a fifth section appears,
-  which PET-9 onward will not need but a future "Modals" section would. Still four after PET-9,
-  as predicted: it added a module to `screens.stories.test.tsx` rather than a section. Whoever
+  which PET-9 onward will not need but a future "Modals" section would. PET-9 added a module to
+  `screens.stories.test.tsx` rather than a section, as predicted. Whoever
   lifts the helper should carry over two behaviours that copy has now had to document - it
   applies no `decorators`, so anything a story needs must live in its `render`, and a screen
   reaching `useRouter` needs `next/navigation` mocked in the suite.

@@ -26,8 +26,8 @@ jest.mock('next/navigation', () => ({ useRouter: jest.fn() }));
 // and every interaction is awaited. No act() wrapping is needed.
 //
 // next/jest maps every .css import to an empty object, so nothing here can assert
-// a rendered colour or size; class names are the only appearance signal, and that
-// they generate CSS is proved in components/ui/utilities.test.ts.
+// a rendered colour or size; class names are the only appearance signal, and
+// nothing proves they generate CSS since PET-57 retired the compile guard.
 
 /** U+2014, so a substitution in the currency label fails loudly rather than invisibly. */
 const EM_DASH = '—';

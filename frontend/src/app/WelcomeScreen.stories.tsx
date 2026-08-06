@@ -10,9 +10,8 @@ import { WelcomeScreen } from './WelcomeScreen';
 // @storybook/nextjs-vite will not load under Jest and only the erased type import
 // keeps this module loadable there. Same note as ui/Sidebar.stories.tsx.
 //
-// Filed under "Screens", a third section beside "Components" and "Foundations". All
-// three are named after their Figma page, and the frames live on the page called
-// Screens - which also gives PET-9 onward an obvious home (Screens/02 Setup).
+// Filed under "Screens", named after the Figma page the frames live on, exactly as
+// "Components" is - which also gives PET-9 onward an obvious home (Screens/02 Setup).
 //
 // The story is titled "01 Welcome" rather than the frame's literal "01 · Welcome":
 // a middle dot in a sidebar label is noise. The real frame is named below.

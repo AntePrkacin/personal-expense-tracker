@@ -1,8 +1,11 @@
 'use client';
 
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { SIDEBAR_HREFS, SIDEBAR_ITEMS, Sidebar, type SidebarItem } from '@/components/ui/Sidebar';
+
+import { DRAWER_TOGGLE_ID } from './drawer';
 
 // The (app) shell's mount point for ui/Sidebar, and the one client component in
 // the shell.
@@ -14,6 +17,10 @@ import { SIDEBAR_HREFS, SIDEBAR_ITEMS, Sidebar, type SidebarItem } from '@/compo
 // Deriving it inside Sidebar instead would force 'use client' onto the whole
 // component and break ui.stories.test.tsx, which renders every story under Jest
 // with no router in context.
+//
+// The pathname it reads for the highlight also closes the drawer: both jobs are
+// "react to a navigation", which is why the effect lives here rather than in a
+// second client file.
 //
 // The profile comes down as props rather than being fetched here, which keeps
 // the fetch (and, for now, the placeholder standing in for one) in the Server
@@ -62,7 +69,19 @@ type SidebarNavProps = {
 };
 
 export function SidebarNav({ firstName, lastName, email }: SidebarNavProps) {
-  const active = matchItem(usePathname()) ?? FALLBACK_ITEM;
+  const pathname = usePathname();
+  const active = matchItem(pathname) ?? FALLBACK_ITEM;
+
+  // Close the off-canvas drawer once a navigation lands. The (app) layout - the
+  // checkbox included - persists across a soft navigation, so nothing else ever
+  // unchecks it: below lg, following a sidebar link left the drawer and its
+  // overlay open over the new page. Written onto the DOM node rather than lifted
+  // into state, so the checkbox stays uncontrolled and opening the drawer stays
+  // JavaScript-free.
+  useEffect(() => {
+    const toggle = document.getElementById(DRAWER_TOGGLE_ID);
+    if (toggle instanceof HTMLInputElement) toggle.checked = false;
+  }, [pathname]);
 
   // No wrapper of its own: the layout's `drawer-side` is what constrains the
   // panel's height and keeps it in place while the content column scrolls,

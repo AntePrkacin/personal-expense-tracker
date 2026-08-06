@@ -16,8 +16,8 @@ import { SetupCategoriesScreen } from './SetupCategoriesScreen';
 // somebody turned Continue back into a conditional button.
 //
 // next/jest maps every .css import to an empty object, so nothing here can assert a
-// rendered colour or size; class names are the only appearance signal, and that they
-// generate CSS is proved in components/ui/utilities.test.ts.
+// rendered colour or size; class names are the only appearance signal, and nothing
+// proves they generate CSS since PET-57 retired the compile guard.
 
 /** U+2014, which Figma types and the repo normalises away. */
 const EM_DASH = '—';

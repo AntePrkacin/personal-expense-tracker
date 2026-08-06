@@ -56,11 +56,12 @@ the automatic behaviour when it lands.
 local component earns a file only when it carries real logic or genuinely shared behaviour.
 PET-57 deleted `Tag`, `ProgressBar`, `Stat`, `SectionHeader` and `ListRow` - story-only or
 single-decorative-use wrappers around what daisyUI ships as `badge`, `progress`, `stat` and
-`list` - and `Field`, whose job the two field components absorbed. When a view finally needs a
+`list` - and `Field`; the identical half of what the two field components absorbed is regrouped
+in `ui/FieldShell`, which is smaller than `Field` was. When a view finally needs a
 stat row or a transaction list, write the daisyUI classes in place rather than resurrecting a
 wrapper; the ticket that needs shared behaviour can extract one then.
 
-`frontend/src/components/ui/` keeps four primitives and a helper, each owning behaviour:
+`frontend/src/components/ui/` keeps four primitives and two helpers, each owning behaviour:
 
 - **`ui/Button` either navigates or acts, never both.** Its props are an exclusive union: pass
   `href` and it renders a `next/link`, otherwise a `<button>` with `type` (defaulting to
@@ -68,9 +69,10 @@ wrapper; the ticket that needs shared behaviour can extract one then.
   anchor cannot be disabled by author styles, so `<Button href disabled>` would look dimmed and
   still navigate - and `npm run build`, the typecheck gate, is what rejects the combination.
 
-- **`ui/Input` and `ui/Select` own the field pattern**: the `fieldset` / `label` pair, the
-  controlled `error` prop rendered as a `text-error` line, and the `aria-invalid` /
-  `aria-describedby` wiring between them. daisyUI's `validator` class is deliberately unused: it
+- **`ui/Input` and `ui/Select` own the field pattern, on the shell `ui/FieldShell` renders for
+  both**: the `fieldset` / `label` pair and the inline `text-error` message are the shell's one
+  copy, and each control keeps its own `aria-invalid` / `aria-describedby` wiring, pointed at
+  the shell's `fieldErrorId`. daisyUI's `validator` class is deliberately unused: it
   colours from the HTML validation API, and every form here is `noValidate` with controlled
   messages. `id` is a required prop because `useId()` is a hook and would force `'use client'`
   onto the field layer. There is deliberately no `type="number"` - the currency variant would
@@ -104,8 +106,10 @@ Three conventions, all of which existing files demonstrate:
 
 - **Files are flat inside `ui/`**, no folder per component and no barrel `index.ts`.
 
-- **Components stay Server Components.** None carries `'use client'`, because none holds state;
-  a client component that imports one pulls it into the client bundle on its own. Only add the
+- **Components stay Server Components.** `ResendLink` is the one exception - it holds its
+  request's pending and confirmation state, and `frontend/src/app/CLAUDE.md` names it screen
+  24's one client boundary. Everything else takes handler props without the directive; a client
+  component that imports one pulls it into the client bundle on its own, so only add the
   directive when a component genuinely needs the client itself.
 
 Tests assert behaviour and semantics, not class strings. The daisyUI state classes

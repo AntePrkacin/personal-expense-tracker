@@ -14,21 +14,19 @@
 /**
  * The trailing chevron, traced from the Figma export (node 21:63).
  *
- * Not ui/Select's Chevron, which is drawn at 10x5 for the form control and bakes
- * its own absolute positioning into its class string. This one is the designed
- * 9x4.5 and sits in flow beside the label. Two glyphs for a 1px difference is
- * worth it only because sharing would mean a size prop and a positioning prop on
- * a nine-pixel arrow; if a third chevron ever appears, lift them then.
+ * The repo's one hand-traced chevron as of PET-57, which retired ui/Select's:
+ * daisyUI's `select` class draws its own. This one is the designed 9x4.5 and
+ * sits in flow beside the label; if a second hand-drawn chevron ever appears,
+ * consider lifting them then.
  *
- * `overflow-visible` for the reason Select's records: the 1.5 round-capped
- * stroke falls half outside the box at both tips and the elbow, and an SVG
- * viewport clips its own overflow, so without it the arrow renders shorn flat.
+ * `overflow-visible` is load-bearing: the 1.5 round-capped stroke falls half
+ * outside the box at both tips and the elbow, and an SVG viewport clips its own
+ * overflow, so without it the arrow renders shorn flat.
  *
  * The size is literal pixels rather than spacing steps because 4.5px is
  * `h-1.125`, and Tailwind will not generate a three-decimal step - it drops the
- * candidate silently, which utilities.test.ts caught. A literal compiles with no
- * token lookup, so nothing about the scale can break it, and it is not on the
- * guard's list for that reason.
+ * candidate silently. A literal compiles with no token lookup, so nothing about
+ * the scale can break it.
  */
 function Chevron() {
   return (

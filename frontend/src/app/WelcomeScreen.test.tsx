@@ -10,12 +10,12 @@ import { WelcomeScreen } from './WelcomeScreen';
 //
 // next/jest maps every .css import to an empty object, so jsdom never receives a
 // stylesheet and nothing here can assert a rendered colour or size. Class names are
-// the only appearance signal a Jest test has; that they generate real CSS is proved
-// separately in components/ui/utilities.test.ts.
+// the only appearance signal a Jest test has, and nothing proves they generate real
+// CSS since PET-57 retired the compile guard; review is what holds that line now.
 
 // The three non-ASCII glyphs the design draws, written as escapes so a substitution
 // fails loudly rather than reading as an identical-looking diff. That is the same
-// call lib/format.ts makes for U+2212 and ui/Stat.tsx for its own glyph: the failure
+// call lib/format.ts makes for U+2212: the failure
 // message `expected "on plan — all", received "on plan - all"` is close to invisible
 // in a terminal otherwise.
 const EM_DASH = '—';

@@ -145,8 +145,18 @@ export function DecorativePanel() {
     // 560px above that breakpoint and needs shrink-0 so the flex row cannot compress
     // it. overflow-hidden is what clips the two circles, and it belongs here rather
     // than on the page so the frame keeps its no-scroll promise.
+    //
+    // data-theme="light" pins the subtree, which is daisyUI's own mechanism for a
+    // section that must not follow the page. The art is drawn as a bright card on
+    // ink: the card is `base-100` on a `neutral` panel, a pairing that only
+    // contrasts while base-100 is light, and the dark theme's base-100 is itself
+    // near-ink - so without the pin the card and both accent washes sank into the
+    // panel. Every figure in here is fabricated and permanently so; there is
+    // nothing for the reader's theme to adapt. This is not the `dark:` variant the
+    // design-token rules forbid - nothing here forks on the theme, it opts out.
     <div
       aria-hidden="true"
+      data-theme="light"
       className="bg-neutral text-neutral-content relative hidden w-140 shrink-0 overflow-hidden lg:block"
     >
       {/* Two washes of accent, bleeding off two edges. The exported SVGs were

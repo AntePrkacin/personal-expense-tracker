@@ -135,6 +135,37 @@ const NAV_SECTIONS = [
   }[];
 }[];
 
+/**
+ * How an item looks per state, complete literal strings per the repo's Record
+ * convention.
+ *
+ * These overrides exist because daisyUI's menu defaults assume a menu on a base
+ * surface, and this one sits on `bg-neutral`. Three of those defaults fail here,
+ * verified against `daisyui/components/menu.css` (5.7.16):
+ *
+ *   - `.menu` sets `--menu-active-bg` to `neutral` itself, so the active fill
+ *     was the exact colour of the panel behind it - in both themes, whose
+ *     `neutral` is the same near-black. Four pixel-identical items.
+ *   - The focus rule recolours the label `base-content` (near-black in the
+ *     light theme) behind a `base-content` wash that is equally dark-on-dark.
+ *   - The focus rule and `menu-active` both set `outline-style: none` and
+ *     `--tw-outline-style: none`, which is why `outline-solid` is spelled out
+ *     below: `outline-2` only reads that variable, so without the style
+ *     utility the restored ring computes to no outline at all.
+ *
+ * Everything is therefore stated in `neutral-content` terms, which contrasts
+ * with `neutral` by definition in both themes. `menu-active` stays on the
+ * active item: it is the state daisyUI names and the visible half of
+ * aria-current that the tests pin; the utilities beside it are what make it
+ * visible on this panel, and they win because Tailwind emits them unlayered
+ * inside `utilities` while daisyUI's rules sit in a nested sub-layer.
+ */
+const LINK_STATE: Record<'active' | 'idle', string> = {
+  active:
+    'menu-active bg-neutral-content/10 text-neutral-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-content',
+  idle: 'hover:bg-neutral-content/10 focus-visible:bg-neutral-content/10 focus-visible:text-neutral-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-content',
+};
+
 type SidebarProps = {
   /**
    * Which of the four views is open, the Figma variant property.
@@ -211,7 +242,7 @@ export function Sidebar({ active, firstName, lastName, email }: SidebarProps) {
                         <Link
                           href={SIDEBAR_HREFS[key]}
                           aria-current={isActive ? 'page' : undefined}
-                          className={isActive ? 'menu-active' : undefined}
+                          className={LINK_STATE[isActive ? 'active' : 'idle']}
                         >
                           <Glyph />
                           {label}

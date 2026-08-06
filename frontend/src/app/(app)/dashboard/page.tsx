@@ -29,7 +29,7 @@ export default function DashboardPage() {
           </>
         }
       />
-      <main className="flex-1 px-4 pb-10 sm:px-6 lg:px-10" />
+      <main className="flex-1 pb-10" />
     </>
   );
 }

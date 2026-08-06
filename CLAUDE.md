@@ -23,7 +23,7 @@ went against a monthly budget. Access is passwordless, by emailed single-use log
 password field anywhere. A **NestJS 11** API serves `/api` on port **3000**; a **Next.js 16**
 App Router frontend runs on **4200** and is the only thing that calls it. One HTTP contract is
 generated from the backend and committed, Drizzle ORM over Turso's SQLite engine gives **every
-user their own database**, and the interface is built from a Figma-derived design system you can
+user their own database**, and the interface is built on a stock daisyUI design system you can
 browse in Storybook on **6006**. The repo is also a Decode Academy final project, which is why
 the team tooling is real rather than illustrative.
 
@@ -145,8 +145,8 @@ read the file before you write the change, not after.
 | run a command, or need an environment value                         | `docs/guides/commands.md`, `docs/guides/configuration.md` |
 
 Two worked examples of why these are not ceremony. Before adding a Tailwind class, read
-`frontend/CLAUDE.md`: Tailwind's own palette and type scale are cleared, so `text-red-600`
-generates no CSS, fails no build, and looks exactly like a class that did nothing. Before
+`frontend/CLAUDE.md`: theme-aware colour is daisyUI semantic colour only, and the full Tailwind
+palette compiles, so a `text-red-600` builds green and quietly bypasses the theme. Before
 changing a DTO, read `docs/agents/api-contract.md`: four separate mistakes in that pipeline still
 generate a spec, they just describe your response as `{}`.
 

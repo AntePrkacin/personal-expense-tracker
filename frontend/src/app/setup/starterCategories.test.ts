@@ -30,7 +30,7 @@ describe('STARTER_CATEGORIES', () => {
     ]);
   });
 
-  it('pairs every chip with a real Foundations category colour', () => {
+  it('pairs every chip with a real category colour word', () => {
     // The colours are the one half of this file the generated contract cannot
     // check, because the API publishes names only. A colour key with no entry in
     // CATEGORY_TILE would render a chip with no dot fill at all: a transparent

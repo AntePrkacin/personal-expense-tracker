@@ -20,7 +20,7 @@ export default function InsightsPage() {
         title="AI Insights"
         action={<Button label="Regenerate" variant="secondary" />}
       />
-      <main className="flex-1 px-4 pb-10 sm:px-6 lg:px-10" />
+      <main className="flex-1 pb-10" />
     </>
   );
 }

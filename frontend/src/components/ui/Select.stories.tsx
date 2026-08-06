@@ -53,9 +53,8 @@ export const WithPlaceholder: Story = {
  */
 export const SideBySide: Story = {
   render: () => (
-    // min-w-0 on each column for the reason ListRow documents: a flex item's
-    // default minimum size is its content, so a long option label would otherwise
-    // push the pair wider than the modal.
+    // min-w-0 on each column: a flex item's default minimum size is its content,
+    // so a long option label would otherwise push the pair wider than the modal.
     <div className="flex gap-3">
       <div className="min-w-0 flex-1">
         <Select

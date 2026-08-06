@@ -2,7 +2,8 @@ import type { CategoryColour } from '@/components/ui/categoryColour';
 import type { components } from '@/types/api';
 
 // The ten starter chips onboarding offers on screen 03 (CAT-2), paired with the
-// Foundations colour each one's dot carries.
+// colour word each one's dot carries (a `CategoryColour` key, resolved through
+// `ui/categoryColour.ts` onto the active theme).
 //
 // **The names are not this file's to invent.** The backend validates them with
 // `@IsIn(STARTER_CATEGORY_NAMES)` and seeds the picked ones at verification, and

@@ -51,8 +51,8 @@ const CHIP_BASE = 'btn gap-2 font-normal';
  *
  * The path is the exported vector translated to its own 8.5x6 bounding box, so half
  * of the 2-wide round-capped stroke falls outside the viewBox and `overflow-visible`
- * is what stops the tips and the elbow rendering shorn flat - the trap `ui/Select`'s
- * glyph documents.
+ * is what stops the tips and the elbow rendering shorn flat - the trap the Chevron
+ * in `app/(app)/dashboard/MonthPill.tsx` documents.
  *
  * `currentColor` now: Figma strokes the tick one shade lighter than the label beside
  * it, and the theme publishes one accent, so inheriting the pressed chip's own

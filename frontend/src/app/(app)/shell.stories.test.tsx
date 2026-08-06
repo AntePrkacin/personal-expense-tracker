@@ -4,12 +4,12 @@ import { render } from '@testing-library/react';
 import * as PageHeader from './PageHeader.stories';
 
 // Smoke-tests the shell's stories, the same job src/components/ui/ui.stories.test.tsx
-// does for the Components section and src/stories/foundations/foundations.stories.test.tsx
-// does for Foundations. `storybook build` bundles a story but never runs one, so
+// does for the Components section and src/app/screens.stories.test.tsx does for
+// Screens. `storybook build` bundles a story but never runs one, so
 // without this a runtime throw ships through a green CI and surfaces only when
 // somebody opens Storybook.
 //
-// A third file rather than an entry in ui.stories.test.tsx because that suite
+// Its own file rather than an entry in ui.stories.test.tsx because that suite
 // asserts every module's title matches /^Components\//, and these are filed
 // under "Shell". The duplication is two dozen lines; merging them would mean
 // parameterising that assertion, which is the one thing it exists to make

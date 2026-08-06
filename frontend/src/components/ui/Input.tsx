@@ -1,6 +1,7 @@
-// Input, on daisyUI's `input` inside a `fieldset`/`label` pair (PET-57). The
-// pair replaced ui/Field, whose one job - the label, the inline message and the
-// aria wiring between them - both field components now carry directly.
+// Input, on daisyUI's `input` inside the `fieldset`/`label` shell that
+// ui/FieldShell renders for both field components (PET-57 replaced ui/Field;
+// FieldShell is the identical half of what Input and Select absorbed, regrouped
+// so the field pattern has one owner).
 //
 // The text field on Register (22), Log in (23) and the forms to come. The
 // `currency` variant is the "Amount" / "Monthly budget" field: the same input
@@ -11,6 +12,8 @@
 // HTML validation API's :valid/:invalid, and every form here is `noValidate`
 // with controlled messages passed through the `error` prop, so `input-error`
 // is applied from that prop instead.
+
+import { FieldShell, fieldErrorId } from './FieldShell';
 
 export type InputVariant = 'default' | 'currency';
 
@@ -74,7 +77,7 @@ export function Input({
   disabled,
   error,
 }: InputProps) {
-  const errorId = error ? `${id}-error` : undefined;
+  const errorId = fieldErrorId(id, error);
 
   const control = (
     <input
@@ -95,10 +98,7 @@ export function Input({
   );
 
   return (
-    <fieldset className="fieldset w-full">
-      <label className="label" htmlFor={id}>
-        {label}
-      </label>
+    <FieldShell id={id} label={label} error={error}>
       {variant === 'currency' ? (
         // The wrapping label is daisyUI's prefix pattern: the box styling sits on
         // it, the inner input is bare, and a click anywhere in the box - the "$"
@@ -113,11 +113,6 @@ export function Input({
       ) : (
         control
       )}
-      {error ? (
-        <p id={errorId} className="text-error text-sm">
-          {error}
-        </p>
-      ) : null}
-    </fieldset>
+    </FieldShell>
   );
 }

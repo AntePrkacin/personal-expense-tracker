@@ -9,8 +9,8 @@ import { CategoryChip, CHIP_STATE } from './CategoryChip';
 // rather than left to the screen test.
 //
 // next/jest maps every .css import to an empty object, so nothing here can assert a
-// rendered colour or size; class names are the only appearance signal, and that they
-// generate CSS is proved in components/ui/utilities.test.ts.
+// rendered colour or size; class names are the only appearance signal, and nothing
+// proves they generate CSS since PET-57 retired the compile guard - review holds it.
 
 function renderChip(selected: boolean, onToggle = jest.fn()) {
   render(<CategoryChip label="Groceries" colour="green" selected={selected} onToggle={onToggle} />);
@@ -67,7 +67,7 @@ describe('CategoryChip', () => {
   it('keeps the checkmark from being shorn flat by its own viewBox', () => {
     // Half of the 2-wide round-capped stroke falls outside the box at every end, so
     // without overflow-visible both tips and the elbow render clipped. Same trap
-    // ui/Select's and ui/ListRow's glyphs document.
+    // the Chevron in app/(app)/dashboard/MonthPill.tsx documents.
     const { container } = render(
       <CategoryChip label="Bills" colour="orange" selected onToggle={jest.fn()} />,
     );

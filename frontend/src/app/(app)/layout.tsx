@@ -1,5 +1,6 @@
 import { requireProfile } from '@/lib/profile';
 
+import { DRAWER_TOGGLE_ID } from './drawer';
 import { SidebarNav } from './SidebarNav';
 
 // The app shell: the dark sidebar beside a content column, which every
@@ -15,7 +16,10 @@ import { SidebarNav } from './SidebarNav';
 // `lg` and up, and collapses into an off-canvas panel behind a hamburger below
 // it - the small-screen behaviour the fixed 1440px Figma frames never specified.
 // The toggle is the drawer's own checkbox, so this layout stays a Server
-// Component; no JavaScript is involved in opening it.
+// Component; no JavaScript is involved in opening it. Closing it after a
+// navigation does take one effect - the checkbox is uncontrolled and this layout
+// persists across a soft navigation, so nothing else would ever uncheck it - and
+// that effect lives in SidebarNav, beside the pathname read it keys on.
 //
 // The page header is not here. It is per-route, because a layout cannot know the
 // page's own title; app/(app)/PageHeader.tsx is the shared component that keeps
@@ -55,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // `flex-1` rather than a height of its own: the root layout already makes
     // <body> `flex min-h-full flex-col`, so the drawer fills what is left.
     <div className="drawer lg:drawer-open flex-1">
-      <input id="app-drawer" type="checkbox" className="drawer-toggle" />
+      <input id={DRAWER_TOGGLE_ID} type="checkbox" className="drawer-toggle" />
       {/* min-w-0 so a wide child - the transactions table, later - overflows
           itself rather than pushing the sidebar column off-screen. */}
       <div className="drawer-content flex min-w-0 flex-col">
@@ -63,7 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             sidebar; at lg and up the drawer is fixed open and this disappears. */}
         <div className="navbar bg-base-100 border-base-300 border-b lg:hidden">
           <label
-            htmlFor="app-drawer"
+            htmlFor={DRAWER_TOGGLE_ID}
             aria-label="Open sidebar"
             className="btn btn-square btn-ghost drawer-button"
           >
@@ -71,10 +75,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </label>
           <span className="font-display px-2 text-lg font-bold">Spendifico</span>
         </div>
-        {children}
+        {/* The pages' shared horizontal gutter, stated exactly once. The header
+            and every <main> below it read their left and right edges from this
+            wrapper, which is what keeps a page's title and its content on the
+            same grid at every breakpoint - as five hand-kept copies of the same
+            three classes, one of them could drift and no test would notice. */}
+        <div className="flex flex-1 flex-col px-4 sm:px-6 lg:px-10">{children}</div>
       </div>
       <div className="drawer-side">
-        <label htmlFor="app-drawer" aria-label="Close sidebar" className="drawer-overlay"></label>
+        <label
+          htmlFor={DRAWER_TOGGLE_ID}
+          aria-label="Close sidebar"
+          className="drawer-overlay"
+        ></label>
         {/* The footer's name and email are real as of PET-52. They take two rows
             in two databases to assemble - the names from the per-user `profile`
             row, the email from the central `users` row - which is exactly what

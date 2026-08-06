@@ -1,6 +1,7 @@
-// Select, on daisyUI's `select` inside a `fieldset`/`label` pair (PET-57). The
-// pair replaced ui/Field; see Input for the shared reasoning, including why
-// daisyUI's `validator` class is not used for the controlled `error` prop.
+// Select, on daisyUI's `select` inside the `fieldset`/`label` shell that
+// ui/FieldShell renders for both field components; see Input and FieldShell for
+// the shared reasoning, including why daisyUI's `validator` class is not used
+// for the controlled `error` prop.
 //
 // The dropdown on Setup step 1 ("Currency", 02) and the forms to come. Built on
 // a native <select>: Figma never draws one open (assumptions A16, A40), so
@@ -8,6 +9,8 @@
 // handling, screen-reader semantics and the platform picker on a phone for
 // free. daisyUI's `select` class draws its own chevron, which retired the
 // hand-traced one this file used to carry.
+
+import { FieldShell, fieldErrorId } from './FieldShell';
 
 // State-keyed complete literals, the repo's Record convention: Tailwind's
 // scanner reads whole class strings, never halves assembled at runtime.
@@ -54,13 +57,10 @@ export function Select({
   disabled,
   error,
 }: SelectProps) {
-  const errorId = error ? `${id}-error` : undefined;
+  const errorId = fieldErrorId(id, error);
 
   return (
-    <fieldset className="fieldset w-full">
-      <label className="label" htmlFor={id}>
-        {label}
-      </label>
+    <FieldShell id={id} label={label} error={error}>
       <select
         id={id}
         name={name ?? id}
@@ -84,11 +84,6 @@ export function Select({
           </option>
         ))}
       </select>
-      {error ? (
-        <p id={errorId} className="text-error text-sm">
-          {error}
-        </p>
-      ) : null}
-    </fieldset>
+    </FieldShell>
   );
 }
