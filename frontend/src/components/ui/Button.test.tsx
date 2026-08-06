@@ -9,7 +9,14 @@ import { Button, type ButtonVariant } from './Button';
 // daisyUI's as of PET-57, so these assert behaviour and semantics; the one class
 // assertion left is `btn`, the component-defining hook both renderings share.
 
-const VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'danger', 'text', 'textDanger'];
+const VARIANTS: ButtonVariant[] = [
+  'primary',
+  'secondary',
+  'danger',
+  'dangerSoft',
+  'text',
+  'textDanger',
+];
 
 describe('Button', () => {
   it.each(VARIANTS)('%s renders a button carrying its label', (variant) => {

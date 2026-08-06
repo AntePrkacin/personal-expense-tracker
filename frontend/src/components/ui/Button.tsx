@@ -8,16 +8,27 @@ import Link from 'next/link';
 // "Delete" in both confirmation dialogs (danger). The two `text` variants are
 // "Back" on the access screens and "Delete transaction" on 11 and 21.
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'text' | 'textDanger';
+export type ButtonVariant =
+  'primary' | 'secondary' | 'danger' | 'dangerSoft' | 'text' | 'textDanger';
 
 // Complete literal class strings, because Tailwind's scanner reads this file as
 // raw text and an interpolated `btn-${variant}` compiles to nothing. The colour
 // modifiers are semantic, not decoration: primary is the one emphasized action
 // per screen, error marks destructive actions.
+//
+// `dangerSoft` is PET-34's, and it is an emphasis distinction rather than a
+// second red. `danger` is the solid fill both delete confirmations use, where
+// Delete is the dialog's own primary action; frame 08 draws Delete in the page
+// header beside Edit, where a solid fill would make the destructive action the
+// loudest thing on a screen whose main job is reading. `btn-soft` is a style
+// modifier and `btn-error` a colour one, which is the pairing frontend/CLAUDE.md
+// records as supported - two *style* modifiers is the mistake, and the reason
+// `btn-ghost btn-outline` draws no border.
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'btn btn-primary',
   secondary: 'btn',
   danger: 'btn btn-error',
+  dangerSoft: 'btn btn-soft btn-error',
   text: 'btn btn-ghost',
   textDanger: 'btn btn-ghost text-error',
 };

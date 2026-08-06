@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+import Link from 'next/link';
 
 import { Button } from '@/components/ui/Button';
 
@@ -86,5 +87,36 @@ export const Settings: Story = {
   args: {
     overline: 'Manage your account',
     title: 'Settings',
+  },
+};
+
+/**
+ * 08 Transaction detail (node 34:349). The second shape: a breadcrumb where the
+ * four above draw an overline, and a caption row under the title. PET-34 dropped
+ * the frame's "· 2:32 PM" from that caption, because no column stores a time.
+ */
+export const TransactionDetail: Story = {
+  args: {
+    breadcrumb: (
+      <Link href="/transactions" className="link link-hover text-base-content/60 text-sm">
+        All transactions
+      </Link>
+    ),
+    title: 'Whole Foods',
+    caption: (
+      <>
+        <span className="text-base-content/60 text-sm">Oct 8, 2025</span>
+        <span className="badge badge-sm badge-ghost gap-1.5">
+          <span className="status status-success" aria-hidden="true" />
+          Groceries
+        </span>
+      </>
+    ),
+    action: (
+      <>
+        <Button label="Edit" variant="secondary" />
+        <Button label="Delete" variant="dangerSoft" />
+      </>
+    ),
   },
 };

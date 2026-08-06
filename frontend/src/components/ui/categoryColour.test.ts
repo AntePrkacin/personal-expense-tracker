@@ -1,8 +1,10 @@
 import {
   CATEGORY_COLOUR_BY_HEX,
   CATEGORY_DOT,
+  CATEGORY_DOT_NEUTRAL,
   CATEGORY_TILE,
   CATEGORY_TILE_NEUTRAL,
+  categoryDotClass,
   categoryTileClass,
   type CategoryColour,
 } from './categoryColour';
@@ -113,5 +115,50 @@ describe('categoryTileClass', () => {
     // where a class string is expected.
     expect(categoryTileClass('constructor')).toBe(CATEGORY_TILE_NEUTRAL);
     expect(categoryTileClass('toString')).toBe(CATEGORY_TILE_NEUTRAL);
+  });
+});
+
+describe('categoryDotClass', () => {
+  // PET-34's half of the pair. The two existing CATEGORY_DOT call sites index it by colour
+  // word; a screen rendering an API category has a hex, and the hex-keyed path used to return
+  // the tile - whose text-*-content half is what must not reach a `status`.
+
+  it.each(Object.entries(CATEGORY_COLOUR_BY_HEX))('maps %s to its dot', (hex, colour) => {
+    expect(categoryDotClass(hex)).toBe(CATEGORY_DOT[colour as CategoryColour]);
+  });
+
+  it('accepts a lowercase hex', () => {
+    expect(categoryDotClass('#57b368')).toBe(CATEGORY_DOT.green);
+  });
+
+  it.each([
+    ['an unknown but well-formed hex', '#123456'],
+    ["the fallback category's own grey", '#98A0AE'],
+    ['something that is not a hex', 'green'],
+    ['an empty string', ''],
+    ['a category that could not be resolved', undefined],
+    ['a colour the API left null', null],
+  ])('falls back to the neutral dot for %s', (_label, value) => {
+    expect(categoryDotClass(value)).toBe(CATEGORY_DOT_NEUTRAL);
+  });
+
+  it('never hands a status dot a content colour to smudge itself with', () => {
+    // The whole reason this function exists rather than the tile one being reused. Every
+    // return value has to be background-only.
+    for (const hex of [...Object.keys(CATEGORY_COLOUR_BY_HEX), '#123456', null]) {
+      expect(categoryDotClass(hex)).not.toMatch(/text-/);
+    }
+  });
+
+  it('agrees with categoryTileClass about which colour a hex is', () => {
+    // Two lookups over one map; this is what stops them drifting.
+    for (const hex of Object.keys(CATEGORY_COLOUR_BY_HEX)) {
+      expect(categoryTileClass(hex).split(' ')[0]).toBe(categoryDotClass(hex));
+    }
+  });
+
+  it('never returns a bare index into Object.prototype', () => {
+    expect(categoryDotClass('constructor')).toBe(CATEGORY_DOT_NEUTRAL);
+    expect(categoryDotClass('toString')).toBe(CATEGORY_DOT_NEUTRAL);
   });
 });

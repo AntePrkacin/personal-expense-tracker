@@ -113,6 +113,15 @@ export const CATEGORY_COLOUR_BY_HEX: Record<string, CategoryColour> = {
 export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
 
 /**
+ * The same fallback without its content half, for a mark with nothing on it.
+ *
+ * Stands to `CATEGORY_TILE_NEUTRAL` exactly as `CATEGORY_DOT` stands to `CATEGORY_TILE`, and
+ * for the identical reason: daisyUI's `status` reads `currentColor` to draw its shadow, so
+ * handing it the `text-base-content` half turns that shadow into an opaque smudge.
+ */
+export const CATEGORY_DOT_NEUTRAL = 'bg-base-300';
+
+/**
  * The background utility for a stored category colour.
  *
  * Falls back to the neutral tile for a hex outside the eight, for a category that could not
@@ -139,4 +148,30 @@ export function categoryTileClass(hex: string | null | undefined): string {
   return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
     ? CATEGORY_TILE[CATEGORY_COLOUR_BY_HEX[key]!]
     : CATEGORY_TILE_NEUTRAL;
+}
+
+/**
+ * The same lookup for a `status` dot, added by PET-34.
+ *
+ * The two existing `CATEGORY_DOT` call sites - the onboarding chip and the Welcome panel -
+ * index it by colour **word**, because each of them owns the word already. A screen rendering
+ * a category that came off the API has a hex instead, and the only hex-keyed path here
+ * returned the tile - whose `text-*-content` half is exactly what must not reach a `status`.
+ * So this is the missing half of the pair rather than a convenience: without it the transaction
+ * detail's category chip would have had a smudge under its dot, or a second colour lookup
+ * written out at the call site.
+ *
+ * Every note on `categoryTileClass` applies unchanged, `Object.hasOwn` included and for the
+ * same reason.
+ */
+export function categoryDotClass(hex: string | null | undefined): string {
+  if (hex === null || hex === undefined) {
+    return CATEGORY_DOT_NEUTRAL;
+  }
+
+  const key = hex.toUpperCase();
+
+  return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
+    ? CATEGORY_DOT[CATEGORY_COLOUR_BY_HEX[key]!]
+    : CATEGORY_DOT_NEUTRAL;
 }
