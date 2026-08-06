@@ -69,7 +69,7 @@ export type AuthorizedResult<T> = { ok: true; data: T } | { ok: false; reason: A
  * **It exists because there were about to be three copies of it.** `readSession()` below and
  * `readProfile()` in `lib/profile.ts` each inlined the same six lines, and this repo's rule for
  * that situation - duplicated rather than shared, and lifted into one owner when a third
- * consumer appears - is written down in `frontend/CLAUDE.md` under Shared components.
+ * consumer appears - is written down in `frontend/src/components/CLAUDE.md`.
  * `lib/transactions.ts` is the third. (This used to cite `components/ui/utilities.test.ts`,
  * which PET-57 deleted with the token layer it pinned.)
  *

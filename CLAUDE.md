@@ -137,9 +137,11 @@ read the file before you write the change, not after.
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
+| open the Figma file, or implement a designed screen                 | `frontend/CLAUDE.md`, Figma against daisyUI |
 | write a daisyUI class, or wonder why one paints nothing             | `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight |
 | run the daisyUI Blueprint MCP                                       | `docs/agents/claude-tooling.md` |
-| add or change anything in `frontend/src/components/`                | `frontend/CLAUDE.md`, Shared components |
+| verify a UI change in a browser                                     | `docs/agents/claude-tooling.md` |
+| add or change anything in `frontend/src/components/`                | `frontend/src/components/CLAUDE.md` |
 | touch a route, a layout, or the session gate                        | `frontend/src/app/CLAUDE.md`    |
 | build a modal, or add an "Add transaction" trigger                  | `frontend/src/app/CLAUDE.md`, The app shell |
 | build one of the remaining access screens                            | `frontend/src/app/CLAUDE.md`, The access screens |

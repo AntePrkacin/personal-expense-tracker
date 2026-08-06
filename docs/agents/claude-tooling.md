@@ -104,6 +104,51 @@ incorporation of main established, verified finding by finding:
   manual-check protocol demands that walk; treat the walk, not the findings list, as the
   stage's real value.
 
+**That walk runs in headless Chromium over the DevTools protocol, not through the
+claude-in-chrome extension.** Strongly prefer headless unless the request explicitly names the
+extension or the browser. `/usr/bin/chromium --headless=new --remote-debugging-port=N
+--user-data-dir=<throwaway>`, then attach a flat session with `Target.attachToTarget` and drive
+it with `Runtime.evaluate`. Node's global `WebSocket` is enough, so this needs no Puppeteer, no
+Playwright and no dependency of any kind. Do not ask which browser to use.
+
+The reason is not convenience. Every defect this class of check exists to find is **a class that
+is present in the markup and paints nothing** - `frontend/CLAUDE.md`'s Where daisyUI and Tailwind
+fight is the catalogue - and three things follow from that:
+
+- **Computed style and the accessibility tree are the evidence**, not a screenshot. Whether an
+  outline paints is `getComputedStyle(el).outlineStyle`; whether a control contradicts itself is
+  `Accessibility.getPartialAXTree`. Both are exact, and neither is a judgement call about a
+  picture.
+- **The pre-fix markup can be probed in the same run**, which is the part no manual walk gives
+  you. Clone the element, put the old classes back, read what the browser computes, and assert
+  the old value *fails* the check. PET-57's review fixes were verified with twelve such checks,
+  two of them proving the harness discriminates - the old dot still computes an opaque shadow
+  colour and the old drawer markup still reports `Open sidebar Close sidebar`. A check that has
+  never been seen to fail is not evidence.
+- **The script is the artifact.** It is reviewable, it reruns, and it does not depend on which
+  tab anybody has open.
+
+Four gotchas, all of them met in practice:
+
+- **Chromium reports colour as `oklab(L a b / A)`**, not `rgba()`. Matching `rgba(` produces a
+  false failure; match the alpha component generically instead.
+- **Headless starts in the light theme.** This app ships `light` and `dark` selected by
+  `prefers-color-scheme` with no controller, so anything theme-specific needs
+  `Emulation.setEmulatedMedia` - and a check that silently only ever ran in light is half a
+  check.
+- **`next/font` fetches from Google at build time**, so with no network the fallback family
+  renders. Any check whose subject is a glyph is untrustworthy offline; the ₵ CEDI SIGN in
+  `ui/Sidebar.tsx`'s wordmark is the one this repo already flags for a human eye.
+- **Storybook is the cheap surface and it does not cover everything.** `npm run storybook` plus
+  `iframe.html?viewMode=story&id=<id>` reaches every component and screen with no backend and no
+  session, and `index.json` lists the story ids. The four `(app)` screens are behind the session
+  gate, so reaching them headlessly means driving register, the emailed link and `/auth/verify`
+  first - possible, and much more setup than a component check needs.
+
+**Reach for the extension only when the task genuinely needs a human's browser**: an
+authenticated session on a third-party site, something the user wants to watch or take over
+mid-flow, or their saved logins. Verifying this app's own CSS and semantics is none of those.
+
 `.claude/commit-checks.md` is a generated cache read by `repo-commit`. Regenerate it
 with `/repo-commit refresh-checks` when it goes stale.
 

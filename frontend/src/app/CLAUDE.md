@@ -3,10 +3,12 @@
 Guidance for Claude Code inside `frontend/src/app/`: the routed screens themselves. This file
 is the authority for the signed-in shell and for the access screens outside it.
 
-It does not repeat the design system. `frontend/CLAUDE.md` owns the daisyUI theme, the `ui/`
-primitives and their conventions, and it loads alongside this file, so read it before writing
+It does not repeat the design system. `frontend/CLAUDE.md` owns the daisyUI theme, the Figma
+boundary and the cascade traps, and it loads alongside this file, so read it before writing
 any class: theme-aware colour is daisyUI semantic colour only, and Tailwind's full palette is
-back as of PET-57, so a raw `text-red-600` compiles and quietly bypasses the theme.
+back as of PET-57, so a raw `text-red-600` compiles and quietly bypasses the theme. The `ui/`
+primitives and their conventions are `frontend/src/components/CLAUDE.md`'s, which does **not**
+load in a route - read it when a screen's change reaches into a shared component.
 
 This file exists because `frontend/CLAUDE.md` passed 400 lines when PET-8 landed, which is the
 promotion trigger `docs/agents/conventions.md` sets. It is one directory deeper, so it loads

@@ -11,11 +11,51 @@ in `docs/guides/configuration.md`.
 Figma-token layer. `frontend/src/app/globals.css` is now small enough to read in one breath: the
 Tailwind import, the daisyUI plugin registering the built-in `light` / `dark` themes selected
 automatically from the OS, and the two font tokens. There is no `tailwind.config`; Tailwind v4
-is configured CSS-first. Figma still governs each screen's structure, layout and content, but
-colour, type, radius and shadow are stock daisyUI - the design deliberately no longer matches
-Figma's pixels, which is the decision PET-57's plan rests on.
+is configured CSS-first.
 
-Four rules keep it coherent:
+### Figma against daisyUI: the division of authority
+
+**Read this before opening the design file. It is not a preference and it is not negotiable** -
+it is the decision PET-57's plan rests on, and every one of its three parts has already been
+violated once by somebody working from the design file in good faith.
+
+1. **The Figma Foundations and Components pages are dead. Do not work from them, for anything.**
+   Foundations documents the retired token layer - the 19 named type styles, the hand-rolled
+   palette, the radius and shadow scales - and Components documents a nine-tile set that no
+   longer exists. **daisyUI is the component library.** Whatever either page says about colour,
+   type, radius, shadow, spacing or how a control is constructed is superseded, and consulting
+   them for any of it is precisely how the token layer returns one class at a time.
+
+   Two things this rule deliberately does **not** ask for, so that it needs no sweep to be true.
+   **Existing references to those pages stay.** A comment saying `ui/` mirrors the nine tiles, or
+   naming node `18:252` as a story's diff target, is a record of why a file sits where it sits -
+   history, not an instruction to go and open the page - and rewriting nine such comments would
+   change no behaviour and lose the reasoning. Read them as dated. And **icon geometry is
+   exempt until its own ticket**, because daisyUI ships no icon set at all: a vector export is
+   still the only source for a glyph, `ui/Select.tsx` and `ui/Sidebar.tsx` trace theirs from that
+   page, and `docs/TODO.md` carries the refactor that ends the dependency. What the rule forbids
+   is **new** work taken from either page, and adding a reference of your own to them.
+
+2. **On the Screens page the split is exact.** Figma governs **structure, layout and content** -
+   what is on the screen, in what order, grouped how, with which words. Stock daisyUI governs
+   **colour, type, radius and shadow**. **Never re-theme daisyUI toward Figma's values.**
+   Concretely: `globals.css` registers the built-in `light` / `dark` pair and declares two font
+   variables, and that is the whole of what it may ever contain - no theme block, no overridden
+   `--color-*`, no custom radius or shadow scale. The colour rule below is the same prohibition
+   from the other end, because a raw `text-red-600` is re-theming by hand, one element at a time.
+
+3. **Match the frame as closely as those boundaries allow, and build it with the daisyUI
+   Blueprint MCP.** Closeness is measured in structure, layout and content; it is never measured
+   in hex values, pixel radii or shadow spreads, and a diff against the frame that reports those
+   as defects is reporting the design system working. Two standing carve-outs, both already
+   exercised across this app: the frames are a fixed 1440px and draw no narrow viewport, so a
+   designed fixed width becomes a `max-w-*` ceiling rather than a `w-*`; and where a frame draws
+   no state at all - focus, disabled, pending, empty, error - that state is ours to invent, and
+   `docs/TODO.md` tracks the sign-offs A19 and A29 owe for the ones already shipped. The MCP's
+   three stages earn three different levels of trust, which `docs/agents/claude-tooling.md` sets
+   out; do not treat its inspector as an authority over any of the above.
+
+Four rules keep the rest coherent:
 
 - **Theme-aware colour is daisyUI semantic colour, never a raw palette class.** The names are
   `base-100/200/300`, `base-content`, `primary`, `secondary`, `accent`, `neutral`, `info`,
@@ -117,100 +157,41 @@ inspector's findings rather than applying them, and treat the browser walk as th
 `docs/agents/claude-tooling.md` is the single home for all three and for the false positives this
 codebase reliably produces; read it before running the server, not after.
 
+**Every trap above was found in a browser and none of them by a gate, so the walk is the check.**
+That means headless Chromium over the DevTools protocol, reading computed style and the
+accessibility tree - and probing the old classes in the same run, so the check is seen to fail
+before it is trusted. Prefer it over anything that drives a human's browser. The method, the four
+gotchas (colour arrives as `oklab`, headless starts light, `next/font` needs network, Storybook
+does not reach the gated screens) and how to get story ids are all in
+`docs/agents/claude-tooling.md`.
+
 ## Shared components
 
-**daisyUI is the component library now.** A screen reaches for daisyUI classes directly, and a
-local component earns a file only when it carries real logic or genuinely shared behaviour.
-PET-57 deleted `Tag`, `ProgressBar`, `Stat`, `SectionHeader` and `ListRow` - story-only or
-single-decorative-use wrappers around what daisyUI ships as `badge`, `progress`, `stat` and
-`list` - and `Field`; the identical half of what the two field components absorbed is regrouped
-in `ui/FieldShell`, which is smaller than `Field` was. When a view finally needs a
-stat row or a transaction list, write the daisyUI classes in place rather than resurrecting a
-wrapper; the ticket that needs shared behaviour can extract one then.
+`frontend/src/components/CLAUDE.md` is the authority: what earns a file there, the four `ui/`
+primitives and two helpers, the six direct children, and the three conventions they follow. It
+loads whenever you read a file under `src/components/`, so read it before adding or changing one
+rather than reasoning from this file - the bar a wrapper has to clear is the whole reason six
+components were deleted in PET-57.
 
-`frontend/src/components/ui/` keeps four primitives and two helpers, each owning behaviour:
+Two rules stated there are reached from outside that folder often enough to name here. **The rule
+of three**: duplicate rather than share until a third consumer appears, then lift it into one
+owner - `lib/session.ts`'s `authorizedGet` and `components/FormError.tsx` are the two worked
+examples. And **tests assert behaviour and semantics, not class strings**, with daisyUI's state
+classes the one exception, as the visible half of an aria attribute the same test pins.
 
-- **`ui/Button` either navigates or acts, never both.** Its props are an exclusive union: pass
-  `href` and it renders a `next/link`, otherwise a `<button>` with `type` (defaulting to
-  `button`, not HTML's `submit`), `disabled` and `onClick`. The `never`s are load-bearing - an
-  anchor cannot be disabled by author styles, so `<Button href disabled>` would look dimmed and
-  still navigate - and `npm run build`, the typecheck gate, is what rejects the combination.
-
-- **`ui/Input` and `ui/Select` own the field pattern, on the shell `ui/FieldShell` renders for
-  both**: the `fieldset` / `label` pair and the inline `text-error` message are the shell's one
-  copy, and each control keeps its own `aria-invalid` / `aria-describedby` wiring, pointed at
-  the shell's `fieldErrorId`. The shell also puts an `id` on its label, because a `<button>`
-  trigger (the modal's Date field) is named from its own subtree under HTML-AAM and needs
-  `aria-labelledby` to reach the label at all. daisyUI's `validator` class is deliberately
-  unused: it colours from the HTML validation API, and every form here is `noValidate` with
-  controlled messages. `id` is a required prop because `useId()` is a hook and would force
-  `'use client'` onto the field layer. There is deliberately no `type="number"` - the currency variant would
-  render spinners and discard a half-typed `24.` mid-keystroke; `inputMode="decimal"` gets the
-  numeric keypad without either problem.
-
-- **`ui/Sidebar` takes its active item as a prop**, not a `usePathname()` call, which keeps it a
-  Server Component; the `(app)` shell's thin `'use client'` wrapper (`SidebarNav`) reads the
-  pathname. `SIDEBAR_HREFS` is the single declaration of the four app routes and the contract
-  the route folders match. The panel is `bg-neutral`, daisyUI's always-dark slot, so it stays
-  dark in both themes the way the design draws it. Its collapse lives in the layout, not here:
-  the `(app)` shell wraps everything in a daisyUI `drawer` that is fixed open at `lg` and
-  off-canvas behind a hamburger below it.
-
-- **`ui/categoryColour.ts` maps the eight stored colour words onto theme colours**,
-  nearest-match and lossy on purpose: orange and yellow both land on `warning`, accepted because
-  category colours are decoration. The colour words are the stable identity the category rows
-  and the picker use; only the rendered hue follows the theme. Do not "fix" the collision by
-  reaching for a raw palette value.
-
-`components/` has six direct children. Four belong to the access screens: `LogoLockup.tsx`
-(the accent tile and wordmark), `AccessCard.tsx` (the centred column and `card` box, with an
-`aboveCard` slot the onboarding step indicator drops into), and `ResendLink.tsx` with
-`LogInAgain.tsx`, the recovery controls. The fifth is `EmptyState.tsx`, the shared empty-state
-card, documented after `lib/format.ts` below. Each is shared by more screens
-than one route segment holds, which is why they are neither in `ui/` nor beside a route.
-
-The sixth is **`components/FormError.tsx`, the form-level error line, and it is the repo's
-worked example of the rule of three** stated below. It renders one `role="alert"` line in the
-same `text-error text-sm` treatment `ui/FieldShell` gives a field message, and renders nothing
-when its message is absent, so a call site passes state straight through with no ternary. What
-earns it a file is arithmetic rather than taste: the identical five tokens stood in
-`app/login/LoginForm.tsx`, `app/setup/register/RegisterForm.tsx` and twice in
-`app/(app)/AddTransactionModal.tsx`, each with its own paragraph explaining the same
-`role="alert"` decision and each rewritten independently during PET-57 - four copies of a
-three-copy trigger. `components/ResendLink.tsx` deliberately does **not** use it: that one
-switches between `role="alert"` and `role="status"` over three treatments, and a component with
-a politeness prop would be a worse answer than two files.
-
-**The rule of three is this repo's, and `docs/TODO.md` is not where it lives.** Duplicate rather
-than share until a third consumer appears, then lift it into one owner. `lib/session.ts`'s
-`authorizedGet` is the other worked example, extracted when `lib/transactions.ts` became its
-third caller; that file used to cite the deleted `ui/utilities.test.ts` for the rule, which is
-why it is written down here instead. The trigger counts consumers, not lines - `FormError` is
-five tokens - because what duplication costs is the drift between copies, and the four copies
-above had already drifted in their comments before they drifted in their markup.
-
-Three conventions, all of which existing files demonstrate:
-
-- **Tests and stories are colocated**, `Button.tsx` next to `Button.test.tsx` and
-  `Button.stories.tsx`. Do not "tidy" them into `__tests__/` or `stories/` trees.
-
-- **Files are flat inside `ui/`**, no folder per component and no barrel `index.ts`.
-
-- **Components stay Server Components.** `ResendLink` is the one exception - it holds its
-  request's pending and confirmation state, and `frontend/src/app/CLAUDE.md` names it screen
-  24's one client boundary. Everything else takes handler props without the directive; a client
-  component that imports one pulls it into the client bundle on its own, so only add the
-  directive when a component genuinely needs the client itself.
-
-Tests assert behaviour and semantics, not class strings. The daisyUI state classes
-(`menu-active`, `input-error`) are the one exception, as the visible half of an aria attribute
-the same test pins. The old compile-pinning suites (`globals.test.ts`, `utilities.test.ts`) are
-gone with the token system they guarded.
+## Storybook
 
 Storybook keeps three sections: **Components** for `ui/`, **Screens** for the frames, **Shell**
 for the app shell's own pieces. **Foundations is gone** with the token layer it documented.
 `.storybook/preview.ts` imports `globals.css` and applies the font variable classes, so the
 daisyUI plugin registration lands in every story automatically.
+
+It is also the cheapest surface to verify a change on, since every component and screen renders
+there with no backend and no session: `docs/agents/claude-tooling.md` covers driving it headlessly,
+including the story-id index. The four `(app)` screens are the exception, being behind the session
+gate.
+
+## Formatting and dates
 
 `frontend/src/lib/format.ts` owns display formatting, in six parts. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN

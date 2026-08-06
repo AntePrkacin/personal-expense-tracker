@@ -764,6 +764,33 @@ implies and what `ui/Select.tsx` already records it cannot render; or a renderin
 not go through a class map, which means an inline `style` and a deliberate exception to the
 literal-class rule. Note the second also affects the 8px category dot, not only the tile.
 
+### Icons are the last thing still read off the Figma Components page, and they need their own ticket
+
+`frontend/CLAUDE.md`'s Figma against daisyUI rule retires the Foundations and Components pages
+outright, with **one exemption, and this is it**: daisyUI ships no icon set at all, so a vector
+export is still the only source for a glyph and two files trace theirs from the dead page -
+`ui/Select.tsx`'s chevron leaf (node 14:16) and `ui/Sidebar.tsx`'s four nav glyphs (nodes 18:12,
+18:19, 18:33, 18:40). Everything else in the app traces from a **Screens** node instead, which
+that rule still allows: `ui/Button.tsx`'s trash (29:529), `Modal.tsx`'s X (28:388),
+`MonthPill.tsx`'s chevron (21:63), `SearchPill.tsx`'s magnifier (26:143),
+`TransactionRow.tsx`'s tile bag (27:149), `TransactionsEmpty.tsx`'s list mark (45:1046) and
+`CategoryChip.tsx`'s check (43:723). So the exemption covers two files, not ten.
+
+What the ticket has to decide is where icons come from once the page is gone, and the options are
+not equivalent. An icon library (Heroicons, Lucide) is the obvious answer and is a real
+dependency plus a visual break from every Screens-traced mark beside it. Re-exporting the two
+marks from a Screens frame keeps them consistent and keeps the tracing convention, but only if a
+frame actually draws them - the sidebar glyphs may exist nowhere else. Vendoring the two current
+paths into a local `icons.ts` with the provenance recorded costs nothing and ends the dependency
+without answering the design question, which makes it the likely first step. Whatever it picks,
+`ChevronLeaf` is the one to look at first: it is exported from `ui/Select.tsx` and reused rotated
+by the date picker's month pagers, so it is already a shared icon in everything but name, and
+`docs/TODO.md`'s own "the 9x4.5 chevron now exists three times" item below is the same
+observation from the other side. The two should probably be one ticket.
+
+Until it lands, the two files stay as they are and the exemption in that rule is what makes them
+legal. Do not "fix" them by reaching back into Components for anything else.
+
 ### The design file draws the category tile glyph twice, and the code now draws it once
 
 Two exports of the placeholder shopping bag Figma uses for every category, and they are different
