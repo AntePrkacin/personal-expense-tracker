@@ -37,33 +37,48 @@ So the bars are `<div>`s with a proportional height and the donut is one SVG `<c
 If a later ticket needs axes, scales or interaction - INS-2's charts on frame 16 are the candidate
 - that ticket makes the case with a real requirement behind it.
 
-**AC5 is the whole of the work, because the contract deliberately does not help.**
-`weeklyBuckets` is documented as summing to `spent` and as being "an **empty array**, not
-zero-filled buckets, when there is nothing to chart this period". So the API returns the buckets
-that have spend in them, and AC5 wants a week with no spending "still there with a zero value
-rather than being dropped from the axis". Rendering the array as it arrives fails AC5 by
-construction: a month whose second week was frugal draws three bars labelled Week 1, Week 3,
-Week 4, which reads as a data error.
+**AC5 is already served by the API, and reading it the other way was this plan's own mistake.**
+The first draft of this plan argued that `weeklyBuckets` carries only the weeks that have spend in
+them, so the card had to derive the period's full bucket set and fill the response into it. That is
+wrong. It is corrected here rather than quietly deleted, because the misreading is an easy one to
+make twice and the fix removes a module rather than adding one.
 
-**So the card derives the period's full bucket set and fills the API's buckets into it.** The
-contract gives everything needed and no `monthStartDay` read is involved: each bucket carries
-`startDate` inclusive and `endDate` exclusive, they are stated to tile the period without gap or
-overlap, and the final one is short rather than overshooting. The period's own bounds are therefore
-the first bucket's `startDate` and the last one's `endDate` whenever any bucket exists.
+`weeklyBucketsOf` in `backend/src/dashboard/dashboard.service.ts` computes
+`bucketCount = Math.ceil(totalDays / 7)` and pushes **every** bucket in that range, a week with no
+spend included, as `total: 0`. Its one early return is for an account with no transactions in the
+period at all, which answers `[]`. So a frugal second week arrives as a real bucket carrying zero,
+and AC5's "still there with a zero value rather than being dropped from the axis" is satisfied by
+rendering the array as it comes.
 
-**The empty period is the one case that has no bounds to read**, because `weeklyBuckets` is `[]`
-and there is nothing to take a start or an end from. That is exactly frame 05, and it is
-**PET-26's**: the trend card's empty treatment is a bar glyph over "No spending to chart yet", not
-a zero-filled axis. So this card renders nothing for an empty array and PET-26 puts the designed
-treatment there. Deriving a synthetic four-week axis of zeroes here would be building a fifth
-state nobody designed, and it would then have to be removed.
+The evidence was in the contract all along and pointed both ways at once, which is worth naming so
+the next reader is not caught by the same sentence. The line the first draft leaned on - "an
+**empty array**, not zero-filled buckets, when there is nothing to chart this period" - is about
+the *whole period* being empty, not about an individual week; and the same `@ApiProperty` says the
+buckets "tile the period without gap or overlap", which no response that dropped a week could do.
+`backend/CLAUDE.md`'s Dashboard section then says it outright: "Within an account that does have
+spend, a week with none still gets a zero-valued bucket - the chart draws a continuous axis and a
+missing week would compress it."
 
-**Bucket arithmetic goes through `lib/date.ts`, never `new Date(iso)`.** That module owns the wire
-form and touches neither `Intl` nor UTC, because a calendar date is a day rather than an instant.
-`new Date('2025-10-08')` parses as **UTC midnight**, so any zone behind UTC reads it as the day
-before - which would mis-bucket the boundary days of every week and put AC3's highlight on the
-wrong bar for part of the day. Both `lib/date.ts` and `lib/format.ts` record this trap in both
-directions.
+**So there is no fill, and `weeks.ts` is one function rather than two.** What AC5 needs from this
+card is not arithmetic but a rendered floor, which the bar-height decision below already carries: a
+`total: 0` bucket has zero proportional height and needs a visible minimum track so its week label
+is not orphaned under nothing. That is the only thing standing between the response and AC5.
+
+**The empty array is `transactionCount === 0` exactly, and that is what makes the division with
+PET-26 clean.** `weeklyBucketsOf` returns `[]` when `periodTransactions.length === 0`, and
+`transactionCount` *is* `periodTransactions.length` on the same response - so this card's "nothing
+to draw" and PET-26's screen-wide empty condition are the same state rather than two conditions
+that might disagree. This card renders nothing for it and PET-26 puts frame 05's bar glyph over
+"No spending to chart yet" there. Synthesising a zero axis here would be inventing a fifth state
+nobody designed, and it would then have to be removed.
+
+**Today comes from `lib/date.ts`, never from `new Date(iso)`.** With the fill gone this is the
+card's only remaining contact with a date, and it is still the trap worth naming. That module owns
+the wire form and touches neither `Intl` nor UTC, because a calendar date is a day rather than an
+instant. `new Date('2025-10-08')` parses as **UTC midnight**, so any zone behind UTC reads it as the
+day before - which would put AC3's highlight on the wrong bar for part of the day. Both
+`lib/date.ts` and `lib/format.ts` record this trap in both directions, so `todayIsoDate()` is what
+this card calls and the comparison stays string-to-string from there.
 
 **AC3's current week is a half-open range test, and the final bucket is why that matters.**
 `startDate <= today < endDate`, string-compared on `YYYY-MM-DD`, which sorts correctly as text and
@@ -102,10 +117,10 @@ that function carries is `frontend/CLAUDE.md`'s existing record, not a new one h
 
 ## Shape
 
-`(app)/dashboard/weeks.ts` - the bucket fill and the current-week index, pure functions over the
-contract's `WeeklyBucketDto[]` plus today's date, with its own suite. Separate from the component
-because AC5's fill and AC3's range test are the two things worth testing directly and neither needs
-a render.
+`(app)/dashboard/weeks.ts` - the current-week index, one pure function over the contract's
+`WeeklyBucketDto[]` plus today's date, with its own suite. Still its own module rather than a helper
+inside the component, because AC3's range test is the only real arithmetic on this card and the
+short-final-bucket case is worth pinning without a render.
 
 `(app)/dashboard/TrendCard.tsx` - the card, the caption, the bars and their two label rows. A
 Server Component; nothing on it is interactive, per AC4.
@@ -115,16 +130,17 @@ Server Component; nothing on it is interactive, per AC4.
 ## Tasks
 
 - [ ] Commit this plan alone and open the draft PR against `feat/PET-21-monthly-budget-card`
-- [ ] `(app)/dashboard/weeks.ts` and its suite: the fill, the current-week index, a short final
-      bucket, an empty array
-- [ ] `(app)/dashboard/TrendCard.tsx` and its suite: bars, proportional heights, one highlight,
-      zero weeks present, no interactive role anywhere
+- [ ] `(app)/dashboard/weeks.ts` and its suite: the current-week index, a short final bucket, today
+      in the first and in the last bucket, an empty array
+- [ ] `(app)/dashboard/TrendCard.tsx` and its suite: bars, proportional heights, one highlight, a
+      `total: 0` week keeping its label over a minimum track, no interactive role anywhere
 - [ ] `(app)/dashboard/page.tsx`: fill the trend slot
 - [ ] Stories: `Shell/Spending trend` with a filled month, a month holding a zero week, and a
       short final bucket; re-check `Screens/04 Dashboard` against node `21:4`
-- [ ] Docs: `frontend/src/app/CLAUDE.md` (the no-library decision, the AC5 fill, the range test),
-      root `CLAUDE.md`, `docs/TODO.md` if the AC3 colour-only question is raised
-- [ ] Comment on PET-22 with the AC5 fill and the no-library decision
+- [ ] Docs: `frontend/src/app/CLAUDE.md` (the no-library decision, that the API already zero-fills
+      and the card must not, the range test), root `CLAUDE.md`, `docs/TODO.md` if the AC3
+      colour-only question is raised
+- [ ] Comment on PET-22 with the no-library decision and the correction that AC5 needs no fill
 
 No `npm run api:sync`: nothing here changes a request or response body.
 
@@ -142,9 +158,11 @@ Then the app itself, signed in, in **Chrome**:
 5. A week with no spending still draws its label and a zero-height bar (AC5)
 
 Two of those need data built for them rather than found. For AC5, log transactions in weeks 1 and
-3 of the current period and nothing in week 2. For the short-final-bucket case, check the highlight
-on the last day of the period - which can be reached without waiting by temporarily setting the
-profile's `monthStartDay` so that today is the period's last day, then setting it back.
+3 of the current period and nothing in week 2 - which checks that the card draws the zero bucket
+**and** confirms the API really sends it, so the correction this plan rests on is verified against a
+running backend rather than only against the source. For the short-final-bucket case, check the
+highlight on the last day of the period - which can be reached without waiting by temporarily
+setting the profile's `monthStartDay` so that today is the period's last day, then setting it back.
 
 Then `Shell/Spending trend` and `Screens/04 Dashboard` in Storybook. The screen story already
 carries `AddTransactionProvider` and the `appDirectory` parameter from PET-21; the card's own
