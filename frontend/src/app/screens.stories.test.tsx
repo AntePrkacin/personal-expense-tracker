@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 
 import * as AddTransactionModal from './(app)/AddTransactionModal.stories';
 import * as EditTransactionModal from './(app)/EditTransactionModal.stories';
+import * as TransactionDetailScreen from './(app)/transactions/[id]/TransactionDetailScreen.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
@@ -76,6 +77,10 @@ const MODULES: [name: string, module: StoryModule][] = [
   // reason above, and the pairing is worth noticing: 09 and 11 are the two halves this ticket
   // deliberately did not merge into one component with a `mode` prop.
   ['EditTransactionModal', EditTransactionModal as StoryModule],
+  // Frame 08. Three of its five stories are states the frame draws no variant for - an
+  // uncapped category, one over its cap, and a transaction with no note - which makes this
+  // module the review surface for them rather than only a diff against the design.
+  ['TransactionDetailScreen', TransactionDetailScreen as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

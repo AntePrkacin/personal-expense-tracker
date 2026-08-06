@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 
 import { categoryTileClass } from '../../../components/ui/categoryColour';
 import type { CategoryLabel } from '../../../lib/categories';
-import type { Transaction } from '../../../lib/transactions';
+import type { Transaction, TransactionFilters } from '../../../lib/transactions';
 
 import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
 import { EditTransactionProvider } from '../EditTransactionProvider';
@@ -42,11 +42,14 @@ const UBER = transaction({
  * row draws a kebab whose `useDeleteTransaction()` throws outside it. PET-32 added the second and
  * the nesting the layout uses, since the edit provider consumes the delete one.
  */
-function renderTable(transactions: Transaction[] = [transaction()]) {
+function renderTable(
+  transactions: Transaction[] = [transaction()],
+  filters: TransactionFilters = {},
+) {
   return render(
     <DeleteTransactionProvider>
       <EditTransactionProvider>
-        <TransactionsTable transactions={transactions} categories={CATEGORIES} />
+        <TransactionsTable transactions={transactions} categories={CATEGORIES} filters={filters} />
       </EditTransactionProvider>
     </DeleteTransactionProvider>,
   );
@@ -179,6 +182,23 @@ describe('the rows', () => {
     renderTable([]);
 
     expect(screen.getAllByRole('row')).toHaveLength(1);
+  });
+
+  it('gives every row the same filter query, built once', () => {
+    // PET-34. The table owns the query string rather than each row building its own, which is
+    // the difference between one URLSearchParams and one per row for an identical answer.
+    renderTable([transaction(), UBER], { period: 'all', sort: 'date_asc' });
+
+    for (const link of screen.getAllByRole('link')) {
+      expect(link).toHaveAttribute('href', expect.stringContaining('?period=all&sort=date_asc'));
+    }
+  });
+
+  it('links each row to its own transaction', () => {
+    renderTable([transaction(), UBER]);
+
+    const hrefs = screen.getAllByRole('link').map((link) => link.getAttribute('href'));
+    expect(new Set(hrefs).size).toBe(2);
   });
 });
 
