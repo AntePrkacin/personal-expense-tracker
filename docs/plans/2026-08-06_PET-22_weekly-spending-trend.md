@@ -175,8 +175,8 @@ Server Component; nothing on it is interactive, per AC4.
       and the card must not, the range test, the caption naming no month, the two-clocks edge on
       the highlight), root `CLAUDE.md`, `docs/TODO.md` (extend the PET-21 period-label entry
       rather than adding a new one)
-- [ ] Comment on PET-22 with the no-library decision, the correction that AC5 needs no fill, and
-      the caption amendment (held back with the push, per instruction)
+- [x] Comment on PET-22 with the no-library decision, the correction that AC5 needs no fill, and
+      the caption amendment
 
 No `npm run api:sync`: nothing here changes a request or response body.
 
