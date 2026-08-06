@@ -10,12 +10,12 @@ import { WelcomeScreen } from './WelcomeScreen';
 //
 // next/jest maps every .css import to an empty object, so jsdom never receives a
 // stylesheet and nothing here can assert a rendered colour or size. Class names are
-// the only appearance signal a Jest test has; that they generate real CSS is proved
-// separately in components/ui/utilities.test.ts.
+// the only appearance signal a Jest test has, and nothing proves they generate real
+// CSS since PET-57 retired the compile guard; review is what holds that line now.
 
 // The three non-ASCII glyphs the design draws, written as escapes so a substitution
 // fails loudly rather than reading as an identical-looking diff. That is the same
-// call lib/format.ts makes for U+2212 and ui/Stat.tsx for its own glyph: the failure
+// call lib/format.ts makes for U+2212: the failure
 // message `expected "on plan — all", received "on plan - all"` is close to invisible
 // in a terminal otherwise.
 const EM_DASH = '—';
@@ -59,18 +59,6 @@ describe('the Welcome screen', () => {
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
-
-  it('draws the overline in the pressed accent, not the plain one', () => {
-    // The one class assertion worth making here: `text-brand-accent` instead of
-    // `text-brand-accent-pressed` is the exact mistake a reader makes, it is what
-    // Figma binds, and no other test in the repo would notice.
-    render(<WelcomeScreen />);
-
-    expect(screen.getByText('PERSONAL FINANCE, SIMPLIFIED')).toHaveClass(
-      'text-overline',
-      'text-brand-accent-pressed',
-    );
-  });
 });
 
 describe('the two entry routes', () => {
@@ -112,8 +100,8 @@ describe('the decorative panel', () => {
   it('is hidden from assistive technology', () => {
     // AC4, WEL-4, and a real assertion rather than a formality. Role queries only
     // match the accessibility tree, so queryByRole('progressbar') passing null is
-    // exactly the proof that aria-hidden is in place: ui/ProgressBar publishes
-    // role="progressbar" with aria-valuenow, and unhidden it would announce a
+    // exactly the proof that aria-hidden is in place: the sample card's native
+    // <progress> carries that role implicitly, and unhidden it would announce a
     // real-sounding 62% of a budget that is not the reader's.
     render(<WelcomeScreen />);
 
@@ -160,7 +148,7 @@ describe('the decorative panel', () => {
  * "whatever is hiding this fabricated content" - and cannot drift onto another
  * hidden node.
  *
- * Not keyed off a class either (`.bg-surface-ink`), which would couple the panel's
+ * Not keyed off a class either (`.bg-neutral`), which would couple the panel's
  * identity to its fill.
  */
 function panel(): HTMLElement {

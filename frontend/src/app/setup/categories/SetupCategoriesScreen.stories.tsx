@@ -63,7 +63,7 @@ export const Setup: Story = {
     <SetupDraftProvider>
       {/* The height and the canvas the root layout would supply: the shell takes
           `flex flex-1`, so it needs a flex column with a height to centre within. */}
-      <div className="bg-surface-canvas flex h-[1024px] flex-col">
+      <div className="bg-base-200 flex h-[1024px] flex-col">
         <SetupCategoriesScreen />
       </div>
     </SetupDraftProvider>
@@ -83,7 +83,7 @@ export const Setup: Story = {
  */
 export const Chips: Story = {
   render: () => (
-    <div className="bg-surface-canvas flex flex-col gap-8 p-8">
+    <div className="bg-base-200 flex flex-col gap-8 p-8">
       {[false, true].map((selected) => (
         <div key={String(selected)} className="flex flex-wrap gap-2.5">
           {STARTER_CATEGORIES.map(({ name, colour }) => (

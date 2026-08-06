@@ -2,13 +2,13 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 
-import { Modal, type ModalHandle } from './Modal';
+import { Modal, type ModalHandle, type ModalShape } from './Modal';
 
 // What this suite can and cannot see is the thing to understand before adding to it.
 //
 // jsdom 26.1.0 implements almost nothing of `HTMLDialogElement` - its prototype carries
 // exactly `constructor` and `open` - so `jest.setup.ts` fakes `showModal()` and `close()` and
-// **deliberately fakes nothing else**. Three behaviours are therefore unassertable here, and
+// **deliberately fakes nothing else**. Two behaviours are therefore unassertable here, and
 // asserting them would mean asserting the polyfill rather than the browser:
 //
 //   - **Escape.** In a browser it fires `cancel`, whose default action calls `close()`. The
@@ -16,20 +16,36 @@ import { Modal, type ModalHandle } from './Modal';
 //     proves the wiring Escape arrives through.
 //   - **The focus trap.** `user.tab()` walks straight out of the dialog under jsdom, because
 //     there is no top layer.
-//   - **Focus returning to the trigger.** The browser does it and this component writes no
-//     code for it, so there is nothing here to observe.
 //
-// All three are Storybook and manual checks, recorded in `frontend/src/app/CLAUDE.md`.
+// Both are Storybook and manual checks, recorded in `frontend/src/app/CLAUDE.md`. It was three
+// until focus returning to the trigger turned out to need this component's own code rather
+// than the platform's, at which point it became testable - see "focus on close" below.
+//
+// **No assertion here pins a daisyUI class.** The chrome is `modal` / `modal-box` /
+// `modal-action` and the theme owns what they draw, so what is left to test is behaviour: the
+// one exit, the aria wiring, the focus restore, and the one property the box's own padding
+// could break, in "the box" below.
 
 /** A trigger plus the modal, so opening is a real interaction rather than a mount. */
 function Harness({
   onClose,
   initialFocusId,
   onSubmit,
+  shape = { align: 'start' },
 }: {
   onClose?: () => void;
   initialFocusId?: string;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  /**
+   * The header shape, spread into `Modal` as one value rather than two loose props.
+   *
+   * It has to be the union's own type: `Modal`'s `align` and `icon` became exclusive so that
+   * `icon` without `align="center"` is a build error, and a harness holding them as two
+   * independent optionals reconstructs exactly the impossible pair the union exists to reject.
+   * `npx tsc --noEmit` is what caught that here - `npm run build` never reads this file, which
+   * is the gap `frontend/CLAUDE.md` records.
+   */
+  shape?: ModalShape;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -42,6 +58,7 @@ function Harness({
       {open ? (
         <Modal
           title="Add transaction"
+          {...shape}
           onClose={() => {
             setOpen(false);
             onClose?.();
@@ -126,6 +143,83 @@ describe('the header', () => {
     // A visually hidden span rather than aria-label, and the glyph hidden from the tree.
     expect(close).toBeInTheDocument();
     expect(close.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+describe('the centred shape', () => {
+  // PET-33's addition, and frame 12's. The default shape above is unchanged; these pin the
+  // three differences and, more importantly, that everything else survives them.
+
+  it('draws no close control, because Cancel is the designed dismissal', async () => {
+    // The one deliberate removal. A confirmation whose footer already names the way out does
+    // not need a third way to say no - and Escape and the backdrop still reach the same exit,
+    // which the two assertions after this one prove.
+    render(<Harness shape={{ align: 'center' }} />);
+    await userEvent.click(openIt());
+
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+  });
+
+  it('still closes on a scrim click with no X present', async () => {
+    const onClose = jest.fn();
+    render(<Harness shape={{ align: 'center' }} onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    await userEvent.click(dialog());
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('still reports a native close event, which is the path Escape arrives through', async () => {
+    // Escape itself is unassertable here for the reason at the top of this file. This is the
+    // same stand-in the default shape uses, repeated because dropping the X is exactly the
+    // change that could plausibly have taken the exit with it.
+    const onClose = jest.fn();
+    render(<Harness shape={{ align: 'center' }} onClose={onClose} />);
+    await userEvent.click(openIt());
+
+    await act(async () => {
+      dialog().dispatchEvent(new Event('close'));
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the dialog named by its title', async () => {
+    // aria-labelledby points at the h2 either way. Worth its own assertion because the h2
+    // moved into a different wrapper.
+    render(<Harness shape={{ align: 'center' }} />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByRole('dialog', { name: 'Add transaction' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Add transaction' })).toBeInTheDocument();
+  });
+
+  it('renders the icon and hides it from the accessibility tree', async () => {
+    // The circle is decoration beside a heading that already says what this is - the same call
+    // the step indicator, the chip dots and ui/Input's `$` prefix all make.
+    render(<Harness shape={{ align: 'center', icon: <svg data-testid="glyph" /> }} />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByTestId('glyph').parentElement).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('renders no circle when no icon is given', async () => {
+    // An empty tinted disc above the title would be worse than nothing, so the wrapper is
+    // conditional rather than always present.
+    const { container } = render(<Harness shape={{ align: 'center' }} />);
+    await userEvent.click(openIt());
+
+    expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it("leaves the default shape's X in place", async () => {
+    // The regression that matters most: `align` defaults to 'start', so every existing caller
+    // - frame 09 today, 11 and 21 later - keeps the header it had.
+    render(<Harness />);
+    await userEvent.click(openIt());
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   });
 });
 
@@ -400,46 +494,26 @@ describe('the optional form', () => {
   });
 });
 
-describe('the designed structure', () => {
-  it('draws the two hairline dividers', async () => {
-    render(<Harness />);
+describe('the box', () => {
+  it('does not close when the box’s own padding is clicked', async () => {
+    // The one thing daisyUI's chrome could break and no diff would show. The backdrop test is
+    // `event.target === dialogRef.current`, so every padded region has to be a *child* of the
+    // dialog: `modal-box` carries the padding the header, body and footer used to hold
+    // individually, and a click on it therefore reports the box rather than the dialog. Were
+    // that padding ever moved onto the dialog itself, clicking beside the heading would
+    // discard a half-typed form.
+    const onClose = jest.fn();
+    render(<Harness onClose={onClose} />);
     await userEvent.click(openIt());
 
-    expect(dialog().querySelectorAll('.bg-border-subtle.h-px')).toHaveLength(2);
-  });
+    const box = dialog().firstElementChild as HTMLElement;
+    expect(box).toContainElement(screen.getByRole('heading', { level: 2 }));
+    expect(box).toContainElement(screen.getByLabelText('Amount'));
+    expect(box).toContainElement(screen.getByRole('button', { name: 'Cancel' }));
 
-  it('carries m-auto, without which preflight leaves it in the corner', async () => {
-    // Tailwind preflight sets margin:0 on *, overriding the UA's dialog{margin:auto} - the
-    // entire centring mechanism. Nothing about the markup looks wrong when it is missing,
-    // which is why it is pinned here rather than left to a visual check.
-    render(<Harness />);
-    await userEvent.click(openIt());
+    await userEvent.click(box);
 
-    expect(dialog()).toHaveClass('m-auto');
-  });
-
-  it('scopes its display to the open state rather than laying out unconditionally', async () => {
-    // A bare `flex` would outrank the UA's dialog:not([open]){display:none} and show the box
-    // for the frame between mount and the effect.
-    render(<Harness />);
-    await userEvent.click(openIt());
-
-    expect(dialog()).toHaveClass('open:flex');
-    expect(dialog().className).not.toMatch(/(^|\s)flex(\s|$)/);
-  });
-
-  it('does not clip its own overflow, which would cut the footer focus rings', async () => {
-    render(<Harness />);
-    await userEvent.click(openIt());
-
-    expect(dialog().className).not.toContain('overflow-clip');
-    expect(dialog().className).not.toContain('overflow-hidden');
-  });
-
-  it('styles the scrim through the backdrop variant', async () => {
-    render(<Harness />);
-    await userEvent.click(openIt());
-
-    expect(dialog().className).toContain('backdrop:bg-[rgba(10,15,23,0.5)]');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(dialog()).toBeInTheDocument();
   });
 });

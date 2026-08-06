@@ -547,7 +547,7 @@ describe('the request, which the design draws no states for', () => {
     ['an unreachable backend', { ok: false as const }],
   ])('reports %s in one line and stays put', async (_label, result) => {
     // A29 designs no error surface and the spec says so outright, so this line is
-    // ours: the same red-text treatment ui/Field uses, and one message for every
+    // ours: the same red-text treatment ui/Input uses, and one message for every
     // failure because the screen cannot act on the difference.
     register.mockResolvedValue(result);
 
@@ -559,7 +559,7 @@ describe('the request, which the design draws no states for', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("We couldn't create your account. Please try again.");
-    expect(alert.className).toContain('text-status-danger-text');
+    expect(alert.className).toContain('text-error');
     expect(mockPush).not.toHaveBeenCalled();
   });
 

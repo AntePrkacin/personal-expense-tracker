@@ -3,9 +3,9 @@ import { render, screen } from '@testing-library/react';
 import { PageHeader } from './PageHeader';
 
 // next/jest stubs CSS imports, so nothing here asserts a rendered colour or
-// spacing; utilities.test.ts is what proves the classes generate CSS. These
-// assert structure and semantics, which is where the header's acceptance
-// criteria actually live.
+// spacing. These assert structure and semantics, which is where the header's
+// acceptance criteria actually live; the classes are stock daisyUI plus
+// Tailwind defaults as of PET-57, and review is what guards them.
 
 describe('PageHeader', () => {
   it('renders the overline and the title', () => {
@@ -18,8 +18,9 @@ describe('PageHeader', () => {
 
   it('renders the title as the page-level heading', () => {
     // Level 1 specifically. ui/Sidebar renders no heading at all - its own test
-    // pins that - so this is the first one a screen reader reaches, and every
-    // SectionHeader below it defaults to h2 on the assumption this exists.
+    // pins that - so this is the first one a screen reader reaches, and the
+    // section headings the content tickets add below it start at h2 on the
+    // assumption this exists.
     render(<PageHeader overline="Manage your account" title="Settings" />);
 
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();

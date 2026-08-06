@@ -39,44 +39,53 @@ export function WelcomeScreen() {
   return (
     // `flex flex-1` rather than a height of its own, the same call
     // app/(app)/layout.tsx makes: the root layout already gives <html> h-full and
-    // <body> `flex min-h-full flex-col`, so this fills what is left and lays the
-    // two columns out side by side. No h-screen.
-    <div className="flex flex-1">
-      {/* px-20 / pt-16 / pb-14 is the designed 80 / 64 / 56.
+    // <body> `flex min-h-full flex-col`, so this fills what is left. No h-screen.
+    //
+    // A column below `lg` and Figma's two-column split above it. The right half is
+    // decoration and hides itself at that breakpoint - see DecorativePanel - so the
+    // stacked case is the copy alone rather than art reflowed under it.
+    <div className="flex flex-1 flex-col lg:flex-row">
+      {/* px-20 / pt-16 / pb-14 is the designed 80 / 64 / 56, kept from `lg` up and
+          scaled down below it so the copy is not pinned to the viewport edge.
 
           justify-between over exactly three children is what Figma's auto-layout
           does, so the middle block sits in the leftover space rather than being
           truly centred in the column - the two coincide only when the header and
           footer are the same height, and here they are not. That is the design;
           do not swap it for justify-center plus margins. */}
-      <main className="bg-surface-card flex flex-1 flex-col justify-between px-20 pt-16 pb-14">
+      <main className="bg-base-100 flex flex-1 flex-col justify-between gap-12 px-6 py-10 sm:px-10 lg:px-20 lg:pt-16 lg:pb-14">
         <header>
           <LogoLockup />
         </header>
 
         <div className="flex flex-col gap-5">
-          {/* `brand-accent-pressed`, not `brand-accent`. That reads like a
-              copy-paste slip and is not: it is which Figma variable the overline is
-              bound to, and the two could diverge. ui/Tag carries the same note for
-              its indigo tone. */}
-          <p className="text-overline text-brand-accent-pressed">PERSONAL FINANCE, SIMPLIFIED</p>
+          {/* The overline is utilities rather than a component: daisyUI draws no
+              eyebrow, and `primary` is the one accent the theme publishes - the
+              Figma file's Brand/Accent and Brand/Accent Pressed both land on it,
+              so the distinction the token layer carried here is gone by design. */}
+          <p className="text-primary text-xs font-semibold tracking-widest uppercase">
+            PERSONAL FINANCE, SIMPLIFIED
+          </p>
 
           {/* The screen's h1. There is no PageHeader out here, so the pitch is the
               one element that earns level 1 - the overline above is a <p> and the
               wordmark is too, matching PageHeader and ui/Sidebar respectively.
 
-              w-115 is the designed 460px. A spacing step rather than a `w-[460px]`
-              literal because 460 is expressible on the scale, which is the same
-              call `w-65` (260px) makes in ui/Sidebar; MonthPill's `h-[4.5px]`
-              literal exists only because 4.5px is not. */}
-          <h1 className="text-display-xl text-text-primary w-115">Take control of your money.</h1>
+              max-w-115 is the designed 460px as a ceiling rather than a width, so
+              the line breaks where Figma breaks it on a wide screen and wraps
+              rather than overflowing on a narrow one. font-display is the heading
+              face; the size steps down twice below `lg`. */}
+          <h1 className="font-display max-w-115 text-4xl font-bold sm:text-5xl lg:text-6xl">
+            Take control of your money.
+          </h1>
 
-          {/* w-107.5 is the designed 430px, narrower than the heading so the copy
-              breaks across three lines as drawn. */}
-          <p className="text-body-l text-text-secondary w-107.5">{INTRO}</p>
+          {/* max-w-107.5 is the designed 430px, narrower than the heading so the
+              copy breaks across three lines as drawn. */}
+          <p className="text-base-content/70 max-w-107.5 text-lg">{INTRO}</p>
 
-          {/* gap-4.5 is the designed 18px, and pt-8 the 8px the row is offset by. */}
-          <div className="flex items-center gap-4.5 pt-8">
+          {/* gap-4 with wrapping, so the two exits stack rather than shrink when the
+              column is narrow. pt-8 is the 8px the row is offset by. */}
+          <div className="flex flex-wrap items-center gap-4 pt-8">
             {/* Both exits are links, not buttons: they change the page location, so
                 a <button> firing router.push() would force 'use client' onto this
                 whole screen and break middle-click, copy-link and prefetch. That is
@@ -87,17 +96,27 @@ export function WelcomeScreen() {
                 would fail both outright while hiding it. */}
             <Button label="Get started" href={ACCESS_ROUTES.setup} />
 
-            {/* No hover:underline. No hover state is drawn anywhere in the file, and
-                the repo only adds what accessibility demands. A colour-only link is
-                a WCAG 1.4.1 concern when it sits inline inside a paragraph; this one
-                sits alone in a row beside a button, so 1.4.1 does not bite. If the
-                designer wants an underline that is their call.
+            {/* `link-hover` rather than `link`: no underline is drawn anywhere in
+                the file, so the resting state stays the colour-only one Figma draws
+                and daisyUI adds the underline on hover for free. A colour-only link
+                is a WCAG 1.4.1 concern when it sits inline inside a paragraph; this
+                one sits alone in a row beside a button, so 1.4.1 does not bite.
 
-                The focus-visible outline is ours, like every other interactive
-                element here: no focus state is drawn, and a keyboard user needs one. */}
+                The focus-visible outline is kept explicit, like every other
+                interactive element here: no focus state is drawn, and a keyboard
+                user needs one.
+
+                **`outline-solid` is what makes that outline exist**, and it is the
+                same daisyUI cascade trap `ui/Sidebar.tsx` records for its menu
+                links. daisyUI's `.link:focus` sets `--tw-outline-style: none`, and
+                Tailwind's `outline-2` emits `outline-style: var(--tw-outline-style)`
+                - so `outline-2` alone computes to a 2px outline of style `none`,
+                which paints nothing at all. `outline-solid` sets the variable back.
+                Nothing in a build, a lint or a Jest run can see this; the class is
+                present, the colour is right, and the ring is simply absent. */}
             <Link
               href={ACCESS_ROUTES.login}
-              className="text-strong-m text-brand-accent focus-visible:outline-brand-accent focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="link link-hover link-primary font-semibold focus-visible:outline-primary focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               I already have an account
             </Link>
@@ -105,7 +124,7 @@ export function WelcomeScreen() {
         </div>
 
         <footer>
-          <p className="text-caption text-text-tertiary">Made for mindful spending.</p>
+          <p className="text-base-content/60 text-sm">Made for mindful spending.</p>
         </footer>
       </main>
 

@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import {
+  authorizedDelete,
   authorizedGet,
   authorizedPost,
   hasSession,
@@ -373,5 +374,103 @@ describe('authorizedPost', () => {
       .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
 
     await expect(authorizedPost('/api/transactions', BODY)).resolves.toBeDefined();
+  });
+});
+
+describe('authorizedDelete', () => {
+  const PATH = '/api/transactions/0198c2a1-0000-7000-8000-0000000000b1';
+
+  it('DELETEs with the session as a bearer token, no body and no store', async () => {
+    const fetchMock = respondWith(204, {});
+
+    await authorizedDelete(PATH);
+
+    expect(fetchMock).toHaveBeenCalledWith(`http://backend.test${PATH}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      cache: 'no-store',
+    });
+  });
+
+  it('sends no body and no Content-Type', async () => {
+    // Stated as its own assertion rather than left implicit in the object above: a
+    // Content-Type on a bodiless request is the sort of thing a strict proxy rejects, and
+    // the shape assertion would still pass if someone added one alongside a `body: undefined`.
+    const fetchMock = respondWith(204, {});
+
+    await authorizedDelete(PATH);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(JSON.stringify(init.headers)).not.toContain('Content-Type');
+  });
+
+  it('never forwards the session as a cookie', async () => {
+    const fetchMock = respondWith(204, {});
+
+    await authorizedDelete(PATH);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(JSON.stringify(init.headers)).not.toContain('spendifico.session');
+  });
+
+  it('reports 401 with no round trip when there is no cookie', async () => {
+    const fetchMock = respondWith(204, {});
+    store(undefined);
+
+    expect(await authorizedDelete(PATH)).toEqual({ ok: false, status: 401 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('treats 204, the status the endpoint actually answers, as success', async () => {
+    respondWith(204, {});
+
+    expect(await authorizedDelete(PATH)).toEqual({ ok: true });
+  });
+
+  it.each([200, 202])('treats %d as success too', async (status) => {
+    // `response.ok` covers the whole 2xx range rather than testing for 204 specifically,
+    // so a backend that starts answering 200 with the deleted row does not read as a failure.
+    respondWith(status, {});
+
+    expect(await authorizedDelete(PATH)).toEqual({ ok: true });
+  });
+
+  it.each([400, 401, 404, 409, 500, 502])('passes %d through as a status', async (status) => {
+    // 404 and 401 are the two the dialog gives different copy to, which is the whole
+    // reason this returns AuthorizedWriteResult rather than collapsing to `unavailable`.
+    respondWith(status, {});
+
+    expect(await authorizedDelete(PATH)).toEqual({ ok: false, status });
+  });
+
+  it('reports an unreachable backend with no status at all', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    const result = await authorizedDelete(PATH);
+
+    expect(result).toEqual({ ok: false });
+    expect(result).not.toHaveProperty('status');
+  });
+
+  it('never reads the response body, because a 204 has none', async () => {
+    const json = jest.fn();
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 204, json }) as unknown as typeof fetch;
+
+    await authorizedDelete(PATH);
+
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('never throws, whatever the backend does', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    await expect(authorizedDelete(PATH)).resolves.toBeDefined();
   });
 });

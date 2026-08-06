@@ -171,8 +171,11 @@ computes one. Both indexes the transaction reads want (`date`, `category_id`) sh
 migration. The one deliberate exception is insight content, which is stored as rendered prose
 because a persisted generation is a snapshot rather than a derived view - see `backend/CLAUDE.md`.
 
-Starter category colors are the real ones, read per chip from the design's variable
-bindings in Figma frame 03 (node 43:705) and checked against a render. Two open design
+Starter category colors were read per chip from the design's variable bindings in Figma frame
+03 (node 43:705); PET-57 then remapped each colour word onto its nearest daisyUI theme colour
+(`frontend/src/components/ui/categoryColour.ts`), so the words stay the stored identity while
+the rendered hue follows the active theme - the mapping is nearest-match and lossy on purpose,
+and which words collide is `frontend/CLAUDE.md`'s to state. Two open design
 questions remain, both for the designer rather than for code:
 
 - **The palette has eight colors for ten chips**, so Subscriptions reuses Transport's blue
@@ -232,27 +235,6 @@ caller may have no row to read, targets a database that is not there. Doing it t
 applying to new users only, which costs `deleteUserDb` that no-row compensation path. That is
 a real change to `UserDatabaseService` rather than a rename, and infrastructure naming no user
 ever sees does not need to follow the brand a second time.
-
-### The logo tile and nav pills use radii that are not on the scale
-
-Figma bound the logo tile and the four nav pills to a raw **10px** corner rather than to a
-radius variable, and Foundations offers only `Radius/SM` (8) and `Radius/MD` (12).
-`ui/Sidebar.tsx` therefore uses a literal `rounded-[10px]`, which matches the design exactly
-and is registered in `utilities.test.ts` so it is findable.
-
-Worth a designer answer: either 10 joins the scale as a token, or these two corners snap to
-8 or 12. Nothing breaks either way, since a literal compiles without a token lookup, so this
-is a consistency question rather than a bug.
-
-The **two header pills** (the month select and the search field) bind the same raw 10px, so
-`app/(app)/dashboard/MonthPill.tsx` and `transactions/SearchPill.tsx` carry the literal too.
-
-**PET-8 found a third value, which is what turns this from a nit into an answerable
-question.** The access screens draw the same logo lockup at 38px instead of the sidebar's
-34px, and Figma binds that larger tile to a raw **11px** - so `components/LogoLockup.tsx`
-carries `rounded-[11px]`. One lockup at two sizes with two different off-scale radii is much
-more readily a pair of slips than a designed progression, which makes "snap both to 12" the
-likely answer. Whatever the designer decides covers all five places at once.
 
 ### The page header's two inert controls
 
@@ -375,6 +357,76 @@ and its tests set the prop by hand, so they were green against a feature wired t
 future change breaks the wiring again, the assertion that catches it is the one in
 `TransactionsScreen.test.tsx` that the table sits inside the region, not anything about the class.
 
+### The row menu's open, close and Escape are browser checks, and jsdom is not being polyfilled
+
+`app/(app)/transactions/TransactionRowMenu.tsx` is daisyUI's popover dropdown, so AC1's "clicking
+elsewhere or pressing Escape closes it" is light dismiss and the Escape default action rather
+than anything this repo wrote. **jsdom 26.1.0 implements none of the Popover API** - verified
+directly: `showPopover` is `undefined` and `popoverTargetElement` is not on
+`HTMLButtonElement` - so none of that is observable under Jest.
+
+`jest.setup.ts` polyfills `<dialog>` and deliberately does **not** polyfill this, which is the
+decision worth recording rather than the gap. Faking `showPopover`, light dismiss and Escape
+would turn AC1 into a test of those few lines: it would pass just as happily with `popover`
+deleted from the markup, which is exactly the failure the dialog polyfill's own comment refuses
+for Escape. The consequence is that under Jest the menu never hides, so both items are always
+queryable - and no assertion in `TransactionRowMenu.test.tsx` should be read as proving the menu
+opened. What that suite pins is the wiring the browser needs: the trigger's accessible name, the
+`popovertarget`-to-`id` pairing, the `anchor-name`-to-`position-anchor` pairing, that two rows
+get two ids, and what Delete hands the provider.
+
+The check that is not automated anywhere is therefore opening `Screens/06 Transactions — List`
+and using it. The day jsdom ships the real API this evaporates on its own, the way the dialog
+polyfill's `typeof` guard is written to.
+
+### The row menu is unanchored in Firefox, and daisyUI's own fallback is what ships
+
+daisyUI positions `.dropdown[popover]` with CSS anchor positioning (`position-area` against a
+`position-anchor`), which Firefox does not support. Its stylesheet carries an
+`@supports not (position-area: bottom)` branch that centres the popover and draws a dimmed
+`::backdrop` instead, so the menu opens and works - it simply appears in the middle of the
+viewport rather than under the kebab that opened it.
+
+Accepted rather than fixed. The alternatives are hand-rolling positioning (a resize and scroll
+listener plus a collision strategy, which is the kind of code the popover was chosen to avoid) or
+pulling in a positioning library for one engine and one control. Both cost more than the
+degradation, and the fallback is a coherent design rather than a broken one. Worth revisiting
+when Firefox ships anchor positioning, at which point the fix is deleting nothing.
+
+### The icon set is lucide's now, and three marks are near-misses the designer has not seen
+
+PET-33 added `lucide-react` and migrated all thirteen hand-traced glyphs onto it, so there is one
+icon idiom and no traced SVG left in `frontend/src` outside the tests, `app/icon.svg` and the
+wordmark. What did **not** come with it is a designer's sign-off, and three specifics are worth
+naming rather than leaving to be re-discovered by whoever next opens the design file.
+
+**The sidebar changed weight.** Its four glyphs were the only *filled* marks in the app; lucide is
+uniformly stroke-based, so the navigation reads a shade lighter than Figma draws it. Taken
+deliberately - four solid glyphs beside an already-stroked hamburger, chevron and magnifier was
+the larger inconsistency - but it is a visible deviation from the frames rather than a swap, and
+it is the one an eye lands on first.
+
+**Two of the four are approximations.** `AlignLeft` (Transactions) draws four ragged lines where
+the trace drew three, and `SlidersHorizontal` (Settings) draws three rows where the trace drew
+two. Both keep the property that made the original readable - the short last line is what stops
+Transactions reading as a second hamburger, and the offset knobs are what say "adjustable" rather
+than "toggled" - so neither is wrong, but neither is the drawn mark either. `Sparkle` is the one
+to leave alone: it is exactly the single four-pointed concave star the design uses for AI, and
+"correcting" it to `Sparkles` would add two smaller stars the frames do not have.
+
+The cheap resolution is a designer confirming the set against frames 04 to 17, which folds into
+whatever pass A29 eventually gets for the undesigned states. The expensive one, if the filled
+sidebar turns out to be load-bearing, is a per-icon `fill` override, which fights the library.
+
+**This item replaces three that the migration answered**, and one fact from them is worth keeping
+rather than losing with the entry: the design file draws the category tile's placeholder shopping
+bag **twice**, and differently - node 15:13 puts the handle left of centre over a bag spanning
+3..17, node 27:149 centres it. That was actionable while the code traced one of them and would
+have had to pick when a second surface drew the tile (the dashboard's recent list, DSH-7, is
+next). It is not any more: both surfaces get lucide's `ShoppingBag`, so the discrepancy is now
+the design file's alone. Worth mentioning in the same conversation as the sign-off above, and
+worth nobody re-tracing either node to "match Figma".
+
 ### The transactions page re-reads the categories on every filter change
 
 `app/(app)/transactions/page.tsx` runs `readTransactionsView` and `readCategoryLabels` in
@@ -430,38 +482,6 @@ Note the tests are not exposed to this. `format.test.ts` builds every fixture wi
 local-time `Date` constructor rather than an ISO string, and says why: `new Date('2025-10-08')`
 parses as UTC, so west of Greenwich a date on the 1st formats as the month before.
 
-### The Welcome panel's circles are filled with an unbound hex
-
-Figma fills both decorative circles on frame 01 (nodes 41:712 and 41:713) with `#4F45E6` at
-28% and 18% opacity, bound to no variable. That is one hex digit off `--color-brand-accent`
-(`#4F46E5`), which makes it a slip rather than a decision.
-
-`DecorativePanel.tsx` ships `bg-brand-accent` under those opacities instead. Hard-coding
-`bg-[#4F45E6]` would be the first raw colour in the entire frontend and would defeat the
-point of clearing Tailwind's palette, and the difference is one unit of green seen through
-28% opacity over `#101720`.
-
-Recorded so the designer can confirm and bind the layer, and so nobody later "corrects" the
-code back to the raw hex from a screenshot. The exported SVGs were inspected while
-implementing: plain solid circles, no blur and no gradient, which is why they are `div`s with
-a background rather than assets - worth knowing before somebody reaches for `blur-*`.
-
-**The modal's scrim is the second unbound fill, and it ships as a raw literal rather than as a
-token.** Frame 09's node 28:383 is `rgba(10, 15, 23, 0.5)` over the whole viewport, bound to no
-variable, and it is **not** `Surface/Ink` (`#101720`, which is rgb(16, 23, 32)) - so unlike the
-circles above there is no near-miss token to substitute. `(app)/Modal.tsx` therefore carries
-`backdrop:bg-[rgba(10,15,23,0.5)]` as a complete literal, guarded by `ui/utilities.test.ts` like
-every other hard-coded class.
-
-Promoting it to `--color-surface-scrim` was considered and deferred for a specific reason rather
-than a general one: `globals.test.ts` cross-checks the colour list against
-`src/stories/foundations/tokens.ts`, so a 37th colour would also put a **translucent swatch** into
-the Foundations Colour story for something that page does not draw. That is the PET-8 side of the
-precedent - ship the literal, let a later ticket promote it - and the promotion is one line plus
-two table rows the day the designer binds the layer. The `--shadow-modal` beside it went the other
-way and became a token, because the shadow group is already documented as having no Figma swatch
-behind it.
-
 ### The design shows whole dollars and `formatCurrency` always emits cents
 
 `formatCurrency(1240)` returns `"$1,240.00"`, pinned in `frontend/src/lib/format.test.ts`,
@@ -469,7 +489,7 @@ while frame 01's sample card and frame 04's real budget card both draw `"$1,240"
 shared formatter cannot produce the string the design asks for.
 
 Welcome sidesteps it: its figures are permanent marketing copy, so `SAMPLE_BUDGET` holds
-literal strings and `ui/Stat.stories.tsx` already hard-codes `'$1,240'` for the same reason.
+literal strings.
 **The dashboard's budget card cannot sidestep it**, because its numbers are real. That ticket
 needs either a no-cents variant beside `formatCurrency` or a designer answer on whether the
 app shows cents at all - and the answer probably differs by context, since a transaction of
@@ -483,28 +503,13 @@ emits no symbol at all. So the two still disagree - the field shows `2,000` whil
 `formatCurrency(2000)` is `$2,000.00` - and the dashboard's budget card still needs the answer
 above.
 
-### The frontend is desktop-only, and Welcome is the first genuinely public page
+### A visible theme toggle is deferred, and adding one costs the automatic behaviour
 
-There is not one responsive utility in `frontend/src` - no `sm:`, `md:` or `lg:` anywhere -
-which is a consistent decision for an app behind a login, drawn at 1440x1024.
-
-Welcome is the one screen a stranger might open on a phone. Its 560px fixed panel plus 80px
-gutters squeezes badly below roughly 900px, and the panel's contents are absolutely
-positioned so they clip rather than reflow. Staying consistent with the repo was the right
-call for PET-8 and this is out of its scope, but the gap is recorded here so it is known
-rather than discovered by a visitor. The cheapest first move, if it matters, is hiding the
-decorative panel below a breakpoint - it carries no information the left column lacks, which
-is also why it is `aria-hidden`.
-
-### Figma's page header is 2px shorter on two of the four screens
-
-Bottom padding is 20px on 04 Dashboard and 14 AI Insights, and 18px on 06 Transactions and 17
-Settings. `PageHeader` uses 20px everywhere, on the reading that this is a Figma inconsistency
-rather than a designed distinction - nothing else about the four headers differs, and no
-plausible reason for the two screens to be shorter exists.
-
-Cheap to confirm and cheap to change if the answer is no; recorded so nobody re-derives it
-from a screenshot.
+PET-57 ships daisyUI's built-in `light` / `dark` pair selected by `prefers-color-scheme`, with
+no manual toggle anywhere. That is not an oversight: daisyUI's own rule is that a toggle and
+automatic prefers-dark selection must not coexist, because a browser already in dark mode makes
+the control switch dark to dark. Whoever adds a toggle removes `--prefersdark` from
+`frontend/src/app/globals.css` in the same change and decides where the preference is stored.
 
 ### The onboarding draft is per tab, and four things follow from that
 
@@ -613,10 +618,11 @@ the form and into `draft.ts` beside the rest of the shape.
 
 ### A29's inline error pattern is now live rather than illustrative
 
-`ui/Field`'s red-border-plus-one-line treatment shipped with PET-17 but nothing rendered it in
-a real flow - only `Input.stories.tsx`'s `WithError` story. PET-9's budget validation is the
-first live use, with the string `Enter an amount greater than 0.` taken verbatim from that
-story and from `Field`'s own doc comment rather than invented.
+The inline error treatment (an error-state control plus one line of copy beneath, owned by
+`ui/Field` until PET-57 folded it into `ui/Input` and `ui/Select` over `ui/FieldShell`) shipped with PET-17 but
+nothing rendered it in a real flow - only `Input.stories.tsx`'s `WithError` story. PET-9's
+budget validation is the first live use, with the string `Enter an amount greater than 0.`
+taken verbatim from that story rather than invented.
 
 That raises the priority of the designer sign-off A29 already owed. The pattern is now what
 users see, and every remaining form ticket (PET-11, PET-12, Settings, the transaction forms)
@@ -632,11 +638,11 @@ frame. The `Screens/22 Register` story's `WithMessages` case renders all of them
 the quickest thing to put in front of the designer.
 
 The second shape is the one that needs an actual decision rather than a sign-off: **a form-level
-message, which `ui/Field` has no concept of.** Field owns per-field messages and deliberately
-carries no `role="alert"`; a failed request belongs to no field and arrives after a network round
-trip with nothing else on screen changing, so PET-11's line sits above the footer row in Field's
-own treatment *with* `role="alert"`. If a second form ever needs one, that is the moment it
-belongs in `ui/` rather than in a screen.
+message, which the field components have no concept of.** A field's inline line is per-field and
+deliberately carries no `role="alert"`; a failed request belongs to no field and arrives after a
+network round trip with nothing else on screen changing, so PET-11's line sits above the footer
+row in the same `text-error` treatment *with* `role="alert"`. If a second form ever needs one,
+that is the moment it belongs in `ui/` rather than in a screen.
 
 Two things the same screen does not validate, both deliberate. `@MaxLength(100)` on the two names
 is **not** mirrored client-side: no `maxlength` is drawn in the frame, so a longer name gets a 400
@@ -709,8 +715,9 @@ should be compared against. If the answer is no, reverting is two strings in
 **PET-31 raised it a sixth time, with nine strings, and it is the first form with more than one way
 to fail.** Four are field messages - `Choose a category.`, `Choose a date.`, `Enter a merchant.`,
 and `Enter an amount greater than 0.` reused verbatim from the budget field. Four are the
-form-level line in `ui/Field`'s treatment with `role="alert"`, one per way the write can be
-refused: `We couldn't add this transaction. Please check the values and try again.` for a 400,
+form-level line with `role="alert"`, in the treatment `components/FormError.tsx` owns since the
+PET-57 review extracted it - `ui/Field` held it when this item was written - one per way the write
+can be refused: `We couldn't add this transaction. Please check the values and try again.` for a 400,
 `That category no longer exists. Pick another one.` for a 404, `Your session has expired. Log in
 again to save this.` for a 401, and `We couldn't add this transaction. Please try again.` for
 everything else. The ninth covers the categories read failing:
@@ -808,6 +815,47 @@ replaces the card with real rows rather than with a blank slot - which means the
 lands on a document that has visibly changed under it. Still the same fix and still nobody's
 single control to invent.
 
+**PET-33 puts the same gap on a path users take far more often, which is the argument for finally
+fixing it.** Deleting a row destroys the kebab that opened the confirmation dialog, so `Modal`'s
+`isConnected` guard finds nothing connected and focus lands on `<body>`. Saving from the empty
+state happens once per account; deleting a transaction happens whenever somebody tidies their
+log, and every one of them leaves the next Tab starting from the top of the page. It is still the
+same fix - a focus-management pattern this repo does not have - and it is still wrong to invent
+one for a single control, but the frequency has changed enough that whoever builds PET-34's
+detail page should look at it: deleting from there navigates, which sidesteps the problem for
+that entry point and leaves the row menu as the only one with it.
+
+**A code review then found this was wider than described, and the wider half is fixed.** It was
+not only the delete path: `Modal` captures `document.activeElement` on mount, React flushes the
+menu item's click synchronously, and `popovertargetaction="hide"` then hides that item - so the
+captured element was a button inside a closed popover, still `isConnected` and no longer
+focusable. **Cancel** therefore dropped focus to `<body>` too, on a path where nothing had been
+destroyed and the restore should simply have worked. `TransactionRowMenu` now focuses the kebab
+before opening the dialog, so the captured element is the right one. What survives is only the
+original case: a successful delete removes the row and its kebab with it, and there is genuinely
+nothing left to focus.
+
+### A delete cannot be cancelled once it is sent, and Cancel no longer implies otherwise
+
+A code review asked for an `AbortController` behind the confirmation dialog's Cancel, because
+clicking it mid-request closes the box while the delete carries on and the row disappears
+anyway. The request is real: AC5 says Cancel leaves the transaction unchanged, and the comment
+there presented it as the way out of a hung request.
+
+**An abort was rejected, and the reason is that it would lie.** Aborting the client-to-Server-
+Action RPC does not un-delete anything - by the time the user reaches for Cancel the server may
+already have removed the row - so the dialog would report a cancellation that did not happen and
+then show a list with the row gone. That is strictly worse than the honest version. What shipped
+instead is the honesty: Cancel promises only what it can do before Delete is pressed, the
+comment says so, and the refresh deliberately outlives the component so the list still agrees
+with the database.
+
+A real cancel needs the operation to be cancellable, not the request: a soft delete with an undo
+window is the usual shape, and DEL-3's copy ("permanently", "can't be undone") rules it out at
+the design level before the engineering starts. Note the backend already tombstones rather than
+hard-deleting, so the capability is closer than the copy suggests - which makes this a question
+for the designer rather than a limitation to route around.
+
 ### A category colour outside the eight renders grey, and nothing can produce one yet
 
 `CategoryResponseDto.color` is a hex string and `CreateCategoryDto` validates it with
@@ -826,34 +874,6 @@ has to choose: a colour picker restricted to the eight, which is what frame 19's
 implies and what `ui/Select.tsx` already records it cannot render; or a rendering path that does
 not go through a class map, which means an inline `style` and a deliberate exception to the
 literal-class rule. Note the second also affects the 8px category dot, not only the tile.
-
-### The transactions table's tile glyph is not `ui/ListRow`'s
-
-Both are the placeholder shopping bag Figma uses for every category, and they are different
-drawings rather than one drawing at two sizes. `ui/ListRow`'s export (node 15:13) puts the handle
-at x=0..8 over a bag spanning 3..17 - left of centre, which that file records as deliberate
-because it is what the export says. The table's (node 27:149) centres it: a bag at 3..15 under a
-handle at 5.5..12.5.
-
-So `app/(app)/transactions/TransactionRow.tsx` traces its own rather than scaling ListRow's, which
-would reproduce the offset handle on a frame that does not draw one. Two glyphs for what is
-supposed to be one placeholder is a discrepancy in the design file rather than in the code, and it
-wants a designer's answer: if the centred one is right, ListRow's export is stale and the dashboard
-row should follow it. Until then neither file is guessing.
-
-### The 9x4.5 chevron now exists three times
-
-`dashboard/MonthPill.tsx` set the trigger itself - "if a third chevron ever appears, lift them
-then" - and PET-29's filter bar is the third. It is deliberately **not** lifted in that ticket: the
-change belongs to a Dashboard file, and editing one from a Transactions branch is the sort of
-drive-by that makes a diff hard to review.
-
-Note `ui/Select.tsx`'s `ChevronLeaf` is not the answer either, and this is the detail that makes
-the unification real work rather than a move. Its viewBox is 10x5 for the form control; rendered
-into a 9x4.5 box it scales the 1.5 round-capped stroke down to 1.35, so the arrow reads visibly
-lighter than the two beside it. A shared component needs a size and a positioning prop before it
-can serve all three, which is three parameters on a nine-pixel arrow - worth doing once, once
-somebody owns all three call sites.
 
 ### An unknown category id in the URL shows no-results with the select reading "All categories"
 
@@ -1441,6 +1461,20 @@ than discovered.
 
 ## Housekeeping
 
+- **`docs:check` cannot see a shorthand path, so a citation of a deleted file survives it.**
+  Check 4 resolves every backticked *repo-root-relative* path, which is the convention
+  `docs/agents/conventions.md` sets - but the agent files are full of deliberate shorthand
+  (`ui/Button`, `lib/format.ts`, `app/setup/draft.ts`), and the regex never looks at those. PET-57
+  deleted six components and the code review that followed found five citations of them left in
+  permanent docs and comments, none of them mechanically catchable: `frontend/src/app/CLAUDE.md`
+  wrote `ui/ListRow.tsx`, and two were inside `.ts` comments, which the script does not read at
+  all. All five are fixed; the gap that let them through is not. The fix is a check that tries a
+  shorthand path against a small set of known bases (`frontend/src/`, `backend/src/`) and fails
+  only when it looks like a file - contains a `/` and an extension - and resolves under none of
+  them. Deliberately not done in the review commit: a first run would have to be triaged across
+  several hundred references, and getting that wrong turns the one check that keeps these files
+  honest into a step people learn to skip. Extending it to comments in `frontend/src/**` and
+  `backend/src/**` is the same shape and doubles the value.
 - **The month window is reached through `CategoriesService`, and now has three callers who
   should promote it.** `currentWindow`, `previousWindow` and `monthStatsFor` are public on that
   service so the transaction reads and PET-20's dashboard compose one aggregation instead of
@@ -1485,20 +1519,19 @@ than discovered.
   type is `string` either way - but if PET-28's read DTOs want the published contract to
   say what the string is, each instant field needs an explicit
   `@ApiProperty({ format: 'date-time' })`.
-- **The Storybook story smoke harness is now duplicated four times.** The same ~30 lines of
+- **The Storybook story smoke harness is duplicated three times** (down from four: PET-57
+  deleted the Foundations copy with its section). The same ~30 lines of
   story discovery and `renders without throwing` live in
-  `frontend/src/components/ui/ui.stories.test.tsx`, `src/app/(app)/shell.stories.test.tsx`,
-  `src/stories/foundations/foundations.stories.test.tsx` and, since PET-8,
-  `src/app/screens.stories.test.tsx`. Each exists because it asserts its own section's title
-  prefix - `/^Components\//`, `/^Shell\//`, `/^Foundations\//`, `/^Screens\//` - and that
-  assertion is the one thing each is there to make unambiguous. Four copies is past the rule
-  `utilities.test.ts` sets for its own harness ("if a third consumer appears, lift it into a
-  helper then"). The shape: one exported function taking the `MODULES` array and a
+  `frontend/src/components/ui/ui.stories.test.tsx`, `src/app/(app)/shell.stories.test.tsx`
+  and, since PET-8, `src/app/screens.stories.test.tsx`. Each exists because it asserts its own
+  section's title prefix - `/^Components\//`, `/^Shell\//`, `/^Screens\//` - and that
+  assertion is the one thing each is there to make unambiguous. Three copies is at the
+  lift-it-into-a-helper threshold. The shape: one exported function taking the `MODULES` array and a
   title-prefix `RegExp`, returning nothing and registering the three `describe` blocks, so each
   suite shrinks to an import, a `MODULES` literal and one call. Lifting three existing suites
   was out of scope for the ticket that added the fourth; do it before a fifth section appears,
-  which PET-9 onward will not need but a future "Modals" section would. Still four after PET-9,
-  as predicted: it added a module to `screens.stories.test.tsx` rather than a section. Whoever
+  which PET-9 onward will not need but a future "Modals" section would. PET-9 added a module to
+  `screens.stories.test.tsx` rather than a section, as predicted. Whoever
   lifts the helper should carry over two behaviours that copy has now had to document - it
   applies no `decorators`, so anything a story needs must live in its `render`, and a screen
   reaching `useRouter` needs `next/navigation` mocked in the suite.

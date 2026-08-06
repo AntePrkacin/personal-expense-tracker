@@ -108,7 +108,7 @@ describe('opening', () => {
 
   it('mounts exactly one dialog however many triggers there are', async () => {
     // The correctness requirement behind the provider. Two modals would mean two focus traps and
-    // two copies of every ui/Field id, which makes getByLabelText ambiguous.
+    // two copies of every field id (ui/FieldShell requires them as literal props), which makes getByLabelText ambiguous.
     const u = user();
     render(<Shell />);
 

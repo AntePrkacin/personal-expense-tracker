@@ -49,7 +49,7 @@ const TABLE = <table data-testid="table" />;
  *
  * The two triggers on one page are also the reason there is one modal on the layout rather than
  * one per button: two would mean two dialogs, two focus traps, and two copies of every
- * `ui/Field` id, which makes `getByLabelText` ambiguous.
+ * field id (`ui/FieldShell`'s required literal prop), which makes `getByLabelText` ambiguous.
  */
 function renderScreen(screenElement: React.ReactNode) {
   return render(<AddTransactionProvider>{screenElement}</AddTransactionProvider>);

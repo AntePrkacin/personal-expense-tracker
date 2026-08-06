@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 
 import { SETUP_DRAFT_KEY } from '../draft';
 import { SetupDraftProvider } from '../SetupDraftProvider';
+import { STEP_DOT, STEP_WIDTH } from '../SetupShell';
 import { STARTER_CATEGORY_NAMES } from '../starterCategories';
+import { CHIP_STATE } from './CategoryChip';
 import { SetupCategoriesScreen } from './SetupCategoriesScreen';
 
 // AC1 to AC5 of PET-10.
@@ -14,8 +16,8 @@ import { SetupCategoriesScreen } from './SetupCategoriesScreen';
 // somebody turned Continue back into a conditional button.
 //
 // next/jest maps every .css import to an empty object, so nothing here can assert a
-// rendered colour or size; class names are the only appearance signal, and that they
-// generate CSS is proved in components/ui/utilities.test.ts.
+// rendered colour or size; class names are the only appearance signal, and nothing
+// proves they generate CSS since PET-57 retired the compile guard.
 
 /** U+2014, which Figma types and the repo normalises away. */
 const EM_DASH = '—';
@@ -72,15 +74,6 @@ describe('AC1: the card as designed', () => {
     expect(screen.getByText(SUPPORTING_COPY).textContent).not.toContain(EM_DASH);
   });
 
-  it('types the overline in the pressed accent, not the pill colour', () => {
-    // Figma binds this line to Brand/Accent Pressed and the step pill 60px above it
-    // to Brand/Accent. Swapping them is a one-token diff nothing else catches.
-    renderScreen();
-
-    expect(screen.getByText('STEP 2 OF 3').className).toContain('text-brand-accent-pressed');
-    expect(screen.getByText('STEP 2 OF 3').className).toContain('text-overline');
-  });
-
   it('renders exactly one page-level heading', () => {
     renderScreen();
 
@@ -113,20 +106,25 @@ describe('AC1: the card as designed', () => {
 
   it('marks the second of three steps active', () => {
     // The three-state coverage lives in SetupShell.test.tsx; this only pins that
-    // step 2 is what this screen asks for.
+    // step 2 is what this screen asks for. Matched against STEP_DOT rather than a
+    // hand-written copy of its classes, which is what kept this passing through the
+    // theme change.
     const { container } = renderScreen();
 
     const dots = [...container.querySelectorAll('[aria-hidden="true"] > span')];
     expect(dots).toHaveLength(3);
-    expect(dots[0]!.className).toContain('bg-border-strong');
-    expect(dots[1]!.className).toContain('bg-brand-accent');
-    expect(dots[2]!.className).toContain('bg-border-strong');
+    expect(dots[0]!.className).toContain(STEP_DOT.inactive);
+    expect(dots[1]!.className).toContain(STEP_DOT.active);
+    expect(dots[2]!.className).toContain(STEP_DOT.inactive);
   });
 
   it('draws the wide card, which is the one thing frame 03 does differently', () => {
+    // Frame 03 is 600px against the other two frames' 520, now a `max-w-*` ceiling
+    // so the card can still shrink. SetupShell.test.tsx owns the per-step table; this
+    // pins that the screen asks for step 2's entry.
     const { container } = renderScreen();
 
-    expect(container.querySelector('.shadow-card')!.className).toContain('w-150');
+    expect(container.querySelector(`.${STEP_WIDTH[2].split(' ').join('.')}`)).not.toBeNull();
   });
 });
 
@@ -144,21 +142,21 @@ describe('AC2: a chip toggles both ways', () => {
     expect(storedCategories()).toEqual([]);
   });
 
-  it('shows the checkmark and the tinted border while selected', async () => {
+  it('shows the checkmark and the tinted treatment while selected', async () => {
     // CAT-2's two visual signals. The state is carried by aria-pressed for a reader
     // and by these for everyone else, so both halves are worth pinning - and the
-    // checkmark count is what proves only the clicked chip grew one.
+    // checkmark count is what proves only the clicked chip grew one. The treatment
+    // itself is CategoryChip's, so it is read from the map rather than restated.
     const user = userEvent.setup();
     const { container } = renderScreen();
 
     expect(container.querySelectorAll('svg')).toHaveLength(0);
-    expect(chip('Bills').className).toContain('border-border-strong');
+    expect(chip('Bills').className).toContain(CHIP_STATE.off);
 
     await user.click(chip('Bills'));
 
     expect(container.querySelectorAll('svg')).toHaveLength(1);
-    expect(chip('Bills').className).toContain('border-brand-accent');
-    expect(chip('Bills').className).toContain('bg-brand-accent-soft');
+    expect(chip('Bills').className).toContain(CHIP_STATE.on);
   });
 
   it('leaves the other nine chips alone', async () => {

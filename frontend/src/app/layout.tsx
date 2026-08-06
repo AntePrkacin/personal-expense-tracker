@@ -10,10 +10,11 @@ export const metadata: Metadata = {
   description: 'Track what you spend, see where it goes, and stay on budget.',
 };
 
-// Only light mode is designed, so declare it at the platform level as well as
-// in globals.css. No dark or alternate theme ships alongside it.
+// Light and dark both ship as of PET-57: daisyUI's built-in pair, selected
+// automatically from the OS. Declaring both here keeps UA widgets (form
+// controls, scrollbars) in step with whichever theme is active.
 export const viewport: Viewport = {
-  colorScheme: 'light',
+  colorScheme: 'light dark',
 };
 
 export default function RootLayout({
@@ -25,8 +26,12 @@ export default function RootLayout({
     // The font variables have to sit on <html>: that is where :root resolves,
     // and the --font-display / --font-sans theme tokens dereference them.
     <html lang="en" className={`${plusJakartaSans.variable} ${inter.variable} h-full antialiased`}>
-      {/* Body/M is the default UI text style; there is no text-base anymore. */}
-      <body className="text-body-m flex min-h-full flex-col">{children}</body>
+      {/* bg-base-200 is the page canvas, one elevation below the bg-base-100
+          cards and panels that sit on it - the same canvas-vs-card distinction
+          the old token system drew, expressed through the theme. Text needs no
+          class: Tailwind's preflight reads --font-sans (Inter) as the default
+          family, and daisyUI's base sets the theme's colours. */}
+      <body className="bg-base-200 flex min-h-full flex-col">{children}</body>
     </html>
   );
 }

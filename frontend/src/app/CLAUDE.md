@@ -3,10 +3,12 @@
 Guidance for Claude Code inside `frontend/src/app/`: the routed screens themselves. This file
 is the authority for the signed-in shell and for the access screens outside it.
 
-It does not repeat the design system. `frontend/CLAUDE.md` owns the tokens, the `ui/`
-primitives and their conventions, and it loads alongside this file, so read it before writing
-any class: Tailwind's own palette and type scale are cleared, and an unknown utility generates
-no CSS while failing no build.
+It does not repeat the design system. `frontend/CLAUDE.md` owns the daisyUI theme, the Figma
+boundary and the cascade traps, and it loads alongside this file, so read it before writing
+any class: theme-aware colour is daisyUI semantic colour only, and Tailwind's full palette is
+back as of PET-57, so a raw `text-red-600` compiles and quietly bypasses the theme. The `ui/`
+primitives and their conventions are `frontend/src/components/CLAUDE.md`'s, which does **not**
+load in a route - read it when a screen's change reaches into a shared component.
 
 This file exists because `frontend/CLAUDE.md` passed 400 lines when PET-8 landed, which is the
 promotion trigger `docs/agents/conventions.md` sets. It is one directory deeper, so it loads
@@ -25,15 +27,18 @@ sit outside it and inherit none of it.
 these is a tile - they are the shell's own. The visible consequence is that `PageHeader`'s
 stories are filed under **Shell**, not **Components**, so they cannot join
 `ui.stories.test.tsx` (which asserts every module's title starts with `Components/`);
-`(app)/shell.stories.test.tsx` is one copy of that smoke test for them. Their
-hard-coded classes are still guarded by `ui/utilities.test.ts`, because a _fourth_ copy of
-the Tailwind compile harness was worse than one list covering both folders.
+`(app)/shell.stories.test.tsx` is one copy of that smoke test for them. The compile harness
+that used to guard their hard-coded classes went with the token system in PET-57; classes are
+stock daisyUI plus Tailwind defaults now, and review is what guards them.
 
-**`SidebarNav` is the shell's only `'use client'` file, and it exists for exactly one
-reason.** `Sidebar` takes `active` as a prop so it can stay a Server Component, and an App
-Router layout cannot read the pathname on the server, so something has to call
-`usePathname()`. It matches by **prefix with a trailing-slash boundary**, so
+**`SidebarNav` is the shell's only `'use client'` file, and it owns both of the shell's
+reactions to a navigation.** `Sidebar` takes `active` as a prop so it can stay a Server
+Component, and an App Router layout cannot read the pathname on the server, so something has to
+call `usePathname()`. It matches by **prefix with a trailing-slash boundary**, so
 `/transactions/abc` keeps Transactions lit while `/settings-import` does not light Settings.
+The same pathname read closes the off-canvas drawer: the drawer's checkbox is uncontrolled and
+the layout - checkbox included - persists across a soft navigation, so without that effect
+following a sidebar link below `lg` left the drawer and its overlay open over the new page.
 
 Two details of it are testability decisions rather than style, and both were review findings:
 
@@ -62,11 +67,13 @@ both times: **AC3 claimed the month select appears on Transactions too** (TRN-1 
 `26:137` draw a search field there instead), and **the ticket never mentioned "Regenerate"**
 (INS-1 and node `38:542` both do). The Jira description was corrected rather than the code.
 
-**The month select and the search field are inert `div`s, not controls.** A8 says the select
-renders the current period and does nothing until month navigation is designed, and the
-search filters a list that does not exist until PET-28. Neither is a `<select>`, `<input>` or
-`<button>`, so neither announces itself as operable, and `(app)/pages.test.tsx` pins that -
-`queryByRole('combobox')` and `queryByRole('textbox')` both have to stay empty.
+**The month select is an inert `div`, not a control - and the search field stopped being one in
+PET-29.** A8 says the select renders the current period and does nothing until month navigation
+is designed, so on the Dashboard it is not a `<select>` or `<button>` and does not announce
+itself as operable; `(app)/pages.test.tsx` pins that `queryByRole('combobox')` stays empty on
+that page. The Transactions search is a real `<input>` now (`TransactionSearch` owns it, under
+The access screens' sibling section below), so the old "both stay empty" pin narrowed to the
+page that still means it.
 
 **`export const dynamic = 'force-dynamic'` was on the layout and is deliberately gone.** It
 existed because the pages read `new Date()` for the overline, and without it Next prerendered
@@ -186,21 +193,25 @@ file gives, now that five frames share them - while `app/setup/SetupShell.tsx` k
 `STEP_DOT`, `STEP_WIDTH` and the indicator itself and renders `AccessCard` with them. `AccessCard`
 takes the indicator through an `aboveCard` slot named for its position rather than its contents,
 and an omitted node renders nothing, so the column's two `gap-6` gaps collapse to one with no
-conditional anywhere. Two things to know before touching it. **The width class has to stay on the
-element carrying `shadow-card`**, because `SetupShell.test.tsx` finds the card by that class and
-then looks for the step's width on it - moving the width to a wrapper is the one change that breaks
-a suite the extraction was meant to leave alone. And that suite passing **unchanged** is what
-proved the DOM stayed byte-identical, which is worth repeating rather than re-deriving.
+conditional anywhere. One thing to know before touching it. **The step's width classes have to stay on the element
+carrying `card`**, because `SetupShell.test.tsx` locates the card by those width classes and
+asserts the children land inside it - moving the width to a wrapper is the one change that
+breaks the suite. (It located the card by `shadow-card` until PET-57 deleted that token.)
 
 **The right half of Welcome is `aria-hidden`, and that is load-bearing.**
 `app/DecorativePanel.tsx` is a dark panel with two accent washes, a sample budget card and two
 floating chips - WEL-4's "display only", every figure fabricated and permanently so. It is
-hidden because `ui/ProgressBar` publishes `role="progressbar"` with `aria-valuenow`, so
-unhidden it announces a real progressbar reporting 62% of a budget that is not the reader's,
-and `ui/Tag` announces "On track" as if it described their finances. Two notes: `aria-hidden`
+hidden because its native `<progress>` publishes `role="progressbar"`, so unhidden it announces
+a real progressbar reporting a budget that is not the reader's, and its badge announces "On
+track" as if it described their finances. (PET-57 inlined daisyUI `progress` and `badge` where
+`ui/ProgressBar` and `ui/Tag` used to render; the reasoning did not move.) Two notes: `aria-hidden`
 does **not** remove focusable descendants from the tab order, so the screen's test pins that
 the subtree contains none; and it is a plain `div`, never an `<aside>`, because an
 `aria-hidden` landmark is self-contradictory.
+The panel also pins `data-theme="light"` on itself, daisyUI's own mechanism for a subtree that
+must not follow the page: the art is a bright `base-100` card on a `neutral` panel, a pairing
+only the light theme's values keep legible, and every figure in it is fabricated, so there is
+nothing for the reader's theme to adapt.
 
 **Onboarding is three nested routes under one layout**: `/setup` (02, step 1),
 `/setup/categories` (03, step 2) and `/setup/register` (22, step 3, PET-11). PET-9
@@ -222,8 +233,7 @@ when the tab closes, and it never leaves the browser, so A32 (nothing persisted 
 until "Finish setup") holds literally. Three things about it are load-bearing. It is
 sessionStorage rather than layout state because AC5's round trip out to Welcome and back
 **unmounts the layout**, so no in-memory option can satisfy it. It is `useSyncExternalStore`
-rather than a mount effect for the reason `stories/foundations/Reference.tsx` already records
-about the stylesheet, plus two sharper ones: `react-hooks/set-state-in-effect` rejects the
+rather than a mount effect for two reasons: `react-hooks/set-state-in-effect` rejects the
 effect version and this repo carries no eslint-disable comments, and the hook is
 hydration-correct by construction where a `typeof window` guard in a `useState` initialiser
 would make the client's first render disagree with the server HTML about a controlled input's
@@ -281,7 +291,7 @@ behaviour is a Storybook or manual check. docs/TODO.md records the gap.
 so three unlabelled shapes carry nothing a reader is missing - unhidden they announce as three
 empty generics. Same call `ui/Input` makes on its `$` prefix. `SetupShell.tsx` records the two
 rejected alternatives so nobody "improves" it into one: a second `role="progressbar"`
-(restating the overline, and `ui/ProgressBar` is the repo's one progressbar), and an `<ol>` with
+(restating the overline, and Welcome's decorative `<progress>` is the repo's only one), and an `<ol>` with
 `aria-current="step"` (the textbook pattern, but it invents list semantics and three step names
 the design never draws). The `aria-hidden` footgun applies here as it does on Welcome, so the
 test pins that the subtree contains nothing focusable.
@@ -292,11 +302,12 @@ been a claim it could not test; that reason went away with the stubs. One call s
 `app/setup/layout.tsx` covers all three steps, which is three fewer places to forget one.
 
 **Storybook gains a third section, `Screens/`.** Named after the Figma page the frames live on,
-exactly as `Components` and `Foundations` are. It needs its own story smoke test
+exactly as `Components` is. It needs its own story smoke test
 (`app/screens.stories.test.tsx`) because each of those suites asserts its own title prefix,
-which is the one thing each exists to make unambiguous - that is now the fourth copy of the
-same harness, and docs/TODO.md records the helper it should become. PET-9 added a module to it
-rather than a fifth section, exactly as that item predicted.
+which is the one thing each exists to make unambiguous - each section's suite carries a copy of
+the same harness (PET-57 deleted the Foundations copy with its section), and docs/TODO.md owns
+the count and records the helper it should become. PET-9 added a module to it rather than a fifth section, exactly as
+that item predicted.
 
 Two things about that harness bite anyone adding a screen story. **It builds each story from
 `render` or `meta.component` and never applies the meta's `decorators`**, so a provider in a
@@ -317,12 +328,11 @@ So the story threw in the browser with a green suite and a green build, and only
 Storybook found it. **Open the story after adding one** - that is what the Verification section
 of every plan means by eyeballing it.
 
-`app/WelcomeScreen.tsx`, `app/DecorativePanel.tsx`, `app/setup/` and
-`components/LogoLockup.tsx` are all covered by `components/ui/utilities.test.ts`, which guards
-their hard-coded classes alongside `ui/`'s and the shell's. That now includes the box shadows,
-which PET-9 turned into Foundations tokens (`frontend/CLAUDE.md` owns them) and which had been
-excluded for two reasons that are both gone: there was no token to check them against, and
-that file's `selector()` could not escape their parens and commas.
+The compile guard that used to cover `app/WelcomeScreen.tsx`, `app/DecorativePanel.tsx`,
+`app/setup/` and `components/LogoLockup.tsx` is gone as of PET-57, along with the token
+shadows it had just learned to check. Classes are stock daisyUI plus Tailwind defaults, and
+the trap inverted: a wrong class now compiles instead of compiling to nothing, so review is
+what holds the semantic-colours-only line.
 
 **Step 2 has no `<form>`, and both of its exits are links.** That is deliberately the opposite
 of step 1, and the reasoning is the same rule applied to a different fact: an exit that always
@@ -339,17 +349,17 @@ no `aria-pressed`, `aria-checked` or `type="checkbox"` anywhere in `frontend/src
 The ARIA toggle-button pattern, which is also what the design draws: a chip that presses. Space
 and Enter both activate it, each chip is one ordinary tab stop, and the colour dot and the
 checkmark are both `aria-hidden` because `aria-pressed` already carries the state - the same
-call `ui/Tag`'s dot and `ui/Input`'s `$` prefix make. That file records the rejected
-`<input type="checkbox">` alternative, and two appearance decisions with no Figma counterpart:
-`border-[1.5px]` in both states, and the checkmark stroked `text-brand-accent` rather than
-`currentColor`.
+call the Welcome panel's chip dots and `ui/Input`'s `$` prefix make. That file records the rejected
+`<input type="checkbox">` alternative; PET-57 rebuilt the chip on daisyUI's `btn` (soft primary
+when pressed, outline at rest) with the checkmark stroked `currentColor`, so its states come
+from the theme rather than from appearance decisions of its own.
 
 **The three onboarding cards differ only in width, and `STEP_WIDTH` is where that lives.** Frame
 03 is 600px against 02's and 22's 520. PET-9 hard-coded `w-130` with a note saying PET-10 either
 changes it or lifts it to a prop; a second width appeared, so `SetupShell` now holds a
 `Record<SetupStep, string>` beside `STEP_DOT`. No prop, every class still a complete literal
-string for Tailwind's scanner, guarded by `components/ui/utilities.test.ts` like its neighbour,
-and frame 22's width recorded now rather than left for PET-11 to rediscover.
+string for Tailwind's scanner - and as of PET-57 the widths are `w-full` plus `max-w-*`
+ceilings, so the cards shrink on a small screen instead of overflowing it.
 
 **The draft's third field is `categories`, and it holds names.** `RegisterDto.categories` is
 `@IsIn(STARTER_CATEGORY_NAMES)`, so names are what cross the wire and an id would be a
@@ -393,8 +403,8 @@ only: they are `CategoryColour` keys, so no hex value enters the frontend.
 **Step 3's two name fields are a `grid`, not a flex row, and the 214px in the frame is a
 consequence rather than a measurement.** Frame 22 draws them at 214px each with a 12px gutter
 inside the card's 440px content box, and `(440 - 12) / 2` is exactly 214 - so `grid grid-cols-2
-gap-3` reproduces the design without restating any of its numbers. A flex row would not: `ui/Field`
-is `w-full`, which spans a grid cell correctly and overflows a flex row, so the fix there would
+gap-3` reproduces the design without restating any of its numbers. A flex row would not: the field
+components are `w-full`, which spans a grid cell correctly and overflows a flex row, so the fix there would
 have been a `flex-1` on each child to re-derive what the grid already gives. The email field is a
 sibling of the grid rather than a third cell, which is what makes it full width.
 
@@ -430,8 +440,8 @@ A19 designs no pending state and A29 no error surface - the spec says outright t
 account creation has none - so both are ours, alongside the details `frontend/CLAUDE.md` lists for
 `ui/`. The submit button is `disabled` while the request is out, because a double submit spends one
 of the five per-address attempts the backend's throttler allows and the second comes back a 429. And
-one failure message sits above the footer row in the same `text-body-s text-status-danger-text`
-treatment `ui/Field` uses, with **`role="alert"`, which `ui/Field` deliberately omits**: Field's
+one failure message sits above the footer row in the same `text-error` treatment the field
+components use, with **`role="alert"`, which their inline error line deliberately omits**: a field's
 message appears synchronously beside the field the user just left, while this one appears after a
 network round trip with nothing else on screen changing, so nothing else would tell a screen reader
 the submit failed. Five new strings come with it, and `docs/TODO.md` adds them to what A29 owes.
@@ -720,14 +730,19 @@ suspending on the RSC payload, and a mocked router resolves immediately. That is
 of gap `Modal` records for Escape and its focus trap, and the same answer applies: the tests pin
 that the region is mounted and silent at rest, and the busy state itself is a browser check.
 
-**The table is a real `<table>`, and the column widths are the designed ones plus 16.** A table
-has no `gap`, so Figma's 16px between columns is `pr-4` on every cell but the last and each
-declared width absorbs it - `w-[166px]` for a 150px CATEGORY column. `TransactionsTable.tsx`
-writes that arithmetic out, because "correcting" it back to the design file's numbers shifts every
-column left by 16px. Two more values there look like mistakes and are read off node 26:172: the
-card is `rounded-lg` with **no shadow**, exactly as frame 07's empty card is, so reaching for
-`AccessCard`'s `shadow-card rounded-xl` box is wrong twice; and the rules between rows are
-`border-subtle` where the card's own border is `border-default`.
+**The table is a real `<table>`, and PET-57 deleted every number this paragraph used to carry.**
+It said the column widths were the designed ones plus 16, because a table has no `gap` and
+Figma's 16px between columns had to be absorbed by each declared width - `w-[166px]` for a 150px
+CATEGORY column - and it named three token-era classes for the card. **All of that is gone and
+none of those classes exists**: daisyUI's `table` puts `padding-inline` on every cell, so nothing
+is `table-fixed` and the browser measures the columns from their content, and the box is the
+stock `overflow-x-auto rounded-box border-base-300 bg-base-100 border` div the component ships
+with. `shadow-card`, `border-subtle` and `border-default` were tokens the 26-line `globals.css`
+no longer defines, so writing one now compiles to nothing at all - the silent-failure mode this
+migration inverted, arrived at from the documentation rather than from the code. The card's
+radius and border colour and the rules between rows are the theme's, and `AccessCard`'s box is
+`card bg-base-100 shadow-sm`, which is what to compare against if a second card ever needs to
+match this one.
 
 **A row is not a link and the kebab is not a button.** Frame 08 is PET-34's and frame 10 is
 PET-33's, and neither exists, so AC7 is drawn and deliberately not wired - the same call the two
@@ -735,8 +750,40 @@ tabs, the month pill and the search pill before it all made. `pages.test.tsx` st
 `queryByRole('link')` empty on this page, and it now holds **by decision** rather than by absence
 of features, which is worth knowing before somebody deletes it as stale. PET-33's diff is a span
 becoming a `<button>` plus an `sr-only` label on the header's deliberately empty fifth cell;
-PET-34's link belongs on the **merchant cell** rather than the row, which is the accessible-name
-argument `ui/ListRow.tsx` already recorded.
+PET-34's link belongs on the **merchant cell** rather than the row, and the argument is worth
+restating here because the file that used to hold it is gone: a link wrapping the whole row takes
+its accessible name from everything inside it, so every row would announce as "Whole Foods
+Groceries Oct 8 −$86.40" - the merchant is the only cell that names the thing being opened. (This
+cited `ui/ListRow.tsx`, which PET-57 deleted, leaving the one recorded reason unreachable.)
+
+**PET-33 landed the kebab half of that, and the prediction above was right about the diff and
+wrong about the boundary.** The span is a `btn btn-ghost btn-square btn-sm` and the fifth header
+cell is named, exactly as written. What it did not anticipate is that
+`transactions/TransactionRowMenu.tsx` needs **no state at all**: the menu is daisyUI's popover
+dropdown, so `popovertarget` opens it and `popovertargetaction="hide"` closes it, and the
+`'use client'` is there only because Delete calls into a context. `TransactionRow.tsx` was split
+out of the table in anticipation of holding that state and **stays a Server Component** anyway.
+The row's own half is unchanged: a click still opens nothing, and `queryByRole('link')` still
+holds.
+
+**The menu is a popover rather than React state, and the argument is the one this file makes
+twice already.** AC1 asks for "clicking elsewhere or pressing Escape closes it", which is light
+dismiss and the Escape default action - the platform gives both plus the top layer, so nothing
+picks a z-index and nothing listens on `document`. daisyUI 5 requires it independently: its
+`dropdown` rules forbid the legacy `tabindex`, `<details>` and focus-based forms. Two costs, both
+recorded rather than fought. **jsdom 26.1.0 implements none of the Popover API** and
+`jest.setup.ts` deliberately polyfills none of it, unlike `<dialog>` - faking light dismiss would
+turn AC1 into a test of the fake - so under Jest the menu is permanently open, the suites assert
+the wiring, and opening and closing are Chrome and Storybook checks. And **Firefox does not
+support CSS anchor positioning**, where daisyUI's own `@supports` fallback centres the menu
+behind a dimmed backdrop instead of anchoring it.
+
+**"Edit" in that menu is `menu-disabled`, and it is a different kind of dead control from the
+ones above it.** The month pill, the search pill and both tabs are things that look operable and
+are not; this one announces `aria-disabled` and says so. PET-32's edit modal does not exist, and
+the alternatives were a live item that does nothing - the failure every inert control on this
+screen exists to avoid - or dropping the item, which makes frame 10 a different design. It
+amends AC2, and PET-33's Jira ticket carries the note.
 
 **Both tabs are inert, and "Categories" specifically must not become a link.** It opens frame 13,
 which is PET-36's route and has no `page.tsx` behind it, and `lib/routes.test.ts` asserts with
@@ -786,23 +833,28 @@ and not in `components/` because `AccessCard`'s reason for being there is spanni
 in _different_ trees, whereas frames 09, 11, 19, 21 and both delete confirmations all sit inside
 this group.
 
-**Two of its Tailwind classes are load-bearing and invisible on reading.** `m-auto` is mandatory:
-preflight sets `margin: 0` on `*` and `::backdrop`, which overrides the user agent's own
-`dialog { margin: auto }` - the entire centring mechanism - so without it the box pins to the
-top-left corner with nothing in the markup looking wrong. And the display class must be
-`open:flex`, never a bare `flex`, which would outrank `dialog:not([open]) { display: none }` and
-show the box for the frame between mount and the effect. There is deliberately **no**
-`overflow-clip`, although Figma reports it: it would clip the footer buttons'
-`focus-visible:outline-offset-2`, which is the reason `components/AccessCard.tsx` omits it too,
-and the UA's own `dialog:modal` max-height survives preflight so a short viewport scrolls the box
-instead of losing its footer.
+**Its chrome is daisyUI's `modal` / `modal-box` / `modal-action`, and the plumbing that used to
+be hand-held is the plugin's now.** The first version of this file documented `m-auto` (preflight
+kills the UA's `dialog { margin: auto }`) and `open:flex` (a bare `flex` would outrank
+`dialog:not([open]) { display: none }` and flash the box before `showModal()`); daisyUI's
+`.modal` owns centring, the closed state (`visibility: hidden; pointer-events: none`) and the
+dimmed backdrop, so none of that is written here any more and none of it should come back. The
+box's radius, shadow, padding and max-height are `modal-box`'s, which also means a short
+viewport scrolls the box instead of losing its footer. One pair of utilities on the box is
+load-bearing: `translate-none scale-none`. daisyUI animates `modal-box` open through the
+`scale` property, and any non-`none` `scale` makes the box the containing block for
+`position: fixed` descendants - so DateField's calendar popover laid out inside the box and was
+scrolled by its `overflow-y: auto` instead of overlaying the modal, which a Chrome walk of
+PET-31's flow caught after every Jest suite passed. The entrance animation is the price, paid
+deliberately; `Modal.tsx` carries the full account.
 
 **Every close affordance funnels through one exit**, and `ref.close()` is a way _in_ to it rather
 than a second way out. Cancel, the X and a backdrop click all call `close()`, whose `close` event
 is `onClose`; Escape reaches the same place through the UA's default action, so the component
 carries no keydown handler at all. The backdrop test is `event.target === dialogRef.current`,
-which works because a click on `::backdrop` reports the dialog itself while any child reports
-itself, and because the box carries no padding of its own. The `ref` handle exists so a successful
+which works because daisyUI dims the dialog element itself and the padding lives on `modal-box`,
+a child - so a click anywhere outside the box, padding included, reports the dialog while any
+click inside reports a descendant. The `ref` handle exists so a successful
 save closes the dialog rather than merely unmounting it, which keeps every exit on the one path the
 owner listens to - the `close` event.
 
@@ -824,13 +876,33 @@ including Escape, and which - because it is our code rather than the platform's 
 `Modal.test.tsx` rather than eyeballed. The lesson generalises past this component: **a platform
 guarantee that fires during an event React unmounts inside is not a guarantee.**
 
+**PET-33 gave `Modal` a second shape rather than a second component.** Frame 12 is a centred icon
+circle over a centred title with no X, so `align` and `icon` arrived: `align="center"` centres
+the header, renders the icon in a tinted circle, splits the footer into two equal buttons and
+**drops the X**. That last part is the half worth knowing - frame 12's dismissal is Cancel, which
+is already on screen and named, and Escape and the backdrop still reach the same single exit, so
+a confirmation with three ways to say no and one to say yes was the wrong shape. The alternative,
+a `ConfirmDialog` of its own, would have duplicated the single-exit `close()`, the focus capture
+and restore, and the backdrop target test - the three least obvious things in that file.
+
+**The delete confirmation is mounted once on the layout too, and here the argument is sharper
+than the Add transaction one.** `DeleteTransactionProvider` holds it and
+`useDeleteTransaction().open(target)` is the seam. Add transaction has five entry points, two of
+which happen to share a page; this one has a trigger **per row**, so a dialog owned by the row
+menu would mount one `<dialog>` per transaction, each with its own focus trap and heading id.
+Two of DEL-1's three entry points do not exist yet, and each is two lines when it does. **AC7's
+"deleting from the detail page lands back on the list" is deliberately not designed in**: it
+looks like an `onDeleted` on `open()`, and a callback nothing passes is precisely the shape
+PET-29 shipped once as `TransactionsTable`'s `pending` prop and had to take back out. The ticket
+with the caller adds the parameter.
+
 **The Add transaction modal is mounted once, on the layout, and that is a correctness requirement
 rather than a tidiness one.** `AddTransactionProvider` holds it, `AddTransactionButton` is the
 trigger every entry point renders, and `useAddTransaction()` throws outside the provider rather
 than returning a no-op. Three triggers exist - the Dashboard header, the Transactions header and
 the Transactions empty card - and the last two are on **one page**: a component owning its own
 modal would mount two `<dialog>` elements there, with two focus traps and two copies of every
-`ui/Field` id, which is a required literal prop precisely because `useId` would force
+field id, which `ui/FieldShell` requires as a literal prop precisely because `useId` would force
 `'use client'` onto the field layer. Duplicate ids make `getByLabelText` ambiguous, which is the
 failure PET-30's own `pages.test.tsx` comment already names. The payoff is that PET-20's DSH-9
 teaser and PET-44's INS-7 card each add a trigger in two lines with no prop threading through
@@ -857,20 +929,22 @@ does not declare it.
 **`(app)/DateField.tsx` is the one place in this feature where Escape needs code.** ADD-7 draws
 the Date field as a closed select and Figma opens it nowhere, so the trigger is read off the
 design and the mini-calendar is entirely ours (A14 owes it a confirmation, and `lib/calendar.ts`
-records what "ours" covers). It is a `<button>` wearing `ui/Select`'s box, padding and chevron,
-because a native `<select>` cannot host a popover - and the popover's keydown handler must
+records what "ours" covers). It is a `<button>` wearing daisyUI's `select` class - the box,
+padding and chevron all come with it - because a native `<select>` cannot host a popover; and
+the popover's keydown handler must
 `preventDefault()` the Escape, or the surrounding `<dialog>` treats it as a close request and
 shuts the whole modal, discarding everything typed. First Escape closes the popover, second
 closes the modal.
 
 Three smaller decisions in that field are worth not re-litigating. Its trigger is named by
-`aria-labelledby` pointing at `ui/Field`'s label **and a value span inside the button**, because
-HTML-AAM computes a button's name from its own subtree and would ignore the `<label for>`
-entirely - which is why `Field` gained a label id. `aria-selected` sits on the `gridcell` rather
-than on the day button, since the `button` role does not support it, and today is marked with
-`aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `Input` and `Select`:
-those are real form controls whose roles support it, a button's does not, and this repo keeps no
-eslint-disable comments - so the red border and `aria-describedby` carry the state.
+`aria-labelledby` pointing at `ui/FieldShell`'s label **and a value span inside the button**,
+because HTML-AAM computes a button's name from its own subtree and would ignore the `<label for>`
+entirely - which is why the shell puts an id on its label. `aria-selected` sits on the `gridcell`
+rather than on the day button, since the `button` role does not support it, and today is marked
+with `aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `Input` and
+`Select`: those are real form controls whose roles support it, a button's does not, and this repo
+keeps no eslint-disable comments - so `select-error`'s border and `aria-describedby` carry the
+state.
 
 ## Not built here
 
@@ -910,3 +984,19 @@ reviewer is most likely to try on a full table is the one thing that is delibera
 also the only screen of the four with a real data path, which was true before PET-29 and is worth
 restating: the Dashboard, AI Insights and Settings `<main>` elements are still empty and still
 fetch nothing.
+
+**PET-33 closes half of that trap and narrows the rest.** The kebab works: it opens a real menu
+and Delete really deletes, which makes this the second write in the app and the first that
+removes anything. A row click is still the dead one, and it is now the _only_ dead one on the
+screen, which makes it more likely to be tried rather than less.
+
+Three things PET-33 adds that are worth carrying into the next ticket here. **Four of its seven
+acceptance criteria could not be verified in it**: AC2 needs PET-32's edit modal, AC3's other two
+entry points need PET-32 and PET-34, AC6 needs a Dashboard and a Categories tab that render
+anything at all, and AC7 needs PET-34 - so a reviewer should read the ticket as amended rather
+than as half-done, and the Jira comment records it. **The delete is the first thing in this app
+that removes data**, and `docs/TODO.md` records that the row tombstones rather than disappearing
+from the database, which is invisible through every endpoint and must not be "fixed" against the
+dialog's "permanently". And **deleting a row destroys the kebab that opened the dialog**, so
+`Modal`'s focus restore finds nothing connected and focus lands on `<body>` - the identical gap
+saving from the empty state already had, now on a path a user takes far more often.

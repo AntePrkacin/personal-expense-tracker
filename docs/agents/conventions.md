@@ -39,7 +39,8 @@ set" instead.
 | Branch format, commit types, the hooks, the CI job list | `docs/CONTRIBUTING.md`; types enforced by `commitlint.config.js` | pointer |
 | Stacked-branch mechanics | `.claude/skills/repo-stack/SKILL.md` and the committed `gh-stack` skill | pointer, including from `docs/CONTRIBUTING.md` |
 | Migration scopes, schema conventions, drivers | `backend/src/database/CLAUDE.md` | pointer |
-| Design tokens and component conventions | `frontend/CLAUDE.md` | pointer |
+| Design tokens, the Figma boundary, the daisyUI cascade traps | `frontend/CLAUDE.md` | pointer |
+| Component conventions, and what earns a file in `components/` | `frontend/src/components/CLAUDE.md` | pointer |
 | Routes, layouts, the session gate, the screens | `frontend/src/app/CLAUDE.md` | pointer |
 | The HTTP contract and its generated artifacts | `docs/agents/api-contract.md` | pointer |
 | Skills, subagents, MCP | `docs/agents/claude-tooling.md`; permissions stay in `.claude/SETTINGS.md` | pointer |
@@ -98,14 +99,24 @@ its first merge conflict, promote its hottest topic one directory deeper, which 
 auto-loads by the same mechanism with better trigger locality. Do it on that evidence, not on
 taste.
 
-This has fired twice. Merging PET-8 took `frontend/CLAUDE.md` to 421 lines, so the app
+This has fired three times. Merging PET-8 took `frontend/CLAUDE.md` to 421 lines, so the app
 shell and the access screens moved to `frontend/src/app/CLAUDE.md`, leaving the design system and
 the `ui/` conventions in the parent. Both files load together when the work is in a route, and
 only the parent loads when it is in `components/`. PET-45's profile endpoints then took
 `backend/CLAUDE.md` past 400, and persistence moved to `backend/src/database/CLAUDE.md` the same
 way - the candidate this paragraph had already named, which is the point of naming one in
-advance. The remaining candidate is `frontend/src/components/CLAUDE.md` for the component
-conventions.
+advance. PET-57's review took `frontend/CLAUDE.md` to 404, and the component conventions moved to
+`frontend/src/components/CLAUDE.md` - the candidate this paragraph had been holding since the
+first promotion, named two tickets before it was needed.
+
+That third one is worth reading for what it says about picking the topic. The heading that moved
+was **Shared components**, but two things underneath it were not components at all and did not
+go: `lib/format.ts` and `lib/date.ts` had been documented inside that section by accident, and
+they kept the parent under a `## Formatting and dates` heading of their own, with Storybook's
+three sections likewise promoted to a sibling heading rather than travelling with `ui/`. Trigger
+locality is the test, not the heading a paragraph happens to sit under - a `lib/` fact filed in
+`components/` loads at exactly the wrong time. The remaining candidate, if `frontend/CLAUDE.md`
+grows again, is `frontend/src/lib/CLAUDE.md` for those two.
 
 Both promotions kept a stub section behind, `## The screens` and `## Persistence`, rather than
 deleting the heading outright. The parent is what a reader lands on first, and a topic that

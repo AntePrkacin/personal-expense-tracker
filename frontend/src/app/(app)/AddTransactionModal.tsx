@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 
+import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -60,7 +61,7 @@ const MESSAGES = {
   categoriesUnavailable: "We couldn't load your categories. Please close this and try again.",
 } as const;
 
-/** Field ids, which `ui/Field` requires rather than generating; see its note on useId. */
+/** Field ids, which `ui/FieldShell` requires rather than generating; see its note on useId. */
 const AMOUNT_ID = 'add-transaction-amount';
 const CATEGORY_ID = 'add-transaction-category';
 const DATE_ID = 'add-transaction-date';
@@ -210,8 +211,10 @@ export function AddTransactionModal({
       ref={modalRef}
       title="Add transaction"
       onClose={onClose}
-      // AC2: frame 09 draws the Amount field focused, and the designed 1.5px accent border is
-      // a focus style - so nothing renders it unless focus actually lands here on open.
+      // AC2: frame 09 draws the Amount field focused, and a focus ring is a focus style - so
+      // nothing renders one unless focus actually lands here on open. The ring is the theme's
+      // now rather than the frame's 1.5px accent border, which changes nothing about the
+      // criterion: focus still has to arrive.
       initialFocusId={AMOUNT_ID}
       onSubmit={onSubmit}
       footer={
@@ -233,9 +236,10 @@ export function AddTransactionModal({
         </>
       }
     >
-      {/* The currency variant is what draws the `$` prefix and the 22px Display/S value
-          (node 28:393). `required` with no asterisk, per A12: required fields are marked only
-          by the absence of "(optional)". */}
+      {/* The currency variant is what draws the `$` prefix and the larger value the frame
+          gives this field alone (node 28:393), which is daisyUI's `input-lg` now rather than a
+          named type style. `required` with no asterisk, per A12: required fields are marked
+          only by the absence of "(optional)". */}
       <Input
         id={AMOUNT_ID}
         label="Amount"
@@ -267,8 +271,8 @@ export function AddTransactionModal({
       />
 
       {/* Date and Merchant share a row at 230px each inside the 472px body (node 28:401).
-          A flex row with flex-1 on each child rather than a grid, because ui/Field is w-full
-          and the two are separate components rather than cells of one layout. */}
+          A flex row with flex-1 on each child rather than a grid, because `ui/FieldShell` is
+          w-full and the two are separate components rather than cells of one layout. */}
       <div className="flex w-full gap-3">
         <div className="flex-1">
           <DateField
@@ -300,21 +304,14 @@ export function AddTransactionModal({
         onChange={(event) => set('note', event.currentTarget.value)}
       />
 
-      {/* role="alert" where ui/Field deliberately has none: Field's message appears
-          synchronously beside the field the user just left, while these two appear after a
-          network round trip with nothing else on screen changing - so nothing else would tell
-          a screen reader anything happened. Same call RegisterForm makes. */}
-      {categoriesFailed ? (
-        <p role="alert" className="text-body-s text-status-danger-text">
-          {MESSAGES.categoriesUnavailable}
-        </p>
-      ) : null}
-
-      {failure !== null ? (
-        <p role="alert" className="text-body-s text-status-danger-text">
-          {failure}
-        </p>
-      ) : null}
+      {/* Two form-level lines rather than one, because they answer different questions and can
+          both be true: the picker had nothing to offer, and the save was rejected.
+          `components/FormError.tsx` owns the treatment and the `role="alert"` argument for both,
+          and renders nothing when its message is absent - so neither needs a conditional here
+          and a closed modal still contributes no text to the page, which
+          `(app)/pages.test.tsx` depends on. */}
+      <FormError message={categoriesFailed ? MESSAGES.categoriesUnavailable : null} />
+      <FormError message={failure} />
     </Modal>
   );
 }

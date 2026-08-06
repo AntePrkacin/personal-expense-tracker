@@ -1,19 +1,11 @@
 import { render, screen } from '@testing-library/react';
 
-import {
-  NAV_ITEM_ICON,
-  NAV_ITEM_LABEL,
-  NAV_ITEM_SURFACE,
-  SIDEBAR_HREFS,
-  SIDEBAR_ITEMS,
-  Sidebar,
-  type SidebarItem,
-} from './Sidebar';
+import { SIDEBAR_HREFS, SIDEBAR_ITEMS, Sidebar, type SidebarItem } from './Sidebar';
 
 // next/jest maps every .css import to an empty object, so jsdom never receives
-// a stylesheet and no test here can assert a rendered colour or size. These
-// assert the class names instead; that the classes generate real CSS is proved
-// separately in components/utilities.test.ts.
+// a stylesheet and no test here can assert a rendered colour or size. Styling is
+// daisyUI's as of PET-57, so these assert semantics; the one class asserted is
+// menu-active, the visible half of aria-current.
 
 const ITEMS = [...SIDEBAR_ITEMS];
 
@@ -50,8 +42,14 @@ const profile = {
   email: 'ivana@example.test',
 } as const;
 
-const renderSidebar = (active: SidebarItem, overrides: Partial<typeof profile> = {}) =>
-  render(<Sidebar active={active} {...profile} {...overrides} />);
+// Overrides are typed against the component's props rather than `typeof
+// profile`: the fixture is `as const`, so Partial of it narrows every field to
+// its literal and rejects any other name - which is exactly what the
+// long-profile test passes.
+const renderSidebar = (
+  active: SidebarItem,
+  overrides: Partial<React.ComponentProps<typeof Sidebar>> = {},
+) => render(<Sidebar active={active} {...profile} {...overrides} />);
 
 const itemLink = (item: SidebarItem) => screen.getByRole('link', { name: LABELS[item] });
 
@@ -98,7 +96,6 @@ describe('Sidebar', () => {
     for (const list of lists) {
       const label = document.getElementById(list.getAttribute('aria-labelledby')!);
       expect(label).not.toBeNull();
-      expect(label).toHaveClass('text-overline');
     }
 
     // The overlines are labels, not headings: promoting them would put three
@@ -128,17 +125,19 @@ describe('Sidebar', () => {
     }
   });
 
-  it.each(ITEMS)('%s takes the active fill and label while the others do not', (active) => {
+  it.each(ITEMS)('%s takes the active treatment while the others do not', (active) => {
     renderSidebar(active);
 
     for (const item of ITEMS) {
-      const state = item === active ? 'active' : 'inactive';
       const link = itemLink(item);
 
-      expect(link).toHaveClass(NAV_ITEM_SURFACE[state], NAV_ITEM_LABEL[state]);
-      // The glyph does not inherit the label colour: active draws it in the brand
-      // accent against a white label, so it carries its own class.
-      expect(link.firstElementChild).toHaveClass(NAV_ITEM_ICON[state]);
+      // menu-active is daisyUI's active-item state, the visible half of the
+      // aria-current the test above pins.
+      if (item === active) {
+        expect(link).toHaveClass('menu-active');
+      } else {
+        expect(link).not.toHaveClass('menu-active');
+      }
     }
   });
 
@@ -171,9 +170,10 @@ describe('Sidebar', () => {
   it('hides the initials tile, which only repeats the name beside it', () => {
     renderSidebar('dashboard');
 
-    // Same call ListRow makes for its category tile: it carries no information
-    // the adjacent text does not already give in words.
-    expect(screen.getByText('IH')).toHaveAttribute('aria-hidden', 'true');
+    // It carries no information the adjacent text does not already give in
+    // words. aria-hidden sits on the avatar wrapper rather than the initials
+    // span, so the whole tile is out of the tree.
+    expect(screen.getByText('IH').closest('[aria-hidden="true"]')).not.toBeNull();
   });
 
   it('contains none of the designed sample values (AC4)', () => {

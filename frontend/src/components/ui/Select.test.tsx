@@ -1,7 +1,10 @@
 import { render, screen } from '@testing-library/react';
 
-import { FIELD_CONTROL_SURFACE } from './Field';
-import { SELECT_CONTROL, Select } from './Select';
+import { Select } from './Select';
+
+// Styling is daisyUI's as of PET-57, so these assert the behaviour the component
+// owns rather than class strings. The chevron is daisyUI's own as well, so
+// nothing here draws or asserts one.
 
 const CATEGORIES = [
   { value: 'groceries', label: 'Groceries' },
@@ -34,14 +37,6 @@ describe('Select', () => {
 
     expect(screen.getAllByRole('option')).toHaveLength(CATEGORIES.length);
     expect(screen.getByRole('option', { name: 'Groceries' })).toHaveValue('groceries');
-  });
-
-  it('applies its designed padding and hides the native arrow', () => {
-    // appearance-none is what removes the platform chevron, so the designed one
-    // is not drawn beside a second arrow.
-    renderSelect();
-
-    expect(screen.getByRole('combobox')).toHaveClass(...SELECT_CONTROL.split(' '));
   });
 
   it('shows the placeholder as the selection without offering it in the list', () => {
@@ -89,34 +84,21 @@ describe('Select', () => {
   });
 
   it('uses the same error pattern as Input', () => {
-    // The acceptance criterion is that one pattern appears in every form, which is
-    // structural here: both field types run through Field.
+    // The acceptance criterion is that one pattern appears in every form. Both
+    // field components carry the identical wiring: aria-invalid, aria-describedby
+    // and the daisyUI error state.
     renderSelect({ error: 'Pick a category.' });
 
     const select = screen.getByRole('combobox');
     expect(select).toHaveAttribute('aria-invalid', 'true');
     expect(select).toHaveAttribute('aria-describedby', 'category-error');
     expect(screen.getByText('Pick a category.')).toHaveAttribute('id', 'category-error');
-    expect(select.parentElement).toHaveClass('border-status-danger');
+    expect(select).toHaveClass('select-error');
   });
 
-  it('looks inert when disabled, not merely refuse input', () => {
-    // Author styles beat the user agent's own disabled treatment, so without an
-    // explicit disabled fill the control renders identically to an editable one.
+  it('refuses input when disabled', () => {
     renderSelect({ disabled: true });
 
-    const select = screen.getByRole('combobox');
-    expect(select).toBeDisabled();
-    expect(select).toHaveClass('disabled:text-text-tertiary');
-    expect(select.parentElement).toHaveClass(...FIELD_CONTROL_SURFACE.disabled.split(' '));
-    expect(select.parentElement).not.toHaveClass('bg-surface-card');
-  });
-
-  it('layers the chevron over the control without stealing its clicks', () => {
-    renderSelect();
-
-    const chevron = screen.getByRole('combobox').parentElement?.querySelector('svg');
-    expect(chevron).toHaveAttribute('aria-hidden', 'true');
-    expect(chevron).toHaveClass('pointer-events-none', 'absolute', 'overflow-visible');
+    expect(screen.getByRole('combobox')).toBeDisabled();
   });
 });

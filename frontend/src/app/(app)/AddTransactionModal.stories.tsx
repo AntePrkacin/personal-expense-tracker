@@ -49,9 +49,11 @@ const accept = async () => ({ ok: true }) as const;
 /**
  * The modal as frame 09 draws it (node 28:384).
  *
- * What to diff against Figma: the 520px box centred over the dimmed page, its 20px radius and
- * lifted shadow, the two hairline rules, the Amount field **focused** with its accent border and
- * `$` prefix, Date and Merchant sharing a row, and the footer's secondary-then-primary pair.
+ * What to diff against Figma is the structure, not the pixels: the box centred over the dimmed
+ * page, the Amount field **focused** and carrying its `$` prefix, Date and Merchant sharing a
+ * row, and the footer's secondary-then-primary pair. Its width, radius, shadow and focus ring
+ * are the theme's as of PET-57, and the frame's two hairline rules are gone with it - a stock
+ * daisyUI modal draws none.
  *
  * Two things here have no Figma counterpart and are the ones to actually look at: the Category
  * field opens on a `Select…` placeholder rather than preselecting "Uncategorized", and the Date
@@ -66,9 +68,10 @@ export const Default: Story = {
  * Every validation message at once, which is the artifact A29 owes a designer.
  *
  * Assumption A29 records that **no form error visual exists anywhere in the Figma file**, so the
- * pattern - a red border plus one line of `status-danger-text`, no icon - and all four strings
- * are ours. This story submits an empty form on mount so the four appear together, because what
- * needs reviewing is the treatment of a whole failing form rather than one field.
+ * pattern - daisyUI's `input-error` / `select-error` border plus one `text-error` line, no icon -
+ * and all four strings are ours. This story submits an empty form on mount so the four appear
+ * together, because what needs reviewing is the treatment of a whole failing form rather than
+ * one field.
  *
  * The four post-network failure lines are not shown here: each replaces the others, they need a
  * round trip to provoke, and `AddTransactionModal.test.tsx` pins all four strings.

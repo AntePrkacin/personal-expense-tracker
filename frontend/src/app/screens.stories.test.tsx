@@ -29,20 +29,18 @@ jest.mock('next/navigation', () => ({
 }));
 
 // Smoke-tests the Screens section's stories, the same job
-// src/components/ui/ui.stories.test.tsx does for Components,
-// src/app/(app)/shell.stories.test.tsx for Shell and
-// src/stories/foundations/foundations.stories.test.tsx for Foundations.
+// src/components/ui/ui.stories.test.tsx does for Components and
+// src/app/(app)/shell.stories.test.tsx for Shell.
 // `storybook build` bundles a story but never runs one, so without this a runtime
 // throw ships through a green CI and surfaces only when somebody opens Storybook.
 //
-// A fourth file rather than an entry in one of the others because each of those
-// asserts its own title prefix - /^Components\//, /^Shell\//, /^Foundations\// - and
-// that assertion is the one thing each exists to make unambiguous.
+// Its own file rather than an entry in one of the others because each of those
+// asserts its own title prefix - /^Components\//, /^Shell\// - and that assertion
+// is the one thing each exists to make unambiguous.
 //
-// **This is now the fourth copy of the ~30 lines below**, which is past the point
-// utilities.test.ts sets for itself ("if a third consumer appears, lift it into a
-// helper then"). Lifting three existing suites was out of scope for the ticket that
-// added this one; see "The story smoke harness is duplicated four times" in
+// **The ~30 lines below are one copy of a harness every section's suite repeats**,
+// past the lift-it-into-a-helper threshold. Lifting the existing suites was out of
+// scope for the ticket that added this one; see the story-smoke-harness entry in
 // docs/TODO.md for the helper's shape.
 
 type Args = Record<string, unknown>;

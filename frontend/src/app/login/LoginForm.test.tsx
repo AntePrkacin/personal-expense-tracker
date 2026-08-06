@@ -112,7 +112,7 @@ describe('AC2: an empty email blocks the submit', () => {
   });
 
   it('wires the message to the field for assistive technology', async () => {
-    // `ui/Field` owns the aria-invalid and aria-describedby pair; this asserts the
+    // `ui/Input` owns the aria-invalid and aria-describedby pair; this asserts the
     // error prop actually reaches it, which is the part this form is responsible for.
     const user = userEvent.setup();
     render(<LoginForm sendLink={sendLink} />);
@@ -239,7 +239,7 @@ describe('the request, which the design draws no states for', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("We couldn't send your login link. Please try again.");
-    expect(alert.className).toContain('text-status-danger-text');
+    expect(alert.className).toContain('text-error');
     expect(mockPush).not.toHaveBeenCalled();
   });
 

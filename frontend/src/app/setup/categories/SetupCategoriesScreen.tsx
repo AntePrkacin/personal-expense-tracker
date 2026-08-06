@@ -48,11 +48,11 @@ export function SetupCategoriesScreen() {
         {/* A <p>, not a heading, for the reason step 1 records: it labels position
             in the flow, and it is where "step 2 of 3" is actually readable - which
             is what lets the indicator above it stay aria-hidden. */}
-        <p className="text-overline text-brand-accent-pressed">STEP 2 OF 3</p>
+        <p className="text-primary text-xs font-semibold tracking-widest uppercase">STEP 2 OF 3</p>
 
-        <h1 className="text-display-s text-text-primary">Pick your categories</h1>
+        <h1 className="font-display text-2xl font-bold">Pick your categories</h1>
 
-        <p className="text-body-m text-text-secondary">{SUPPORTING_COPY}</p>
+        <p className="text-base-content/70">{SUPPORTING_COPY}</p>
       </div>
 
       <CategoryPicker />

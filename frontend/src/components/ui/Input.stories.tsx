@@ -11,7 +11,7 @@ const meta: Meta<typeof Input> = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div className="bg-surface-card border-border-default w-[520px] rounded-xl border p-8">
+      <div className="bg-base-100 border-base-300 rounded-box w-[520px] border p-8">
         <Story />
       </div>
     ),
@@ -26,10 +26,7 @@ type Story = StoryObj<typeof Input>;
 /** One field, driven by the controls. */
 export const Playground: Story = {};
 
-/**
- * Both variants. Click into either to see the designed focus style, a 1.5px
- * accent border (02 node 42:721, 09 node 28:393, 19 node 102:1432).
- */
+/** Both variants. Click into either to see daisyUI's focus treatment. */
 export const AllVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4">
@@ -44,7 +41,7 @@ export const Currency: Story = {
   args: { id: 'amount', label: 'Amount', variant: 'currency', defaultValue: '24.00' },
 };
 
-/** Empty, with the placeholder in `text-tertiary`. */
+/** Empty, with the placeholder in the theme's muted text. */
 export const WithPlaceholder: Story = {
   args: {
     id: 'note',
@@ -65,8 +62,8 @@ export const Disabled: Story = {
 
 /**
  * The inline validation pattern. No error visual exists anywhere in the Figma file
- * (assumption A29), so this is ours: the border turns `status-danger`, one line of
- * `status-danger-text` sits beneath, and the control gets `aria-invalid` plus an
+ * (assumption A29), so this is ours: the control takes daisyUI's error state, one
+ * line of `text-error` sits beneath, and the control gets `aria-invalid` plus an
  * `aria-describedby` pointing at that line. Select uses the identical pattern.
  */
 export const WithError: Story = {

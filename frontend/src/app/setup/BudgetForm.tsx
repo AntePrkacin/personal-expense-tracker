@@ -22,9 +22,8 @@ import { useSetupDraft } from './SetupDraftProvider';
  * The only currency the design ever shows (A6, BUD-2).
  *
  * One option rather than a disabled control: Figma draws an ordinary enabled
- * select with its chevron, and a disabled field would need the disabled treatment
- * `ui/Field` invented, which no frame draws here. The label carries the symbol
- * because the frame does.
+ * select with its chevron, and no frame draws a disabled field at all. The label
+ * carries the symbol because the frame does.
  *
  * A hyphen, not the em dash Figma types. The repo normalised that in
  * `Input.stories.tsx` and PET-9's own ticket text, and the two glyphs are
@@ -36,15 +35,15 @@ const CURRENCY_OPTIONS = [{ value: DEFAULT_CURRENCY, label: 'USD - $' }];
 /**
  * The one validation message (A5, BUD-6).
  *
- * Not invented copy: `ui/Field`'s own doc comment uses this exact string as its
- * example and `Input.stories.tsx`'s `WithError` story already draws it on a
- * currency field. One message covers the empty field and the zero, because A29
+ * Not invented copy: `Input.stories.tsx`'s `WithError` story already draws this
+ * exact string on a currency field. One message covers the empty field and the
+ * zero, because A29
  * designs no error state at all and two shades of wording would invent more than
  * the design has.
  */
 const BUDGET_REQUIRED = 'Enter an amount greater than 0.';
 
-/** Field ids, which `ui/Field` requires rather than generating; see its note on useId. */
+/** Field ids, which `ui/Input` and `ui/Select` require rather than generating. */
 const CURRENCY_ID = 'setup-currency';
 const BUDGET_ID = 'setup-budget';
 
@@ -120,10 +119,10 @@ export function BudgetForm() {
         required
       />
 
-      {/* The currency variant is what draws the `$` prefix and the 22px Display/S
-          value; `ui/Input` documents it against this very node (42:721). The
-          1.5px accent border at rest and on focus comes from FIELD_CONTROL_BORDER,
-          so nothing here restates it. */}
+      {/* The currency variant is what draws the `$` prefix and the larger value;
+          `ui/Input` documents it against this very node (42:721). The box, its
+          border and its focus ring are daisyUI's `input`, so nothing here
+          restates them. */}
       <Input
         id={BUDGET_ID}
         label="Monthly budget"

@@ -5,238 +5,215 @@ everywhere and points here; this file is the authority for everything inside the
 Runnable detail lives in the guides: commands in `docs/guides/commands.md`, environment values
 in `docs/guides/configuration.md`.
 
-Read Design tokens before you write a single class. Tailwind's own palette and type scale are
-cleared, so `text-red-600` and `text-4xl` generate no CSS, fail no build, and look exactly like
-a class that did nothing.
-
 ## Design tokens
 
-`frontend/src/app/globals.css` is the single source of truth for the design system and
-mirrors the Figma **Foundations** page. Tailwind v4 is configured CSS-first, so there is
-no `tailwind.config` to look for. Read the stylesheet before styling anything.
+**daisyUI 5 on Tailwind v4 is the design system as of PET-57**, which retired the hand-rolled
+Figma-token layer. `frontend/src/app/globals.css` is now small enough to read in one breath: the
+Tailwind import, the daisyUI plugin registering the built-in `light` / `dark` themes selected
+automatically from the OS, and the two font tokens. There is no `tailwind.config`; Tailwind v4
+is configured CSS-first.
 
-**Tailwind's own palette and type scale are cleared** (`--color-*: initial`,
-`--text-*: initial`). This is the load-bearing decision: `text-red-600`, `bg-zinc-100`
-and `text-4xl` genuinely do not exist and generate no CSS. Because Tailwind drops
-unknown utilities silently rather than erroring, a class that appears to do nothing is
-usually a class that is not in the design. Use the tokens (`text-body-m`,
-`bg-status-danger-soft`, `text-text-secondary`) or add one to the theme.
+### Figma against daisyUI: the division of authority
 
-Colour tokens are group-prefixed to match the Figma groups: `brand-*`, `surface-*`,
-`text-*`, `border-*`, `status-*`, `category-*`. This is why you write
-`text-text-primary` and `border-border-default`; the stutter is deliberate.
+**Read this before opening the design file. It is not a preference and it is not negotiable** -
+it is the decision PET-57's plan rests on, and every one of its three parts has already been
+violated once by somebody working from the design file in good faith.
 
-Each `status-*` group carries three values and they are not interchangeable: the bare name
-is the fill (`status-danger`, `#dc2626`), `-text` is the darker one to set type in
-(`status-danger-text`, `#b91c1c`), and `-soft` is the tint to sit that type on
-(`status-danger-soft`). Red type therefore takes `text-status-danger-text`, not
-`text-status-danger`. Note also that the three status colours carry meaning - danger means an
-error or an over-budget condition - so reaching for one purely because a design asks for that
-hue says something the interface did not intend.
+1. **The Figma Foundations and Components pages are dead. Do not work from them, for anything.**
+   Foundations documents the retired token layer - the 19 named type styles, the hand-rolled
+   palette, the radius and shadow scales - and Components documents a nine-tile set that no
+   longer exists. **daisyUI is the component library.** Whatever either page says about colour,
+   type, radius, shadow, spacing or how a control is constructed is superseded, and consulting
+   them for any of it is precisely how the token layer returns one class at a time.
 
-**The 19 type styles are `@utility` blocks, not `--text-*` tokens**, because a type
-style has to carry its font-family and the compiler only accepts `--line-height`,
-`--letter-spacing` and `--font-weight` as paired suffixes on a `--text-*` token.
+   Two things this rule deliberately does **not** ask for, so that it needs no sweep to be true.
+   **Existing references to those pages stay.** A comment saying `ui/` mirrors the nine tiles, or
+   naming node `18:252` as a story's diff target, is a record of why a file sits where it sits -
+   history, not an instruction to go and open the page - and rewriting nine such comments would
+   change no behaviour and lose the reasoning. Read them as dated. What the rule forbids
+   is **new** work taken from either page, and adding a reference of your own to them.
 
-**The spacing scale is Tailwind's, not a redeclared Figma one.** The `--spacing`
-namespace also drives `w-*`, `h-*`, `size-*`, `inset-*` and `translate-*`, so overriding
-it would silently delete every sizing key not explicitly listed. The Figma mapping
-(`Space/16` = 16px = `p-4`) is documented in `globals.css`.
+   **Icon geometry used to be exempt from this rule and is not any more.** The exemption existed
+   because daisyUI ships no icon set, so a vector export was the only source for a glyph and two
+   files traced theirs from the dead Components page. PET-33 added `lucide-react` and migrated
+   every glyph onto it, which is the ticket that exemption was waiting for - so a mark now comes
+   from the library, never from a Figma node, and the last reason to open either dead page is
+   gone. See the icon-library rule under Shared components below.
 
-Two smaller traps. `--radius-full` is ignored by the compiler, so Radius/Full is
-Tailwind's built-in `rounded-full`; and clearing `--radius-*` also removes the bare
-`rounded` utility, so use `rounded-md` explicitly.
+2. **On the Screens page the split is exact.** Figma governs **structure, layout and content** -
+   what is on the screen, in what order, grouped how, with which words. Stock daisyUI governs
+   **colour, type, radius and shadow**. **Never re-theme daisyUI toward Figma's values.**
+   Concretely: `globals.css` registers the built-in `light` / `dark` pair and declares two font
+   variables, and that is the whole of what it may ever contain - no theme block, no overridden
+   `--color-*`, no custom radius or shadow scale. The colour rule below is the same prohibition
+   from the other end, because a raw `text-red-600` is re-theming by hand, one element at a time.
 
-**Foundations declares four shadows, and they are the one group with no Figma swatch behind
-them.** `--shadow-card` is the centred card every access frame and every dashboard card draws;
-`--shadow-panel` and `--shadow-chip` are Welcome's decorative panel, which shipped them as
-arbitrary literals before PET-9 gave them names; `--shadow-modal` is the lifted box behind every
-dialog, and it is deliberately not `--shadow-panel` - close enough to read as a duplicate in a
-diff, far enough apart that reusing either would be visibly wrong. All four shadow namespaces are cleared -
-`--shadow-*`, `--inset-shadow-*`, `--drop-shadow-*` and `--text-shadow-*` - for the same reason
-the palette is, so `shadow-lg` and `drop-shadow-md` generate nothing. Bare `shadow` disappears
-with the namespace exactly as bare `rounded` does; `shadow-none` is the one survivor, because it
-is a static utility rather than a token lookup. `globals.test.ts` pins each of those. Note the
-card's value is a raw fill in the frame rather than a bound variable, one row up from the
-unbound circle colour in `docs/TODO.md`.
+3. **Match the frame as closely as those boundaries allow, and build it with the daisyUI
+   Blueprint MCP.** Closeness is measured in structure, layout and content; it is never measured
+   in hex values, pixel radii or shadow spreads, and a diff against the frame that reports those
+   as defects is reporting the design system working. Two standing carve-outs, both already
+   exercised across this app: the frames are a fixed 1440px and draw no narrow viewport, so a
+   designed fixed width becomes a `max-w-*` ceiling rather than a `w-*`; and where a frame draws
+   no state at all - focus, disabled, pending, empty, error - that state is ours to invent, and
+   `docs/TODO.md` tracks the sign-offs A19 and A29 owe for the ones already shipped. The MCP's
+   three stages earn three different levels of trust, which `docs/agents/claude-tooling.md` sets
+   out; do not treat its inspector as an authority over any of the above.
 
-**Only light mode is designed.** No dark theme ships, and `dark:` variants should not be
-added. Note that Tailwind cannot make `dark:` a build error, so this rests on review.
+Four rules keep the rest coherent:
 
-The two typefaces load through `next/font/google` in `frontend/src/app/fonts.ts`. That
-module exists separately from `layout.tsx` so `.storybook/preview.ts` can import the same
-loaders. The variable classes must land on `<html>`, which is where `:root` resolves.
+- **Theme-aware colour is daisyUI semantic colour, never a raw palette class.** The names are
+  `base-100/200/300`, `base-content`, `primary`, `secondary`, `accent`, `neutral`, `info`,
+  `success`, `warning` and `error`, each with a `-content` pair for what sits on it. Tailwind's
+  full palette is back, so `text-red-600` now compiles and quietly bypasses the theme - the
+  exact inversion of the old failure, where a wrong class generated nothing. The compile-time
+  check died with the token layer, so this rests on review.
 
-`npm test` runs `frontend/src/app/globals.test.ts`, which both asserts every documented
-value and compiles the stylesheet through Tailwind's own `compile()` to confirm each
-utility actually generates. `npm run storybook` renders the whole system under
-**Foundations** for diffing against Figma.
+- **Never write a `dark:` variant.** Semantic colours resolve through the active theme, so dark
+  mode needs nothing from markup, and a `dark:` override would fight the theme instead of
+  following it.
+
+- **Colour modifiers are semantic state, not decoration.** `btn-primary` marks the one
+  emphasized action per screen; `btn-error`, `input-error` and `text-error` mark destructive
+  actions and invalid state. The three status colours still carry meaning: reaching for one
+  because a design asks for that hue says something the interface did not intend.
+
+- **Class strings stay complete literals.** Tailwind's scanner reads source as raw text, so an
+  interpolated `bg-${tone}` compiles to nothing with no build error. Variant maps keep whole
+  strings per key (`ui/categoryColour.ts` is the pattern), and daisyUI modifiers are literal
+  classes in markup.
+
+Typography: the two families load through `next/font/google` in `frontend/src/app/fonts.ts`,
+whose variable classes must stay on `<html>` - that is where `:root` resolves, and both
+`.storybook/preview.ts` and the root layout apply them. `--font-sans` (Inter) is what Tailwind's
+preflight reads as the default body family; `font-display` (Plus Jakarta Sans) is the heading
+and wordmark face. Type sizes are Tailwind's own scale (`text-sm`, `text-2xl`); the 19 named
+Figma type styles are gone.
+
+**Light and dark both ship**, selected by `prefers-color-scheme` with no theme controller,
+deliberately: a controller and automatic prefers-dark must not coexist, or a browser already in
+dark mode makes the control switch dark to dark. A visible toggle is deferred and trades away
+the automatic behaviour when it lands.
+
+## Where daisyUI and Tailwind fight
+
+**Every entry below is a class that is present in the markup and paints nothing**, and not one
+of them can fail a build, a lint or a Jest run. That is the same inversion the colour rule above
+describes, and it is the whole reason this section exists: under the token layer a wrong class
+generated no CSS and the compile harness caught it, and now a wrong class generates CSS that
+loses. Each of these cost a review finding on PET-57 or its incorporation, verified against
+`frontend/node_modules/daisyui/components/*.css` rather than reasoned about - **read that CSS
+when a daisyUI class does not do what its name says**, because the plugin ships the compiled
+rules and they answer these questions in one grep.
+
+- **Two modifiers from the same daisyUI component in one class string are resolved by the
+  plugin's emission order, not by yours.** They land at equal specificity in the same cascade
+  layer, so the later rule in `button.css` wins whatever the attribute says. The worked example
+  is `btn-ghost btn-outline`: `.btn-outline` sets `--btn-border` to the button's colour
+  and `.btn-ghost` sets it to transparent, ghost is emitted second, and the outline never
+  renders - which is how `(app)/DateField.tsx`'s "today" marker was pixel-identical to a plain
+  day with `toHaveClass('btn-outline')` green. A **colour** modifier is safe to pair with a
+  style one, because `btn-primary` only sets `--btn-color` and `--btn-fg`, which the style
+  modifier reads: `btn-outline btn-primary` is the supported combination and is what that file
+  uses now. Two style modifiers is the mistake.
+
+- **A daisyUI `:focus` rule sets `--tw-outline-style: none`, and Tailwind's `outline-2` reads
+  that variable.** So `focus-visible:outline-2` alone computes to a 2px outline of style `none`
+  and there is no focus ring at all - a WCAG 2.4.7 failure that looks correct in the diff, has
+  the right colour class beside it, and is invisible to every gate. **Any restored focus ring
+  needs `focus-visible:outline-solid` too.** `.link` and `.menu` both do this; assume the next
+  component does as well. `ui/Sidebar.tsx` and `app/WelcomeScreen.tsx` are the two call sites,
+  and the app currently has no `outline-2` anywhere without its `outline-solid`.
+
+- **daisyUI sets no cursor on a resting `select`, so `cursor-pointer` is not redundant.**
+  `select.css` sets `not-allowed` when the control is disabled and `pointer` on an `<option>`
+  inside the picker, and nothing else - an enabled select keeps the user agent's arrow and reads
+  as inert. `btn` does carry one, which is why this is easy to assume. PET-10 fixed this
+  app-wide once; `ui/Select.tsx` holds the constant, and `(app)/DateField.tsx`'s `<button>`
+  trigger and the transactions filter pills each state it too.
+
+- **`fieldset` is `display: grid`, so `self-start` on a child does nothing.** The class is a
+  one-column `1fr` grid, where the horizontal axis is `justify-self` and `align-self` is the
+  block axis - so a label that shrank to its text under a `flex flex-col` parent stretches to
+  full width the moment the same markup moves onto `fieldset`, and every click in the invisible
+  strip beside the word is forwarded to the control. `ui/FieldShell.tsx` records what that looks
+  like on a `<select>` and its suite pins the fix.
+
+- **The `<fieldset>` element is not the `fieldset` class.** The element publishes
+  `role="group"`, and daisyUI's own idiom is one of them around a _set_ of fields named by a
+  `legend.fieldset-legend`. Wrapping a single control in the element gives every field in the
+  app its own nameless group boundary, announced entering and leaving. The class is pure CSS and
+  works on a `div`, which is what `ui/FieldShell.tsx` uses.
+
+- **`status` draws a drop shadow from `currentColor`**, and sets `color` to a translucent black
+  for exactly that purpose. Handing it a class pair that includes a `text-*-content` half turns
+  that shadow into an opaque coloured smudge. This is why `ui/categoryColour.ts` exports
+  `CATEGORY_DOT` beside `CATEGORY_TILE`: a `text-*` class is inert on a mark with no content
+  only where nothing reads `currentColor`, and a surprising number of daisyUI components do.
+
+- **`modal-box` animates through the `scale` property, which makes it a containing block for
+  `position: fixed` descendants.** The one defect of this migration that a browser walk caught
+  and nothing else could; `frontend/src/app/CLAUDE.md` owns the account of it, under The app
+  shell, along with the `translate-none scale-none` that pays for it.
+
+**The daisyUI Blueprint MCP is this repo's method for writing that markup, and its three stages
+earn three different levels of trust** - follow the syntax stage verbatim, adjudicate the quality
+inspector's findings rather than applying them, and treat the browser walk as the real output.
+`docs/agents/claude-tooling.md` is the single home for all three and for the false positives this
+codebase reliably produces; read it before running the server, not after.
+
+**Every trap above was found in a browser and none of them by a gate, so the walk is the check.**
+That means headless Chromium over the DevTools protocol, reading computed style and the
+accessibility tree - and probing the old classes in the same run, so the check is seen to fail
+before it is trusted. Prefer it over anything that drives a human's browser. The method, the four
+gotchas (colour arrives as `oklab`, headless starts light, `next/font` needs network, Storybook
+does not reach the gated screens) and how to get story ids are all in
+`docs/agents/claude-tooling.md`.
 
 ## Shared components
 
-`frontend/src/components/ui/` holds the design-system primitives, mirroring the Figma
-**Components** page. **Every tile on that page now has a component**: `Button`, `Input`,
-`Select`, `Tag`, `ProgressBar`, `Stat`, `SectionHeader`, `ListRow` and `Sidebar`.
-`npm run storybook` renders them under **Components**. The library is complete; a new
-component from here on is a feature's own, not a tile.
+`frontend/src/components/CLAUDE.md` is the authority: what earns a file there, the four `ui/`
+primitives and two helpers, the six direct children, and the three conventions they follow. It
+loads whenever you read a file under `src/components/`, so read it before adding or changing one
+rather than reasoning from this file - the bar a wrapper has to clear is the whole reason six
+components were deleted in PET-57.
 
-**Shared UI is split by role, not by file type.** `components/ui/` is the primitive layer,
-the vocabulary every screen draws from. Components that only make sense for one feature go
-in `components/` beside it, or next to the route that uses them. Nothing has earned a
-feature folder yet, so `ui/` is currently the only child - the app shell's own components
-took the second option and live under `app/(app)/`, documented in
-`frontend/src/app/CLAUDE.md`.
+Two rules stated there are reached from outside that folder often enough to name here. **The rule
+of three**: duplicate rather than share until a third consumer appears, then lift it into one
+owner - `lib/session.ts`'s `authorizedGet` and `components/FormError.tsx` are the two worked
+examples. And **tests assert behaviour and semantics, not class strings**, with daisyUI's state
+classes the one exception, as the visible half of an aria attribute the same test pins.
 
-`components/` has four direct children of its own, and all four are there for one reason:
-**`LogoLockup.tsx`**, the accent tile carrying the cedi glyph plus the wordmark,
-**`AccessCard.tsx`**, the centred column and card box under it, and **`ResendLink.tsx`** with
-**`LogInAgain.tsx`**, the pair of recovery controls. None is a Components-page tile,
-so `ui/` is wrong; each belongs to more screens than one route segment holds, so beside a route is
-wrong too - the lockup to all six access frames, the card to the five that are centred cards, and
-the two controls to screen 24 plus PET-52's verify failure screen.
-`AccessCard` arrived late, in PET-12, and the sequence is the useful part: the chrome lived in
-`app/setup/SetupShell.tsx` while only the three onboarding steps drew it, and moved here when Log
-in and Check your email turned out to draw the identical box with no step indicator. That shell
-still exists and still owns the indicator and the per-step width, which really are onboarding's.
-Note `ui/Sidebar.tsx` holds a _second_, smaller copy of the same lockup
-(34px, `rounded-[10px]`, `text-on-dark` against `surface-ink`) and that is deliberate for now:
-unifying them is not a refactor of one file, it needs a size and a tone pair, and it would
-drag a merged, pinned component through whichever ticket happens to notice.
+**`lucide-react` is the icon library, and there are no hand-traced glyphs left.** Every mark in
+the app was a hand-drawn inline `<svg>` with its Figma node id in the comment until PET-33
+introduced the dependency and migrated all thirteen. It is named here rather than in
+`frontend/src/components/CLAUDE.md` because routes draw glyphs too - `(app)/layout.tsx`'s
+hamburger and `(app)/DateField.tsx`'s month arrows are not components. Import the icon, size it
+with a Tailwind `size-*` class, and pass `aria-hidden="true"` **explicitly**: lucide renders a
+bare `<svg>` with no ARIA of its own, and several suites assert that attribute on a glyph. Do not
+reintroduce a traced SVG for a mark the library already has; the two that legitimately stay
+hand-made are `app/icon.svg` (the favicon) and `components/LogoLockup.tsx` (the brand mark, which
+must not follow an icon set at all).
 
-The Storybook section is still called **Components** while the folder is `ui/`. That
-mismatch is deliberate: `ui/` says where the code lives, **Components** is the Figma page
-name, and the stories exist to be diffed against it.
+Two consequences worth knowing. Lucide is **stroke-based throughout**, so a filled mark is not
+available without fighting the library - which is why the sidebar reads lighter than Figma draws
+it, and `docs/TODO.md` records that deviation as owing a designer's sign-off. And every icon
+carries `'use client'` internally, which costs nothing here: a Server Component may render one
+and stays a Server Component, so `ui/Sidebar`, `ui/Button` and `(app)/layout.tsx` all still
+render on the server with icons in them.
 
-Five conventions, all of which existing files demonstrate:
+## Storybook
 
-- **Tests and stories are colocated**, `Tag.tsx` next to `Tag.test.tsx` and
-  `Tag.stories.tsx`. Do not "tidy" them into `__tests__/` or `stories/` trees. Parallel
-  trees make a rename touch three directories, and they hide the one signal worth having
-  at a glance: a component with no test file beside it.
-- **Files are flat inside `ui/`**, not a folder per component. Alphabetical sort already
-  groups a component with its satellites, and it keeps imports at `@/components/ui/Tag`
-  rather than a stuttering `.../Tag/Tag` or nine files all named `index.tsx`. Promote one
-  component to its own folder when it first needs private sub-parts; a mixed directory is
-  fine. There is no barrel `index.ts` and adding one is not an improvement.
-- **Variant classes come from a `Record<Variant, string>` holding complete literal class
-  strings** (`TAG_TONES`, `CATEGORY_TILE`, `BUTTON_VARIANTS`, `INPUT_VARIANTS`,
-  `FIELD_CONTROL_BORDER`), interpolated into a template literal. This is
-  not style preference. Tailwind's scanner reads these files as raw text, so a class built
-  by interpolation (`bg-category-${n}`) is found by nobody and compiles to nothing, with
-  no build error and no failing test. There are no `clsx` / `cva` style dependencies and
-  none are needed. The rule extends to position classes held in data, which is why
-  `DecorativePanel`'s `SAMPLE_CHIPS` spells out `top-55 left-52.5` rather than computing it.
-- **`src/components/ui/utilities.test.ts` compiles every one of those classes** through
-  Tailwind and fails if any generates no CSS. It is what makes the point above enforceable
-  rather than a rule people remember. Add new class maps to it.
-- **Components stay Server Components.** None of them carry `'use client'`, because none
-  holds state. `Button`, `Input` and `Select` accept handler props without it: a client
-  component that imports one pulls it into the client bundle on its own, and only a Server
-  Component trying to pass a function would break. Only add the directive when a component
-  genuinely needs the client itself.
+Storybook keeps three sections: **Components** for `ui/`, **Screens** for the frames, **Shell**
+for the app shell's own pieces. **Foundations is gone** with the token layer it documented.
+`.storybook/preview.ts` imports `globals.css` and applies the font variable classes, so the
+daisyUI plugin registration lands in every story automatically.
 
-**`ui/Button` either navigates or acts, never both.** Its props are an exclusive union: pass
-`href` and it renders a `next/link`, otherwise a `<button>` with `type`, `disabled` and
-`onClick`. The `never`s in that union are load-bearing rather than pedantic - an anchor cannot
-be disabled by author styles, so `<Button href disabled>` would look dimmed and still
-navigate - and `npm run build`, the typecheck gate, is what rejects the combination. Both
-renderings share one exported `BUTTON_BASE` plus `BUTTON_VARIANTS`; **never duplicate those
-strings into a second link-shaped component**, which is the whole reason the prop lives here.
-A wrapped `<button>` inside an `<a>` was the alternative and is invalid HTML, so the element
-itself has to change.
+It is also the cheapest surface to verify a change on, since every component and screen renders
+there with no backend and no session: `docs/agents/claude-tooling.md` covers driving it headlessly,
+including the story-id index. The four `(app)` screens are the exception, being behind the session
+gate.
 
-**Form fields go through `ui/Field.tsx`.** `Input` and `Select` are both built on it, and
-it owns the label, the inline validation message, and the `aria-invalid` /
-`aria-describedby` wiring between them. Build a new control on it rather than repeating the
-pattern; that is what keeps every form in the app reporting errors identically. Two things
-about it look like friction and are not: `id` is a **required** prop, because `useId()` is a
-hook and generating one would force `'use client'` onto the whole field layer; and each
-state-dependent colour comes from its own `Record` (`FIELD_CONTROL_SURFACE` for the fill,
-`FIELD_CONTROL_BORDER` for the border) rather than being appended conditionally, because
-`border-border-strong` and `border-status-danger` have equal specificity, so emitting both
-makes the winner depend on stylesheet order. Classes carrying a variant prefix
-(`focus-within:`, `disabled:`) are exempt, since the extra pseudo-class settles it.
-
-**Every field label is `self-start`, and that is a bug fix rather than alignment.** `ui/Field`'s
-column is `w-full` and a flex item stretches by default, so a label used to be a full-width block -
-472px of it inside the Add transaction modal against about 55px of text. Clicking anywhere in that
-invisible strip activated the control, which is `<label for>` behaving exactly as specified and
-reads as a glitch. It was worst on a `<select>`: Chrome focuses the control from a forwarded label
-click but does **not** open the list, so the border turned accent and nothing else happened.
-Shrinking the label to its own text makes the hit area what a reader would guess it is, and
-`Field.test.tsx` pins the class because jsdom computes no layout to measure. `ui/Select`'s control
-also carries `cursor-pointer` now, for the reason `BUTTON_BASE` does: the user agent draws an arrow
-over a `<select>`, so the one control on a form that opens a list read as unclickable.
-
-**Padding sits on the control, never on the bordered box.** Both `Input` and `Select` put it
-on the `<input>` / `<select>`, and `Input`'s `$` prefix and `Select`'s chevron are absolutely
-positioned over the control with `pointer-events-none`. A padded box turns its own 14-16px
-band into a dead zone where a click places no caret and opens no list.
-
-**Six details of the form components have no Figma counterpart.** They were chosen, not
-read, so do not "correct" them without asking the designer:
-
-- **The inline error pattern** - red border plus one line of `text-body-s
-text-status-danger-text`, no icon. Assumption A29 records that no form error visual exists
-  anywhere in the file.
-- **The disabled button dimming** (`disabled:opacity-60`). Frame 15 draws the in-flight
-  "Generating..." button identically to a resting secondary one, so the design says only the
-  label changes (A26). A control that looks enabled while it is not is a defect, hence the
-  addition.
-- **The disabled field fill** (`bg-surface-muted` plus `text-text-tertiary`). No disabled
-  field is drawn anywhere in the file, and it cannot simply be left out: author styles beat
-  the user agent's own disabled treatment, so an undecorated disabled field is
-  pixel-identical to an editable one.
-- **The forced-colors focus outline** on the field box. Windows High Contrast forces every
-  border colour to one system colour, so the designed accent border cannot signal focus
-  there. The outline is scoped to `forced-colors:` alone, so normal rendering still matches
-  Figma exactly.
-- **The currency field at rest.** The 1.5px `brand-accent` border is treated as the _focus_
-  style, which is what the ticket and spec BUD-3 assert, but Figma only ever draws it on the
-  currency amount field and never draws that field unfocused. Its 1px resting border is
-  inferred from the plain Input tile. Focus also keeps that accent border on an _invalid_
-  field rather than holding the red: invalidity is still carried by the message and by
-  `aria-invalid`, and a 0.5px width change is too little focus signal to see.
-
-- **The pointer cursor** (`cursor-pointer` in `BUTTON_BASE`). A design file has no cursors to
-  read, and this one is not the browser's default either: Tailwind's preflight sets only
-  `appearance: button` on a `<button>`, and the user agent draws an arrow, so every button in
-  the app read as unclickable on hover until PET-10 added it. It lives in the shared base
-  rather than the `<button>` branch, because the anchor and button renderings must not differ
-  under the cursor even though an anchor gets the pointer natively. `disabled:` still wins
-  through its pseudo-class. The one control that must _not_ inherit this is a deliberately
-  inert one - the header's month and search pills are `div`s, so they do not.
-
-**`ui/Sidebar.tsx` takes its active item as a prop, and that has a consequence for whoever
-mounts it.** `active` is one of four keys matching the Figma variant property, not a
-`usePathname()` call, which is what keeps the component a Server Component like the rest of
-`ui/`. But an App Router layout cannot read the pathname on the server, so the `(app)` shell
-needs a thin `'use client'` wrapper that calls `usePathname()` and passes `active` down;
-reading it inside the sidebar instead would force `'use client'` onto the whole component and
-break `ui.stories.test.tsx`, which renders every story under Jest with no router in context.
-The four hrefs (`/dashboard`, `/transactions`, `/insights`, `/settings`) are declared in that
-file's `NAV_SECTIONS` and are the contract the routing ticket has to match.
-
-It is also the **first and only consumer of the six dark-surface tokens** (`surface-ink`,
-`-ink-raised`, `-ink-elevated`, `text-on-dark`, `-on-dark-subtle`), which had shipped unused
-since the Foundations work. `text-on-dark-muted` is now the one Foundations colour with no
-consumer at all.
-
-**Four more details have no Figma counterpart**, on top of the five form ones above:
-
-- **The sidebar's white focus ring** (`focus-visible:outline-white`), where every other
-  component uses `focus-visible:outline-brand-accent`. No sidebar focus state is drawn, and
-  the accent on `surface-ink` is too dark to read as one.
-- **The truncating footer name and email.** Figma clips inside a fixed 260px column because
-  it only ever draws the short sample address; `min-w-0` plus `truncate` is the honest
-  equivalent, the same pattern `ListRow` uses for a long merchant name.
-- **`rounded-[10px]` on the logo tile and the nav pills**, the one place a literal beats a
-  token. Figma bound that corner to a raw 10px rather than a radius variable, and the scale
-  offers only 8 and 12. Worth a designer answer; until then the literal matches the design.
-- **The wordmark reads "Spendifico", not Figma's "Expensa".** The rename was decided on
-  2026-08-02 and this is its most visible string. PET-51 finished it everywhere in the repo,
-  so the design file is the only holdout left; `docs/TODO.md` records that, and the one
-  constraint the rename leaves on any future change to the per-user database naming.
+## Formatting and dates
 
 `frontend/src/lib/format.ts` owns display formatting, in six parts. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
@@ -275,39 +252,30 @@ must never follow a locale. That file records the two directions the mistake run
 
 All six parts hard-code `en-US` and its separators. When the currency chosen during onboarding
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
-that, and PET-9 made the amount input its third consumer. The one thing that must **not** follow
-it is `lib/date.ts`, for the reason above.
+that. The one thing that must **not** follow it is `lib/date.ts`, for the reason above.
 
 **`components/EmptyState.tsx` is the fifth direct child, and it arrived before its second
 consumer rather than after.** `AccessCard` above records the usual sequence: chrome lives beside
 one route until a second screen turns out to draw the identical box, then moves. This one skipped
 the wait because the second consumer is already measurable in the design file - frame 07
 Transactions (node `45:1044`) and frame 16 AI Insights (node `39:665`) are the same card, same
-72px accent-soft circle, same `Display/S` heading, same 440px `Body/L` body, same primary button,
-differing only in glyph and copy, and DSH-7 describes the same shape a third time inside the
-dashboard's recent-list card. Waiting for PET-44 to prove what PET-30 could already see would
-have bought a move commit and nothing else. It takes `icon`, `heading`, `body`, an optional
-`action` and `SectionHeader`'s `headingLevel`, defaulting to 2 because `PageHeader` owns the
-page's `h1`.
-
-**Two of its values are the ones a reader will try to correct, so both are pinned by its
-suite.** It is `rounded-lg`, Radius/LG at 16px, where every other card in the app is
-`rounded-xl` at 20 - Figma binds a raw 16 on this frame. And it carries **no `shadow-card`**,
-which makes it the first card here without one; `frontend/CLAUDE.md` calls that token "the centred
-card every access frame and every dashboard card draws", and this frame simply has no shadow at
-all. Reaching for `AccessCard`'s box string, which is the obvious move, is therefore wrong twice
-over - and both mistakes look like the design until somebody opens Figma. The one deliberate
-deviation is `max-w-110` where the frame fixes 440px: identical at the designed 1440 width, and
-a narrower window wraps instead of overflowing the card's `px-10`, the same call `AccessCard`'s
-`py-10` makes about a viewport Figma never draws.
+72px accent-soft circle, same heading, same 440px body, same primary button, differing only in
+glyph and copy, and DSH-7 describes the same shape a third time inside the dashboard's
+recent-list card. Waiting for PET-44 to prove what PET-30 could already see would have bought a
+move commit and nothing else. It takes `icon`, `heading`, `body`, an optional `action` and a
+`headingLevel`, defaulting to 2 because `PageHeader` owns the page's `h1`. Its box is stock
+daisyUI - Figma's raw 16px radius and shadowless card stopped binding when PET-57 handed radius
+and shadow to the theme - and the one deliberate deviation from the frame is `max-w-110` where
+it fixes 440px: identical at the designed 1440 width, and a narrower window wraps instead of
+overflowing the card's padding, the same call `AccessCard` makes about a viewport Figma never
+draws.
 
 ## The screens
 
 The signed-in shell, its four routed views and the access screens outside it are documented in
 `frontend/src/app/CLAUDE.md`, which loads whenever you read a file under `src/app/`. Read it
 before touching a route, a layout or the session gate: two of the seams there are deliberate
-stubs, and the shell's `force-dynamic` is load-bearing while `/`'s static prerender is equally
-deliberate, so copying one into the other breaks something quietly.
+stubs, and the session gate's one-read shape is load-bearing.
 
 ## Environment
 
@@ -333,10 +301,8 @@ every `.tsx` in the project, so a test file with a type error is in scope on pap
 in and nothing imports a test. PET-12 found this the direct way: an exclusive-union prop was
 being violated in four places in one suite while `build`, `lint` and `test` were all green,
 because Jest transpiles without checking types and the build never looked. **`npx tsc --noEmit`
-from `frontend/` is what covers them**, and running it reports pre-existing errors in
-`src/components/ui/Sidebar.test.tsx` that no gate has ever failed on. Reach for it after
-changing a prop type, a discriminated union or anything a test constructs by hand; CI does not,
-which is why the errors are still there.
+from `frontend/` is what covers them.** Reach for it after changing a prop type, a discriminated
+union or anything a test constructs by hand; CI does not.
 
 ## Not built here
 
@@ -345,13 +311,14 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
+- **A visible theme toggle.** There is no `theme-controller` anywhere, so nothing in markup may
+  assume one: adding it trades the automatic `prefers-color-scheme` selection away rather than
+  sitting beside it. `docs/TODO.md` carries why, per the conventions table's rule that a gap list
+  holds the warning and points at the reasoning.
 - **The `/api/chat` route handler.** The env template deliberately declares no model-provider
   key. Add whichever variable your provider needs when you build the route, server-side only and
-  never behind `NEXT_PUBLIC_`. Related: `@google/genai` was once present in
-  `frontend/node_modules` while absent from `package.json`, so a clean install removes it.
-  Declare any SDK properly rather than relying on a leftover install. Note this is no longer the
-  repo's _first_ route handler either - `app/auth/verify/route.ts` is, and it is the one to copy
-  the shape from.
+  never behind `NEXT_PUBLIC_`. Note this is not the repo's _first_ route handler -
+  `app/auth/verify/route.ts` is, and it is the one to copy the shape from.
 - **The shell's content.** The `(app)` group, the four routes and the page header exist, every
   screen renders its designed header, and the shell is really gated and really shows the signed-in
   user's profile as of PET-52. What is missing is everything below the header on **three** of the
@@ -366,9 +333,12 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   route with no `page.tsx` behind it. Every "Add transaction" button is real as of PET-31, and as
   of PET-29 a save finally shows its effect in the list rather than only in the badge - unless the
   date is backdated out of the current period, which the period select can now go and find.
-  What the transactions screen still does not do is **navigate**: a row click opens nothing
-  (PET-34's detail page) and the kebab opens nothing (PET-33's row menu). Both are drawn and
-  deliberately inoperable, the same call the inert tabs make.
+  What the transactions screen still does not do is **navigate**: a row click opens nothing,
+  which is PET-34's detail page, drawn and deliberately inoperable the same way the inert tabs
+  are. **The kebab is live as of PET-33** and no longer belongs on that list: it opens a real
+  popover menu whose "Delete" really deletes. The one thing still inert inside it is "Edit",
+  which renders `menu-disabled` with `aria-disabled` because PET-32's edit modal does not
+  exist - a different claim from the drawn-but-dead controls around it, since this one says so.
 - **Every read a screen needs for its own data, bar the transactions list and the categories.**
   PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and
   `lib/profile.ts` calls `GET /api/profile`, both lifting the session cookie into an
@@ -388,12 +358,16 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   route-handler caller would be handed an HTML login page with a 200 on it - so a Server
   Component using it applies the 401 policy at the call site, which
   `app/(app)/transactions/page.tsx` is the worked example of.
-- **Every write except creating a transaction.** PET-31 is the app's first authenticated write:
+- **Every write except creating and deleting a transaction.** PET-31 is the app's first authenticated write:
   `lib/createTransaction.ts` is a Server Action over `authorizedPost` in `lib/session.ts`, the
   write half of `authorizedGet` and the second thing to reuse rather than re-derive. Two of its
   decisions generalise to the writes still to come. It **surfaces the status on rejection** where
   the read helper collapses everything non-401 into `unavailable`, because 400, 404 and 401 need
   three different messages from a form and one of them must not say "try again". And it **does not
   parse the created row**: a 2xx whose body will not parse still means the write landed, so
-  reporting failure there would have the user create a duplicate. Editing, deleting, and every
-  category and profile write are still unbuilt.
+  reporting failure there would have the user create a duplicate. PET-33 added the second,
+  `lib/deleteTransaction.ts` over a new `authorizedDelete`, which is where to see what
+  generalises: it reuses `AuthorizedWriteResult` rather than growing a shape of its own, and it
+  publishes **three** reasons where the create publishes four, because a 400 there is a body the
+  user can fix and a 400 here is only a malformed id. Editing and every category and profile
+  write are still unbuilt.

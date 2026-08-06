@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
+import { FormError } from '@/components/FormError';
 import { Input } from '@/components/ui/Input';
 
 import { LoginScreen } from './LoginScreen';
@@ -44,7 +45,7 @@ export const LogIn: Story = {
   render: () => (
     // The height and the canvas the root layout would supply: the card takes
     // `flex flex-1`, so it needs a flex column with a height to centre within.
-    <div className="bg-surface-canvas flex h-[1024px] flex-col">
+    <div className="bg-base-200 flex h-[1024px] flex-col">
       <LoginScreen />
     </div>
   ),
@@ -53,10 +54,9 @@ export const LogIn: Story = {
 /**
  * The two states the frame does not draw, side by side.
  *
- * The inline message is A29's pattern - red border plus one line of
- * `text-body-s text-status-danger-text`, no icon - and the second line is the
- * form-level failure, which carries `role="alert"` where the field's message
- * deliberately does not.
+ * The inline message is A29's pattern - `input-error` plus one line of `text-error`,
+ * no icon - and the second line is the form-level failure, which carries
+ * `role="alert"` where the field's message deliberately does not.
  *
  * Static markup rather than the real form, so both render at once: the form shows one
  * or the other, and driving it here would need a submit and a stubbed action.
@@ -64,7 +64,7 @@ export const LogIn: Story = {
 export const WithMessages: Story = {
   render: () => (
     // w-110 is the card's own 440px content box.
-    <div className="bg-surface-canvas flex w-110 flex-col gap-5 p-8">
+    <div className="bg-base-200 flex w-110 flex-col gap-5 p-8">
       <Input
         id="story-login-email"
         label="Email"
@@ -73,9 +73,9 @@ export const WithMessages: Story = {
         error="Enter a valid email address."
       />
 
-      <p role="alert" className="text-body-s text-status-danger-text">
-        We couldn&apos;t send your login link. Please try again.
-      </p>
+      {/* The real component, not a copy of its markup: it is what the form renders, so a change
+          to the treatment reaches this story rather than leaving it illustrating the old one. */}
+      <FormError message="We couldn't send your login link. Please try again." />
     </div>
   ),
 };

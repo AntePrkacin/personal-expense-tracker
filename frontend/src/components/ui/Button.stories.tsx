@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
-import { BUTTON_VARIANTS, Button, TrashGlyph, type ButtonVariant } from './Button';
+import { Trash2 } from 'lucide-react';
+
+import { Button, type ButtonVariant } from './Button';
 
 // The import above is type-only on purpose. Importing any *value* from Storybook
 // (`fn` from storybook/test, say) breaks ui.stories.test.tsx with an opaque ESM
@@ -13,11 +15,11 @@ const meta: Meta<typeof Button> = {
   tags: ['autodocs'],
   // preview.ts sets layout: 'fullscreen' globally with no decorators, so without
   // these the button renders flush in the corner and the secondary variant's
-  // white fill disappears against the canvas (#f5f7f8).
+  // fill disappears against the canvas.
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div className="bg-surface-card border-border-default rounded-xl border p-8">
+      <div className="bg-base-100 border-base-300 rounded-box border p-8">
         <Story />
       </div>
     ),
@@ -49,12 +51,16 @@ export const AllVariants: Story = {
 
     return (
       <div className="flex flex-col items-start gap-5">
-        {(Object.keys(BUTTON_VARIANTS) as ButtonVariant[]).map((variant) => (
+        {(Object.keys(labels) as ButtonVariant[]).map((variant) => (
           <Button
             key={variant}
             variant={variant}
             label={labels[variant]}
-            icon={variant === 'textDanger' ? <TrashGlyph /> : undefined}
+            icon={
+              variant === 'textDanger' ? (
+                <Trash2 className="size-4 shrink-0" aria-hidden="true" />
+              ) : undefined
+            }
           />
         ))}
       </div>

@@ -12,8 +12,7 @@
 // belongs to six screens rather than one. So it is the first non-ui child of
 // components/, which is the third case CLAUDE.md's split-by-role paragraph allows.
 //
-// **Note ui/Sidebar.tsx holds a second, smaller copy of the same lockup**: 34px
-// tile, `rounded-[10px]`, wordmark in `text-on-dark` against `surface-ink`.
+// **Note ui/Sidebar.tsx holds a second, smaller copy of the same lockup.**
 // Unifying the two is deliberately out of scope here, and it is not a refactor of
 // this file - it needs a size and a tone pair, and it would drag a merged,
 // pinned component through a UI ticket that has no other business in it.
@@ -26,19 +25,17 @@ export function LogoLockup() {
   return (
     // gap-2.75 is 11px, the designed distance from tile to wordmark.
     <div className="flex items-center gap-2.75">
-      {/* size-9.5 is the designed 38px. `rounded-[11px]` is off the Foundations
-          scale, which offers only 8 and 12: Figma bound this corner to a raw 11px
-          rather than a radius variable. It is the same situation as the sidebar's
-          `rounded-[10px]`, and the two together are the argument that both are
-          slips - the same lockup at two sizes should not carry two different
-          off-scale radii. See docs/TODO.md; until the designer answers, the
-          literal matches the design. */}
-      <div className="bg-brand-accent flex size-9.5 shrink-0 items-center justify-center rounded-[11px]">
+      {/* size-9.5 is the designed 38px, which is geometry rather than styling and
+          so still comes from Figma. The corner does not: the frame binds it to a
+          raw 11px, and PET-57 takes the theme's `rounded-lg` instead of carrying an
+          off-scale literal for a value the design system never named. The brand
+          tile is `primary`, which is what the accent became. */}
+      <div className="bg-primary text-primary-content flex size-9.5 shrink-0 items-center justify-center rounded-lg">
         {/* U+20B5 CEDI SIGN, as drawn. A text glyph rather than a traced path,
             which is what Figma has, so it depends on Plus Jakarta Sans carrying
             it - worth an eye in Storybook, because a fallback glyph would look
             wrong here and no test can see it. Same note as ui/Sidebar. */}
-        <span aria-hidden="true" className="text-heading-l text-text-on-dark">
+        <span aria-hidden="true" className="font-display text-xl">
           ₵
         </span>
       </div>
@@ -52,7 +49,7 @@ export function LogoLockup() {
           A <p>, not a heading. ui/Sidebar makes the same call and records why: the
           brand is not the page's own title, and putting it in the heading rotor
           would place it ahead of the screen's real h1. */}
-      <p className="text-wordmark text-text-primary">Spendifico</p>
+      <p className="font-display text-xl font-bold">Spendifico</p>
     </div>
   );
 }

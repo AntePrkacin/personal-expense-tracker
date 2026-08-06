@@ -13,19 +13,20 @@ import { Modal } from './Modal';
 // Filed under "Shell" rather than "Components", the same call PageHeader makes: this is not
 // one of the nine tiles on the Figma Components page, it is the app shell's own box.
 //
-// **These two stories are the only review available for three of this component's
-// behaviours.** jsdom implements no part of the top layer, so Escape, the focus trap and
-// focus returning to the trigger cannot be asserted in Jest and are deliberately not faked
-// (see jest.setup.ts). Open `From trigger` and check them by hand - that is what the plan's
-// verification step means, and there is no CI gate behind it.
+// **These two stories are the only review available for two of this component's
+// behaviours.** jsdom implements no part of the top layer, so Escape and the focus trap
+// cannot be asserted in Jest and are deliberately not faked (see jest.setup.ts). Open
+// `From trigger` and check them by hand - that is what the plan's verification step means,
+// and there is no CI gate behind it. They are also the only review of the daisyUI chrome
+// itself, since no assertion pins a `modal` class anywhere.
 
 const meta: Meta<typeof Modal> = {
   title: 'Shell/Modal',
   component: Modal,
   tags: ['autodocs'],
   parameters: {
-    // The box centres itself over the whole viewport through the UA's dialog margin, so
-    // Storybook's padding would only fight it.
+    // daisyUI's `modal` makes the dialog a full-viewport container that centres the box
+    // itself, so Storybook's padding would only fight it.
     layout: 'fullscreen',
   },
 };
@@ -35,11 +36,12 @@ export default meta;
 type Story = StoryObj<typeof Modal>;
 
 /**
- * The box as frame 09 draws it (node 28:384), mounted open for the pixel diff.
+ * The box as frame 09 draws it (node 28:384), mounted open.
  *
  * Rendered rather than given `args`, because the fields below are the caller's content and
  * this is the arrangement to compare against Figma: a full-width row, a two-up row, and a
- * footer of secondary plus primary.
+ * footer of secondary plus primary. Its radius, shadow and width are the theme's rather than
+ * the frame's, which is PET-57's fidelity boundary - the structure is what this diffs.
  */
 export const Open: Story = {
   render: () => (
@@ -80,8 +82,10 @@ export const FromTrigger: Story = {
     function Demo() {
       const [open, setOpen] = useState(false);
 
+      // `base-200` rather than the page's own `base-100`, so the dimmed page behind the open
+      // dialog is visibly a page rather than the same flat surface as the box.
       return (
-        <div className="bg-surface-canvas flex min-h-screen items-start p-10">
+        <div className="bg-base-200 flex min-h-screen items-start p-10">
           <Button label="Add transaction" onClick={() => setOpen(true)} />
 
           {open ? (

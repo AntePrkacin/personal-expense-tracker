@@ -23,7 +23,7 @@ went against a monthly budget. Access is passwordless, by emailed single-use log
 password field anywhere. A **NestJS 11** API serves `/api` on port **3000**; a **Next.js 16**
 App Router frontend runs on **4200** and is the only thing that calls it. One HTTP contract is
 generated from the backend and committed, Drizzle ORM over Turso's SQLite engine gives **every
-user their own database**, and the interface is built from a Figma-derived design system you can
+user their own database**, and the interface is built on a stock daisyUI design system you can
 browse in Storybook on **6006**. The repo is also a Decode Academy final project, which is why
 the team tooling is real rather than illustrative.
 
@@ -33,11 +33,13 @@ and update, the category endpoints with their month stats, and the dashboard sum
 has the design system, the app shell with its four routed views, all six access screens, and
 PET-52's verify handler at `/auth/verify` with the httpOnly `spendifico.session` cookie behind it.
 So a person can register, click the emailed link, and land signed in on a Dashboard that knows who
-they are - the sidebar footer reads a real `GET /api/profile`. Two things beyond access work now:
-`/transactions` reads and renders its own list state, and every "Add transaction" button opens a
-modal that really writes. What is still missing is most of what a screen *shows*: three of the four
-`<main>` elements below the page header are empty, the transactions table is a slot waiting to be
-filled, and the dashboard summary and transaction detail are called by nobody.
+they are - the sidebar footer reads a real `GET /api/profile`. Four things beyond access work
+now: `/transactions` reads and renders its own list state, the table under it draws the rows with
+their filters live in the URL, every "Add transaction" button opens a modal that really
+writes, and as of PET-33 each row's kebab opens a menu whose "Delete" really removes the
+transaction behind a confirmation dialog. What is still missing is most of what the other screens
+*show*: the Dashboard, AI Insights and Settings `<main>` elements below the page header are
+empty, and the dashboard summary and transaction detail are called by nobody.
 
 ## Repository map
 
@@ -136,7 +138,11 @@ read the file before you write the change, not after.
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
-| add or change anything in `frontend/src/components/`                | `frontend/CLAUDE.md`, Shared components |
+| open the Figma file, or implement a designed screen                 | `frontend/CLAUDE.md`, Figma against daisyUI |
+| write a daisyUI class, or wonder why one paints nothing             | `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight |
+| run the daisyUI Blueprint MCP                                       | `docs/agents/claude-tooling.md` |
+| verify a UI change in a browser                                     | `docs/agents/claude-tooling.md` |
+| add or change anything in `frontend/src/components/`                | `frontend/src/components/CLAUDE.md` |
 | touch a route, a layout, or the session gate                        | `frontend/src/app/CLAUDE.md`    |
 | build a modal, or add an "Add transaction" trigger                  | `frontend/src/app/CLAUDE.md`, The app shell |
 | build one of the remaining access screens                            | `frontend/src/app/CLAUDE.md`, The access screens |
@@ -147,11 +153,14 @@ read the file before you write the change, not after.
 | change a permission                                                 | `.claude/SETTINGS.md`           |
 | run a command, or need an environment value                         | `docs/guides/commands.md`, `docs/guides/configuration.md` |
 
-Two worked examples of why these are not ceremony. Before adding a Tailwind class, read
-`frontend/CLAUDE.md`: Tailwind's own palette and type scale are cleared, so `text-red-600`
-generates no CSS, fails no build, and looks exactly like a class that did nothing. Before
+Three worked examples of why these are not ceremony. Before adding a Tailwind class, read
+`frontend/CLAUDE.md`: theme-aware colour is daisyUI semantic colour only, and the full Tailwind
+palette compiles, so a `text-red-600` builds green and quietly bypasses the theme. Before
 changing a DTO, read `docs/agents/api-contract.md`: four separate mistakes in that pipeline still
-generate a spec, they just describe your response as `{}`.
+generate a spec, they just describe your response as `{}`. And before pairing two daisyUI
+modifiers or restoring a focus ring over one, read the same file's Where daisyUI and Tailwind
+fight: `btn-ghost btn-outline` draws no border and `focus-visible:outline-2` draws no outline,
+both with every gate green, because the losing class is still in the attribute.
 
 ## Editing these files
 

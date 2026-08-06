@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { usePathname } from 'next/navigation';
 
 import { SIDEBAR_HREFS, SIDEBAR_ITEMS } from '@/components/ui/Sidebar';
 
+import { DRAWER_TOGGLE_ID } from './drawer';
 import { matchItem, SidebarNav } from './SidebarNav';
 
 // jsdom has no App Router, so usePathname() throws without this. Mocking it is
@@ -119,6 +120,54 @@ describe('SidebarNav', () => {
     render(<SidebarNav {...PROFILE} />);
 
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('unchecks the drawer toggle when the pathname changes', () => {
+    // The (app) layout - the checkbox included - persists across a soft
+    // navigation, so this effect is the only thing that ever closes the
+    // off-canvas drawer after a link is followed. The checkbox is rendered by
+    // the layout, not by this component, so the test supplies one the same way.
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.id = DRAWER_TOGGLE_ID;
+    document.body.appendChild(toggle);
+
+    try {
+      mockPathname('/dashboard');
+      const { rerender } = render(<SidebarNav {...PROFILE} />);
+
+      toggle.checked = true;
+      mockPathname('/transactions');
+      rerender(<SidebarNav {...PROFILE} />);
+
+      expect(toggle.checked).toBe(false);
+    } finally {
+      toggle.remove();
+    }
+  });
+
+  it('unchecks the drawer toggle when the link for the current section is tapped', () => {
+    // The regression the pathname effect above cannot cover: `usePathname()` returns the same
+    // string, so the effect never re-runs, and below `lg` the drawer and its scrim stayed over
+    // the page. Nothing else can close it - the toggle id has three references in the app and
+    // no other link carries a handler - so the tap was a dead end on the one item a user
+    // looking at that page is most likely to reach for.
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.id = DRAWER_TOGGLE_ID;
+    document.body.appendChild(toggle);
+
+    try {
+      mockPathname('/transactions');
+      render(<SidebarNav {...PROFILE} />);
+
+      toggle.checked = true;
+      fireEvent.click(screen.getByRole('link', { name: 'Transactions' }));
+
+      expect(toggle.checked).toBe(false);
+    } finally {
+      toggle.remove();
+    }
   });
 
   it('passes the profile through to the footer', () => {

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
+import { FormError } from '@/components/FormError';
 import { Input } from '@/components/ui/Input';
 
 import { SetupDraftProvider } from '../SetupDraftProvider';
@@ -55,7 +56,7 @@ export const Register: Story = {
     <SetupDraftProvider>
       {/* The height and the canvas the root layout would supply: the shell takes
           `flex flex-1`, so it needs a flex column with a height to centre within. */}
-      <div className="bg-surface-canvas flex h-[1024px] flex-col">
+      <div className="bg-base-200 flex h-[1024px] flex-col">
         <SetupRegisterScreen />
       </div>
     </SetupDraftProvider>
@@ -66,9 +67,8 @@ export const Register: Story = {
  * Every validation message and the submit failure, all visible at once.
  *
  * This is the story the designer sign-off A29 owes is easiest to give against: the
- * file draws no error state anywhere, so the red border plus one line of
- * `status-danger-text` is ours, and this screen is the first place five of those
- * strings appear. Worth checking that the two side-by-side messages do not push the
+ * file draws no error state anywhere, so the red field plus one line of `text-error`
+ * is ours, and this screen is the first place five of those strings appear. Worth checking that the two side-by-side messages do not push the
  * email field out of alignment, and that the alert line above the buttons reads as
  * belonging to the form rather than to the email field above it.
  *
@@ -82,7 +82,7 @@ export const WithMessages: Story = {
     // w-110 is the card's own 440px content box. On this column rather than on the
     // grid, so the email field is the same width as the row above it - which is the
     // alignment this story exists to show.
-    <div className="bg-surface-canvas flex w-110 flex-col gap-5 p-8">
+    <div className="bg-base-200 flex w-110 flex-col gap-5 p-8">
       <div className="grid grid-cols-2 gap-3">
         <Input id="story-first-name" label="First name" error="Enter your first name." />
         <Input id="story-last-name" label="Last name" error="Enter your last name." />
@@ -96,9 +96,9 @@ export const WithMessages: Story = {
         error="Enter a valid email address."
       />
 
-      <p role="alert" className="text-body-s text-status-danger-text">
-        We couldn&apos;t create your account. Please try again.
-      </p>
+      {/* The real component, not a copy of its markup, so this story cannot drift from the
+          treatment the form actually renders. */}
+      <FormError message="We couldn't create your account. Please try again." />
     </div>
   ),
 };

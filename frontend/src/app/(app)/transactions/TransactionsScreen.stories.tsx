@@ -68,7 +68,9 @@ const NO_RESULTS: TransactionsView = { state: 'noResults', total: 0 };
 function Frame({ view }: { view: TransactionsView }) {
   return (
     <AddTransactionProvider>
-      <div className="bg-surface-canvas flex h-screen flex-col">
+      {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
+          gutter the `(app)` shell owns, since neither wraps a story. */}
+      <div className="bg-base-200 flex h-screen flex-col px-4 sm:px-6 lg:px-10">
         <TransactionsScreen view={view} filters={{}} />
       </div>
     </AddTransactionProvider>
@@ -78,11 +80,12 @@ function Frame({ view }: { view: TransactionsView }) {
 /**
  * The frame as drawn (node 45:752), for an account with nothing in it.
  *
- * What to check against Figma: the badge reading 0, **no filter bar** between the tabs and the
- * card - the visible difference from frame 06 - and the card itself at node `45:1044`. On the
- * card: a 16px radius and **no shadow**, which makes it the only card in the app without one;
- * the 72px accent-soft circle; 16px from circle to heading and heading to copy, then 36px from
- * copy to button; and the copy wrapping at 440px into two lines.
+ * What to check: the badge reading 0, **no filter bar** between the tabs and the card - the
+ * visible difference from frame 06 - and the card itself (node `45:1044`), which is
+ * `components/EmptyState`'s stock daisyUI box. Its radius, its shadow and its type come from
+ * the theme as of PET-57, so the frame's own 16px-and-no-shadow pair no longer binds; what
+ * still should hold is the circle, the heading, the copy wrapping into two lines, and the
+ * button, all vertically centred in the remaining height.
  *
  * The copy keeps Figma's UK "categorised" (A30).
  */

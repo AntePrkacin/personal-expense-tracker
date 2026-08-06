@@ -10,9 +10,8 @@ import { WelcomeScreen } from './WelcomeScreen';
 // @storybook/nextjs-vite will not load under Jest and only the erased type import
 // keeps this module loadable there. Same note as ui/Sidebar.stories.tsx.
 //
-// Filed under "Screens", a third section beside "Components" and "Foundations". All
-// three are named after their Figma page, and the frames live on the page called
-// Screens - which also gives PET-9 onward an obvious home (Screens/02 Setup).
+// Filed under "Screens", named after the Figma page the frames live on, exactly as
+// "Components" is - which also gives PET-9 onward an obvious home (Screens/02 Setup).
 //
 // The story is titled "01 Welcome" rather than the frame's literal "01 · Welcome":
 // a middle dot in a sidebar label is noise. The real frame is named below.
@@ -48,10 +47,13 @@ type Story = StoryObj<typeof WelcomeScreen>;
  *
  * Things worth checking here rather than in a test, because next/jest gives jsdom no
  * stylesheet and none of them is visible to an assertion: the cedi glyph really
- * renders from Plus Jakarta Sans rather than a fallback, the two shadows (now
- * `shadow-panel` and `shadow-chip`, so this frame is the visual check that PET-9's
- * retro-fit onto tokens changed nothing), the 460px heading and 430px intro line
- * breaks, and the em dash in "on plan — all in one".
+ * renders from Plus Jakarta Sans rather than a fallback, the two elevations on the
+ * dark panel, the 460px heading and 430px intro line breaks, and the em dash in
+ * "on plan — all in one".
+ *
+ * Also the responsive boundary this frame is the only one to have: below `lg` the
+ * split collapses to the copy column alone, because the right half is decoration and
+ * hides itself. Narrow the viewport here rather than reasoning about it.
  */
 export const Welcome: Story = {};
 
@@ -62,6 +64,9 @@ export const Welcome: Story = {};
  *
  * Check that the two circles read as two distinct washes - 28% and 18% of the same
  * accent - and that both are clipped rather than overflowing.
+ *
+ * The panel hides itself below `lg`, so this story is blank on a narrow viewport by
+ * design rather than broken.
  */
 export const Panel: Story = {
   render: () => <DecorativePanel />,
@@ -76,7 +81,7 @@ export const Panel: Story = {
  */
 export const Lockup: Story = {
   render: () => (
-    <div className="bg-surface-card p-8">
+    <div className="bg-base-100 p-8">
       <LogoLockup />
     </div>
   ),

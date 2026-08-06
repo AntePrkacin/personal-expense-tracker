@@ -4,6 +4,7 @@ import type { CategoryLabel } from '@/lib/categories';
 import type { Transaction, TransactionFilters, TransactionsView } from '@/lib/transactions';
 
 import { AddTransactionProvider } from '../AddTransactionProvider';
+import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
 import { TransactionFilterBar } from './TransactionFilterBar';
 import { TransactionsScreen } from './TransactionsScreen';
 import { TransactionsTable } from './TransactionsTable';
@@ -84,14 +85,29 @@ function Frame({ filters }: { filters: TransactionFilters }) {
 
   return (
     <AddTransactionProvider>
-      <div className="bg-surface-canvas flex min-h-screen flex-col">
-        <TransactionsScreen
-          view={view}
-          filters={filters}
-          filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
-          table={<TransactionsTable transactions={TRANSACTIONS} categories={CATEGORIES} />}
-        />
-      </div>
+      {/* Both providers, and the second is not optional: every row draws a kebab whose
+          `useDeleteTransaction()` throws outside it. Inside `render` with the first one, for
+          the reason the header note gives - the smoke harness never applies `meta.decorators`.
+          This is also what makes the row menu and the delete dialog reviewable here at all,
+          which is the only review either gets: `build-storybook` never runs a story. */}
+      {/* A stub action, and it is not decoration: without it this provider imports the real
+          `'use server'` `deleteTransaction`, which Storybook's Vite build bundles as an ordinary
+          browser module - so pressing Delete in the confirmation would run `cookies()` from
+          `next/headers` in the page instead of an RPC. The story text below invites exactly that
+          click. Resolving `ok` lets the whole flow be walked; nothing is deleted, and the list
+          does not change because no server answered. */}
+      <DeleteTransactionProvider remove={async () => ({ ok: true })}>
+        {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
+            gutter the `(app)` shell owns, since neither wraps a story. */}
+        <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+          <TransactionsScreen
+            view={view}
+            filters={filters}
+            filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
+            table={<TransactionsTable transactions={TRANSACTIONS} categories={CATEGORIES} />}
+          />
+        </div>
+      </DeleteTransactionProvider>
     </AddTransactionProvider>
   );
 }
@@ -99,17 +115,28 @@ function Frame({ filters }: { filters: TransactionFilters }) {
 /**
  * The frame as drawn (node 26:90).
  *
- * What to check against Figma. On the bar: three pills at a 10px radius with a 1px
- * Border/Strong edge, the two category and period ones grouped left with a 10px gutter, and
- * the sort pill flush right. On the card (node 26:172): a **16px** radius and **no shadow** -
- * the same pair frame 07's empty card draws, and the reason reaching for `AccessCard`'s box
- * is wrong; the rules inset 24px from the card edge; one under the header and one between
- * every pair of rows, but none after the last. On a row: the 36px tile at a 10px radius,
- * MERCHANT in Strong/S, the 8px dot before a Label/M category name, "Oct 8" without its year,
- * and the amount right-aligned with a **U+2212** minus rather than a hyphen.
+ * What to check, which since PET-57 is structure and behaviour rather than pixels - radius,
+ * border colour, type scale and cell padding are the theme's now, so a diff against the frame's
+ * own numbers is expected to disagree. On the bar: three `select select-sm` controls, category
+ * and period grouped left, sort flush right. On the card: one rule under the header and one
+ * between every pair of rows, none after the last. On a row: the coloured tile, the dot before
+ * the category name in the same colour, "Oct 8" without its year, and the amount right-aligned
+ * with a **U+2212** minus rather than a hyphen.
  *
- * The kebab is drawn and does nothing: MNU-1's menu is PET-33's, and a row click does nothing
- * either because the detail page is PET-34's.
+ * **Narrow the viewport, which is the check the design file cannot give you.** The card is
+ * `overflow-x-auto`, so the table scrolls inside its own box; the page body must not scroll
+ * sideways with it, and the filter bar should wrap rather than crush its selects.
+ *
+ * **The kebab is live as of PET-33, and this story is where its two browser-only behaviours are
+ * checked** - jsdom implements no Popover API at all and `jest.setup.ts` deliberately fakes
+ * none of it, so nothing in the suite can see either. Open a row's menu: it should sit anchored
+ * under that kebab, close on a click anywhere else and close on Escape. "Edit" reads dimmed and
+ * does nothing, which is PET-32's to finish. "Delete" closes the menu and opens the
+ * confirmation over the page. In **Firefox**, where CSS anchor positioning is unsupported,
+ * daisyUI's own fallback centres the menu behind a dimmed backdrop instead - degraded and
+ * expected, not a bug to fix here.
+ *
+ * A row click still does nothing, because the detail page is PET-34's.
  */
 export const List: Story = {
   render: () => <Frame filters={{}} />,

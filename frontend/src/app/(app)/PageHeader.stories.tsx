@@ -25,9 +25,9 @@ const meta: Meta<typeof PageHeader> = {
   decorators: [
     // The header is a full-width band with no background of its own; it sits on
     // the body's canvas. The decorator supplies that, since Storybook's own
-    // backdrop is white and would hide the distinction from surface-card.
+    // backdrop would hide the distinction from a card surface.
     (Story) => (
-      <div className="bg-surface-canvas w-full">
+      <div className="bg-base-200 w-full">
         <Story />
       </div>
     ),

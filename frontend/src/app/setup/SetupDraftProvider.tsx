@@ -24,15 +24,13 @@ import { parseDraft, SETUP_DRAFT_KEY, serializeDraft, type SetupDraft } from './
 // nothing to clone props onto.
 //
 // **sessionStorage is an external store, so it is read through
-// useSyncExternalStore rather than into state from a mount effect.** Three reasons,
-// in ascending order of importance:
+// useSyncExternalStore rather than into state from a mount effect.** Two reasons,
+// in ascending order of importance (a third, that an effect calling setState
+// costs a second render pass on every mount, is true but not load-bearing):
 //
-//   1. It is the pattern `stories/foundations/Reference.tsx` already established
-//      here for reading the stylesheet, and for the same stated reason: an effect
-//      that calls setState costs a second render pass on every mount.
-//   2. `react-hooks/set-state-in-effect` rejects the effect version outright, and
+//   1. `react-hooks/set-state-in-effect` rejects the effect version outright, and
 //      this repo carries no eslint-disable comments anywhere.
-//   3. It is the only one of the two that is *hydration-correct by construction*.
+//   2. It is the only one of the two that is *hydration-correct by construction*.
 //      A lazy useState initialiser behind a `typeof window` guard would make the
 //      client's first render disagree with the server HTML about a controlled
 //      input's value; this hook exists precisely for a store whose value differs

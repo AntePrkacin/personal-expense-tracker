@@ -1,3 +1,5 @@
+import { Search } from 'lucide-react';
+
 // The Transactions header's search field (Figma node 26:142).
 //
 // Note this is what 06 Transactions draws where 04 Dashboard draws the month
@@ -25,30 +27,6 @@
 // onChange.
 
 /**
- * The magnifier, traced from the Figma export (node 26:143) and re-pointed at
- * `currentColor`.
- *
- * Stroke-only at 1.5, like Button's TrashGlyph and Select's Chevron, but unlike
- * those two it needs no `overflow-visible`: the ring's outer edge lands at 11 and
- * the handle's round cap at about 14.5, both inside the 16 box.
- */
-function MagnifierGlyph() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className="size-4 shrink-0"
-      fill="none"
-      aria-hidden="true"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    >
-      <circle cx="5.5" cy="5.5" r="4.75" />
-      <path d="M9.5 9.5L14 14" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/**
  * Controlled or uncontrolled, and never half of either.
  *
  * An exclusive union, the technique `ui/Button` uses for `href` versus `onClick` and
@@ -68,18 +46,14 @@ type SearchPillProps = { placeholder: string } & (
 
 export function SearchPill({ placeholder, value, onChange, onKeyDown }: SearchPillProps) {
   return (
-    // Body/M in Text/Tertiary on the box, not Label/L in Text/Primary: Figma draws
-    // this as placeholder copy rather than as a value, which is the one styling
-    // difference from the month pill beyond the swapped padding. The *typed* value
-    // is Text/Primary, since by then it is a value - the placeholder colour is
-    // inherited from the box and the input overrides it for its own text.
-    // The focus treatment is `ui/Field`'s, borrowed rather than invented: the accent
-    // border is what every other control in this app turns when focused, and it goes on
-    // the box because the input inside it is borderless. The `forced-colors` outline is
-    // the same floor `FIELD_CONTROL_BASE` puts under it - Windows High Contrast forces
-    // every border to one system colour, so the recolour alone signals nothing there.
-    <div className="bg-surface-card border-border-strong focus-within:border-brand-accent text-body-m text-text-tertiary flex items-center gap-2 rounded-[10px] border py-2.5 pr-3.5 pl-3 focus-within:forced-colors:outline-2 focus-within:forced-colors:outline-offset-2">
-      <MagnifierGlyph />
+    // daisyUI's `input` class on a wrapper rather than on the <input> itself: the
+    // magnifier sits inside the field, so the border, background, focus-within ring
+    // and placeholder treatment all come from the theme via the wrapper and the
+    // inner control stays bare - the documented daisyUI shape for an input with an
+    // icon. A <label>, so clicking the glyph focuses the input with no handler.
+    // `text-sm` matches the month pill beside it in the header.
+    <label className="input flex w-fit items-center gap-2 text-sm">
+      <Search className="size-4 shrink-0" aria-hidden="true" />
 
       {/* `type="text"`, not `type="search"`: Chrome and Safari draw their own cancel
           button on a search input, which this frame does not, and the `searchbox`
@@ -87,15 +61,15 @@ export function SearchPill({ placeholder, value, onChange, onKeyDown }: SearchPi
           the design has none, and the placeholder alone is not an accessible name -
           it disappears the moment somebody types.
 
-          No padding of its own: the box carries it, which is the opposite of
-          `ui/Field`'s rule and correct here because this box has no chevron or
-          prefix layered over it, so no part of it is a dead zone.
+          No padding and no border of its own: the wrapper carries both, which is
+          the opposite of the field components' rule and correct here because this
+          box has no chevron or prefix layered over it, so no part of it is a dead
+          zone.
 
           `w-33` is the frame's own 132px - the 182px box less the 36px the glyph
           and its gap occupy and the 14px of right padding - and it is fixed rather
           than `flex-1` because the header lays this out beside the Add transaction
-          button with no column to fill. `outline-none` is safe only because the box
-          above carries the focus treatment. */}
+          button with no column to fill. */}
       <input
         type="text"
         aria-label={placeholder}
@@ -103,8 +77,8 @@ export function SearchPill({ placeholder, value, onChange, onKeyDown }: SearchPi
         value={value}
         onChange={onChange && ((event) => onChange(event.target.value))}
         onKeyDown={onKeyDown}
-        className="text-text-primary placeholder:text-text-tertiary w-33 bg-transparent outline-none"
+        className="w-33"
       />
-    </div>
+    </label>
   );
 }

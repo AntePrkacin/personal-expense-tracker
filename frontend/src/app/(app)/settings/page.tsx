@@ -14,7 +14,7 @@ export default function SettingsPage() {
   return (
     <>
       <PageHeader overline="Manage your account" title="Settings" />
-      <main className="flex-1 px-10 pb-10" />
+      <main className="flex-1 pb-10" />
     </>
   );
 }

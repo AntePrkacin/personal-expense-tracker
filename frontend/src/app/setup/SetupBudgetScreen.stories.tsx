@@ -51,11 +51,11 @@ type Story = StoryObj<typeof SetupBudgetScreen>;
  * The whole frame (Figma node 42:700). This is the story to diff against the design.
  *
  * Things worth checking here rather than in a test, because next/jest gives jsdom no
- * stylesheet and none of them is visible to an assertion: the 520px card and its
- * `shadow-card` elevation, the 8px gaps inside the copy block against the 20px gaps
- * between the card's rows, the 28x8 active pill beside its two 8px dots, and the
- * budget field's 1.5px accent border with `2,000` set at 22px Display/S behind the
- * `$`.
+ * stylesheet and none of them is visible to an assertion: the 520px card ceiling and
+ * its elevation, the 8px gaps inside the copy block against the 20px gaps between the
+ * card's rows, the 28x8 active pill beside its two 8px dots, and the currency field
+ * with `2,000` set behind the `$`. Both themes, and the narrow viewport where the card
+ * stops being 520px wide.
  *
  * The one interaction worth doing by hand here: click into the middle of the number
  * and type. Storybook is a real browser, so it is the only place the caret restore is
@@ -67,7 +67,7 @@ export const Setup: Story = {
     <SetupDraftProvider>
       {/* The height and the canvas the root layout would supply: the shell takes
           `flex flex-1`, so it needs a flex column with a height to centre within. */}
-      <div className="bg-surface-canvas flex h-[1024px] flex-col">
+      <div className="bg-base-200 flex h-[1024px] flex-col">
         <SetupBudgetScreen />
       </div>
     </SetupDraftProvider>
@@ -85,10 +85,10 @@ export const StepIndicatorStates: Story = {
   render: () => (
     // No provider needed: SetupShell holds no state and reads no draft, which is
     // what keeps it a Server Component.
-    <div className="bg-surface-canvas flex flex-col gap-8 py-10">
+    <div className="bg-base-200 flex flex-col gap-8 py-10">
       {([1, 2, 3] as const).map((step) => (
         <SetupShell key={step} step={step}>
-          <p className="text-body-m text-text-secondary">Step {step} of 3</p>
+          <p className="text-base-content/70">Step {step} of 3</p>
         </SetupShell>
       ))}
     </div>

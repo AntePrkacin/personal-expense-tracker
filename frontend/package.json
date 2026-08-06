@@ -21,6 +21,7 @@
     "singleQuote": true
   },
   "dependencies": {
+    "lucide-react": "^1.29.0",
     "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -37,6 +38,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "daisyui": "^5.7.16",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "eslint-plugin-storybook": "^10.5.5",
@@ -48,5 +50,10 @@
     "ts-node": "^10.9.2",
     "typescript": "^5",
     "vite": "^8.2.0"
+  },
+  "allowScripts": {
+    "unrs-resolver@1.12.2": true,
+    "esbuild@0.28.1": true,
+    "sharp@0.34.5": true
   }
 }

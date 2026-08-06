@@ -39,6 +39,9 @@ beforeEach(() => {
 
 describe('the three controls', () => {
   it('renders a category, a period and a sort select', () => {
+    // By role rather than by class, so the assertion survives a restyling: PET-57 replaced a
+    // hand-drawn box plus an overlaid SVG chevron with a stock daisyUI `select`, and nothing
+    // in this suite had to change - which is the point of pinning behaviour.
     setup();
 
     expect(screen.getAllByRole('combobox')).toHaveLength(3);
@@ -49,7 +52,7 @@ describe('the three controls', () => {
 
   it('names each one, since the design draws no visible labels', () => {
     // The pills are label-less in the frame, which is why these are not `ui/Select` - that
-    // component always renders a `ui/Field` label above the control. An aria-label is what
+    // component always renders a `FieldShell` label above the control. An aria-label is what
     // keeps three unnamed comboboxes from being three unnamed comboboxes.
     setup();
 

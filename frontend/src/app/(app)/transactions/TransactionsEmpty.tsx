@@ -1,3 +1,5 @@
+import { AlignLeft } from 'lucide-react';
+
 import { EmptyState } from '@/components/EmptyState';
 
 import { AddTransactionButton } from '../AddTransactionButton';
@@ -28,30 +30,11 @@ export const NO_RESULTS_COPY = {
   body: 'Try a different search term, category or period.',
 } as const;
 
-/**
- * The three-bar list mark, traced from node `45:1046`.
- *
- * `ui/Sidebar.tsx`'s `TransactionsGlyph` is the same mark and is deliberately not reused. That
- * one is a 20-box with its bars flush to the edge (20, 20 and 13 wide, 3 tall, `rx` 1.5); this
- * is a 30-box with a 2px inset (26, 26 and 18 wide, 4 tall, `rx` 2). Close enough to read as
- * the same icon, not close enough to be the same path - and the sidebar's is unexported and
- * local to its file, which is this repo's pattern rather than an oversight.
- *
- * The short third bar is the load-bearing detail, for the reason the sidebar's copy also
- * records: it is what makes this read as a list rather than as a hamburger menu.
- *
- * No `overflow-visible` needed - every rect is fill-only and sits wholly inside the box, so
- * there is no stroke half-width to be sheared flat.
- */
-function TransactionsGlyph() {
-  return (
-    <svg viewBox="0 0 30 30" className="size-7.5" fill="currentColor" aria-hidden="true">
-      <rect x="2" y="6" width="26" height="4" rx="2" />
-      <rect x="2" y="14" width="26" height="4" rx="2" />
-      <rect x="2" y="22" width="18" height="4" rx="2" />
-    </svg>
-  );
-}
+// **`TransactionsGlyph` was a hand-traced 30-box of three bars and is now lucide's
+// `AlignLeft`** - the same mark `ui/Sidebar.tsx` gives the Transactions item, so the two stop
+// being near-identical paths maintained apart, which is what the comment here used to spend a
+// paragraph explaining. The ragged short line survives the swap and is the load-bearing
+// detail: it is what makes this read as a list rather than as a hamburger.
 
 /**
  * Frame 07, or the no-results variant of it.
@@ -64,14 +47,14 @@ function TransactionsGlyph() {
  * **The button opens modal 09 as of PET-31**, which closes PET-30's AC4 - exactly as that
  * ticket predicted, with an `onClick` and nothing else here changing. It is the same trigger
  * component the header above uses, and both reach the single modal on the shell's layout: two
- * independent modals on one page would mean two focus traps and duplicate `ui/Field` ids.
+ * independent modals on one page would mean two focus traps and duplicate field ids (`ui/FieldShell` requires them as literal props).
  */
 export function TransactionsEmpty({ state }: { state: 'empty' | 'noResults' }) {
   const copy = state === 'empty' ? EMPTY_COPY : NO_RESULTS_COPY;
 
   return (
     <EmptyState
-      icon={<TransactionsGlyph />}
+      icon={<AlignLeft className="size-7.5" aria-hidden="true" />}
       heading={copy.heading}
       body={copy.body}
       action={<AddTransactionButton />}

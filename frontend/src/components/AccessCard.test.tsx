@@ -11,61 +11,57 @@ import { AccessCard } from './AccessCard';
 // states, and the two frames that use neither.
 //
 // next/jest maps every .css import to an empty object, so nothing here can assert
-// a rendered size. That these classes generate real CSS is proved in
-// components/ui/utilities.test.ts.
+// a rendered size - the card is located by daisyUI's own `card` class, which is
+// the one thing the width contract below needs to be attached to.
 
 const CEDI = '₵';
 
 function card(container: HTMLElement): HTMLElement {
-  const found = container.querySelector('.shadow-card');
+  const found = container.querySelector('.card');
   if (!(found instanceof HTMLElement)) {
-    throw new Error('no element carrying shadow-card');
+    throw new Error('no element carrying the card class');
   }
   return found;
 }
 
 describe('AccessCard', () => {
-  it('defaults to the 520px width both new frames draw', () => {
-    // Frames 23 (node 132:1139) and 24 (134:1143) are both 520px, which is also
-    // steps 1 and 3. Neither screen passes a width, so the default is the design
-    // fact rather than a convenience - and it has to be a literal in that file for
-    // Tailwind's scanner to find it.
+  it('defaults to a width that survives a phone', () => {
+    // PET-57 replaced the frame's fixed 520px with a maximum: a card wider than the
+    // viewport was the design's one unusable layout. Neither screen 23 nor 24 passes
+    // a width, so the default is what they get.
     const { container } = render(
       <AccessCard>
         <p>card body</p>
       </AccessCard>,
     );
 
-    expect(card(container).className).toContain('w-130');
+    expect(card(container).className).toContain('w-full');
+    expect(card(container).className).toContain('max-w-lg');
   });
 
-  it('puts a caller width on the element carrying shadow-card', () => {
+  it('puts a caller width on the element carrying the card class', () => {
     // Load-bearing rather than incidental: SetupShell.test.tsx finds the card by
-    // that class and then looks for the step's width on it, so a width that landed
-    // on a wrapper instead would pass here and fail there.
+    // class and then looks for the step's width on it, so a width that landed on a
+    // wrapper instead would pass here and fail there.
     const { container } = render(
-      <AccessCard width="w-150">
+      <AccessCard width="max-w-2xl">
         <p>card body</p>
       </AccessCard>,
     );
 
     const box = card(container);
-    expect(box.className).toContain('w-150');
-    expect(box.className).not.toContain('w-130');
+    expect(box.className).toContain('max-w-2xl');
+    expect(box.className).not.toContain('max-w-lg');
   });
 
-  it('carries the designed card treatment', () => {
+  it('renders the children inside the card box', () => {
     const { container } = render(
       <AccessCard>
         <p>card body</p>
       </AccessCard>,
     );
 
-    const box = card(container);
-    expect(box.className).toContain('bg-surface-card');
-    expect(box.className).toContain('border-border-default');
-    expect(box.className).toContain('rounded-xl');
-    expect(box).toContainElement(screen.getByText('card body'));
+    expect(card(container)).toContainElement(screen.getByText('card body'));
   });
 
   it('shows the brand lockup, not the pre-rename wordmark', () => {
