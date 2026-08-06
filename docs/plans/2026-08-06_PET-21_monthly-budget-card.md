@@ -31,6 +31,7 @@ out because getting them wrong is expensive five branches up:
 | `DashboardScreen` and its card slots | all five |
 | The card grid | all five |
 | A whole-dollar money formatter | PET-22, PET-23, PET-26 |
+| Where the empty-state condition is resolved | PET-26 |
 
 ## Decisions
 
@@ -67,6 +68,22 @@ Storybook is the only place frames 04 and 05 get reviewed. The difference from t
 whether something renders, and there is no such choice here; a default would let a call site
 quietly test a dashboard with cards missing, which is the mistake `frontend/CLAUDE.md` describes
 for `filters` on the transactions screen.
+
+**Anything a card needs is handed to it in `page.tsx`, because a slot is a node and not a
+component.** `TransactionsScreen`'s two slots are typed `React.ReactNode` and these copy them, so
+`DashboardScreen` receives cards that are already built: it cannot pass a prop into one, and
+`cloneElement` over a typed slot is not a seam anybody should inherit. This is written down here
+rather than discovered five branches up, because PET-26's empty state is **one condition shared by
+four cards** and the obvious place to put it is the screen. It does not go there. **The condition
+is resolved in `page.tsx`, beside the read that answers it, and travels as a prop on each card as
+that card is constructed.**
+
+That is the one respect in which these slots differ from `TransactionsScreen`, and the difference
+is worth stating because that file is the precedent for everything else here: it takes a `view`
+prop of its own and uses it, because TRN-3 makes the filter bar's presence *the screen's* decision.
+Nothing on frame 05 is the screen's decision - every treatment there is internal to a card - so
+`DashboardScreen` needs no state prop at all, and giving it one would put frame 05's design
+decisions in the file least able to express them.
 
 **This ticket ships four of the five slots empty**, as `<div />` placeholders with the ticket
 number in a comment, so the grid's geometry is reviewable now and each later branch is a one-line
@@ -136,6 +153,14 @@ reading `monthStartDay` in the frontend, which no frontend module does and which
 in the caption still comes from `monthLabel(new Date())`, which is the calendar month and
 therefore correct only while `monthStartDay` is 1 - the deviation that file already records, not a
 new one, and worth nobody re-fixing here.
+
+One edge on `daysLeft` to know rather than handle: `backend/CLAUDE.md`'s Dashboard section records
+that the endpoint resolves the period three times independently, so at the midnight boundary the
+window and the request's own `today` can land on either side of it and `daysLeft` can momentarily
+read 0 where its DTO promises 1. It self-heals on the next request and disappears if a shared
+`PeriodService` ever lands. So the caption can read "0 days left" for a few seconds twice a month,
+which is wrong but not broken, and clamping it here would mean this card second-guessing a field it
+does not own to hide a backend edge that is already written down.
 
 ## Shape
 
