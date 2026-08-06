@@ -1,11 +1,11 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useState } from 'react';
 
-import type { CategoryOption } from '@/lib/categories';
 import { createTransaction } from '@/lib/createTransaction';
 
 import { AddTransactionModal } from './AddTransactionModal';
+import { useCategoryOptions } from './useCategoryOptions';
 
 // The shell's single Add transaction modal, and the seam every entry point opens it through.
 //
@@ -28,9 +28,13 @@ import { AddTransactionModal } from './AddTransactionModal';
 // anybody opens the modal and make three otherwise-synchronous pages async; and not in the
 // layout, which would add a second guarded read to the shell - the shape the `/dashboard` to
 // `/login` redirect loop came out of. `app/api/categories/route.ts` explains its half.
-
-/** Where the fetch goes. `app/api/categories/route.ts` is the other half of this string. */
-const CATEGORIES_PATH = '/api/categories';
+//
+// **PET-32 moved the read itself into `(app)/useCategoryOptions.ts` and left that decision
+// here.** The edit modal needs the identical read, and the hook's own comment argues why a
+// second copy of it was the wrong call. Nothing about the paragraph above changed: the read
+// still happens on open, from a provider, through the route handler. What moved is the fetch,
+// the path and the generation guard - and the `useEffect` they lived in is gone, because with
+// `read()` called straight from the opener there is no longer any state for an effect to watch.
 
 type AddTransaction = {
   /** Opens the modal. Every trigger in the shell calls this and nothing else. */
@@ -58,65 +62,15 @@ export function useAddTransaction(): AddTransaction {
 
 export function AddTransactionProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  const [categories, setCategories] = useState<CategoryOption[] | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  /**
-   * Which open the in-flight request belongs to.
-   *
-   * Bumped on every open, and compared when the response lands, so a read that resolves after
-   * the modal was closed - or after it was closed and opened again - cannot write stale options
-   * into the current one. An `AbortController` would cancel the request instead; this is
-   * simpler and covers the case that actually matters, which is the late *write* rather than
-   * the wasted bytes.
-   */
-  const openCount = useRef(0);
+  const { categories, failed, read } = useCategoryOptions();
 
   const openModal = useCallback(() => {
     // Opened immediately rather than after the fetch resolves. A button that does nothing for
     // a round trip reads as broken, and the modal has a designed state for absent options -
     // a disabled select - where it has none for "not open yet".
-    openCount.current += 1;
-    setCategories(null);
-    setFailed(false);
+    read();
     setOpen(true);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const generation = openCount.current;
-    let live = true;
-
-    async function read() {
-      try {
-        // `no-store` on the browser hop as well as the server one, so a second open in the same
-        // session cannot render a list the account no longer has. Re-read on **every** open for
-        // the same reason: a category created in another tab has to show up.
-        const response = await fetch(CATEGORIES_PATH, { cache: 'no-store' });
-
-        if (!response.ok) throw new Error(`Categories read failed: ${response.status}`);
-
-        const body = (await response.json()) as { categories: CategoryOption[] };
-
-        if (!live || generation !== openCount.current) return;
-        setCategories(body.categories);
-      } catch {
-        // A 401, a 503, an unreachable server or a body that will not parse. The modal shows
-        // one line for all of them, because the user's next move is the same either way: close
-        // this and try again. The 401 case is the session dying with the modal open, which the
-        // create action reports separately if they get as far as submitting.
-        if (!live || generation !== openCount.current) return;
-        setFailed(true);
-      }
-    }
-
-    void read();
-
-    return () => {
-      live = false;
-    };
-  }, [open]);
+  }, [read]);
 
   return (
     <AddTransactionContext.Provider value={{ open: openModal }}>

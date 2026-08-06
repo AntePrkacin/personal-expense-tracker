@@ -96,6 +96,30 @@ the caps never reach the browser. The module behind it, `lib/categories.ts`, del
 handler answering a `fetch()` would hand the modal an HTML login page with a 200 on it, so the
 failure has to stay data.
 
+**There are four verbs in `lib/session.ts` now**: `authorizedGet`, `authorizedPost`,
+PET-33's `authorizedDelete` and PET-32's `authorizedPatch`. The three writes share one
+`AuthorizedWriteResult` rather than growing shapes of their own, and each new one is a handful of
+lines because the cookie-to-bearer lift, `cache: 'no-store'` and the status-passing convention are
+already settled. None of them may become a Server Action: they take a `path`, and `'use server'`
+would publish an endpoint accepting an arbitrary one.
+
+**A status can be ambiguous, and the caller narrows it from the request rather than from the error
+prose.** `PATCH /api/transactions/:id` is the first place this bites: it answers 404 both for a
+transaction it cannot find and for a `categoryId` it cannot find, and distinguishes them only in the
+message string. `lib/updateTransaction.ts` splits them on whether the body it built carried a
+`categoryId` - a fact the caller already has - and publishes two reasons over one status. Matching
+the backend's message text was the alternative and is the thing not to do: nothing pins those
+strings across the two applications, so a reword there would silently pick the wrong message with
+every gate green. **A caller reads the contract's types, and error prose is not one of them.**
+
+**A partial write says what changed and nothing else.** `UpdateTransactionDto` is a real patch -
+absent leaves a field alone, `null` clears a nullable one - so `(app)/transactionForm.ts`'s
+`toUpdateTransactionBody` diffs the form against the row it opened on. Two consequences for any
+future patch endpoint. `JSON.stringify` drops `undefined` and keeps `null`, which is what makes the
+tri-state expressible at all, so a helper must never strip falsy values on the way out. And an empty
+diff is a legitimate outcome meaning "nothing changed": the endpoint answers 400 to a body with no
+keys, so the *caller* has to treat it as nothing to ask rather than something to send.
+
 ## One contract, generated, and the frontend types come out of it
 
 The backend is the source of truth and nothing restates it. `nest build` runs `@nestjs/swagger`'s CLI

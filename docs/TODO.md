@@ -691,6 +691,29 @@ forever on a body the DTO will always reject, and a 404 has an obvious next move
 hides. `Screens/09 Add transaction`'s `WithMessages` story renders the four field messages at once,
 and `CategoriesUnavailable` shows the ninth.
 
+**PET-32 raised it a seventh time, with five strings, and four of the nine above are reused rather
+than restated.** The edit modal's four field messages are frame 09's **verbatim** - each states a
+rule rather than an operation, so "Enter an amount greater than 0." is as true of an edit as of a
+create, and a second wording of one rule a modal apart would be the defect rather than the
+consistency. So are the 401 and the categories-read lines, which say nothing about which operation
+was attempted. The five new ones are:
+`We couldn't save this transaction. Please check the values and try again.` for a 400,
+`This transaction no longer exists. Close this and refresh the list.` for a 404 on a patch that did
+not touch the category, `This transaction or that category no longer exists. Close this and try
+again.` for a 404 on one that did, and
+`We couldn't save this transaction. Please try again.` for everything else.
+
+The decision inside that set rather than the sign-off is **two lines for one status**. The backend
+answers 404 for a missing transaction and for a missing category and distinguishes them only in its
+own message text, so the frontend narrows it from the body it sent: with no `categoryId` in the patch
+the row is the only thing that can be missing, and that is the overwhelmingly common case, since
+nothing in this frontend can delete a category yet while deleting a *transaction* is a button on
+every row. One combined line was the alternative and would tell somebody whose row was deleted in
+another tab that "this transaction or that category" is missing, on the path users actually reach.
+`Screens/11 Edit transaction`'s `WithMessages` story renders the field messages over a **prefilled**
+form, which is the only way a user reaches validation in an edit, and its `Saving` and
+`CategoriesUnavailable` stories cover the two undesigned states around them.
+
 ### The Add transaction modal's date picker has no Figma counterpart at all
 
 ADD-7 draws the Date field as a **closed select** showing "Oct 8, 2025", and assumption A14 says to
@@ -750,6 +773,14 @@ design nothing for; and bounding the date field to the current period contradict
 neighbour is worth knowing too - a **future** date inside the current month does appear, and one in
 the next month does not.
 
+**Amended 2026-08-06 by PET-32: an edit can do it too, and the same three fixes are still the
+candidates.** Changing a transaction's date into another month makes the row leave a
+`period=current` list exactly as a backdated create never joins it, and the modal closes on a
+save that looks like it did nothing. Verified rather than prevented, for the reasons below plus one
+of its own: the date field is prefilled with the row's own date, so the user who moves it out of the
+period did so deliberately, which is a weaker case for a confirmation than the create's and the same
+case for not bounding the field.
+
 **Amended 2026-08-05 by PET-29: there is a way to go and find it now, and nothing automatic.**
 The period select offers "Last month" and "All time", so a backdated transaction is two clicks
 from being visible instead of being unreachable - which is the part that made this a defect
@@ -793,6 +824,14 @@ destroyed and the restore should simply have worked. `TransactionRowMenu` now fo
 before opening the dialog, so the captured element is the right one. What survives is only the
 original case: a successful delete removes the row and its kebab with it, and there is genuinely
 nothing left to focus.
+
+**PET-32 adds a third route to the same surviving case, and it is the longest chain of the three.**
+Deleting from *inside* the edit modal unwinds two dialogs: the confirmation restores focus to the
+modal's own "Delete transaction" button, which is still attached and correct, and then that modal
+unmounts and restores focus onward to the kebab - which died with its row. So focus lands on `<body>`
+for the same single reason as before, through one more hop. The ordering that makes the first hop
+work is deliberate and pinned (`DeleteTransactionDialog` calls `onDeleted` **after** its own
+`close()`); what is unfixed is unchanged, and this is not a second entry.
 
 ### A delete cannot be cancelled once it is sent, and Cancel no longer implies otherwise
 
@@ -865,6 +904,13 @@ strings are the wrong reason to invent one."
 PET-32's Edit transaction modal validates the same field and would make it a third copy, which is
 the point at which a shared `lib/amount.ts` earns its place. Whoever writes that should take
 `isMerchantValid` and `isNameValid` with it - they are the same pair of twins.
+
+**PET-32 shipped and did not make it a third copy, so the trigger has not fired.** The edit modal
+reuses `app/(app)/transactionForm.ts` wholesale - `invalidFields` and all four predicates - rather
+than restating the rule, which is what the rule of three is supposed to produce and is why nothing
+was lifted. The count is still two. The trigger to watch for is now a third *form* that validates an
+amount without going through that module, and the prediction above is left standing rather than
+deleted because the reasoning for the lift is unchanged when it does arrive.
 
 ### Screen 24's no-address arrival is new copy and a reworded AC
 

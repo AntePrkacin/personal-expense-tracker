@@ -138,9 +138,37 @@ type ModalProps = {
  * constructing the impossible pair by hand.
  */
 export type ModalShape =
-  | { align?: 'start'; icon?: never }
+  | {
+      align?: 'start';
+      icon?: never;
+      /**
+       * A control at the **left** of the footer row, opposite the `footer`'s own.
+       *
+       * Frame 11's red "Delete transaction", and the second consumer this file predicted when it
+       * said `modal-action` had "one consumer, one literal, for now". Present, the row becomes
+       * `justify-between` and the `footer`'s controls are grouped so Cancel and Save stay
+       * together; absent, nothing about the footer changes.
+       *
+       * **A slot rather than an alignment prop**, named for its position exactly as `footer`,
+       * `AccessCard`'s `aboveCard` and `PageHeader`'s `action` are. The alternative was a
+       * `footerAlign` beside a three-child `footer`, which puts the caller in charge of grouping
+       * its own right-hand pair and makes a footer that looks correct and lays out wrong
+       * perfectly typeable. This way the alignment is implied by whether there is anything to
+       * put on the left, so the two cannot disagree.
+       */
+      footerStart?: React.ReactNode;
+    }
   | {
       align: 'center';
+      /**
+       * Rejected in the centred shape, and the `never` is what says so.
+       *
+       * Frame 12 and the category delete confirmation split their footer into two equal buttons,
+       * which is what `align="center"` already draws. A control on the left of that has nowhere
+       * to go, and a prop that typechecks and then renders nothing is the exact mistake this
+       * union exists to prevent - see `icon` before this change, which did precisely that.
+       */
+      footerStart?: never;
       /**
        * The glyph above the title, in a tinted circle.
        *
@@ -165,6 +193,7 @@ export function Modal({
   onSubmit,
   align = 'start',
   icon,
+  footerStart,
   ref,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -258,6 +287,21 @@ export function Modal({
     if (event.target === dialogRef.current) close();
   }
 
+  /**
+   * The footer row's one class string, complete literals per case.
+   *
+   * Never interpolated, which is `frontend/CLAUDE.md`'s rule rather than a style: Tailwind's
+   * scanner reads source as raw text, so a built-up class compiles to nothing with no build
+   * error. `footerStart` is checked first because it is the narrower case - it can only occur in
+   * the `start` shape, so no ordering question arises between the two.
+   */
+  const footerClass =
+    footerStart !== undefined
+      ? 'modal-action justify-between'
+      : align === 'center'
+        ? 'modal-action *:flex-1'
+        : 'modal-action';
+
   const content = (
     <>
       {/* `modal-box` owns the padding now, so the body only spaces its own rows: gap-4 is node
@@ -273,8 +317,24 @@ export function Modal({
           equal buttons filling the box's width, which `modal-action` plus `*:flex-1` gives
           without a second alignment. `align` carries that rather than a third prop, because the
           two always travel together - a centred confirmation is exactly the one with a split
-          footer. */}
-      <div className={align === 'center' ? 'modal-action *:flex-1' : 'modal-action'}>{footer}</div>
+          footer.
+
+          **PET-32 built frame 11, and the prediction was right about the class and wrong about
+          the shape.** `justify-between` is exactly what it needed; a Record keyed by alignment
+          was not, because the third layout is not a third *alignment* - it is the presence of a
+          left-hand control, which the caller either has or has not. So `footerStart` decides it,
+          and the three cases stay mutually exclusive by construction: a centred footer cannot
+          have one (the union's `never`), and a footer with one is never centred.
+
+          The right-hand controls need their own flex box in that case, because `justify-between`
+          would otherwise space all three children evenly and put Cancel in the middle of the
+          row. `gap-2` matches `.modal-action`'s own `gap: .5rem`, read out of
+          `node_modules/daisyui/components/modal.css` rather than guessed - the rule
+          `frontend/CLAUDE.md` sets for every question about what a daisyUI class actually does. */}
+      <div className={footerClass}>
+        {footerStart}
+        {footerStart === undefined ? footer : <div className="flex gap-2">{footer}</div>}
+      </div>
     </>
   );
 

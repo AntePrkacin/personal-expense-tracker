@@ -785,6 +785,17 @@ the alternatives were a live item that does nothing - the failure every inert co
 screen exists to avoid - or dropping the item, which makes frame 10 a different design. It
 amends AC2, and PET-33's Jira ticket carries the note.
 
+**PET-32 made it live, and both attributes are gone.** It is an ordinary `<button>` now, shaped
+exactly like the Delete beside it - `popovertargetaction="hide"` on the way out, and
+`triggerRef.current?.focus()` before opening, because `Modal` captures `document.activeElement` on
+mount and React flushes the click synchronously, so without it the captured element is a menu item
+about to be hidden inside a closed popover. What it hands over is deliberately **wider** than
+Delete's four fields: the whole transaction, because a row already carries `note` and `categoryId`
+and those are exactly the two a prefilled form cannot do without and a confirmation has no business
+reading. That is what makes AC1's "every field is prefilled" cost no request. The paragraph above
+is left standing rather than rewritten, because the reasoning for shipping it disabled is still the
+right call for the next control in that position.
+
 **Both tabs are inert, and "Categories" specifically must not become a link.** It opens frame 13,
 which is PET-36's route and has no `page.tsx` behind it, and `lib/routes.test.ts` asserts with
 `fs` that every declared route does - its `PENDING` list is empty and stays. So a link here would
@@ -896,6 +907,62 @@ looks like an `onDeleted` on `open()`, and a callback nothing passes is precisel
 PET-29 shipped once as `TransactionsTable`'s `pending` prop and had to take back out. The ticket
 with the caller adds the parameter.
 
+**PET-32 was that ticket, and `open(target, { onDeleted })` is what it added.** The edit modal opens
+this confirmation over itself, so a delete that really removed the row has to take that modal down
+too - a caller rather than a forecast, which is the whole distinction the paragraph above draws.
+Three details of it are decisions. It fires on **success only**, including not on a 404: that arm's
+copy asks the user to close the dialog and see the current list, so dismissing whatever is behind it
+would be a dismissal caused by a failure. It fires **after** `router.refresh()` and after the
+confirmation's own `close()`, so the two dialogs unwind top-first and the focus restore aims at an
+element still attached - reversed, it would detach the edit modal's Delete button before the
+browser handed focus back to it. And it lives in the provider's **one state object** beside the
+target, not in a ref, so a cancelled open cannot leave a callback behind to fire for somebody else's
+delete. PET-34's redirect now needs no new parameter: its detail page passes an `onDeleted` that
+navigates.
+
+**The edit modal is mounted once too, and its provider is the first that consumes another.**
+`EditTransactionProvider` holds it, `useEditTransaction().open(transaction)` is the seam, and it
+sits **inside** `DeleteTransactionProvider` on the layout because it calls `useDeleteTransaction()`
+in its own body - so the nesting order, which PET-33 could still say carried nothing, is now
+load-bearing: reversed, it throws while rendering every page rather than on the first Edit click.
+`(app)/layout.test.tsx` pins it with a child that opens the modal, since every other assertion in
+that file would fail for the same reason and none of them would say why. Its trigger is per row like
+the confirmation's, so the one-instance argument is that one's rather than Add transaction's.
+
+**It takes a whole `Transaction` where the confirmation takes four fields, and that asymmetry is
+the design.** `TransactionResponseDto` carries every field the form draws, so a caller that rendered
+the row already holds everything AC1 needs and the modal fetches nothing to prefill - only the
+picker's _options_ need the network, which is why every other field is right before that read lands.
+The confirmation stays narrow for the opposite reason: it would otherwise be able to read a note it
+has no business rendering.
+
+**Frame 11's footer is `Modal`'s `footerStart`, and it is a slot rather than an alignment prop.**
+This file used to predict "a Record keyed by alignment" for it; the prediction was right about the
+class - `modal-action justify-between` - and wrong about the shape, because the third layout is not
+a third _alignment_ but the presence of a left-hand control. So the caller passes the control and
+the alignment follows, which makes the two impossible to disagree; the right-hand pair gets its own
+`flex gap-2` box, or `justify-between` would strand Cancel in the middle of the row. It is on the
+`align: 'start'` arm of `ModalShape` only, with `footerStart?: never` on the centred one, for the
+reason that union already existed: frame 12 has nowhere to put one, and a prop that typechecks and
+then renders nothing is exactly what the `never` on `icon` was added to stop.
+
+**The edit form sends only what changed, and an unchanged form sends nothing at all.**
+`(app)/transactionForm.ts` gained the two boundaries - `toTransactionFormValues` in, and
+`toUpdateTransactionBody` out - and three of their rules matter outside that file. A blank Note over
+a stored one becomes `null`, which is the only way to clear a note; a blank Note over an absent one
+contributes no key at all; and an empty diff means the modal **closes without a request**, because
+`PATCH /api/transactions/:id` answers 400 to an empty body and that is a correct answer to a
+question the user did not ask. The amount is compared as a number, so retyping `24.00` over `24` is
+not an edit.
+
+**The categories read is shared now, in `(app)/useCategoryOptions.ts`.** Both transaction modals
+need the identical fetch-on-open, and it was lifted rather than duplicated - a deliberate exception
+to the rule of three, because what is in it is a generation guard against a late response and a path
+string that is one half of a contract with `app/api/categories/route.ts`. Its `read()` is called
+from the opener rather than from an effect, and that is not a simplification: resetting the previous
+open's state is a synchronous `setState`, which `react-hooks/set-state-in-effect` rejects inside an
+effect body, so the effect version needed two seams to express one event.
+
 **The Add transaction modal is mounted once, on the layout, and that is a correctness requirement
 rather than a tidiness one.** `AddTransactionProvider` holds it, `AddTransactionButton` is the
 trigger every entry point renders, and `useAddTransaction()` throws outside the provider rather
@@ -1000,3 +1067,22 @@ from the database, which is invisible through every endpoint and must not be "fi
 dialog's "permanently". And **deleting a row destroys the kebab that opened the dialog**, so
 `Modal`'s focus restore finds nothing connected and focus lands on `<body>` - the identical gap
 saving from the empty state already had, now on a path a user takes far more often.
+
+**PET-32 closes PET-33's AC2 and leaves the row click.** The kebab's "Edit" opens frame 11 prefilled,
+which makes editing the third write in the app, so **nothing in the menu is inert any anymore** and
+the row click is the last dead affordance on the screen. That is worth stating plainly for the same
+reason PET-29's trap was: the screen looks finished, every control in reach works, and the one thing
+a reviewer will still try on a full table - clicking a row - is PET-34's.
+
+Three things PET-32 adds that the next ticket here should know. **Two of its six acceptance criteria
+are amended rather than met**: AC1 and AC3 name the transaction detail page as a second entry point
+and a second surface to refresh, and PET-34 has neither a route nor a read - the modal is mounted on
+the shell, so that becomes a two-line call site. AC3's dashboard and category-total halves are
+`router.refresh()`'s to make true the day those screens read anything, which is the situation PET-33
+recorded for its own AC6 and is still unverifiable. **The nested-dialog case is real now**, so
+`Modal`'s generated heading id has stopped being a precaution: two dialogs are genuinely mounted
+together, and under Jest both are reachable because jsdom has no top layer - a query for "Cancel"
+with the confirmation open is ambiguous and has to say which dialog it means. And **the focus gap
+gets a third route to it**: deleting from inside the edit modal unwinds two dialogs onto a kebab that
+died with its row, so focus still lands on `<body>`. It joins the existing entry rather than opening
+a second one.

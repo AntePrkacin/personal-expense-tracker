@@ -30,14 +30,23 @@ const TARGET: DeleteTarget = {
 function renderDialog({
   remove = jest.fn().mockResolvedValue({ ok: true }),
   onClose = jest.fn(),
+  onDeleted = jest.fn(),
   target = TARGET,
 }: {
   remove?: jest.Mock;
   onClose?: jest.Mock;
+  onDeleted?: jest.Mock;
   target?: DeleteTarget;
 } = {}) {
-  render(<DeleteTransactionDialog target={target} remove={remove} onClose={onClose} />);
-  return { remove, onClose };
+  render(
+    <DeleteTransactionDialog
+      target={target}
+      remove={remove}
+      onClose={onClose}
+      onDeleted={onDeleted}
+    />,
+  );
+  return { remove, onClose, onDeleted };
 }
 
 beforeEach(() => {
@@ -349,5 +358,91 @@ describe('when the request itself rejects', () => {
     renderDialog();
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('onDeleted', () => {
+  // PET-32's addition, and the caller PET-33 declined to invent one for. The edit modal opens this
+  // confirmation over itself, so a real delete has to take that modal down too.
+
+  it('runs after a delete that removed the row', async () => {
+    const { onDeleted } = renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onDeleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs after the dialog has closed, not before', async () => {
+    // The ordering the nested case depends on: `close()` restores focus to whatever opened this -
+    // the edit modal's own Delete button - and only then may that modal be unmounted. Reversed,
+    // the restore would aim at an element already detached.
+    const onClose = jest.fn();
+    const onDeleted = jest.fn();
+    renderDialog({ onClose, onDeleted });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onClose.mock.invocationCallOrder[0]!).toBeLessThan(
+      onDeleted.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('runs after the refresh, so the list is already re-reading', async () => {
+    const { onDeleted } = renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(refresh.mock.invocationCallOrder[0]!).toBeLessThan(
+      onDeleted.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('does not run when Cancel closes the dialog', async () => {
+    const { onDeleted } = renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing', 'unauthenticated', 'failed'] as const)(
+    'does not run on a %s failure',
+    async (reason) => {
+      // Including `missing`, deliberately: a 404 means the row was already gone, and its copy asks
+      // the user to close the dialog to see the current list - so whatever is behind it stays put
+      // with the message in front of it rather than being dismissed by something that failed.
+      const remove = jest.fn().mockResolvedValue({ ok: false, reason });
+      const { onDeleted } = renderDialog({ remove });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+      expect(onDeleted).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not run when the request itself rejects', async () => {
+    const remove = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    const { onDeleted } = renderDialog({ remove });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  it('is optional, so the row menu can open the dialog without one', async () => {
+    // The call site that has nothing to do afterwards stays `open(target)`, and this pins that the
+    // absent callback is not an absent guard.
+    render(
+      <DeleteTransactionDialog
+        target={TARGET}
+        remove={jest.fn().mockResolvedValue({ ok: true })}
+        onClose={jest.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });

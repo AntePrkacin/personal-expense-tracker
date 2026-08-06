@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import {
   authorizedDelete,
   authorizedGet,
+  authorizedPatch,
   authorizedPost,
   hasSession,
   SESSION_COOKIE,
@@ -472,5 +473,132 @@ describe('authorizedDelete', () => {
       .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
 
     await expect(authorizedDelete(PATH)).resolves.toBeDefined();
+  });
+});
+
+describe('authorizedPatch', () => {
+  const PATH = '/api/transactions/0198c2a1-0000-7000-8000-0000000000b1';
+  const BODY = { amount: 31.5 };
+
+  it('PATCHes JSON with the session as a bearer token and no store', async () => {
+    const fetchMock = respondWith(200, {});
+
+    await authorizedPatch(PATH, BODY);
+
+    expect(fetchMock).toHaveBeenCalledWith(`http://backend.test${PATH}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(BODY),
+      cache: 'no-store',
+    });
+  });
+
+  it('serialises a partial body verbatim, adding nothing', async () => {
+    // The whole point of the endpoint: an absent key means "leave this field alone", so a
+    // helper that filled in the four it was not given would rewrite fields the user never
+    // touched. forbidNonWhitelisted makes an added key a 400 on top of that.
+    const fetchMock = respondWith(200, {});
+
+    await authorizedPatch(PATH, BODY);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(Object.keys(JSON.parse(init.body as string))).toEqual(['amount']);
+  });
+
+  it('sends an explicit null through, because null is how the note is cleared', async () => {
+    // `JSON.stringify` drops `undefined` and keeps `null`, which is exactly the DTO's
+    // tri-state: absent leaves the note alone, null clears it, a string sets it. Pinned here
+    // because a helper that stripped falsy values would make clearing a note impossible.
+    const fetchMock = respondWith(200, {});
+
+    await authorizedPatch(PATH, { note: null, merchant: undefined });
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual({ note: null });
+  });
+
+  it('never forwards the session as a cookie', async () => {
+    const fetchMock = respondWith(200, {});
+
+    await authorizedPatch(PATH, BODY);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(JSON.stringify(init.headers)).not.toContain('spendifico.session');
+  });
+
+  it('reports 401 with no round trip when there is no cookie', async () => {
+    const fetchMock = respondWith(200, {});
+    store(undefined);
+
+    expect(await authorizedPatch(PATH, BODY)).toEqual({ ok: false, status: 401 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('treats 200, the status the endpoint actually answers, as success', async () => {
+    respondWith(200, {});
+
+    expect(await authorizedPatch(PATH, BODY)).toEqual({ ok: true });
+  });
+
+  it.each([201, 202, 204])('treats %d as success too', async (status) => {
+    respondWith(status, {});
+
+    expect(await authorizedPatch(PATH, BODY)).toEqual({ ok: true });
+  });
+
+  it.each([400, 401, 404, 409, 500, 502])('passes %d through as a status', async (status) => {
+    // 404 is the one this verb cannot classify on its own - it means either a missing
+    // transaction or a missing category - which is why the status travels and
+    // `lib/updateTransaction.ts` narrows it from the body it built.
+    respondWith(status, {});
+
+    expect(await authorizedPatch(PATH, BODY)).toEqual({ ok: false, status });
+  });
+
+  it('reports an unreachable backend with no status at all', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    const result = await authorizedPatch(PATH, BODY);
+
+    expect(result).toEqual({ ok: false });
+    expect(result).not.toHaveProperty('status');
+  });
+
+  it('succeeds on a 2xx even when the body is unparseable', async () => {
+    // The edit landed, so nothing may report otherwise - `authorizedPost`'s rule, and the
+    // reason this helper does not parse the updated row it is offered.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected token < in JSON');
+      },
+    }) as unknown as typeof fetch;
+
+    expect(await authorizedPatch(PATH, BODY)).toEqual({ ok: true });
+  });
+
+  it('never reads the response body', async () => {
+    const json = jest.fn();
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json }) as unknown as typeof fetch;
+
+    await authorizedPatch(PATH, BODY);
+
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('never throws, whatever the backend does', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    await expect(authorizedPatch(PATH, BODY)).resolves.toBeDefined();
   });
 });

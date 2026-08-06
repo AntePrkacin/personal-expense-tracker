@@ -65,6 +65,23 @@ type DeleteTransactionDialogProps = {
   remove: (id: string) => Promise<DeleteTransactionResult>;
   /** Called once the dialog has closed, however it closed. The owner stops rendering this. */
   onClose: () => void;
+  /**
+   * Called after a delete that really removed the row, and only then.
+   *
+   * **PET-32 is the caller PET-33 was waiting for.** That ticket deliberately left this out,
+   * because AC7's "deleting from the detail page lands back on the list" looked like a callback
+   * nothing passed - the shape `TransactionsTable`'s unreachable `pending` prop already took. The
+   * edit modal is a real caller: with the confirmation opened over it, a successful delete has to
+   * take that modal down too, since the row it is editing no longer exists.
+   *
+   * **Not on the failure arms, including `missing`.** A 404 means the row was already gone, which
+   * is a state its own copy asks the user to close the dialog to see - so the modal behind it
+   * stays open with the message in front of it, rather than being dismissed by something that
+   * failed. PET-34's redirect will want the same distinction.
+   *
+   * Optional, so the row menu's call site stays `open(target)` with no second argument.
+   */
+  onDeleted?: () => void;
 };
 
 /**
@@ -88,7 +105,12 @@ export function deleteTransactionBody({ merchant, amount, date }: DeleteTarget):
 
 export const DELETE_TRANSACTION_TITLE = 'Delete this transaction?';
 
-export function DeleteTransactionDialog({ target, remove, onClose }: DeleteTransactionDialogProps) {
+export function DeleteTransactionDialog({
+  target,
+  remove,
+  onClose,
+  onDeleted,
+}: DeleteTransactionDialogProps) {
   const router = useRouter();
   const modalRef = useRef<ModalHandle>(null);
 
@@ -147,6 +169,18 @@ export function DeleteTransactionDialog({ target, remove, onClose }: DeleteTrans
     // `docs/TODO.md` beside the identical gap saving from the empty state leaves.
     router.refresh();
     modalRef.current?.close();
+
+    // **Last, and the order is the interesting part when something is open behind this.** With
+    // the edit modal underneath, the two dialogs come down top-first: `close()` above restores
+    // focus to whatever opened this - the edit modal's own "Delete transaction" - and only then
+    // does this line unmount that modal, which restores focus onward to the kebab. Calling it
+    // before `close()` would detach the element the restore was aiming at, which is the same
+    // trap `Modal`'s own focus effect exists for.
+    //
+    // The kebab dies with its row, so the chain ends on `<body>` regardless; what this ordering
+    // buys is that it does so for one reason rather than two, and it is already correct for the
+    // detail page, where the element behind survives.
+    onDeleted?.();
   }
 
   return (

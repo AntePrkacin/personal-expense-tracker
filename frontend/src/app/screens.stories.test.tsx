@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
 import * as AddTransactionModal from './(app)/AddTransactionModal.stories';
+import * as EditTransactionModal from './(app)/EditTransactionModal.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
@@ -71,6 +72,10 @@ const MODULES: [name: string, module: StoryModule][] = [
   // the empty box those frames share. The two are not duplicates: one is the chrome,
   // this one is the form inside it.
   ['AddTransactionModal', AddTransactionModal as StoryModule],
+  // Frame 11, the same five fields prefilled. A separate module for the module-carries-one-title
+  // reason above, and the pairing is worth noticing: 09 and 11 are the two halves this ticket
+  // deliberately did not merge into one component with a `mode` prop.
+  ['EditTransactionModal', EditTransactionModal as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

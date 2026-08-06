@@ -27,10 +27,30 @@ import { DeleteTransactionDialog, type DeleteTarget } from './DeleteTransactionD
 // passes is the shape PET-29 already shipped once and had to take back out, when
 // `TransactionsTable` grew a `pending` prop no caller could reach. The ticket with the caller
 // adds the parameter.
+//
+// **PET-32 is that ticket, and `onDeleted` arrived with it.** The edit modal opens this
+// confirmation over itself, so a delete that succeeds has to take the modal down too - the row it
+// was editing is gone. That is a caller rather than a forecast, which is the whole distinction the
+// paragraph above draws. PET-34's redirect is still not built, and now needs no new parameter:
+// its detail page passes an `onDeleted` that navigates.
+
+type DeleteTransactionOptions = {
+  /**
+   * Called after a delete that really removed the row, and only then.
+   *
+   * The edit modal's use is to stop rendering itself. See `DeleteTransactionDialog`'s own note
+   * for why the failure arms - including a 404 - deliberately do not call it.
+   */
+  onDeleted?: () => void;
+};
 
 type DeleteTransaction = {
-  /** Opens the confirmation for one transaction. Every trigger calls this and nothing else. */
-  open: (target: DeleteTarget) => void;
+  /**
+   * Opens the confirmation for one transaction. Every trigger calls this and nothing else.
+   *
+   * The options argument is optional so the row menu's call site stays a bare `open(target)`.
+   */
+  open: (target: DeleteTarget, options?: DeleteTransactionOptions) => void;
 };
 
 const DeleteTransactionContext = createContext<DeleteTransaction | null>(null);
@@ -77,15 +97,26 @@ export function DeleteTransactionProvider({
   remove = deleteTransaction,
 }: DeleteTransactionProviderProps) {
   /**
-   * Which transaction is being asked about, or `null` for "the dialog is closed".
+   * Which transaction is being asked about and what to do after removing it, or `null` for "the
+   * dialog is closed".
    *
    * One piece of state rather than a boolean beside a target, because the two cannot legally
    * disagree: there is no open dialog without a target and no target worth keeping once it
    * closes. It also means the copy cannot flash the previous row's merchant on the way out.
+   *
+   * PET-32's `onDeleted` joined the same object rather than becoming a second `useState` or a
+   * ref, for that same reason: it belongs to the open it arrived with, so it has to be cleared by
+   * the same assignment that clears the target.
    */
-  const [target, setTarget] = useState<DeleteTarget | null>(null);
+  const [request, setRequest] = useState<
+    ({ target: DeleteTarget } & DeleteTransactionOptions) | null
+  >(null);
 
-  const open = useCallback((next: DeleteTarget) => setTarget(next), []);
+  const open = useCallback(
+    (target: DeleteTarget, options: DeleteTransactionOptions = {}) =>
+      setRequest({ target, ...options }),
+    [],
+  );
 
   return (
     <DeleteTransactionContext.Provider value={{ open }}>
@@ -96,8 +127,13 @@ export function DeleteTransactionProvider({
           `queryByRole` cannot see inside it, but `queryAllByText` **can** - so an
           always-mounted dialog would put "Delete this transaction?" into every screen's tree
           forever. `(app)/pages.test.tsx` depends on it. */}
-      {target !== null ? (
-        <DeleteTransactionDialog target={target} remove={remove} onClose={() => setTarget(null)} />
+      {request !== null ? (
+        <DeleteTransactionDialog
+          target={request.target}
+          remove={remove}
+          onClose={() => setRequest(null)}
+          onDeleted={request.onDeleted}
+        />
       ) : null}
     </DeleteTransactionContext.Provider>
   );

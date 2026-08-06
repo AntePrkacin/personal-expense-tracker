@@ -21,6 +21,7 @@ import { TransactionRowMenu } from './TransactionRowMenu';
 // dismiss and the Escape are Chrome and Storybook checks.
 
 const open = jest.fn();
+const openEdit = jest.fn();
 
 // A relative specifier: `jest.mock('@/…')` fails with "Cannot find module" from anywhere, which
 // is the alias trap `frontend/src/app/CLAUDE.md` records. The provider is mocked rather than
@@ -29,8 +30,19 @@ jest.mock('../DeleteTransactionProvider', () => ({
   useDeleteTransaction: () => ({ open: mockOpen() }),
 }));
 
+// PET-32's provider, mocked for the same reason and with the same relative specifier. Mocking it
+// rather than wrapping keeps this suite about the *menu*: what each item hands over, with no modal
+// in the tree to make five field labels ambiguous.
+jest.mock('../EditTransactionProvider', () => ({
+  useEditTransaction: () => ({ open: mockOpenEdit() }),
+}));
+
 function mockOpen() {
   return open;
+}
+
+function mockOpenEdit() {
+  return openEdit;
 }
 
 const TRANSACTION: Transaction = {
@@ -150,13 +162,33 @@ describe('the two items', () => {
     expect(screen.getByText('Delete')).toBeInTheDocument();
   });
 
-  it('renders Edit as disabled rather than as a control that does nothing', async () => {
-    // The amendment to AC2. PET-32's edit modal does not exist, so this says so instead of
-    // looking operable - and it is not a `<button>`, so nothing can click it.
+  it('renders Edit as a real, enabled button, which closes PET-33’s amended AC2', async () => {
+    // This assertion is the inverse of the one it replaces. For one ticket Edit was a `<span>`
+    // carrying `aria-disabled`, because PET-32's modal did not exist and an item that announces
+    // itself as operable and does nothing is the failure every inert control on this screen was
+    // built to avoid. The modal exists, so both the span and the flag are gone - and the negative
+    // is asserted beside the positive, because `menu-disabled` left behind would dim a button that
+    // still works.
     render(<TransactionRowMenu transaction={TRANSACTION} />);
 
-    expect(screen.getByText('Edit')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    const edit = screen.getByRole('button', { name: 'Edit' });
+
+    expect(edit).toBeEnabled();
+    expect(edit).not.toHaveAttribute('aria-disabled');
+    expect(edit.closest('li')).not.toHaveClass('menu-disabled');
+  });
+
+  it('gives both items their designed glyph, hidden from the accessibility tree', async () => {
+    // The labels already name them, so the marks are decoration. lucide renders a bare `<svg>`
+    // with no ARIA of its own, which is why `aria-hidden` is explicit at every call site.
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    for (const name of ['Edit', 'Delete']) {
+      expect(screen.getByRole('button', { name }).querySelector('svg')).toHaveAttribute(
+        'aria-hidden',
+        'true',
+      );
+    }
   });
 
   it('publishes no menu role, because the keyboard contract behind it is not implemented', async () => {
@@ -229,5 +261,68 @@ describe('Delete', () => {
     render(<TransactionRowMenu transaction={TRANSACTION} />);
 
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveAttribute('type', 'button');
+  });
+});
+
+describe('Edit', () => {
+  it('opens the edit modal for this row', async () => {
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(openEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands over the whole transaction, which is what makes the prefill need no read', async () => {
+    // Deliberately wider than Delete's four fields. `note` and `categoryId` are exactly the two a
+    // confirmation has no business knowing and the two a form cannot prefill without - and the
+    // row already has both, so AC1 costs no round trip.
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(openEdit).toHaveBeenCalledWith(TRANSACTION);
+  });
+
+  it('closes the menu on its way out', async () => {
+    // So the modal never opens underneath an open popover - two top-layer elements competing is
+    // the mess the platform is being used to avoid.
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    const edit = screen.getByRole('button', { name: 'Edit' });
+
+    expect(edit).toHaveAttribute('popovertarget', `row-menu-${TRANSACTION.id}`);
+    expect(edit).toHaveAttribute('popovertargetaction', 'hide');
+  });
+
+  it('hands focus back to the kebab before opening the modal', async () => {
+    // The same fix Delete needed, and it has to be asserted separately rather than assumed from
+    // there: the two handlers are two call sites, and the one that forgets the line is the one
+    // whose Cancel leaves focus on `<body>`.
+    let focusedWhenOpened: Element | null = null;
+    openEdit.mockImplementation(() => {
+      focusedWhenOpened = document.activeElement;
+    });
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(focusedWhenOpened).toBe(screen.getByRole('button', { name: 'Actions for Whole Foods' }));
+  });
+
+  it('does not submit anything, being type=button', async () => {
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveAttribute('type', 'button');
+  });
+
+  it('does not delete anything', async () => {
+    // The two items are one class string apart in the markup, so the assertion that each does only
+    // its own job is worth having on both.
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(open).not.toHaveBeenCalled();
   });
 });
