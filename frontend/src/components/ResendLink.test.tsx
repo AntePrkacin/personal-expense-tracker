@@ -99,7 +99,14 @@ describe('the states A36 designs none of', () => {
 
     settle({ ok: true });
     await screen.findByRole('status');
-    expect(resendButton()).toBeEnabled();
+    // `waitFor`, not a bare assertion, and the reason is `useTransition`'s two commits. The
+    // status line is painted by the transition's own `setOutcome`, while the button's
+    // `disabled` follows `isPending`, which React clears when the transition *completes* -
+    // a separate commit. So the confirmation appearing is not evidence the button is back,
+    // and asserting it synchronously was a race that lost roughly one full-suite run in
+    // four once PET-22 added enough parallel load to shift the scheduling. The assertion
+    // itself is unchanged; only the waiting is.
+    await waitFor(() => expect(resendButton()).toBeEnabled());
   });
 
   it.each([
