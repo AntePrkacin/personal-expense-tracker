@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { Transaction } from '@/lib/transactions';
@@ -62,6 +62,39 @@ describe('the trigger', () => {
     render(<TransactionRowMenu transaction={{ ...TRANSACTION, merchant: 'Uber' }} />);
 
     expect(screen.getByRole('button', { name: 'Actions for Uber' })).toBeInTheDocument();
+  });
+
+  it('reports the menu as collapsed at rest', async () => {
+    // `aria-expanded` rather than `aria-haspopup`, and the difference is the point: haspopup
+    // promises a keyboard pattern this does not implement, where expanded reports state. Without
+    // it a screen reader announces nothing when the popover opens, because focus stays here.
+    //
+    // Note jsdom implements no Popover API, so this suite can only see the resting value and the
+    // wiring below - the transition itself is a browser check, like everything else about this
+    // menu.
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    expect(screen.getByRole('button', { name: 'Actions for Whole Foods' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('tracks the popover’s own toggle event rather than its trigger’s click', async () => {
+    // The wiring that keeps `aria-expanded` honest. Light dismiss and Escape close the popover
+    // without ever reaching the trigger, so state set in the trigger's onClick would drift from
+    // what is on screen; the `toggle` event fires for every route in and out.
+    const { container } = render(<TransactionRowMenu transaction={TRANSACTION} />);
+    const menu = container.querySelector('[popover]') as HTMLElement;
+    const trigger = screen.getByRole('button', { name: 'Actions for Whole Foods' });
+
+    await act(async () => {
+      menu.dispatchEvent(
+        Object.assign(new Event('toggle', { bubbles: false }), { newState: 'open' }),
+      );
+    });
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('hides its glyph from the accessibility tree', async () => {
@@ -171,6 +204,23 @@ describe('Delete', () => {
 
     expect(remove).toHaveAttribute('popovertarget', `row-menu-${TRANSACTION.id}`);
     expect(remove).toHaveAttribute('popovertargetaction', 'hide');
+  });
+
+  it('hands focus back to the kebab before opening the dialog', async () => {
+    // **The focus-restore fix, and it is assertable because it is our code.** `Modal` captures
+    // `document.activeElement` on mount; React flushes this click synchronously, so without the
+    // refocus the captured element is this menu item, which `popovertargetaction="hide"` then
+    // hides - still `isConnected`, so Modal's guard passes and focuses something unfocusable.
+    // Asserting focus at the moment `open` is called is what pins the ordering.
+    let focusedWhenOpened: Element | null = null;
+    open.mockImplementation(() => {
+      focusedWhenOpened = document.activeElement;
+    });
+    render(<TransactionRowMenu transaction={TRANSACTION} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(focusedWhenOpened).toBe(screen.getByRole('button', { name: 'Actions for Whole Foods' }));
   });
 
   it('does not submit anything, being type=button', async () => {

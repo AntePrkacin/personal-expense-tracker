@@ -1,6 +1,7 @@
 'use client';
 
 import { EllipsisVertical, Pencil, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
 
 import type { Transaction } from '@/lib/transactions';
 
@@ -19,12 +20,14 @@ import { useDeleteTransaction } from '../DeleteTransactionProvider';
 // `dropdown` component's own rules forbid the legacy `tabindex`, `<details>` and focus-based
 // forms.
 //
-// The consequence is that this component holds **no state at all**. `popovertarget` opens it and
-// `popovertargetaction="hide"` closes it, both declaratively. The `'use client'` is here only
-// because Delete calls into a context - which also means PET-29's prediction was pessimistic:
-// it split `TransactionRow.tsx` out so the kebab's open state would not drag the table into the
-// client bundle, and the boundary turns out to land one level smaller still, on this file, with
-// the row staying a Server Component.
+// The consequence is that **nothing here decides whether the menu is showing**: `popovertarget`
+// opens it and `popovertargetaction="hide"` closes it, both declaratively, and no branch below
+// reads any of that. There is one `useState`, added later for `aria-expanded` alone - it mirrors
+// the platform rather than driving it, which is why it is fed by the popover's own `toggle`
+// event. PET-29's prediction was still pessimistic in the useful direction: it split
+// `TransactionRow.tsx` out so the kebab's open state would not drag the table into the client
+// bundle, and the boundary lands one level smaller still, on this file, with the row staying a
+// Server Component.
 //
 // **Two things the popover costs, both recorded rather than fixed.**
 //
@@ -65,18 +68,40 @@ export function TransactionRowMenu({ transaction }: TransactionRowMenuProps) {
   const menuId = `row-menu-${transaction.id}`;
   const anchor = `--row-menu-${transaction.id}`;
 
+  /**
+   * Whether the popover is open, mirrored from the platform for `aria-expanded` alone.
+   *
+   * This is the state the popover API was chosen to avoid, and it is worth being clear that it
+   * buys nothing else: opening, closing, light dismiss and Escape all still belong to the
+   * browser, and nothing below reads this to decide what to render. It exists so a screen
+   * reader is told the menu opened.
+   */
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  /** The kebab, so Delete can hand focus back before the dialog captures it. See its onClick. */
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
   return (
     <>
       {/* The name is the merchant rather than a bare "More actions", because a page of ten
           identical "More actions" buttons tells a screen-reader user which control they are on
           and nothing about which row. `aria-haspopup` is deliberately absent: its useful values
-          name ARIA patterns this is not one of, and "true" means menu. */}
+          name ARIA patterns this is not one of, and "true" means menu.
+
+          **`aria-expanded` is present, and the distinction from `aria-haspopup` is the point.**
+          A code review asked for it and it is the right call: `haspopup` promises a *pattern*
+          with a keyboard contract this does not implement, while `expanded` reports *state*, and
+          state is exactly what a reader is missing when the popover opens with focus still on
+          this button and nothing announced. It costs the one piece of React state the popover
+          otherwise let us avoid - see `menuOpen` above. */}
       <button
+        ref={triggerRef}
         type="button"
         className="btn btn-ghost btn-square btn-sm"
         popoverTarget={menuId}
         style={{ anchorName: anchor } as React.CSSProperties}
         aria-label={`Actions for ${transaction.merchant}`}
+        aria-expanded={menuOpen}
       >
         <EllipsisVertical className="text-base-content/40 size-4" aria-hidden="true" />
       </button>
@@ -89,6 +114,12 @@ export function TransactionRowMenu({ transaction }: TransactionRowMenuProps) {
         popover="auto"
         id={menuId}
         style={{ positionAnchor: anchor } as React.CSSProperties}
+        // The popover's own `toggle` event, which fires for every route in and out - the
+        // trigger, a light-dismiss click, Escape, and the `popovertargetaction="hide"` below.
+        // Reading state from the platform rather than tracking it beside the platform is what
+        // keeps `aria-expanded` true to what is on screen; setting it in the trigger's onClick
+        // would drift the moment a dismissal happened any other way.
+        onToggle={(event) => setMenuOpen(event.newState === 'open')}
       >
         {/* **Edit is disabled, and that amends AC2 rather than ignoring it.** MNU-2 opens the
             edit modal, which is PET-32 and does not exist. The alternatives were a live item
@@ -113,14 +144,26 @@ export function TransactionRowMenu({ transaction }: TransactionRowMenuProps) {
             className="text-error"
             popoverTarget={menuId}
             popoverTargetAction="hide"
-            onClick={() =>
+            onClick={() => {
+              // **Hand focus back to the kebab before the dialog mounts, and this is a fix
+              // rather than a nicety.** `Modal` captures `document.activeElement` in its mount
+              // effect to restore focus on close. React flushes this discrete click
+              // synchronously, so without this line the element it captures is *this* button -
+              // which `popovertargetaction="hide"` then hides inside a closed popover. It stays
+              // `isConnected`, so Modal's guard passes and it focuses something unfocusable: a
+              // no-op, and focus lands on `<body>`. That broke the Cancel path too, not only
+              // the delete path where the row is destroyed - a code review caught the wider
+              // case. Focusing the trigger first makes the captured element the kebab, which is
+              // where focus belonged all along.
+              triggerRef.current?.focus();
+
               open({
                 id: transaction.id,
                 merchant: transaction.merchant,
                 amount: transaction.amount,
                 date: transaction.date,
-              })
-            }
+              });
+            }}
           >
             <Trash2 className="size-4" aria-hidden="true" />
             Delete
