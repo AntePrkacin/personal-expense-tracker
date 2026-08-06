@@ -187,19 +187,19 @@ widths.
 
 ## Tasks
 
-- [ ] Commit this plan alone and open the draft PR against `main`
-- [ ] `lib/dashboard.ts` and `lib/dashboard.test.ts`: the read and its failure policy
-- [ ] `lib/format.ts`: `formatWhole()`, with cases in `format.test.ts`
-- [ ] `(app)/dashboard/DashboardScreen.tsx` and its suite: the header, the grid, the five slots
-- [ ] `(app)/dashboard/BudgetCard.tsx` and its suite: chip, readout, clamped bar, captions, stats
-- [ ] `(app)/dashboard/page.tsx`: async, the read, the four placeholder slots
-- [ ] `(app)/pages.test.tsx`: mock `lib/dashboard`, re-verify the month pill stays inert
-- [ ] Stories: `Screens/04 Dashboard` against node `21:4`, plus a `Shell/Budget card` pair for the
+- [x] Commit this plan alone and open the draft PR against `main`
+- [x] `lib/dashboard.ts` and `lib/dashboard.test.ts`: the read and its failure policy
+- [x] `lib/format.ts`: `formatWhole()`, with cases in `format.test.ts`
+- [x] `(app)/dashboard/DashboardScreen.tsx` and its suite: the header, the grid, the five slots
+- [x] `(app)/dashboard/BudgetCard.tsx` and its suite: chip, readout, clamped bar, captions, stats
+- [x] `(app)/dashboard/page.tsx`: async, the read, the four placeholder slots
+- [x] `(app)/pages.test.tsx`: mock `lib/dashboard`, re-verify the month pill stays inert
+- [x] Stories: `Screens/04 Dashboard` against node `21:4`, plus a `Shell/Budget card` pair for the
       two chip tones
-- [ ] Docs: `frontend/CLAUDE.md` (the formatter, and its `## Not built here` entry for the reads),
+- [x] Docs: `frontend/CLAUDE.md` (the formatter, and its `## Not built here` entry for the reads),
       `frontend/src/app/CLAUDE.md` (the screen split and the slots), root `CLAUDE.md`,
       `docs/TODO.md` (the cents item answered, the chip threshold added)
-- [ ] Comment on PET-21 with the whole-dollar resolution and the two-tone chip decision
+- [x] Comment on PET-21 with the whole-dollar resolution and the two-tone chip decision
 
 No `npm run api:sync`: nothing here changes a request or response body.
 
@@ -271,11 +271,11 @@ first met on the post-login landing route by this ticket. One boundary at the ro
 `requireProfile()` throw lands there too, `ErrorScreen.tsx` beside it so Storybook can review copy
 that has no frame behind it.
 
-- [ ] `BudgetCard.tsx`: drop the month from the caption, pluralize the day count, round the
+- [x] `BudgetCard.tsx`: drop the month from the caption, pluralize the day count, round the
       whole-dollar figures once
-- [ ] `BudgetCard.test.tsx`: the three cases above, and drop the fake clock the card no longer uses
-- [ ] `app/error.tsx`, `app/ErrorScreen.tsx` and their suite and stories, plus the story smoke test
-- [ ] Correct every comment claiming no `error.tsx` exists (`lib/profile.ts`,
+- [x] `BudgetCard.test.tsx`: the three cases above, and drop the fake clock the card no longer uses
+- [x] `app/error.tsx`, `app/ErrorScreen.tsx` and their suite and stories, plus the story smoke test
+- [x] Correct every comment claiming no `error.tsx` exists (`lib/profile.ts`,
       `transactions/filters.ts` and both suites, `frontend/src/app/CLAUDE.md`)
-- [ ] Docs: `frontend/src/app/CLAUDE.md` (the boundary, the caption), `docs/TODO.md` (the period
+- [x] Docs: `frontend/src/app/CLAUDE.md` (the boundary, the caption), `docs/TODO.md` (the period
       label owed from the backend, the boundary's copy joining A29)
