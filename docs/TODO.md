@@ -357,6 +357,58 @@ and its tests set the prop by hand, so they were green against a feature wired t
 future change breaks the wiring again, the assertion that catches it is the one in
 `TransactionsScreen.test.tsx` that the table sits inside the region, not anything about the class.
 
+### The row menu's open, close and Escape are browser checks, and jsdom is not being polyfilled
+
+`app/(app)/transactions/TransactionRowMenu.tsx` is daisyUI's popover dropdown, so AC1's "clicking
+elsewhere or pressing Escape closes it" is light dismiss and the Escape default action rather
+than anything this repo wrote. **jsdom 26.1.0 implements none of the Popover API** - verified
+directly: `showPopover` is `undefined` and `popoverTargetElement` is not on
+`HTMLButtonElement` - so none of that is observable under Jest.
+
+`jest.setup.ts` polyfills `<dialog>` and deliberately does **not** polyfill this, which is the
+decision worth recording rather than the gap. Faking `showPopover`, light dismiss and Escape
+would turn AC1 into a test of those few lines: it would pass just as happily with `popover`
+deleted from the markup, which is exactly the failure the dialog polyfill's own comment refuses
+for Escape. The consequence is that under Jest the menu never hides, so both items are always
+queryable - and no assertion in `TransactionRowMenu.test.tsx` should be read as proving the menu
+opened. What that suite pins is the wiring the browser needs: the trigger's accessible name, the
+`popovertarget`-to-`id` pairing, the `anchor-name`-to-`position-anchor` pairing, that two rows
+get two ids, and what Delete hands the provider.
+
+The check that is not automated anywhere is therefore opening `Screens/06 Transactions — List`
+and using it. The day jsdom ships the real API this evaporates on its own, the way the dialog
+polyfill's `typeof` guard is written to.
+
+### The row menu is unanchored in Firefox, and daisyUI's own fallback is what ships
+
+daisyUI positions `.dropdown[popover]` with CSS anchor positioning (`position-area` against a
+`position-anchor`), which Firefox does not support. Its stylesheet carries an
+`@supports not (position-area: bottom)` branch that centres the popover and draws a dimmed
+`::backdrop` instead, so the menu opens and works - it simply appears in the middle of the
+viewport rather than under the kebab that opened it.
+
+Accepted rather than fixed. The alternatives are hand-rolling positioning (a resize and scroll
+listener plus a collision strategy, which is the kind of code the popover was chosen to avoid) or
+pulling in a positioning library for one engine and one control. Both cost more than the
+degradation, and the fallback is a coherent design rather than a broken one. Worth revisiting
+when Firefox ships anchor positioning, at which point the fix is deleting nothing.
+
+### lucide-react arrived, and two hand-traced glyphs did not migrate with it
+
+PET-33 added `lucide-react` as the app's icon library, on the daisyUI Blueprint MCP's setup
+guidance, and used it for the row menu's ellipsis, pencil and trash and the confirmation dialog's
+trash. Every glyph before it was hand-traced from a Figma export with its node id in the comment,
+and **two of those are still in place**: `ui/Button.tsx`'s `TrashGlyph`, exported for the two
+"Delete transaction" text buttons, and `(app)/Modal.tsx`'s `CloseGlyph`.
+
+So the app has two icon idioms, and the visible consequence is narrow but real: `TrashGlyph` and
+lucide's `Trash2` are different drawings of the same object, and PET-32's edit modal will put one
+of them (the text button) on screen one click before the other (the dialog's circle). Migrating
+is mechanical and has no behaviour in it, which is exactly why it was not folded into PET-33 -
+it belongs in its own commit where the diff is reviewable as a swap. Whoever does it should check
+`CategoryGlyph` in `TransactionRow.tsx` too, though that one is the placeholder bag Figma uses
+for every category rather than a standard icon, and may have no lucide equivalent worth taking.
+
 ### The transactions page re-reads the categories on every filter change
 
 `app/(app)/transactions/page.tsx` runs `readTransactionsView` and `readCategoryLabels` in
@@ -744,6 +796,16 @@ neither observable in jsdom.
 replaces the card with real rows rather than with a blank slot - which means the focus restore
 lands on a document that has visibly changed under it. Still the same fix and still nobody's
 single control to invent.
+
+**PET-33 puts the same gap on a path users take far more often, which is the argument for finally
+fixing it.** Deleting a row destroys the kebab that opened the confirmation dialog, so `Modal`'s
+`isConnected` guard finds nothing connected and focus lands on `<body>`. Saving from the empty
+state happens once per account; deleting a transaction happens whenever somebody tidies their
+log, and every one of them leaves the next Tab starting from the top of the page. It is still the
+same fix - a focus-management pattern this repo does not have - and it is still wrong to invent
+one for a single control, but the frequency has changed enough that whoever builds PET-34's
+detail page should look at it: deleting from there navigates, which sidesteps the problem for
+that entry point and leaves the row menu as the only one with it.
 
 ### A category colour outside the eight renders grey, and nothing can produce one yet
 

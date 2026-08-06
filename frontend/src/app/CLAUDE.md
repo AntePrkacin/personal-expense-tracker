@@ -756,6 +756,35 @@ its accessible name from everything inside it, so every row would announce as "W
 Groceries Oct 8 −$86.40" - the merchant is the only cell that names the thing being opened. (This
 cited `ui/ListRow.tsx`, which PET-57 deleted, leaving the one recorded reason unreachable.)
 
+**PET-33 landed the kebab half of that, and the prediction above was right about the diff and
+wrong about the boundary.** The span is a `btn btn-ghost btn-square btn-sm` and the fifth header
+cell is named, exactly as written. What it did not anticipate is that
+`transactions/TransactionRowMenu.tsx` needs **no state at all**: the menu is daisyUI's popover
+dropdown, so `popovertarget` opens it and `popovertargetaction="hide"` closes it, and the
+`'use client'` is there only because Delete calls into a context. `TransactionRow.tsx` was split
+out of the table in anticipation of holding that state and **stays a Server Component** anyway.
+The row's own half is unchanged: a click still opens nothing, and `queryByRole('link')` still
+holds.
+
+**The menu is a popover rather than React state, and the argument is the one this file makes
+twice already.** AC1 asks for "clicking elsewhere or pressing Escape closes it", which is light
+dismiss and the Escape default action - the platform gives both plus the top layer, so nothing
+picks a z-index and nothing listens on `document`. daisyUI 5 requires it independently: its
+`dropdown` rules forbid the legacy `tabindex`, `<details>` and focus-based forms. Two costs, both
+recorded rather than fought. **jsdom 26.1.0 implements none of the Popover API** and
+`jest.setup.ts` deliberately polyfills none of it, unlike `<dialog>` - faking light dismiss would
+turn AC1 into a test of the fake - so under Jest the menu is permanently open, the suites assert
+the wiring, and opening and closing are Chrome and Storybook checks. And **Firefox does not
+support CSS anchor positioning**, where daisyUI's own `@supports` fallback centres the menu
+behind a dimmed backdrop instead of anchoring it.
+
+**"Edit" in that menu is `menu-disabled`, and it is a different kind of dead control from the
+ones above it.** The month pill, the search pill and both tabs are things that look operable and
+are not; this one announces `aria-disabled` and says so. PET-32's edit modal does not exist, and
+the alternatives were a live item that does nothing - the failure every inert control on this
+screen exists to avoid - or dropping the item, which makes frame 10 a different design. It
+amends AC2, and PET-33's Jira ticket carries the note.
+
 **Both tabs are inert, and "Categories" specifically must not become a link.** It opens frame 13,
 which is PET-36's route and has no `page.tsx` behind it, and `lib/routes.test.ts` asserts with
 `fs` that every declared route does - its `PENDING` list is empty and stays. So a link here would
@@ -847,6 +876,26 @@ including Escape, and which - because it is our code rather than the platform's 
 `Modal.test.tsx` rather than eyeballed. The lesson generalises past this component: **a platform
 guarantee that fires during an event React unmounts inside is not a guarantee.**
 
+**PET-33 gave `Modal` a second shape rather than a second component.** Frame 12 is a centred icon
+circle over a centred title with no X, so `align` and `icon` arrived: `align="center"` centres
+the header, renders the icon in a tinted circle, splits the footer into two equal buttons and
+**drops the X**. That last part is the half worth knowing - frame 12's dismissal is Cancel, which
+is already on screen and named, and Escape and the backdrop still reach the same single exit, so
+a confirmation with three ways to say no and one to say yes was the wrong shape. The alternative,
+a `ConfirmDialog` of its own, would have duplicated the single-exit `close()`, the focus capture
+and restore, and the backdrop target test - the three least obvious things in that file.
+
+**The delete confirmation is mounted once on the layout too, and here the argument is sharper
+than the Add transaction one.** `DeleteTransactionProvider` holds it and
+`useDeleteTransaction().open(target)` is the seam. Add transaction has five entry points, two of
+which happen to share a page; this one has a trigger **per row**, so a dialog owned by the row
+menu would mount one `<dialog>` per transaction, each with its own focus trap and heading id.
+Two of DEL-1's three entry points do not exist yet, and each is two lines when it does. **AC7's
+"deleting from the detail page lands back on the list" is deliberately not designed in**: it
+looks like an `onDeleted` on `open()`, and a callback nothing passes is precisely the shape
+PET-29 shipped once as `TransactionsTable`'s `pending` prop and had to take back out. The ticket
+with the caller adds the parameter.
+
 **The Add transaction modal is mounted once, on the layout, and that is a correctness requirement
 rather than a tidiness one.** `AddTransactionProvider` holds it, `AddTransactionButton` is the
 trigger every entry point renders, and `useAddTransaction()` throws outside the provider rather
@@ -935,3 +984,19 @@ reviewer is most likely to try on a full table is the one thing that is delibera
 also the only screen of the four with a real data path, which was true before PET-29 and is worth
 restating: the Dashboard, AI Insights and Settings `<main>` elements are still empty and still
 fetch nothing.
+
+**PET-33 closes half of that trap and narrows the rest.** The kebab works: it opens a real menu
+and Delete really deletes, which makes this the second write in the app and the first that
+removes anything. A row click is still the dead one, and it is now the _only_ dead one on the
+screen, which makes it more likely to be tried rather than less.
+
+Three things PET-33 adds that are worth carrying into the next ticket here. **Four of its seven
+acceptance criteria could not be verified in it**: AC2 needs PET-32's edit modal, AC3's other two
+entry points need PET-32 and PET-34, AC6 needs a Dashboard and a Categories tab that render
+anything at all, and AC7 needs PET-34 - so a reviewer should read the ticket as amended rather
+than as half-done, and the Jira comment records it. **The delete is the first thing in this app
+that removes data**, and `docs/TODO.md` records that the row tombstones rather than disappearing
+from the database, which is invisible through every endpoint and must not be "fixed" against the
+dialog's "permanently". And **deleting a row destroys the kebab that opened the dialog**, so
+`Modal`'s focus restore finds nothing connected and focus lands on `<body>` - the identical gap
+saving from the empty state already had, now on a path a user takes far more often.

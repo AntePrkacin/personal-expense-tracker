@@ -311,9 +311,12 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   route with no `page.tsx` behind it. Every "Add transaction" button is real as of PET-31, and as
   of PET-29 a save finally shows its effect in the list rather than only in the badge - unless the
   date is backdated out of the current period, which the period select can now go and find.
-  What the transactions screen still does not do is **navigate**: a row click opens nothing
-  (PET-34's detail page) and the kebab opens nothing (PET-33's row menu). Both are drawn and
-  deliberately inoperable, the same call the inert tabs make.
+  What the transactions screen still does not do is **navigate**: a row click opens nothing,
+  which is PET-34's detail page, drawn and deliberately inoperable the same way the inert tabs
+  are. **The kebab is live as of PET-33** and no longer belongs on that list: it opens a real
+  popover menu whose "Delete" really deletes. The one thing still inert inside it is "Edit",
+  which renders `menu-disabled` with `aria-disabled` because PET-32's edit modal does not
+  exist - a different claim from the drawn-but-dead controls around it, since this one says so.
 - **Every read a screen needs for its own data, bar the transactions list and the categories.**
   PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and
   `lib/profile.ts` calls `GET /api/profile`, both lifting the session cookie into an
@@ -333,12 +336,16 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   route-handler caller would be handed an HTML login page with a 200 on it - so a Server
   Component using it applies the 401 policy at the call site, which
   `app/(app)/transactions/page.tsx` is the worked example of.
-- **Every write except creating a transaction.** PET-31 is the app's first authenticated write:
+- **Every write except creating and deleting a transaction.** PET-31 is the app's first authenticated write:
   `lib/createTransaction.ts` is a Server Action over `authorizedPost` in `lib/session.ts`, the
   write half of `authorizedGet` and the second thing to reuse rather than re-derive. Two of its
   decisions generalise to the writes still to come. It **surfaces the status on rejection** where
   the read helper collapses everything non-401 into `unavailable`, because 400, 404 and 401 need
   three different messages from a form and one of them must not say "try again". And it **does not
   parse the created row**: a 2xx whose body will not parse still means the write landed, so
-  reporting failure there would have the user create a duplicate. Editing, deleting, and every
-  category and profile write are still unbuilt.
+  reporting failure there would have the user create a duplicate. PET-33 added the second,
+  `lib/deleteTransaction.ts` over a new `authorizedDelete`, which is where to see what
+  generalises: it reuses `AuthorizedWriteResult` rather than growing a shape of its own, and it
+  publishes **three** reasons where the create publishes four, because a 400 there is a body the
+  user can fix and a 400 here is only a malformed id. Editing and every category and profile
+  write are still unbuilt.
