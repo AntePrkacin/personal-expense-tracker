@@ -137,6 +137,8 @@ read the file before you write the change, not after.
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
+| write a daisyUI class, or wonder why one paints nothing             | `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight |
+| run the daisyUI Blueprint MCP                                       | `docs/agents/claude-tooling.md` |
 | add or change anything in `frontend/src/components/`                | `frontend/CLAUDE.md`, Shared components |
 | touch a route, a layout, or the session gate                        | `frontend/src/app/CLAUDE.md`    |
 | build a modal, or add an "Add transaction" trigger                  | `frontend/src/app/CLAUDE.md`, The app shell |
@@ -148,11 +150,14 @@ read the file before you write the change, not after.
 | change a permission                                                 | `.claude/SETTINGS.md`           |
 | run a command, or need an environment value                         | `docs/guides/commands.md`, `docs/guides/configuration.md` |
 
-Two worked examples of why these are not ceremony. Before adding a Tailwind class, read
+Three worked examples of why these are not ceremony. Before adding a Tailwind class, read
 `frontend/CLAUDE.md`: theme-aware colour is daisyUI semantic colour only, and the full Tailwind
 palette compiles, so a `text-red-600` builds green and quietly bypasses the theme. Before
 changing a DTO, read `docs/agents/api-contract.md`: four separate mistakes in that pipeline still
-generate a spec, they just describe your response as `{}`.
+generate a spec, they just describe your response as `{}`. And before pairing two daisyUI
+modifiers or restoring a focus ring over one, read the same file's Where daisyUI and Tailwind
+fight: `btn-ghost btn-outline` draws no border and `focus-visible:outline-2` draws no outline,
+both with every gate green, because the losing class is still in the attribute.
 
 ## Editing these files
 

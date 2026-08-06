@@ -728,14 +728,19 @@ suspending on the RSC payload, and a mocked router resolves immediately. That is
 of gap `Modal` records for Escape and its focus trap, and the same answer applies: the tests pin
 that the region is mounted and silent at rest, and the busy state itself is a browser check.
 
-**The table is a real `<table>`, and the column widths are the designed ones plus 16.** A table
-has no `gap`, so Figma's 16px between columns is `pr-4` on every cell but the last and each
-declared width absorbs it - `w-[166px]` for a 150px CATEGORY column. `TransactionsTable.tsx`
-writes that arithmetic out, because "correcting" it back to the design file's numbers shifts every
-column left by 16px. Two more values there look like mistakes and are read off node 26:172: the
-card is `rounded-lg` with **no shadow**, exactly as frame 07's empty card is, so reaching for
-`AccessCard`'s `shadow-card rounded-xl` box is wrong twice; and the rules between rows are
-`border-subtle` where the card's own border is `border-default`.
+**The table is a real `<table>`, and PET-57 deleted every number this paragraph used to carry.**
+It said the column widths were the designed ones plus 16, because a table has no `gap` and
+Figma's 16px between columns had to be absorbed by each declared width - `w-[166px]` for a 150px
+CATEGORY column - and it named three token-era classes for the card. **All of that is gone and
+none of those classes exists**: daisyUI's `table` puts `padding-inline` on every cell, so nothing
+is `table-fixed` and the browser measures the columns from their content, and the box is the
+stock `overflow-x-auto rounded-box border-base-300 bg-base-100 border` div the component ships
+with. `shadow-card`, `border-subtle` and `border-default` were tokens the 26-line `globals.css`
+no longer defines, so writing one now compiles to nothing at all - the silent-failure mode this
+migration inverted, arrived at from the documentation rather than from the code. The card's
+radius and border colour and the rules between rows are the theme's, and `AccessCard`'s box is
+`card bg-base-100 shadow-sm`, which is what to compare against if a second card ever needs to
+match this one.
 
 **A row is not a link and the kebab is not a button.** Frame 08 is PET-34's and frame 10 is
 PET-33's, and neither exists, so AC7 is drawn and deliberately not wired - the same call the two
@@ -743,8 +748,11 @@ tabs, the month pill and the search pill before it all made. `pages.test.tsx` st
 `queryByRole('link')` empty on this page, and it now holds **by decision** rather than by absence
 of features, which is worth knowing before somebody deletes it as stale. PET-33's diff is a span
 becoming a `<button>` plus an `sr-only` label on the header's deliberately empty fifth cell;
-PET-34's link belongs on the **merchant cell** rather than the row, which is the accessible-name
-argument `ui/ListRow.tsx` already recorded.
+PET-34's link belongs on the **merchant cell** rather than the row, and the argument is worth
+restating here because the file that used to hold it is gone: a link wrapping the whole row takes
+its accessible name from everything inside it, so every row would announce as "Whole Foods
+Groceries Oct 8 −$86.40" - the merchant is the only cell that names the thing being opened. (This
+cited `ui/ListRow.tsx`, which PET-57 deleted, leaving the one recorded reason unreachable.)
 
 **Both tabs are inert, and "Categories" specifically must not become a link.** It opens frame 13,
 which is PET-36's route and has no `page.tsx` behind it, and `lib/routes.test.ts` asserts with

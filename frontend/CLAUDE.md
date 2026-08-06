@@ -50,6 +50,73 @@ deliberately: a controller and automatic prefers-dark must not coexist, or a bro
 dark mode makes the control switch dark to dark. A visible toggle is deferred and trades away
 the automatic behaviour when it lands.
 
+## Where daisyUI and Tailwind fight
+
+**Every entry below is a class that is present in the markup and paints nothing**, and not one
+of them can fail a build, a lint or a Jest run. That is the same inversion the colour rule above
+describes, and it is the whole reason this section exists: under the token layer a wrong class
+generated no CSS and the compile harness caught it, and now a wrong class generates CSS that
+loses. Each of these cost a review finding on PET-57 or its incorporation, verified against
+`frontend/node_modules/daisyui/components/*.css` rather than reasoned about - **read that CSS
+when a daisyUI class does not do what its name says**, because the plugin ships the compiled
+rules and they answer these questions in one grep.
+
+- **Two modifiers from the same daisyUI component in one class string are resolved by the
+  plugin's emission order, not by yours.** They land at equal specificity in the same cascade
+  layer, so the later rule in `button.css` wins whatever the attribute says. The worked example
+  is `btn-ghost btn-outline`: `.btn-outline` sets `--btn-border` to the button's colour
+  and `.btn-ghost` sets it to transparent, ghost is emitted second, and the outline never
+  renders - which is how `(app)/DateField.tsx`'s "today" marker was pixel-identical to a plain
+  day with `toHaveClass('btn-outline')` green. A **colour** modifier is safe to pair with a
+  style one, because `btn-primary` only sets `--btn-color` and `--btn-fg`, which the style
+  modifier reads: `btn-outline btn-primary` is the supported combination and is what that file
+  uses now. Two style modifiers is the mistake.
+
+- **A daisyUI `:focus` rule sets `--tw-outline-style: none`, and Tailwind's `outline-2` reads
+  that variable.** So `focus-visible:outline-2` alone computes to a 2px outline of style `none`
+  and there is no focus ring at all - a WCAG 2.4.7 failure that looks correct in the diff, has
+  the right colour class beside it, and is invisible to every gate. **Any restored focus ring
+  needs `focus-visible:outline-solid` too.** `.link` and `.menu` both do this; assume the next
+  component does as well. `ui/Sidebar.tsx` and `app/WelcomeScreen.tsx` are the two call sites,
+  and the app currently has no `outline-2` anywhere without its `outline-solid`.
+
+- **daisyUI sets no cursor on a resting `select`, so `cursor-pointer` is not redundant.**
+  `select.css` sets `not-allowed` when the control is disabled and `pointer` on an `<option>`
+  inside the picker, and nothing else - an enabled select keeps the user agent's arrow and reads
+  as inert. `btn` does carry one, which is why this is easy to assume. PET-10 fixed this
+  app-wide once; `ui/Select.tsx` holds the constant, and `(app)/DateField.tsx`'s `<button>`
+  trigger and the transactions filter pills each state it too.
+
+- **`fieldset` is `display: grid`, so `self-start` on a child does nothing.** The class is a
+  one-column `1fr` grid, where the horizontal axis is `justify-self` and `align-self` is the
+  block axis - so a label that shrank to its text under a `flex flex-col` parent stretches to
+  full width the moment the same markup moves onto `fieldset`, and every click in the invisible
+  strip beside the word is forwarded to the control. `ui/FieldShell.tsx` records what that looks
+  like on a `<select>` and its suite pins the fix.
+
+- **The `<fieldset>` element is not the `fieldset` class.** The element publishes
+  `role="group"`, and daisyUI's own idiom is one of them around a _set_ of fields named by a
+  `legend.fieldset-legend`. Wrapping a single control in the element gives every field in the
+  app its own nameless group boundary, announced entering and leaving. The class is pure CSS and
+  works on a `div`, which is what `ui/FieldShell.tsx` uses.
+
+- **`status` draws a drop shadow from `currentColor`**, and sets `color` to a translucent black
+  for exactly that purpose. Handing it a class pair that includes a `text-*-content` half turns
+  that shadow into an opaque coloured smudge. This is why `ui/categoryColour.ts` exports
+  `CATEGORY_DOT` beside `CATEGORY_TILE`: a `text-*` class is inert on a mark with no content
+  only where nothing reads `currentColor`, and a surprising number of daisyUI components do.
+
+- **`modal-box` animates through the `scale` property, which makes it a containing block for
+  `position: fixed` descendants.** The one defect of this migration that a browser walk caught
+  and nothing else could; `frontend/src/app/CLAUDE.md` owns the account of it, under The app
+  shell, along with the `translate-none scale-none` that pays for it.
+
+**The daisyUI Blueprint MCP is this repo's method for writing that markup, and its three stages
+earn three different levels of trust** - follow the syntax stage verbatim, adjudicate the quality
+inspector's findings rather than applying them, and treat the browser walk as the real output.
+`docs/agents/claude-tooling.md` is the single home for all three and for the false positives this
+codebase reliably produces; read it before running the server, not after.
+
 ## Shared components
 
 **daisyUI is the component library now.** A screen reaches for daisyUI classes directly, and a
@@ -95,12 +162,32 @@ wrapper; the ticket that needs shared behaviour can extract one then.
   and the picker use; only the rendered hue follows the theme. Do not "fix" the collision by
   reaching for a raw palette value.
 
-`components/` has five direct children. Four belong to the access screens: `LogoLockup.tsx`
+`components/` has six direct children. Four belong to the access screens: `LogoLockup.tsx`
 (the accent tile and wordmark), `AccessCard.tsx` (the centred column and `card` box, with an
 `aboveCard` slot the onboarding step indicator drops into), and `ResendLink.tsx` with
 `LogInAgain.tsx`, the recovery controls. The fifth is `EmptyState.tsx`, the shared empty-state
 card, documented after `lib/format.ts` below. Each is shared by more screens
 than one route segment holds, which is why they are neither in `ui/` nor beside a route.
+
+The sixth is **`components/FormError.tsx`, the form-level error line, and it is the repo's
+worked example of the rule of three** stated below. It renders one `role="alert"` line in the
+same `text-error text-sm` treatment `ui/FieldShell` gives a field message, and renders nothing
+when its message is absent, so a call site passes state straight through with no ternary. What
+earns it a file is arithmetic rather than taste: the identical five tokens stood in
+`app/login/LoginForm.tsx`, `app/setup/register/RegisterForm.tsx` and twice in
+`app/(app)/AddTransactionModal.tsx`, each with its own paragraph explaining the same
+`role="alert"` decision and each rewritten independently during PET-57 - four copies of a
+three-copy trigger. `components/ResendLink.tsx` deliberately does **not** use it: that one
+switches between `role="alert"` and `role="status"` over three treatments, and a component with
+a politeness prop would be a worse answer than two files.
+
+**The rule of three is this repo's, and `docs/TODO.md` is not where it lives.** Duplicate rather
+than share until a third consumer appears, then lift it into one owner. `lib/session.ts`'s
+`authorizedGet` is the other worked example, extracted when `lib/transactions.ts` became its
+third caller; that file used to cite the deleted `ui/utilities.test.ts` for the rule, which is
+why it is written down here instead. The trigger counts consumers, not lines - `FormError` is
+five tokens - because what duplication costs is the drift between copies, and the four copies
+above had already drifted in their comments before they drifted in their markup.
 
 Three conventions, all of which existing files demonstrate:
 
@@ -221,10 +308,10 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **A visible theme toggle.** The theme pair follows the OS automatically, and shipping a
-  `theme-controller` alongside that automatic behaviour is the combination daisyUI's own rules
-  forbid - a browser already in dark mode would make the control switch dark to dark. Adding a
-  toggle is its own change and trades the automatic selection away.
+- **A visible theme toggle.** There is no `theme-controller` anywhere, so nothing in markup may
+  assume one: adding it trades the automatic `prefers-color-scheme` selection away rather than
+  sitting beside it. `docs/TODO.md` carries why, per the conventions table's rule that a gap list
+  holds the warning and points at the reasoning.
 - **The `/api/chat` route handler.** The env template deliberately declares no model-provider
   key. Add whichever variable your provider needs when you build the route, server-side only and
   never behind `NEXT_PUBLIC_`. Note this is not the repo's _first_ route handler -

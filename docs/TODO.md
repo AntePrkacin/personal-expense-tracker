@@ -549,7 +549,7 @@ the form and into `draft.ts` beside the rest of the shape.
 ### A29's inline error pattern is now live rather than illustrative
 
 The inline error treatment (an error-state control plus one line of copy beneath, owned by
-`ui/Field` until PET-57 folded it into `ui/Input` and `ui/Select`) shipped with PET-17 but
+`ui/Field` until PET-57 folded it into `ui/Input` and `ui/Select` over `ui/FieldShell`) shipped with PET-17 but
 nothing rendered it in a real flow - only `Input.stories.tsx`'s `WithError` story. PET-9's
 budget validation is the first live use, with the string `Enter an amount greater than 0.`
 taken verbatim from that story rather than invented.
@@ -645,8 +645,9 @@ should be compared against. If the answer is no, reverting is two strings in
 **PET-31 raised it a sixth time, with nine strings, and it is the first form with more than one way
 to fail.** Four are field messages - `Choose a category.`, `Choose a date.`, `Enter a merchant.`,
 and `Enter an amount greater than 0.` reused verbatim from the budget field. Four are the
-form-level line in `ui/Field`'s treatment with `role="alert"`, one per way the write can be
-refused: `We couldn't add this transaction. Please check the values and try again.` for a 400,
+form-level line with `role="alert"`, in the treatment `components/FormError.tsx` owns since the
+PET-57 review extracted it - `ui/Field` held it when this item was written - one per way the write
+can be refused: `We couldn't add this transaction. Please check the values and try again.` for a 400,
 `That category no longer exists. Pick another one.` for a 404, `Your session has expired. Log in
 again to save this.` for a 401, and `We couldn't add this transaction. Please try again.` for
 everything else. The ninth covers the categories read failing:
@@ -763,19 +764,20 @@ implies and what `ui/Select.tsx` already records it cannot render; or a renderin
 not go through a class map, which means an inline `style` and a deliberate exception to the
 literal-class rule. Note the second also affects the 8px category dot, not only the tile.
 
-### The transactions table's tile glyph is not `ui/ListRow`'s
+### The design file draws the category tile glyph twice, and the code now draws it once
 
-Both are the placeholder shopping bag Figma uses for every category, and they are different
-drawings rather than one drawing at two sizes. `ui/ListRow`'s export (node 15:13) puts the handle
-at x=0..8 over a bag spanning 3..17 - left of centre, which that file records as deliberate
-because it is what the export says. The table's (node 27:149) centres it: a bag at 3..15 under a
-handle at 5.5..12.5.
+Two exports of the placeholder shopping bag Figma uses for every category, and they are different
+drawings rather than one drawing at two sizes. Node 15:13 puts the handle at x=0..8 over a bag
+spanning 3..17, left of centre; node 27:149, the transactions table's, centres it - a bag at 3..15
+under a handle at 5.5..12.5.
 
-So `app/(app)/transactions/TransactionRow.tsx` traces its own rather than scaling ListRow's, which
-would reproduce the offset handle on a frame that does not draw one. Two glyphs for what is
-supposed to be one placeholder is a discrepancy in the design file rather than in the code, and it
-wants a designer's answer: if the centred one is right, ListRow's export is stale and the dashboard
-row should follow it. Until then neither file is guessing.
+This item used to be a disagreement between two components, because `ui/ListRow` traced the first
+and `app/(app)/transactions/TransactionRow.tsx` the second. **PET-57 deleted `ui/ListRow`**, so
+there is exactly one glyph in the repo and nothing left to diverge. What survives is a discrepancy
+in the design file, and it becomes actionable again the moment a second surface draws this tile -
+the dashboard's recent list (DSH-7) is the next one. Copy `TransactionRow.tsx`'s glyph rather than
+re-exporting node 15:13, and ask the designer which is canonical before assuming the offset handle
+was ever intended.
 
 ### The 9x4.5 chevron now exists three times
 
@@ -1377,6 +1379,20 @@ than discovered.
 
 ## Housekeeping
 
+- **`docs:check` cannot see a shorthand path, so a citation of a deleted file survives it.**
+  Check 4 resolves every backticked *repo-root-relative* path, which is the convention
+  `docs/agents/conventions.md` sets - but the agent files are full of deliberate shorthand
+  (`ui/Button`, `lib/format.ts`, `app/setup/draft.ts`), and the regex never looks at those. PET-57
+  deleted six components and the code review that followed found five citations of them left in
+  permanent docs and comments, none of them mechanically catchable: `frontend/src/app/CLAUDE.md`
+  wrote `ui/ListRow.tsx`, and two were inside `.ts` comments, which the script does not read at
+  all. All five are fixed; the gap that let them through is not. The fix is a check that tries a
+  shorthand path against a small set of known bases (`frontend/src/`, `backend/src/`) and fails
+  only when it looks like a file - contains a `/` and an extension - and resolves under none of
+  them. Deliberately not done in the review commit: a first run would have to be triaged across
+  several hundred references, and getting that wrong turns the one check that keeps these files
+  honest into a step people learn to skip. Extending it to comments in `frontend/src/**` and
+  `backend/src/**` is the same shape and doubles the value.
 - **The month window is reached through `CategoriesService`, and now has three callers who
   should promote it.** `currentWindow`, `previousWindow` and `monthStatsFor` are public on that
   service so the transaction reads and PET-20's dashboard compose one aggregation instead of
