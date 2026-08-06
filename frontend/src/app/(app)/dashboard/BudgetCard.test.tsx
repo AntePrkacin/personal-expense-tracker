@@ -18,13 +18,10 @@ const ON_TRACK = {
   },
 };
 
-beforeEach(() => {
-  jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8));
-});
-
-afterEach(() => {
-  jest.useRealTimers();
-});
+// No fake clock, deliberately: every figure on this card comes off the response, and the
+// caption stopped naming a month precisely because a month name could only come from the
+// frontend host's clock while `daysLeft` is counted against the profile's `monthStartDay`.
+// A `setSystemTime` here would be a claim that this component reads a clock, which it does not.
 
 describe('the on-track state (AC1, AC2, AC3, AC4)', () => {
   it('shows the readout and the budget without cents', () => {
@@ -49,11 +46,20 @@ describe('the on-track state (AC1, AC2, AC3, AC4)', () => {
     expect(bar).toHaveAttribute('max', '2000');
   });
 
-  it('shows the amount left and the days left in the current month', () => {
+  it('shows the amount left and the days left in the period', () => {
     render(<BudgetCard {...ON_TRACK} />);
 
     expect(screen.getByText('$760 left')).toBeInTheDocument();
-    expect(screen.getByText('8 days left in October')).toBeInTheDocument();
+    expect(screen.getByText('8 days left')).toBeInTheDocument();
+  });
+
+  it('names no month, because `daysLeft` counts a period a month name cannot describe', () => {
+    // The frame draws "8 days left in October". `daysLeft` is counted against the profile's
+    // `monthStartDay`, so at 15 the period spans two calendar months and any month name here
+    // would be a false statement beside a true count.
+    render(<BudgetCard {...ON_TRACK} />);
+
+    expect(screen.queryByText(/days left in/i)).not.toBeInTheDocument();
   });
 
   it('shows the three stat tiles: count, average per day and the top category', () => {
@@ -65,6 +71,29 @@ describe('the on-track state (AC1, AC2, AC3, AC4)', () => {
     expect(screen.getByText('Avg / day')).toBeInTheDocument();
     expect(screen.getByText('Groceries')).toBeInTheDocument();
     expect(screen.getByText('Top category')).toBeInTheDocument();
+  });
+});
+
+describe('the last day of the period', () => {
+  it('says "1 day left", not "1 days left"', () => {
+    // `daysLeft` is documented as 1 on the last day and never 0, so this is a state every
+    // account reaches once a period rather than an edge case.
+    render(<BudgetCard {...ON_TRACK} daysLeft={1} />);
+
+    expect(screen.getByText('1 day left')).toBeInTheDocument();
+    expect(screen.queryByText('1 days left')).not.toBeInTheDocument();
+  });
+});
+
+describe('the two whole-dollar figures, which have to agree with each other', () => {
+  it('derives the remainder from the rounded spend rather than rounding it separately', () => {
+    // 1240.50 and 759.50 each round up on their own, so three independent `formatWhole` calls
+    // print "$1,241 of $2,000" beside "$760 left" - 2001 on a 2000 budget.
+    render(<BudgetCard {...ON_TRACK} spent={1240.5} remaining={759.5} />);
+
+    expect(screen.getByText('$1,241')).toBeInTheDocument();
+    expect(screen.getByText('of $2,000')).toBeInTheDocument();
+    expect(screen.getByText('$759 left')).toBeInTheDocument();
   });
 });
 

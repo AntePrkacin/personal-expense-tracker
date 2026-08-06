@@ -80,6 +80,21 @@ The residue is that the design draws no error screen anywhere (A19, A29), so wha
 when the throw fires is Next's own. A custom `error.tsx` is a designer conversation rather than
 a gap PET-52 could close.
 
+**Closed 2026-08-06 by PET-21, and the designer conversation is the part that is left.** Four
+`lib/` modules ended their failure policy on the sentence "so Next's error boundary renders
+something a reload retries" while no `error.tsx` existed anywhere under `frontend/src/app` - so
+what the sentence described was Next's built-in "Application error: a server-side exception has
+occurred", with no chrome and nothing to click. PET-21 is what forced it rather than what broke
+it: `/dashboard` is where `/auth/verify` lands after a login, so it is the first read whose
+failure a user can meet before seeing the app at all. `frontend/src/app/error.tsx` is now that
+boundary, one at the root so a `requireProfile()` throw in the shell's own layout lands there
+too, and `ErrorScreen.tsx` beside it holds the screen. Its two strings and its retry are ours,
+so they join the A29 group with A15's no-results copy and A38's verify-failure copy: real until
+a designer looks at them, not placeholders. What is still owed is the designer's answer, plus
+the question this deferred rather than settled - whether a failure inside the signed-in shell
+should keep the sidebar, which is a second boundary at `(app)/error.tsx` and a second copy of
+this copy.
+
 **The wait behind the verify click was measured on 2026-08-05, and the blank page stands.**
 This was the open question A33/A19 left: verify is one blocking POST with no loading state
 designed, so the number decided whether a waiting state had to go to the designer. Measured
@@ -503,6 +518,32 @@ pace-relative to `daysLeft`? - that nobody has chosen, and picking one here woul
 the design never states as if it were designed. Joins the running set of copy and state this
 app ships without a frame behind it, alongside A15's no-results string and A29's inline error
 copy: real until a designer looks at it, not a placeholder.
+
+### Nothing names the budgeting period, so the budget card's caption cannot
+
+Node 22:55 draws "8 days left in October", and PET-21 shipped that literally: `daysLeft` off the
+response beside `monthLabel(new Date())`. Review of the PR found the two halves describe
+different periods. `daysLeft` is counted backend-side against the profile's `monthStartDay`
+(`backend/src/common/month-window.ts`), so at 15 the window runs 15 October to 15 November and
+the card claimed "26 days left in October" when October had 11 days left. Even at the default of
+1 the clocks differ: the backend resolves its period against `APP_TIMEZONE` while `new Date()` in
+a Server Component reads the frontend host's zone, so a UTC-deployed frontend renders "30 days
+left in October" for the first hour of 1 November. No frontend surface sets `monthStartDay`
+today, which is what made it latent rather than live - PET-45 is the ticket that makes it live.
+
+**The fix was to stop naming the month**, because nothing on `GET /api/dashboard` names the
+period and the frontend cannot derive it: reading `monthStartDay` would mean a second guarded
+read inside the shell, which is the shape the `/dashboard`-to-`/login` loop came out of, and even
+with the value in hand a window spanning two calendar months has no single month name. So the
+caption reads "26 days left" and the sentence is true whatever the period is.
+
+**What is owed is a field, not a workaround.** A period label - either a `periodStart` /
+`periodEnd` pair or a formatted string - on `DashboardResponseDto` would let the caption name the
+window the count actually belongs to, and it would come from the one place that already resolves
+it. That is a backend ticket with an `npm run api:sync` behind it, so it is recorded here rather
+than smuggled into a frontend branch. The page header's overline and month pill are untouched and
+stay on the calendar month: they are labels standing alone, and `frontend/CLAUDE.md` already
+records that they ignore `monthStartDay` until PET-45.
 
 ### A visible theme toggle is deferred, and adding one costs the automatic behaviour
 

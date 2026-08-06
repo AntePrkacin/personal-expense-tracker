@@ -22,9 +22,10 @@ import type { TransactionFilters } from '@/lib/transactions';
 // validated by `backend/src/transactions/dto/list-transactions-query.dto.ts` and answers
 // **400** when it fails - `@IsIn` on the two enums, `@IsUUID` on the category, `@MaxLength(200)`
 // on the search. `authorizedGet` collapses everything non-401 into `unavailable`, and
-// `readTransactions` throws on that. There is no `error.tsx` anywhere in this app, so a
-// single junk query parameter is not an ignored filter, it is Next's default error page over
-// the whole screen. `?sort=lol` has to become `{}` here or it takes `/transactions` down.
+// `readTransactions` throws on that, so a single junk query parameter is not an ignored
+// filter, it is the whole screen replaced by the error boundary. `?sort=lol` has to become
+// `{}` here or it takes `/transactions` down. (Until PET-21 added `app/error.tsx` the page
+// it was replaced by was Next's built-in one, which made this worse and not better.)
 //
 // The same call `parseReason` makes about its query parameter and `parseDraft` makes about
 // sessionStorage: the value is typed by whoever is holding the address bar.

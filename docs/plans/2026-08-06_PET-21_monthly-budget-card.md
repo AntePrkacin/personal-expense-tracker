@@ -236,3 +236,46 @@ builds each story from `render` and never applies decorators. And that provider 
 which reaches `useRouter`, so the story needs
 `parameters: { nextjs: { appDirectory: true } }` or it throws in the browser with both gates green.
 **Open the story after adding it** - that is the only check there is.
+
+## Review follow-ups
+
+Four findings from the PR review, all in this branch's own code, all fixed here rather than
+deferred. Two of them contradict decisions written above, which is why they are recorded rather
+than quietly applied.
+
+**The caption names no month, which reverses the Decisions note above.** That note said the month
+name "still comes from `monthLabel(new Date())`, which is the calendar month and therefore correct
+only while `monthStartDay` is 1 - the deviation that file already records, not a new one". The
+first half is right and the conclusion is wrong: `monthOverline` and `monthLabel` on the page
+header are *labels standing alone*, so a calendar month is merely imprecise there, while composing
+one with a window-derived `daysLeft` produces a sentence that is false rather than approximate. At
+`monthStartDay: 15` on 20 October the card read "26 days left in October". Nothing on the response
+names the period, so the caption drops the month; `docs/TODO.md` records the backend field that
+would let it come back.
+
+**The day count is pluralized.** `daysLeft` is documented as 1 on the last day of the period and
+never 0, so "1 days left" was a state every account reached once a period. A local ternary rather
+than a helper - it is the only pluralized string in the app.
+
+**The two whole-dollar figures are rounded once and the remainder derived from the rounded pair.**
+Three independent `formatWhole` calls let `spent: 1240.50` on a 2000 budget render "$1,241 of
+$2,000" beside "$760 left". The Decisions note above accepts that a whole-dollar aggregate can sit
+a dollar off the cents a user adds by hand; it does not extend to two figures on one card
+disagreeing with each other.
+
+**`app/error.tsx` exists now, and this branch is what forced it.** Every read in `lib/` ends its
+failure policy on "so Next's error boundary renders something a reload retries" and there was no
+`error.tsx` anywhere under `src/app` - so a 500 on `/dashboard`, the route `/auth/verify` lands on
+after a login, rendered Next's built-in page with no chrome and nothing to click. Pre-existing, and
+first met on the post-login landing route by this ticket. One boundary at the root so a
+`requireProfile()` throw lands there too, `ErrorScreen.tsx` beside it so Storybook can review copy
+that has no frame behind it.
+
+- [ ] `BudgetCard.tsx`: drop the month from the caption, pluralize the day count, round the
+      whole-dollar figures once
+- [ ] `BudgetCard.test.tsx`: the three cases above, and drop the fake clock the card no longer uses
+- [ ] `app/error.tsx`, `app/ErrorScreen.tsx` and their suite and stories, plus the story smoke test
+- [ ] Correct every comment claiming no `error.tsx` exists (`lib/profile.ts`,
+      `transactions/filters.ts` and both suites, `frontend/src/app/CLAUDE.md`)
+- [ ] Docs: `frontend/src/app/CLAUDE.md` (the boundary, the caption), `docs/TODO.md` (the period
+      label owed from the backend, the boundary's copy joining A29)

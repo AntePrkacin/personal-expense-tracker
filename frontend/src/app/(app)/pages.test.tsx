@@ -310,8 +310,8 @@ describe('the query string reaching the list read', () => {
   // The one seam nothing else covers: `filters.test.ts` proves the parser and
   // `lib/transactions.test.ts` proves the read, but only this file renders the page that
   // joins them. It matters because the failure is not a filter that does nothing - an
-  // invalid value is a 400, which `readTransactions` throws on, and there is no `error.tsx`
-  // in this app for it to land in.
+  // invalid value is a 400, which `readTransactions` throws on, so the screen is replaced by
+  // `app/error.tsx` rather than rendered with one filter missing.
 
   async function renderWith(searchParams: Record<string, string | string[]>) {
     return render(

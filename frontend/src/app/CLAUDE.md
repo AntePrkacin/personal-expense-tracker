@@ -696,9 +696,10 @@ is written as the **absent key** rather than `?period=current`, so one view has 
 means the parsed filters are sparse while every select needs a resolved value, and a pill reading
 blank on a bare `/transactions` is that mistake. And parsing is **load-bearing rather than
 defensive**: every one of those four keys is validated by the backend and answers 400, which
-`authorizedGet` reports as `unavailable` and `readTransactions` throws on, and there is no
-`error.tsx` anywhere in this app - so `?sort=lol` is not an ignored filter, it is the whole screen
-replaced by Next's default error page.
+`authorizedGet` reports as `unavailable` and `readTransactions` throws on - so `?sort=lol` is not
+an ignored filter, it is the whole screen replaced by the error boundary. That sentence used to
+end "and there is no `error.tsx` anywhere in this app", which was true and is not: PET-21 added
+one at `app/error.tsx`, so what a junk parameter now costs is our screen rather than Next's.
 
 **`TransactionSearch` is the smallest client boundary on the screen, and its state machine is not
 optional.** A plain `value={filters.search}` fails twice over: without a debounce React re-renders
@@ -1024,12 +1025,14 @@ prefix with a trailing-slash boundary, which is why `/transactions/abc` keeps Tr
 
 **It brings the app's first `not-found.tsx`, scoped to that segment rather than the root.** Placed
 here it renders inside the shell, so a stale link keeps the sidebar and a way back; at the root it
-would replace the page and leave the reader nowhere. There is still **no `error.tsx` anywhere** and
-this does not change that - a backend that cannot answer still throws. What changed is that
-"deleted" and "unreachable" stopped being the same answer: `authorizedGet` grew a `missing` arm for
-a 404, and `readTransactionDetail` turns it into `notFound()`. A **non-UUID** id is a 400, not a
-404, so it still reaches the error page - the two mean genuinely different things, and `?sort=lol`
-on the list is the existing precedent for the second.
+would replace the page and leave the reader nowhere. A backend that cannot answer still throws.
+What changed is that "deleted" and "unreachable" stopped being the same answer: `authorizedGet`
+grew a `missing` arm for a 404, and `readTransactionDetail` turns it into `notFound()`. A
+**non-UUID** id is a 400, not a 404, so it still reaches the error boundary - the two mean
+genuinely different things, and `?sort=lol` on the list is the existing precedent for the second.
+(This paragraph used to add "there is still **no `error.tsx` anywhere** and this does not change
+that", which was true when PET-34 landed and stopped being true one ticket later: the paragraph
+below is where PET-21 adds it.)
 
 **`PageHeader` has a second shape, and it is the same call PET-33 made for `Modal`.** Frame 08
 draws a breadcrumb where the four routed views draw an overline, plus a caption row under the
@@ -1072,6 +1075,24 @@ state object as the row so a cancelled open cannot leave a redirect behind for s
 edit. `EmptyState` also gained `headingLevel={1}` for that boundary, which was shipping with an
 `h2` as the topmost heading on the one screen in the shell with no `PageHeader` above it.
 
+**`app/error.tsx` is the app's error boundary, and it is the file four `lib/` modules already
+assumed existed.** `lib/profile.ts`, `lib/transactions.ts`, `lib/categories.ts` and
+`lib/dashboard.ts` each end their failure policy on "so Next's error boundary renders something a
+reload retries", and until PET-21 there was no `error.tsx` under `src/app` at all - so what that
+sentence actually described was Next's built-in "Application error: a server-side exception has
+occurred", with no chrome and no control. PET-21 forced it rather than introduced it, because
+`/dashboard` is where `/auth/verify` lands after a login. Three things about it are decisions.
+**One boundary at the root, not one per segment**: `app/error.tsx` wraps everything below the root
+layout, `(app)/layout.tsx` included, so a `requireProfile()` that throws lands there too - which a
+boundary inside the shell could not catch - and the price is that the sidebar goes with it.
+**`ErrorScreen.tsx` is a separate file** for the reason `WelcomeScreen` and `CheckEmailScreen` are:
+a boundary is a fixed Next contract, and the screen beside it is something Storybook can render and
+a suite can mount. And it is the **second screen in this app with no Figma frame behind it**, so it
+borrows `VerifyFailedScreen`'s answer - `AccessCard`, one heading, one line, one control - and its
+strings join what A29 owes a designer. It shows `error.digest` and never `error.message`, because
+production redacts the message to a generic string and the digest is the half that ties the screen
+to a server log line.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
@@ -1099,6 +1120,22 @@ the screen itself cannot supply, and Storybook has to be able to hand it stand-i
 ticket ships one of the five, `BudgetCard`, built from the read at the call site; the other four
 are placeholder `<div />`s naming the ticket that fills them (PET-22 to PET-25). AI Insights and
 Settings are the two screens whose `<main>` is still empty and still fetches nothing.
+
+**That card reads no clock at all, and its "days left" caption names no month, which amends node
+22:55.** The frame draws "8 days left in October" and the review of PET-21 found the two halves of
+that sentence come from different periods: `daysLeft` is counted backend-side against the profile's
+`monthStartDay`, while a month name in the frontend can only be the host's calendar month. At
+`monthStartDay: 15` on 20 October the window is Oct 15 to Nov 15 and the card would have read
+"26 days left in October"; even at the default of 1 the two clocks disagree for an hour twice a
+month, because the backend formats its period against `APP_TIMEZONE` and `new Date()` here reads
+whatever zone the frontend runs in. Nothing on the dashboard response names the period, so the
+caption drops the month rather than guessing at one - the header's overline and month pill keep
+theirs, because those are labels for the calendar month and nothing composes them with a
+window-derived count. Two smaller consequences: the day count is pluralized, since `daysLeft` is 1
+on the last day of every period, and the card's whole-dollar figures are **rounded once and the
+remainder derived from the rounded pair**, so "$1,241 of $2,000" can never sit beside a "left"
+figure that fails to add up to the budget. Giving the period a real name is a backend field
+(`docs/TODO.md` records it), not a second guess here.
 
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show
