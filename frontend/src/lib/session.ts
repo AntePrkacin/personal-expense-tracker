@@ -52,8 +52,18 @@ type Session = components['schemas']['SessionResponseDto'];
  * could not answer, where redirecting anywhere is a guess. Each caller keeps its own policy
  * over the two - `hasSession()` answers false to both, `requireProfile()` redirects on the
  * first and throws on the second.
+ *
+ * **PET-34 added `missing`, and it is a third statement rather than a shade of the second.**
+ * `unavailable` means the question could not be asked; `missing` means it was asked and the
+ * answer is that the thing is not there. Only one read in the app can produce it -
+ * `GET /api/transactions/:id`, whose own contract says a 404 always means the id in the URL -
+ * so the other four readers never see the arm and keep the policy they already had, which is
+ * to throw on anything that is not `unauthenticated`. The detail read calls `notFound()` on
+ * it, which is the whole reason the distinction is worth carrying: collapsed into
+ * `unavailable` it would throw, and a mistyped or stale URL would read as "the app is broken"
+ * rather than "no such transaction".
  */
-export type AuthorizedFailure = 'unauthenticated' | 'unavailable';
+export type AuthorizedFailure = 'unauthenticated' | 'missing' | 'unavailable';
 
 export type AuthorizedResult<T> = { ok: true; data: T } | { ok: false; reason: AuthorizedFailure };
 
@@ -77,6 +87,12 @@ export type AuthorizedResult<T> = { ok: true; data: T } | { ok: false; reason: A
  * and the guard answers nothing else. Everything else - a 500, an unreachable backend, a body
  * that will not parse - is `unavailable`: something is wrong that the user cannot fix by
  * signing in again.
+ *
+ * **A 404 is the one exception to that, and it is `missing`.** Three of the five reads here
+ * are on routes that cannot answer one at all, so the arm costs them nothing; the fourth,
+ * `GET /api/transactions`, answers an empty list rather than a 404 for a filter matching
+ * nothing. It exists for the detail read, which needs to tell a deleted transaction from a
+ * backend that fell over, because those are a 404 page and an error page respectively.
  *
  * `cache: 'no-store'` on every read, without exception. The credential never leaves the
  * server, so nothing about any of these responses may be reused across requests - the rule
@@ -106,6 +122,10 @@ export async function authorizedGet<T>(path: string): Promise<AuthorizedResult<T
 
     if (response.status === 401) {
       return { ok: false, reason: 'unauthenticated' };
+    }
+
+    if (response.status === 404) {
+      return { ok: false, reason: 'missing' };
     }
 
     if (!response.ok) {

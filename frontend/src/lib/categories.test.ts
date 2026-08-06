@@ -252,10 +252,21 @@ describe('the failure classification, inherited from authorizedGet', () => {
     });
   });
 
-  it.each([403, 404, 500, 502, 503])('reports a %d as unavailable', async (status) => {
+  it.each([403, 500, 502, 503])('reports a %d as unavailable', async (status) => {
     respondWith(status, {});
 
     await expect(readCategoryOptions()).resolves.toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('inherits PET-34\'s "missing" for a 404, which changes nothing for this caller', async () => {
+    // 404 was in the sweep above until `authorizedGet` grew a third arm for the transaction
+    // detail read. `GET /api/categories` cannot answer one - there is no id in the path - so
+    // this pins the inheritance rather than a reachable state, and the one consumer that
+    // branches on it, `app/api/categories/route.ts`, answers 503 for anything but a 401
+    // either way.
+    respondWith(404, {});
+
+    await expect(readCategoryOptions()).resolves.toEqual({ ok: false, reason: 'missing' });
   });
 
   it('reports an unreachable backend as unavailable', async () => {
