@@ -1157,6 +1157,19 @@ its one early return - an **empty** array - is for `transactionCount === 0`, the
 having no spend at all. `TrendCard` renders that empty case as nothing, which PET-26 is what
 replaces with frame 05's own empty-state card rather than a zero-filled axis nobody designed.
 
+**A percentage-height bar needs a plot area that holds nothing but bars, and PET-22 shipped the
+version that did not.** The bars sat directly in the `h-32` column beside their value row, their
+week label and two `gap-1`s, so `height: 100%` resolved against 128px while only 88px was free -
+and a bar is a shrinkable flex item, so every bucket at or above 68.75% of the maximum was
+flex-shrunk to that same 88px. `$410` and `$300` drew the identical bar and AC2 was false on
+screen. The chart now nests the bar in its own `h-32` box, and `TrendCard.test.tsx` carries the
+structural guard: the bar's parent must contain the bar and nothing else. **This generalises to
+PET-23's donut and to any chart after it**, along with the two things that let it through: an
+inline `style.height` is what the component _wrote_ rather than what the browser _drew_, so a
+browser walk over a chart has to measure `getBoundingClientRect()`; and jsdom runs no layout at
+all, so no Jest suite can see this class of defect by construction - it belongs on the same
+browser-check list as `Modal`'s Escape and `BudgetForm`'s caret restore.
+
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show
 you is the result: the transactions **table** is PET-29's slot, so saving from the Transactions

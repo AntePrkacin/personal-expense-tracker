@@ -70,22 +70,29 @@ export function TrendCard({ weeklyBuckets }: TrendCardProps) {
           <p className="text-base-content/60 text-sm">Weekly</p>
         </div>
 
-        {/* h-32 is the fixed track every bar's percentage height is measured against - a chart
-            with no axis still needs somewhere for "100%" to mean something. */}
-        <div className="flex h-32 items-end justify-between gap-2">
+        <div className="flex items-end justify-between gap-2">
           {weeklyBuckets.map((bucket, index) => (
-            <div
-              key={bucket.startDate}
-              className="flex h-full flex-1 flex-col items-center justify-end gap-1"
-            >
+            <div key={bucket.startDate} className="flex flex-1 flex-col items-center gap-1">
               <p className="text-xs font-semibold">{formatWhole(bucket.total)}</p>
-              <div
-                // The highlight is bg-accent and the rest bg-primary - a chart series rather
-                // than a status or a control, which is a case `frontend/CLAUDE.md`'s "colour
-                // modifiers are semantic state" rule does not cover either way.
-                className={`w-full rounded-t ${index === highlightIndex ? 'bg-accent' : 'bg-primary'}`}
-                style={{ height: `${barHeightPercent(bucket.total, maxTotal)}%` }}
-              />
+              {/* **The plot area holds the bar and nothing else, and that is a correctness
+                  requirement rather than tidiness.** A percentage height resolves against the
+                  containing block, so with the two label rows inside this box the bars measured
+                  themselves against a track 40px of which was already spoken for - and, being
+                  shrinkable flex items, they absorbed the whole overflow. Every bucket at or
+                  above 68.75% of the max then rendered at the identical clamped height, so
+                  `$410` and `$300` drew the same bar and AC2's "the biggest week is the tallest"
+                  was false on screen while the inline `style.height` said otherwise. Review of
+                  this PR caught it; `h-32` now belongs to a box whose only child is the bar, so
+                  100% means the whole track. */}
+              <div className="flex h-32 w-full items-end">
+                <div
+                  // The highlight is bg-accent and the rest bg-primary - a chart series rather
+                  // than a status or a control, which is a case `frontend/CLAUDE.md`'s "colour
+                  // modifiers are semantic state" rule does not cover either way.
+                  className={`w-full rounded-t ${index === highlightIndex ? 'bg-accent' : 'bg-primary'}`}
+                  style={{ height: `${barHeightPercent(bucket.total, maxTotal)}%` }}
+                />
+              </div>
               <p className="text-base-content/60 text-xs">Week {index + 1}</p>
             </div>
           ))}

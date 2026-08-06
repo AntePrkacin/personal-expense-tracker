@@ -35,7 +35,16 @@ describe('the populated chart (AC1, AC2, AC3)', () => {
     expect(screen.getByText('Week 4')).toBeInTheDocument();
   });
 
-  it('scales bar heights proportionally, the tallest week at 100%', () => {
+  // **This asserts the arithmetic, not the geometry, and the difference cost a review
+  // finding.** jsdom runs no layout - every `offsetHeight` is 0 and no percentage is ever
+  // resolved - so the strongest claim available here is that the right percentage reached the
+  // right bar. The first version of this card passed exactly these four assertions while
+  // drawing `$410` and `$300` as identical bars in a browser, because the percentage resolved
+  // against a track the two label rows were also eating into and flex-shrink absorbed the
+  // difference. **AC2 is therefore a browser check**, alongside `Modal`'s Escape and the focus
+  // trap and `BudgetForm`'s caret restore, and it is the geometry - `getBoundingClientRect()`
+  // on the laid-out bars - that has to be measured there rather than the style attribute.
+  it('gives each bar the percentage height its bucket earns against the tallest', () => {
     const { container } = render(<TrendCard weeklyBuckets={FOUR_WEEKS} />);
     const bars = container.querySelectorAll<HTMLElement>('.bg-primary, .bg-accent');
 
@@ -44,6 +53,20 @@ describe('the populated chart (AC1, AC2, AC3)', () => {
     expect(bars[0]?.style.height).toBe(`${(280 / 410) * 100}%`);
     expect(bars[2]?.style.height).toBe(`${(250 / 410) * 100}%`);
     expect(bars[3]?.style.height).toBe(`${(300 / 410) * 100}%`);
+  });
+
+  it('puts the bar alone in its plot area, which is what makes those percentages true', () => {
+    // The regression guard for the finding above: the bar's parent must contain the bar and
+    // nothing else, so `height: X%` resolves against the whole `h-32` track. A label row moving
+    // back inside that box is the change that silently re-clamps every tall bar.
+    const { container } = render(<TrendCard weeklyBuckets={FOUR_WEEKS} />);
+
+    for (const bar of container.querySelectorAll<HTMLElement>('.bg-primary, .bg-accent')) {
+      const plotArea = bar.parentElement!;
+      expect(plotArea.children).toHaveLength(1);
+      expect(plotArea.className).toContain('h-32');
+      expect(plotArea.textContent).toBe('');
+    }
   });
 
   it('highlights only the current week, the rest staying the un-accented colour', () => {

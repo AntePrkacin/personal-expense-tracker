@@ -213,12 +213,34 @@ Then headless Chromium over CDP against `Shell/Spending trend`'s four stories an
 `Screens/04 Dashboard`, with the story fixtures anchored to the real clock (`daysAgo()` helpers
 in both story files) rather than a fixed October 2025, so the highlight is checked against
 whatever "today" the story actually renders under rather than assumed: all four values render
-(AC1), the $410 bucket is the 100%-height bar and the rest scale under it (AC2), exactly one bar
-is highlighted and it is the open-ended current bucket (AC3), no button/link/progressbar role
-anywhere on the chart (AC4), a zero-total week still renders its `$0` and `Week 2` label over a
-visible non-zero floor rather than collapsing (AC5), the short-final-bucket case highlights the
-short last bucket rather than missing it, the whole-period-empty case renders nothing, and the
-card repaints in the dark theme.
+(AC1), exactly one bar is highlighted and it is the open-ended current bucket (AC3), no
+button/link/progressbar role anywhere on the chart (AC4), a zero-total week still renders its
+`$0` and `Week 2` label over a visible non-zero floor rather than collapsing (AC5), the
+short-final-bucket case highlights the short last bucket rather than missing it, the
+whole-period-empty case renders nothing, and the card repaints in the dark theme.
+
+**AC2 was claimed on that list and was false, which is the one thing in this branch worth
+reading twice.** The first pass reported "the $410 bucket is the 100%-height bar and the rest
+scale under it" by reading each bar's inline `style.height` - the attribute this component
+writes, not the box the browser draws - so it confirmed the arithmetic and learned nothing about
+the geometry. Review of the PR measured `getBoundingClientRect()` instead and found the bars
+rendered **87.41 / 88 / 78.05 / 88** pixels for `$280 / $410 / $250 / $300`: the percentage
+resolved against the `h-32` column, but that column also held the value row, the week label and
+two `gap-1`s, so only 88px of the 128 was free and every bar that would have exceeded it was
+flex-shrunk to exactly that. `$410` and `$300` drew the identical bar, `$280` came within 0.6px
+of both, and AC2 failed for every bucket at or above 68.75% of the maximum. The fix gives the
+bar its own plot area holding nothing else; the same measurement now reads
+**87.41 / 128 / 78.05 / 93.66**, proportional to within half a pixel, and the walk rebuilds the
+old markup in the same page to confirm it still clamps - a check that has never been seen to
+fail is not evidence.
+
+Two lessons this leaves for PET-23's donut, which has the same shape of risk. **A style
+attribute is not a measurement**: assert `getBoundingClientRect()`, since a value that is
+correct in the attribute and wrong on screen is exactly what a CSS layout bug looks like. And
+**jsdom runs no layout at all**, so `TrendCard.test.tsx` cannot see this class of defect by
+construction - it now says so where the percentages are asserted, and carries a structural
+regression guard (the bar's parent must contain the bar and nothing else) as the closest thing
+to it that Jest can hold.
 
 **Not verified: AC5 and the short-final-bucket case against a running backend with real data.**
 The plan asks for both to be confirmed against `GET /api/dashboard` actually sending the shapes
