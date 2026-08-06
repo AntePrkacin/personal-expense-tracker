@@ -9,6 +9,12 @@ paragraph or two probably deserve their own plan in this directory.
 
 ---
 
+## Post-Jira Cleanup Tasks
+- **Fix oversized CLAUDE.md files:** `backend/CLAUDE.md` (>700 lines) and `frontend/src/app/CLAUDE.md` (>1000 lines) need to be restructured and moved into feature subdirectories according to conventions.
+- **Fix JSDOM Version Mismatch:** `docs/CONTRIBUTING.md` and `jest.setup.ts` comments mention `jsdom 26.1.0`, while `frontend/package.json` depends on `jest-environment-jsdom: ^30.4.1`. Update the comments to reflect the actual installed version.
+
+---
+
 ## Deferred by design
 
 These were decided against deliberately. Reasons are recorded so the decision is not
@@ -236,47 +242,11 @@ applying to new users only, which costs `deleteUserDb` that no-row compensation 
 a real change to `UserDatabaseService` rather than a rename, and infrastructure naming no user
 ever sees does not need to follow the brand a second time.
 
-### The page header's two inert controls
+### The page header's inert month select
 
-The month select (04, node 21:61) and the search field (06, node 26:142) are drawn but do
-nothing. They are plain `div`s rather than a `<select>` and an `<input>`, so neither announces
-itself as operable, and `app/(app)/pages.test.tsx` pins that: `queryByRole('combobox')` and
-`queryByRole('textbox')` both have to stay empty.
+The month select (04, node 21:61) is drawn but does nothing. It is a plain `div` rather than a `<select>`, so it does not announce itself as operable, and `app/(app)/pages.test.tsx` pins that: `queryByRole('combobox')` has to stay empty.
 
-Each is waiting on something different, which is why they are one item and not two.
-
-The **month select** is inert by the design's own decision. A8 says only October exists in the
-file, so it renders the current period and stays non-functional until month navigation is
-designed. Making it real needs a designed control first, not just code.
-
-The **search field** is inert because there is nothing to filter. TRN-1 _does_ describe a real
-search input, so this one is a chosen behaviour rather than a read one: a box that accepts
-typing and filters nothing is a worse lie than one that plainly does nothing. PET-28's
-transaction list is what turns it into an `<input>` plus the state that owns the query.
-
-**Amended 2026-08-05 by PET-30.** The list it filters exists now: `/transactions` reads
-`GET /api/transactions` and renders three states. So the reason above has moved on - what is
-missing is not the data but the query, and **PET-29** is the ticket that owns it, not PET-28.
-`readTransactionsView()` already takes the filters as its one argument, so turning this real is
-the `<div>` becoming an `<input>`, plus whichever of `searchParams` or client state PET-29 picks
-to hold the term. A third inert control joined them in the same ticket, and it is inert for a
-different reason again: the transactions **tab bar**. "Categories" points at frame 13, which is
-PET-36's route and has no `page.tsx`, and `lib/routes.test.ts` asserts with `fs` that every
-declared route has one - so a link there would either 404 or force a hole into that check.
-`pages.test.tsx` now pins `queryByRole('tab')` and `queryByRole('link')` empty on that page too.
-
-**Amended 2026-08-05 by PET-29, and the search field is off this list.** It is a real
-`<input>` now, filters on a 300ms debounce, and holds its term in `searchParams` - the choice
-PET-30 left open. `pages.test.tsx`'s assertion about it was **inverted rather than deleted**,
-so a `<div>` creeping back is a failure rather than a silence.
-
-**Two of the three remain, and only one of them is still waiting on the same thing.** The
-month select is unchanged and still needs a designed control before it can do anything (A8).
-The tab bar is now inert **by decision** rather than by absence: PET-29 made every other
-control on that page real and deliberately left "Categories" alone, because frame 13 is still
-PET-36's and `routes.test.ts` still has an empty `PENDING` list. That is AC2's amendment, and
-the distinction matters for whoever reads the assertion next - it is a record of a choice now,
-not a description of an unbuilt screen.
+The **month select** is inert by the design's own decision. A8 says only October exists in the file, so it renders the current period and stays non-functional until month navigation is designed. Making it real needs a designed control first, not just code.
 
 ### A15's no-results state is amended, and its copy is ours until a variant is designed
 
@@ -455,6 +425,8 @@ Fixing it is not just threading a number through: with `monthStartDay = 15`, the
 spanning 15 Aug to 14 Sep has no single month name, and the design draws no label for that
 case. So this needs a designer answer alongside PET-45's read, not only the value.
 
+**Proposed fix:** When `monthStartDay` is > 1, the frontend appearance should be updated to show both months (e.g., instead of "October", it writes "October / November").
+
 **PET-30 gave the mismatch a visible symptom rather than only a wrong label.** The transactions
 header formats the calendar month while the list read's `period=current` resolves against
 `monthStartDay`, so for any value other than 1 the two disagree about which window the page is
@@ -579,19 +551,6 @@ three are checked by hand against `Shell/Modal`'s `FromTrigger` story and
 browser's behaviour rather than ours. One real browser test would close the whole set at once,
 which is the strongest argument yet for adding the runner.
 
-**Focus returning to the trigger was a fourth item on that list, and walking it in Chrome is what
-demoted it from "untestable" to "was broken".** The platform restores focus to whatever opened a
-dialog, so `Modal` wrote no code for it. In the real thing focus landed on `<body>`: `close()` fires
-the `close` event, `onClose` is where the owner stops rendering the modal, React does that
-**synchronously inside the event dispatch**, and the dialog detaches before the browser's restore
-step completes - so the next Tab started from the top of the page. `Modal` now captures
-`document.activeElement` on open and refocuses it on unmount, and because that is our code it is
-asserted in `Modal.test.tsx` rather than eyeballed.
-
-Worth generalising rather than filing away: **a platform guarantee that fires during an event React
-unmounts inside is not a guarantee.** The same shape will apply to any future component that closes
-itself by ceasing to exist, and it is invisible to jsdom in both directions - the polyfill cannot
-fake the guarantee, so nothing failed.
 
 ### The currency select has one option, and two things wait on A6
 
