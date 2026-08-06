@@ -1,6 +1,6 @@
-import { Button } from '@/components/ui/Button';
 import { monthLabel, monthOverline } from '@/lib/format';
 
+import { AddTransactionButton } from '../AddTransactionButton';
 import { PageHeader } from '../PageHeader';
 import { MonthPill } from './MonthPill';
 
@@ -23,9 +23,10 @@ export default function DashboardPage() {
         action={
           <>
             <MonthPill label={monthLabel(now)} />
-            {/* No onClick: "Add transaction" opens modal 09, which is its own
-                ticket. The button is drawn and reachable, and does nothing. */}
-            <Button label="Add transaction" />
+            {/* Opens modal 09, as of PET-31. The trigger is a thin client wrapper so this page
+                can stay a Server Component: a Server Component cannot hand `ui/Button` an
+                onClick, and the modal itself lives once on the shell's layout. */}
+            <AddTransactionButton />
           </>
         }
       />

@@ -638,6 +638,138 @@ that, at which point the export became a claim about nothing rather than a safeg
 the condition this file already set for deleting it. `layout.test.tsx` inverted its assertion
 rather than dropping it, so nobody restores it.
 
+**`/transactions` is the first screen with content under its header, and the shape it uses is
+the one the other three should copy.** `page.tsx` is async, awaits `readTransactionsView()` and
+hands the result to `TransactionsScreen`, which is synchronous and takes the whole state as one
+prop. The split is not stylistic: Storybook cannot render an async Server Component that reads
+cookies, which is the same reason `WelcomeScreen` and `CheckEmailScreen` are their own files, and
+it is what lets both empty states be diffed against Figma with no request scope and no mocks. It
+also means `(app)/pages.test.tsx` now renders every page through `await Page()` - awaiting a
+synchronous component's return value is a no-op, so one call site covers all four - and mocks
+`../../lib/transactions` for the one that fetches.
+
+**The screen has three states, and the API cannot tell them apart on its own.** `total` is the
+count _after_ filters and `period` defaults to `current`, and PET-28 deliberately publishes no
+account-wide count, so a `total` of 0 means one of: the account is empty, a filter matched
+nothing, or the account's transactions are all in an earlier month. The third is the one that
+forces the design: treating it as the first renders "Log your first expense" over a real history
+_and_, because TRN-3 removes the filter bar in that state, leaves no control on screen that could
+change the period to go and find it. So `lib/transactions.ts` resolves the ambiguity with a
+second read - `period=all`, no other filter, fired **only** when the first read returns zero -
+rather than inferring from whether a filter looks active, which gets that third case wrong by
+construction because that case _has_ no active filter. Every page load with data on it still
+costs exactly one request.
+
+**`TransactionsScreen` owns the `filterBar` conditional, and that is why it was built before the
+filter bar.** TRN-3 says the bar is deliberately absent in the empty state, which is a statement
+about a conditional rather than about a component - so the slot and its test exist now, and PET-29
+fills something that already knows when to disappear. Built the other way round, nothing would
+have failed if the bar rendered unconditionally. `table` is the same shape for the populated
+branch.
+
+**PET-29 filled both, and they stayed slots.** `page.tsx` builds a `TransactionFilterBar` and a
+`TransactionsTable` and passes them down, rather than the screen importing either: both need the
+category read the screen deliberately does not make, and Storybook has to be able to hand it
+stand-ins. The screen's own new prop is `filters`, and it is a **prop rather than a third slot**
+because the search field has no conditional - all three states draw it - so an omitted node would
+silently delete a control instead of expressing a choice. It is required rather than defaulted for
+the reason `frontend/CLAUDE.md` gives about the typecheck: `npm run build` never reads
+`*.test.tsx`, so a default of `{}` would let a call site quietly test a screen with no filters.
+
+**The search field must stay in the header, outside the state conditional, and that is a
+correctness requirement.** It keeps its focus and its caret across a filter change only because
+its position in the tree is identical in all three states, so React reconciles it instead of
+remounting it. Move it under `<main>` - into the branch that swaps between the table and the
+empty card - or key the screen on anything, and every keystroke loses focus once the debounce
+lands. `TransactionsScreen.test.tsx` pins that it is inside `<header>` and not inside `<main>`,
+because the failure is invisible in a diff.
+
+**The filters live in `searchParams`, which is the choice PET-30 left open, and
+`app/(app)/transactions/filters.ts` is where the decision is written down.** Three things about
+it are worth knowing before touching that page. The URL keys are the backend's own parameter
+names, so `filterHref` and the API request are built by one function and cannot drift. A default
+is written as the **absent key** rather than `?period=current`, so one view has one URL - which
+means the parsed filters are sparse while every select needs a resolved value, and a pill reading
+blank on a bare `/transactions` is that mistake. And parsing is **load-bearing rather than
+defensive**: every one of those four keys is validated by the backend and answers 400, which
+`authorizedGet` reports as `unavailable` and `readTransactions` throws on, and there is no
+`error.tsx` anywhere in this app - so `?sort=lol` is not an ignored filter, it is the whole screen
+replaced by Next's default error page.
+
+**`TransactionSearch` is the smallest client boundary on the screen, and its state machine is not
+optional.** A plain `value={filters.search}` fails twice over: without a debounce React re-renders
+with the old prop before the server answers and typed characters visibly disappear; with one, the
+prop lands mid-word and React's controlled-input commit collapses the caret to the end. So the
+value is local state, the URL is write-mostly, and the field re-reads the URL only when the prop
+_changed_ **and** the change was not its own echo. Both halves of that condition are load-bearing:
+comparing against the last write alone reads the component's own pending navigation as somebody
+else's and empties the box. It is written as a render-phase state adjustment because
+`react-hooks/set-state-in-effect` rejects the effect version and `react-hooks/refs` rejects doing
+it with a ref, which is why the echo is state rather than the `useRef` it obviously wants to be.
+
+**`FilterNavigation.tsx` owns the screen's one transition, and it exists because a pending
+state has nowhere else to live.** The search field and the three selects are separate client
+components on opposite sides of the `<main>` boundary, and the thing that should dim is the
+table, which is a Server Component between them. The first version of this ticket gave
+`TransactionsTable` a `pending` prop and shipped with nothing able to pass it: the affordance
+existed in a file, had tests that set the prop by hand, and was wired to nothing - which is the
+exact failure mode `frontend/CLAUDE.md` warns about for a class map, arrived at from a different
+direction. So the `useTransition` is hoisted to a provider wrapping the whole screen, both
+controls navigate through it, and `PendingRegion` wraps the table and reads it. `useFilterNavigation`
+throws outside the provider rather than returning a no-op, the call `AddTransactionProvider`
+makes: a control that quietly stops navigating is a bug that looks like a slow network.
+
+Two consequences. The provider has to wrap the **header** as well as `<main>`, or the search
+field throws. And `isPending` turning true is **not assertable in jsdom** - a transition stays
+pending only while something inside it suspends, which in the real app is `router.replace`
+suspending on the RSC payload, and a mocked router resolves immediately. That is the same class
+of gap `Modal` records for Escape and its focus trap, and the same answer applies: the tests pin
+that the region is mounted and silent at rest, and the busy state itself is a browser check.
+
+**The table is a real `<table>`, and the column widths are the designed ones plus 16.** A table
+has no `gap`, so Figma's 16px between columns is `pr-4` on every cell but the last and each
+declared width absorbs it - `w-[166px]` for a 150px CATEGORY column. `TransactionsTable.tsx`
+writes that arithmetic out, because "correcting" it back to the design file's numbers shifts every
+column left by 16px. Two more values there look like mistakes and are read off node 26:172: the
+card is `rounded-lg` with **no shadow**, exactly as frame 07's empty card is, so reaching for
+`AccessCard`'s `shadow-card rounded-xl` box is wrong twice; and the rules between rows are
+`border-subtle` where the card's own border is `border-default`.
+
+**A row is not a link and the kebab is not a button.** Frame 08 is PET-34's and frame 10 is
+PET-33's, and neither exists, so AC7 is drawn and deliberately not wired - the same call the two
+tabs, the month pill and the search pill before it all made. `pages.test.tsx` still pins
+`queryByRole('link')` empty on this page, and it now holds **by decision** rather than by absence
+of features, which is worth knowing before somebody deletes it as stale. PET-33's diff is a span
+becoming a `<button>` plus an `sr-only` label on the header's deliberately empty fifth cell;
+PET-34's link belongs on the **merchant cell** rather than the row, which is the accessible-name
+argument `ui/ListRow.tsx` already recorded.
+
+**Both tabs are inert, and "Categories" specifically must not become a link.** It opens frame 13,
+which is PET-36's route and has no `page.tsx` behind it, and `lib/routes.test.ts` asserts with
+`fs` that every declared route does - its `PENDING` list is empty and stays. So a link here would
+either 404 or force exactly the kind of exemption that turns that check into a lie. Neither label
+is a `<button>`, `<a>` or `role="tab"`, matching the month and search pills, and both
+`pages.test.tsx` and `TransactionsScreen.test.tsx` pin it. Making them real controls is PET-29's
+AC2. The count badge beside "All transactions" is the one real thing in the bar, and it reads
+`total` rather than `transactions.length` because the contract says to: a future page size must
+not silently turn TRN-2's badge into a page count.
+
+**PET-29 did not make them real, and that amends AC2.** Everything else on the page became
+operable in that ticket and these two deliberately did not, because the reason above has not
+changed: frame 13 is still PET-36's and `routes.test.ts` still keeps an empty `PENDING` list. AC2's
+first half - the badge showing the real total - shipped in PET-30 and is untouched. So the
+inertness here is now a recorded decision rather than a screen nobody has got to yet, and the
+assertions pinning it should be read that way.
+
+**The no-results copy is ours, and it amends A15 and PET-30's AC5.** Both said to reuse frame
+07's message until a variant is designed. That message reads "Log your first expense and it'll
+show up here" - shown to somebody with a hundred transactions whose search matched nothing, that
+is not thin copy but wrong copy, reporting the account as empty when it is full. So the
+no-results state keeps the card, the glyph and the button and changes the two strings, and
+`docs/TODO.md` records the amendment plus these two strings joining what A29 owes a designer.
+The designed state keeps Figma's UK "categorised" (A30). `TransactionsEmpty.tsx` exports both
+copy objects so no test or story restates a shipped string.
+
 **`PLACEHOLDER_PROFILE` is gone too, and the shell makes exactly one read.** `requireProfile()`
 in `lib/profile.ts` calls `GET /api/profile`, which stitches the names from the per-user
 `profile` row together with the email from the central `users` row - the seam that made the
@@ -646,6 +778,106 @@ footer unfixable by the session read alone. Because that route is guarded, the s
 decide and deliberately carries no branch of its own. A second opinion is exactly what produced
 the loop described under The app shell.
 
+**`(app)/Modal.tsx` is built on the native `<dialog>` with `showModal()`, and that buys four
+things nobody had to write.** The top layer, so no z-index is chosen anywhere and the box paints
+over `SidebarNav`'s `sticky top-0` with no stacking context to arrange - verified in Chrome
+against a sticky element at `z-index: 9999`, which the dialog still covers; focus containment;
+and Escape, which the user agent turns into a `cancel` whose default action closes the dialog.
+`ui/Select.tsx` makes the same argument about native controls
+generally, and it is the reason the alternative - a `fixed inset-0` div with `role="dialog"`, a
+hand-rolled focus trap and a chosen z-index - was rejected: it trades three browser guarantees
+for three green tests over our own approximations of them. It lives beside the layout rather than
+in `components/ui/` because that folder mirrors the Figma Components page and this is not a tile,
+and not in `components/` because `AccessCard`'s reason for being there is spanning route segments
+in _different_ trees, whereas frames 09, 11, 19, 21 and both delete confirmations all sit inside
+this group.
+
+**Two of its Tailwind classes are load-bearing and invisible on reading.** `m-auto` is mandatory:
+preflight sets `margin: 0` on `*` and `::backdrop`, which overrides the user agent's own
+`dialog { margin: auto }` - the entire centring mechanism - so without it the box pins to the
+top-left corner with nothing in the markup looking wrong. And the display class must be
+`open:flex`, never a bare `flex`, which would outrank `dialog:not([open]) { display: none }` and
+show the box for the frame between mount and the effect. There is deliberately **no**
+`overflow-clip`, although Figma reports it: it would clip the footer buttons'
+`focus-visible:outline-offset-2`, which is the reason `components/AccessCard.tsx` omits it too,
+and the UA's own `dialog:modal` max-height survives preflight so a short viewport scrolls the box
+instead of losing its footer.
+
+**Every close affordance funnels through one exit**, and `ref.close()` is a way _in_ to it rather
+than a second way out. Cancel, the X and a backdrop click all call `close()`, whose `close` event
+is `onClose`; Escape reaches the same place through the UA's default action, so the component
+carries no keydown handler at all. The backdrop test is `event.target === dialogRef.current`,
+which works because a click on `::backdrop` reports the dialog itself while any child reports
+itself, and because the box carries no padding of its own. The `ref` handle exists so a successful
+save closes the dialog rather than merely unmounting it, which keeps every exit on the one path the
+owner listens to - the `close` event.
+
+**Two of the modal's behaviours are unassertable in Jest, and `jest.setup.ts` deliberately does
+not fake them.** jsdom 26.1.0's `HTMLDialogElement.prototype` carries exactly `constructor` and
+`open`, so the polyfill supplies `showModal()` and `close()` and stops there: Escape and the focus
+trap are Storybook and manual checks. Faking Escape would turn AC7 into a test of the polyfill,
+passing just as happily with the real handler deleted - the same call `BudgetForm`'s caret restore
+already lives with. `docs/TODO.md` records the gap.
+
+**It was three, and the third turned into a bug worth knowing about.** The platform restores focus
+to whatever opened a dialog, so `Modal` originally wrote no code for it and the behaviour was
+listed as another manual check. Walking it in Chrome showed focus landing on `<body>` instead: the
+`close` event fires, `onClose` is where the owner stops rendering the modal, React does that
+**synchronously inside the event dispatch**, and the dialog therefore detaches before the
+browser's restore step completes - so the next Tab started from the top of the page. `Modal` now
+captures `document.activeElement` on open and refocuses it on unmount, which covers every exit
+including Escape, and which - because it is our code rather than the platform's - is asserted in
+`Modal.test.tsx` rather than eyeballed. The lesson generalises past this component: **a platform
+guarantee that fires during an event React unmounts inside is not a guarantee.**
+
+**The Add transaction modal is mounted once, on the layout, and that is a correctness requirement
+rather than a tidiness one.** `AddTransactionProvider` holds it, `AddTransactionButton` is the
+trigger every entry point renders, and `useAddTransaction()` throws outside the provider rather
+than returning a no-op. Three triggers exist - the Dashboard header, the Transactions header and
+the Transactions empty card - and the last two are on **one page**: a component owning its own
+modal would mount two `<dialog>` elements there, with two focus traps and two copies of every
+`ui/Field` id, which is a required literal prop precisely because `useId` would force
+`'use client'` onto the field layer. Duplicate ids make `getByLabelText` ambiguous, which is the
+failure PET-30's own `pages.test.tsx` comment already names. The payoff is that PET-20's DSH-9
+teaser and PET-44's INS-7 card each add a trigger in two lines with no prop threading through
+`<main>`.
+
+**A closed modal renders nothing, and the reason is text queries rather than role queries.** A
+closed `<dialog>` is `display: none`, so `queryByRole` cannot see inside it - but
+`queryAllByText` and `queryAllByLabelText` **can**, so an always-mounted modal would put a
+combobox, a textbox and five labels into every screen's tree forever. `(app)/pages.test.tsx`
+depends on this in two places: its inert-control assertions would break for reasons having
+nothing to do with the header pills they are about, which is why that file now also asserts the
+absence of a dialog directly.
+
+**The categories are read on open, through the frontend's own route handler.** Not in each
+`page.tsx`, which would pay for the request on every load whether or not anybody opens the modal
+and make three otherwise-synchronous pages async; and not on the layout, which would put a second
+guarded read into the shell - the shape the `/dashboard` to `/login` loop came out of. The
+provider re-reads on **every** open with `cache: 'no-store'`, so a category created in another
+tab appears, and it guards against a read landing after the modal was closed and reopened. The
+one string that must not drift is the fetch path, which exists in `app/api/categories/route.ts`
+and in the provider; the provider's suite asserts it exactly, because `lib/routes.ts` deliberately
+does not declare it.
+
+**`(app)/DateField.tsx` is the one place in this feature where Escape needs code.** ADD-7 draws
+the Date field as a closed select and Figma opens it nowhere, so the trigger is read off the
+design and the mini-calendar is entirely ours (A14 owes it a confirmation, and `lib/calendar.ts`
+records what "ours" covers). It is a `<button>` wearing `ui/Select`'s box, padding and chevron,
+because a native `<select>` cannot host a popover - and the popover's keydown handler must
+`preventDefault()` the Escape, or the surrounding `<dialog>` treats it as a close request and
+shuts the whole modal, discarding everything typed. First Escape closes the popover, second
+closes the modal.
+
+Three smaller decisions in that field are worth not re-litigating. Its trigger is named by
+`aria-labelledby` pointing at `ui/Field`'s label **and a value span inside the button**, because
+HTML-AAM computes a button's name from its own subtree and would ignore the `<label for>`
+entirely - which is why `Field` gained a label id. `aria-selected` sits on the `gridcell` rather
+than on the day button, since the `button` role does not support it, and today is marked with
+`aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `Input` and `Select`:
+those are real form controls whose roles support it, a button's does not, and this repo keeps no
+eslint-disable comments - so the red border and `aria-describedby` carry the state.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
@@ -653,9 +885,34 @@ alongside this file whenever the work is in a route: the `/api/chat` route handl
 shell's content, and every read a screen needs for its own data. That list is the
 single home, so nothing is restated here.
 
-The one trap to carry into every file in this directory: **the session is real now, and the
-screens behind it are still empty.** `requireProfile()` and `hasSession()` both do what they say
-as of PET-52, so a route that reads as authenticated is, and the sidebar footer shows a real
-person - but all four `<main>` elements below the header are empty, and no screen fetches its own
-data. A screen that renders is still not evidence that its data path exists; what changed is that
-the _authentication_ path finally is.
+The one trap to carry into every file in this directory: **the session is real now, and three of
+the four screens behind it are still empty.** `requireProfile()` and `hasSession()` both do what
+they say as of PET-52, so a route that reads as authenticated is, and the sidebar footer shows a
+real person. PET-30 then filled one `<main>`: `/transactions` reads its own data and renders it.
+The Dashboard, AI Insights and Settings `<main>` elements are still empty and still fetch nothing.
+A screen that renders is not evidence that its data path exists - `/transactions` is now the only
+one where it does, and it is the file to copy rather than the new normal.
+
+PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
+the three Add transaction triggers, and the write is the only one in the app. What it cannot show
+you is the result: the transactions **table** is PET-29's slot, so saving from the Transactions
+empty card correctly replaces the card with a blank table body - correct tabs, a badge that ticks
+up, and nothing beneath. The badge moving is the visible evidence the write landed, and it is what
+AC5 can honestly claim. Two consequences worth carrying: a **backdated** transaction lands outside
+`period=current` and so neither appears nor counts, which is PET-29's filter to own rather than a
+bug here; and a successful save from an empty state **destroys the button that opened the modal**,
+so the browser's focus restore has nowhere to go. Both are in `docs/TODO.md`.
+
+**PET-29 closes the first of those and leaves the second.** The table is real, so a save now shows
+its row rather than a blank body, and a backdated one can be reached with the period select
+instead of being invisible - though nothing switches the period _for_ you, which `docs/TODO.md`
+records as still wanting the confirmation copy A19 and A29 owe. The focus-restore gap is unchanged
+and is now slightly more visible, since the card is replaced by rows rather than by nothing.
+
+**The trap PET-29 leaves is the opposite shape to the ones above: this screen now looks finished
+and is not.** Every control on it works except the two that navigate. A row click does nothing and
+the kebab does nothing, because frame 08 is PET-34's and frame 10 is PET-33's - so the one thing a
+reviewer is most likely to try on a full table is the one thing that is deliberately dead. It is
+also the only screen of the four with a real data path, which was true before PET-29 and is worth
+restating: the Dashboard, AI Insights and Settings `<main>` elements are still empty and still
+fetch nothing.

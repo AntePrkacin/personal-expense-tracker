@@ -1,7 +1,13 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { hasSession, SESSION_COOKIE, sessionCookieOptions } from './session';
+import {
+  authorizedGet,
+  authorizedPost,
+  hasSession,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+} from './session';
 
 // The module's first suite: `lib/session.ts` shipped as two documented stubs and was the
 // only file in `src/lib/` with no test beside it, because there was nothing yet to
@@ -183,5 +189,189 @@ describe('hasSession', () => {
     await hasSession();
 
     expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe('authorizedGet', () => {
+  // The seam `readSession()` and `requireProfile()` share, and `lib/transactions.ts` is the
+  // third consumer that earned it. `hasSession` above deliberately discards the failure
+  // reason, so these are the assertions that pin the distinction itself - the one that
+  // stopped `/dashboard` and `/login` bouncing off each other.
+
+  it('returns the parsed body on success', async () => {
+    expect(await authorizedGet('/api/auth/session')).toEqual({ ok: true, data: SESSION });
+  });
+
+  it('takes the path verbatim, query string included', async () => {
+    // What `lib/transactions.ts` needs from it: the filters are already in the path.
+    const fetchMock = respondWith(200);
+
+    await authorizedGet('/api/transactions?period=all');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://backend.test/api/transactions?period=all');
+  });
+
+  it.each([
+    ['no cookie at all', () => store(undefined)],
+    ['a 401, the only status the guard uses for a dead bearer', () => respondWith(401, {})],
+  ])('reports %s as unauthenticated', async (_label, arrange) => {
+    arrange();
+
+    expect(await authorizedGet('/api/profile')).toEqual({ ok: false, reason: 'unauthenticated' });
+  });
+
+  it.each([
+    ['a 500', () => respondWith(500, {})],
+    ['a bad gateway', () => respondWith(502, {})],
+    [
+      'an unreachable backend',
+      () => {
+        global.fetch = jest
+          .fn()
+          .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+      },
+    ],
+    [
+      'a body that will not parse',
+      () => {
+        global.fetch = jest.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new SyntaxError('Unexpected token < in JSON');
+          },
+        }) as unknown as typeof fetch;
+      },
+    ],
+  ])('reports %s as unavailable, never as signed out', async (_label, arrange) => {
+    // The half that must not be collapsed into the other. Answering "unauthenticated" here
+    // is what sent a live session with a failing read to /login, which sent it back.
+    arrange();
+
+    expect(await authorizedGet('/api/profile')).toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('never throws, whatever the backend does', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    await expect(authorizedGet('/api/profile')).resolves.toBeDefined();
+  });
+});
+
+describe('authorizedPost', () => {
+  const BODY = {
+    amount: 24,
+    date: '2025-10-08',
+    merchant: 'Whole Foods',
+    categoryId: '0198c2a1-0000-7000-8000-0000000000a1',
+  };
+
+  it('POSTs JSON with the session as a bearer token and no store', async () => {
+    const fetchMock = respondWith(201, {});
+
+    await authorizedPost('/api/transactions', BODY);
+
+    expect(fetchMock).toHaveBeenCalledWith('http://backend.test/api/transactions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(BODY),
+      cache: 'no-store',
+    });
+  });
+
+  it('serialises the body verbatim, adding and dropping nothing', async () => {
+    // forbidNonWhitelisted makes any extra property a 400, so this helper must not
+    // decorate what it is given. The caller owns the key set.
+    const fetchMock = respondWith(201, {});
+
+    await authorizedPost('/api/transactions', BODY);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual(BODY);
+  });
+
+  it('never forwards the session as a cookie', async () => {
+    const fetchMock = respondWith(201, {});
+
+    await authorizedPost('/api/transactions', BODY);
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(JSON.stringify(init.headers)).not.toContain('spendifico.session');
+  });
+
+  it('reports 401 with no round trip when there is no cookie', async () => {
+    // A missing cookie is reported as 401 rather than a reason of its own: for a write the
+    // advice is identical either way, so one status keeps the caller's table to four rows.
+    const fetchMock = respondWith(201, {});
+    store(undefined);
+
+    expect(await authorizedPost('/api/transactions', BODY)).toEqual({ ok: false, status: 401 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([200, 201, 202, 204])('treats %d as success', async (status) => {
+    respondWith(status, {});
+
+    expect(await authorizedPost('/api/transactions', BODY)).toEqual({ ok: true });
+  });
+
+  it.each([400, 401, 404, 409, 429, 500, 502])('passes %d through as a status', async (status) => {
+    // The whole reason this is not authorizedGet: the caller has to tell 400 from 404 from
+    // 401, and AuthorizedResult would have collapsed all three into `unavailable`.
+    respondWith(status, {});
+
+    expect(await authorizedPost('/api/transactions', BODY)).toEqual({ ok: false, status });
+  });
+
+  it('reports an unreachable backend with no status at all', async () => {
+    // The absent status is the documented signal for "the request never completed", and
+    // the one case where the caller genuinely cannot know whether the write landed.
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    const result = await authorizedPost('/api/transactions', BODY);
+
+    expect(result).toEqual({ ok: false });
+    expect(result).not.toHaveProperty('status');
+  });
+
+  // The failure worth engineering against: a 201 whose body will not parse means the
+  // transaction *exists*, so reporting failure would send the user to create a second one.
+  // Nothing in this helper reads the body, which is what makes that unreachable.
+  it('succeeds on a 2xx even when the body is unparseable', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => {
+        throw new SyntaxError('Unexpected token < in JSON');
+      },
+    }) as unknown as typeof fetch;
+
+    expect(await authorizedPost('/api/transactions', BODY)).toEqual({ ok: true });
+  });
+
+  it('never reads the response body', async () => {
+    const json = jest.fn();
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 201, json }) as unknown as typeof fetch;
+
+    await authorizedPost('/api/transactions', BODY);
+
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('never throws, whatever the backend does', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    await expect(authorizedPost('/api/transactions', BODY)).resolves.toBeDefined();
   });
 });

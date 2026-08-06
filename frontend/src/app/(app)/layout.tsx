@@ -1,5 +1,6 @@
 import { requireProfile } from '@/lib/profile';
 
+import { AddTransactionProvider } from './AddTransactionProvider';
 import { DRAWER_TOGGLE_ID } from './drawer';
 import { SidebarNav } from './SidebarNav';
 
@@ -79,8 +80,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             and every <main> below it read their left and right edges from this
             wrapper, which is what keeps a page's title and its content on the
             same grid at every breakpoint - as five hand-kept copies of the same
-            three classes, one of them could drift and no test would notice. */}
-        <div className="flex flex-1 flex-col px-4 sm:px-6 lg:px-10">{children}</div>
+            three classes, one of them could drift and no test would notice.
+
+            **One Add transaction modal for the whole shell**, which is a correctness
+            requirement rather than a tidiness one: Transactions draws two triggers (its header
+            and its empty card), and a component owning its own modal would mount two dialogs
+            there - two focus traps and two copies of every field id, which makes
+            `getByLabelText` ambiguous. `AddTransactionProvider` records the whole of it.
+
+            This layout stays a Server Component, and the provider carries the `'use client'`
+            boundary, so neither this file nor any of the four pages joins the client bundle.
+            Same shape `app/setup/layout.tsx` uses for `SetupDraftProvider`, and the same rule
+            `SidebarNav` follows: push the boundary into the smallest wrapper.
+
+            Inside the gutter wrapper rather than around the drawer, so the provider's own
+            subtree does not sit between the drawer's two children. The modal itself renders
+            in the top layer regardless of where it is mounted. */}
+        <div className="flex flex-1 flex-col px-4 sm:px-6 lg:px-10">
+          <AddTransactionProvider>{children}</AddTransactionProvider>
+        </div>
       </div>
       <div className="drawer-side">
         <label

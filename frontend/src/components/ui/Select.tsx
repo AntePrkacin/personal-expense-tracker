@@ -12,6 +12,30 @@
 
 import { FieldShell, fieldErrorId } from './FieldShell';
 
+/**
+ * The chevron leaf, redrawn from the Figma export (node 14:16) and re-pointed at
+ * `currentColor`, free of any field positioning.
+ *
+ * daisyUI's `select` class draws the field chevron itself, so the only consumer left is
+ * anything that needs the mark inline - the date picker's month chevrons sit in a row and
+ * are rotated a quarter turn each. The 10x5 viewBox and `overflow-visible` are the reason to
+ * reuse this rather than redraw it: the designed leaf has a 1.5 round-capped stroke, so half
+ * the stroke falls outside the box along all three ends, and an SVG viewport clips its own
+ * overflow by default - redrawn naively, both tips and the elbow render shorn flat.
+ */
+export function ChevronLeaf({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 10 5"
+      className={`h-1.25 w-2.5 overflow-visible ${className ?? ''}`}
+      fill="none"
+      aria-hidden="true"
+    >
+      <path d="M0 0L5 5L10 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // State-keyed complete literals, the repo's Record convention: Tailwind's
 // scanner reads whole class strings, never halves assembled at runtime.
 const SELECT_CONTROL: Record<'valid' | 'invalid', string> = {

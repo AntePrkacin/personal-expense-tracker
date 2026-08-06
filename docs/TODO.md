@@ -254,6 +254,126 @@ search input, so this one is a chosen behaviour rather than a read one: a box th
 typing and filters nothing is a worse lie than one that plainly does nothing. PET-28's
 transaction list is what turns it into an `<input>` plus the state that owns the query.
 
+**Amended 2026-08-05 by PET-30.** The list it filters exists now: `/transactions` reads
+`GET /api/transactions` and renders three states. So the reason above has moved on - what is
+missing is not the data but the query, and **PET-29** is the ticket that owns it, not PET-28.
+`readTransactionsView()` already takes the filters as its one argument, so turning this real is
+the `<div>` becoming an `<input>`, plus whichever of `searchParams` or client state PET-29 picks
+to hold the term. A third inert control joined them in the same ticket, and it is inert for a
+different reason again: the transactions **tab bar**. "Categories" points at frame 13, which is
+PET-36's route and has no `page.tsx`, and `lib/routes.test.ts` asserts with `fs` that every
+declared route has one - so a link there would either 404 or force a hole into that check.
+`pages.test.tsx` now pins `queryByRole('tab')` and `queryByRole('link')` empty on that page too.
+
+**Amended 2026-08-05 by PET-29, and the search field is off this list.** It is a real
+`<input>` now, filters on a 300ms debounce, and holds its term in `searchParams` - the choice
+PET-30 left open. `pages.test.tsx`'s assertion about it was **inverted rather than deleted**,
+so a `<div>` creeping back is a failure rather than a silence.
+
+**Two of the three remain, and only one of them is still waiting on the same thing.** The
+month select is unchanged and still needs a designed control before it can do anything (A8).
+The tab bar is now inert **by decision** rather than by absence: PET-29 made every other
+control on that page real and deliberately left "Categories" alone, because frame 13 is still
+PET-36's and `routes.test.ts` still has an empty `PENDING` list. That is AC2's amendment, and
+the distinction matters for whoever reads the assertion next - it is a record of a choice now,
+not a description of an unbuilt screen.
+
+### A15's no-results state is amended, and its copy is ours until a variant is designed
+
+A15 said: no search-or-filter no-results state is designed, so show frame 07's "No transactions
+yet" message without hiding the controls until a designed variant exists. PET-30 kept the second
+half and **amended the first**, which also amends its own AC5.
+
+The reason is that the placeholder is not merely thin, it is wrong. Frame 07's body reads "Log
+your first expense and it'll show up here, sorted and categorised automatically." Shown to
+somebody with a hundred transactions whose search matched nothing, that reports the account as
+empty when it is full, and the button it offers does not address what went wrong. A15 was a
+default for an undesigned state rather than a decision about this one, so the two strings changed:
+the no-results state reads **"No matching transactions"** over **"Try a different search term,
+category or period."** Everything else - the card, the glyph, the "Add transaction" button - is
+identical, and the controls stay on screen exactly as A15 asked.
+
+**What is owed.** A designed no-results variant, at which point these two strings are replaced
+rather than kept. Until then they join the list under A29's item above: copy that ships, was not
+read off a frame, and needs a designer's sign-off. `Screens/07 Transactions — No results` is the
+quickest thing to put in front of them, next to the `Empty` story it should be diffed against.
+The designed state keeps Figma's UK "categorised" untouched, which is A30's copy pass and not
+this.
+
+### Telling an empty account from an empty filter costs a second request
+
+`GET /api/transactions` returns `total` **after** filters and no account-wide count beside it -
+PET-28 considered the second count and dropped it, because no frame draws two numbers. Combined
+with `period` defaulting to `current`, that leaves a `total` of 0 meaning any of three things: the
+account is empty, a filter matched nothing, or the account's transactions are all in an earlier
+month.
+
+The third is the one that forces a decision rather than a preference. Treating it as the first
+renders "Log your first expense" over a real history and, because TRN-3 removes the filter bar in
+that state, leaves no control on screen that could change the period to go and find it - the user
+is told they have no data and given no way to disagree. Inferring the state from whether a filter
+looks active gets exactly that case wrong, because that case has no active filter.
+
+So `lib/transactions.ts` reads a second time when the first read returns zero: `period=all`, no
+other filter, and only then. Every page load with data on it still costs one request, and the
+extra round trip is spent only on the state that has nothing to render. **What would remove it is
+a count the API does not publish** - an unfiltered total beside the filtered one, which is a
+backend change reversing a recorded PET-28 decision, so it wants a real reason rather than tidiness.
+One reason may arrive on its own: if the period select ever offers "All time" (A16 leaves its
+options unknown), a caller already asking for `period=all` pays one redundant request in the empty
+case, and `readTransactionsView` should short-circuit rather than probe.
+
+**Amended 2026-08-05 by PET-29: that reason arrived, and the short-circuit is in.** The period
+select offers "All time", so `period=all` with no search and no category is now one click away,
+and its first read already *is* the probe - answering zero to it means the account is empty and
+there is nothing left to ask. `readTransactionsView` returns `empty` directly in that one case.
+The condition is "these filters already are the probe" rather than "the period is all": an
+all-time read narrowed by a search or a category still leaves the two states apart, so it still
+probes. The second request is otherwise unchanged, and so is the argument for eventually
+replacing it with a count the API publishes.
+
+**One cost of the search field is worth naming here**, because it multiplies against this. A
+search matching nothing costs two requests rather than one, so a navigation per keystroke would
+be two round trips per keystroke - which is why the 300ms debounce in
+`app/(app)/transactions/TransactionSearch.tsx` is load-bearing rather than a nicety.
+
+### The filter bar's pending state is a browser check, not a jsdom one
+
+`app/(app)/transactions/FilterNavigation.tsx` dims the table and sets `aria-busy` while a filter
+change is in flight, and the moment it turns true cannot be asserted under Jest. A transition
+stays pending only while something inside it suspends; in the running app that is
+`router.replace` suspending on the RSC payload, and a mocked router resolves immediately, so the
+callback completes synchronously and `isPending` is false again before an assertion can run.
+
+Rewriting `navigate` into an async transition purely so a test could observe it would be
+contorting the component to suit the harness, which is the call `(app)/Modal.tsx` already makes
+about Escape and its focus trap. So the suite pins everything either side - that the region is
+mounted around the table, that it is silent at rest, that the controls reach the provider at all -
+and the busy state itself is eyeballed.
+
+The near miss is worth recording, because it is what the region exists to prevent: an earlier
+version of this ticket gave `TransactionsTable` a `pending` prop that **no caller could pass**,
+and its tests set the prop by hand, so they were green against a feature wired to nothing. If a
+future change breaks the wiring again, the assertion that catches it is the one in
+`TransactionsScreen.test.tsx` that the table sits inside the region, not anything about the class.
+
+### The transactions page re-reads the categories on every filter change
+
+`app/(app)/transactions/page.tsx` runs `readTransactionsView` and `readCategoryLabels` in
+`Promise.all`, and both re-run on every navigation - so each debounced keystroke, each category
+change and each sort change fetches a category list that cannot have changed. With the probe
+above, a search matching nothing costs **three** backend requests where one would do.
+
+Deliberate for now rather than overlooked. The obvious fix is caching the category read, and the
+invalidation story is the part that makes it a decision rather than a tidy-up: a category created
+in the Add transaction modal has to appear in the filter select, and the modal already re-reads
+on every open with `cache: 'no-store'` for exactly that reason. Ten categories is also a cheap
+query against a per-user SQLite database, so the win is small today.
+
+What would change the calculus is the account-wide count discussed above landing, or a user with
+enough categories that the join stops being trivial. Whoever picks it up should look at the two
+reads together rather than only this one.
+
 ### The header period ignores the profile's month start day
 
 `monthOverline()` and `monthLabel()` in `lib/format.ts` format the **calendar** month, and
@@ -264,6 +384,14 @@ value, which no user can set yet.
 Fixing it is not just threading a number through: with `monthStartDay = 15`, the period
 spanning 15 Aug to 14 Sep has no single month name, and the design draws no label for that
 case. So this needs a designer answer alongside PET-45's read, not only the value.
+
+**PET-30 gave the mismatch a visible symptom rather than only a wrong label.** The transactions
+header formats the calendar month while the list read's `period=current` resolves against
+`monthStartDay`, so for any value other than 1 the two disagree about which window the page is
+showing. A transaction dated inside the calendar month but outside the budgeting period is then
+absent from a page whose overline names that month - and if it is the only one, the page reports
+no matching transactions under a heading that says otherwise. Nothing new is broken here; what
+changed is that the disagreement now has rows to hide.
 
 The same two functions also hard-code the `en-US` locale, matching `formatCurrency`. When
 onboarding's chosen currency is finally threaded through, the locale should follow it. PET-9
@@ -365,6 +493,35 @@ earlier version of that test did. The suite therefore asserts that `setSelection
 called with the computed offset, and the visible behaviour is a Storybook or manual check. A
 real browser test (Playwright, or Storybook's own test runner) is what would close this
 properly, and nothing in the repo runs one yet.
+
+**PET-31 made that missing browser test matter more, and one of the gaps it named turned out to be
+a bug.** `(app)/Modal.tsx` is built on the native `<dialog>`, and jsdom 26.1.0 implements almost
+none of it - `HTMLDialogElement.prototype` carries exactly `constructor` and `open`. So
+`jest.setup.ts` fakes `showModal()` and `close()` and **deliberately stops there**, leaving two
+things unassertable: **Escape** (in a browser the UA fires `cancel`, whose default action closes the
+dialog) and the **focus trap**. Faking Escape was the obvious next step and is the wrong one: AC7's
+"Escape closes the modal" would then be a test of fifteen lines of polyfill, passing just as
+happily with the real behaviour deleted.
+
+The amount field's caret is the third, since the modal reuses `BudgetForm`'s handler verbatim. All
+three are checked by hand against `Shell/Modal`'s `FromTrigger` story and
+`Screens/09 Add transaction`, in both Chrome and Firefox, because every one of them is the
+browser's behaviour rather than ours. One real browser test would close the whole set at once,
+which is the strongest argument yet for adding the runner.
+
+**Focus returning to the trigger was a fourth item on that list, and walking it in Chrome is what
+demoted it from "untestable" to "was broken".** The platform restores focus to whatever opened a
+dialog, so `Modal` wrote no code for it. In the real thing focus landed on `<body>`: `close()` fires
+the `close` event, `onClose` is where the owner stops rendering the modal, React does that
+**synchronously inside the event dispatch**, and the dialog detaches before the browser's restore
+step completes - so the next Tab started from the top of the page. `Modal` now captures
+`document.activeElement` on open and refocuses it on unmount, and because that is our code it is
+asserted in `Modal.test.tsx` rather than eyeballed.
+
+Worth generalising rather than filing away: **a platform guarantee that fires during an event React
+unmounts inside is not a guarantee.** The same shape will apply to any future component that closes
+itself by ceasing to exist, and it is invisible to jsdom in both directions - the polyfill cannot
+fake the guarantee, so nothing failed.
 
 ### The currency select has one option, and two things wait on A6
 
@@ -473,6 +630,198 @@ itself still live. The `Screens/Verify link failed` stories reach all four, and 
 number** because there is no frame - which also makes opening them the only review this screen can
 get. The card and both controls are screen 24's, so what actually needs the designer's eye is the
 copy rather than the layout.
+
+**PET-30 raised it a fifth time, with two strings, and this pair is different from the twelve
+above.** Every earlier addition filled a state the design simply never drew. These two *replace* a
+string the design does draw: A15 instructed the no-results state to reuse frame 07's "No
+transactions yet" copy, and PET-30 shipped **"No matching transactions"** over **"Try a different
+search term, category or period."** instead. So the sign-off asked for here is not "is this
+acceptable copy for a gap" but "was overriding your instruction right" - the argument being that
+frame 07's body tells a user with a full history to log their first expense. The reasoning is under
+A15's own item above, and `Screens/07 Transactions — No results` sits beside the `Empty` story it
+should be compared against. If the answer is no, reverting is two strings in
+`TransactionsEmpty.tsx` and the assertions naming them.
+
+**PET-31 raised it a sixth time, with nine strings, and it is the first form with more than one way
+to fail.** Four are field messages - `Choose a category.`, `Choose a date.`, `Enter a merchant.`,
+and `Enter an amount greater than 0.` reused verbatim from the budget field. Four are the
+form-level line in `ui/Field`'s treatment with `role="alert"`, one per way the write can be
+refused: `We couldn't add this transaction. Please check the values and try again.` for a 400,
+`That category no longer exists. Pick another one.` for a 404, `Your session has expired. Log in
+again to save this.` for a 401, and `We couldn't add this transaction. Please try again.` for
+everything else. The ninth covers the categories read failing:
+`We couldn't load your categories. Please close this and try again.`
+
+Two things in that set are decisions rather than sign-offs. **The amount message covers both AC3's
+"missing" and AC4's "zero or negative"**, because it states the rule rather than the symptom and is
+therefore true of an empty field and a typed `0` alike - the ticket carries an amendment saying so,
+so QA does not read AC4 as requiring a second string. And **four failure lines rather than one
+apology**, because collapsing them would make two actively wrong: a 400 told to "try again" loops
+forever on a body the DTO will always reject, and a 404 has an obvious next move that a generic line
+hides. `Screens/09 Add transaction`'s `WithMessages` story renders the four field messages at once,
+and `CategoriesUnavailable` shows the ninth.
+
+### The Add transaction modal's date picker has no Figma counterpart at all
+
+ADD-7 draws the Date field as a **closed select** showing "Oct 8, 2025", and assumption A14 says to
+"use a standard date picker and confirm the pattern with the designer". Frame 09 never opens it, and
+no frame anywhere in the file contains a calendar - so PET-31 built one and every part of it inside
+the trigger is invented.
+
+What the design does fix, and what PET-31 matched exactly: the resting field is `ui/Select`'s box,
+padding and chevron, so it is pixel-identical to the Category select above it. What is ours: a 280px
+popover; a **six-row** grid, fixed so paging cannot change the popover's height under the user's
+cursor; **Monday-first** single-letter column headings; the three day-cell states (selected, today,
+default), none of which the file colours; the two month chevrons, which are `ui/Select`'s own leaf
+rotated a quarter turn; and the whole keyboard model - arrows by day and week, PageUp and PageDown
+by month with the day clamped rather than rolled, Enter to pick.
+
+Two consequences worth the designer's attention rather than just a nod. There is **no year
+control**: paging December forward reaches January, which makes the two chevrons sufficient but
+makes a date two years back twenty-four clicks away. And the trigger is a `<button>` rather than a
+`<select>`, which is what makes the popover possible at all and is the reason
+`(app)/DateField.tsx` carries three ARIA decisions the two real fields beside it do not need.
+
+**The week starts on Monday, which is a product decision and not the app's locale.** Every other
+formatter in the frontend is pinned to `en-US`, where the week starts on Sunday - so this one
+deliberately disagrees with its neighbours, on the grounds that a spending week reads better ending
+at the weekend. Two things follow that are easy to get wrong later. `leadingBlanks` in
+`lib/calendar.ts` is the **only** place `getDay()`'s Sunday-first numbering is converted, and its
+suite pins that the two schemes coincide on no day of the week at all - so a stray `getDay()` used
+as a column index is always wrong rather than occasionally right. And the grid's worst case moved
+with the first day: it is now a 31-day month starting on **Sunday** (37 cells) where it used to be
+one starting on Saturday. If the locale work `lib/format.ts` defers ever arrives, this is a
+deliberate exception to it rather than an oversight to sweep up.
+
+**The popover is `position: fixed` and that is not cosmetic.** A modal `<dialog>` gets
+`overflow: auto` and a `max-height` from the user agent, so an `absolute` popover anchored to the
+field is inside that scroll box: opening it grew the dialog's `scrollHeight` from 532 to 663, put a
+scrollbar down the side of the modal, and clipped 131px of the calendar - all measured in Chrome.
+`fixed` escapes both, because the dialog sets no `transform`, `filter` or `contain` and so
+establishes no containing block, while the popover stays a DOM child of the dialog and therefore
+still paints inside its top layer. The cost is that the coordinates are computed on open rather
+than declared, which brings two small limits with it: the flip-above decision reads a
+`POPOVER_HEIGHT` constant that is only correct because `monthMatrix` fixes the grid at six rows,
+and a window resize **closes** the popover rather than repositioning it. Both are cheap to revisit
+if a second popover ever appears; a shared positioning helper is what that would want.
+
+### A created transaction can legitimately fail to appear, and two smaller edges around it
+
+`GET /api/transactions` defaults to `period=current`, so a transaction dated into an earlier month
+is created successfully and then shows up in neither the list nor the count badge. To the user the
+modal closes and nothing happens, which reads exactly like a failed save. Backdating is not an edge
+case the backend tolerates but a documented feature of it - `CreateTransactionDto` says so, and the
+date is stored verbatim precisely to support it.
+
+PET-31 deliberately neither fixed nor prevented this. All three candidate fixes are owned
+elsewhere: switching the list's period to the new transaction's month is filter state **PET-29**
+owns; a confirmation naming the month ("Added to September") is new copy plus a state A19 and A29
+design nothing for; and bounding the date field to the current period contradicts the DTO. The near
+neighbour is worth knowing too - a **future** date inside the current month does appear, and one in
+the next month does not.
+
+**Amended 2026-08-05 by PET-29: there is a way to go and find it now, and nothing automatic.**
+The period select offers "Last month" and "All time", so a backdated transaction is two clicks
+from being visible instead of being unreachable - which is the part that made this a defect
+rather than a quirk. What PET-29 did **not** do is switch the period for you after a save. That
+would mean the modal reaching into the list's filter state to move it somewhere the user did not
+ask to go, and the honest fix is still the one A19 and A29 owe copy for: a confirmation naming
+the month it landed in. The count badge remains the only immediate feedback, and it still does
+not tick for a backdated row.
+
+Two smaller edges from the same ticket. A successful save from an **empty state** destroys the
+button that opened the modal, because the empty card is replaced by the (currently blank) table -
+so the browser's focus restore has nowhere to return to and focus falls back to the document. That
+is the same class of problem as screen 24's expiry swap above, and the same answer applies: it wants
+a focus-management pattern this repo does not have, and a single control is the wrong first mover.
+And **background scroll behind an open modal is unhandled**: `showModal()` does not lock it, three
+of four `<main>` elements are still empty so there is nothing to scroll yet, and the fix if it ever
+matters is an `overflow-hidden` toggle plus `scrollbar-gutter: stable` - both undesigned, and
+neither observable in jsdom.
+
+**The first of those two is live now.** PET-29 filled the table, so a save from the empty state
+replaces the card with real rows rather than with a blank slot - which means the focus restore
+lands on a document that has visibly changed under it. Still the same fix and still nobody's
+single control to invent.
+
+### A category colour outside the eight renders grey, and nothing can produce one yet
+
+`CategoryResponseDto.color` is a hex string and `CreateCategoryDto` validates it with
+`/^#[0-9A-Fa-f]{6}$/` - any well-formed hex, not one of the palette's eight. The frontend's only
+colour vocabulary is Tailwind class names, and a class cannot be built from a hex at runtime
+without Tailwind's scanner failing to find it, so `components/ui/categoryColour.ts` maps the eight
+known hexes and falls back to `bg-text-tertiary` for anything else.
+
+That fallback is **correct rather than lossy today**, and for a reason worth writing down: the only
+colour outside the eight that a real account holds is `FALLBACK_CATEGORY.color`, `#98A0AE`, which
+*is* `--color-text-tertiary`. So "Uncategorized" gets the grey the design gives it, and nothing
+else can reach the branch - no screen can create a category yet.
+
+The day category writes ship (PET-37 and friends), that stops being true, and whoever builds them
+has to choose: a colour picker restricted to the eight, which is what frame 19's "Color" select
+implies and what `ui/Select.tsx` already records it cannot render; or a rendering path that does
+not go through a class map, which means an inline `style` and a deliberate exception to the
+literal-class rule. Note the second also affects the 8px category dot, not only the tile.
+
+### The transactions table's tile glyph is not `ui/ListRow`'s
+
+Both are the placeholder shopping bag Figma uses for every category, and they are different
+drawings rather than one drawing at two sizes. `ui/ListRow`'s export (node 15:13) puts the handle
+at x=0..8 over a bag spanning 3..17 - left of centre, which that file records as deliberate
+because it is what the export says. The table's (node 27:149) centres it: a bag at 3..15 under a
+handle at 5.5..12.5.
+
+So `app/(app)/transactions/TransactionRow.tsx` traces its own rather than scaling ListRow's, which
+would reproduce the offset handle on a frame that does not draw one. Two glyphs for what is
+supposed to be one placeholder is a discrepancy in the design file rather than in the code, and it
+wants a designer's answer: if the centred one is right, ListRow's export is stale and the dashboard
+row should follow it. Until then neither file is guessing.
+
+### The 9x4.5 chevron now exists three times
+
+`dashboard/MonthPill.tsx` set the trigger itself - "if a third chevron ever appears, lift them
+then" - and PET-29's filter bar is the third. It is deliberately **not** lifted in that ticket: the
+change belongs to a Dashboard file, and editing one from a Transactions branch is the sort of
+drive-by that makes a diff hard to review.
+
+Note `ui/Select.tsx`'s `ChevronLeaf` is not the answer either, and this is the detail that makes
+the unification real work rather than a move. Its viewBox is 10x5 for the form control; rendered
+into a 9x4.5 box it scales the 1.5 round-capped stroke down to 1.35, so the arrow reads visibly
+lighter than the two beside it. A shared component needs a size and a positioning prop before it
+can serve all three, which is three parameters on a nine-pixel arrow - worth doing once, once
+somebody owns all three call sites.
+
+### An unknown category id in the URL shows no-results with the select reading "All categories"
+
+`parseTransactionFilters` checks that `?categoryId=` is a well-formed UUID and deliberately does
+**not** check that it is one of the account's categories. The two reads run in `Promise.all`, so
+the category list is not available before the list request goes out, and serialising them would add
+a round trip to every load of the app's busiest screen to fix a state only a stale bookmark or a
+hand-edited URL reaches.
+
+The outcome is coherent enough: the API filters everything out rather than 404ing, so the screen
+shows the no-results card, whose copy already reads "Try a different search term, category or
+period". The incoherence is one line of display - the category select falls back to
+"All categories" while the URL is filtered by something else, so the bar disagrees with the list
+until the next interaction, which heals it.
+
+The fix, if it is ever worth the round trip, is one line between two awaits: drop `categoryId` when
+no category matches it. The alternative that costs nothing is to render the unknown id as a
+disabled option reading something like "Unknown category", which is new copy A29 would owe.
+
+`isBudgetValid` in `app/setup/draft.ts` and `isAmountValid` in `app/(app)/transactionForm.ts` are
+the same one-line rule, `parseAmountInput(value) > 0`, copied rather than shared. Each names the
+other in a comment.
+
+The copy is deliberate for now, and the reason is layering rather than laziness: importing would
+point the signed-in shell at onboarding, which is the inversion that moved `resendLoginLink` out of
+`app/check-email/` into `lib/`. It is also the call `LoginForm` already made about its two field
+messages - "copied rather than shared: there is no copy module in this repo and two overlapping
+strings are the wrong reason to invent one."
+
+PET-32's Edit transaction modal validates the same field and would make it a third copy, which is
+the point at which a shared `lib/amount.ts` earns its place. Whoever writes that should take
+`isMerchantValid` and `isNameValid` with it - they are the same pair of twins.
 
 ### Screen 24's no-address arrival is new copy and a reworded AC
 
@@ -602,6 +951,13 @@ native build per platform, and `test-e2e` runs against the embedded driver on a 
 
 Until then the DTO's own description says so, which is at least honest to a frontend developer
 reading the generated types.
+
+**PET-30 is what makes this reachable by a user rather than by a caller.** The transactions page
+now renders a no-results state, so a search for `kovačić` against a merchant stored as `Kovačić`
+produces a screen saying there are no matching transactions - which is, from the reader's side,
+indistinguishable from having none. The copy that ships tells them to try a different search term,
+which happens to be correct advice for the wrong reason. Worth revisiting together with the
+normalized column rather than separately.
 
 ### The Fly MCP server is declined; the flyctl workflow becomes a repo skill instead
 

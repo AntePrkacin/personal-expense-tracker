@@ -33,9 +33,11 @@ and update, the category endpoints with their month stats, and the dashboard sum
 has the design system, the app shell with its four routed views, all six access screens, and
 PET-52's verify handler at `/auth/verify` with the httpOnly `spendifico.session` cookie behind it.
 So a person can register, click the emailed link, and land signed in on a Dashboard that knows who
-they are - the sidebar footer reads a real `GET /api/profile`. What is missing is every read a
-*screen* needs for its own data: all four `<main>` elements below the page header are empty, and
-the dashboard summary, transaction and category endpoints are called by nobody.
+they are - the sidebar footer reads a real `GET /api/profile`. Two things beyond access work now:
+`/transactions` reads and renders its own list state, and every "Add transaction" button opens a
+modal that really writes. What is still missing is most of what a screen *shows*: three of the four
+`<main>` elements below the page header are empty, the transactions table is a slot waiting to be
+filled, and the dashboard summary and transaction detail are called by nobody.
 
 ## Repository map
 
@@ -136,6 +138,7 @@ read the file before you write the change, not after.
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
 | add or change anything in `frontend/src/components/`                | `frontend/CLAUDE.md`, Shared components |
 | touch a route, a layout, or the session gate                        | `frontend/src/app/CLAUDE.md`    |
+| build a modal, or add an "Add transaction" trigger                  | `frontend/src/app/CLAUDE.md`, The app shell |
 | build one of the remaining access screens                            | `frontend/src/app/CLAUDE.md`, The access screens |
 | change a DTO, a response shape, or how a page fetches               | `docs/agents/api-contract.md`   |
 | branch, commit, push, or touch a stacked branch                     | `docs/CONTRIBUTING.md`          |
