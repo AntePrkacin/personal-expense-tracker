@@ -1118,8 +1118,8 @@ endpoint takes no filters at all, so there is no ambiguous-empty case for one to
 importing them, the same reason `TransactionsScreen`'s two are slots - both need reads or state
 the screen itself cannot supply, and Storybook has to be able to hand it stand-ins - and this
 ticket ships one of the five, `BudgetCard`, built from the read at the call site; the other four
-are placeholder `<div />`s naming the ticket that fills them (PET-22 to PET-25). AI Insights and
-Settings are the two screens whose `<main>` is still empty and still fetches nothing.
+were placeholder `<div />`s naming the ticket that fills them. AI Insights and Settings are the
+two screens whose `<main>` is still empty and still fetches nothing.
 
 **That card reads no clock at all, and its "days left" caption names no month, which amends node
 22:55.** The frame draws "8 days left in October" and the review of PET-21 found the two halves of
@@ -1136,6 +1136,26 @@ on the last day of every period, and the card's whole-dollar figures are **round
 remainder derived from the rounded pair**, so "$1,241 of $2,000" can never sit beside a "left"
 figure that fails to add up to the budget. Giving the period a real name is a backend field
 (`docs/TODO.md` records it), not a second guess here.
+
+**PET-22 filled the second slot, `TrendCard`, and it inherits both of PET-21's review lessons
+before shipping rather than after.** The card is DSH-6's weekly bars, self-scaled with no
+charting library - both dashboard charts are static and non-interactive by their own acceptance
+criteria, so a library's value (axes, scales, tooltips, transitions) is unwanted, and re-theming
+one onto `--color-accent` would cost more than the fourteen lines of `<div>`s it replaces. Its
+caption reads "Weekly" with **no month name**, for the identical reason `BudgetCard`'s stopped
+naming one: the bars are anchored to `weeklyBuckets`, which shares `daysLeft`'s
+`monthWindow(monthStartDay, today)`, so a window spanning two calendar months has no single name
+and the plan that first drafted this card caught itself repeating the mistake before writing the
+component. `weeks.ts`'s `currentWeekIndex` carries the matching edge for the highlight: it reads
+`todayIsoDate()` off the frontend host's clock while every bucket boundary comes from
+`APP_TIMEZONE`, so the two can disagree by up to the zone offset and the accent bar can land one
+week off for up to an hour twice a month - self-healing on the next request, exactly like the
+`daysLeft` edge beside it, and not fixable here without this card reading `monthStartDay` itself.
+**The API already zero-fills a spend-free week**, so the card must not: `weeklyBucketsOf` on the
+backend pushes every bucket in the period's range with `total: 0` rather than omitting it, and
+its one early return - an **empty** array - is for `transactionCount === 0`, the whole period
+having no spend at all. `TrendCard` renders that empty case as nothing, which PET-26 is what
+replaces with frame 05's own empty-state card rather than a zero-filled axis nobody designed.
 
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show

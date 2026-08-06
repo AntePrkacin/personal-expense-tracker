@@ -545,6 +545,20 @@ than smuggled into a frontend branch. The page header's overline and month pill 
 stay on the calendar month: they are labels standing alone, and `frontend/CLAUDE.md` already
 records that they ignore `monthStartDay` until PET-45.
 
+**PET-22's `TrendCard` hit the identical wall before a line of it was written, which is worth
+recording here rather than as a second entry.** `weeklyBuckets` is anchored to the same
+`monthWindow(monthStartDay, today)` `daysLeft` comes from, so the plan's first draft of the
+card's caption - "Weekly · October", reusing `monthLabel` the way the page header does - was
+caught and corrected during planning: the caption reads "Weekly" alone. The same field this entry
+already asks for would fix both captions in one place rather than two, so a future ticket adding
+it should thread the label through `BudgetCard` and `TrendCard` together. `TrendCard` also
+carries a narrower version of the same two-clocks edge, on `weeks.ts`'s current-week highlight
+rather than on a caption: `todayIsoDate()` reads the frontend host's clock while
+`weeklyBuckets`'s boundaries come from `APP_TIMEZONE`, so the highlighted bar can land one week
+off for up to an hour twice a month. Self-healing on the next request, the same as `daysLeft`'s
+own midnight edge in `backend/CLAUDE.md`'s Dashboard section, and not fixable in the frontend
+without it reading `monthStartDay` itself.
+
 ### A visible theme toggle is deferred, and adding one costs the automatic behaviour
 
 PET-57 ships daisyUI's built-in `light` / `dark` pair selected by `prefers-color-scheme`, with

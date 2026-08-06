@@ -115,6 +115,40 @@ reports the reader's own money.
 header already draws its overline from, so the two cannot disagree. The `monthStartDay` deviation
 that function carries is `frontend/CLAUDE.md`'s existing record, not a new one here.
 
+## Review follow-ups (folded in before implementation)
+
+Three corrections, caught reviewing this plan against PET-21's own review rather than against
+running code, and folded in here before a line of the card is written rather than after.
+
+**The caption's month claim above repeats the mistake PET-21's review just fixed, and it is
+wrong for the same reason.** "Weekly · October" is not the same case as the page header's
+overline: `monthOverline`/`monthLabel` on the header are labels standing alone, so a calendar
+month is merely imprecise there while `monthStartDay` is 1. This caption is attached to
+`weeklyBuckets`, which `weeklyBucketsOf` anchors to `monthWindow(monthStartDay, today)` in
+`backend/src/dashboard/dashboard.service.ts` - the identical window `daysLeft` comes from, which
+PET-21's card no longer names a month for. At `monthStartDay: 15` the window runs 15 October to
+15 November, and every bucket in it - not just the boundary week - would sit under a caption
+naming one month while up to half its bars fall in the other. So the caption is **"Weekly"**,
+with no month at all, until a period label exists on the response; `docs/TODO.md`'s existing
+PET-21 entry about that field is the one to extend, not a new entry.
+
+**AC3's highlight has the same two-clocks edge PET-21's `daysLeft` does, narrower but not new.**
+`todayIsoDate()` reads the frontend host's clock while every bucket boundary comes from
+`APP_TIMEZONE` in `monthWindow`, so for up to an hour a day the two disagree - and when that hour
+straddles a bucket boundary, the computed current-week index points at the neighbouring bar
+instead. Self-healing on the next request, exactly as PET-21's `backend/CLAUDE.md` note already
+describes for `daysLeft`, and not fixable here for the same reason: fixing it would mean this card
+reading `monthStartDay` itself, which is the second-guessing PET-21's card was written to avoid.
+Recorded in `weeks.ts` rather than left implicit, so the next reader does not have to rediscover it.
+
+**Bar height's divide-by-zero has to be an explicit guard, not an implicit one.** "A percentage of
+the tallest bucket" is `0/0` the day every bucket in the period is zero. That day cannot arrive
+today - `weeklyBucketsOf` returns `[]` outright when `periodTransactions.length === 0`, and every
+stored amount is `@IsPositive`, so a non-empty array always contains at least one positive `total`
+- but the height calculation is still worth writing as a guarded percentage (falling back to the
+same minimum track a zero bucket gets) rather than a bare division, so a future relaxation of
+either invariant degrades to a flat chart instead of `NaN%` in every inline style.
+
 ## Shape
 
 `(app)/dashboard/weeks.ts` - the current-week index, one pure function over the contract's
@@ -129,18 +163,20 @@ Server Component; nothing on it is interactive, per AC4.
 
 ## Tasks
 
-- [ ] Commit this plan alone and open the draft PR against `feat/PET-21-monthly-budget-card`
-- [ ] `(app)/dashboard/weeks.ts` and its suite: the current-week index, a short final bucket, today
+- [x] Commit this plan alone and open the draft PR against `feat/PET-21-monthly-budget-card`
+- [x] `(app)/dashboard/weeks.ts` and its suite: the current-week index, a short final bucket, today
       in the first and in the last bucket, an empty array
-- [ ] `(app)/dashboard/TrendCard.tsx` and its suite: bars, proportional heights, one highlight, a
+- [x] `(app)/dashboard/TrendCard.tsx` and its suite: bars, proportional heights, one highlight, a
       `total: 0` week keeping its label over a minimum track, no interactive role anywhere
-- [ ] `(app)/dashboard/page.tsx`: fill the trend slot
-- [ ] Stories: `Shell/Spending trend` with a filled month, a month holding a zero week, and a
+- [x] `(app)/dashboard/page.tsx`: fill the trend slot
+- [x] Stories: `Shell/Spending trend` with a filled month, a month holding a zero week, and a
       short final bucket; re-check `Screens/04 Dashboard` against node `21:4`
-- [ ] Docs: `frontend/src/app/CLAUDE.md` (the no-library decision, that the API already zero-fills
-      and the card must not, the range test), root `CLAUDE.md`, `docs/TODO.md` if the AC3
-      colour-only question is raised
-- [ ] Comment on PET-22 with the no-library decision and the correction that AC5 needs no fill
+- [x] Docs: `frontend/src/app/CLAUDE.md` (the no-library decision, that the API already zero-fills
+      and the card must not, the range test, the caption naming no month, the two-clocks edge on
+      the highlight), root `CLAUDE.md`, `docs/TODO.md` (extend the PET-21 period-label entry
+      rather than adding a new one)
+- [ ] Comment on PET-22 with the no-library decision, the correction that AC5 needs no fill, and
+      the caption amendment (held back with the push, per instruction)
 
 No `npm run api:sync`: nothing here changes a request or response body.
 
@@ -167,3 +203,29 @@ setting the profile's `monthStartDay` so that today is the period's last day, th
 Then `Shell/Spending trend` and `Screens/04 Dashboard` in Storybook. The screen story already
 carries `AddTransactionProvider` and the `appDirectory` parameter from PET-21; the card's own
 stories need neither, since nothing in this card reaches a hook.
+
+### What was actually verified, and what is still owed
+
+`npm run lint`, `npm test` (75 suites, 1409 tests), `npm run build` and `npx tsc --noEmit` from
+`frontend/`, `npm run docs:check` from the root: all green.
+
+Then headless Chromium over CDP against `Shell/Spending trend`'s four stories and
+`Screens/04 Dashboard`, with the story fixtures anchored to the real clock (`daysAgo()` helpers
+in both story files) rather than a fixed October 2025, so the highlight is checked against
+whatever "today" the story actually renders under rather than assumed: all four values render
+(AC1), the $410 bucket is the 100%-height bar and the rest scale under it (AC2), exactly one bar
+is highlighted and it is the open-ended current bucket (AC3), no button/link/progressbar role
+anywhere on the chart (AC4), a zero-total week still renders its `$0` and `Week 2` label over a
+visible non-zero floor rather than collapsing (AC5), the short-final-bucket case highlights the
+short last bucket rather than missing it, the whole-period-empty case renders nothing, and the
+card repaints in the dark theme.
+
+**Not verified: AC5 and the short-final-bucket case against a running backend with real data.**
+The plan asks for both to be confirmed against `GET /api/dashboard` actually sending the shapes
+this card assumes - a zero-valued bucket for a spend-free week, and a short final bucket at a
+period boundary - not only against Storybook fixtures built by hand to look like them. No backend
+was running in this session to do that against. The source-level argument in Decisions above
+(`weeklyBucketsOf`'s early return is `periodTransactions.length === 0`, not "any bucket empty",
+and the loop pushes every bucket including zero ones) still stands on inspection of
+`backend/src/dashboard/dashboard.service.ts`, but it has not been confirmed live the way the plan
+asks. Whoever takes this out of draft should run the two backend-dependent checks before merge.

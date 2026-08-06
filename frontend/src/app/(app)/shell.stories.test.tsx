@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
 import * as BudgetCard from './dashboard/BudgetCard.stories';
+import * as TrendCard from './dashboard/TrendCard.stories';
 import * as Modal from './Modal.stories';
 import * as PageHeader from './PageHeader.stories';
 
@@ -28,9 +29,10 @@ type StoryModule = Record<string, unknown> & { default: Meta };
 const MODULES: [name: string, module: StoryModule][] = [
   ['PageHeader', PageHeader as StoryModule],
   ['Modal', Modal as StoryModule],
-  // The dashboard's own card (node 22:55), not a tile on the Figma Components page and not a
+  // The dashboard's own cards (node 22:55), not tiles on the Figma Components page and not a
   // whole frame - `Screens/04 Dashboard` is where the frame is diffed.
   ['BudgetCard', BudgetCard as StoryModule],
+  ['TrendCard', TrendCard as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

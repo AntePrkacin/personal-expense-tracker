@@ -329,11 +329,12 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   screen renders its designed header, and the shell is really gated and really shows the signed-in
   user's profile as of PET-52. What is missing is everything below the header on **two** of the
   four: the AI Insights and Settings `<main>` elements are empty. Dashboard is no longer one of
-  them as of PET-21: its `<main>` is a grid holding the real Monthly budget card and four
-  placeholder `<div />`s, one per still-unbuilt card - PET-22 (spending trend), PET-23 (category
-  donut), PET-24 (recent transactions) and PET-25 (insight teaser) - so the geometry is reviewable
-  now and each is a one-line change at `page.tsx`'s call site when its own ticket lands.
-  Transactions is the exception that came before it, and as of PET-29 it is a **complete** screen
+  them as of PET-21: its `<main>` is a grid holding the real Monthly budget card, and PET-22 filled
+  the second, the weekly spending trend chart. Three placeholder `<div />`s remain, one per
+  still-unbuilt card - PET-23 (category donut), PET-24 (recent transactions) and PET-25 (insight
+  teaser) - so the geometry is reviewable now and each is a one-line change at `page.tsx`'s call
+  site when its own ticket lands. Transactions is the exception that came before it, and as of
+  PET-29 it is a **complete** screen
   rather than a partial one: the tab bar
   and its real count badge, both empty states, the filter bar and the table are all built, and the
   two slots PET-30 left are filled by `page.tsx`. They are still slots rather than direct imports,
