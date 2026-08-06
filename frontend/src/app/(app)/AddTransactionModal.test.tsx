@@ -103,9 +103,8 @@ describe('AC1: the modal and its five fields', () => {
 
 describe('AC2: the amount field', () => {
   it('holds focus on open', () => {
-    // The precondition for the designed focus style. The 1.5px accent border is a focus style,
-    // so nothing renders it unless focus really lands here - but the border itself is CSS and
-    // is a Storybook check.
+    // The precondition for the designed focus style. A focus ring only renders if focus really
+    // lands here - but the ring itself is the theme's CSS and is a Storybook check.
     open();
 
     expect(amount()).toHaveFocus();
@@ -440,7 +439,7 @@ describe('the four failure lines', () => {
 
   it('announces the failure, where a field message deliberately does not', async () => {
     // role="alert" because this appears after a network round trip with nothing else on screen
-    // changing. ui/Field omits it because its message appears beside the field just left.
+    // changing. ui/FieldShell omits it because its message appears beside the field just left.
     create.mockResolvedValue({ ok: false, reason: 'failed' });
 
     const u = user();

@@ -17,72 +17,27 @@ import {
 //
 // **One client file rather than a Server Component holding three client pills.** Every
 // element in this bar is interactive, the `justify-between` that pushes the sort pill right
-// belongs to the bar itself, and nothing outside this screen draws a pill of this shape - so
+// belongs to the bar itself, and nothing outside this screen draws a bar of this shape - so
 // there is no smaller boundary to push into, which is the test `SidebarNav` and
 // `AddTransactionProvider` apply.
 //
-// **Not `ui/Select`.** That component is built on `ui/Field`, which always renders a label
-// above the control, and these three pills are label-less by design. Its `SELECT_CONTROL`
-// also bakes in the form field's own padding and a 34px right inset for a 10px chevron,
-// where this pill is 9x4.5 with 12px of it. What *is* borrowed is the rule underneath both,
-// and it is the one that fails silently if missed: **padding sits on the `<select>`, never on
-// the bordered box** - a padded box turns its own 9-14px band into a dead zone where a click
-// opens no list.
+// **Three stock daisyUI `select select-sm` controls as of PET-57, and that deleted more than
+// it changed.** The pills used to be a hand-drawn box around an `appearance-none` select with
+// an SVG chevron absolutely positioned over it, which needed a rule stated in this file so it
+// would not fail silently - padding on the `<select>` and never on the box, or the box's own
+// band becomes a dead zone where a click opens no list. daisyUI's `select` puts the border,
+// the radius, the padding and the chevron on the control itself, so there is no box, no
+// overlay and no rule left to break.
+//
+// **Not `ui/Select`.** That component renders a `FieldShell` label above the control, and
+// these three are label-less by design - which is the whole of the difference now that both
+// draw the same daisyUI box. An `aria-label` per control is what names them instead.
 //
 // **The navigation goes through `FilterNavigation` rather than through this file's own
 // router.** That provider owns the one `useTransition` on the screen, which is what lets the
 // table dim while a change is in flight - three controls each owning their own would produce
 // three `isPending` flags that nothing between them can read. It is also where the
 // `replace`-not-`push` decision is recorded, since it applies to the search field equally.
-
-/**
- * The pill's box, and the control inside it.
- *
- * Two strings for the reason `ui/Field` splits its own: the box owns the border and the fill,
- * the control owns every pixel of padding, and merging them would put the padding on the box.
- *
- * `pr-7.25` is 29px - the designed 12px of right padding, the 9px chevron, and the 8px gap
- * the frame draws between the value and the mark. `appearance-none` removes the platform
- * arrow so only the designed one shows, and `cursor-pointer` is the call `SELECT_CONTROL`
- * records: a user agent draws an arrow over a `<select>`, so the control reads as unclickable
- * without it.
- */
-export const FILTER_PILL_BOX =
-  'bg-surface-card border-border-strong relative flex items-center rounded-[10px] border';
-
-export const FILTER_PILL_CONTROL =
-  'text-label-l text-text-primary w-full cursor-pointer appearance-none bg-transparent py-2.25 pr-7.25 pl-3.5 outline-none focus-visible:outline-brand-accent focus-visible:outline-2 focus-visible:outline-offset-2';
-
-/**
- * The trailing chevron, traced from the Figma export (node 26:165).
- *
- * **The third copy of this 9x4.5 leaf**, which is exactly the trigger
- * `dashboard/MonthPill.tsx` names: "if a third chevron ever appears, lift them then". It is
- * not lifted here on purpose - unifying it means editing a Dashboard file from a Transactions
- * ticket, and the shared component needs a size prop and a positioning prop before it can
- * serve all three. `docs/TODO.md` records it.
- *
- * `ui/Select`'s `ChevronLeaf` is not a drop-in either: its 10x5 viewBox rendered into 9x4.5
- * scales the 1.5 stroke down to 1.35, so the arrow would be visibly lighter than the two
- * beside it in the same bar.
- *
- * `pointer-events-none` is what keeps the whole pill clickable - the mark is layered over the
- * select, and without it a click on the arrow, the most obvious place to click, lands on
- * decoration. `overflow-visible` because the round-capped stroke falls half outside the box
- * at both tips and the elbow.
- */
-function Chevron() {
-  return (
-    <svg
-      viewBox="0 0 9 4.5"
-      className="text-text-tertiary pointer-events-none absolute top-1/2 right-3 h-[4.5px] w-[9px] -translate-y-1/2 overflow-visible"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path d="M0 0L4.5 4.5L9 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 type FilterPillProps<T extends string> = {
   /** Names the control, since the design draws no visible label. */
@@ -94,21 +49,22 @@ type FilterPillProps<T extends string> = {
 
 function FilterPill<T extends string>({ label, value, options, onChange }: FilterPillProps<T>) {
   return (
-    <div className={FILTER_PILL_BOX}>
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value as T)}
-        className={FILTER_PILL_CONTROL}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <Chevron />
-    </div>
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(event) => onChange(event.target.value as T)}
+      // `w-auto` is the one class here that is not stock, and it is not cosmetic: `select`
+      // ships `width: clamp(3rem, 20rem, 100%)`, sized for a form field standing alone in a
+      // column, and three of those side by side is 960px of filter bar. Sizing to content is
+      // what makes these read as the pills the frame draws.
+      className="select select-sm w-auto"
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -139,8 +95,11 @@ export function TransactionFilterBar({ filters, categories }: TransactionFilterB
 
   return (
     // justify-between is what right-aligns the sort pill; the frame gives the two left pills
-    // a 10px gutter of their own rather than distributing all three.
-    <div className="flex items-center justify-between">
+    // a 10px gutter of their own rather than distributing all three. `flex-wrap` and the
+    // row gap are for the viewport Figma never draws: below `sm` three selects and a long
+    // category name do not fit one line, and wrapping is what the drawer's `min-w-0` content
+    // column expects of everything inside it.
+    <div className="flex flex-wrap items-center justify-between gap-y-2.5">
       <div className="flex items-center gap-2.5">
         <FilterPill
           label="Category"

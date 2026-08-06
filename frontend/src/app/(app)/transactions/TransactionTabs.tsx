@@ -13,11 +13,15 @@
 // Turning this real is two `next/link`s plus `aria-current`, or a full tablist if the
 // Categories view ends up client-side.
 //
-// The badge is built here rather than out of `ui/Tag`. Tag's `indigo` tone is the same colour
-// pair by coincidence (`bg-brand-accent-soft` over `text-brand-accent-pressed`), but its
-// padding and type are its own, it renders a dot unless told not to, and its required `label`
-// prop means "a status" where this is a count - three of its decisions overridden to inherit
-// one.
+// **That inertness is also why daisyUI's `tabs` component is deliberately not used here**,
+// though the bar it draws is exactly this one. `tabs` expects `role="tab"` elements or real
+// radio inputs and links, which is the announcement this bar must not make; so the two labels
+// stay plain spans wearing utilities, and the day PET-36 lands the route is the day the stock
+// component becomes the right answer.
+//
+// The count badge is stock `badge badge-soft badge-primary badge-sm`, and the colour modifier
+// is semantic rather than decorative: it marks the one selected tab, which is the same job
+// `btn-primary` does for the one emphasized action on a screen.
 
 /**
  * The tab bar, with the post-filter total on the active tab.
@@ -33,29 +37,28 @@
  */
 export function TransactionTabs({ total }: { total: number }) {
   return (
-    // The 1px rule under the whole bar is Border/Default and runs the full content width on
-    // both frames. gap-7 is the designed 28px between the two tabs.
-    <div className="border-border-default flex items-center gap-7 border-b">
-      {/* The active tab is a column: label row, then the 2px accent underline sitting flush
+    // The rule under the whole bar runs the full content width on both frames. gap-7 is the
+    // designed 28px between the two tabs.
+    <div className="border-base-300 flex items-center gap-7 border-b">
+      {/* The active tab is a column: label row, then the 2px `primary` underline sitting flush
           with the container's own border. pb-3 plus gap-2.5 is the designed 12 + 10. */}
       <div className="flex flex-col items-center gap-2.5">
         <div className="flex items-center gap-1.75 pb-3">
-          <span className="text-strong-m text-text-primary">All transactions</span>
+          <span className="text-sm font-semibold">All transactions</span>
 
-          <span className="bg-brand-accent-soft text-brand-accent-pressed text-label-s rounded-full px-1.75 py-0.5">
-            {total}
-          </span>
+          <span className="badge badge-soft badge-primary badge-sm">{total}</span>
         </div>
 
-        <div className="bg-brand-accent h-0.5 w-full" />
+        <div className="bg-primary h-0.5 w-full" />
       </div>
 
       {/* Figma draws the inactive tab's underline too and marks it hidden, so it is simply
           absent here rather than transparent. The label row keeps the same pb-3 so both
-          labels sit on one baseline. */}
+          labels sit on one baseline, and the label is dimmed rather than recoloured - the
+          selected one takes plain `base-content`. */}
       <div className="flex flex-col items-center gap-2.5">
         <div className="flex items-center pb-3">
-          <span className="text-strong-m text-text-tertiary">Categories</span>
+          <span className="text-base-content/50 text-sm font-semibold">Categories</span>
         </div>
       </div>
     </div>

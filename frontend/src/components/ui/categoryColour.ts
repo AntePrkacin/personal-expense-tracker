@@ -17,16 +17,22 @@
 export type CategoryColour =
   'coral' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue' | 'violet' | 'pink';
 
-/** Background utility for a category's icon tile, keyed by colour name. */
+/**
+ * Background and content utility for a category's icon tile, keyed by colour name.
+ *
+ * Each value pairs the tile's background with its `-content` colour, so a glyph
+ * drawn on the tile with `currentColor` follows the theme rather than assuming
+ * white - the same pairing every daisyUI status colour ships with.
+ */
 export const CATEGORY_TILE: Record<CategoryColour, string> = {
-  coral: 'bg-error',
-  orange: 'bg-warning',
-  yellow: 'bg-warning',
-  green: 'bg-success',
-  teal: 'bg-accent',
-  blue: 'bg-info',
-  violet: 'bg-primary',
-  pink: 'bg-secondary',
+  coral: 'bg-error text-error-content',
+  orange: 'bg-warning text-warning-content',
+  yellow: 'bg-warning text-warning-content',
+  green: 'bg-success text-success-content',
+  teal: 'bg-accent text-accent-content',
+  blue: 'bg-info text-info-content',
+  violet: 'bg-primary text-primary-content',
+  pink: 'bg-secondary text-secondary-content',
 };
 
 // Everything below is the bridge from what the API stores to what the map above is keyed
@@ -47,9 +53,10 @@ export const CATEGORY_TILE: Record<CategoryColour, string> = {
  * `#57b368` is a value the API accepts and stores as typed, while
  * `backend/src/database/user/starter-categories.ts` seeds the same colour uppercase.
  *
- * The hexes are the ones in `globals.css`, and `globals.test.ts` pins those against the
- * design; this file's own test pins that the two agree, so a token edited in one place
- * cannot leave a tile silently falling back to grey.
+ * The hexes are the backend's stored seed values, not a frontend token: PET-57 retired
+ * `globals.css`'s hand-rolled palette and `globals.test.ts` with it, so this file is now
+ * their single frontend home. `backend/src/database/user/starter-categories.ts` seeds
+ * each one uppercase, which is the casing this map keys on.
  */
 export const CATEGORY_COLOUR_BY_HEX: Record<string, CategoryColour> = {
   '#EF6F6C': 'coral',
@@ -65,17 +72,19 @@ export const CATEGORY_COLOUR_BY_HEX: Record<string, CategoryColour> = {
 /**
  * The tile for a colour outside the eight.
  *
- * **`bg-text-tertiary` looks like a mistake and is not.** `--color-text-tertiary` is
- * `#98a0ae`, which is exactly `FALLBACK_CATEGORY.color` - the "Uncategorized" grey that the
- * backend's own file says is deliberately outside the palette. So this is the design's
- * answer for a category with no colour of its own rather than an invented grey, and
- * reaching for a `category-*` token here would give the fallback a real category's colour.
+ * **`bg-base-300` looks like a mistake and is not.** `#98A0AE`, `FALLBACK_CATEGORY.color`
+ * in the backend's own file, is the "Uncategorized" grey that file says is deliberately
+ * outside the palette. Under daisyUI a colour that is nobody's category colour has no
+ * status meaning to reach for, so the theme-aware stand-in is a base shade rather than one
+ * of `error`/`warning`/`success`/etc - a base shade is exactly what has no semantic weight
+ * to spend. `text-base-content` is the paired content colour, the same pairing every entry
+ * in `CATEGORY_TILE` above carries.
  *
  * A bare string rather than a ninth entry in the map above, because `CategoryColour` stays
  * eight keys: widening it would offer this grey to the onboarding chips and to `ui/ListRow`
  * as if it were a colour somebody could pick.
  */
-export const CATEGORY_TILE_NEUTRAL = 'bg-text-tertiary';
+export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
 
 /**
  * The background utility for a stored category colour.

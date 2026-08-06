@@ -38,7 +38,15 @@ type FieldShellProps = {
 export function FieldShell({ id, label, error, children }: FieldShellProps) {
   return (
     <fieldset className="fieldset w-full">
-      <label className="label" htmlFor={id}>
+      {/* The label carries an id as well as `htmlFor`, for the one consumer that cannot use
+          the latter. `htmlFor` names a form control, and HTML-AAM computes a **button's** name
+          from its own subtree instead - so `(app)/DateField.tsx`, whose trigger is a `<button>`
+          because a native `<select>` cannot host a popover, would never have its label
+          announced. It points `aria-labelledby` at this id plus a value span inside itself, and
+          the pattern needs an id it can name. Derived from `id` rather than passed, so no
+          caller can hand out one that matches nothing. Harmless to `ui/Input` and `ui/Select`,
+          which keep using `htmlFor` and ignore this. */}
+      <label id={`${id}-label`} className="label" htmlFor={id}>
         {label}
       </label>
       {children}

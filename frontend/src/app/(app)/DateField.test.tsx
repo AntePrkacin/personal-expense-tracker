@@ -43,8 +43,8 @@ describe('the resting trigger', () => {
     render(<Harness initial="2025-10-08" />);
 
     // Node 28:402's own string, and the accessible name is label plus value - which is what
-    // the aria-labelledby self-reference buys, since a <label for> alone would not name a
-    // button at all.
+    // aria-labelledby naming both the shell's label and a span inside the button buys, since a
+    // <label for> alone would not name a button at all.
     expect(trigger()).toHaveAccessibleName('Date Oct 8, 2025');
     expect(trigger()).toHaveTextContent('Oct 8, 2025');
   });
@@ -71,18 +71,22 @@ describe('the resting trigger', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('carries the error wiring ui/Field provides', () => {
+  it('carries the error wiring ui/FieldShell provides', () => {
     render(<Harness initial="2025-10-08" error="Choose a date." />);
 
     expect(trigger()).toHaveAccessibleDescription('Choose a date.');
     expect(screen.getByText('Choose a date.')).toBeInTheDocument();
+    // `select-error` is the visible half of a state this control cannot express in aria at all
+    // (see the next test), which is why it is pinned beside the description rather than left to
+    // review like every other class in this file.
+    expect(trigger()).toHaveClass('select-error');
   });
 
   it('does not set aria-invalid, which the button role does not support', () => {
     // ui/Input and ui/Select both set it, on real form controls where the textbox and combobox
-    // roles support it. A button does not, so the invalid state is carried by the red border
-    // and by the description above. Pinned so it is not "restored" for consistency with the
-    // two fields beside it.
+    // roles support it. A button does not, so the invalid state is carried by `select-error`'s
+    // border and by the description above. Pinned so it is not "restored" for consistency with
+    // the two fields beside it.
     render(<Harness initial="2025-10-08" error="Choose a date." />);
 
     expect(trigger()).not.toHaveAttribute('aria-invalid');
@@ -500,9 +504,18 @@ describe('today', () => {
 
     await user().click(trigger());
 
-    // The 8th is today under the pinned clock, the 20th is selected. Selected wins where they
-    // coincide, which is why the two class maps are mutually exclusive in the markup.
-    expect(day('Oct 8, 2025').className).toContain('text-brand-accent');
-    expect(day('Oct 20, 2025').className).toContain('bg-brand-accent');
+    // The 8th is today under the pinned clock, the 20th is selected, and the two states are
+    // mutually exclusive in the markup with selected winning. The two daisyUI classes are each
+    // the visible half of an aria state this test pins beside them, which is the one case
+    // `frontend/CLAUDE.md` allows a class assertion for.
+    expect(day('Oct 8, 2025')).toHaveAttribute('aria-current', 'date');
+    expect(day('Oct 8, 2025')).toHaveClass('btn-outline');
+
+    expect(day('Oct 20, 2025').closest('[role="gridcell"]')).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(day('Oct 20, 2025')).toHaveClass('btn-primary');
+    expect(day('Oct 20, 2025')).not.toHaveAttribute('aria-current');
   });
 });

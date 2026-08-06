@@ -3,8 +3,8 @@
 import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 
 // The dialog box every modal in the app draws (Figma node 28:384, which is literally named
-// "Modal"): the scrim, the centred 520px card, the titled header with its close button, the
-// two hairline dividers, the padded body and the right-aligned footer row.
+// "Modal"): the dimmed page behind it, the centred card, the titled header with its close
+// button, the body and the right-aligned footer row.
 //
 // **Built on the native `<dialog>` with `showModal()`**, which is the call `ui/Select.tsx`
 // already argues for about native controls: the platform gives the top layer, focus
@@ -15,10 +15,18 @@ import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 // `sticky top-0` with no stacking context to arrange. Verified in Chrome against a sticky
 // element at `z-index: 9999`, which the dialog still covers.
 //
-// **Focus restoration is the one item that was on that list and had to come off it.** The
-// platform does restore focus to whatever opened a dialog, and it does not survive an owner
-// that unmounts the modal in `onClose` - see the effect below, which is why this component
-// writes that part itself.
+// **The chrome is stock daisyUI as of PET-57**: `modal` on the dialog, `modal-box` on the
+// card, `modal-action` on the footer row. That retired four hard-coded class constants and
+// the reasoning behind two of them, because daisyUI's own stylesheet now owns what they
+// worked around - it styles the `::backdrop`, centres the box, hides the closed state, and
+// gives the box its padding, radius, shadow, width and `max-height`. The two hairline
+// dividers went with them: a stock daisyUI modal draws none, and PET-57 hands radius,
+// shadow and rules to the theme rather than to Figma's measurements.
+//
+// **Focus restoration is the one item that was on the platform's list and had to come off
+// it.** The platform does restore focus to whatever opened a dialog, and it does not survive
+// an owner that unmounts the modal in `onClose` - see the effect below, which is why this
+// component writes that part itself.
 //
 // **It lives here rather than in `components/ui/`.** That folder mirrors the Figma Components
 // page and is complete, and this is not a tile. It is not `components/`' case either -
@@ -35,82 +43,15 @@ import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 // focus restore turned out to need our own code, at which point it became testable.
 
 /**
- * The scrim.
- *
- * An arbitrary literal rather than a Foundations colour token, deliberately. The value is an
- * eyedropped frame fill on node 28:383 that is **not** `Surface/Ink` (#101720 against this
- * rgb(10, 15, 23)), it carries alpha where every `--color-*` token is opaque, and
- * `globals.test.ts` cross-checks the colour list against the Foundations Colour story - so
- * promoting it would put a translucent swatch on a page that draws no such thing. This is the
- * PET-8 side of the precedent: ship the literal, let a later ticket promote it if the
- * designer binds a variable. `docs/TODO.md` records it beside the unbound circle hex, and
- * `ui/utilities.test.ts` compiles it so it cannot silently generate nothing.
- *
- * Exported for that test rather than inlined, which is the rule `frontend/CLAUDE.md` sets for
- * every hard-coded class: a complete literal string, never interpolated.
- */
-export const MODAL_BACKDROP = 'backdrop:bg-[rgba(10,15,23,0.5)]';
-
-/**
- * The box itself, and two of these classes are load-bearing in a way that is invisible on
- * reading.
- *
- * **`m-auto` is mandatory.** Tailwind's preflight sets `margin: 0` on `*` and on `::backdrop`,
- * which overrides the user agent's own `dialog { margin: auto }` - and that rule is the entire
- * centring mechanism for a modal dialog. Without this class the box pins to the top-left
- * corner of the viewport, with nothing in the markup looking wrong.
- *
- * **`open:flex`, never a bare `flex`.** The UA hides a closed dialog with
- * `dialog:not([open]) { display: none }`, and an unconditional `display: flex` outranks it -
- * so the box would be visible for the frame between mount and the effect below running.
- * Scoping the display to the open state means the element is laid out only while it is
- * actually open.
- *
- * **No `overflow-clip`**, although Figma reports it on this frame. It would clip the footer
- * buttons' `focus-visible:outline-offset-2` rings, which is exactly why `AccessCard` omits it
- * too. The UA's own `dialog:modal { max-height: …; overflow: auto }` survives preflight, so a
- * viewport shorter than the box scrolls the box rather than losing its footer.
- */
-export const MODAL_BOX = 'm-auto w-130 flex-col rounded-xl bg-surface-card shadow-modal open:flex';
-
-/**
- * The 1px `Border/Subtle` rules under the header and above the footer.
- *
- * Two elements rather than `divide-y` on the dialog, because the optional `<form>` below
- * changes the box's child count - so `divide-y` would draw one line in the form case and two
- * in the other. An `<hr>` was the other candidate and publishes a `separator` to the
- * accessibility tree that the design does not intend.
- *
- * Exported so `ui/utilities.test.ts` compiles it; `bg-border-subtle` is this component's own
- * first use of that token.
- */
-export const MODAL_DIVIDER = 'bg-border-subtle h-px w-full';
-
-/**
- * The 34px close target (node 28:387).
- *
- * `cursor-pointer` is **not** redundant here, and this is the one place in the app where
- * forgetting it is easy: `BUTTON_BASE` is not in play because this is not a `ui/Button`, and
- * the user agent draws an arrow over a `<button>`. That is the defect PET-10 fixed app-wide.
- *
- * The focus ring is the repo's standard `focus-visible:` trio. No hover or pressed treatment,
- * because the file draws none - one of the answers `docs/TODO.md` records as owed.
- */
-export const MODAL_CLOSE =
-  'inline-flex size-8.5 shrink-0 cursor-pointer items-center justify-center rounded-full ' +
-  'bg-surface-muted text-text-secondary focus-visible:outline-brand-accent ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-2';
-
-/**
  * The X, traced from node 28:388: a 10x10 box, two crossing strokes, round caps.
  *
- * `overflow-visible` for the reason `ui/Select`'s chevron and `CategoryChip`'s checkmark both
- * document: an SVG viewport clips its own overflow, and half of a round-capped 1.5 stroke
- * falls outside the box at all four ends, so without it every tip renders shorn flat.
+ * `overflow-visible` for the reason `ui/Select`'s chevron leaf and `CategoryChip`'s checkmark
+ * both document: an SVG viewport clips its own overflow, and half of a round-capped 1.5
+ * stroke falls outside the box at all four ends, so without it every tip renders shorn flat.
  *
- * `currentColor` so the button owns the colour. The stroke width and that colour are both
- * inferred rather than read - the frame exports this as a flattened image - and are on the
- * list of things the designer still owes an answer on.
+ * `currentColor` so the button owns the colour, which under `btn-ghost` means the theme does.
+ * The stroke width is inferred rather than read - the frame exports this as a flattened
+ * image - and is on the list of things the designer still owes an answer on.
  */
 function CloseGlyph() {
   return (
@@ -138,7 +79,7 @@ type ModalProps = {
    * closed modal render nothing at all.
    */
   onClose: () => void;
-  /** The body's rows. Wrapped in the designed padding and 16px gap; pass the fields alone. */
+  /** The body's rows. Wrapped in the designed gap; pass the fields alone. */
   children: React.ReactNode;
   /**
    * The footer's controls, right-aligned.
@@ -151,10 +92,10 @@ type ModalProps = {
   /**
    * The `id` of the control to focus when the dialog opens.
    *
-   * An id rather than a ref, which is not a workaround in this codebase: `ui/Field` makes `id`
-   * a required prop precisely so no field needs one, every form declares its ids as module
-   * constants, and `ui/Input` exposes no `ref` at all - the same constraint `BudgetForm`
-   * works within for its caret restore.
+   * An id rather than a ref, which is not a workaround in this codebase: `ui/FieldShell` makes
+   * `id` a required prop precisely so no field needs one, every form declares its ids as
+   * module constants, and `ui/Input` exposes no `ref` at all - the same constraint
+   * `BudgetForm` works within for its caret restore.
    *
    * **Without it the browser focuses the first tabbable descendant, which is the X.** So a
    * screen reader would announce "Close" on arrival, and frame 09's drawn focused-Amount
@@ -205,10 +146,10 @@ export function Modal({
   /**
    * The heading's id, generated rather than required.
    *
-   * `ui/Field` bans `useId` because it would force `'use client'` onto the whole field layer;
-   * this component already carries the directive, so the objection does not apply. And it must
-   * be generated rather than a constant: frame 11 opening frame 12 is a real two-dialog case,
-   * and a hard-coded id would collide the moment both are mounted.
+   * `ui/FieldShell` bans `useId` because it would force `'use client'` onto the whole field
+   * layer; this component already carries the directive, so the objection does not apply. And
+   * it must be generated rather than a constant: frame 11 opening frame 12 is a real
+   * two-dialog case, and a hard-coded id would collide the moment both are mounted.
    */
   const titleId = useId();
 
@@ -274,12 +215,12 @@ export function Modal({
   useImperativeHandle(ref, () => ({ close }));
 
   /**
-   * A click on the scrim, and the target test is the whole of it.
+   * A click on the dimmed area outside the box, and the target test is the whole of it.
    *
    * A click on `::backdrop` reports the dialog element itself as its target, while a click on
-   * anything inside reports that child - and the box carries no padding of its own, because
-   * the header, body and footer hold all of it, so there is no band of dialog left for a stray
-   * click to land on.
+   * anything inside reports that child - and daisyUI's `.modal` makes the dialog a full-viewport
+   * container whose only child is `modal-box`, so everything with padding on it is a child and
+   * the only thing left for the dialog itself to receive is a click beside the box.
    *
    * Known limitation, worth a comment rather than a fix: a press that starts inside the box and
    * releases outside it also lands here. Pairing `pointerdown` with `click` is the mitigation
@@ -293,14 +234,15 @@ export function Modal({
 
   const content = (
     <>
-      {/* px-6 py-5.5 and gap-4 are node 28:390's own 24 / 22 / 16. */}
-      <div className="flex w-full flex-col gap-4 px-6 py-5.5">{children}</div>
-      <div className={MODAL_DIVIDER} />
-      {/* justify-end is hard-coded, and frame 11 is what will change that: it puts a
-          "Delete transaction" text button at the left of this row. A Record keyed by
-          alignment is the shape then, exactly the sequence STEP_WIDTH went through when a
-          second width appeared. One consumer, one literal, for now. */}
-      <div className="flex w-full justify-end gap-3 px-6 pt-4.5 pb-5.5">{footer}</div>
+      {/* `modal-box` owns the padding now, so the body only spaces its own rows: gap-4 is node
+          28:390's 16, and the vertical padding is what separates them from the header above and
+          the footer's own `modal-action` margin below. */}
+      <div className="flex flex-col gap-4 py-4">{children}</div>
+      {/* `modal-action` is daisyUI's footer row: right-aligned, gapped, spaced off the body.
+          Frame 11 is what will change that - it puts a "Delete transaction" text button at the
+          left of this row, which is `modal-action` plus a `justify-between`, and a Record keyed
+          by alignment is the shape then. One consumer, one literal, for now. */}
+      <div className="modal-action">{footer}</div>
     </>
   );
 
@@ -310,37 +252,46 @@ export function Modal({
       onClose={onClose}
       onClick={onDialogClick}
       aria-labelledby={titleId}
-      className={`${MODAL_BOX} ${MODAL_BACKDROP}`}
+      className="modal"
     >
-      {/* The designed padding is asymmetric: 24 left against 20 right, because the close
-          target carries its own visual inset (node 28:385). */}
-      <div className="flex w-full items-center justify-between pt-5.5 pr-5 pb-4.5 pl-6">
-        {/* An h2, not an h1. PageHeader owns the page's only h1, and (app)/pages.test.tsx
-            asserts there is exactly one - so a modal heading has to sit below it. */}
-        <h2 id={titleId} className="text-heading-l text-text-primary">
-          {title}
-        </h2>
+      {/* `translate-none scale-none` trades daisyUI's entrance animation away, and it is not
+          optional: `.modal-box` rests at `scale: .95` and opens to `scale: 1`, and any non-none
+          `scale`/`translate` makes this element the containing block for `position: fixed`
+          descendants - so DateField's fixed-positioned calendar popover would be laid out
+          relative to this box and then scrolled by its `overflow-y: auto`, instead of
+          overlaying the modal from the viewport. Walked in Chrome: without these two classes,
+          opening the Date field scrolls the whole box sideways. Tailwind's utilities layer
+          outranks daisyUI's component layer, which is what lets two utilities beat the
+          open-state rule. */}
+      <div className="modal-box translate-none scale-none">
+        <div className="flex items-center justify-between gap-4">
+          {/* An h2, not an h1. PageHeader owns the page's only h1, and (app)/pages.test.tsx
+              asserts there is exactly one - so a modal heading has to sit below it. */}
+          <h2 id={titleId} className="text-lg font-bold">
+            {title}
+          </h2>
 
-        {/* Not a `ui/Button`. Its `label` prop is required and renders as visible text, and
-            its own doc says "nothing in the design is icon-only" - this is the exception that
-            proves it, so forcing it through would mean either a visible label or weakening a
-            prop that is right for every other control. A visually hidden span rather than
-            `aria-label`, which keeps getByRole('button', { name: 'Close' }) true. */}
-        <button type="button" onClick={close} className={MODAL_CLOSE}>
-          <CloseGlyph />
-          <span className="sr-only">Close</span>
-        </button>
+          {/* Not a `ui/Button`. Its `label` prop is required and renders as visible text, and
+              its own doc says "nothing in the design is icon-only" - this is the exception that
+              proves it, so forcing it through would mean either a visible label or weakening a
+              prop that is right for every other control. daisyUI's own close-corner idiom
+              instead, minus the absolute positioning, because the header row already has a slot
+              for it. A visually hidden span rather than `aria-label`, which keeps
+              getByRole('button', { name: 'Close' }) true. */}
+          <button type="button" onClick={close} className="btn btn-sm btn-circle btn-ghost">
+            <CloseGlyph />
+            <span className="sr-only">Close</span>
+          </button>
+        </div>
+
+        {onSubmit ? (
+          <form noValidate onSubmit={onSubmit}>
+            {content}
+          </form>
+        ) : (
+          content
+        )}
       </div>
-
-      <div className={MODAL_DIVIDER} />
-
-      {onSubmit ? (
-        <form noValidate onSubmit={onSubmit} className="flex w-full flex-col">
-          {content}
-        </form>
-      ) : (
-        content
-      )}
     </dialog>
   );
 }

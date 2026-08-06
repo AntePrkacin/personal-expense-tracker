@@ -64,7 +64,7 @@ function TransactionsGlyph() {
  * **The button opens modal 09 as of PET-31**, which closes PET-30's AC4 - exactly as that
  * ticket predicted, with an `onClick` and nothing else here changing. It is the same trigger
  * component the header above uses, and both reach the single modal on the shell's layout: two
- * independent modals on one page would mean two focus traps and duplicate `ui/Field` ids.
+ * independent modals on one page would mean two focus traps and duplicate field ids (`ui/FieldShell` requires them as literal props).
  */
 export function TransactionsEmpty({ state }: { state: 'empty' | 'noResults' }) {
   const copy = state === 'empty' ? EMPTY_COPY : NO_RESULTS_COPY;

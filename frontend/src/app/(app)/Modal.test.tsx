@@ -8,7 +8,7 @@ import { Modal, type ModalHandle } from './Modal';
 //
 // jsdom 26.1.0 implements almost nothing of `HTMLDialogElement` - its prototype carries
 // exactly `constructor` and `open` - so `jest.setup.ts` fakes `showModal()` and `close()` and
-// **deliberately fakes nothing else**. Three behaviours are therefore unassertable here, and
+// **deliberately fakes nothing else**. Two behaviours are therefore unassertable here, and
 // asserting them would mean asserting the polyfill rather than the browser:
 //
 //   - **Escape.** In a browser it fires `cancel`, whose default action calls `close()`. The
@@ -16,10 +16,15 @@ import { Modal, type ModalHandle } from './Modal';
 //     proves the wiring Escape arrives through.
 //   - **The focus trap.** `user.tab()` walks straight out of the dialog under jsdom, because
 //     there is no top layer.
-//   - **Focus returning to the trigger.** The browser does it and this component writes no
-//     code for it, so there is nothing here to observe.
 //
-// All three are Storybook and manual checks, recorded in `frontend/src/app/CLAUDE.md`.
+// Both are Storybook and manual checks, recorded in `frontend/src/app/CLAUDE.md`. It was three
+// until focus returning to the trigger turned out to need this component's own code rather
+// than the platform's, at which point it became testable - see "focus on close" below.
+//
+// **No assertion here pins a daisyUI class.** The chrome is `modal` / `modal-box` /
+// `modal-action` and the theme owns what they draw, so what is left to test is behaviour: the
+// one exit, the aria wiring, the focus restore, and the one property the box's own padding
+// could break, in "the box" below.
 
 /** A trigger plus the modal, so opening is a real interaction rather than a mount. */
 function Harness({
@@ -400,46 +405,26 @@ describe('the optional form', () => {
   });
 });
 
-describe('the designed structure', () => {
-  it('draws the two hairline dividers', async () => {
-    render(<Harness />);
+describe('the box', () => {
+  it('does not close when the box’s own padding is clicked', async () => {
+    // The one thing daisyUI's chrome could break and no diff would show. The backdrop test is
+    // `event.target === dialogRef.current`, so every padded region has to be a *child* of the
+    // dialog: `modal-box` carries the padding the header, body and footer used to hold
+    // individually, and a click on it therefore reports the box rather than the dialog. Were
+    // that padding ever moved onto the dialog itself, clicking beside the heading would
+    // discard a half-typed form.
+    const onClose = jest.fn();
+    render(<Harness onClose={onClose} />);
     await userEvent.click(openIt());
 
-    expect(dialog().querySelectorAll('.bg-border-subtle.h-px')).toHaveLength(2);
-  });
+    const box = dialog().firstElementChild as HTMLElement;
+    expect(box).toContainElement(screen.getByRole('heading', { level: 2 }));
+    expect(box).toContainElement(screen.getByLabelText('Amount'));
+    expect(box).toContainElement(screen.getByRole('button', { name: 'Cancel' }));
 
-  it('carries m-auto, without which preflight leaves it in the corner', async () => {
-    // Tailwind preflight sets margin:0 on *, overriding the UA's dialog{margin:auto} - the
-    // entire centring mechanism. Nothing about the markup looks wrong when it is missing,
-    // which is why it is pinned here rather than left to a visual check.
-    render(<Harness />);
-    await userEvent.click(openIt());
+    await userEvent.click(box);
 
-    expect(dialog()).toHaveClass('m-auto');
-  });
-
-  it('scopes its display to the open state rather than laying out unconditionally', async () => {
-    // A bare `flex` would outrank the UA's dialog:not([open]){display:none} and show the box
-    // for the frame between mount and the effect.
-    render(<Harness />);
-    await userEvent.click(openIt());
-
-    expect(dialog()).toHaveClass('open:flex');
-    expect(dialog().className).not.toMatch(/(^|\s)flex(\s|$)/);
-  });
-
-  it('does not clip its own overflow, which would cut the footer focus rings', async () => {
-    render(<Harness />);
-    await userEvent.click(openIt());
-
-    expect(dialog().className).not.toContain('overflow-clip');
-    expect(dialog().className).not.toContain('overflow-hidden');
-  });
-
-  it('styles the scrim through the backdrop variant', async () => {
-    render(<Harness />);
-    await userEvent.click(openIt());
-
-    expect(dialog().className).toContain('backdrop:bg-[rgba(10,15,23,0.5)]');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(dialog()).toBeInTheDocument();
   });
 });

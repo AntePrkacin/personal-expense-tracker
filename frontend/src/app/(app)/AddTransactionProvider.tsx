@@ -14,7 +14,7 @@ import { AddTransactionModal } from './AddTransactionModal';
 // and two of them are on the *same page*: `transactions/TransactionsScreen.tsx` has the header
 // button and `transactions/TransactionsEmpty.tsx` has the empty card's. A component that owned
 // its own modal would therefore mount two `<dialog>` elements on Transactions, with two focus
-// traps, two backdrops, and two copies of every `ui/Field` id - which is a required literal
+// traps, two backdrops, and two copies of every field id - which `ui/FieldShell` requires as a literal
 // prop precisely because `useId` would force `'use client'` onto the field layer. Duplicate ids
 // make `getByLabelText` ambiguous, which is the failure PET-30's own `pages.test.tsx` comment
 // already names when it explains why that file mocks the populated state.

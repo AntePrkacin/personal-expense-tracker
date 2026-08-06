@@ -40,6 +40,22 @@ describe('FieldShell', () => {
     expect(screen.getByLabelText('Merchant')).toHaveAccessibleDescription('Enter a merchant.');
   });
 
+  it('gives the label an id, which is how a button trigger is named', () => {
+    // `(app)/DateField.tsx` points its `aria-labelledby` at this id: its trigger is a
+    // `<button>`, and HTML-AAM computes a button's name from its own subtree, so `htmlFor`
+    // alone would leave the label unannounced. Pinned here rather than only there, because the
+    // string is this file's to keep.
+    render(
+      <FieldShell id="date" label="Date">
+        <button type="button" aria-labelledby="date-label date-value">
+          <span id="date-value">Oct 8, 2025</span>
+        </button>
+      </FieldShell>,
+    );
+
+    expect(screen.getByRole('button')).toHaveAccessibleName('Date Oct 8, 2025');
+  });
+
   it('renders no message element at all without an error', () => {
     const { container } = render(
       <FieldShell id="merchant" label="Merchant">

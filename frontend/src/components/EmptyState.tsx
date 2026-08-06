@@ -11,15 +11,12 @@
 // guessed at - PET-44's frame 16 is the same box, measured - so this skips the move commit
 // instead of waiting to be told what is already known.
 //
-// Everything about the box came off node 45:1044, and two of its values are the sort that look
-// like a mistake:
-//
-//   * **`rounded-lg`, not `rounded-xl`.** Figma binds a raw 16px here, which is Radius/LG.
-//     `AccessCard`'s 20px is a different radius on a different card.
-//   * **No `shadow-card`.** The frame carries no shadow at all, which makes this the first
-//     card in the app without one - every access frame and every dashboard card draws it. So
-//     copying `AccessCard`'s box string would be wrong twice, and it is the obvious thing to
-//     reach for.
+// Everything about the box came off node 45:1044. Figma binds a raw 16px radius here and no
+// shadow at all - the first card in the app without one - but PET-57 handed radius and shadow
+// to the theme, so this now draws the stock daisyUI surface (`bg-base-100`, `rounded-box`)
+// rather than either of the frame's measured values. The design deliberately no longer
+// matches Figma's pixels on this point, the same call `frontend/CLAUDE.md` records for the
+// design system generally.
 
 type EmptyStateProps = {
   /**
@@ -44,15 +41,13 @@ type EmptyStateProps = {
    * The primary button, or nothing.
    *
    * Both designed states carry one, but presence is the switch rather than a `showAction`
-   * pair, matching `SectionHeader`'s call on the same question: an omitted node renders
-   * nothing and cannot contradict a flag.
+   * pair: an omitted node renders nothing and cannot contradict a flag.
    */
   action?: React.ReactNode;
   /**
    * Absent from Figma, which has no notion of document outline.
    *
-   * Defaults to 2 because `PageHeader` owns the `h1` on every `(app)` screen, which is the
-   * same reason `SectionHeader` defaults there.
+   * Defaults to 2 because `PageHeader` owns the `h1` on every `(app)` screen.
    */
   headingLevel?: 2 | 3 | 4;
 };
@@ -68,10 +63,11 @@ export function EmptyState({ icon, heading, body, action, headingLevel = 2 }: Em
     // and `justify-center` puts the column in the middle of whatever that turns out to be.
     //
     // gap-4 is the designed 16px between all four children. px-10 is Space/40.
-    <div className="bg-surface-card border-border-default flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border px-10">
-      {/* size-18 is 72px, and the circle is the one place brand-accent-soft appears outside a
-          Tag. text-brand-accent sets the colour the glyph inherits through currentColor,
-          which is how every glyph in the repo takes its colour.
+    <div className="bg-base-100 border-base-300 rounded-box flex flex-1 flex-col items-center justify-center gap-4 border px-10">
+      {/* size-18 is 72px. bg-primary/10 is the opacity modifier on a semantic colour the
+          design tokens rules allow, standing in for the old accent-soft tint; text-primary
+          sets the colour the glyph inherits through currentColor, which is how every glyph in
+          the repo takes its colour.
 
           aria-hidden covers the circle *and* whatever glyph is passed in, so the guarantee
           belongs to this component rather than to each caller's memory. It is also correct on
@@ -80,17 +76,17 @@ export function EmptyState({ icon, heading, body, action, headingLevel = 2 }: Em
           app/DecorativePanel.tsx records - but nothing focusable belongs in an icon. */}
       <div
         aria-hidden="true"
-        className="bg-brand-accent-soft text-brand-accent flex size-18 shrink-0 items-center justify-center rounded-full"
+        className="bg-primary/10 text-primary flex size-18 shrink-0 items-center justify-center rounded-full"
       >
         {icon}
       </div>
 
-      <Heading className="text-display-s text-text-primary text-center">{heading}</Heading>
+      <Heading className="font-display text-2xl font-bold text-center">{heading}</Heading>
 
       {/* max-w-110 rather than the frame's fixed 440px w-110: at the designed 1440 width the
           two render identically, and a narrower window wraps instead of overflowing the
           px-10. The same call AccessCard's py-10 makes about a viewport Figma never draws. */}
-      <p className="text-body-l text-text-secondary max-w-110 text-center">{body}</p>
+      <p className="text-base-content/70 max-w-110 text-center">{body}</p>
 
       {/* mt-5 is not arbitrary. Figma puts a 4px spacer frame between the copy and the button
           inside this 16px-gap column, so the designed distance is 16 + 4 + 16 = 36px, and

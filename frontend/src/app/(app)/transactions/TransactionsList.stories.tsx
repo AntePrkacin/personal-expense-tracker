@@ -84,7 +84,9 @@ function Frame({ filters }: { filters: TransactionFilters }) {
 
   return (
     <AddTransactionProvider>
-      <div className="bg-surface-canvas flex min-h-screen flex-col">
+      {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
+          gutter the `(app)` shell owns, since neither wraps a story. */}
+      <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
         <TransactionsScreen
           view={view}
           filters={filters}
@@ -99,14 +101,17 @@ function Frame({ filters }: { filters: TransactionFilters }) {
 /**
  * The frame as drawn (node 26:90).
  *
- * What to check against Figma. On the bar: three pills at a 10px radius with a 1px
- * Border/Strong edge, the two category and period ones grouped left with a 10px gutter, and
- * the sort pill flush right. On the card (node 26:172): a **16px** radius and **no shadow** -
- * the same pair frame 07's empty card draws, and the reason reaching for `AccessCard`'s box
- * is wrong; the rules inset 24px from the card edge; one under the header and one between
- * every pair of rows, but none after the last. On a row: the 36px tile at a 10px radius,
- * MERCHANT in Strong/S, the 8px dot before a Label/M category name, "Oct 8" without its year,
- * and the amount right-aligned with a **U+2212** minus rather than a hyphen.
+ * What to check, which since PET-57 is structure and behaviour rather than pixels - radius,
+ * border colour, type scale and cell padding are the theme's now, so a diff against the frame's
+ * own numbers is expected to disagree. On the bar: three `select select-sm` controls, category
+ * and period grouped left, sort flush right. On the card: one rule under the header and one
+ * between every pair of rows, none after the last. On a row: the coloured tile, the dot before
+ * the category name in the same colour, "Oct 8" without its year, and the amount right-aligned
+ * with a **U+2212** minus rather than a hyphen.
+ *
+ * **Narrow the viewport, which is the check the design file cannot give you.** The card is
+ * `overflow-x-auto`, so the table scrolls inside its own box; the page body must not scroll
+ * sideways with it, and the filter bar should wrap rather than crush its selects.
  *
  * The kebab is drawn and does nothing: MNU-1's menu is PET-33's, and a row click does nothing
  * either because the detail page is PET-34's.

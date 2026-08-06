@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
+import { categoryTileClass } from '../../../components/ui/categoryColour';
 import type { CategoryLabel } from '../../../lib/categories';
 import type { Transaction } from '../../../lib/transactions';
 
@@ -36,6 +37,17 @@ const UBER = transaction({
 
 function renderTable(transactions: Transaction[] = [transaction()]) {
   return render(<TransactionsTable transactions={transactions} categories={CATEGORIES} />);
+}
+
+/**
+ * The background half of a stored colour's tile classes, as a bare selector.
+ *
+ * `categoryTileClass` returns a background paired with its `-content` partner, and only the
+ * background identifies the colour - so this takes the first class rather than the string,
+ * which as a `.a b` selector would mean something else entirely.
+ */
+function tileBackground(hex: string): string {
+  return categoryTileClass(hex).split(' ')[0]!;
 }
 
 describe('the columns', () => {
@@ -80,25 +92,15 @@ describe('the columns', () => {
     expect(screen.getAllByRole('columnheader')[4]).toBeEmptyDOMElement();
   });
 
-  it('declares each width once, on the header', () => {
-    // `table-fixed` is what makes that inheritance work, and the widths are the designed
-    // ones plus the 16px a table cannot express as a gap. A row carries no width class.
-    const { container } = renderTable();
-
-    expect(container.querySelector('table')).toHaveClass('table-fixed');
-    expect(screen.getAllByRole('columnheader')[1]).toHaveClass('w-[166px]');
-    expect(screen.getAllByRole('columnheader')[2]).toHaveClass('w-[136px]');
-    expect(screen.getAllByRole('columnheader')[3]).toHaveClass('w-[116px]');
-    expect(screen.getAllByRole('cell')[1]).not.toHaveClass('w-[166px]');
-  });
-
-  it('left-aligns the headers a user agent would centre, and right-aligns AMOUNT', () => {
+  it('names every header as a column rather than as a row', () => {
+    // `scope="col"` is what a screen reader reads back as "Date, column 3". The designed
+    // widths and the 16px-gap arithmetic that used to be asserted here died with the token
+    // system: daisyUI's `table` owns cell padding, and the browser measures the columns.
     renderTable();
 
-    const headers = screen.getAllByRole('columnheader');
-
-    expect(headers[0]).toHaveClass('text-left');
-    expect(headers[3]).toHaveClass('text-right');
+    for (const header of screen.getAllByRole('columnheader')) {
+      expect(header).toHaveAttribute('scope', 'col');
+    }
   });
 });
 
@@ -119,12 +121,20 @@ describe('the rows', () => {
 
   it('joins each row’s categoryId to a name and a colour', () => {
     // A row carries only `categoryId`; PET-28 publishes no name or colour on it.
+    //
+    // The two selectors are derived from `categoryTileClass` rather than typed out, so this
+    // asserts that the join reached the right colour without restating which theme colour
+    // green happens to map to - that is `categoryColour.test.ts`'s to pin, and it changed
+    // once already when PET-57 moved the map onto semantic colours. Each colour appears
+    // twice per row, on the tile and on the dot.
     const { container } = renderTable([transaction(), UBER]);
+    const green = tileBackground('#57B368');
+    const blue = tileBackground('#3F8EE6');
 
     expect(screen.getByText('Groceries')).toBeInTheDocument();
     expect(screen.getByText('Transport')).toBeInTheDocument();
-    expect(container.querySelectorAll('.bg-category-4-green')).toHaveLength(2);
-    expect(container.querySelectorAll('.bg-category-6-blue')).toHaveLength(2);
+    expect(container.querySelectorAll(`.${green}`)).toHaveLength(2);
+    expect(container.querySelectorAll(`.${blue}`)).toHaveLength(2);
   });
 
   it('renders a row whose category is missing rather than dropping it', () => {
@@ -146,23 +156,14 @@ describe('the rows', () => {
 });
 
 describe('the card', () => {
-  it('is rounded-lg with no shadow, which both look like mistakes', () => {
-    // Node 26:172 binds a raw 16px radius and carries no effect at all, exactly as frame
-    // 07's empty card does. Reaching for AccessCard's `shadow-card rounded-xl` is the
-    // obvious move and is wrong twice over.
+  it('can scroll a table wider than its column, rather than widening the page', () => {
+    // The one class on the wrapper that is behaviour rather than looks, and the reason it is
+    // asserted where radius and border colour are not: this is the widest thing in the app,
+    // the shell's drawer gives the content column `min-w-0` so the overflow lands here, and
+    // without it a narrow window stretches the whole layout sideways instead. jsdom computes
+    // no layout, so the class is the only available evidence.
     const { container } = renderTable();
-    const card = container.firstElementChild;
 
-    expect(card).toHaveClass('rounded-lg');
-    expect(card).not.toHaveClass('rounded-xl');
-    expect(card).not.toHaveClass('shadow-card');
-  });
-
-  it('separates rows with Border/Subtle, not the card’s own Border/Default', () => {
-    // Two different tokens, and the export says which goes where.
-    const { container } = renderTable([transaction(), UBER]);
-
-    expect(container.querySelector('tbody')).toHaveClass('divide-border-subtle');
-    expect(container.firstElementChild).toHaveClass('border-border-default');
+    expect(container.firstElementChild).toHaveClass('overflow-x-auto');
   });
 });

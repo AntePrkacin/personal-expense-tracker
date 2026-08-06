@@ -25,7 +25,21 @@ const TRANSACTION: Transaction = {
   updatedAt: '2025-10-08T09:00:00.000Z',
 };
 
-const GROCERIES: RowCategory = { name: 'Groceries', tileClass: 'bg-category-4-green' };
+/**
+ * A resolved category's tile classes, in the shape `ui/categoryColour.ts` hands the table: a
+ * semantic background paired with the `-content` colour that sits on it.
+ *
+ * Split into two halves because only the background identifies a mark in a query - the whole
+ * string as `.a b` would be a descendant selector and match nothing. The row is expected to
+ * forward both halves verbatim: the tile needs the content colour for its glyph, and on the
+ * 8px dot it is simply inert.
+ */
+const TILE = { background: 'bg-success', content: 'text-success-content' } as const;
+
+const GROCERIES: RowCategory = {
+  name: 'Groceries',
+  tileClass: `${TILE.background} ${TILE.content}`,
+};
 
 /** A `<tr>` is invalid outside a table, and React warns about it. */
 function renderRow(category: RowCategory | null = GROCERIES, transaction = TRANSACTION) {
@@ -76,8 +90,19 @@ describe('the category', () => {
   it('paints the tile and the dot with that category’s colour', () => {
     const { container } = renderRow();
 
-    // Both marks, one class: the 36px tile and the 8px dot are the same colour by design.
-    expect(container.querySelectorAll('.bg-category-4-green')).toHaveLength(2);
+    // Both marks, one class string: the tile and the dot are the same colour by design.
+    expect(container.querySelectorAll(`.${TILE.background}`)).toHaveLength(2);
+  });
+
+  it('forwards the map’s whole class string, so the glyph gets its content colour', () => {
+    // The tile used to hard-code `text-white`, which was right for eight fixed hues and wrong
+    // the moment the colours became theme colours - `warning` is a light fill in the light
+    // theme. The content colour arrives paired with the background instead, and this pins
+    // that the row passes the string through rather than picking classes out of it.
+    const { container } = renderRow();
+    const tile = container.querySelector(`.${TILE.background}`);
+
+    expect(tile).toHaveClass(TILE.content);
   });
 
   it('hides the tile and the dot from the accessible tree', () => {
@@ -85,7 +110,7 @@ describe('the category', () => {
     // categories share a colour, so the mark cannot identify one on its own.
     const { container } = renderRow();
 
-    for (const mark of container.querySelectorAll('.bg-category-4-green')) {
+    for (const mark of container.querySelectorAll(`.${TILE.background}`)) {
       expect(mark).toHaveAttribute('aria-hidden', 'true');
     }
   });
@@ -103,9 +128,16 @@ describe('the category', () => {
     it('falls back to the neutral tile rather than to no colour at all', () => {
       // A tile with no background class is transparent, builds cleanly and reads as a
       // rendering glitch - the failure Tailwind makes silent.
+      //
+      // The constant is imported and split rather than typed out, for the reason `TILE` above
+      // gives: it is a pair of classes now, so `.${CATEGORY_TILE_NEUTRAL}` would be a
+      // descendant selector and quietly match nothing.
       const { container } = renderRow(null);
+      const [background] = CATEGORY_TILE_NEUTRAL.split(' ');
 
-      expect(container.querySelector(`.${CATEGORY_TILE_NEUTRAL}`)).toBeInTheDocument();
+      expect(container.querySelector(`.${background}`)).toHaveClass(
+        ...CATEGORY_TILE_NEUTRAL.split(' '),
+      );
     });
 
     it('still renders the other three cells', () => {

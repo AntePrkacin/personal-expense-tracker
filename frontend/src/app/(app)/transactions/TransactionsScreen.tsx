@@ -82,8 +82,13 @@ export function TransactionsScreen({ view, filters, filterBar, table }: Transact
 
       {/* gap-5 is the designed 20px, which both frames put between the tabs and whatever comes
           next - the filter bar on 06, the card on 07. flex-1 on the column is what lets the
-          empty card fill the remaining height rather than sitting at its content's size. */}
-      <main className="flex flex-1 flex-col gap-5 px-10 pb-10">
+          empty card fill the remaining height rather than sitting at its content's size.
+
+          No horizontal padding: `(app)/layout.tsx` states the shared gutter exactly once, so
+          the header above and this column read their edges from the same wrapper. A `px-10`
+          here would double it and put this page's content on a different grid from the other
+          three. */}
+      <main className="flex flex-1 flex-col gap-5 pb-10">
         <TransactionTabs total={view.total} />
 
         {showFilterBar ? filterBar : null}
