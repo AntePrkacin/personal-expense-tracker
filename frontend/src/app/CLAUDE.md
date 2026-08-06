@@ -1087,6 +1087,19 @@ The Dashboard, AI Insights and Settings `<main>` elements are still empty and st
 A screen that renders is not evidence that its data path exists - `/transactions` is now the only
 one where it does, and it is the file to copy rather than the new normal.
 
+**PET-21 filled a second `<main>`, and its shape is the one to copy for Dashboard's own remaining
+cards.** `/dashboard/page.tsx` is now async and awaits `lib/dashboard.ts`'s `readDashboard()`,
+the same two-branch failure policy as `/transactions` and the profile read behind the shell's own
+gate - deliberately identical, since this read sits inside the shell that already read the
+profile a moment earlier. Unlike `/transactions`, there is no second, probing request: the
+endpoint takes no filters at all, so there is no ambiguous-empty case for one to resolve.
+`DashboardScreen.tsx` takes the five cards as required `React.ReactNode` slots rather than
+importing them, the same reason `TransactionsScreen`'s two are slots - both need reads or state
+the screen itself cannot supply, and Storybook has to be able to hand it stand-ins - and this
+ticket ships one of the five, `BudgetCard`, built from the read at the call site; the other four
+are placeholder `<div />`s naming the ticket that fills them (PET-22 to PET-25). AI Insights and
+Settings are the two screens whose `<main>` is still empty and still fetches nothing.
+
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show
 you is the result: the transactions **table** is PET-29's slot, so saving from the Transactions

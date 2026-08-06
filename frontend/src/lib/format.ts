@@ -38,6 +38,32 @@ export function formatCurrency(amount: number): string {
 }
 
 /**
+ * A second `Intl` instance at zero fraction digits, `docs/TODO.md`'s cents item answered
+ * (PET-21): the design draws every aggregate figure whole - `$1,240`, not `$1,240.00` - while
+ * every per-transaction amount keeps its cents through `formatCurrency`/`formatNegative`
+ * above. It **rounds**, which is `Intl`'s own behaviour at zero fraction digits and the right
+ * one here: it keeps a whole-dollar aggregate as close to the real total as one dollar
+ * allows, where truncating would bias every figure on the dashboard downwards.
+ */
+const CURRENCY_WHOLE = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+});
+
+/**
+ * Formats an amount as whole-dollar currency, e.g. `1240` -> `"$1,240"`.
+ *
+ * For an aggregate a user reconciles by eye - a budget readout, a chart bar, a legend total -
+ * never for a per-transaction amount, which is what `formatCurrency` and `formatNegative` stay
+ * for. Every caller in this epic hands it a non-negative figure; the `MINUS` substitution below
+ * is defensive, matching `formatCurrency`'s own, rather than a sign this app draws anywhere.
+ */
+export function formatWhole(amount: number): string {
+  return CURRENCY_WHOLE.format(amount).replace('-', MINUS);
+}
+
+/**
  * Formats a stored (positive) amount as the negative value the UI shows,
  * e.g. `24` -> `"−$24.00"`.
  *

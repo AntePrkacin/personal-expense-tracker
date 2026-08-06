@@ -33,7 +33,7 @@ and update, the category endpoints with their month stats, and the dashboard sum
 has the design system, the app shell with its four routed views, all six access screens, and
 PET-52's verify handler at `/auth/verify` with the httpOnly `spendifico.session` cookie behind it.
 So a person can register, click the emailed link, and land signed in on a Dashboard that knows who
-they are - the sidebar footer reads a real `GET /api/profile`. Five things beyond access work
+they are - the sidebar footer reads a real `GET /api/profile`. Seven things beyond access work
 now: `/transactions` reads and renders its own list state, the table under it draws the rows with
 their filters live in the URL, every "Add transaction" button opens a modal that really
 writes, and as of PET-33 each row's kebab opens a menu whose "Delete" really removes the
@@ -41,9 +41,11 @@ transaction behind a confirmation dialog. The fifth is PET-32's: that menu's "Ed
 form prefilled from the row and saves the fields the user actually changed, so a logged expense can
 now be corrected as well as removed. PET-34 adds a sixth and the app's first dynamic route: a
 row's merchant links to `/transactions/[id]`, which shows one expense in full beside how its
-category is doing against that month's cap, and carries the list's filters there and back. What is
-still missing is most of what the other screens *show*: the Dashboard, AI Insights and Settings
-`<main>` elements below the page header are empty, and the dashboard summary is called by nobody.
+category is doing against that month's cap, and carries the list's filters there and back. The
+seventh is PET-21's: `/dashboard` reads the dashboard summary and renders its first card, the
+monthly budget. What is still missing is most of what the other screens *show*: the Dashboard's
+own remaining four cards, and the AI Insights and Settings `<main>` elements below the page
+header are empty.
 
 ## Repository map
 

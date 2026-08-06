@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 
 import * as AddTransactionModal from './(app)/AddTransactionModal.stories';
 import * as EditTransactionModal from './(app)/EditTransactionModal.stories';
+import * as DashboardScreen from './(app)/dashboard/DashboardScreen.stories';
 import * as TransactionDetailScreen from './(app)/transactions/[id]/TransactionDetailScreen.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
@@ -74,13 +75,17 @@ const MODULES: [name: string, module: StoryModule][] = [
   // this one is the form inside it.
   ['AddTransactionModal', AddTransactionModal as StoryModule],
   // Frame 11, the same five fields prefilled. A separate module for the module-carries-one-title
-  // reason above, and the pairing is worth noticing: 09 and 11 are the two halves this ticket
+  // reason above, and the pairing is worth noticing: 09 and 11 are the two halves PET-32
   // deliberately did not merge into one component with a `mode` prop.
   ['EditTransactionModal', EditTransactionModal as StoryModule],
   // Frame 08. Three of its five stories are states the frame draws no variant for - an
   // uncapped category, one over its cap, and a transaction with no note - which makes this
   // module the review surface for them rather than only a diff against the design.
   ['TransactionDetailScreen', TransactionDetailScreen as StoryModule],
+  // Frame 04, PET-21's own. Four of its five slots are the placeholder `<div />`s
+  // `page.tsx` actually renders today; `Shell/Budget card` is where the card itself, the
+  // fifth, is reviewed.
+  ['DashboardScreen', DashboardScreen as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

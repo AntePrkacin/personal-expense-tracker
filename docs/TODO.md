@@ -475,6 +475,35 @@ emits no symbol at all. So the two still disagree - the field shows `2,000` whil
 `formatCurrency(2000)` is `$2,000.00` - and the dashboard's budget card still needs the answer
 above.
 
+**Answered 2026-08-06 by PET-21, and this is the resolution rather than a designer sign-off.**
+The epic's own mocks answer the "does the app show cents at all" question, and the split is
+exactly the contextual one this item predicted: aggregates are whole dollars (`$1,240 of $2,000`,
+`$760 left`, `$54` avg/day on the budget card; the same pattern across PET-22 to PET-26's
+mocks) and per-transaction amounts keep their cents (`−$24.00` on the transactions table, which
+already went through `formatNegative`). So `lib/format.ts` gained `formatWhole()` beside
+`formatCurrency()` rather than replacing it - a second `Intl` instance at zero fraction digits
+that **rounds**, which keeps a whole-dollar aggregate as close to the real total as one dollar
+allows, where truncating would bias every figure on the dashboard downwards. That does mean a
+summary can sit a dollar off the sum of the cents a user adds up by hand, which is inherent in
+drawing whole dollars at all and is the design's call rather than ours. The *currency* half of
+this item is untouched and still owed: all of `format.ts` hard-codes `en-US` until onboarding's
+chosen currency is stored, `formatWhole` included.
+
+### The budget card's status chip ships two tones, and a third is a real designer question
+
+Node 22:55 draws only "On track", and PET-21's ticket says other tones follow the Status
+palette used elsewhere - which authorises inventing them, not how many to invent. Two are
+forced by the contract: `DashboardResponseDto.remaining` is documented as able to go negative,
+with the note that "overspending is a state the frontend needs the magnitude to draw". So
+`BudgetCard` ships exactly two - under budget is "On track" in `badge-soft badge-success`, over
+budget is "Over budget" in `badge-soft badge-error` - and that is the whole set.
+
+**What is owed.** A middle "getting close" tone would need a threshold - 80% of the budget? 90%?
+pace-relative to `daysLeft`? - that nobody has chosen, and picking one here would ship a number
+the design never states as if it were designed. Joins the running set of copy and state this
+app ships without a frame behind it, alongside A15's no-results string and A29's inline error
+copy: real until a designer looks at it, not a placeholder.
+
 ### A visible theme toggle is deferred, and adding one costs the automatic behaviour
 
 PET-57 ships daisyUI's built-in `light` / `dark` pair selected by `prefers-color-scheme`, with

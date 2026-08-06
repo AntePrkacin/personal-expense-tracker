@@ -217,7 +217,13 @@ gate.
 
 `frontend/src/lib/format.ts` owns display formatting, in six parts. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
-rather than the hyphen `Intl.NumberFormat` emits, matching the design. Names: `initials()`
+rather than the hyphen `Intl.NumberFormat` emits, matching the design. PET-21 added
+`formatWhole()` beside it, the `docs/TODO.md` cents item's answer: the design draws every
+aggregate figure whole (`"$1,240"`, the dashboard budget card's own readout) while every
+per-transaction amount keeps its cents through `formatCurrency`/`formatNegative`, so a
+second `Intl` instance at zero fraction digits sits beside the first rather than replacing
+it. It **rounds** rather than truncating, which keeps a whole-dollar aggregate as close to
+the real total as one dollar allows. Names: `initials()`
 and `shortName()` derive the sidebar footer's "MK" and "Marko K." from the two stored name
 fields. Both are derived and never stored (SET-2), and SET-6 requires the sidebar footer and
 the Settings avatar to agree, which is why one shared function is the point rather than a
@@ -321,9 +327,14 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `app/auth/verify/route.ts` is, and it is the one to copy the shape from.
 - **The shell's content.** The `(app)` group, the four routes and the page header exist, every
   screen renders its designed header, and the shell is really gated and really shows the signed-in
-  user's profile as of PET-52. What is missing is everything below the header on **three** of the
-  four: the Dashboard, AI Insights and Settings `<main>` elements are empty. Transactions is the
-  exception, and as of PET-29 it is a **complete** screen rather than a partial one: the tab bar
+  user's profile as of PET-52. What is missing is everything below the header on **two** of the
+  four: the AI Insights and Settings `<main>` elements are empty. Dashboard is no longer one of
+  them as of PET-21: its `<main>` is a grid holding the real Monthly budget card and four
+  placeholder `<div />`s, one per still-unbuilt card - PET-22 (spending trend), PET-23 (category
+  donut), PET-24 (recent transactions) and PET-25 (insight teaser) - so the geometry is reviewable
+  now and each is a one-line change at `page.tsx`'s call site when its own ticket lands.
+  Transactions is the exception that came before it, and as of PET-29 it is a **complete** screen
+  rather than a partial one: the tab bar
   and its real count badge, both empty states, the filter bar and the table are all built, and the
   two slots PET-30 left are filled by `page.tsx`. They are still slots rather than direct imports,
   because both need reads the screen cannot make and Storybook has to be able to hand it
@@ -347,22 +358,25 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `/transactions/[id]`, the app's first dynamic route. Read the sentence above as history - though
   "a row click" stays literally true of the other four cells, because the link is on the merchant
   alone for the accessible-name reason `frontend/src/app/CLAUDE.md` records.
-- **Every read a screen needs for its own data, bar the transactions list and the categories.**
-  PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and
-  `lib/profile.ts` calls `GET /api/profile`, both lifting the session cookie into an
-  `Authorization` header server-side. PET-30 added the third, `lib/transactions.ts`, and it is the
-  first read a _screen_ makes for its own data - so it, rather than the two access reads, is the
-  one to copy: it shows the classified-failure policy, and it shows what to do when the API's
-  answer is ambiguous. PET-31 added `lib/categories.ts`, narrowed to what a picker needs.
-  All four now go through `authorizedGet` in `lib/session.ts`, which is where the cookie becomes
-  a bearer token; do not inline a fifth copy of that. What no screen fetches yet is the
-  dashboard summary. PET-34's `lib/transactionDetail.ts` took the transaction _detail_ **and** the
+- **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
+  and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
+  `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session
+  cookie into an `Authorization` header server-side. PET-30 added the third, `lib/transactions.ts`,
+  and it is the first read a _screen_ makes for its own data - so it, rather than the two access
+  reads, is the one to copy: it shows the classified-failure policy, and it shows what to do when
+  the API's answer is ambiguous. PET-31 added `lib/categories.ts`, narrowed to what a picker needs.
+  PET-21 added `lib/dashboard.ts`'s `readDashboard()`, the same two-branch failure policy as
+  `lib/profile.ts` beside it - deliberately, since the shell already read the profile through the
+  same guard a moment earlier - and no probe: the endpoint takes no filters at all, so there is no
+  ambiguous-empty case for a second request to resolve. All five now go through `authorizedGet` in
+  `lib/session.ts`, which is where the cookie becomes a bearer token; do not inline a sixth copy of
+  that. PET-34's `lib/transactionDetail.ts` took the transaction _detail_ **and** the
   categories' month stats off this list together, in one request: `GET /api/transactions/:id`
   embeds the whole `CategoryResponseDto`, caps included, so the narrowing above is intact and
   `lib/categories.ts` was not widened. It is also the read to copy for a **404**, which is the
   app's third failure policy - `authorizedGet` grew a `missing` arm so a deleted transaction calls
   `notFound()` instead of throwing like an unreachable backend. No other read's endpoint answers
-  404, so the four above are unchanged.
+  404, so the five above are unchanged.
   `lib/categories.ts` now holds **two** projections over one shared request: `readCategoryOptions`
   for the modal's `<select>`, and PET-29's `readCategoryLabels`, which adds `color` because a
   transaction row carries only a `categoryId` and the table joins the name and the tile colour
