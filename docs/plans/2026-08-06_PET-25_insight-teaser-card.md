@@ -97,9 +97,13 @@ union precisely so these cannot be confused, and `npm run build` is what rejects
 **`AddTransactionButton` here is the fourth trigger and costs nothing to add**, which
 `frontend/src/app/CLAUDE.md` predicted in as many words: the modal is mounted once on the shell so
 "PET-20's DSH-9 teaser and PET-44's INS-7 card each add a trigger in two lines with no prop
-threading". This is that ticket, and the prediction holds - but note the button's **variant** differs
-from the header's primary one, so whatever `AddTransactionButton` hard-codes may need a prop. If it
-does, that is a prop on the trigger rather than a second trigger component.
+threading". This is that ticket, and the prediction holds exactly.
+
+The variant needs no work either, which an earlier draft of this plan hedged about. `AddTransactionButton`
+already takes `variant?: ButtonVariant` defaulting to `'primary'`, and its own comment says why in
+advance: "Primary everywhere it exists today; the teaser may differ." So this card passes the variant
+frame 05 draws and adds nothing. Worth stating rather than leaving as an open question, because the
+hedge invited a second trigger component that the existing prop makes pointless.
 
 **The insight copy is never written here, and the test suite must not fix it.** AC1's "not hardcoded
 copy" is the criterion, so the card renders whatever the response carries and its suite passes the
