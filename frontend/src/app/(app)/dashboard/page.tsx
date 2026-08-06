@@ -28,7 +28,7 @@ export default async function DashboardPage() {
   return (
     <DashboardScreen
       budgetCard={<BudgetCard {...summary} />}
-      trendCard={<TrendCard weeklyBuckets={summary.weeklyBuckets} />}
+      trendCard={<TrendCard weeklyBuckets={summary.weeklyBuckets} daysLeft={summary.daysLeft} />}
       donutCard={<div /> /* PET-23 */}
       recentTransactionsCard={<div /> /* PET-24 */}
       insightCard={<div /> /* PET-25 */}

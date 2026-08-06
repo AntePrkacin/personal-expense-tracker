@@ -1,3 +1,4 @@
+import { addDays } from '@/lib/calendar';
 import type { DashboardSummary } from '@/lib/dashboard';
 
 // The one piece of real arithmetic on the trend card: which bucket is the current week.
@@ -9,6 +10,45 @@ import type { DashboardSummary } from '@/lib/dashboard';
 // shorter month.
 
 type WeeklyBucket = DashboardSummary['weeklyBuckets'][number];
+
+/**
+ * The date the backend was standing on when it built these buckets, as `YYYY-MM-DD`, or `null`.
+ *
+ * **This exists so the card never reads a clock**, which is the whole of the fix for the review
+ * finding recorded below. `daysLeft` is `daysBetween(today, window.end)`
+ * (`backend/src/common/month-window.ts`), and the final bucket's `endDate` **is** `window.end` -
+ * `weeklyBucketsOf` ends its last bucket at the period end rather than seven days after its own
+ * start, which is the same contract detail `currentWeekIndex`'s range test depends on. So
+ * `window.end` minus `daysLeft` is exactly the `today` the backend resolved against
+ * `APP_TIMEZONE`, arithmetic rather than a second opinion, and both halves arrive on the one
+ * `GET /api/dashboard` response the card is already built from.
+ *
+ * **What it replaces was not the harmless edge the first version of this file claimed.** That
+ * version called `lib/date.ts`'s `todayIsoDate()` and described the disagreement as "one week
+ * off for up to an hour twice a month". It was wrong three ways. The gap is the full zone offset
+ * (two hours under CEST, not one), it straddles *every* bucket boundary rather than the month's
+ * (five chances a period, not two), and on the **first day of a period** the frontend's `today`
+ * falls before `buckets[0].startDate`, so `currentWeekIndex` answered `null` and **no bar was
+ * highlighted at all** - AC3 failing outright rather than pointing one week off. Nothing pins
+ * `TZ` on the frontend host, so a UTC container against the default `Europe/Zagreb` is the
+ * ordinary deployment rather than a contrived one.
+ *
+ * **Total, and `null` is an ordinary answer.** `daysLeft` can read 0 at the midnight boundary
+ * (`backend/CLAUDE.md`'s Dashboard section), which puts `today` on `window.end` and outside every
+ * bucket - `currentWeekIndex` then says "no highlight" honestly, exactly as it does for a `today`
+ * past the last bucket, and the next request corrects itself. The guards are the same call
+ * `parseDraft` and `partsFromIso` make: this reads a network response, so a shape it cannot use
+ * must not throw inside a card.
+ */
+export function todayFromDaysLeft(buckets: WeeklyBucket[], daysLeft: number): string | null {
+  const periodEnd = buckets[buckets.length - 1]?.endDate;
+
+  if (periodEnd === undefined || !Number.isInteger(daysLeft) || daysLeft < 0) {
+    return null;
+  }
+
+  return addDays(periodEnd, -daysLeft);
+}
 
 /**
  * The index of `buckets` that contains `today`, or `null` if none does.
@@ -32,16 +72,13 @@ type WeeklyBucket = DashboardSummary['weeklyBuckets'][number];
  * case is a defect this function should paper over; it says "no highlight" honestly and the next
  * request corrects itself.
  *
- * **A `today` past the profile's zone, not the frontend host's, would place the highlight one
- * bucket off for up to an hour twice a month.** `weeklyBuckets`' boundaries come from
- * `monthWindow`, which resolves `today` against the profile's `APP_TIMEZONE`
- * (`backend/src/common/month-window.ts`); `today` here comes from `lib/date.ts`'s
- * `todayIsoDate()`, which reads whichever zone the frontend host runs in. The two clocks can
- * therefore disagree by up to the zone offset, and when that disagreement straddles a bucket
- * boundary the computed index points at the neighbouring week. Self-healing on the next request,
- * exactly like the `daysLeft` edge above, and not fixable here: fixing it would mean this card
- * reading `monthStartDay` and re-deriving the window itself, which is the second-guessing
- * PET-21's `BudgetCard` was written to avoid for `daysLeft`.
+ * **`today` must come from `todayFromDaysLeft` above, never from a clock.** `weeklyBuckets`'
+ * boundaries come from `monthWindow`, which resolves its own `today` against `APP_TIMEZONE`
+ * (`backend/src/common/month-window.ts`). Passing `lib/date.ts`'s `todayIsoDate()` here compares
+ * those boundaries against whichever zone the frontend host runs in, which is the defect that
+ * function's doc comment records. This one stays a pure range test over two strings, so it is
+ * indifferent to where its argument came from - which is exactly what makes the caller's choice
+ * the thing to get right.
  */
 export function currentWeekIndex(buckets: WeeklyBucket[], today: string): number | null {
   const index = buckets.findIndex(

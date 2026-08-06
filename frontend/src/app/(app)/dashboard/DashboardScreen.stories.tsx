@@ -1,7 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
-import { isoFromParts } from '@/lib/date';
-
 import { AddTransactionProvider } from '../AddTransactionProvider';
 import { BudgetCard } from './BudgetCard';
 import { DashboardScreen } from './DashboardScreen';
@@ -15,9 +13,11 @@ import { TrendCard } from './TrendCard';
 // PET-25 each replace one placeholder here as they land, and the grid geometry is already
 // reviewable.
 //
-// `TrendCard`'s own three states are `Shell/Spending trend`'s; this story carries only the one
-// that matches node 22:55, anchored to today the same way that file's stories are, for the
-// reason given there.
+// `TrendCard`'s own states are `Shell/Spending trend`'s; this story carries only the one that
+// matches node 22:55. **Its buckets and `BUDGET.daysLeft` describe the same moment**, which they
+// did not before: the trend card used to anchor its boundaries to the real clock while the
+// budget card claimed 8 days left, so the two halves of one response disagreed on screen. Both
+// now read the one `daysLeft` this fixture states.
 //
 // **The provider is inside `render` rather than in a decorator**, the same reason
 // `TransactionsScreen.stories.tsx` gives: the smoke harness in `screens.stories.test.tsx` never
@@ -30,13 +30,6 @@ import { TrendCard } from './TrendCard';
 // expected app router to be mounted` outside one. `build-storybook` bundles this story without
 // running it and `screens.stories.test.tsx` renders it with `next/navigation` already mocked,
 // so both gates stay green and only opening the story finds the throw.
-
-/** `days` before today, as `YYYY-MM-DD` - `Shell/Spending trend`'s own helper carries the reason. */
-function daysAgo(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return isoFromParts(date.getFullYear(), date.getMonth() + 1, date.getDate());
-}
 
 const BUDGET = {
   spent: 1240,
@@ -75,11 +68,12 @@ export const Default: Story = {
           trendCard={
             <TrendCard
               weeklyBuckets={[
-                { startDate: daysAgo(28), endDate: daysAgo(21), total: 280 },
-                { startDate: daysAgo(21), endDate: daysAgo(14), total: 410 },
-                { startDate: daysAgo(14), endDate: daysAgo(7), total: 250 },
-                { startDate: daysAgo(7), endDate: daysAgo(-1), total: 300 },
+                { startDate: '2025-10-01', endDate: '2025-10-08', total: 280 },
+                { startDate: '2025-10-08', endDate: '2025-10-15', total: 410 },
+                { startDate: '2025-10-15', endDate: '2025-10-22', total: 250 },
+                { startDate: '2025-10-22', endDate: '2025-10-29', total: 300 },
               ]}
+              daysLeft={BUDGET.daysLeft}
             />
           }
           donutCard={<div />}

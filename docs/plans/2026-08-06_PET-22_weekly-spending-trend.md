@@ -178,6 +178,20 @@ Server Component; nothing on it is interactive, per AC4.
 - [x] Comment on PET-22 with the no-library decision, the correction that AC5 needs no fill, and
       the caption amendment
 
+### Round two, from the review of PR #51
+
+- [x] `weeks.ts`: `todayFromDaysLeft`, so the highlight comes off the response rather than off
+      the frontend host's clock, plus its suite and the corrected account in both doc comments
+- [x] `TrendCard.tsx`: take `daysLeft`, mute the buckets after the current week and dim their
+      figures, and name both states with an `sr-only` line
+- [x] `TrendCard.test.tsx`: no fake timers, a case where the system clock cannot move the
+      highlight, the `daysLeft: 0` no-highlight case, the muted-week counts and the two labels
+- [x] Stories: fixed October dates instead of `daysAgo()` in both story files, two new states
+      (`WeeksStillToCome`, `AtThePeriodBoundary`), and one `daysLeft` shared with `BudgetCard`
+      on `Screens/04 Dashboard` so the two cards describe the same moment
+- [x] Docs: correct the two-clocks claim in `frontend/src/app/CLAUDE.md` and `docs/TODO.md`
+      rather than deleting it, and record the upcoming-week state as owing A29
+
 No `npm run api:sync`: nothing here changes a request or response body.
 
 ## Verification
@@ -241,6 +255,32 @@ correct in the attribute and wrong on screen is exactly what a CSS layout bug lo
 construction - it now says so where the percentages are asserted, and carries a structural
 regression guard (the bar's parent must contain the bar and nothing else) as the closest thing
 to it that Jest can hold.
+
+### Round two: what the review of PR #51 changed, and what the walk found after it
+
+Three findings, all fixed on this branch. **The highlight read a clock**, which the branch had
+recorded as a one-hour-twice-a-month edge and which is really the full zone offset at every
+bucket boundary - and which, on the first day of a period, drops the accent from the chart
+entirely rather than moving it. `todayFromDaysLeft` recovers the backend's own `today` from
+`daysLeft` and the final bucket's `endDate`, so the card now reads no clock at all and the suite
+proves it by moving the system time a year and asserting nothing changes. **Neither the current
+week nor anything else was in the DOM**, so AC3 was unanswerable without seeing colour; both
+states now carry an `sr-only` line. And **an unstarted week drew exactly like AC5's spend-free
+week**, which is what most accounts see for most of a period; buckets after the current one are
+now muted.
+
+The walk ran again over both themes: 20 checks, all passing, including the pre-fix discriminator
+(rebuilding the old plot-area markup still collapses the `$410`-to-`$300` gap from 34.34px to
+2.34px) and one new class of check. **`bg-base-300` was the first choice for the muted tone and
+the browser rejected it**: it computes to `oklch(0.95 0 0)` in light, so a bar at
+`MIN_BAR_PERCENT` against the card's white `base-100` is invisible - roughly 1.09:1. Computed
+style alone could not say so, because the tone that replaced it carries an alpha, so the walk
+composites the bar over the card on a canvas and measures the painted pixel: `base-content/20`
+reads 1.53:1 in light and 1.88:1 in dark. Two notes for the next walk. Headless Chromium did
+**not** start in the light theme here, contrary to `docs/agents/claude-tooling.md` - it read
+dark with no emulation set at all - so both themes have to be emulated explicitly rather than one
+of them assumed. And counting interactive elements document-wide inside a Storybook iframe finds
+seven of Storybook's own; scope an AC4 check to the card.
 
 **Not verified: AC5 and the short-final-bucket case against a running backend with real data.**
 The plan asks for both to be confirmed against `GET /api/dashboard` actually sending the shapes

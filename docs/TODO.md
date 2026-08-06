@@ -551,13 +551,40 @@ recording here rather than as a second entry.** `weeklyBuckets` is anchored to t
 card's caption - "Weekly · October", reusing `monthLabel` the way the page header does - was
 caught and corrected during planning: the caption reads "Weekly" alone. The same field this entry
 already asks for would fix both captions in one place rather than two, so a future ticket adding
-it should thread the label through `BudgetCard` and `TrendCard` together. `TrendCard` also
-carries a narrower version of the same two-clocks edge, on `weeks.ts`'s current-week highlight
-rather than on a caption: `todayIsoDate()` reads the frontend host's clock while
-`weeklyBuckets`'s boundaries come from `APP_TIMEZONE`, so the highlighted bar can land one week
-off for up to an hour twice a month. Self-healing on the next request, the same as `daysLeft`'s
-own midnight edge in `backend/CLAUDE.md`'s Dashboard section, and not fixable in the frontend
-without it reading `monthStartDay` itself.
+it should thread the label through `BudgetCard` and `TrendCard` together.
+
+**`TrendCard` was recorded here as carrying a narrower version of the same edge, and that entry
+was wrong twice over - it is written out rather than deleted, because the way it was wrong is
+the point.** It said `weeks.ts`'s highlight reads `todayIsoDate()` against boundaries resolved
+from `APP_TIMEZONE`, so the accent bar "can land one week off for up to an hour twice a month",
+self-healing and not fixable without the frontend reading `monthStartDay` itself. Review of
+PET-22's PR found the severity understated on three counts - the gap is the full zone offset
+rather than an hour, it straddles every bucket boundary rather than the month's, and on the
+first day of a period the frontend's `today` sorts before the first bucket, so **no bar is
+accented at all** - and the conclusion wrong outright. `daysLeft` and the final bucket's
+`endDate` are both already on the response, and `endDate` **is** `monthWindow`'s exclusive
+`end`, so `todayFromDaysLeft` recovers the backend's own `today` by subtraction. No second read,
+no `monthStartDay`, no clock. The caption above still owes a field; **the highlight owed
+nothing, and "not fixable here" was a conclusion drawn from the caption's constraint rather than
+from this one's**. Worth remembering the next time a card seems to need a clock: check what the
+response already implies before deciding the frontend cannot know.
+
+### The trend chart draws a week that has not happened yet, and no frame says how
+
+`weeklyBucketsOf` tiles the whole budgeting period regardless of where today falls, so most of
+the time the chart holds buckets for weeks still to come. Node 22:55 draws a completed month and
+answers this nowhere, and until PET-22's review nothing distinguished them: an unstarted week and
+AC5's genuinely spend-free week were the same `$0` label over the same minimum bar. `TrendCard`
+now mutes everything after the current week and names both states with an `sr-only` line -
+"Current week" and "Upcoming week" - so two more strings and one more visual state join what A29
+owes a designer, alongside A15's no-results copy and `BudgetCard`'s two badge tones above.
+
+**What is owed is a decision, not a fix.** Muting is one answer; omitting the future buckets
+entirely is another, and it is the one a designer might well prefer, since a chart that grows
+bars as the period runs reads as progress where a chart that fades them reads as absence. The
+card has `highlightIndex` in hand either way, so switching costs a line. It ships muted because
+that keeps the axis stable as weeks land, which is the property the running total in the card
+above it already has.
 
 ### A visible theme toggle is deferred, and adding one costs the automatic behaviour
 
