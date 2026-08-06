@@ -1,3 +1,5 @@
+import { Search } from 'lucide-react';
+
 // The Transactions header's search field (Figma node 26:142).
 //
 // Note this is what 06 Transactions draws where 04 Dashboard draws the month
@@ -23,30 +25,6 @@
 // **Every new prop is optional**, so the existing header story still renders it with a
 // placeholder alone - uncontrolled, with no React warning about a value without an
 // onChange.
-
-/**
- * The magnifier, traced from the Figma export (node 26:143) and re-pointed at
- * `currentColor`.
- *
- * Stroke-only at 1.5, like Button's TrashGlyph and Select's Chevron, but unlike
- * those two it needs no `overflow-visible`: the ring's outer edge lands at 11 and
- * the handle's round cap at about 14.5, both inside the 16 box.
- */
-function MagnifierGlyph() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className="size-4 shrink-0"
-      fill="none"
-      aria-hidden="true"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    >
-      <circle cx="5.5" cy="5.5" r="4.75" />
-      <path d="M9.5 9.5L14 14" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 /**
  * Controlled or uncontrolled, and never half of either.
@@ -75,7 +53,7 @@ export function SearchPill({ placeholder, value, onChange, onKeyDown }: SearchPi
     // icon. A <label>, so clicking the glyph focuses the input with no handler.
     // `text-sm` matches the month pill beside it in the header.
     <label className="input flex w-fit items-center gap-2 text-sm">
-      <MagnifierGlyph />
+      <Search className="size-4 shrink-0" aria-hidden="true" />
 
       {/* `type="text"`, not `type="search"`: Chrome and Safari draw their own cancel
           button on a search input, which this frame does not, and the `searchbox`

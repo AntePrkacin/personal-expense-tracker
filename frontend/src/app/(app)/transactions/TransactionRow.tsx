@@ -1,3 +1,5 @@
+import { ShoppingBag } from 'lucide-react';
+
 import { CATEGORY_TILE_NEUTRAL } from '@/components/ui/categoryColour';
 import { formatIsoDayMonth, formatNegative } from '@/lib/format';
 import type { Transaction } from '@/lib/transactions';
@@ -26,36 +28,6 @@ import { TransactionRowMenu } from './TransactionRowMenu';
 
 /** The tile's colour and the dot's, plus the name, resolved by `TransactionsTable`. */
 export type RowCategory = { name: string; tileClass: string };
-
-/**
- * The tile glyph, traced from this frame's own export (node 27:149).
- *
- * The placeholder shopping bag Figma uses for every category, centred: a bag at 3..15 under a
- * handle at 5.5..12.5. `ui/ListRow` used to draw the same mark from a different export, with
- * the handle left of centre, and `docs/TODO.md` recorded the discrepancy - PET-57 deleted that
- * component, so this is the only copy and there is nothing left to disagree with.
- *
- * `overflow-visible` because the 1.4 round-capped stroke falls half outside the box at the
- * handle's tips, and an SVG viewport clips its own overflow, so without it the arc renders
- * shorn flat.
- *
- * `currentColor` on both shapes is what makes the tile's own content colour reach the glyph:
- * `ui/categoryColour.ts` pairs every background with its `-content` partner, so the mark
- * follows the theme with nothing stated here.
- */
-function CategoryGlyph() {
-  return (
-    <svg viewBox="0 0 18 18" className="size-4.5 overflow-visible" fill="none" aria-hidden="true">
-      <rect x="3" y="6.5" width="12" height="10" rx="2" fill="currentColor" />
-      <path
-        d="M5.5 7C5.5 3 12.5 3 12.5 7"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 type TransactionRowProps = {
   transaction: Transaction;
@@ -87,7 +59,11 @@ export function TransactionRow({ transaction, category }: TransactionRowProps) {
             aria-hidden="true"
             className={`rounded-field flex size-9 shrink-0 items-center justify-center ${category?.tileClass ?? CATEGORY_TILE_NEUTRAL}`}
           >
-            <CategoryGlyph />
+            {/* Figma's placeholder mark for every category, which is why one glyph serves all
+                eight colours. No colour stated: `ui/categoryColour.ts` pairs each background
+                with its `-content` partner, and lucide strokes `currentColor`, so the mark
+                follows the tile. */}
+            <ShoppingBag className="size-4.5" aria-hidden="true" />
           </span>
 
           {/* **`whitespace-nowrap`, and deliberately not `truncate`.** It was `min-w-0 truncate`,

@@ -22,33 +22,11 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   textDanger: 'btn btn-ghost text-error',
 };
 
-/**
- * The trash glyph on "Delete transaction" / "Delete category", traced from the
- * Figma export (node 29:529) and re-pointed at `currentColor` so it inherits the
- * variant's text colour instead of hard-coding the red.
- *
- * The body rect is inset by 0.75 from the designed 9.5x10.5 box, and its radius
- * dropped by the same amount. Figma aligns a frame's stroke inside its box and
- * CSS draws a border inside too, but an SVG stroke is centred on its path, so
- * the designed geometry only survives if the path is pulled in by half the
- * 1.5 stroke width. Without it the glyph reads 1.5 too wide and its corners too
- * round.
- */
-function TrashGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" className="size-4 shrink-0" fill="none" aria-hidden="true">
-      <rect x="6" y="1.6" width="4" height="1.7" rx="1" fill="currentColor" />
-      <rect x="2" y="3.5" width="12" height="1.7" rx="1" fill="currentColor" />
-      <rect x="4" y="6.25" width="8" height="9" rx="0.75" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
 type ButtonOwnProps = {
   /** The Figma "Label" property. Required: nothing in the design is icon-only. */
   label: string;
   variant?: ButtonVariant;
-  /** A leading glyph, e.g. `<TrashGlyph />` on the delete text buttons. */
+  /** A leading glyph, e.g. lucide's `<Trash2 />` on the delete text buttons. */
   icon?: React.ReactNode;
 };
 
@@ -125,7 +103,9 @@ export function Button({ label, variant = 'primary', icon, ...rest }: ButtonProp
   );
 }
 
-// Exported so the delete actions can pass the designed glyph rather than
-// redrawing it. It lives here, beside the only variant that uses it, instead of
-// in an icon module that does not exist yet.
-export { TrashGlyph };
+// **`TrashGlyph` used to be exported from here and is gone.** It existed so the delete
+// actions could pass the designed mark rather than redrawing it, which is exactly the job
+// an icon library does - `lucide-react` arrived with PET-33, so a call site passes
+// `icon={<Trash2 className="size-4" aria-hidden="true" />}` and this file needs no icon
+// vocabulary of its own. Keeping it would have left two different drawings of a bin one
+// click apart, since the delete confirmation already uses lucide's.

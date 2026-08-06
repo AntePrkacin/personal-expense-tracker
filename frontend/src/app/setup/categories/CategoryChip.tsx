@@ -1,3 +1,5 @@
+import { Check } from 'lucide-react';
+
 import { CATEGORY_DOT, type CategoryColour } from '@/components/ui/categoryColour';
 
 // One starter category chip on screen 03 (node 43:720), which toggles.
@@ -46,31 +48,6 @@ export const CHIP_STATE: Record<'on' | 'off', string> = {
  */
 const CHIP_BASE = 'btn gap-2 font-normal';
 
-/**
- * The checkmark a selected chip shows (node 43:723).
- *
- * The path is the exported vector translated to its own 8.5x6 bounding box, so half
- * of the 2-wide round-capped stroke falls outside the viewBox and `overflow-visible`
- * is what stops the tips and the elbow rendering shorn flat - the trap the Chevron
- * in `app/(app)/dashboard/MonthPill.tsx` documents.
- *
- * `currentColor` now: Figma strokes the tick one shade lighter than the label beside
- * it, and the theme publishes one accent, so inheriting the pressed chip's own
- * colour is both correct and theme-aware.
- */
-function CheckGlyph() {
-  return (
-    <svg
-      viewBox="0 0 8.5 6"
-      className="h-1.5 w-[8.5px] shrink-0 overflow-visible"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path d="M0 3L3 6L8.5 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 type CategoryChipProps = {
   /** The category's name, which is also what a registration submits. */
   label: string;
@@ -105,7 +82,10 @@ export function CategoryChip({ label, colour, selected, onToggle }: CategoryChip
           coloured smudge. `categoryColour.ts` records the whole of it. */}
       <span aria-hidden="true" className={`status status-lg shrink-0 ${CATEGORY_DOT[colour]}`} />
       {label}
-      {selected ? <CheckGlyph /> : null}
+      {/* `currentColor` by default, which is the call the hand-traced tick already made:
+          Figma strokes it one shade lighter than the label, and the theme publishes one
+          accent, so inheriting the pressed chip's own colour is correct and theme-aware. */}
+      {selected ? <Check className="size-3.5 shrink-0" aria-hidden="true" /> : null}
     </button>
   );
 }

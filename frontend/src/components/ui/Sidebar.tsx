@@ -1,3 +1,4 @@
+import { AlignLeft, LayoutGrid, Sparkle, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { initials, shortName } from '@/lib/format';
@@ -43,62 +44,20 @@ export const SIDEBAR_HREFS: Record<SidebarItem, string> = {
   settings: '/settings',
 };
 
-/**
- * The four nav glyphs, traced from the Figma exports (nodes 18:12, 18:19, 18:33
- * and 18:40) and re-pointed at `currentColor`, so each inherits the menu item's
- * own state colour.
- *
- * All four are 20x20 and fill-only, and every shape sits wholly inside the
- * viewBox, so none of them needs `overflow-visible`: there is no stroke whose
- * half-width falls outside the box to be sheared flat.
- */
-function DashboardGlyph() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-5 shrink-0" fill="currentColor" aria-hidden="true">
-      <rect width="8.5" height="8.5" rx="2.5" />
-      <rect x="11.5" width="8.5" height="8.5" rx="2.5" />
-      <rect y="11.5" width="8.5" height="8.5" rx="2.5" />
-      <rect x="11.5" y="11.5" width="8.5" height="8.5" rx="2.5" />
-    </svg>
-  );
-}
-
-function TransactionsGlyph() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-5 shrink-0" fill="currentColor" aria-hidden="true">
-      <rect y="2" width="20" height="3" rx="1.5" />
-      <rect y="8.5" width="20" height="3" rx="1.5" />
-      {/* Deliberately short. The ragged third bar is what makes this read as a
-          list rather than as a hamburger menu. */}
-      <rect y="15" width="13" height="3" rx="1.5" />
-    </svg>
-  );
-}
-
-function InsightsGlyph() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-5 shrink-0" fill="currentColor" aria-hidden="true">
-      {/* A four-pointed star with concave sides, the same "AI" mark the insights
-          teaser card carries on 04 Dashboard (node 23:127). The control points
-          are 7.17157, i.e. 10 - 10/sqrt(2), so the waist sits exactly on the
-          inscribed square's corner. */}
-      <path d="M10 0L12.8284 7.17157L20 10L12.8284 12.8284L10 20L7.17157 12.8284L0 10L7.17157 7.17157L10 0Z" />
-    </svg>
-  );
-}
-
-function SettingsGlyph() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-5 shrink-0" fill="currentColor" aria-hidden="true">
-      {/* Two sliders. The knobs sit off-centre and on opposite sides, which is
-          what says "adjustable" rather than "toggled". */}
-      <rect y="4.4" width="20" height="2.6" rx="1.3" />
-      <circle cx="16" cy="6.1" r="3" />
-      <rect y="13" width="20" height="2.6" rx="1.3" />
-      <circle cx="7" cy="14.7" r="3" />
-    </svg>
-  );
-}
+// **The four nav glyphs were hand-traced from Figma (nodes 18:12, 18:19, 18:33 and 18:40) and
+// are now lucide's.** They were the only *filled* marks in the set, so this is the one place
+// the migration is a visible change rather than a swap: lucide is uniformly stroke-based, and
+// the sidebar reads a shade lighter for it. Taken deliberately, because four solid glyphs
+// beside a stroked hamburger, chevron and magnifier was the inconsistency.
+//
+// `Sparkle` is the one to not "correct" to `Sparkles`: the design's AI mark is a single
+// four-pointed concave star, which is what `Sparkle` draws - `Sparkles` adds two smaller ones.
+//
+// `AlignLeft` keeps the ragged short line the traced mark had, which is what stops the
+// Transactions item reading as a second hamburger next to the drawer's own; it draws four
+// lines where the trace drew three. `SlidersHorizontal` is the same kind of near-miss for
+// Settings: three rows against the trace's two, knobs still offset on opposite sides, which is
+// the part that says "adjustable" rather than "toggled".
 
 /**
  * The navigation as designed: three labelled groups, four items.
@@ -114,24 +73,24 @@ const NAV_SECTIONS = [
   {
     heading: 'MENU',
     items: [
-      { key: 'dashboard', label: 'Dashboard', Glyph: DashboardGlyph },
-      { key: 'transactions', label: 'Transactions', Glyph: TransactionsGlyph },
+      { key: 'dashboard', label: 'Dashboard', Glyph: LayoutGrid },
+      { key: 'transactions', label: 'Transactions', Glyph: AlignLeft },
     ],
   },
   {
     heading: 'ASSISTANT',
-    items: [{ key: 'insights', label: 'Insights', Glyph: InsightsGlyph }],
+    items: [{ key: 'insights', label: 'Insights', Glyph: Sparkle }],
   },
   {
     heading: 'ACCOUNT',
-    items: [{ key: 'settings', label: 'Settings', Glyph: SettingsGlyph }],
+    items: [{ key: 'settings', label: 'Settings', Glyph: SlidersHorizontal }],
   },
 ] as const satisfies readonly {
   heading: string;
   items: readonly {
     key: SidebarItem;
     label: string;
-    Glyph: () => React.ReactElement;
+    Glyph: LucideIcon;
   }[];
 }[];
 
@@ -263,7 +222,7 @@ export function Sidebar({ active, firstName, lastName, email, onNavigate }: Side
                           onClick={onNavigate}
                           className={LINK_STATE[isActive ? 'active' : 'idle']}
                         >
-                          <Glyph />
+                          <Glyph className="size-5 shrink-0" aria-hidden="true" />
                           {label}
                         </Link>
                       </li>

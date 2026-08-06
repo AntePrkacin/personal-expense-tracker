@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
-import { Button, TrashGlyph, type ButtonVariant } from './Button';
+import { Trash2 } from 'lucide-react';
+
+import { Button, type ButtonVariant } from './Button';
 
 // The import above is type-only on purpose. Importing any *value* from Storybook
 // (`fn` from storybook/test, say) breaks ui.stories.test.tsx with an opaque ESM
@@ -54,7 +56,11 @@ export const AllVariants: Story = {
             key={variant}
             variant={variant}
             label={labels[variant]}
-            icon={variant === 'textDanger' ? <TrashGlyph /> : undefined}
+            icon={
+              variant === 'textDanger' ? (
+                <Trash2 className="size-4 shrink-0" aria-hidden="true" />
+              ) : undefined
+            }
           />
         ))}
       </div>

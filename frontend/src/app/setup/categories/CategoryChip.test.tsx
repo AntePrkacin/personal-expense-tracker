@@ -64,16 +64,12 @@ describe('CategoryChip', () => {
     expect(withCheck.container.querySelector('svg')).not.toBeNull();
   });
 
-  it('keeps the checkmark from being shorn flat by its own viewBox', () => {
-    // Half of the 2-wide round-capped stroke falls outside the box at every end, so
-    // without overflow-visible both tips and the elbow render clipped. Same trap
-    // the Chevron in app/(app)/dashboard/MonthPill.tsx documents.
-    const { container } = render(
-      <CategoryChip label="Bills" colour="orange" selected onToggle={jest.fn()} />,
-    );
-
-    expect(container.querySelector('svg')!.getAttribute('class')).toContain('overflow-visible');
-  });
+  // **"keeps the checkmark from being shorn flat by its own viewBox" was here and is deleted
+  // rather than updated.** It pinned `overflow-visible` on the tick, which existed because
+  // half of a 2-wide round-capped stroke fell outside a hand-traced 8.5x6 box. The tick is
+  // lucide's `Check` now, drawn on a 24 grid with the padding built in, so there is no
+  // clipping to guard against - and an assertion kept alive past the property it protects is
+  // worse than none, because it reads as coverage.
 
   it('fills the dot from the shared category palette, background only', () => {
     const { container } = render(

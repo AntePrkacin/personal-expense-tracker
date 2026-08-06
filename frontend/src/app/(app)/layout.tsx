@@ -1,3 +1,5 @@
+import { Menu } from 'lucide-react';
+
 import { requireProfile } from '@/lib/profile';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
@@ -41,16 +43,6 @@ import { SidebarNav } from './SidebarNav';
 // bounced to `/login`, which sends a signed-in visitor back to `/dashboard`. One read
 // cannot disagree with itself. `lib/profile.ts` records the whole of it.
 
-function HamburgerGlyph() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-5" fill="currentColor" aria-hidden="true">
-      <rect y="2.5" width="20" height="2.6" rx="1.3" />
-      <rect y="8.7" width="20" height="2.6" rx="1.3" />
-      <rect y="14.9" width="20" height="2.6" rx="1.3" />
-    </svg>
-  );
-}
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Redirects to Log in when there is no live session, and throws when the
   // backend could not answer - deliberately not a redirect, because "we could
@@ -81,7 +73,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             aria-label="Toggle sidebar"
             className="btn btn-square btn-ghost drawer-button"
           >
-            <HamburgerGlyph />
+            <Menu className="size-5" aria-hidden="true" />
           </label>
           <span className="font-display px-2 text-lg font-bold">Spendifico</span>
         </div>

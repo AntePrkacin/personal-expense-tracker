@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 
-import { Button, TrashGlyph, type ButtonVariant } from './Button';
+import { Trash2 } from 'lucide-react';
+
+import { Button, type ButtonVariant } from './Button';
 
 // next/jest maps every .css import to an empty object, so jsdom never receives a
 // stylesheet and no test here can assert a rendered colour or size. Styling is
@@ -66,7 +68,13 @@ describe('Button', () => {
   it('renders an icon and hides it from assistive technology', () => {
     // The trash glyph on "Delete transaction" (11, node 29:528) carries no
     // information the label does not already give in words.
-    render(<Button label="Delete transaction" variant="textDanger" icon={<TrashGlyph />} />);
+    render(
+      <Button
+        label="Delete transaction"
+        variant="textDanger"
+        icon={<Trash2 className="size-4 shrink-0" aria-hidden="true" />}
+      />,
+    );
 
     const glyph = screen.getByRole('button').firstElementChild;
     expect(glyph?.tagName).toBe('svg');
@@ -122,7 +130,13 @@ describe('Button as a link', () => {
   });
 
   it('still renders a leading glyph', () => {
-    render(<Button label="Get started" href="/setup" icon={<TrashGlyph />} />);
+    render(
+      <Button
+        label="Get started"
+        href="/setup"
+        icon={<Trash2 className="size-4 shrink-0" aria-hidden="true" />}
+      />,
+    );
 
     const glyph = screen.getByRole('link').firstElementChild;
     expect(glyph?.tagName).toBe('svg');

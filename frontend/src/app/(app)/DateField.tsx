@@ -1,8 +1,8 @@
 'use client';
 
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { ChevronLeaf } from '@/components/ui/Select';
 import { FieldShell, fieldErrorId } from '@/components/ui/FieldShell';
 import { addDays, addMonths, daysInMonth, monthMatrix, WEEKDAY_INITIALS } from '@/lib/calendar';
 import { isoFromParts, partsFromIso, todayIsoDate } from '@/lib/date';
@@ -420,8 +420,7 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
               onClick={() => page(-1)}
               className={DATE_PAGER}
             >
-              {/* The leaf points down at rest, so a quarter turn clockwise points it left. */}
-              <ChevronLeaf className="rotate-90" />
+              <ChevronLeft className="size-4" aria-hidden="true" />
             </button>
 
             {/* aria-live so paging announces the new month to a screen reader; without it the
@@ -437,7 +436,7 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
               onClick={() => page(1)}
               className={DATE_PAGER}
             >
-              <ChevronLeaf className="-rotate-90" />
+              <ChevronRight className="size-4" aria-hidden="true" />
             </button>
           </div>
 

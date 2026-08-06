@@ -393,21 +393,39 @@ pulling in a positioning library for one engine and one control. Both cost more 
 degradation, and the fallback is a coherent design rather than a broken one. Worth revisiting
 when Firefox ships anchor positioning, at which point the fix is deleting nothing.
 
-### lucide-react arrived, and two hand-traced glyphs did not migrate with it
+### The icon set is lucide's now, and three marks are near-misses the designer has not seen
 
-PET-33 added `lucide-react` as the app's icon library, on the daisyUI Blueprint MCP's setup
-guidance, and used it for the row menu's ellipsis, pencil and trash and the confirmation dialog's
-trash. Every glyph before it was hand-traced from a Figma export with its node id in the comment,
-and **two of those are still in place**: `ui/Button.tsx`'s `TrashGlyph`, exported for the two
-"Delete transaction" text buttons, and `(app)/Modal.tsx`'s `CloseGlyph`.
+PET-33 added `lucide-react` and migrated all thirteen hand-traced glyphs onto it, so there is one
+icon idiom and no traced SVG left in `frontend/src` outside the tests, `app/icon.svg` and the
+wordmark. What did **not** come with it is a designer's sign-off, and three specifics are worth
+naming rather than leaving to be re-discovered by whoever next opens the design file.
 
-So the app has two icon idioms, and the visible consequence is narrow but real: `TrashGlyph` and
-lucide's `Trash2` are different drawings of the same object, and PET-32's edit modal will put one
-of them (the text button) on screen one click before the other (the dialog's circle). Migrating
-is mechanical and has no behaviour in it, which is exactly why it was not folded into PET-33 -
-it belongs in its own commit where the diff is reviewable as a swap. Whoever does it should check
-`CategoryGlyph` in `TransactionRow.tsx` too, though that one is the placeholder bag Figma uses
-for every category rather than a standard icon, and may have no lucide equivalent worth taking.
+**The sidebar changed weight.** Its four glyphs were the only *filled* marks in the app; lucide is
+uniformly stroke-based, so the navigation reads a shade lighter than Figma draws it. Taken
+deliberately - four solid glyphs beside an already-stroked hamburger, chevron and magnifier was
+the larger inconsistency - but it is a visible deviation from the frames rather than a swap, and
+it is the one an eye lands on first.
+
+**Two of the four are approximations.** `AlignLeft` (Transactions) draws four ragged lines where
+the trace drew three, and `SlidersHorizontal` (Settings) draws three rows where the trace drew
+two. Both keep the property that made the original readable - the short last line is what stops
+Transactions reading as a second hamburger, and the offset knobs are what say "adjustable" rather
+than "toggled" - so neither is wrong, but neither is the drawn mark either. `Sparkle` is the one
+to leave alone: it is exactly the single four-pointed concave star the design uses for AI, and
+"correcting" it to `Sparkles` would add two smaller stars the frames do not have.
+
+The cheap resolution is a designer confirming the set against frames 04 to 17, which folds into
+whatever pass A29 eventually gets for the undesigned states. The expensive one, if the filled
+sidebar turns out to be load-bearing, is a per-icon `fill` override, which fights the library.
+
+**This item replaces three that the migration answered**, and one fact from them is worth keeping
+rather than losing with the entry: the design file draws the category tile's placeholder shopping
+bag **twice**, and differently - node 15:13 puts the handle left of centre over a bag spanning
+3..17, node 27:149 centres it. That was actionable while the code traced one of them and would
+have had to pick when a second surface drew the tile (the dashboard's recent list, DSH-7, is
+next). It is not any more: both surfaces get lucide's `ShoppingBag`, so the discrepancy is now
+the design file's alone. Worth mentioning in the same conversation as the sign-off above, and
+worth nobody re-tracing either node to "match Figma".
 
 ### The transactions page re-reads the categories on every filter change
 
@@ -825,62 +843,6 @@ has to choose: a colour picker restricted to the eight, which is what frame 19's
 implies and what `ui/Select.tsx` already records it cannot render; or a rendering path that does
 not go through a class map, which means an inline `style` and a deliberate exception to the
 literal-class rule. Note the second also affects the 8px category dot, not only the tile.
-
-### Icons are the last thing still read off the Figma Components page, and they need their own ticket
-
-`frontend/CLAUDE.md`'s Figma against daisyUI rule retires the Foundations and Components pages
-outright, with **one exemption, and this is it**: daisyUI ships no icon set at all, so a vector
-export is still the only source for a glyph and two files trace theirs from the dead page -
-`ui/Select.tsx`'s chevron leaf (node 14:16) and `ui/Sidebar.tsx`'s four nav glyphs (nodes 18:12,
-18:19, 18:33, 18:40). Everything else in the app traces from a **Screens** node instead, which
-that rule still allows: `ui/Button.tsx`'s trash (29:529), `Modal.tsx`'s X (28:388),
-`MonthPill.tsx`'s chevron (21:63), `SearchPill.tsx`'s magnifier (26:143),
-`TransactionRow.tsx`'s tile bag (27:149), `TransactionsEmpty.tsx`'s list mark (45:1046) and
-`CategoryChip.tsx`'s check (43:723). So the exemption covers two files, not ten.
-
-What the ticket has to decide is where icons come from once the page is gone, and the options are
-not equivalent. An icon library (Heroicons, Lucide) is the obvious answer and is a real
-dependency plus a visual break from every Screens-traced mark beside it. Re-exporting the two
-marks from a Screens frame keeps them consistent and keeps the tracing convention, but only if a
-frame actually draws them - the sidebar glyphs may exist nowhere else. Vendoring the two current
-paths into a local `icons.ts` with the provenance recorded costs nothing and ends the dependency
-without answering the design question, which makes it the likely first step. Whatever it picks,
-`ChevronLeaf` is the one to look at first: it is exported from `ui/Select.tsx` and reused rotated
-by the date picker's month pagers, so it is already a shared icon in everything but name, and
-`docs/TODO.md`'s own "the 9x4.5 chevron now exists three times" item below is the same
-observation from the other side. The two should probably be one ticket.
-
-Until it lands, the two files stay as they are and the exemption in that rule is what makes them
-legal. Do not "fix" them by reaching back into Components for anything else.
-
-### The design file draws the category tile glyph twice, and the code now draws it once
-
-Two exports of the placeholder shopping bag Figma uses for every category, and they are different
-drawings rather than one drawing at two sizes. Node 15:13 puts the handle at x=0..8 over a bag
-spanning 3..17, left of centre; node 27:149, the transactions table's, centres it - a bag at 3..15
-under a handle at 5.5..12.5.
-
-This item used to be a disagreement between two components, because `ui/ListRow` traced the first
-and `app/(app)/transactions/TransactionRow.tsx` the second. **PET-57 deleted `ui/ListRow`**, so
-there is exactly one glyph in the repo and nothing left to diverge. What survives is a discrepancy
-in the design file, and it becomes actionable again the moment a second surface draws this tile -
-the dashboard's recent list (DSH-7) is the next one. Copy `TransactionRow.tsx`'s glyph rather than
-re-exporting node 15:13, and ask the designer which is canonical before assuming the offset handle
-was ever intended.
-
-### The 9x4.5 chevron now exists three times
-
-`dashboard/MonthPill.tsx` set the trigger itself - "if a third chevron ever appears, lift them
-then" - and PET-29's filter bar is the third. It is deliberately **not** lifted in that ticket: the
-change belongs to a Dashboard file, and editing one from a Transactions branch is the sort of
-drive-by that makes a diff hard to review.
-
-Note `ui/Select.tsx`'s `ChevronLeaf` is not the answer either, and this is the detail that makes
-the unification real work rather than a move. Its viewBox is 10x5 for the form control; rendered
-into a 9x4.5 box it scales the 1.5 round-capped stroke down to 1.35, so the arrow reads visibly
-lighter than the two beside it. A shared component needs a size and a positioning prop before it
-can serve all three, which is three parameters on a nine-pixel arrow - worth doing once, once
-somebody owns all three call sites.
 
 ### An unknown category id in the URL shows no-results with the select reading "All categories"
 

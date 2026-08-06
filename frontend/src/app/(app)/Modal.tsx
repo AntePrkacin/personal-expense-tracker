@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 
 // The dialog box every modal in the app draws (Figma node 28:384, which is literally named
@@ -48,30 +49,6 @@ import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 // Storybook and manual checks, recorded in `frontend/src/app/CLAUDE.md` and `docs/TODO.md` -
 // the same split `BudgetForm`'s caret restore already lives with. It was three until the
 // focus restore turned out to need our own code, at which point it became testable.
-
-/**
- * The X, traced from node 28:388: a 10x10 box, two crossing strokes, round caps.
- *
- * `overflow-visible` for the reason `ui/Select`'s chevron leaf and `CategoryChip`'s checkmark
- * both document: an SVG viewport clips its own overflow, and half of a round-capped 1.5
- * stroke falls outside the box at all four ends, so without it every tip renders shorn flat.
- *
- * `currentColor` so the button owns the colour, which under `btn-ghost` means the theme does.
- * The stroke width is inferred rather than read - the frame exports this as a flattened
- * image - and is on the list of things the designer still owes an answer on.
- */
-function CloseGlyph() {
-  return (
-    <svg viewBox="0 0 10 10" className="size-2.5 overflow-visible" fill="none" aria-hidden="true">
-      <path
-        d="M0 0L10 10M10 0L0 10"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 type ModalProps = {
   /** The header's heading, e.g. "Add transaction". Rendered as an `h2`; see below. */
@@ -339,7 +316,7 @@ export function Modal({
                 for it. A visually hidden span rather than `aria-label`, which keeps
                 getByRole('button', { name: 'Close' }) true. */}
             <button type="button" onClick={close} className="btn btn-sm btn-circle btn-ghost">
-              <CloseGlyph />
+              <X className="size-4" aria-hidden="true" />
               <span className="sr-only">Close</span>
             </button>
           </div>

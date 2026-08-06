@@ -30,11 +30,15 @@ violated once by somebody working from the design file in good faith.
    **Existing references to those pages stay.** A comment saying `ui/` mirrors the nine tiles, or
    naming node `18:252` as a story's diff target, is a record of why a file sits where it sits -
    history, not an instruction to go and open the page - and rewriting nine such comments would
-   change no behaviour and lose the reasoning. Read them as dated. And **icon geometry is
-   exempt until its own ticket**, because daisyUI ships no icon set at all: a vector export is
-   still the only source for a glyph, `ui/Select.tsx` and `ui/Sidebar.tsx` trace theirs from that
-   page, and `docs/TODO.md` carries the refactor that ends the dependency. What the rule forbids
+   change no behaviour and lose the reasoning. Read them as dated. What the rule forbids
    is **new** work taken from either page, and adding a reference of your own to them.
+
+   **Icon geometry used to be exempt from this rule and is not any more.** The exemption existed
+   because daisyUI ships no icon set, so a vector export was the only source for a glyph and two
+   files traced theirs from the dead Components page. PET-33 added `lucide-react` and migrated
+   every glyph onto it, which is the ticket that exemption was waiting for - so a mark now comes
+   from the library, never from a Figma node, and the last reason to open either dead page is
+   gone. See the icon-library rule under Shared components below.
 
 2. **On the Screens page the split is exact.** Figma governs **structure, layout and content** -
    what is on the screen, in what order, grouped how, with which words. Stock daisyUI governs
@@ -178,6 +182,24 @@ of three**: duplicate rather than share until a third consumer appears, then lif
 owner - `lib/session.ts`'s `authorizedGet` and `components/FormError.tsx` are the two worked
 examples. And **tests assert behaviour and semantics, not class strings**, with daisyUI's state
 classes the one exception, as the visible half of an aria attribute the same test pins.
+
+**`lucide-react` is the icon library, and there are no hand-traced glyphs left.** Every mark in
+the app was a hand-drawn inline `<svg>` with its Figma node id in the comment until PET-33
+introduced the dependency and migrated all thirteen. It is named here rather than in
+`frontend/src/components/CLAUDE.md` because routes draw glyphs too - `(app)/layout.tsx`'s
+hamburger and `(app)/DateField.tsx`'s month arrows are not components. Import the icon, size it
+with a Tailwind `size-*` class, and pass `aria-hidden="true"` **explicitly**: lucide renders a
+bare `<svg>` with no ARIA of its own, and several suites assert that attribute on a glyph. Do not
+reintroduce a traced SVG for a mark the library already has; the two that legitimately stay
+hand-made are `app/icon.svg` (the favicon) and `components/LogoLockup.tsx` (the brand mark, which
+must not follow an icon set at all).
+
+Two consequences worth knowing. Lucide is **stroke-based throughout**, so a filled mark is not
+available without fighting the library - which is why the sidebar reads lighter than Figma draws
+it, and `docs/TODO.md` records that deviation as owing a designer's sign-off. And every icon
+carries `'use client'` internally, which costs nothing here: a Server Component may render one
+and stays a Server Component, so `ui/Sidebar`, `ui/Button` and `(app)/layout.tsx` all still
+render on the server with icons in them.
 
 ## Storybook
 
