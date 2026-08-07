@@ -4,9 +4,10 @@
 cards`. Figma: [05 Dashboard -
 Empty](https://www.figma.com/design/9bM26sKqmJTiZkej4V1Toz/Personal-Expense-Tracker?node-id=44-706).
 
-Base branch is `feat/PET-25-insight-teaser-card`, so this is a stacked branch and its PR targets
-that branch rather than `main`. Position 6 of 6 in the Dashboard stack, and the last ticket in the
-epic.
+Base branch **was** `feat/PET-25-insight-teaser-card`, position 6 of 6 in the Dashboard stack and
+the last ticket in the epic. PET-21 to PET-25 all merged on 2026-08-07, so GitHub retargeted PR #55
+onto `main` and this stopped being a stacked branch: it is an ordinary branch off `main` now, and
+the five cards it decorates are all in the trunk. Nothing else in this plan depended on the stack.
 
 ## Why
 
@@ -36,6 +37,18 @@ acceptance criteria describe. PET-25 is the single exception and it is deliberat
 "Add transaction" button in full, so building it here was never possible without PET-25 shipping a
 half-finished card. Both tickets now carry a Jira comment recording the resolution. So the teaser is
 **verified** here, not written, and this plan's checklist says so rather than quietly skipping it.
+
+**Amended after PET-25's code review: that card has three states, not two, and it already resolves
+this ticket's condition for itself.** The review found `insight === null` covers two different
+accounts, and that the unlock copy was the only state a running app could reach - nothing anywhere
+calls `POST /api/insights/generate`, so an account with two hundred expenses was being told insights
+unlock after its first. The card now takes `transactionCount` beside `insight`: at zero it draws
+frame 44:706's unlock copy, above zero it says nothing has been analysed yet, and `docs/TODO.md`
+records the missing trigger as PET-44's. Two consequences for this ticket. The teaser is no longer
+merely "verified" - it is the one card that had already computed this screen's condition, under a
+different name, before this branch started. And frame 05's own teaser treatment is still exactly what
+PET-25 shipped, because a genuinely new account has `transactionCount: 0` and therefore draws the
+unlock copy the frame draws. What changes here is the prop, not the pixels.
 
 That leaves four treatments, and every one of them is genuinely absent after PET-21 to PET-24 -
 because each of those cards renders nothing rather than something wrong for the empty case, which is
@@ -68,6 +81,18 @@ principle hold transactions summing to zero, and more importantly five condition
 produce a screen that is half empty and half zeroed. The state is resolved once and each card takes a
 boolean, so the frame is either drawn or not.
 
+**That decision now has to reach a card that shipped before it, and the answer is to align the card.**
+PET-25's teaser derives the same condition from `transactionCount` itself. It cannot disagree with
+`isEmpty` today, because both read the identical field - but it is two spellings of one decision, and
+the drift is one edit away: whoever changes what `isEmpty` means in `page.tsx` leaves the teaser on
+the old definition with every gate green, which is precisely the failure the paragraph above exists
+to prevent. So this ticket switches the teaser to the shared boolean and drops its `transactionCount`
+prop. A boolean carries everything it needs, since its third state is exactly
+`insight === null && !isEmpty`. The alternative, leaving it as the one card computing its own, was
+rejected for that drift; the cost is a prop rename plus its stories and specs, on a card this
+checklist already had a task for. This is the one respect in which the "the teaser is untouched"
+claim below is amended.
+
 **It is resolved in `page.tsx`, not in `DashboardScreen`, and that is forced rather than chosen.**
 PET-21's plan records why and this plan originally had it wrong. The cards are **slots** typed
 `React.ReactNode`, the same as `TransactionsScreen`'s two, so `page.tsx` constructs each card and
@@ -91,7 +116,9 @@ empty `categories` on a populated screen, and the donut would render blank with 
 it. Guarding that card on its own input closes the gap, and it does not reopen the disagreement this
 section's first decision exists to prevent: an empty screen *always* has empty `categories`, so the
 guard is a strict superset of the screen condition rather than a competing opinion about whether the
-account is new. Every other card keeps the screen's flag.
+account is new. Every other card keeps the screen's flag, the teaser included once this ticket
+aligns it - so after this branch there are exactly two conditions on the screen, the shared one and
+the donut's deliberate superset, rather than three spellings of two decisions.
 
 **AC2's "Full month ahead" proves the point.** `daysLeft` is documented as never 0 and counting
 today, so it carries no signal about emptiness at all - there is no value of it that means "empty".
@@ -146,31 +173,39 @@ is the one real branch.
 `(app)/dashboard/TrendCard.tsx`, `CategoryDonut.tsx`, `RecentTransactionsCard.tsx` - each gains its
 designed treatment where it currently renders nothing.
 
-`(app)/dashboard/InsightTeaserCard.tsx` - untouched. PET-25 built both its states.
+`(app)/dashboard/InsightTeaserCard.tsx` - PET-25 built all **three** of its states and this ticket
+writes none of them. The one change is the prop: `transactionCount` becomes the shared `isEmpty`, so
+the screen carries one spelling of one condition. Its rendered output on frame 05 is unchanged.
 
 ## Tasks
 
-- [ ] Commit this plan alone and open the draft PR against `feat/PET-25-insight-teaser-card`
-- [ ] `page.tsx`: resolve `isEmpty` once, thread it to the four cards as they are constructed, and
-      pin in `(app)/pages.test.tsx` that it is one condition and not five
+- [x] Commit this plan alone and open the draft PR against `feat/PET-25-insight-teaser-card`.
+      Done; PR #55 was retargeted onto `main` when that branch merged
+- [ ] `page.tsx`: resolve `isEmpty` once, thread it to **all five** cards as they are constructed,
+      and pin in `(app)/pages.test.tsx` that it is one condition and not five
 - [ ] `BudgetCard.tsx`: the "Full month ahead" caption and the Top category dash, with cases
 - [ ] `TrendCard.tsx`: the bar glyph and "No spending to chart yet", with cases
 - [ ] `RecentTransactionsCard.tsx`: the icon, "No transactions yet" and its body line, with cases
 - [ ] `CategoryDonut.tsx`: the gray ring, the `$0 spent` centre and its caption, guarded on
       `categories.length === 0` rather than on the screen's flag, with cases for both routes into it
-- [ ] Verify the teaser card already renders its unlock state from PET-25; change nothing if it does
+- [ ] `InsightTeaserCard.tsx`: swap `transactionCount` for the shared `isEmpty`, changing no copy and
+      no markup, and update `Shell/AI insight teaser`'s three stories and its suite with it. Verify
+      the unlock state still renders on a zero-transaction account, which is what frame 05 draws
 - [ ] Stories: `Screens/05 Dashboard — Empty` against node `44:706`, plus an empty variant on each
-      of the four card stories
+      of the four card stories. The teaser needs no new story - PET-25's `Unlock` **is** its frame 05
+      state, and `Pending` is the third state no frame draws
 - [ ] Docs: `frontend/src/app/CLAUDE.md` (the one-condition decision, where it is resolved and why,
       the donut's wider guard, and why `EmptyState` is not used), root `CLAUDE.md` - **this is the
       ticket that empties the Dashboard entry in `frontend/CLAUDE.md`'s `## Not built here`**, so
       delete that bullet's dashboard clause rather than editing around it. The bullet itself stays:
       it is "The shell's content", and AI Insights and Settings are still empty below the header
 - [ ] `docs/TODO.md`: the five designed strings, and PET-21's chip threshold if still open
-- [ ] Comment on PET-26 recording that the teaser clause was satisfied in PET-25
+- [ ] Comment on PET-26 recording that the teaser clause was satisfied in PET-25, and that its prop
+      was aligned onto the shared condition here
 
-No `npm run api:sync`: nothing here changes a request or response body. Note this branch **inherits**
-PET-25's regenerated artifacts through the stack and must not regenerate them again.
+No `npm run api:sync`: nothing here changes a request or response body. PET-25's regenerated
+artifacts are in `main` now rather than inherited through the stack, so there is nothing to
+regenerate and a diff on either would mean something else went wrong.
 
 ## Verification
 
