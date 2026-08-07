@@ -1237,6 +1237,95 @@ in dark**, and `base-300` still measures **1.115:1** through the identical harne
 number is the point of re-running it - a check that has never been seen to fail is not evidence,
 and this one is now on record failing for the token it rejected.
 
+**PET-23 filled the third slot, `CategoryDonut`, and the requirement it was built to is stronger
+than the one its plan was written to.** That plan designed a ring **deliberately allowed not to
+close**, on the reasoning that a transaction whose category was tombstoned leaves the slices
+summing to just under 100 and that a visible gap beats a shortfall hidden inside every
+percentage. The product decision reversed it: the ring always closes, the centre reads the
+period's total, and the percentages sum to 100. The old argument was right about the facts and
+wrong that the gap had to be **shown** rather than removed.
+
+**Three unrelated things can stop a donut closing, and the plan only knew the rarest.** Display
+rounding is the one that would have shipped: five slices at 32.4 / 24.3 / 18.2 / 14.2 / 10.9 each
+round correctly alone and sum to 99, on most accounts, with nothing wrong with the data. That is
+`donut.ts`'s `apportionPercents`, largest-remainder, and its accepted cost is that a slice can
+read a point off its own rounding - on those five the floors total 98, so two points are handed
+out and the 32.4 shows 33. The underlying values were already fine. And the orphan case is
+narrower than "a deleted category", because `DELETE /api/categories/:id` reassigns to the
+Uncategorized fallback before tombstoning; only the check-then-write race can orphan anything.
+
+**That last one is fixed in the backend rather than in this card**, because the money belongs to
+a category the user can no longer see and that is exactly what Uncategorized is for.
+`CategoriesService.withSpend` folds it in, which restores _every transaction is counted in
+exactly one row_ for the categories list and the month stats too, not just here.
+`docs/TODO.md` carries the VERY IMPORTANT invariant entry and the part of it the write path
+still cannot guarantee.
+
+**The ring is closed by two independent mechanisms and that is deliberate.** The arcs are driven
+by `dataKey="spent"`, which Recharts normalises against the sum of the values it holds, so the
+geometry closes even if a future response's percentages did not add up. A chart's correctness
+should not rest on a field being well-behaved.
+
+**`Pie` carries a second focusable default beyond `accessibilityLayer`.** Its own `rootTabIndex`
+defaults to 0, so switching the accessibility layer off was not enough and the ring stayed in the
+tab order inside an `aria-hidden` subtree. Both are off now. Found by the suite asserting the
+negative rather than by enumerating known defaults, which is the argument for writing that
+assertion on every chart.
+
+**The donut's ring is `aria-hidden` with no `sr-only` twin, unlike the trend chart, and the
+difference is the legend.** Here the legend names every slice with its amount and its percentage in
+real text, so it is a strict **superset** of the hover tooltip and there is nothing to mirror.
+The trend chart's tooltip carried a date range that appeared nowhere else, which is why that one
+needed a list. The tooltip shows the **apportioned** integer rather than rounding again, so a
+slice and its legend row cannot disagree by a point.
+
+**That superset argument covers the slices and not the centre total, which is the review finding
+it produced.** The card first put `aria-hidden` on a wrapper holding the ring _and_ the centre
+readout, and no legend row states the period's total - so AC2's own figure was on no accessible
+surface at all, the exact gap PET-22's chart paid for with an `sr-only` list. The fix is a second
+wrapper: the attribute sits on the ring alone and the readout is ordinary announced text. Worth
+knowing why the suite could not have caught it as written - **RTL queries read straight through
+`aria-hidden`**, so `getByText('$1,240')` passed with the defect present and only the containment
+says which. `CategoryDonut.test.tsx` asserts the containment now, and the rule generalises to
+every chart on this dashboard: a text assertion is not an accessibility assertion.
+
+**The legend's percentages are apportioned against the response's own total, not renormalised to
+100, and that reverses what `donut.ts` first documented.** The first version divided each value by
+the set's sum before apportioning, so a response summing to 97 still produced a legend reading
+100 - defended in that file as surviving the breach of a guarantee. It is the wrong way to survive
+it, because of what the guarantee is made of: `dashboard.service.ts`'s `categoriesOf` deliberately
+divides by `totalCents`, the account-wide total summed from the transaction list rather than from
+these rows, and both its docblock and `backend/CLAUDE.md` say the reason in as many words - a
+regression in the orphan fold is then **visible** as percentages failing to reach 100 instead of
+being renormalised out of sight. Scaling in the consumer disarmed that detector from the far end,
+and would have shown a legend reading 100% over amounts summing to less than the figure in the
+middle of the ring. So a shortfall now survives to be seen, and the ring still closes beside it
+because Recharts sizes the arcs from `spent`: **the two mechanisms disagreeing is the signal**,
+which is what "two independent mechanisms" above is for.
+
+**Two review findings were about colour, and both are the kind only a browser can settle.** The
+fallback slice and its legend dot were `base-300`, the token PET-22 had already measured and
+rejected for the trend chart's muted bars - **1.157:1** in light and **1.115:1** in dark against
+this card - and it mattered more here than there, because the backend's orphan fold routes real
+money into that one slice, so drawing it invisible is the ring failing to close by another route.
+It is `base-content/50` now: **3.401:1** light, **4.769:1** dark, composited and measured through
+the same harness, which probed the old token in the same run and watched it fail. And the arcs
+carry a `stroke` of `base-100` where they carried none, because `CATEGORY_FILL` is lossy on
+purpose - `orange` and `yellow` both resolve to `var(--color-warning)` - so two same-coloured
+slices landing next to each other in the `spent`-descending sort merged into one arc, showing four
+slices under a legend listing five. The seam is invisible between two differently-coloured slices,
+which is what makes it free; `Shell/Spending by category`'s `SameColourNeighbours` story is the
+case, and counting its arcs against its legend rows is the whole check.
+
+**The legend's tiebreak compares with `<`, not `localeCompare`, and "the same rule as the backend"
+had to mean the same collation.** `topCategoryOf` breaks its tie with `row.name < winner.name` and
+`CategoriesService.withSpend` orders by SQLite's BINARY collation, both UTF-16 code units;
+`localeCompare` is a different order and disagrees on ordinary data rather than exotic data - two
+categories tied at $100 named `Bills` and `arcade` put `Bills` in PET-21's "Top category" stat and
+`arcade` at the top of this legend, on one screen. Any accented name does it too. The nicer human
+ordering is real, and it is the backend's to choose for both surfaces rather than this card's to
+have an opinion about.
+
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show
 you is the result: the transactions **table** is PET-29's slot, so saving from the Transactions

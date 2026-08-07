@@ -61,6 +61,31 @@ export const CATEGORY_DOT: Record<CategoryColour, string> = {
   pink: 'bg-secondary',
 };
 
+/**
+ * The same eight colours as a CSS value, for an SVG `fill`.
+ *
+ * **A third map rather than a reuse of `CATEGORY_DOT`, because `fill` is an SVG presentation
+ * attribute and a Tailwind class is not a valid value for one.** `bg-error` in a `fill` resolves
+ * to nothing at all: no error, no colour, an unpainted slice. PET-23's donut is the first thing
+ * here that colours an SVG rather than a box, and every chart after it has the same problem.
+ *
+ * A `var(--color-*)` reference is a live one, resolved by the browser exactly as the class is, so
+ * a slice follows the light/dark theme with no JavaScript and no `dark:` variant - verified in a
+ * browser by flipping `prefers-color-scheme` and re-reading the computed fill. The values pair
+ * one-to-one with `CATEGORY_DOT` and `categoryColour.test.ts` pins that, so a ninth colour added
+ * to one and not the others fails there rather than painting a hole in the ring.
+ */
+export const CATEGORY_FILL: Record<CategoryColour, string> = {
+  coral: 'var(--color-error)',
+  orange: 'var(--color-warning)',
+  yellow: 'var(--color-warning)',
+  green: 'var(--color-success)',
+  teal: 'var(--color-accent)',
+  blue: 'var(--color-info)',
+  violet: 'var(--color-primary)',
+  pink: 'var(--color-secondary)',
+};
+
 // Everything below is the bridge from what the API stores to what the map above is keyed
 // by, and it exists because the two speak different languages on purpose.
 //
@@ -109,17 +134,41 @@ export const CATEGORY_COLOUR_BY_HEX: Record<string, CategoryColour> = {
  * A bare string rather than a ninth entry in the maps above, because `CategoryColour` stays
  * eight keys: widening it would offer this grey to the onboarding chips and to the colour picker
  * frame 19 draws, as if it were a colour somebody could pick.
+ *
+ * **`CATEGORY_DOT_NEUTRAL` and `CATEGORY_FILL_NEUTRAL` deliberately do not follow this one**, and
+ * the reason is the glyph: the tile has content drawn on it and they do not. See their own note.
  */
 export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
 
 /**
  * The same fallback without its content half, for a mark with nothing on it.
  *
- * Stands to `CATEGORY_TILE_NEUTRAL` exactly as `CATEGORY_DOT` stands to `CATEGORY_TILE`, and
- * for the identical reason: daisyUI's `status` reads `currentColor` to draw its shadow, so
- * handing it the `text-base-content` half turns that shadow into an opaque smudge.
+ * **Not `CATEGORY_TILE_NEUTRAL`'s background half, and the difference is whether anything is
+ * drawn on top.** A tile is a box with a glyph in it, so it reads as a shape whatever its
+ * background does. A dot and a donut slice are bare colour, and `base-300` is the theme's own
+ * *empty-surface* token: on a `bg-base-100` card it measures **1.157:1** in light and **1.115:1**
+ * in dark, which is the near-invisibility PET-22 already measured and rejected for the trend
+ * chart's muted bars. Reaching for it here reintroduced that finding on a different chart.
+ *
+ * **This is not a decorative state, which is what makes it worth contrast rather than restraint.**
+ * `CategoriesService.foldOrphansIntoFallback` attributes every orphaned transaction to
+ * Uncategorized, so this is the colour real money is drawn in - and PET-23's requirement is that
+ * the ring closes, which a slice nobody can see fails by another route.
+ *
+ * `base-content/50` measures **3.382:1** in light and **4.743:1** in dark against the same card,
+ * clearing the 3:1 non-text contrast bar in both. That is one step darker than
+ * `FALLBACK_CATEGORY.color`'s own `#98A0AE` (2.66:1 in light), and the divergence is deliberate:
+ * `frontend/CLAUDE.md` gives colour to daisyUI and structure to Figma, so a stored hex is not the
+ * authority over a rendered hue, and clearing the bar is worth more than matching the grey.
+ *
+ * It and `CATEGORY_FILL_NEUTRAL` below are the same colour by construction - Tailwind's `/50`
+ * modifier compiles to exactly the `color-mix` that one is written as - which is what keeps a
+ * legend dot and its own slice from drifting apart. Neither carries the `text-*-content` half,
+ * the whole reason `CATEGORY_DOT` exists as a second map: on a mark with no content it turns
+ * daisyUI's `currentColor` drop shadow into an opaque smudge, and a fallback that reintroduced it
+ * would reintroduce that bug on exactly the path nobody looks at.
  */
-export const CATEGORY_DOT_NEUTRAL = 'bg-base-300';
+export const CATEGORY_DOT_NEUTRAL = 'bg-base-content/50';
 
 /**
  * The background utility for a stored category colour.
@@ -151,18 +200,21 @@ export function categoryTileClass(hex: string | null | undefined): string {
 }
 
 /**
- * The same lookup for a `status` dot, added by PET-34.
+ * The same lookup for a `status` dot, for a mark with no content on it.
  *
- * The two existing `CATEGORY_DOT` call sites - the onboarding chip and the Welcome panel -
- * index it by colour **word**, because each of them owns the word already. A screen rendering
- * a category that came off the API has a hex instead, and the only hex-keyed path here
- * returned the tile - whose `text-*-content` half is exactly what must not reach a `status`.
- * So this is the missing half of the pair rather than a convenience: without it the transaction
- * detail's category chip would have had a smudge under its dot, or a second colour lookup
+ * **Two tickets needed it independently, which is why this names both call sites.** PET-34's
+ * transaction detail draws a category chip; PET-23's donut legend draws a coloured dot with the
+ * category name beside it in real text. The two existing `CATEGORY_DOT` call sites - the
+ * onboarding chip and the Welcome panel - index it by colour **word**, because each of them owns
+ * the word already. A screen rendering a category that came off the API has a hex instead, and
+ * the only hex-keyed path here returned the tile - whose `text-*-content` half is exactly what
+ * must not reach a `status`. So this is the missing half of the pair rather than a convenience:
+ * without it either consumer would have had a smudge under its dot, or a second colour lookup
  * written out at the call site.
  *
- * Every note on `categoryTileClass` applies unchanged, `Object.hasOwn` included and for the
- * same reason.
+ * Every note on `categoryTileClass` applies unchanged, `Object.hasOwn` included and for the same
+ * reason, and so does the uppercase normalisation - `CreateCategoryDto` accepts `#57b368` while
+ * the seed writes `#57B368`.
  */
 export function categoryDotClass(hex: string | null | undefined): string {
   if (hex === null || hex === undefined) {
@@ -174,4 +226,35 @@ export function categoryDotClass(hex: string | null | undefined): string {
   return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
     ? CATEGORY_DOT[CATEGORY_COLOUR_BY_HEX[key]!]
     : CATEGORY_DOT_NEUTRAL;
+}
+
+/**
+ * The neutral fill, for a colour outside the eight.
+ *
+ * Stands to `CATEGORY_FILL` as `CATEGORY_DOT_NEUTRAL` stands to `CATEGORY_DOT`, and that one is
+ * declared above beside `CATEGORY_TILE_NEUTRAL` rather than here, which is where the contrast
+ * measurements and the no-content-half reasoning both live. Written as the `color-mix` Tailwind's
+ * `/50` modifier compiles to, because an SVG `fill` takes a CSS value and not a class - so the
+ * two are the same colour by construction rather than by a comment asking you to keep them so.
+ */
+export const CATEGORY_FILL_NEUTRAL =
+  'color-mix(in oklab, var(--color-base-content) 50%, transparent)';
+
+/**
+ * The CSS colour for a stored category colour, for an SVG `fill`.
+ *
+ * The donut's slices. Falls back to the same neutral grey the tile and the dot do, which is the
+ * designed answer for the fallback category's own `#98A0AE` rather than an accident - dropping an
+ * unresolvable slice would make the ring not close, and the ring closing is PET-23's requirement.
+ */
+export function categoryFillVar(hex: string | null | undefined): string {
+  if (hex === null || hex === undefined) {
+    return CATEGORY_FILL_NEUTRAL;
+  }
+
+  const key = hex.toUpperCase();
+
+  return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
+    ? CATEGORY_FILL[CATEGORY_COLOUR_BY_HEX[key]!]
+    : CATEGORY_FILL_NEUTRAL;
 }

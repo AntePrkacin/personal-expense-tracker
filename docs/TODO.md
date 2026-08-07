@@ -599,6 +599,69 @@ captioned "Week 5" beside four full weeks, and the range in the tooltip is the s
 A pointer-only fact would have been the wrong home for that, which is why the list carries it
 too.
 
+### VERY IMPORTANT: every transaction must resolve to a live category, and the write path still cannot guarantee it
+
+**The rule.** A transaction always belongs to exactly one category, and the default is
+**Uncategorized**. Nothing in the product has a concept of uncategorized-as-in-absent: the
+fallback category is a real row (`is_fallback = 1`, colour `#98A0AE`) seeded into every user
+database whether or not the user picked anything, and `DELETE /api/categories/:id` moves a deleted
+category's transactions into it before tombstoning. Treat "which category is this in" as a
+question that always has an answer.
+
+**`NOT NULL` is not what enforces this, and assuming it does is the trap.**
+`transactions.category_id` is indeed `NOT NULL`, so no transaction can lack an id. But
+`backend/src/database/user/schema.ts` is **FK-less by design** - its own comment says "No
+`.references()`: the schema is FK-less throughout, so reads already have to tolerate a dangling
+id" - and categories are **soft-deleted**, with every read filtering `isNull(deletedAt)`. So the
+column guarantees a *value*, never a *resolvable* one, and the failure mode is not a null
+category but a category tombstoned out from under a live transaction.
+
+**What already enforces it.** Two of three layers:
+
+- Writes check the category is live before storing (`assertCategoryExists`).
+- Deletes reassign to the fallback before tombstoning.
+- Reads fold anything that slipped through into the fallback, added with PET-23:
+  `CategoriesService.withSpend` sums in-window transactions matching no live category and adds
+  them to the Uncategorized row. **This is what lets the dashboard promise that the category
+  spends sum to the period total and the percentages sum to 100**, which PET-23's donut requires
+  in order to draw a ring that always closes.
+
+**What still does not, and this is the open work.** The check and the write are separate
+statements, so a create or update can pass `assertCategoryExists`, have a concurrent
+`DELETE /api/categories/:id` sweep its reassignment past, and then land its write with the id that
+just died. Rare - two overlapping requests on one user's own database, sub-second window - but
+permanent once it happens, because nothing repairs the row afterwards. The read-time fold hides
+the consequence; it does not restore the invariant in storage.
+
+**The obvious fix is forbidden here, which is why this is still open.** Wrapping check and write
+in `db.transaction()` is what both `categories.service.ts` and `transactions.service.ts` refuse at
+the top of the file: the embedded driver refuses overlapping transactions rather than queueing
+them, so a second transactional call site on a user database turns a rare correctness bug into a
+common availability one. The fix that respects that constraint is a **conditional single
+statement**: an `INSERT ... SELECT ... WHERE EXISTS (SELECT 1 FROM categories WHERE id = ? AND
+deleted_at IS NULL)` that inserts zero rows when the category died, with the same `EXISTS` added
+to the update's `WHERE`. Atomic, no transaction, no overlap. It needs a decision about error
+semantics first, since a zero-row update then means either "no such transaction" or "the category
+just died" and the endpoint currently promises a 404 always means the transaction id.
+
+A repair pass for rows already orphaned belongs with it: one
+`UPDATE transactions SET category_id = <fallback> WHERE category_id NOT IN (SELECT id FROM
+categories WHERE deleted_at IS NULL)`, idempotent and almost always zero rows.
+
+**The review of PET-23 found what the unrepaired row costs a client, so the repair has a second
+reason to happen and a note to delete when it does.** Because the fold attributes on read and
+changes nothing in storage, the two endpoints disagree about exactly one row: `GET /categories`
+can report Uncategorized with a `transactionCount` that
+`GET /transactions?categoryId=<fallback id>` will not return, since that filter matches the id
+still stored on the row. Counted, and not enumerable. It is documented on
+`CategoryResponseDto.spent` and `.transactionCount` rather than left for a client to discover,
+and the `UPDATE` above is what makes both descriptions deletable. Until then, do not build a
+"see these transactions" link off that count for the fallback row.
+
+**One stale claim to fix while in there.** Both service files say `LoginTokenService.issue()` is
+the app's only transactional call site. `insights.service.ts` added a second one on a user
+database, so the sentence is no longer true.
+
 ### The dashboard's chart states need seeded data, and the seed script does not exist yet
 
 Two of PET-22's acceptance criteria have never been checked against a running backend, only

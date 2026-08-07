@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, asc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, lt, notExists, sql } from 'drizzle-orm';
 import { newId } from '../common/ids';
 import { fromCents, toCents } from '../common/money';
 import {
@@ -393,11 +393,104 @@ export class CategoriesService {
       // not unique, hence the id tiebreak.
       .orderBy(asc(categories.name), asc(categories.id));
 
-    return rows.map((row) => ({
+    const withSpend = rows.map((row) => ({
       row: row.row,
       spentCents: Number(row.spentCents),
       transactionCount: Number(row.transactionCount),
     }));
+
+    return this.foldOrphansIntoFallback(db, window, withSpend);
+  }
+
+  /**
+   * Attribute spend belonging to no live category to the Uncategorized fallback.
+   *
+   * **The invariant this restores: every transaction in the period is counted in exactly one
+   * returned row, so these rows always sum to the period's total spend.** Callers may rely on
+   * that. PET-23's donut does: it draws one arc per row and the ring has to close, and a ring
+   * that silently omitted a few pounds would be a chart that lies rather than a chart with a gap.
+   *
+   * **What breaks the invariant without this.** `transactions.category_id` is `NOT NULL`, so no
+   * transaction lacks a category *id* - but `database/user/schema.ts` is FK-less by design and
+   * categories are soft-deleted, so an id can name a row that still exists and is tombstoned.
+   * The join above filters `isNull(categories.deletedAt)`, so such a transaction matches no row
+   * and its cents leave the per-category totals while staying in the account-wide total.
+   *
+   * **It is rare and it is not hypothetical.** `remove` reassigns a category's transactions to
+   * the fallback before tombstoning it, so ordinary deletion accounts for everything. The hole is
+   * the check-then-write race `TransactionsService` documents: a create or update passes
+   * `assertCategoryExists`, the concurrent delete's reassignment sweeps past it, and the write
+   * lands with the id that just died. Nothing repairs it afterwards, so one occurrence is
+   * permanent.
+   *
+   * **This does not close that race, and closing it is not this function's job.** The obvious fix
+   * - wrapping check and write in `db.transaction()` - is forbidden by the note at the top of
+   * this file: the embedded driver refuses overlapping transactions rather than queueing them, so
+   * a second call site on a user database turns a rare correctness bug into a common availability
+   * one. `docs/TODO.md` carries the conditional-write fix that would respect that constraint.
+   * Until then this makes the money add up on the way out, which is what every reader needs.
+   *
+   * **What it costs, stated so no screen builds on the wrong half of it.** The fold happens on
+   * read and repairs nothing in storage, so an orphaned transaction is counted on the fallback
+   * row while still carrying the tombstoned category's id. The two endpoints therefore disagree
+   * about that one row: `GET /categories` can report Uncategorized with a `transactionCount` that
+   * `GET /transactions?categoryId=<fallback id>` will not return, because the filter matches the
+   * stored id. `CategoryResponseDto` says so on both fields, since a client cannot see this from
+   * the shape. What it is safe to build on is the sum - every transaction in the period is counted
+   * in exactly one row - which is what the donut and the month stats need and all they need.
+   *
+   * Skipped entirely when the caller asked for one non-fallback category, since there is then no
+   * row for the orphans to land in and no reason to pay for the query.
+   */
+  private async foldOrphansIntoFallback(
+    db: UserDatabase,
+    window: MonthWindow,
+    rows: CategoryWithSpend[],
+  ): Promise<CategoryWithSpend[]> {
+    const fallback = rows.find(({ row }) => row.isFallback);
+    if (!fallback) return rows;
+
+    const [orphaned] = await db
+      .select({
+        spentCents: sql<number>`coalesce(sum(${transactions.amountCents}), 0)`,
+        transactionCount: sql<number>`count(${transactions.id})`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          isNull(transactions.deletedAt),
+          gte(transactions.date, window.start),
+          lt(transactions.date, window.end),
+          // A correlated NOT EXISTS rather than `notInArray` over the ids already in `rows`,
+          // because `rows` is a single category when `onlyId` was passed and every other live
+          // category would then read as orphaned.
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(categories)
+              .where(
+                and(
+                  eq(categories.id, transactions.categoryId),
+                  isNull(categories.deletedAt),
+                ),
+              ),
+          ),
+        ),
+      );
+
+    const spentCents = Number(orphaned?.spentCents ?? 0);
+    if (spentCents === 0) return rows;
+
+    return rows.map((row) =>
+      row.row.isFallback
+        ? {
+            ...row,
+            spentCents: row.spentCents + spentCents,
+            transactionCount:
+              row.transactionCount + Number(orphaned?.transactionCount ?? 0),
+          }
+        : row,
+    );
   }
 
   /** @throws NotFoundException if the id names no live category. */

@@ -2,9 +2,12 @@ import {
   CATEGORY_COLOUR_BY_HEX,
   CATEGORY_DOT,
   CATEGORY_DOT_NEUTRAL,
+  CATEGORY_FILL,
+  CATEGORY_FILL_NEUTRAL,
   CATEGORY_TILE,
   CATEGORY_TILE_NEUTRAL,
   categoryDotClass,
+  categoryFillVar,
   categoryTileClass,
   type CategoryColour,
 } from './categoryColour';
@@ -119,9 +122,10 @@ describe('categoryTileClass', () => {
 });
 
 describe('categoryDotClass', () => {
-  // PET-34's half of the pair. The two existing CATEGORY_DOT call sites index it by colour
-  // word; a screen rendering an API category has a hex, and the hex-keyed path used to return
-  // the tile - whose text-*-content half is what must not reach a `status`.
+  // The half of the pair PET-34 and PET-23 both needed. The two existing CATEGORY_DOT call
+  // sites index it by colour word; a screen rendering an API category has a hex, and the
+  // hex-keyed path used to return the tile - whose text-*-content half is what must not reach
+  // a `status`.
 
   it.each(Object.entries(CATEGORY_COLOUR_BY_HEX))('maps %s to its dot', (hex, colour) => {
     expect(categoryDotClass(hex)).toBe(CATEGORY_DOT[colour as CategoryColour]);
@@ -144,10 +148,12 @@ describe('categoryDotClass', () => {
 
   it('never hands a status dot a content colour to smudge itself with', () => {
     // The whole reason this function exists rather than the tile one being reused. Every
-    // return value has to be background-only.
+    // return value has to be background-only, the neutral fallback included - a text-*-content
+    // half turns daisyUI's currentColor drop shadow into an opaque smudge under every dot.
     for (const hex of [...Object.keys(CATEGORY_COLOUR_BY_HEX), '#123456', null]) {
       expect(categoryDotClass(hex)).not.toMatch(/text-/);
     }
+    expect(CATEGORY_DOT_NEUTRAL).not.toMatch(/text-/);
   });
 
   it('agrees with categoryTileClass about which colour a hex is', () => {
@@ -160,5 +166,67 @@ describe('categoryDotClass', () => {
   it('never returns a bare index into Object.prototype', () => {
     expect(categoryDotClass('constructor')).toBe(CATEGORY_DOT_NEUTRAL);
     expect(categoryDotClass('toString')).toBe(CATEGORY_DOT_NEUTRAL);
+  });
+});
+
+describe('CATEGORY_FILL', () => {
+  it('covers the same eight colours as the dot', () => {
+    expect(Object.keys(CATEGORY_FILL)).toEqual(Object.keys(CATEGORY_DOT));
+  });
+
+  it('pairs every dot class with the CSS variable naming the same colour', () => {
+    // The pin that stops the three maps drifting. `bg-error` and `var(--color-error)` are the
+    // same colour reached two ways, and a ninth colour added to one map and not the others fails
+    // here rather than painting an unfilled slice in the donut.
+    for (const colour of Object.keys(CATEGORY_DOT) as CategoryColour[]) {
+      const token = CATEGORY_DOT[colour].replace(/^bg-/, '');
+      expect(CATEGORY_FILL[colour]).toBe(`var(--color-${token})`);
+    }
+  });
+
+  it('is a CSS value everywhere, never a Tailwind class', () => {
+    // The whole reason this map exists. `fill="bg-error"` is not invalid CSS so much as
+    // meaningless: the slice simply never paints, with no error anywhere.
+    for (const colour of Object.keys(CATEGORY_FILL) as CategoryColour[]) {
+      expect(CATEGORY_FILL[colour]).toMatch(/^var\(--color-[a-z-]+\)$/);
+      expect(CATEGORY_FILL[colour]).not.toMatch(/^bg-/);
+    }
+  });
+
+  it('lets orange and yellow collide, exactly as the other two maps do', () => {
+    expect(CATEGORY_FILL.orange).toBe(CATEGORY_FILL.yellow);
+  });
+});
+
+describe('categoryFillVar', () => {
+  it.each(Object.entries(CATEGORY_COLOUR_BY_HEX))('maps %s to its fill', (hex, colour) => {
+    expect(categoryFillVar(hex)).toBe(CATEGORY_FILL[colour as CategoryColour]);
+  });
+
+  it('accepts a lowercase hex', () => {
+    expect(categoryFillVar('#57b368')).toBe(CATEGORY_FILL.green);
+  });
+
+  it.each([
+    ['the fallback category own grey', '#98A0AE'],
+    ['an unknown but well-formed hex', '#123456'],
+    ['something that is not a hex', 'green'],
+    ['an empty string', ''],
+    ['a category that could not be resolved', undefined],
+    ['a colour the API left null', null],
+  ])('falls back to the neutral fill for %s', (_label, value) => {
+    expect(categoryFillVar(value)).toBe(CATEGORY_FILL_NEUTRAL);
+  });
+
+  it('never returns an empty string, which would be an unpainted slice', () => {
+    // The donut's version of the transparent-tile failure: a slice with no fill still occupies
+    // its arc, so the ring would have a hole in it that nothing reports.
+    expect(categoryFillVar('#000000')).not.toBe('');
+    expect(CATEGORY_FILL_NEUTRAL).not.toBe('');
+  });
+
+  it('never returns a bare index into Object.prototype', () => {
+    expect(categoryFillVar('constructor')).toBe(CATEGORY_FILL_NEUTRAL);
+    expect(categoryFillVar('toString')).toBe(CATEGORY_FILL_NEUTRAL);
   });
 });

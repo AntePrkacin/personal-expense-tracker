@@ -368,15 +368,36 @@ on either side of it, so `daysLeft` could momentarily read 0 where its DTO promi
 self-heals on the next request and disappears the moment a shared `PeriodService` resolves the
 window once.
 
-Five things about the figures are easy to get wrong:
+Six things about the figures are easy to get wrong:
 
 - **The account-wide total is summed from the transaction list, never from the per-category
-  rows.** A transaction whose category was deleted moments after it was created (see
-  `TransactionsService`'s own note on that race) would not appear in any live category row, and
-  summing categories instead would silently under-report `spent` - the one figure the top stat
-  tile exists to get right. The same reasoning makes the donut's percentages relative to that
-  total rather than to the sum of the slices: the two can disagree by the same rare margin, and
-  disagreeing in the total would be worse.
+  rows**, and the donut's percentages are relative to that total rather than to the sum of the
+  slices. Both still hold; the reason has changed. It used to be that the two figures could
+  genuinely disagree, because a transaction whose category was deleted moments after it was
+  created (see `TransactionsService`'s own note on that race) appeared in no live category row -
+  so the slices were allowed to sum to just under 100% and this file preferred a visible
+  shortfall in one slice to a hidden one inside every percentage. **PET-23 removed the
+  shortfall instead of choosing where to put it**: `CategoriesService.withSpend` folds spend
+  matching no live category into the Uncategorized fallback, so every transaction in the period
+  is counted in exactly one row, the rows sum to `spent` exactly, and the percentages sum to 100.
+  The donut relies on that, because its ring is required to close. Keeping the two derivations
+  independent is now a **check** rather than a hedge: if the fold ever regresses, the
+  percentages visibly fail to reach 100 instead of the total quietly shrinking to match. See
+  `docs/TODO.md`'s invariant entry for what the write path still cannot guarantee.
+  **That check is only worth stating because the consumer stopped defeating it.** The donut's
+  `apportionPercents` originally renormalised its input against the set's own sum before rounding,
+  which turned any shortfall back into a legend reading 100% - so the detector this bullet
+  describes existed on the wire and was erased one function later. The review of PET-23 removed
+  the renormalisation. Anything else consuming these percentages inherits the same obligation:
+  divide by nothing.
+- **The fold is a read-time attribution and repairs nothing, so two endpoints disagree about one
+  row.** An orphaned transaction is counted on the Uncategorized row while still storing the
+  tombstoned category's id, which means `GET /categories` can report a `transactionCount` that
+  `GET /transactions?categoryId=<fallback id>` will not return - the filter matches the stored id,
+  and nothing has changed it. `CategoryResponseDto` says so on both `spent` and `transactionCount`,
+  because a client cannot see it from the shape; the repair `UPDATE` that would close it is in
+  `docs/TODO.md` with the conditional-write fix, deferred rather than forgotten. What is safe to
+  build on is the **sum**, which is the whole of what the donut and the month stats need.
 - **`averagePerDay` divides by days elapsed, counting today, never by the days in the whole
   period.** Elapsed is the rate that answers "am I burning too fast"; dividing by the full
   period on day 2 makes a number that looks like success and means nothing. It is never zero,

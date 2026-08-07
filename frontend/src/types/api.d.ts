@@ -436,9 +436,9 @@ export interface components {
             isFallback: boolean;
             /** @description Major units. Null means uncapped, which is not a cap of 0. */
             monthlyCap: number | null;
-            /** @description Major units spent in this category during the current period. */
+            /** @description Major units spent in this category during the current period. On the fallback (`isFallback`) row this also carries spend whose category no longer exists, so these figures always sum to the period total; see `transactionCount` for what that costs. */
             spent: number;
-            /** @description Transactions counted in `spent`. */
+            /** @description Transactions counted in `spent`. On the fallback (`isFallback`) row this can exceed what `GET /transactions?categoryId=<this id>` returns: orphaned transactions are attributed here on read but still store the id of the deleted category, so they are counted and not enumerable. Do not present this count as a link to a filtered list for that one row. */
             transactionCount: number;
             /** @description Percentage of the cap used, unrounded. Null when uncapped. Round it for display; the status is decided on cents, so rounding cannot disagree with it. */
             percentUsed: number | null;
@@ -571,7 +571,7 @@ export interface components {
             color: string;
             /** @description Major units spent in this category during the current period. */
             spent: number;
-            /** @description Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap. */
+            /** @description Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap. Across the whole `categories` array these sum to 100: spend belonging to no live category is folded into the Uncategorized fallback, so every transaction in the period is counted in exactly one entry. Round for display with an apportionment that preserves the total, since rounding each value independently can sum to 99 or 101. */
             percent: number;
         };
         DashboardResponseDto: {
@@ -591,7 +591,7 @@ export interface components {
             topCategory: components["schemas"]["TopCategoryDto"] | null;
             /** @description Sums to `spent`. Anchored to the period start, not to ISO weeks, so the buckets tile the period without gap or overlap; the last one is short rather than overshooting into the next period. An **empty array**, not zero-filled buckets, when there is nothing to chart this period. */
             weeklyBuckets: components["schemas"]["WeeklyBucketDto"][];
-            /** @description Every nonzero category this period, percentages unrounded and relative to `spent`. Empty when there is no spend yet. */
+            /** @description Every nonzero category this period, percentages unrounded and relative to `spent`. The entries account for all of `spent`, so their `spent` fields sum to it and their `percent` fields sum to 100. Empty when there is no spend yet. */
             categories: components["schemas"]["DashboardCategoryDto"][];
             /** @description Up to 3 most recent transactions in the current period, newest first. */
             recentTransactions: components["schemas"]["TransactionResponseDto"][];
