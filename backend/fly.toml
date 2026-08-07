@@ -85,20 +85,44 @@ swap_size_mb = 512
 
   TURSO_GROUP = "decode-pet"
 
-  # Auth rate limits, tightened below the Joi defaults (5 email / 30 IP) for the
-  # deployed app: 3 login-link/register knocks per 15 minutes per email address,
-  # 15 per 15 minutes per caller IP. The window is AUTH_RATE_TTL_S, left at its
-  # 900s (15 min) default. Local, CI and the e2e suite never read this file, so
-  # they keep the looser defaults - only production is tightened.
+  # Auth rate limits. The window is AUTH_RATE_TTL_S, left at its 900s (15 min)
+  # default in every profile below. Local, CI and the e2e suite never read this
+  # file, so they keep the Joi defaults (5 email / 30 IP) - only the deployed app
+  # reads these.
   #
   # DEMO/SHOWCASE WARNING - read "Showcase / demo day" in
   # docs/guides/deployment.md before an event. The per-IP limit is the trap: a
   # room full of people on one venue WiFi all share a single caller IP, and a
-  # full signup spends TWO of that IP's knocks (register, then verify), so 15
-  # allows only ~7 signups per 15 min for the whole room. Raise this value for
-  # the event and put it back to 15 afterwards.
-  AUTH_RATE_LIMIT = "3"
-  AUTH_RATE_IP_LIMIT = "15"
+  # full signup spends TWO of that IP's knocks (register, then verify), so the
+  # DEFAULT 15 allows only ~7 signups per 15 min for the whole room.
+  #
+  # ---------------------------------------------------------------------------
+  # DEFAULT profile - the tightened production values. 3 login-link/register
+  # knocks per 15 minutes per email address, 15 per 15 minutes per caller IP.
+  # THIS IS WHAT SHOULD BE ACTIVE IN NORMAL OPERATION. Restore it by swapping the
+  # two blocks below.
+  #
+  #   AUTH_RATE_LIMIT    = "3"
+  #   AUTH_RATE_IP_LIMIT = "15"
+  #
+  # ---------------------------------------------------------------------------
+  # DEVELOPMENT profile - ACTIVE. Ten times the DEFAULT values, same 15-minute
+  # window, so development and testing against the deployed app stop tripping the
+  # limiter after three knocks. 30 per email address and 150 per caller IP, per
+  # 15 minutes.
+  #
+  # TEMPORARY. This weakens a real abuse control on a public endpoint: it is the
+  # only thing standing between a script and unlimited login mail sent to an
+  # address somebody else owns, and the per-IP figure is what a botnet-free
+  # single host has to exhaust. It is acceptable while the team is actively
+  # testing and not acceptable as a resting state.
+  #
+  # PUT THE DEFAULT PROFILE BACK when the current round of testing is done. A
+  # change here only takes effect on the next deploy, and merging does not
+  # deploy - dispatch "Deploy backend to Fly.io" from the Actions tab, both when
+  # raising these and when restoring them.
+  AUTH_RATE_LIMIT = "30"
+  AUTH_RATE_IP_LIMIT = "150"
 
   # Paired with the MAILPACE_API_TOKEN secret by Joi's .and(). Note the sharp
   # edge: `fly secrets unset MAILPACE_API_TOKEN` on its own leaves this half of
