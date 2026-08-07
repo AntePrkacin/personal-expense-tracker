@@ -56,6 +56,14 @@ export function RecentTransactionsCard({
         <ul className="flex flex-col gap-3">
           {recentTransactions.map((transaction) => {
             const category = categoryById.get(transaction.categoryId) ?? null;
+            // Both halves of the caption can go missing, so it is joined rather than
+            // interpolated: `formatRelativeDate` answers `''` for a string that is not a
+            // calendar date, which the contract's `@Matches` plus `@IsDateString` make
+            // unreachable but the API does not - and an interpolated separator would then
+            // render a dangling "Groceries · ". Same call the category makes one line up.
+            const caption = [category?.name, formatRelativeDate(transaction.date)]
+              .filter(Boolean)
+              .join(' · ');
 
             return (
               <li key={transaction.id} className="flex items-center gap-3">
@@ -66,20 +74,21 @@ export function RecentTransactionsCard({
                   <ShoppingBag className="size-4.5" aria-hidden="true" />
                 </span>
 
-                <div className="flex grow flex-col">
-                  <span className="text-sm font-semibold">{transaction.merchant}</span>
+                {/* `min-w-0` is load-bearing: a flex item's default `min-width: auto` floors
+                    at min-content, so a merchant carrying one long unbreakable token would
+                    push the amount off the card rather than truncating - and this card has no
+                    `overflow-x-auto` box around it to catch that, where the transactions
+                    table's own cell does. `truncate` is what it buys. */}
+                <div className="flex min-w-0 grow flex-col">
+                  <span className="truncate text-sm font-semibold">{transaction.merchant}</span>
                   {/* An unresolved category drops its name rather than printing "Uncategorized"
                       for a category this account may not even have that name for - the same
                       call the transactions table's own cell makes for a blank one. The date
                       still renders on its own, so the row degrades rather than disappears. */}
-                  <span className="text-base-content/60 text-xs">
-                    {category === null
-                      ? formatRelativeDate(transaction.date)
-                      : `${category.name} · ${formatRelativeDate(transaction.date)}`}
-                  </span>
+                  <span className="text-base-content/60 truncate text-xs">{caption}</span>
                 </div>
 
-                <span className="text-sm font-semibold tabular-nums">
+                <span className="shrink-0 text-sm font-semibold tabular-nums">
                   {formatNegative(transaction.amount)}
                 </span>
               </li>
