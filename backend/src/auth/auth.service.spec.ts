@@ -1,9 +1,6 @@
 import { BadRequestException, Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import type {
-  ResolvedCategoryTemplate,
-  TemplatesService,
-} from '../templates/templates.service';
+import type { TemplatesService } from '../templates/templates.service';
 import type { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import type { LoginTokenService } from './login-token.service';
@@ -16,14 +13,6 @@ const flush = () => new Promise((resolve) => setImmediate(resolve));
 // RegisterDto validates the shape, though nothing in this suite runs the pipe.
 const GROCERIES_ID = '0198f2b0-0000-7000-8000-000000000001';
 const TRANSPORT_ID = '0198f2b0-0000-7000-8000-000000000002';
-
-const template = (id: string, name: string): ResolvedCategoryTemplate => ({
-  id,
-  name,
-  color: 'success',
-  icon: 'shopping-basket',
-  description: `Everything ${name.toLowerCase()}.`,
-});
 
 const dto: RegisterDto = {
   firstName: 'Marko',
@@ -49,7 +38,7 @@ describe('AuthService', () => {
   let stashOnboardingPayload: jest.Mock;
   let issue: jest.Mock;
   let send: jest.Mock;
-  let resolveTemplates: jest.Mock;
+  let templatesExist: jest.Mock;
   let logError: jest.SpyInstance;
 
   beforeEach(() => {
@@ -58,12 +47,7 @@ describe('AuthService', () => {
     stashOnboardingPayload = jest.fn().mockResolvedValue(undefined);
     issue = jest.fn().mockResolvedValue('raw-token');
     send = jest.fn().mockResolvedValue(undefined);
-    resolveTemplates = jest
-      .fn()
-      .mockResolvedValue([
-        template(GROCERIES_ID, 'Groceries'),
-        template(TRANSPORT_ID, 'Transportation'),
-      ]);
+    templatesExist = jest.fn().mockResolvedValue([GROCERIES_ID, TRANSPORT_ID]);
 
     service = new AuthService(
       {
@@ -76,7 +60,7 @@ describe('AuthService', () => {
       {
         get: (_key: string, fallback: unknown) => fallback,
       } as unknown as ConfigService,
-      { resolve: resolveTemplates } as unknown as TemplatesService,
+      { exists: templatesExist } as unknown as TemplatesService,
     );
 
     logError = jest
@@ -185,7 +169,7 @@ describe('AuthService', () => {
     // that the offered list is a table rather than a constant with an enum.
 
     it('rejects an id that is not a live category template', async () => {
-      resolveTemplates.mockResolvedValue([template(GROCERIES_ID, 'Groceries')]);
+      templatesExist.mockResolvedValue([GROCERIES_ID]);
 
       await expect(service.register({ ...dto })).rejects.toBeInstanceOf(
         BadRequestException,
@@ -193,7 +177,7 @@ describe('AuthService', () => {
     });
 
     it('names the missing id rather than only the count', async () => {
-      resolveTemplates.mockResolvedValue([template(GROCERIES_ID, 'Groceries')]);
+      templatesExist.mockResolvedValue([GROCERIES_ID]);
 
       await expect(service.register({ ...dto })).rejects.toThrow(TRANSPORT_ID);
     });
@@ -201,7 +185,7 @@ describe('AuthService', () => {
     it('creates no account and sends nothing when an id is unknown', async () => {
       // The check has to run *ahead* of the floated work, or the 400 arrives
       // after a link has already been mailed for an account that was created.
-      resolveTemplates.mockResolvedValue([]);
+      templatesExist.mockResolvedValue([]);
 
       await expect(service.register({ ...dto })).rejects.toBeInstanceOf(
         BadRequestException,
@@ -213,13 +197,46 @@ describe('AuthService', () => {
       expect(send).not.toHaveBeenCalled();
     });
 
+    it('asks exists(), not resolve(), so a colourless template is not an unknown id', async () => {
+      // The distinction this whole method turns on. `resolve()` inner-joins the
+      // colour and the icon, so a template whose colour an admin tombstoned
+      // comes back missing from it - and reusing it here reported that template
+      // as an unknown id and 400'd a registration over a chip the picker had
+      // just offered. `exists()` reads `category_templates` alone.
+      //
+      // Asserted as "the service never reaches for resolve" rather than by
+      // simulating the join, because a mock cannot fake an inner join and the
+      // property that matters is which question is asked.
+      const resolve = jest.fn();
+      service = new AuthService(
+        {
+          findByEmail,
+          createPending,
+          stashOnboardingPayload,
+        } as unknown as UsersService,
+        { issue, ttlMinutes: 15 } as unknown as LoginTokenService,
+        { send },
+        {
+          get: (_key: string, fallback: unknown) => fallback,
+        } as unknown as ConfigService,
+        { exists: templatesExist, resolve } as unknown as TemplatesService,
+      );
+
+      await service.register({ ...dto });
+      await flush();
+
+      expect(templatesExist).toHaveBeenCalledWith([GROCERIES_ID, TRANSPORT_ID]);
+      expect(resolve).not.toHaveBeenCalled();
+      expect(createPending).toHaveBeenCalled();
+    });
+
     it('asks central nothing when no chips were picked', async () => {
       // An empty selection is legal (A4) and needs no lookup at all - which is
       // also what keeps the empty case off the unauthenticated route's clock.
       await service.register({ ...dto, categories: [] });
       await flush();
 
-      expect(resolveTemplates).not.toHaveBeenCalled();
+      expect(templatesExist).not.toHaveBeenCalled();
       expect(createPending).toHaveBeenCalledWith(
         'marko@email.com',
         expect.objectContaining({ categories: [] }),
@@ -228,12 +245,9 @@ describe('AuthService', () => {
 
     it('runs before the directory lookup, so it cannot time an address', async () => {
       const order: string[] = [];
-      resolveTemplates.mockImplementation(() => {
+      templatesExist.mockImplementation(() => {
         order.push('templates');
-        return Promise.resolve([
-          template(GROCERIES_ID, 'Groceries'),
-          template(TRANSPORT_ID, 'Transportation'),
-        ]);
+        return Promise.resolve([GROCERIES_ID, TRANSPORT_ID]);
       });
       findByEmail.mockImplementation(() => {
         order.push('directory');

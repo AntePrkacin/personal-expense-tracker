@@ -302,13 +302,26 @@ have rendered that slice, the legend swatch and the list dot as nothing.
 **PET-64 reversed the first half of that and kept the second.** `categories.color` stores a
 daisyUI semantic token now rather than a hex, so there is no off-palette neutral left to reach
 for: `--color-text-tertiary` went with the token layer PET-57 retired, and the paragraph above
-is dated to before that caught up with this row. The fallback carries **`warning-content`**,
+is dated to before that caught up with this row. The fallback carries **`base-content/50`**,
 with `circle-question-mark` as its icon, both from the same allowlist every other category draws
 from. What still holds is the reason white was rejected - this row can hold the largest donut
-slice, so its colour has to be visible against the card in both themes, which is exactly what a
-real theme token gives it and a hex could not promise. Its `note` is written in
+slice, so its colour has to be visible against the card in both themes. Its `note` is written in
 `FALLBACK_CATEGORY` too, since it is the one category with no template to copy a description
 from.
+
+**PET-64 first shipped `warning-content` here and the sentence above was false about it**, which
+is worth keeping rather than quietly correcting, because the mistake is a class rather than a
+typo. This file claimed the colour "has to be visible against the card in both themes, which is
+exactly what a real theme token gives it and a hex could not promise" - and a real theme token
+gives no such thing. `warning-content` measures **1.713:1** against the dark card. The claim was
+written from the plausible idea that a semantic token is theme-aware and therefore safe, and
+nobody measured it. `COLOUR_CONTRAST` in `src/database/central/template-tokens.ts` is the
+measured table that now exists so the next person does not repeat it: of the sixteen semantic
+tokens, **only `primary` and `secondary` clear 3:1 against the card in both themes**, because
+daisyUI deliberately puts each `-content` at the opposite end of the lightness range from its
+base. `base-content/50` is the seventeenth entry in the allowlist precisely because no muted
+semantic token works, and PET-23 had already measured it at 3.401:1 and 4.769:1 for this exact
+row before PET-64 took it away.
 
 **It is deliberately not a `category_templates` row**, for the same reason it was never in
 `STARTER_CATEGORIES`: that table is the onboarding chip list, this must never appear there, and
@@ -611,6 +624,15 @@ Four things about it are easy to get wrong:
   the float a 400 would arrive too late to be a 400 at all. Its `@ArrayMaxSize` is a **literal
   ceiling** rather than the list's length, and deliberately not a count query: that would put a
   database read in front of validation on the one route anybody can post to.
+- **That check asks `exists()`, never `resolve()`, and the two are not interchangeable.** Both
+  read `category_templates`, but `resolve()` inner-joins the colour and the icon, so a template
+  whose _colour_ an admin tombstoned comes back missing from it. That is right where it is used -
+  provisioning cannot write a category with no colour, and `seedStarterCategories` skips it with
+  a warning - and wrong as a membership check, because the caller then cannot tell "not a
+  template" from "lost its colour" and registration answers 400 naming an id the picker had just
+  offered, on a screen with no error state for it (A29). `exists()` reads the one table and
+  filters only the tombstone. PET-64 shipped the conflated version; `test/templates.e2e-spec.ts`
+  pins both directions, including that a genuinely unknown id is still a 400.
 - **Verification copies rather than references, and tolerates a template that vanished.**
   `seedStarterCategories` writes name, colour, icon and the template's `description` into the
   user's own `categories` row - the description becoming `note`, which is what keeps this whole

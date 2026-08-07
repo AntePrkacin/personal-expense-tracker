@@ -86,18 +86,27 @@ export class AuthService {
    * id the API does not know is a frontend out of step with the templates, and
    * seeding whatever survived a filter would hand the user an account missing
    * categories they picked, with nothing anywhere saying so.
+   *
+   * **It asks `exists()` rather than `resolve()`, and that is a correctness
+   * difference rather than a cheaper query.** `resolve()` inner-joins the colour
+   * and the icon, so a template whose colour an admin tombstoned comes back
+   * missing from it - which would land here as "unknown category template id"
+   * and reject a registration over an id the picker had just offered. Only a
+   * genuinely absent or tombstoned *template* belongs in this 400; a template
+   * that lost its colour is skipped at verification instead, which is the arm
+   * `seedStarterCategories` already documents.
    */
   private async assertCategoryTemplatesExist(ids: string[]): Promise<void> {
     if (ids.length === 0) {
       return;
     }
 
-    const found = await this.templates.resolve(ids);
+    const found = await this.templates.exists(ids);
     if (found.length === ids.length) {
       return;
     }
 
-    const known = new Set(found.map((template) => template.id));
+    const known = new Set(found);
     const missing = ids.filter((id) => !known.has(id));
 
     throw new BadRequestException(

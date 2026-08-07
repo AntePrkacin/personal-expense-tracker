@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, type SQL } from 'drizzle-orm';
 import {
   categoryTemplates,
   colourTemplates,
@@ -44,16 +44,22 @@ export class TemplatesService {
   constructor(@Inject(APP_DB) private readonly db: CentralDatabase) {}
 
   /**
-   * The enabled category templates with their colour and icon resolved, in the
-   * order an admin put them in.
+   * The select and the two joins both resolving reads share, parameterised by
+   * the predicate that is genuinely different between them.
+   *
+   * Written once because it was written twice: the two callers differed in
+   * their `where` and in nothing else, so a column added to one and not the
+   * other would have provisioned a category the picker never showed.
    *
    * The joins are plain equality on `colour_id` / `icon_id`, and an inner join
    * rather than a left one: a template whose colour was tombstoned has no
    * colour to draw, and a chip with no colour is worse than a chip that is not
-   * offered. The partial unique indexes keep those joins single-valued.
+   * offered. The partial unique indexes keep those joins single-valued. Note
+   * what that costs `resolve()`, which is why `exists()` below does not use
+   * this - see its own note.
    */
-  async categories(): Promise<CategoryTemplatesResponseDto> {
-    const rows = await this.db
+  private resolvedTemplates(where: SQL | undefined) {
+    return this.db
       .select({
         id: categoryTemplates.id,
         name: categoryTemplates.name,
@@ -76,13 +82,21 @@ export class TemplatesService {
           isNull(iconTemplates.deletedAt),
         ),
       )
-      .where(
-        and(
-          isNull(categoryTemplates.deletedAt),
-          eq(categoryTemplates.enabled, true),
-        ),
-      )
+      .where(where)
       .orderBy(asc(categoryTemplates.sortOrder));
+  }
+
+  /**
+   * The enabled category templates with their colour and icon resolved, in the
+   * order an admin put them in.
+   */
+  async categories(): Promise<CategoryTemplatesResponseDto> {
+    const rows = await this.resolvedTemplates(
+      and(
+        isNull(categoryTemplates.deletedAt),
+        eq(categoryTemplates.enabled, true),
+      ),
+    );
 
     return { categories: rows };
   }
@@ -108,36 +122,54 @@ export class TemplatesService {
       return [];
     }
 
-    return this.db
-      .select({
-        id: categoryTemplates.id,
-        name: categoryTemplates.name,
-        color: colourTemplates.token,
-        icon: iconTemplates.name,
-        description: categoryTemplates.description,
-      })
+    return this.resolvedTemplates(
+      and(
+        isNull(categoryTemplates.deletedAt),
+        inArray(categoryTemplates.id, [...ids]),
+      ),
+    );
+  }
+
+  /**
+   * Which of `ids` are live category templates, for a membership check.
+   *
+   * **Deliberately not `resolve()`, and the difference is the joins.** That one
+   * inner-joins its colour and its icon, so a template whose *colour* was
+   * tombstoned comes back missing - correct there, because a category with no
+   * colour cannot be drawn, and `seedStarterCategories` is documented to skip
+   * it. Reused as a membership check it conflates two different answers: the
+   * caller cannot tell "this id is not a template" from "this template lost its
+   * colour", and registration would answer 400 naming an id the picker had just
+   * offered, on a screen with no error state for it (A29).
+   *
+   * So this reads `category_templates` alone and filters only the tombstone.
+   * The consequence is deliberate: a registration naming a colourless template
+   * is accepted, and the template is dropped at verification with a warning -
+   * which is the arm that already exists for a template that vanished between
+   * the form and the click, and is far better than refusing the registration.
+   *
+   * `enabled` is not filtered, for the reason `resolve()` gives: a pick stashed
+   * before an admin disabled a template must still be honoured.
+   *
+   * One indexed read over the primary key, and it selects the id alone - the
+   * caller only ever compares a set.
+   */
+  async exists(ids: readonly string[]): Promise<string[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .select({ id: categoryTemplates.id })
       .from(categoryTemplates)
-      .innerJoin(
-        colourTemplates,
-        and(
-          eq(colourTemplates.id, categoryTemplates.colourId),
-          isNull(colourTemplates.deletedAt),
-        ),
-      )
-      .innerJoin(
-        iconTemplates,
-        and(
-          eq(iconTemplates.id, categoryTemplates.iconId),
-          isNull(iconTemplates.deletedAt),
-        ),
-      )
       .where(
         and(
           isNull(categoryTemplates.deletedAt),
           inArray(categoryTemplates.id, [...ids]),
         ),
-      )
-      .orderBy(asc(categoryTemplates.sortOrder));
+      );
+
+    return rows.map((row) => row.id);
   }
 
   /** The enabled colours and icons a category picker may offer. */

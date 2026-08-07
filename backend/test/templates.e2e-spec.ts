@@ -190,5 +190,100 @@ describe('Template endpoints (e2e)', () => {
         .where(eq(colourTemplates.token, 'error-content'));
       expect(row.deletedAt).toBeNull();
     });
+
+    it('offers the muted token the fallback category carries', async () => {
+      // `base-content/50` is the seventeenth entry and the only one that is
+      // neither a saturated brand colour nor near-invisible in one theme -
+      // `COLOUR_CONTRAST` in template-tokens.ts carries the measured table.
+      const body = (await getPalette(bearer).expect(200))
+        .body as PaletteResponseDto;
+
+      expect(body.colors.map((colour) => colour.token)).toContain(
+        'base-content/50',
+      );
+    });
+  });
+
+  describe('a template whose colour was tombstoned', () => {
+    // The distinction between `resolve()` and `exists()`, end to end. Both reads
+    // that serve a *screen* inner-join the colour, so such a template stops
+    // being offered - correct, since a chip with no colour cannot be drawn. What
+    // must not happen is registration reusing that query as its membership
+    // check and answering 400 over an id it had just handed out, which is what
+    // it did until the review of PET-64.
+    const TOKEN = 'neutral-content';
+    let orphanedId: string;
+
+    beforeAll(async () => {
+      const [colour] = await centralDb
+        .select()
+        .from(colourTemplates)
+        .where(eq(colourTemplates.token, TOKEN));
+
+      const [template] = await centralDb
+        .select()
+        .from(categoryTemplates)
+        .where(eq(categoryTemplates.colourId, colour.id));
+
+      // No seeded template uses this token, so give one to it first: the point
+      // is a *live* template that has lost its colour, not an absent one.
+      if (!template) {
+        const [first] = await centralDb.select().from(categoryTemplates);
+        await centralDb
+          .update(categoryTemplates)
+          .set({ colourId: colour.id })
+          .where(eq(categoryTemplates.id, first.id));
+        orphanedId = first.id;
+      } else {
+        orphanedId = template.id;
+      }
+
+      await centralDb
+        .update(colourTemplates)
+        .set({ deletedAt: new Date() })
+        .where(eq(colourTemplates.id, colour.id));
+    });
+
+    afterAll(async () => {
+      await centralDb
+        .update(colourTemplates)
+        .set({ deletedAt: null })
+        .where(eq(colourTemplates.token, TOKEN));
+    });
+
+    it('stops being offered, because a chip with no colour cannot be drawn', async () => {
+      const body = (await getCategories().expect(200))
+        .body as CategoryTemplatesResponseDto;
+
+      expect(body.categories.map((row) => row.id)).not.toContain(orphanedId);
+    });
+
+    it('is still accepted by registration rather than 400ing as unknown', async () => {
+      await request(app.getHttpServer())
+        .post('/api/auth/register')
+        .send({
+          firstName: 'Marko',
+          lastName: 'Kovac',
+          email: 'orphaned-colour@example.com',
+          monthlyBudget: 2000,
+          categories: [orphanedId],
+        })
+        .expect(202);
+    });
+
+    it('still 400s an id that is genuinely not a template', async () => {
+      // The other half: widening the check must not have widened it to
+      // everything. A well-formed UUID that names nothing is still rejected.
+      await request(app.getHttpServer())
+        .post('/api/auth/register')
+        .send({
+          firstName: 'Marko',
+          lastName: 'Kovac',
+          email: 'unknown-template@example.com',
+          monthlyBudget: 2000,
+          categories: ['0198f2b0-0000-7000-8000-0000000000ff'],
+        })
+        .expect(400);
+    });
   });
 });

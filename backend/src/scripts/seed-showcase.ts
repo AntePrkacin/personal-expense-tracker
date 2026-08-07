@@ -416,9 +416,10 @@ async function seed(app: INestApplicationContext): Promise<void> {
   );
   const merchantNames = [...merchantPool.keys()];
 
-  const subscriptionsCategory = {
-    id: requireCategoryId(allCategories, SUBSCRIPTION_CATEGORY),
-  };
+  const subscriptionsCategoryId = requireCategoryId(
+    allCategories,
+    SUBSCRIPTION_CATEGORY,
+  );
 
   // Today in the app's own zone, not the machine's, so a run just either side
   // of local midnight agrees with every month-scoped figure the dashboard
@@ -471,7 +472,7 @@ async function seed(app: INestApplicationContext): Promise<void> {
       rows.push({
         id: newId(),
         merchant: subscription.merchant,
-        categoryId: subscriptionsCategory.id,
+        categoryId: subscriptionsCategoryId,
         amountCents: subscription.amountCents,
         date: dateMonthsAgo(today, monthsAgo, subscription.dayOfMonth),
       });
