@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 
 import { readCategoryLabels } from '../../lib/categories';
+import { readDashboard } from '../../lib/dashboard';
 import { readTransactionsView } from '../../lib/transactions';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
@@ -25,6 +26,10 @@ import TransactionsPage from './transactions/page';
 // A relative specifier, because `jest.mock` cannot resolve the `@/` alias from
 // anywhere in this repo - see the note in frontend/src/app/CLAUDE.md.
 jest.mock('../../lib/transactions', () => ({ readTransactionsView: jest.fn() }));
+
+// Dashboard is not, as of PET-21: it awaits `readDashboard()`, the same shape as Transactions,
+// so it too goes through `renderScreen` and needs a mock rather than a real request.
+jest.mock('../../lib/dashboard', () => ({ readDashboard: jest.fn() }));
 
 // PET-29 gives that page a second read: a row carries only a `categoryId`, so the name and
 // colour the table draws are joined on from the category list. Same relative specifier, same
@@ -107,6 +112,23 @@ beforeEach(() => {
   // file asserts the header. The read still has to succeed, because the page throws on an
   // unavailable one rather than rendering a table with every category cell blank.
   (readCategoryLabels as jest.Mock).mockResolvedValue({ ok: true, data: [] });
+
+  // Zeroes are enough: `BudgetCard.test.tsx` is the card's own subject, and this file asserts
+  // the header. `readDashboard` throws rather than returning a rejection, matching the shape
+  // `lib/dashboard.ts` actually has - there is no `{ ok }` wrapper to mock here.
+  (readDashboard as jest.Mock).mockResolvedValue({
+    spent: 0,
+    monthlyBudget: 2000,
+    remaining: 2000,
+    daysLeft: 8,
+    transactionCount: 0,
+    averagePerDay: 0,
+    topCategory: null,
+    weeklyBuckets: [],
+    categories: [],
+    recentTransactions: [],
+    insight: null,
+  });
 });
 
 // October 2025 is the month the whole Figma file is drawn in, so pinning the
@@ -288,8 +310,8 @@ describe('the query string reaching the list read', () => {
   // The one seam nothing else covers: `filters.test.ts` proves the parser and
   // `lib/transactions.test.ts` proves the read, but only this file renders the page that
   // joins them. It matters because the failure is not a filter that does nothing - an
-  // invalid value is a 400, which `readTransactions` throws on, and there is no `error.tsx`
-  // in this app for it to land in.
+  // invalid value is a 400, which `readTransactions` throws on, so the screen is replaced by
+  // `app/error.tsx` rather than rendered with one filter missing.
 
   async function renderWith(searchParams: Record<string, string | string[]>) {
     return render(

@@ -5,6 +5,7 @@ import {
   formatIsoDate,
   formatIsoDayMonth,
   formatNegative,
+  formatWhole,
   initials,
   monthLabel,
   monthOverline,
@@ -64,6 +65,37 @@ describe('formatNegative', () => {
   it('leaves zero unsigned', () => {
     expect(formatNegative(0)).toBe('$0.00');
     expect(formatNegative(-0)).toBe('$0.00');
+  });
+});
+
+describe('formatWhole', () => {
+  it('drops the cents, e.g. the dashboard budget readout', () => {
+    // The design draws "$1,240", never "$1,240.00" - node 21:4's real budget card and frame
+    // 01's sample card both. formatCurrency keeps the cents for a per-transaction amount.
+    expect(formatWhole(1240)).toBe('$1,240');
+  });
+
+  it('separates thousands, matching formatCurrency', () => {
+    expect(formatWhole(12400)).toBe('$12,400');
+  });
+
+  it('formats zero unsigned', () => {
+    expect(formatWhole(0)).toBe('$0');
+  });
+
+  it('rounds rather than truncating', () => {
+    // Rounding keeps a whole-dollar aggregate as close to the real total as one dollar
+    // allows; truncating would bias every figure on the dashboard downwards.
+    expect(formatWhole(54.4)).toBe('$54');
+    expect(formatWhole(54.6)).toBe('$55');
+  });
+
+  it('uses U+2212 for a negative input rather than the hyphen Intl emits', () => {
+    // Defensive, matching formatCurrency's own case: nothing in this epic hands formatWhole a
+    // negative figure, but a caller that started would get the design's glyph rather than
+    // Intl's hyphen.
+    expect(formatWhole(-1240)).toBe(`${MINUS}$1,240`);
+    expect(formatWhole(-1240)).not.toContain('-');
   });
 });
 

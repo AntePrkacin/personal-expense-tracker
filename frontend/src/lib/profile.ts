@@ -37,9 +37,9 @@ type Profile = components['schemas']['ProfileResponseDto'];
  * **An `unavailable` backend throws rather than redirecting**, and that is the fix for
  * the loop described at the top of this file. It surfaces through Next's error boundary,
  * which a reload retries - the honest response to "we could not reach the backend", and
- * one that terminates. Note the design draws no error screen anywhere (A19, A29), so what
- * the reader sees is the framework's own; `docs/TODO.md` records that a custom `error.tsx`
- * is a designer conversation rather than a gap this ticket could close.
+ * one that terminates. Note the design draws no error screen anywhere (A19, A29), so the
+ * one the reader sees is ours: `app/error.tsx` is the boundary as of PET-21, and until then
+ * this sentence described Next's built-in page rather than anything in this repo.
  *
  * **The read itself is `authorizedGet` in `lib/session.ts`**, which owns the cookie, the
  * bearer lift, `cache: 'no-store'` and the 401-versus-everything-else classification - all

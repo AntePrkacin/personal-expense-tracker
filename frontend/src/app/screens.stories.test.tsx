@@ -3,11 +3,13 @@ import { render } from '@testing-library/react';
 
 import * as AddTransactionModal from './(app)/AddTransactionModal.stories';
 import * as EditTransactionModal from './(app)/EditTransactionModal.stories';
+import * as DashboardScreen from './(app)/dashboard/DashboardScreen.stories';
 import * as TransactionDetailScreen from './(app)/transactions/[id]/TransactionDetailScreen.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
 import * as CheckEmailScreen from './check-email/CheckEmailScreen.stories';
+import * as ErrorScreen from './ErrorScreen.stories';
 import * as LoginScreen from './login/LoginScreen.stories';
 import * as SetupCategoriesScreen from './setup/categories/SetupCategoriesScreen.stories';
 import * as SetupRegisterScreen from './setup/register/SetupRegisterScreen.stories';
@@ -60,6 +62,10 @@ const MODULES: [name: string, module: StoryModule][] = [
   // The one module here with no Figma frame behind it (A38), which is also what makes
   // its stories the only place the screen can be looked at.
   ['VerifyFailedScreen', VerifyFailedScreen as StoryModule],
+  // The second module here with no frame behind it, and the only screen in the app that no
+  // route path reaches: `app/error.tsx` renders it when any route throws, so these two
+  // stories are the only place its copy can be looked at.
+  ['ErrorScreen', ErrorScreen as StoryModule],
   // The first signed-in screen in this section, and the first module here that lives
   // under `(app)/`. It is filed under Screens rather than Shell because frame 07 is a
   // whole frame, where `Shell/Page header` is one band of chrome shared by four - so
@@ -74,13 +80,17 @@ const MODULES: [name: string, module: StoryModule][] = [
   // this one is the form inside it.
   ['AddTransactionModal', AddTransactionModal as StoryModule],
   // Frame 11, the same five fields prefilled. A separate module for the module-carries-one-title
-  // reason above, and the pairing is worth noticing: 09 and 11 are the two halves this ticket
+  // reason above, and the pairing is worth noticing: 09 and 11 are the two halves PET-32
   // deliberately did not merge into one component with a `mode` prop.
   ['EditTransactionModal', EditTransactionModal as StoryModule],
   // Frame 08. Three of its five stories are states the frame draws no variant for - an
   // uncapped category, one over its cap, and a transaction with no note - which makes this
   // module the review surface for them rather than only a diff against the design.
   ['TransactionDetailScreen', TransactionDetailScreen as StoryModule],
+  // Frame 04, PET-21's own. Four of its five slots are the placeholder `<div />`s
+  // `page.tsx` actually renders today; `Shell/Budget card` is where the card itself, the
+  // fifth, is reviewed.
+  ['DashboardScreen', DashboardScreen as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

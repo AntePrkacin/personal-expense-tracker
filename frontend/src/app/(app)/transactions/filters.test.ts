@@ -12,9 +12,9 @@ import {
 // The four filters arrive in a query string, so they are typed by whoever holds the address
 // bar - the threat model `parseReason` handles for its own parameter. What is different here
 // is the consequence: every one of these keys is validated by the backend and answers 400 when
-// it fails, `authorizedGet` reports that as `unavailable`, `readTransactions` throws, and no
-// `error.tsx` exists in this app. So a value that slips through is not a filter that does
-// nothing, it is the whole screen replaced by an error page.
+// it fails, `authorizedGet` reports that as `unavailable`, and `readTransactions` throws. So a
+// value that slips through is not a filter that does nothing, it is the whole screen replaced
+// by `app/error.tsx`.
 
 const UUID = '018f4a1e-2c3b-7d4e-8f90-a1b2c3d4e5f6';
 
