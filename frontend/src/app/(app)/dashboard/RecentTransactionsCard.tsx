@@ -1,4 +1,4 @@
-import { ShoppingBag } from 'lucide-react';
+import { ReceiptText, ShoppingBag } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { categoryTileClass } from '@/components/ui/categoryColour';
@@ -30,17 +30,55 @@ import type { DashboardSummary } from '@/lib/dashboard';
 export type RecentTransactionsCardProps = Pick<
   DashboardSummary,
   'recentTransactions' | 'categories'
->;
+> & {
+  /**
+   * The screen's shared PET-26 condition, not `recentTransactions.length === 0`.
+   *
+   * The two are documented as identical - the field is up to three transactions **in the
+   * current period**, so an empty array and a transaction-free period are the same fact - but
+   * this card takes the flag rather than re-deriving it, the same call `TrendCard` makes about
+   * `weeklyBuckets`: a card computing its own opinion from a field it happens to hold is a sixth
+   * spelling of the one condition `page.tsx` already resolved.
+   */
+  isEmpty: boolean;
+};
 
 export function RecentTransactionsCard({
   recentTransactions,
   categories,
+  isEmpty,
 }: RecentTransactionsCardProps) {
-  // Fewer than three rows needs no code: the contract already returns "up to 3", so a shorter
-  // array renders shorter and a zero-length one renders nothing - the same division PET-22 and
-  // PET-23 both take, and the shared empty condition PET-26 draws frame 05's treatment for.
-  if (recentTransactions.length === 0) {
-    return null;
+  if (isEmpty) {
+    return (
+      <section className="card bg-base-100 shadow-sm">
+        <div className="card-body gap-4">
+          {/* No "View all" here, unlike the populated header below: frame 05 draws every
+              empty treatment with no interactive control of its own, and puts the screen's one
+              call to action on the teaser card instead - `docs/plans/2026-08-06_PET-26_dashboard-empty-state.md`
+              states the rule and `page.tsx`'s own header `AddTransactionButton` is the other
+              half of it. */}
+          <h2 className="text-base font-semibold">Recent transactions</h2>
+
+          {/* The circle and its tint are `components/EmptyState.tsx`'s own treatment, scaled
+              down: `size-14` (56px) against that component's `size-18` (72px), because this
+              glyph sits inside a card that keeps its own header rather than replacing the whole
+              card - `frontend/src/app/CLAUDE.md` records why `EmptyState` itself is the wrong
+              component for any of frame 05's four treatments. */}
+          <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
+            <div
+              aria-hidden="true"
+              className="bg-primary/10 text-primary flex size-14 shrink-0 items-center justify-center rounded-full"
+            >
+              <ReceiptText className="size-6" aria-hidden="true" />
+            </div>
+            <p className="text-sm font-semibold">No transactions yet</p>
+            <p className="text-base-content/60 max-w-70 text-xs">
+              Your recent expenses will appear here as you add them.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   const categoryById = new Map(categories.map((category) => [category.id, category]));

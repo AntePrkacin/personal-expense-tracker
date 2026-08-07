@@ -36,20 +36,23 @@ export const Ready: Story = {
       headline: 'You are on track this month',
       body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
     },
-    transactionCount: 38,
+    isEmpty: false,
   },
 };
 
-/** AC3, AC4: an account with nothing logged, so the card offers Add transaction instead. */
+/**
+ * AC3, AC4: an account with nothing logged, so the card offers Add transaction instead. Frame
+ * 05 (node 44:706) draws this same state under PET-26's shared `isEmpty` flag.
+ */
 export const Unlock: Story = {
   render: () => (
     <AddTransactionProvider>
-      <InsightTeaserCard insight={null} transactionCount={0} />
+      <InsightTeaserCard insight={null} isEmpty={true} />
     </AddTransactionProvider>
   ),
 };
 
 /** No frame: expenses logged, no set generated over them. Every real account today. */
 export const Pending: Story = {
-  args: { insight: null, transactionCount: 38 },
+  args: { insight: null, isEmpty: false },
 };

@@ -1173,8 +1173,9 @@ dashboard belongs to the backend's.**
 **The API already zero-fills a spend-free week**, so the card must not: `weeklyBucketsOf` on the
 backend pushes every bucket in the period's range with `total: 0` rather than omitting it, and
 its one early return - an **empty** array - is for `transactionCount === 0`, the whole period
-having no spend at all. `TrendCard` renders that empty case as nothing, which PET-26 is what
-replaces with frame 05's own empty-state card rather than a zero-filled axis nobody designed.
+having no spend at all. `TrendCard` draws frame 05's own bar glyph and caption for that case as of
+PET-26, guarded on the shared `isEmpty` prop rather than on `weeklyBuckets` itself, so a week that
+merely has not started yet still reaches the zero-filled axis above and never this treatment.
 
 **A percentage-height bar needs a plot area that holds nothing but bars, and PET-22 shipped the
 version that did not.** The bars sat directly in the `h-32` column beside their value row, their
@@ -1381,18 +1382,69 @@ in either app generates a set**: no frontend caller of `POST /api/insights/gener
 still an empty `<main>` (PET-44), and no backend path generating on a write. So `insight` is null
 for every account there is, and the unlock copy - "Insights unlock after your first expense." over
 an "Add transaction" - was the only state a running app could reach, shown to an account with two
-hundred of them. The card now takes `transactionCount` beside `insight` and splits the null: at
-zero it draws frame 44:706's designed copy, above zero it says nothing has been analysed yet and
-offers the same link to Insights the ready state does. Still two shapes rather than three, still
+hundred of them. The card then took `transactionCount` beside `insight` and split the null: at
+zero it drew frame 44:706's designed copy, above zero it said nothing has been analysed yet and
+offered the same link to Insights the ready state does. Still two shapes rather than three, still
 no `generating` skeleton - that card is PET-44's, reading `GET /api/insights` directly rather than
 this field - and the two new strings join what A29 owes a designer. The lesson is the one
 `TransactionsScreen`'s no-results copy already paid for: **an empty state has to be honest about
 which emptiness it is describing**, and the reachable state is the one to check first.
+`transactionCount` is PET-26's `isEmpty` now, and the paragraph below is why.
 
 **The AI Insights and Settings `<main>` elements are now the only two still empty and still
 fetching nothing.** Every trap statement above naming "the Dashboard, AI Insights and Settings"
 as the unbuilt three is dated to before this ticket; Dashboard's own `<main>` is real as of
 PET-21 and complete as of this one.
+
+**PET-26 is frame 05, the Dashboard's designed empty state, and it closes the Dashboard epic.**
+Five cards had each been shipping the _populated_ mock their own ticket drew, with an empty
+account rendering nothing on four of them and a stand-in caption on the fifth - none of it wrong,
+all of it undesigned. `docs/plans/2026-08-06_PET-26_dashboard-empty-state.md` is the plan in full;
+what belongs here is the shape.
+
+**One condition, resolved once in `page.tsx`, not five per-card guesses.** `isEmpty =
+summary.transactionCount === 0`, not `spent === 0` - a period could in principle hold
+transactions summing to zero, which is a different fact - and not each card reading its own
+field: `weeklyBuckets.length === 0` and `recentTransactions.length === 0` are documented as
+identical to the shared flag today, but a card that re-derived its own opinion from a field it
+happens to hold is a sixth spelling of one decision, and the whole point of resolving it once is
+that a future edit to what "empty" means in `page.tsx` cannot leave one card behind with every
+gate green. So `BudgetCard`, `TrendCard`, `RecentTransactionsCard` and `InsightTeaserCard` all
+take `isEmpty` as a plain boolean prop and branch on nothing else. `DashboardScreen` never sees
+it, for the reason PET-21's own note above already gives: nothing on frame 05 is the screen's
+decision, so the flag travels straight from the read to the card that needs it.
+
+**`CategoryDonut` is the one deliberate exception, and it takes no `isEmpty` prop at all.** Its
+guard stays `categories.length === 0`, which PET-23's own plan set out and this ticket carries
+out rather than revisits: the trend and recent cards' empty arrays occur exactly when
+`transactionCount === 0`, because both are derived straight from the period's transaction list,
+but `categories` comes from `CategoriesService.list()` filtered on `spent > 0` and can be empty
+on a populated screen through the dangling-category race `backend/src/dashboard/dashboard.service.ts`
+documents. Guarding on the screen's own flag would leave that race drawing a blank card with
+nothing explaining it. The donut's guard is a strict superset of the shared condition rather than
+a sixth spelling of it - an empty screen always has empty `categories` - so after this ticket
+there are exactly two conditions on the whole screen, not five: the shared `isEmpty` and the
+donut's own input. Its centre reads `formatWhole(spent)` rather than a literal `$0` for the same
+reason: the true empty account has `spent: 0` and draws frame 05 exactly, but the race can leave
+real spend on the card with nowhere to draw it, and the figure must not claim there was none.
+
+**`components/EmptyState.tsx` is the wrong component for any of the four, and this is worth
+stating because it looks right.** That component is the full-card centred treatment frames 07 and
+16 draw - a 72px accent-soft circle, a heading, a 440px body and a primary button, replacing the
+whole card. Frame 05's four treatments are each a small glyph and a line or two _inside a card
+that keeps its own header and its own footprint in the grid_ - `RecentTransactionsCard`'s empty
+branch still draws "Recent transactions" above the icon, where `EmptyState` would draw nothing
+above it at all. Reusing it here would change the design and break the grid's alignment, so each
+card gets its own small local markup instead, scaled down from `EmptyState`'s own
+`bg-primary/10 text-primary` circle treatment where a card needs a tinted glyph
+(`RecentTransactionsCard`), and left a plain muted glyph where the frame draws one with no tint at
+all (`TrendCard`, and the donut's ring itself).
+
+**Five new strings join what A29 owes**, `docs/TODO.md` is where they are logged. Unlike the
+undesigned-state copy that list otherwise tracks, these five are read straight off frame 05 -
+"Full month ahead", "No spending to chart yet", "No transactions yet" and its body line, and the
+donut's "Your category breakdown appears here once you start spending" - so a copy review has one
+place to look rather than mistaking them for invented copy.
 
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show
@@ -1469,6 +1521,9 @@ because Time, Payment and Status are no longer on the screen to render as empty 
 answered by dropping the rows rather than blanking them. **The uncapped state is the one owing a
 designer's answer**: caps are optional and the preselected fallback ships without one, so it is
 the _common_ case that no frame draws, and `Screens/08 Transaction detail`'s `Uncapped` story is
-what to put in front of them. And **the dashboard and the Categories tab are still the two screens
-this page's figures cannot be cross-checked against**, since PET-21 to PET-26 are an open stack and
-PET-36 has no route - the same disposition PET-32 and PET-33 both recorded.
+what to put in front of them. And **the Categories tab is still one of the two screens this
+page's figures cannot be cross-checked against**, because PET-36 has no route behind it - the
+same disposition PET-32 and PET-33 both recorded. The dashboard is no longer the other: PET-21 to
+PET-26 closed as an epic rather than staying an open stack, so its category totals are real
+figures on a real screen now, the same cross-check this page's own category cap and spend already
+invite.

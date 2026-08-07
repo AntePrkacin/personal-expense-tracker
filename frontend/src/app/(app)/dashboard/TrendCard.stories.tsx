@@ -39,7 +39,7 @@ type Story = StoryObj<typeof TrendCard>;
  * every week has happened, and the last of them is the current one.
  */
 export const FilledMonth: Story = {
-  args: { weeklyBuckets: FOUR_WEEKS, daysLeft: 1 },
+  args: { weeklyBuckets: FOUR_WEEKS, daysLeft: 1, isEmpty: false },
 };
 
 /**
@@ -49,7 +49,7 @@ export const FilledMonth: Story = {
  * to the genuinely spend-free week below, which was the third finding from this PR's review.
  */
 export const WeeksStillToCome: Story = {
-  args: { weeklyBuckets: FOUR_WEEKS, daysLeft: 15 },
+  args: { weeklyBuckets: FOUR_WEEKS, daysLeft: 15, isEmpty: false },
 };
 
 /**
@@ -66,6 +66,7 @@ export const WithAZeroWeek: Story = {
       { startDate: '2025-10-15', endDate: '2025-10-22', total: 300 },
     ],
     daysLeft: 2,
+    isEmpty: false,
   },
 };
 
@@ -85,6 +86,7 @@ export const ShortFinalBucket: Story = {
       { startDate: '2025-10-22', endDate: '2025-10-24', total: 90 },
     ],
     daysLeft: 1,
+    isEmpty: false,
   },
 };
 
@@ -95,10 +97,10 @@ export const ShortFinalBucket: Story = {
  * the honest answer rather than a guess, and the next request corrects it.
  */
 export const AtThePeriodBoundary: Story = {
-  args: { weeklyBuckets: FOUR_WEEKS, daysLeft: 0 },
+  args: { weeklyBuckets: FOUR_WEEKS, daysLeft: 0, isEmpty: false },
 };
 
-/** The whole-period-empty case, which renders nothing until PET-26 fills it. */
-export const NoSpendThisPeriod: Story = {
-  args: { weeklyBuckets: [], daysLeft: 8 },
+/** Frame 05 (node 44:706): the bar glyph and "No spending to chart yet". */
+export const Empty: Story = {
+  args: { weeklyBuckets: [], daysLeft: 8, isEmpty: true },
 };

@@ -16,6 +16,7 @@ const ON_TRACK = {
     color: 'green',
     spent: 397,
   },
+  isEmpty: false,
 };
 
 // No fake clock, deliberately: every figure on this card comes off the response, and the
@@ -102,6 +103,48 @@ describe('an empty account', () => {
     render(<BudgetCard {...ON_TRACK} topCategory={null} />);
 
     expect(screen.getByText('—')).toBeInTheDocument();
+  });
+});
+
+describe('the empty state (AC2, PET-26)', () => {
+  it('swaps the caption to "Full month ahead" rather than the days-left count', () => {
+    render(<BudgetCard {...ON_TRACK} isEmpty={true} topCategory={null} />);
+
+    expect(screen.getByText('Full month ahead')).toBeInTheDocument();
+    expect(screen.queryByText(/days? left/)).not.toBeInTheDocument();
+  });
+
+  it('reads "$0 of {the budget}" off real zero values rather than a hardcoded figure', () => {
+    // AC2's "$0 of $2,000" is exactly what a zero `spent` already formats to - the load-bearing
+    // fact `docs/plans/2026-08-06_PET-26_dashboard-empty-state.md` names, and the one this test
+    // would catch a hardcoded budget breaking.
+    render(
+      <BudgetCard
+        {...ON_TRACK}
+        isEmpty={true}
+        spent={0}
+        remaining={2000}
+        transactionCount={0}
+        averagePerDay={0}
+        topCategory={null}
+      />,
+    );
+
+    // "$0" appears twice - the spend readout and the Avg/day tile - so this checks the count
+    // rather than picking one, which a `getByText` here cannot disambiguate.
+    expect(screen.getAllByText('$0')).toHaveLength(2);
+    expect(screen.getByText('of $2,000')).toBeInTheDocument();
+    expect(screen.getByText('$2,000 left')).toBeInTheDocument();
+  });
+
+  it('ignores `daysLeft` for the caption, which carries no signal about emptiness', () => {
+    // The caption has to come from the shared flag rather than from `daysLeft` reaching some
+    // special value, because `daysLeft` counts down identically whether or not anything has
+    // ever been spent.
+    render(<BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={30} />);
+
+    expect(screen.getByText('Full month ahead')).toBeInTheDocument();
+    expect(screen.queryByText('30 days left')).not.toBeInTheDocument();
   });
 });
 

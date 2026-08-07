@@ -33,12 +33,50 @@ import { apportionPercents, sortedCategories } from './donut';
 export type CategoryDonutProps = Pick<DashboardSummary, 'categories' | 'spent'>;
 
 export function CategoryDonut({ categories, spent }: CategoryDonutProps) {
-  // The same condition PET-26 will draw frame 05's treatment for. Note this is **not** the
-  // screen-wide empty state: `categories` is empty whenever the period is, but it is also
-  // reachable on its own, so PET-26's guard for this one card is `categories.length === 0`
-  // rather than the shared condition. A strict superset, so the two cannot disagree.
+  // **Not** the screen-wide empty state: `categories` is empty whenever the period is, but it
+  // is also reachable on its own through the dangling-category race
+  // `backend/src/dashboard/dashboard.service.ts` documents, so this card's guard is its own
+  // input rather than a prop threaded from `page.tsx`. A strict superset of the shared
+  // condition, so the two cannot disagree - `frontend/src/app/CLAUDE.md` records why every
+  // other card keeps the screen's flag and this one deliberately does not.
   if (categories.length === 0) {
-    return null;
+    return (
+      <section className="card bg-base-100 shadow-sm">
+        <div className="card-body gap-4">
+          <h2 className="text-base font-semibold">Spending by category</h2>
+
+          <div className="relative">
+            {/* **Not `aria-hidden`, unlike the populated ring above.** There is no legend
+                below to act as this ring's accessible equivalent, so it needs a real name of
+                its own instead - `role="img"` naming what there is to see, which is nothing,
+                rather than hiding a ring a screen reader would otherwise announce as an
+                unlabelled generic. */}
+            <div
+              role="img"
+              aria-label="No spending recorded this period"
+              className="border-base-300 mx-auto flex size-46 items-center justify-center rounded-full border-[28px]"
+            />
+
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              {/* `spent` rather than a literal "$0": the true empty account has `spent: 0` and
+                  reads exactly as frame 05 draws it, but the dangling-category race can leave
+                  real spend on this card with nowhere to draw it, and this figure must not
+                  claim there was none. Muted `base-content/50`, the same tone this file's own
+                  fallback slice and legend dot already use for "nothing to spend meaningfully
+                  about". */}
+              <p className="text-base-content/50 font-display text-2xl font-bold">
+                {formatWhole(spent)}
+              </p>
+              <p className="text-base-content/60 text-xs">Total spent</p>
+            </div>
+          </div>
+
+          <p className="text-base-content/60 text-center text-sm">
+            Your category breakdown appears here once you start spending.
+          </p>
+        </div>
+      </section>
+    );
   }
 
   const sorted = sortedCategories(categories);

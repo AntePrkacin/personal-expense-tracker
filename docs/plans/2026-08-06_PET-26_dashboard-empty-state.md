@@ -181,26 +181,44 @@ the screen carries one spelling of one condition. Its rendered output on frame 0
 
 - [x] Commit this plan alone and open the draft PR against `feat/PET-25-insight-teaser-card`.
       Done; PR #55 was retargeted onto `main` when that branch merged
-- [ ] `page.tsx`: resolve `isEmpty` once, thread it to **all five** cards as they are constructed,
-      and pin in `(app)/pages.test.tsx` that it is one condition and not five
-- [ ] `BudgetCard.tsx`: the "Full month ahead" caption and the Top category dash, with cases
-- [ ] `TrendCard.tsx`: the bar glyph and "No spending to chart yet", with cases
-- [ ] `RecentTransactionsCard.tsx`: the icon, "No transactions yet" and its body line, with cases
-- [ ] `CategoryDonut.tsx`: the gray ring, the `$0 spent` centre and its caption, guarded on
-      `categories.length === 0` rather than on the screen's flag, with cases for both routes into it
-- [ ] `InsightTeaserCard.tsx`: swap `transactionCount` for the shared `isEmpty`, changing no copy and
-      no markup, and update `Shell/AI insight teaser`'s three stories and its suite with it. Verify
+- [x] `page.tsx`: resolve `isEmpty` once, thread it to **all five** cards as they are constructed,
+      and pin in `(app)/pages.test.tsx` that it is one condition and not five. `CategoryDonut` is
+      constructed without the prop - it never receives it, rather than receiving and ignoring it -
+      since its own guard is `categories.length === 0`; the pin in `pages.test.tsx` hands the page
+      a deliberately inconsistent fixture (`transactionCount: 0` beside nonzero `spent` and
+      populated `weeklyBuckets`/`recentTransactions`) to prove the four cards key off the shared
+      flag rather than their own field
+- [x] `BudgetCard.tsx`: the "Full month ahead" caption and the Top category dash, with cases. The
+      dash was already shipped for `topCategory: null`; only the caption branch is new
+- [x] `TrendCard.tsx`: the bar glyph (lucide's `ChartNoAxesColumnIncreasing`, muted
+      `text-base-content/30`) and "No spending to chart yet", with cases
+- [x] `RecentTransactionsCard.tsx`: the icon (`ReceiptText` in the `bg-primary/10 text-primary`
+      circle, scaled to 56px), "No transactions yet" and its body line, with cases. Frame 05 draws
+      no "View all" in this state, so the empty branch drops it rather than reusing the populated
+      header
+- [x] `CategoryDonut.tsx`: the gray ring (a static `border-base-300` ring, not `CategoryRing` -
+      there is no data to chart), the `$0 spent` centre and its caption, guarded on
+      `categories.length === 0` rather than on the screen's flag, with cases for both routes into
+      it. The centre reads `formatWhole(spent)` rather than a literal `$0`, so the dangling-category
+      race's real spend is never reported as none
+- [x] `InsightTeaserCard.tsx`: swap `transactionCount` for the shared `isEmpty`, changing no copy and
+      no markup, and update `Shell/AI insight teaser`'s three stories and its suite with it. Verified
       the unlock state still renders on a zero-transaction account, which is what frame 05 draws
-- [ ] Stories: `Screens/05 Dashboard — Empty` against node `44:706`, plus an empty variant on each
+- [x] Stories: `Screens/05 Dashboard — Empty` against node `44:706`, plus an empty variant on each
       of the four card stories. The teaser needs no new story - PET-25's `Unlock` **is** its frame 05
-      state, and `Pending` is the third state no frame draws
-- [ ] Docs: `frontend/src/app/CLAUDE.md` (the one-condition decision, where it is resolved and why,
-      the donut's wider guard, and why `EmptyState` is not used), root `CLAUDE.md` - **this is the
-      ticket that empties the Dashboard entry in `frontend/CLAUDE.md`'s `## Not built here`**, so
-      delete that bullet's dashboard clause rather than editing around it. The bullet itself stays:
-      it is "The shell's content", and AI Insights and Settings are still empty below the header
-- [ ] `docs/TODO.md`: the five designed strings, and PET-21's chip threshold if still open
-- [ ] Comment on PET-26 recording that the teaser clause was satisfied in PET-25, and that its prop
+      state, and `Pending` is the third state no frame draws. The frame's own story is a second
+      module, `DashboardScreenEmpty.stories.tsx`, the same split `TransactionsList.stories.tsx` and
+      `TransactionsScreen.stories.tsx` already use - one module, one title
+- [x] Docs: `frontend/src/app/CLAUDE.md` (the one-condition decision, where it is resolved and why,
+      the donut's wider guard, and why `EmptyState` is not used), root `CLAUDE.md`. **The Dashboard
+      entry in `frontend/CLAUDE.md`'s `## Not built here` was already empty** - PET-25's own docs
+      commit had already written "so Dashboard is a complete screen too" ahead of this ticket, and
+      root `CLAUDE.md`'s top summary already made the same claim - so there was no dashboard clause
+      left to delete in either file; verified by grep rather than assumed
+- [x] `docs/TODO.md`: the five designed strings (new entry, distinguished from A29's invented-copy
+      item since these are the designer's own words), and PET-21's chip threshold - still open, no
+      designer answer yet, so no change there
+- [x] Comment on PET-26 recording that the teaser clause was satisfied in PET-25, and that its prop
       was aligned onto the shared condition here
 
 No `npm run api:sync`: nothing here changes a request or response body. PET-25's regenerated

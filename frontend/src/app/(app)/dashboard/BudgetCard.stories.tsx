@@ -34,6 +34,7 @@ export const OnTrack: Story = {
       color: 'green',
       spent: 397,
     },
+    isEmpty: false,
   },
 };
 
@@ -56,10 +57,12 @@ export const OverBudget: Story = {
       color: 'coral',
       spent: 512,
     },
+    isEmpty: false,
   },
 };
 
-/** The contract's null case: nothing spent yet this period. */
+/** The contract's null case: nothing spent yet this period. `isEmpty` stays false here - this
+ * pins the dash on its own, independently of PET-26's caption swap below. */
 export const NoTopCategory: Story = {
   args: {
     ...OnTrack.args,
@@ -68,5 +71,14 @@ export const NoTopCategory: Story = {
     transactionCount: 0,
     averagePerDay: 0,
     topCategory: null,
+    isEmpty: false,
+  },
+};
+
+/** Frame 05 (node 44:706): a genuinely new account, "$0 of $2,000" and "Full month ahead". */
+export const Empty: Story = {
+  args: {
+    ...NoTopCategory.args,
+    isEmpty: true,
   },
 };

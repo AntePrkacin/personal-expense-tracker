@@ -127,7 +127,15 @@ export const SameColourNeighbours: Story = {
   },
 };
 
-/** The whole-period-empty case, which renders nothing until PET-26 fills it. */
-export const NoSpendThisPeriod: Story = {
+/** Frame 05 (node 44:706): the gray ring, the $0 centre and its caption. */
+export const Empty: Story = {
   args: { categories: [], spent: 0 },
+};
+
+/**
+ * The dangling-category race, not the screen's empty state: real spend with nowhere to draw it,
+ * which is why the centre reads the actual total rather than a hardcoded "$0".
+ */
+export const EmptyWithSpend: Story = {
+  args: { categories: [], spent: 124 },
 };

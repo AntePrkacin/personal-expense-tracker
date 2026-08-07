@@ -40,7 +40,10 @@ type BudgetCardProps = Pick<
   | 'transactionCount'
   | 'averagePerDay'
   | 'topCategory'
->;
+> & {
+  /** The screen's shared PET-26 condition. Swaps the caption to "Full month ahead". */
+  isEmpty: boolean;
+};
 
 export function BudgetCard({
   spent,
@@ -50,6 +53,7 @@ export function BudgetCard({
   transactionCount,
   averagePerDay,
   topCategory,
+  isEmpty,
 }: BudgetCardProps) {
   const overBudget = remaining < 0;
   const tone = overBudget ? CHIP.overBudget : CHIP.onTrack;
@@ -121,9 +125,16 @@ export function BudgetCard({
 
               The plural is a local ternary rather than a helper: `daysLeft` is documented as 1
               on the last day of the period and never 0, so "1 days left" is a state every user
-              reaches once a month, and this is the app's only pluralized string. */}
+              reaches once a month, and this is the app's only pluralized string.
+
+              **`isEmpty` swaps this line to frame 05's "Full month ahead" rather than
+              anything `daysLeft` itself carries.** `daysLeft` counts down whether or not the
+              account has ever spent anything, so it has no value that means "empty" - the swap
+              can only come from the screen's own shared condition, which is why the caption
+              branches on the prop rather than on `daysLeft === monthlyBudget` or any other
+              stand-in. */}
           <p className="text-base-content/60">
-            {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left
+            {isEmpty ? 'Full month ahead' : `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`}
           </p>
         </div>
 
