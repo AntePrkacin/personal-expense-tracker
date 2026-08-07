@@ -78,13 +78,14 @@ export class DashboardService {
     const insight = await this.insights.latestReadyTeaser(userId);
 
     // The source of truth for the account-wide total, deliberately not a sum
-    // of `categoryRows`' own `spent` fields. A transaction whose category was
-    // deleted moments after it was created (see TransactionsService's own note
-    // on that race) would not appear in any live category row, and summing
-    // categories would silently under-report the one figure the top stat tile
-    // exists to get right. Re-derived in cents rather than summed as the
-    // already-converted major-unit floats the list returns, so this addition
-    // cannot drift the way repeated float sums can.
+    // of `categoryRows`' own `spent` fields even though the two now agree.
+    // `CategoriesService.withSpend` folds orphaned spend into the fallback row,
+    // so summing the categories would give the same answer - but summing the
+    // transactions keeps this figure independent of that fold, which is what
+    // makes a regression in it visible as percentages failing to reach 100
+    // rather than as a total that quietly shrinks to match. Re-derived in cents
+    // rather than summed as the already-converted major-unit floats the list
+    // returns, so this addition cannot drift the way repeated float sums can.
     const totalCents = periodTransactions.reduce(
       (sum, transaction) => sum + toCents(transaction.amount),
       0,
@@ -168,14 +169,26 @@ function topCategoryOf(rows: SpentCategoryRow[]): TopCategoryDto | null {
  * Every nonzero category, percentages relative to `totalCents` rather than to
  * the sum of these rows' own spend.
  *
- * The two denominators usually agree and can differ by the same dangling-
- * category race `topCategoryOf`'s caller is already written around: a
- * transaction whose category no longer exists inflates `totalCents` without
- * appearing in any row here, so the slices can sum to just under 100%. Correct
- * given AC4 asks for "percentage of the period total", not "percentage of the
- * other slices" - and the alternative, normalising against these rows' own sum,
- * would hide the same shortfall inside every percentage instead of only this
- * one, rarer than either.
+ * **The two denominators are now the same number, and that is a guarantee
+ * rather than a coincidence.** `CategoriesService.withSpend` folds spend
+ * belonging to no live category into the Uncategorized fallback row, so every
+ * transaction in the period is counted in exactly one row and these rows sum to
+ * `totalCents` exactly. Percentages therefore sum to 100 whenever `categories`
+ * is non-empty, which PET-23's donut relies on: it draws one arc per row and the
+ * ring is required to close.
+ *
+ * This comment previously argued the opposite - that a dangling-category
+ * transaction should be allowed to leave the slices summing to just under 100%,
+ * on the grounds that a visible shortfall in one slice beats one hidden inside
+ * every percentage. That reasoning was sound about *where* to put the error and
+ * wrong that an error had to exist at all: the money belongs to a category the
+ * user can no longer see, which is precisely what Uncategorized is for. See
+ * `foldOrphansIntoFallback`.
+ *
+ * `totalCents` stays the denominator regardless, because AC4 asks for
+ * "percentage of the period total" and because keeping it means a future
+ * regression in the fold shows up as percentages that visibly fail to reach
+ * 100, rather than being silently renormalised out of sight.
  */
 function categoriesOf(
   rows: SpentCategoryRow[],

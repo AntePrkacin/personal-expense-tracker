@@ -302,4 +302,93 @@ describe('Dashboard (e2e)', () => {
       expect(dashboardBody(response).daysLeft).toBeGreaterThan(0);
     });
   });
+
+  /**
+   * The invariant PET-23's donut rests on: the categories account for all of `spent`, so the ring
+   * always closes and the percentages always sum to 100.
+   *
+   * **The orphan is built the way the race builds one, not the way the API does.** Going through
+   * `DELETE /api/categories/:id` would prove nothing: it reassigns the category's transactions to
+   * the fallback before tombstoning, so it never leaves an orphan behind. What this does instead
+   * is tombstone the row directly, leaving a live transaction pointing at a category that every
+   * read filters out - exactly the state a create that passed `assertCategoryExists` reaches when
+   * a concurrent delete's reassignment sweeps past it. Reproducing the real interleaving would
+   * need two genuinely concurrent requests; reproducing its result takes one UPDATE.
+   */
+  describe('spend whose category was tombstoned out from under it', () => {
+    let bearer: string;
+    let userId: string;
+
+    beforeAll(async () => {
+      const account = await provision(2000);
+      userId = account.id;
+      bearer = account.token;
+
+      const userDb = await userDatabases.getUserDb(userId);
+      const seeded = await userDb.select().from(categories);
+      const groceriesId = seeded.find((row) => row.name === 'Groceries')!.id;
+      const transportId = seeded.find((row) => row.name === 'Transport')!.id;
+
+      await seed(bearer, {
+        merchant: 'Konzum',
+        categoryId: groceriesId,
+        amount: 60,
+        date: window.start,
+      });
+      await seed(bearer, {
+        merchant: 'Uber',
+        categoryId: transportId,
+        amount: 40,
+        date: window.start,
+      });
+
+      // Tombstone Transport WITHOUT reassigning its transaction, which the delete endpoint would
+      // never do. The $40 is now live spend belonging to no live category.
+      await userDb
+        .update(categories)
+        .set({ deletedAt: new Date() })
+        .where(eq(categories.id, transportId));
+    });
+
+    it('still counts the orphaned spend in the period total', async () => {
+      const body = dashboardBody(await dashboard(bearer).expect(200));
+
+      expect(body.spent).toBe(100);
+      expect(body.transactionCount).toBe(2);
+    });
+
+    it('folds it into Uncategorized rather than dropping it from the donut', async () => {
+      const body = dashboardBody(await dashboard(bearer).expect(200));
+      const uncategorized = body.categories.find(
+        (category) => category.name === 'Uncategorized',
+      );
+
+      expect(uncategorized).toBeDefined();
+      expect(uncategorized!.spent).toBe(40);
+      expect(body.categories.map((category) => category.name)).not.toContain(
+        'Transport',
+      );
+    });
+
+    it('leaves the category spends summing to the period total', async () => {
+      const body = dashboardBody(await dashboard(bearer).expect(200));
+      const summed = body.categories.reduce(
+        (total, category) => total + category.spent,
+        0,
+      );
+
+      expect(summed).toBeCloseTo(body.spent, 10);
+    });
+
+    // The assertion the donut actually depends on. Before the fold this summed to 60.
+    it('leaves the percentages summing to 100, so the ring closes', async () => {
+      const body = dashboardBody(await dashboard(bearer).expect(200));
+      const summed = body.categories.reduce(
+        (total, category) => total + category.percent,
+        0,
+      );
+
+      expect(summed).toBeCloseTo(100, 10);
+    });
+  });
 });

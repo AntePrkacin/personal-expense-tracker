@@ -35,7 +35,7 @@ export class DashboardCategoryDto {
 
   @ApiProperty({
     description:
-      "Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap.",
+      "Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap. Across the whole `categories` array these sum to 100: spend belonging to no live category is folded into the Uncategorized fallback, so every transaction in the period is counted in exactly one entry. Round for display with an apportionment that preserves the total, since rounding each value independently can sum to 99 or 101.",
   })
   percent!: number;
 }
@@ -115,7 +115,7 @@ export class DashboardResponseDto {
   @ApiProperty({
     type: [DashboardCategoryDto],
     description:
-      'Every nonzero category this period, percentages unrounded and relative to `spent`. Empty when there is no spend yet.',
+      'Every nonzero category this period, percentages unrounded and relative to `spent`. The entries account for all of `spent`, so their `spent` fields sum to it and their `percent` fields sum to 100. Empty when there is no spend yet.',
   })
   categories!: DashboardCategoryDto[];
 
