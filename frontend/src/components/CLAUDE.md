@@ -81,9 +81,19 @@ their markup.
   exists because a Tailwind class is not a valid value for a presentation attribute: `fill="bg-error"`
   paints nothing at all, with no error anywhere. Each has a `categoryTileClass` / `categoryDotClass`
   / `categoryFillVar` lookup taking a stored hex, all three carrying the same `Object.hasOwn` guard
-  and uppercase normalisation, and all three falling back to the same neutral grey. The suite pins
+  and uppercase normalisation, and all three falling back to a neutral grey. The suite pins
   the three maps against each other, so a ninth colour added to one and not the others fails there
   rather than leaving a hole in a ring.
+  **Two neutral greys, not one, and the review of PET-23 is why.** The tile keeps `base-300`; the
+  dot and the fill are `base-content/50`, which is the same colour written twice (Tailwind's `/50`
+  compiles to the `color-mix` the fill spells out). The split is whether anything is drawn on top:
+  a tile carries a glyph and reads as a shape whatever its background does, while a legend dot and
+  a donut slice are bare colour, and `base-300` is the theme's _empty-surface_ token - measured in
+  a browser at **1.157:1** in light and **1.115:1** in dark against a `bg-base-100` card, the same
+  near-invisibility PET-22 rejected for the trend chart's muted bars. It matters here rather than
+  being a nicety because the backend's orphan fold routes real money into that slice, so an
+  invisible one is the donut's ring failing to close by another route. The replacement measures
+  **3.401:1** light and **4.769:1** dark through the same harness.
 
 - **`ui/categoryColour.ts` maps the eight stored colour words onto theme colours**,
   nearest-match and lossy on purpose: orange and yellow both land on `warning`, accepted because

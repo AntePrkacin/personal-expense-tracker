@@ -134,17 +134,41 @@ export const CATEGORY_COLOUR_BY_HEX: Record<string, CategoryColour> = {
  * A bare string rather than a ninth entry in the maps above, because `CategoryColour` stays
  * eight keys: widening it would offer this grey to the onboarding chips and to the colour picker
  * frame 19 draws, as if it were a colour somebody could pick.
+ *
+ * **`CATEGORY_DOT_NEUTRAL` and `CATEGORY_FILL_NEUTRAL` deliberately do not follow this one**, and
+ * the reason is the glyph: the tile has content drawn on it and they do not. See their own note.
  */
 export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
 
 /**
  * The same fallback without its content half, for a mark with nothing on it.
  *
- * Stands to `CATEGORY_TILE_NEUTRAL` exactly as `CATEGORY_DOT` stands to `CATEGORY_TILE`, and
- * for the identical reason: daisyUI's `status` reads `currentColor` to draw its shadow, so
- * handing it the `text-base-content` half turns that shadow into an opaque smudge.
+ * **Not `CATEGORY_TILE_NEUTRAL`'s background half, and the difference is whether anything is
+ * drawn on top.** A tile is a box with a glyph in it, so it reads as a shape whatever its
+ * background does. A dot and a donut slice are bare colour, and `base-300` is the theme's own
+ * *empty-surface* token: on a `bg-base-100` card it measures **1.157:1** in light and **1.115:1**
+ * in dark, which is the near-invisibility PET-22 already measured and rejected for the trend
+ * chart's muted bars. Reaching for it here reintroduced that finding on a different chart.
+ *
+ * **This is not a decorative state, which is what makes it worth contrast rather than restraint.**
+ * `CategoriesService.foldOrphansIntoFallback` attributes every orphaned transaction to
+ * Uncategorized, so this is the colour real money is drawn in - and PET-23's requirement is that
+ * the ring closes, which a slice nobody can see fails by another route.
+ *
+ * `base-content/50` measures **3.382:1** in light and **4.743:1** in dark against the same card,
+ * clearing the 3:1 non-text contrast bar in both. That is one step darker than
+ * `FALLBACK_CATEGORY.color`'s own `#98A0AE` (2.66:1 in light), and the divergence is deliberate:
+ * `frontend/CLAUDE.md` gives colour to daisyUI and structure to Figma, so a stored hex is not the
+ * authority over a rendered hue, and clearing the bar is worth more than matching the grey.
+ *
+ * It and `CATEGORY_FILL_NEUTRAL` below are the same colour by construction - Tailwind's `/50`
+ * modifier compiles to exactly the `color-mix` that one is written as - which is what keeps a
+ * legend dot and its own slice from drifting apart. Neither carries the `text-*-content` half,
+ * the whole reason `CATEGORY_DOT` exists as a second map: on a mark with no content it turns
+ * daisyUI's `currentColor` drop shadow into an opaque smudge, and a fallback that reintroduced it
+ * would reintroduce that bug on exactly the path nobody looks at.
  */
-export const CATEGORY_DOT_NEUTRAL = 'bg-base-300';
+export const CATEGORY_DOT_NEUTRAL = 'bg-base-content/50';
 
 /**
  * The background utility for a stored category colour.
@@ -208,10 +232,13 @@ export function categoryDotClass(hex: string | null | undefined): string {
  * The neutral fill, for a colour outside the eight.
  *
  * Stands to `CATEGORY_FILL` as `CATEGORY_DOT_NEUTRAL` stands to `CATEGORY_DOT`, and that one is
- * declared above beside `CATEGORY_TILE_NEUTRAL` rather than here, which is where the shared
- * no-content-half reasoning lives.
+ * declared above beside `CATEGORY_TILE_NEUTRAL` rather than here, which is where the contrast
+ * measurements and the no-content-half reasoning both live. Written as the `color-mix` Tailwind's
+ * `/50` modifier compiles to, because an SVG `fill` takes a CSS value and not a class - so the
+ * two are the same colour by construction rather than by a comment asking you to keep them so.
  */
-export const CATEGORY_FILL_NEUTRAL = 'var(--color-base-300)';
+export const CATEGORY_FILL_NEUTRAL =
+  'color-mix(in oklab, var(--color-base-content) 50%, transparent)';
 
 /**
  * The CSS colour for a stored category colour, for an SVG `fill`.

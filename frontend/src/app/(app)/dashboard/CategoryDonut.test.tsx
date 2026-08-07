@@ -74,8 +74,51 @@ describe('the ring (AC1)', () => {
 
     expect(container.querySelectorAll('.recharts-pie-sector')).toHaveLength(2);
     expect(container.querySelectorAll('.recharts-pie-sector path')[1]?.getAttribute('fill')).toBe(
-      'var(--color-base-300)',
+      'color-mix(in oklab, var(--color-base-content) 50%, transparent)',
     );
+  });
+
+  it('draws that fallback slice in something other than the card it sits on', () => {
+    // `base-300` is the theme's own empty-surface token and measures 1.157:1 in light against a
+    // `bg-base-100` card - the tone PET-22 measured and rejected for the trend chart's muted
+    // bars. The fold routes real money into this slice, so drawing it invisible is the ring
+    // failing to close by another route. This asserts the negative, since the positive is a
+    // browser measurement rather than a string.
+    const { container } = render(
+      <CategoryDonut
+        categories={[
+          { id: 'c1', name: 'Uncategorized', color: '#98A0AE', spent: 40, percent: 100 },
+        ]}
+        spent={40}
+      />,
+    );
+
+    const fill = container.querySelector('.recharts-pie-sector path')?.getAttribute('fill') ?? '';
+    expect(fill).not.toContain('base-300');
+    expect(fill).not.toContain('base-100');
+  });
+
+  it('separates the arcs with a seam, so two same-coloured slices cannot merge', () => {
+    // `orange` and `yellow` both resolve to `var(--color-warning)` by design, so adjacent slices
+    // can share a fill. Without a stroke the ring would show one arc where the legend lists two.
+    const { container } = render(
+      <CategoryDonut
+        categories={[
+          { id: 'c1', name: 'A', color: '#F29A3D', spent: 60, percent: 60 },
+          { id: 'c2', name: 'B', color: '#E7C24A', spent: 40, percent: 40 },
+        ]}
+        spent={100}
+      />,
+    );
+
+    const sectors = Array.from(container.querySelectorAll('.recharts-pie-sector path'));
+    expect(sectors.map((s) => s.getAttribute('fill'))).toEqual([
+      'var(--color-warning)',
+      'var(--color-warning)',
+    ]);
+    for (const sector of sectors) {
+      expect(sector.getAttribute('stroke')).toBe('var(--color-base-100)');
+    }
   });
 });
 
@@ -153,6 +196,19 @@ describe('the centre readout (AC2)', () => {
     render(<CategoryDonut categories={FIVE_CATEGORIES} spent={1240.5} />);
 
     expect(screen.getByText('$1,241')).toBeInTheDocument();
+  });
+
+  it('leaves the total outside the hidden subtree, since nothing else on the card states it', () => {
+    // The legend is a superset of the *tooltip*, which is what makes hiding the ring acceptable -
+    // but it is not a superset of this. No legend row carries the period total, so hiding this
+    // pair with the ring would leave AC2's figure on no accessible surface at all.
+    //
+    // RTL queries read through `aria-hidden`, so both assertions above pass with this defect
+    // present. Only the containment says which.
+    render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+
+    expect(screen.getByText('$1,240').closest('[aria-hidden="true"]')).toBeNull();
+    expect(screen.getByText('Total spent').closest('[aria-hidden="true"]')).toBeNull();
   });
 });
 

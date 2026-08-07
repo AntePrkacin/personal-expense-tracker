@@ -57,16 +57,26 @@ export function CategoryDonut({ categories, spent }: CategoryDonutProps) {
       <div className="card-body gap-4">
         <h2 className="text-base font-semibold">Spending by category</h2>
 
-        {/* The ring is hidden from assistive technology and the legend below is its accessible
-            equivalent. That works here in a way it does not on the trend chart: the legend is a
-            strict **superset** of the tooltip, naming every slice with its amount and its
-            percentage in real text, so a pointer-only tooltip adds convenience rather than
-            information and there is nothing to mirror into an `sr-only` line. */}
-        <div className="relative" aria-hidden="true">
-          <CategoryRing slices={slices} />
+        <div className="relative">
+          {/* The ring is hidden from assistive technology and the legend below is its accessible
+              equivalent. That works here in a way it does not on the trend chart: the legend is a
+              strict **superset** of the tooltip, naming every slice with its amount and its
+              percentage in real text, so a pointer-only tooltip adds convenience rather than
+              information and there is nothing to mirror into an `sr-only` line. */}
+          <div aria-hidden="true">
+            <CategoryRing slices={slices} />
+          </div>
 
           {/* The centre readout, positioned over the hole rather than drawn by Recharts.
-              `pointer-events-none` so it never eats a hover meant for the slice behind it. */}
+              `pointer-events-none` so it never eats a hover meant for the slice behind it.
+
+              **It sits outside the `aria-hidden` above, and that is the point of the extra
+              wrapper.** The superset argument covers the *slices* and not this: the legend names
+              every category with its amount and its percentage and never states the period's
+              total, so hiding this pair with the ring would put AC2's own figure on no accessible
+              surface at all - the gap PET-22's chart paid for with an `sr-only` list. RTL reads
+              through `aria-hidden`, so `getByText` passed either way and only the tree says
+              which; `CategoryDonut.test.tsx` asserts the containment rather than the text. */}
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <p className="font-display text-2xl font-bold">{formatWhole(spent)}</p>
             <p className="text-base-content/60 text-xs">Total spent</p>

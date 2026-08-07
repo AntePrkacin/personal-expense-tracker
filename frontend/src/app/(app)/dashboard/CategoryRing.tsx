@@ -64,11 +64,21 @@ export function CategoryRing({ slices }: { slices: RingSlice[] }) {
           // Twelve o'clock, sweeping clockwise, which is where the frame starts the first slice.
           startAngle={90}
           endAngle={-270}
-          stroke="none"
+          // **A hairline of the card's own colour between the arcs, and it is not decoration.**
+          // `CATEGORY_FILL` is lossy by design - `orange` and `yellow` both resolve to
+          // `var(--color-warning)`, which `categoryColour.test.ts` blesses - and that is harmless
+          // on a chip list where every mark is separated by layout. On a contiguous ring it is
+          // not: two same-coloured slices that happen to land next to each other in the
+          // `spent`-descending sort merge into one arc, so the ring shows four slices where the
+          // legend lists five. A seam in `base-100` separates them without touching the palette,
+          // because the card behind this chart is `bg-base-100`; it is invisible between two
+          // differently-coloured slices, which is why it costs the ordinary case nothing.
+          stroke="var(--color-base-100)"
+          strokeWidth={1}
           isAnimationActive={false}
         >
           {slices.map((slice) => (
-            <Cell key={slice.id} fill={slice.fill} stroke="none" />
+            <Cell key={slice.id} fill={slice.fill} />
           ))}
         </Pie>
       </PieChart>

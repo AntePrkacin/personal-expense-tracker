@@ -106,6 +106,27 @@ export const ManySmallCategories: Story = {
   },
 };
 
+/**
+ * Two neighbouring slices that resolve to the **same** fill, which is the case the seam between
+ * the arcs exists for.
+ *
+ * `CATEGORY_FILL` is lossy on purpose - `orange` and `yellow` both land on `var(--color-warning)`,
+ * which `categoryColour.test.ts` blesses - and that costs nothing on a chip list, where layout
+ * separates every mark. On a contiguous ring it does: with no stroke these two paint as one
+ * continuous arc, so the ring shows two slices where the legend lists three. Count the arcs
+ * against the legend rows; that is the whole check.
+ */
+export const SameColourNeighbours: Story = {
+  args: {
+    categories: [
+      { id: 'a', name: 'Dining out', color: '#F29A3D', spent: 40, percent: 40 },
+      { id: 'b', name: 'Shopping', color: '#E7C24A', spent: 35, percent: 35 },
+      { id: 'c', name: 'Transport', color: '#3F8EE6', spent: 25, percent: 25 },
+    ],
+    spent: 100,
+  },
+};
+
 /** The whole-period-empty case, which renders nothing until PET-26 fills it. */
 export const NoSpendThisPeriod: Story = {
   args: { categories: [], spent: 0 },
