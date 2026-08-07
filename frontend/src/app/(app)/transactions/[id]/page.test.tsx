@@ -164,4 +164,17 @@ describe('the not-found boundary', () => {
 
     expect(container.textContent).not.toMatch(/error|wrong|failed/i);
   });
+
+  it('gives the page a level-1 heading, since it replaces the header too', () => {
+    // A code review found this shipping with an `h2` as its topmost heading. Every other
+    // EmptyState sits under a PageHeader that owns the h1; a not-found boundary replaces the
+    // whole route, so it has to carry its own. `(app)/pages.test.tsx`'s one-h1-per-screen
+    // sweep never reaches a not-found boundary, so nothing else would catch it.
+    render(<TransactionNotFound />);
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: NOT_FOUND_COPY.heading }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('heading')).toHaveLength(1);
+  });
 });

@@ -32,11 +32,13 @@ function renderDialog({
   onClose = jest.fn(),
   onDeleted = jest.fn(),
   target = TARGET,
+  navigates,
 }: {
   remove?: jest.Mock;
   onClose?: jest.Mock;
   onDeleted?: jest.Mock;
   target?: DeleteTarget;
+  navigates?: boolean;
 } = {}) {
   render(
     <DeleteTransactionDialog
@@ -44,6 +46,7 @@ function renderDialog({
       remove={remove}
       onClose={onClose}
       onDeleted={onDeleted}
+      navigates={navigates}
     />,
   );
   return { remove, onClose, onDeleted };
@@ -396,6 +399,45 @@ describe('onDeleted', () => {
     expect(refresh.mock.invocationCallOrder[0]!).toBeLessThan(
       onDeleted.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it('skips the refresh entirely when the caller navigates away', async () => {
+    // PET-34, from a code review. On `/transactions/[id]` the refresh re-runs the route the
+    // user is *currently* on - which is the one about to 404 on the row just deleted - and
+    // races the navigation `onDeleted` starts. The caller says so and the refresh is dropped.
+    const { onDeleted } = renderDialog({ navigates: true });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(onDeleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('still closes before calling onDeleted when navigating', async () => {
+    // The focus-restore ordering is unchanged by the skip: `close()` first, so the restore
+    // aims at an element still attached.
+    const onClose = jest.fn();
+    const onDeleted = jest.fn();
+    renderDialog({ onClose, onDeleted, navigates: true });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onClose.mock.invocationCallOrder[0]!).toBeLessThan(
+      onDeleted.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('still refreshes on a 404 even when navigating, because that arm never navigates', async () => {
+    // The `missing` arm returns early and does not call `onDeleted`, so there is no navigation
+    // to race and the list behind genuinely needs re-reading.
+    renderDialog({
+      remove: jest.fn().mockResolvedValue({ ok: false, reason: 'missing' }),
+      navigates: true,
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it('does not run when Cancel closes the dialog', async () => {

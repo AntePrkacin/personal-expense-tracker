@@ -35,6 +35,11 @@ export default function TransactionNotFound() {
     <main className="flex-1 pt-6 pb-10">
       <EmptyState
         icon={<FileQuestion className="size-7.5" aria-hidden="true" />}
+        // Level 1, unlike every other `EmptyState` in the app. Those sit under a `PageHeader`
+        // that owns the page's `h1`; a not-found boundary replaces the whole route, header
+        // included, so without this the screen has no `h1` at all and its topmost heading is an
+        // `h2` - the only screen in the shell like that. A code review found it.
+        headingLevel={1}
         heading={NOT_FOUND_COPY.heading}
         body={NOT_FOUND_COPY.body}
         action={<Button label={NOT_FOUND_COPY.action} href={SIDEBAR_HREFS.transactions} />}

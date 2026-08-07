@@ -34,7 +34,7 @@ import { DeleteTransactionDialog, type DeleteTarget } from './DeleteTransactionD
 // paragraph above draws. PET-34's redirect is still not built, and now needs no new parameter:
 // its detail page passes an `onDeleted` that navigates.
 
-type DeleteTransactionOptions = {
+export type DeleteTransactionOptions = {
   /**
    * Called after a delete that really removed the row, and only then.
    *
@@ -42,6 +42,23 @@ type DeleteTransactionOptions = {
    * for why the failure arms - including a 404 - deliberately do not call it.
    */
   onDeleted?: () => void;
+  /**
+   * Whether `onDeleted` leaves this route, in which case the dialog must **not** refresh.
+   *
+   * PET-34 added it, and a code review found why it was needed. The dialog's success path
+   * refreshes before calling `onDeleted`, which re-runs the Server Components of whatever
+   * route the user is on - right for the list, where the row has to disappear. On
+   * `/transactions/[id]` it is worse than wasteful: the route re-reads the transaction that
+   * was just deleted, gets a 404 and renders the not-found boundary, racing the navigation
+   * `onDeleted` is about to start. The user could land on "That transaction is gone" instead
+   * of on the list.
+   *
+   * Skipping the refresh loses nothing, because the navigation re-reads the destination:
+   * every route in this app is dynamic, and Next's client cache holds dynamic segments for
+   * zero time by default, so `router.replace` refetches rather than replaying a stale list
+   * still showing the deleted row.
+   */
+  navigates?: boolean;
 };
 
 type DeleteTransaction = {
@@ -133,6 +150,7 @@ export function DeleteTransactionProvider({
           remove={remove}
           onClose={() => setRequest(null)}
           onDeleted={request.onDeleted}
+          navigates={request.navigates}
         />
       ) : null}
     </DeleteTransactionContext.Provider>

@@ -82,6 +82,14 @@ type DeleteTransactionDialogProps = {
    * Optional, so the row menu's call site stays `open(target)` with no second argument.
    */
   onDeleted?: () => void;
+  /**
+   * Whether `onDeleted` navigates away, in which case the success path must not refresh.
+   *
+   * `DeleteTransactionProvider` carries the full account. The short version: a refresh re-runs
+   * the route the user is **currently** on, and on the transaction detail page that route is
+   * about to 404 on the row this dialog just deleted.
+   */
+  navigates?: boolean;
 };
 
 /**
@@ -110,6 +118,7 @@ export function DeleteTransactionDialog({
   remove,
   onClose,
   onDeleted,
+  navigates = false,
 }: DeleteTransactionDialogProps) {
   const router = useRouter();
   const modalRef = useRef<ModalHandle>(null);
@@ -163,11 +172,17 @@ export function DeleteTransactionDialog({
     // Components of whichever route the user is on, which is what drops the row and the count
     // badge together (AC4) without this file knowing which route that is.
     //
+    // **Unless the caller is leaving that route**, which is exactly the case where "whichever
+    // route the user is on" stops being the right target: on `/transactions/[id]` it re-reads
+    // the transaction just deleted, 404s, and renders the not-found boundary in a race with
+    // the navigation `onDeleted` is about to start. A code review on PET-34 found it. The
+    // navigation re-reads the destination on its own, so nothing goes stale.
+    //
     // The focus restore `modalRef.current.close()` buys has one case it cannot serve here, and
     // it is the common one: the kebab that opened this dies with its row, so `Modal`'s
     // `isConnected` guard finds nothing and focus lands on `<body>`. Recorded in
     // `docs/TODO.md` beside the identical gap saving from the empty state leaves.
-    router.refresh();
+    if (!navigates) router.refresh();
     modalRef.current?.close();
 
     // **Last, and the order is the interesting part when something is open behind this.** With

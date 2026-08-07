@@ -6,7 +6,7 @@ import type { Transaction } from '@/lib/transactions';
 import { updateTransaction, type UpdateTransactionResult } from '@/lib/updateTransaction';
 import type { components } from '@/types/api';
 
-import { useDeleteTransaction } from './DeleteTransactionProvider';
+import { useDeleteTransaction, type DeleteTransactionOptions } from './DeleteTransactionProvider';
 import { EditTransactionModal } from './EditTransactionModal';
 import { useCategoryOptions } from './useCategoryOptions';
 
@@ -34,8 +34,14 @@ type EditTransaction = {
    * deliberately a wider payload than `useDeleteTransaction().open`, which takes four fields
    * because a confirmation quoting a note would be reading something it has no business
    * rendering.
+   *
+   * The options argument is PET-34's, and it exists because **this modal is a second delete
+   * entry point**: its "Delete transaction" opens the same confirmation, so a screen that has
+   * to leave the route after a delete has to say so here as well as on its own Delete button,
+   * or the two do different things one click apart. It forwards straight to
+   * `useDeleteTransaction().open`'s options. Optional, so the row menu stays `open(row)`.
    */
-  open: (transaction: Transaction) => void;
+  open: (transaction: Transaction, options?: DeleteTransactionOptions) => void;
 };
 
 const EditTransactionContext = createContext<EditTransaction | null>(null);
@@ -84,26 +90,32 @@ export function EditTransactionProvider({
   update = updateTransaction,
 }: EditTransactionProviderProps) {
   /**
-   * Which transaction is being edited, or `null` for "the modal is closed".
+   * Which transaction is being edited and what its opener asked to happen after a delete from
+   * inside the modal, or `null` for "the modal is closed".
    *
    * One piece of state rather than a boolean beside a row, which is `DeleteTransactionProvider`'s
    * shape and its reasoning: the two cannot legally disagree, and it means the fields cannot flash
-   * the previous row's values on the way out.
+   * the previous row's values on the way out. PET-34's options joined the same object for the
+   * same reason `onDeleted` joined the confirmation's - they belong to the open they arrived
+   * with, so a cancelled open cannot leave a stale redirect behind for somebody else's edit.
    */
-  const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [request, setRequest] = useState<{
+    transaction: Transaction;
+    afterDelete: DeleteTransactionOptions;
+  } | null>(null);
 
   const { categories, failed, read } = useCategoryOptions();
   const { open: openDeleteConfirmation } = useDeleteTransaction();
 
   const open = useCallback(
-    (next: Transaction) => {
+    (next: Transaction, afterDelete: DeleteTransactionOptions = {}) => {
       // Opened immediately rather than after the fetch resolves, which is
       // `AddTransactionProvider`'s call: a menu item that does nothing for a round trip reads as
       // broken, and the modal has a designed state for absent options - a disabled select - where
       // it has none for "not open yet". Every other field is prefilled from `next` and needs
       // nothing from the network at all.
       read();
-      setTransaction(next);
+      setRequest({ transaction: next, afterDelete });
     },
     [read],
   );
@@ -117,7 +129,7 @@ export function EditTransactionProvider({
           `queryByRole` cannot see inside it, but `queryAllByLabelText` **can** - so an
           always-mounted modal would put five labels and a combobox into every screen's tree
           forever. `(app)/pages.test.tsx` depends on it. */}
-      {transaction !== null ? (
+      {request !== null ? (
         <EditTransactionModal
           // **`key` is a correctness requirement, not a reconciliation hint.** The modal seeds its
           // form state from `transaction` once per mount, deliberately, so a `router.refresh()`
@@ -130,12 +142,12 @@ export function EditTransactionProvider({
           // It is here for the entry point this file advertises as costing PET-34 two lines: a
           // detail page calling `open()` for a different row is exactly the caller that reaches it,
           // and one word now is cheaper than the bug report then.
-          key={transaction.id}
-          transaction={transaction}
+          key={request.transaction.id}
+          transaction={request.transaction}
           categories={categories}
           categoriesFailed={failed}
           update={update}
-          onClose={() => setTransaction(null)}
+          onClose={() => setRequest(null)}
           onDelete={() =>
             // **The confirmation opens over this modal, which stays mounted behind it** (AC6), so
             // Cancel returns the user to their form with their edits intact. `Modal` generates its
@@ -147,16 +159,29 @@ export function EditTransactionProvider({
             // pressing Delete removes. Quoting a half-typed merchant would misdescribe it.
             openDeleteConfirmation(
               {
-                id: transaction.id,
-                merchant: transaction.merchant,
-                amount: transaction.amount,
-                date: transaction.date,
+                id: request.transaction.id,
+                merchant: request.transaction.merchant,
+                amount: request.transaction.amount,
+                date: request.transaction.date,
               },
               // The row is gone, so there is nothing left to edit. Unmounting rather than closing
               // through the dialog is correct here and only here: the confirmation has already
               // restored focus to this modal's own Delete button by the time this runs, which is
               // the ordering `DeleteTransactionDialog` pins.
-              { onDeleted: () => setTransaction(null) },
+              //
+              // **The opener's own options compose in front of that**, which is PET-34's fix for
+              // a gap a code review found: the detail page's header Delete navigated to the list
+              // and this one did not, so the same screen did two different things one click
+              // apart - and because this route 404s on the row it just deleted, the second left
+              // the user on the not-found card. `navigates` rides along so the dialog skips a
+              // refresh it would otherwise aim at a dead route.
+              {
+                ...request.afterDelete,
+                onDeleted: () => {
+                  setRequest(null);
+                  request.afterDelete.onDeleted?.();
+                },
+              },
             )
           }
         />

@@ -1055,6 +1055,23 @@ hand-edited `?sort=lol` costs the user their sort here where on the list it 400s
 transaction that no longer exists and Back would land on its 404. It is also why this entry point
 sidesteps the focus-restore gap rather than adding a fourth route to it: the whole page goes away.
 
+**A navigating caller must also say so, and a code review is why `navigates` exists.** The
+confirmation's success path refreshes before calling `onDeleted`, which re-runs the route the user
+is **currently** on - right for the list, and actively wrong here: it re-reads the transaction just
+deleted, gets a 404 and renders the not-found boundary, racing the navigation. So
+`useDeleteTransaction().open()` takes `navigates`, and the dialog skips its refresh when it is set.
+Nothing goes stale, because every route in this app is dynamic and Next holds dynamic segments in
+the client cache for zero time, so the navigation refetches.
+
+**The same options go to `useEditTransaction().open()`, because the modal is a second delete entry
+point on the same screen.** Its "Delete transaction" opens the same confirmation, so passing the
+redirect to only the header button made one screen do two different things one click apart - and
+the modal path left the user on the not-found card for the row they had just deleted. The opener's
+options now compose in front of the provider's own `setRequest(null)`, and they live in the same
+state object as the row so a cancelled open cannot leave a redirect behind for somebody else's
+edit. `EmptyState` also gained `headingLevel={1}` for that boundary, which was shipping with an
+`h2` as the topmost heading on the one screen in the shell with no `PageHeader` above it.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

@@ -73,7 +73,27 @@ describe('Edit', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
-    expect(openEdit).toHaveBeenCalledWith(TRANSACTION);
+    expect(openEdit).toHaveBeenCalledWith(TRANSACTION, expect.any(Object));
+  });
+
+  it('hands the edit modal the same after-delete behaviour as the Delete button', async () => {
+    // The gap a code review found. The modal's own "Delete transaction" opens the same
+    // confirmation, so if only the header button carried the redirect the screen did two
+    // different things one click apart - and the modal path left the user on a detail page for
+    // a row that no longer exists.
+    renderActions('/transactions?period=all');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    const [, editOptions] = openEdit.mock.calls[0];
+    const [, deleteOptions] = openDelete.mock.calls[0];
+
+    expect(editOptions).toEqual(deleteOptions);
+    expect(editOptions.navigates).toBe(true);
+
+    editOptions.onDeleted();
+    expect(replace).toHaveBeenCalledWith('/transactions?period=all');
   });
 
   it('navigates nowhere on its own', () => {
@@ -101,6 +121,17 @@ describe('Delete', () => {
       },
       expect.objectContaining({ onDeleted: expect.any(Function) }),
     );
+  });
+
+  it('tells the dialog it navigates, so it does not refresh a route that is about to 404', async () => {
+    // Without this the dialog refreshes whatever route the user is on, which here re-reads the
+    // transaction just deleted, 404s, and renders the not-found boundary in a race with the
+    // navigation below. A code review found it.
+    renderActions();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(openDelete.mock.calls[0][1].navigates).toBe(true);
   });
 
   it('does not navigate until the delete actually succeeds', async () => {

@@ -68,11 +68,17 @@ afterEach(() => {
 });
 
 /** A trigger inside both providers, so opening is a real interaction rather than a mount. */
-function Trigger({ transaction = TRANSACTION }: { transaction?: Transaction }) {
+function Trigger({
+  transaction = TRANSACTION,
+  afterDelete,
+}: {
+  transaction?: Transaction;
+  afterDelete?: { onDeleted?: () => void; navigates?: boolean };
+}) {
   const { open } = useEditTransaction();
 
   return (
-    <button type="button" onClick={() => open(transaction)}>
+    <button type="button" onClick={() => open(transaction, afterDelete)}>
       Edit it
     </button>
   );
@@ -435,6 +441,82 @@ describe('the delete confirmation opening over it (AC6)', () => {
     await userEvent.click(deleteAction());
 
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("the opener's after-delete options (PET-34)", () => {
+  // A code review found the gap these close: the transaction detail page's header Delete
+  // navigated to the list and this modal's "Delete transaction" did not, so the same screen did
+  // two different things one click apart - and since that route 404s on the row it just
+  // deleted, the modal path stranded the user on the not-found card.
+
+  it('runs the opener’s onDeleted as well as closing the modal', async () => {
+    const onDeleted = jest.fn();
+    render(<Shell>{<Trigger afterDelete={{ onDeleted }} />}</Shell>);
+    await userEvent.click(editIt());
+    await userEvent.click(deleteAction());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(onDeleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards `navigates`, so the dialog skips a refresh aimed at a dead route', async () => {
+    render(<Shell>{<Trigger afterDelete={{ navigates: true, onDeleted: jest.fn() }} />}</Shell>);
+    await userEvent.click(editIt());
+    await userEvent.click(deleteAction());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('still refreshes when the opener passed nothing, which is the row menu', async () => {
+    // The default path must be untouched: the list behind still has to drop the row.
+    render(<Shell />);
+    await userEvent.click(editIt());
+    await userEvent.click(deleteAction());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it('does not leak one open’s options into the next', async () => {
+    // The options live in the same state object as the row, so a cancelled open cannot leave a
+    // redirect behind for somebody else's edit.
+    const onDeleted = jest.fn();
+    function TwoTriggers() {
+      const { open } = useEditTransaction();
+      return (
+        <>
+          <button type="button" onClick={() => open(TRANSACTION, { onDeleted })}>
+            Edit with redirect
+          </button>
+          <button type="button" onClick={() => open(TRANSACTION)}>
+            Edit it
+          </button>
+        </>
+      );
+    }
+
+    render(
+      <Shell>
+        <TwoTriggers />
+      </Shell>,
+    );
+
+    // Open with options, then close without deleting, then reopen without options.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit with redirect' }));
+    await userEvent.click(within(editDialog()).getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(editIt());
+    await userEvent.click(deleteAction());
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(onDeleted).not.toHaveBeenCalled();
   });
 });
 

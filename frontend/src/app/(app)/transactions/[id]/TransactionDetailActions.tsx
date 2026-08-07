@@ -36,9 +36,31 @@ export function TransactionDetailActions({ transaction, backHref }: TransactionD
   const { open: openEdit } = useEditTransaction();
   const { open: openDeleteConfirmation } = useDeleteTransaction();
 
+  /**
+   * What happens after a successful delete, wherever on this page it was started from.
+   *
+   * **One object handed to both entry points**, and a code review is why. The header's Delete
+   * and the edit modal's "Delete transaction" open the same confirmation, so passing this to
+   * only one of them made the same screen do two different things one click apart - the header
+   * landed on the list and the modal left the user on a detail page for a row that no longer
+   * existed.
+   *
+   * `replace`, not `push`: this page is about to describe a deleted transaction, so leaving it
+   * in history means Back returns to a 404 - the one destination the user certainly did not ask
+   * for. Replacing drops the dead entry, so Back reaches whatever preceded the detail page.
+   *
+   * `navigates` tells the dialog to skip its own `router.refresh()`. That refresh re-runs the
+   * route the user is currently on, which here is the one about to 404; the navigation below
+   * re-reads the list on its own.
+   */
+  const afterDelete = {
+    navigates: true,
+    onDeleted: () => router.replace(backHref),
+  };
+
   return (
     <>
-      <Button label="Edit" variant="secondary" onClick={() => openEdit(transaction)} />
+      <Button label="Edit" variant="secondary" onClick={() => openEdit(transaction, afterDelete)} />
       <Button
         label="Delete"
         // Soft rather than solid, unlike the confirmation's own Delete: there that is the
@@ -52,16 +74,7 @@ export function TransactionDetailActions({ transaction, backHref }: TransactionD
               amount: transaction.amount,
               date: transaction.date,
             },
-            {
-              // `replace`, not `push`. This page is about to describe a transaction that no
-              // longer exists, so leaving it in history means Back lands on a 404 - the one
-              // destination the user certainly did not ask for. Replacing drops the dead
-              // entry, so Back reaches whatever preceded the detail page.
-              //
-              // Fires on success only, after the dialog's own close and its router.refresh(),
-              // so the list this lands on is already re-read.
-              onDeleted: () => router.replace(backHref),
-            },
+            afterDelete,
           )
         }
       />
