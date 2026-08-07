@@ -127,6 +127,31 @@ must be nullable or carry a default - a bare `NOT NULL` add fails against any da
 already has rows - and a migration that cannot be made safe that way needs to be split into
 an additive step now and a tightening step once the data is known to be backfilled.
 
+**A migration that changes what a value _means_ is not a drizzle migration at all, and PET-64
+is the worked example.** That ticket changed `categories.color` from a hex to a daisyUI token
+and changed nothing about the column, so `drizzle-kit generate` reports no changes and there is
+no `migration.sql` to hang a rewrite off - and root `CLAUDE.md` forbids hand-writing one into
+`drizzle/**`. The same constraint produced the same answer twice: the central template seed runs
+programmatically in `openCentralDatabase` after `migrate()`, and
+`user/legacy-colour-backfill.ts` runs in `UserDatabaseService.openUserDb` after the user-scope
+`migrate()`. Three properties make that safe to do to live data unattended, and a fourth
+migration of this shape should copy all three. It is **guarded on the data itself** ("does any
+row still hold a hex"), so there is no marker row and no ledger to keep in step and the data is
+its own record of having run. It is **one statement**, so it cannot half-apply. And its mapping
+is **not a judgement call** - it composes the two frontend maps that ticket deleted, so a
+migrated account renders in exactly the colours it rendered in the day before.
+
+**PET-64 shipped without it, and the shape of that failure is the reason this paragraph
+exists.** A category row is written once, at verification, and nothing rewrites it, so every
+account provisioned before the change kept its hexes permanently; the frontend's maps are keyed
+on the contract's enum, which a hex is not, so all of them fell through to a grey tile with no
+glyph on every screen. Two builds, a lint run, 329 unit tests and 292 e2e tests were green
+throughout, because every suite in the repo constructs its own fixtures and they were all
+updated in the same commit. **No test in either app can see this class of defect**; it was found
+by opening the app. `test/legacy-colour-backfill.e2e-spec.ts` now writes the old hexes into a
+real database and reads back what the app would really load, which is the only shape of test
+that could have.
+
 **Conventions worth knowing before writing a table.** Primary keys are UUIDv7 text
 (`src/common/ids.ts`). Money is integer minor units in `*_cents` columns; the API speaks
 major units and the service converts. Instants are `integer` epoch-ms
