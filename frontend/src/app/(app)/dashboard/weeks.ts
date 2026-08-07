@@ -1,4 +1,5 @@
 import { addDays } from '@/lib/calendar';
+import { formatIsoDayMonth } from '@/lib/format';
 import type { DashboardSummary } from '@/lib/dashboard';
 
 // The one piece of real arithmetic on the trend card: which bucket is the current week.
@@ -85,4 +86,49 @@ export function currentWeekIndex(buckets: WeeklyBucket[], today: string): number
     ({ startDate, endDate }) => startDate <= today && today < endDate,
   );
   return index === -1 ? null : index;
+}
+
+/**
+ * The separator between a bucket's two dates.
+ *
+ * U+2013 EN DASH, the typographic character for a range, and a named constant for the same
+ * reason `lib/format.ts` names its U+2212 MINUS: pasted inline it is very nearly
+ * indistinguishable from a hyphen, so a test asserting the wrong one fails with a diff nobody
+ * can read. Exported so the suite references this rather than retyping the character - which is
+ * the one improvement on `MINUS`, whose test file declares a second copy of it.
+ */
+export const RANGE_DASH = '–';
+
+/**
+ * A bucket's own dates as `"Oct 22 – Oct 24"`, for the tooltip and the screen-reader list.
+ *
+ * **`endDate` is exclusive, and rendering it verbatim is the bug this function exists to not
+ * have.** `currentWeekIndex` above tests `startDate <= today < endDate`, so a bucket running
+ * `2025-10-01` to `2025-10-08` covers the 1st to the **7th** - printing its `endDate` would end
+ * every week on the day the next one starts, and a reader comparing two adjacent tooltips would
+ * see the same date twice. So the label ends on `addDays(endDate, -1)`.
+ *
+ * **This is the only thing on the card that can explain a short final bucket.**
+ * `weeklyBucketsOf` ends its last bucket at the period end rather than seven days after its own
+ * start, so a 31-day period draws a three-day stub beside four full weeks - a legitimately short
+ * bar labelled "Week 5" with nothing saying why. The range says why. That is the argument for
+ * amending AC4's "no tooltip", recorded on the ticket.
+ *
+ * **A single-day bucket collapses to one date** rather than reading "Oct 22 – Oct 22", which is
+ * reachable whenever a period's length leaves a remainder of one.
+ *
+ * Total, like everything else this module exports. `addDays` answers `null` and
+ * `formatIsoDayMonth` answers `''` for a string that is not a calendar date, and both flow
+ * through to `''` here rather than into a tooltip reading "Invalid Date" - the same call the
+ * transactions table makes for a date it cannot parse.
+ */
+export function bucketRangeLabel(bucket: WeeklyBucket): string {
+  const lastDay = addDays(bucket.endDate, -1);
+
+  const start = formatIsoDayMonth(bucket.startDate);
+  const end = lastDay === null ? '' : formatIsoDayMonth(lastDay);
+
+  if (start === '' || end === '') return '';
+
+  return start === end ? start : `${start} ${RANGE_DASH} ${end}`;
 }

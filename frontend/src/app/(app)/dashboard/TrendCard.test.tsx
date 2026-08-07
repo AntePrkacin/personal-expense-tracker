@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 
 import { TrendCard } from './TrendCard';
+import { RANGE_DASH } from './weeks';
 
 // Node 22:55's own numbers (DSH-6): $280, $410, $250, $300 over Week 1 to Week 4, tiling
 // 1-29 October.
@@ -12,69 +13,61 @@ const FOUR_WEEKS = [
 ];
 
 // `daysLeft` counts back from the final bucket's `endDate`, so 19 puts the backend's `today` on
-// 10 October - bucket index 1, the same week the deleted `setSystemTime(new Date(2025, 9, 10))`
-// used to select. **There are no fake timers in this file any more**, and that is the point of
-// the change rather than a tidy-up: this card reads no clock at all now, so a suite that had to
-// pin one was pinning the defect.
+// 10 October - bucket index 1. **There are no fake timers in this file except in the one test
+// that exists to prove they change nothing**: this card reads no clock, so a suite that had to
+// pin one would be pinning the defect.
 const DAYS_LEFT_TO_WEEK_2 = 19;
 
-// The three tones a bar can wear (`barTone`), which is also how the suite finds the bars. Class
-// strings, which the repo's own rule allows here: these *are* the visual state under test, the
-// same exception daisyUI's state classes get. The muted one is matched with `~=` rather than as
-// a class selector because `bg-base-content/20` carries a `/`, which `.` selectors would need
-// escaped.
-const UPCOMING = '[class~="bg-base-content/20"]';
-const BARS = `.bg-primary, .bg-accent, ${UPCOMING}`;
+// ---------------------------------------------------------------------------
+// **What this file may and may not claim, now that Recharts draws the plot.**
+//
+// jsdom runs no layout, and `jest.setup.ts`'s ResizeObserver stub hands the chart a fixed,
+// invented 400x300 box so it renders at all. So every bar here has a size that came from that
+// constant rather than from a browser, and **no assertion below reads a width, a height or a
+// proportion**. That is not a gap this file should try to close: PET-22 shipped a chart whose
+// `$410` and `$300` bars drew identically while four assertions about their heights passed,
+// because they read back the inline style the component had just written rather than the box the
+// browser drew. Geometry is a browser check, on the same list as `Modal`'s Escape and
+// `BudgetForm`'s caret restore.
+//
+// What is honestly assertable here is everything that is not geometry: that the right number of
+// bars exist, that each wears the fill its bucket earns, that every figure and caption reached
+// the DOM, that the screen-reader list says what the tooltip says, and that nothing on the card
+// is operable.
+// ---------------------------------------------------------------------------
 
-describe('the populated chart (AC1, AC2, AC3)', () => {
-  it('shows one bar per week, its value above and its week label below', () => {
-    render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />);
+/** Recharts renders each `Cell` as a path; the fill is what carries the tone. */
+function barFills(container: HTMLElement): { fill: string | null; opacity: string | null }[] {
+  return Array.from(container.querySelectorAll('.recharts-bar-rectangle path')).map((bar) => ({
+    fill: bar.getAttribute('fill'),
+    opacity: bar.getAttribute('fill-opacity'),
+  }));
+}
 
-    expect(screen.getByText('$280')).toBeInTheDocument();
-    expect(screen.getByText('Week 1')).toBeInTheDocument();
-    expect(screen.getByText('$410')).toBeInTheDocument();
-    expect(screen.getByText('Week 2')).toBeInTheDocument();
-    expect(screen.getByText('$250')).toBeInTheDocument();
-    expect(screen.getByText('Week 3')).toBeInTheDocument();
-    expect(screen.getByText('$300')).toBeInTheDocument();
-    expect(screen.getByText('Week 4')).toBeInTheDocument();
-  });
+const ACCENT = 'var(--color-accent)';
+const PRIMARY = 'var(--color-primary)';
+const MUTED = 'var(--color-base-content)';
 
-  // **This asserts the arithmetic, not the geometry, and the difference cost a review
-  // finding.** jsdom runs no layout - every `offsetHeight` is 0 and no percentage is ever
-  // resolved - so the strongest claim available here is that the right percentage reached the
-  // right bar. The first version of this card passed exactly these four assertions while
-  // drawing `$410` and `$300` as identical bars in a browser, because the percentage resolved
-  // against a track the two label rows were also eating into and flex-shrink absorbed the
-  // difference. **AC2 is therefore a browser check**, alongside `Modal`'s Escape and the focus
-  // trap and `BudgetForm`'s caret restore, and it is the geometry - `getBoundingClientRect()`
-  // on the laid-out bars - that has to be measured there rather than the style attribute.
-  it('gives each bar the percentage height its bucket earns against the tallest', () => {
-    const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
-    );
-    const bars = container.querySelectorAll<HTMLElement>(BARS);
-
-    expect(bars).toHaveLength(4);
-    expect(bars[1]?.style.height).toBe('100%'); // $410, the tallest
-    expect(bars[0]?.style.height).toBe(`${(280 / 410) * 100}%`);
-    expect(bars[2]?.style.height).toBe(`${(250 / 410) * 100}%`);
-    expect(bars[3]?.style.height).toBe(`${(300 / 410) * 100}%`);
-  });
-
-  it('puts the bar alone in its plot area, which is what makes those percentages true', () => {
-    // The regression guard for the finding above: the bar's parent must contain the bar and
-    // nothing else, so `height: X%` resolves against the whole `h-32` track. A label row moving
-    // back inside that box is the change that silently re-clamps every tall bar.
+describe('the populated chart (AC1, AC3)', () => {
+  it('draws one bar per week', () => {
     const { container } = render(
       <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
     );
 
-    for (const bar of container.querySelectorAll<HTMLElement>(BARS)) {
-      const plotArea = bar.parentElement!;
-      expect(plotArea.children).toHaveLength(1);
-      expect(plotArea.className).toContain('h-32');
-      expect(plotArea.textContent).toBe('');
+    expect(barFills(container)).toHaveLength(4);
+  });
+
+  it('renders every value and every week caption', () => {
+    const { container } = render(
+      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
+    );
+    const text = container.textContent ?? '';
+
+    for (const figure of ['$280', '$410', '$250', '$300']) {
+      expect(text).toContain(figure);
+    }
+    for (const caption of ['Week 1', 'Week 2', 'Week 3', 'Week 4']) {
+      expect(text).toContain(caption);
     }
   });
 
@@ -82,16 +75,16 @@ describe('the populated chart (AC1, AC2, AC3)', () => {
     const { container } = render(
       <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
     );
+    const fills = barFills(container);
 
-    expect(container.querySelectorAll('.bg-accent')).toHaveLength(1);
-    expect(container.querySelector<HTMLElement>('.bg-accent')?.style.height).toBe('100%'); // $410
+    expect(fills.filter((bar) => bar.fill === ACCENT)).toHaveLength(1);
+    expect(fills[1]?.fill).toBe(ACCENT); // Week 2, the $410 bucket
   });
 
-  // The regression guard for the first finding of this PR's review. The card used to call
-  // `todayIsoDate()`, so which bar was accented depended on the frontend host's clock and its
-  // zone - and on the first day of a period a UTC host against `APP_TIMEZONE=Europe/Zagreb`
-  // placed `today` before `buckets[0].startDate`, leaving *nothing* accented. Moving the system
-  // clock a year and a continent away must now change nothing at all.
+  // The regression guard for the first finding of this PR's review, and it survives the move to
+  // Recharts unchanged because the chart never receives a clock - `TrendCard` resolves every tone
+  // on the server from `daysLeft` alone. Moving the system time a year and a continent away must
+  // change nothing at all.
   it('reads no clock, so the system time cannot move the highlight', () => {
     jest.useFakeTimers().setSystemTime(new Date(2024, 2, 3));
 
@@ -100,7 +93,7 @@ describe('the populated chart (AC1, AC2, AC3)', () => {
         <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
       );
 
-      expect(container.querySelector<HTMLElement>('.bg-accent')?.style.height).toBe('100%');
+      expect(barFills(container)[1]?.fill).toBe(ACCENT);
     } finally {
       jest.useRealTimers();
     }
@@ -113,10 +106,22 @@ describe('weeks that have not started (a review finding, no frame behind it)', (
     const { container } = render(
       <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
     );
+    const fills = barFills(container);
 
-    expect(container.querySelectorAll(UPCOMING)).toHaveLength(2);
-    expect(container.querySelectorAll('.bg-primary')).toHaveLength(1); // Week 1, behind us
-    expect(container.querySelectorAll('.bg-accent')).toHaveLength(1); // Week 2
+    expect(fills.filter((bar) => bar.fill === MUTED)).toHaveLength(2);
+    expect(fills.filter((bar) => bar.fill === PRIMARY)).toHaveLength(1); // Week 1, behind us
+    expect(fills.filter((bar) => bar.fill === ACCENT)).toHaveLength(1); // Week 2
+  });
+
+  it('carries the muted tone as an alpha rather than a second colour', () => {
+    // `bg-base-content/20` became a fill plus `fill-opacity`, because SVG composites the alpha
+    // itself. Whether the composited result is *visible* is a browser check and is recorded as
+    // one; that it is translucent at all is assertable here.
+    const { container } = render(
+      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
+    );
+
+    expect(barFills(container)[3]).toEqual({ fill: MUTED, opacity: '0.2' });
   });
 
   it('mutes nothing when the response could not place today at all', () => {
@@ -124,36 +129,72 @@ describe('weeks that have not started (a review finding, no frame behind it)', (
     // belongs to no bucket. Dimming from a window we could not locate would be the guessing
     // this card stopped doing.
     const { container } = render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={0} />);
+    const fills = barFills(container);
 
-    expect(container.querySelectorAll('.bg-accent')).toHaveLength(0);
-    expect(container.querySelectorAll(UPCOMING)).toHaveLength(0);
-    expect(container.querySelectorAll('.bg-primary')).toHaveLength(4);
+    expect(fills.filter((bar) => bar.fill === ACCENT)).toHaveLength(0);
+    expect(fills.filter((bar) => bar.fill === MUTED)).toHaveLength(0);
+    expect(fills.filter((bar) => bar.fill === PRIMARY)).toHaveLength(4);
   });
 });
 
-describe('the two states a screen reader would otherwise miss (a review finding)', () => {
-  it('names the current week in text, since the accent colour carries it alone', () => {
+describe('the screen-reader list, which is the chart for anyone not using a pointer', () => {
+  it('names every week with its date range, its amount and its state', () => {
     render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />);
 
-    expect(screen.getByText('Current week')).toBeInTheDocument();
-    expect(screen.getAllByText('Upcoming week')).toHaveLength(2);
+    expect(
+      screen.getByText(`Week 2, Oct 8 ${RANGE_DASH} Oct 14: $410, current week`),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(`Week 3, Oct 15 ${RANGE_DASH} Oct 21: $250, upcoming week`),
+    ).toBeInTheDocument();
+    // A week behind us gets no suffix at all - "past week" would be noise on the majority state.
+    expect(screen.getByText(`Week 1, Oct 1 ${RANGE_DASH} Oct 7: $280`)).toBeInTheDocument();
   });
 
-  it('says neither when no week is current', () => {
+  it('hides the plot from assistive technology, so nothing is announced twice', () => {
+    const { container } = render(
+      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
+    );
+
+    const chart = container.querySelector('.recharts-responsive-container');
+    expect(chart?.closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it('describes no state when no week is current', () => {
     render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={0} />);
 
-    expect(screen.queryByText('Current week')).not.toBeInTheDocument();
-    expect(screen.queryByText('Upcoming week')).not.toBeInTheDocument();
+    expect(screen.queryByText(/current week/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/upcoming week/)).not.toBeInTheDocument();
   });
 });
 
-describe('display only (AC4)', () => {
-  it('has no interactive role anywhere on the chart', () => {
+describe('display only (AC4, as amended)', () => {
+  // The tooltip is the amendment and it is hover-only: it adds no control, no tab stop and no
+  // role. `accessibilityLayer` is deliberately not enabled on the chart, which is what would
+  // have added one.
+  it('has no interactive role anywhere on the card', () => {
     render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />);
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryAllByRole('progressbar')).toHaveLength(0);
+  });
+
+  // **Both halves of this were false before the review that added it**, and neither came from
+  // anything this repo wrote: Recharts 3 defaults `accessibilityLayer` to `true`, which puts
+  // `tabindex="0"` and `role="application"` on its own `<svg>`. The tab stop is the sharper
+  // failure, because the plot sits inside `aria-hidden` - so it was focusable and simultaneously
+  // invisible to the screen reader that would have to explain it, the same footgun
+  // `frontend/src/app/CLAUDE.md` records for the Welcome panel. The role is the louder one: it
+  // tells assistive technology to leave browse mode and forward every key to a chart that
+  // handles none.
+  it('puts nothing in the tab order and claims no application role', () => {
+    const { container } = render(
+      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} />,
+    );
+
+    expect(container.querySelectorAll('[tabindex]:not([tabindex="-1"])')).toHaveLength(0);
+    expect(container.querySelectorAll('[role="application"]')).toHaveLength(0);
   });
 });
 
@@ -168,21 +209,14 @@ describe('a week with no spending (AC5)', () => {
   // current one and is a real spend-free week rather than one that has not happened.
   const DAYS_LEFT = 2;
 
-  it('still draws its label and a bar, rather than being dropped from the axis', () => {
-    render(<TrendCard weeklyBuckets={WITH_A_ZERO_WEEK} daysLeft={DAYS_LEFT} />);
-
-    expect(screen.getByText('$0')).toBeInTheDocument();
-    expect(screen.getByText('Week 2')).toBeInTheDocument();
-  });
-
-  it('keeps a visible minimum track rather than collapsing to zero height', () => {
+  it('still draws a bar and still says $0, rather than being dropped from the axis', () => {
     const { container } = render(
       <TrendCard weeklyBuckets={WITH_A_ZERO_WEEK} daysLeft={DAYS_LEFT} />,
     );
-    const zeroBar = container.querySelectorAll<HTMLElement>(BARS)[1];
 
-    expect(zeroBar).toBeDefined();
-    expect(parseFloat(zeroBar!.style.height)).toBeGreaterThan(0);
+    expect(barFills(container)).toHaveLength(3);
+    expect(container.textContent).toContain('$0');
+    expect(container.textContent).toContain('Week 2');
   });
 
   it('draws it in the ordinary tone, not the muted one an unstarted week gets', () => {
@@ -190,8 +224,8 @@ describe('a week with no spending (AC5)', () => {
       <TrendCard weeklyBuckets={WITH_A_ZERO_WEEK} daysLeft={DAYS_LEFT} />,
     );
 
-    expect(container.querySelectorAll<HTMLElement>(BARS)[1]?.className).toContain('bg-primary');
-    expect(screen.queryByText('Upcoming week')).not.toBeInTheDocument();
+    expect(barFills(container)[1]?.fill).toBe(PRIMARY);
+    expect(screen.queryByText(/upcoming week/)).not.toBeInTheDocument();
   });
 });
 
