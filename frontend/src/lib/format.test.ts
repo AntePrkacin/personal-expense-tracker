@@ -5,6 +5,7 @@ import {
   formatIsoDate,
   formatIsoDayMonth,
   formatNegative,
+  formatRelativeDate,
   formatWhole,
   initials,
   monthLabel,
@@ -266,6 +267,69 @@ describe('formatIsoDayMonth', () => {
       expect(formatIsoDayMonth(iso)).toBe('');
     },
   );
+});
+
+describe('formatRelativeDate', () => {
+  const TODAY = '2025-10-08';
+
+  it('reads "Today" for the day itself', () => {
+    expect(formatRelativeDate(TODAY, TODAY)).toBe('Today');
+  });
+
+  it('reads "Yesterday" for one day back', () => {
+    expect(formatRelativeDate('2025-10-07', TODAY)).toBe('Yesterday');
+  });
+
+  it('reads the short date beyond yesterday', () => {
+    expect(formatRelativeDate('2025-10-05', TODAY)).toBe('Oct 5');
+  });
+
+  // AC2's mock draws a same-day boundary crossing into a new month, so "Yesterday" has to
+  // survive it rather than only working within one calendar page.
+  it('reads "Yesterday" across a month boundary', () => {
+    expect(formatRelativeDate('2025-09-30', '2025-10-01')).toBe('Yesterday');
+  });
+
+  it('reads "Yesterday" across a year boundary', () => {
+    expect(formatRelativeDate('2024-12-31', '2025-01-01')).toBe('Yesterday');
+  });
+
+  // The Add transaction modal's date field allows a future date, and it is deliberately not
+  // a fifth case here: "Tomorrow" is not in the design, so a day ahead falls through to the
+  // same short date a week ahead would get.
+  it('reads the short date for a future day, rather than inventing "Tomorrow"', () => {
+    expect(formatRelativeDate('2025-10-09', TODAY)).toBe('Oct 9');
+  });
+
+  it('is empty for a string that is not a calendar date', () => {
+    expect(formatRelativeDate('not a date', TODAY)).toBe('');
+  });
+
+  // The regression `formatIsoDate` and `formatIsoDayMonth` both pin: the day this function
+  // reports must not shift in a zone behind UTC. `daysBetween` diffs `Date.UTC` of the parsed
+  // parts rather than the local `Date`s `dateFromIso` would hand back, so a DST transition
+  // between the two dates cannot round a 24-hour gap up or down to the wrong day count.
+  it('keeps the day it was given in a zone behind UTC', () => {
+    const original = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+
+    try {
+      expect(formatRelativeDate(TODAY, TODAY)).toBe('Today');
+      expect(formatRelativeDate('2025-10-07', TODAY)).toBe('Yesterday');
+    } finally {
+      process.env.TZ = original;
+    }
+  });
+
+  it('defaults to the real today, so a fixture is not required to call it', () => {
+    jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8));
+
+    try {
+      expect(formatRelativeDate('2025-10-08')).toBe('Today');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('formatAmountInput', () => {

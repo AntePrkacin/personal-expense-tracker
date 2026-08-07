@@ -16,10 +16,9 @@ import { MonthPill } from './MonthPill';
 // 21:4. Every slot is **required** rather than optional: all five render in both the
 // populated and the empty state, with different content - there is no state in which one is
 // absent, so an optional prop would let a call site quietly test a dashboard with a card
-// missing. PET-21 shipped `budgetCard`, PET-22 `trendCard` and PET-23 `donutCard`;
-// `recentTransactionsCard` (PET-24) and `insightCard` (PET-25) are still placeholder
-// `<div />`s at the call site in `page.tsx`, each a one-line change there when its own
-// ticket lands.
+// missing. PET-21 shipped `budgetCard`, PET-22 `trendCard`, PET-23 `donutCard` and PET-24
+// `recentTransactionsCard`; `insightCard` (PET-25) is still a placeholder `<div />` at the call
+// site in `page.tsx`, a one-line change there when its ticket lands.
 //
 // **Anything a card needs is handed to it in `page.tsx`, because a slot is a node and not a
 // component.** Each is typed `React.ReactNode`, matching `TransactionsScreen`'s two, so this
@@ -38,7 +37,7 @@ type DashboardScreenProps = {
   trendCard: React.ReactNode;
   /** DSH-5. PET-23's `CategoryDonut`. */
   donutCard: React.ReactNode;
-  /** DSH-7. PET-24's placeholder here, filled by that branch. */
+  /** DSH-7. PET-24's `RecentTransactionsCard`. */
   recentTransactionsCard: React.ReactNode;
   /** DSH-8. PET-25's placeholder here, filled by that branch. */
   insightCard: React.ReactNode;

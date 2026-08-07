@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
 import * as BudgetCard from './dashboard/BudgetCard.stories';
+import * as RecentTransactionsCard from './dashboard/RecentTransactionsCard.stories';
 import * as TrendCard from './dashboard/TrendCard.stories';
 import * as Modal from './Modal.stories';
 import * as PageHeader from './PageHeader.stories';
@@ -33,6 +34,7 @@ const MODULES: [name: string, module: StoryModule][] = [
   // whole frame - `Screens/04 Dashboard` is where the frame is diffed.
   ['BudgetCard', BudgetCard as StoryModule],
   ['TrendCard', TrendCard as StoryModule],
+  ['RecentTransactionsCard', RecentTransactionsCard as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {
