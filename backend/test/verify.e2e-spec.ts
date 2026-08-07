@@ -215,7 +215,7 @@ describe('Verification and sessions (e2e)', () => {
       expect(seeded.map((row) => [row.name, row.color])).toEqual([
         ['Groceries', 'success'],
         ['Transportation', 'info'],
-        ['Uncategorized', 'warning-content'],
+        ['Uncategorized', 'base-content/50'],
       ]);
 
       // The template's description is copied into the user's own `note`, which

@@ -255,6 +255,16 @@ describe('VerificationService', () => {
     it('gives the fallback a real theme token and its own note', async () => {
       // Its colour used to be `#98A0AE`, the retired token layer's
       // --color-text-tertiary. There is no off-palette neutral to reach for now.
+      //
+      // **`base-content/50` rather than `warning-content`, and the number is the
+      // reason.** PET-64 first shipped `warning-content` on the claim that it
+      // "reads as muted in both themes"; measured, it is 1.713:1 against the
+      // dark card. This row can hold the largest donut slice on the screen,
+      // because the backend's orphan fold routes spend from tombstoned
+      // categories onto it, and its slice and legend dot are bare colour with no
+      // glyph to carry them. PET-23 measured this token at 3.401:1 and 4.769:1
+      // for exactly that reason. Pinned as a literal rather than read off
+      // FALLBACK_CATEGORY, or the assertion would agree with any future change.
       await service.verify('raw-token');
 
       const [fallback] = argsOf(inserted.get(categories)!, 'values')[0] as {
@@ -263,7 +273,7 @@ describe('VerificationService', () => {
         note: string | null;
       }[];
 
-      expect(fallback.color).toBe('warning-content');
+      expect(fallback.color).toBe('base-content/50');
       expect(fallback.icon).toBe('circle-question-mark');
       expect(fallback.note).not.toBeNull();
     });

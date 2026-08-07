@@ -30,10 +30,16 @@ import {
 const COLOURS = Object.keys(CATEGORY_TILE) as CategoryColour[];
 
 describe('CATEGORY_TILE', () => {
-  it('covers all sixteen daisyUI semantic tokens', () => {
-    // Sixteen because `base-*` is deliberately absent: those are the page's own
-    // surfaces, so a category painted in one is a category painted in nothing.
-    expect(COLOURS).toHaveLength(16);
+  it('covers all seventeen daisyUI semantic tokens', () => {
+    // Sixteen semantic tokens plus `base-content/50`. The `base-100/200/300`
+    // *surfaces* are still deliberately absent - a category painted in one is a
+    // category painted in nothing, and `base-300` measures 1.16:1 against the
+    // card - but `base-content/50` is the ink on those surfaces at half
+    // strength, 3.401:1 and 4.769:1, and it is the only entry in the whole set
+    // that is muted and clears 3:1 in both themes. `COLOUR_CONTRAST` in the
+    // backend's `template-tokens.ts` carries the measured table.
+    expect(COLOURS).toHaveLength(17);
+    expect(COLOURS).toContain('base-content/50');
   });
 
   it('pairs every background with a content colour', () => {
@@ -201,21 +207,36 @@ describe('CATEGORY_FILL', () => {
     expect(Object.keys(CATEGORY_FILL)).toEqual(Object.keys(CATEGORY_DOT));
   });
 
-  it('pairs every dot class with the CSS variable naming the same colour', () => {
+  it('pairs every dot class with the CSS value naming the same colour', () => {
     // The pin that stops the three maps drifting. `bg-error` and `var(--color-error)` are the
-    // same colour reached two ways, and a seventeenth colour added to one map and not the
+    // same colour reached two ways, and an eighteenth colour added to one map and not the
     // others fails here rather than painting an unfilled slice in the donut.
+    //
+    // **The expectation is derived from the dot rather than listed**, which is what lets it
+    // cover the alpha token without an exemption: Tailwind's `/50` modifier compiles to a
+    // `color-mix` against `transparent`, so that is what an SVG `fill` has to say to be the
+    // same colour. Special-casing it by name would have made the one entry that is not a plain
+    // `var()` the one entry nothing checks.
     for (const colour of COLOURS) {
       const token = CATEGORY_DOT[colour].replace(/^bg-/, '');
-      expect(CATEGORY_FILL[colour]).toBe(`var(--color-${token})`);
+      const [name, alpha] = token.split('/');
+
+      expect(CATEGORY_FILL[colour]).toBe(
+        alpha
+          ? `color-mix(in oklab, var(--color-${name}) ${alpha}%, transparent)`
+          : `var(--color-${name})`,
+      );
     }
   });
 
   it('is a CSS value everywhere, never a Tailwind class', () => {
     // The whole reason this map exists. `fill="bg-error"` is not invalid CSS so much as
-    // meaningless: the slice simply never paints, with no error anywhere.
+    // meaningless: the slice simply never paints, with no error anywhere. A `color-mix()` is
+    // as valid a `fill` as a `var()`; a class string is not.
     for (const colour of COLOURS) {
-      expect(CATEGORY_FILL[colour]).toMatch(/^var\(--color-[a-z-]+\)$/);
+      expect(CATEGORY_FILL[colour]).toMatch(
+        /^(var\(--color-[a-z-]+\)|color-mix\(in oklab, var\(--color-[a-z-]+\) \d+%, transparent\))$/,
+      );
       expect(CATEGORY_FILL[colour]).not.toMatch(/^bg-/);
     }
   });

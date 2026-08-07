@@ -27,7 +27,7 @@ type ColourSeed = {
 };
 
 /**
- * The sixteen tokens with the word a person actually picks.
+ * The seventeen tokens with the word a person actually picks.
  *
  * The labels are read off the daisyUI light theme's own values rather than
  * invented - `accent-content` is `oklch(38% 0.063 188.4)`, a dark teal, hence
@@ -40,6 +40,17 @@ type ColourSeed = {
  * be offered. It stays in the allowlist so that a category somehow carrying it
  * still renders, which is exactly the split between validation and presentation
  * `template-tokens.ts` describes.
+ *
+ * **Do not read that as "the other fifteen are fine".** `COLOUR_CONTRAST` in
+ * `template-tokens.ts` carries the measured table, and only `primary` and
+ * `secondary` clear 3:1 against the card in both themes; `error-content` is
+ * disabled because it is invisible in dark at 1.009:1, not because it is the
+ * only one below the bar. The offered set is a deliberate trade recorded on
+ * PET-64, not a set that passes a check.
+ *
+ * `base-content/50` is offered last and is the muted one: it is the only entry
+ * here that clears 3:1 in both themes while not being a saturated brand colour,
+ * which is why the `Uncategorized` fallback carries it.
  */
 const COLOUR_SEED: readonly ColourSeed[] = [
   { token: 'success', label: 'Emerald' },
@@ -58,6 +69,7 @@ const COLOUR_SEED: readonly ColourSeed[] = [
   { token: 'neutral', label: 'Ink' },
   { token: 'neutral-content', label: 'Silver' },
   { token: 'error-content', label: 'Maroon', enabled: false },
+  { token: 'base-content/50', label: 'Slate' },
 ];
 
 /** One icon a category may carry, as the picker offers it. */

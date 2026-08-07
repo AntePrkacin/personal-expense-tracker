@@ -14,20 +14,40 @@ import { categories } from './schema';
  * for. A code constant is exactly right for a value that is not the admin's to
  * edit.
  *
- * Its colour is `warning-content` and its icon `circle-question-mark`, from the
+ * Its colour is `base-content/50` and its icon `circle-question-mark`, from the
  * same allowlist every other category draws from. **That reverses what this file
  * used to say**: the old `#98A0AE` was the retired token layer's
  * `--color-text-tertiary`, and this file's note that it was "not from the
  * eight-color category palette" and must not be "fixed" to one stopped being
- * true when the palette became the daisyUI tokens. There is no off-palette
- * neutral to reach for any more, and `warning-content` is a real theme colour
- * that reads as muted next to the saturated ones in both themes.
+ * true when the palette became the daisyUI tokens.
+ *
+ * **It also reverses what PET-64 first shipped, which was `warning-content`, and
+ * that correction is the point of this paragraph.** The claim written here and
+ * in `backend/CLAUDE.md` was that it "reads as muted in both themes" and was
+ * "visible against the card in both themes". Nobody measured it. It is
+ * **1.713:1 against the dark card** - below the 1.16:1-rejected `base-300` in
+ * spirit and nowhere near the 3:1 non-text bar this repo enforces by name
+ * elsewhere.
+ *
+ * That matters more for this row than for any other, and PET-23 had already
+ * worked out why: the backend's orphan fold routes spend whose category was
+ * tombstoned onto this one, so it can hold the **largest donut slice on the
+ * screen**, and its slice and its legend dot are bare colour with no glyph to
+ * carry them. PET-23 measured `base-content/50` at 3.401:1 and 4.769:1 for
+ * exactly this row and exactly this reason; PET-64 took it away without noticing
+ * it was a measurement rather than a default, and this puts it back.
+ *
+ * `COLOUR_CONTRAST` in `central/template-tokens.ts` is why it is not simply
+ * another semantic token: only `primary` and `secondary` clear 3:1 in both
+ * themes, and both are saturated brand colours already carried by templates.
+ * There is no muted semantic token that works, which is what the seventeenth
+ * entry in the allowlist exists for.
  *
  * It has no template to take a description from, so its `note` is written here.
  */
 export const FALLBACK_CATEGORY = {
   name: 'Uncategorized',
-  color: 'warning-content',
+  color: 'base-content/50',
   icon: 'circle-question-mark',
   note: "Any transaction that doesn't have its own category.",
 } as const;

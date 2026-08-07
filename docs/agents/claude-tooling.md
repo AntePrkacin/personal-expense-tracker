@@ -128,10 +128,24 @@ fight is the catalogue - and three things follow from that:
 - **The script is the artifact.** It is reviewable, it reruns, and it does not depend on which
   tab anybody has open.
 
-Four gotchas, all of them met in practice:
+Five gotchas, all of them met in practice:
 
 - **Chromium reports colour as `oklab(L a b / A)`**, not `rgba()`. Matching `rgba(` produces a
   false failure; match the alpha component generically instead.
+- **A colour check that only asks "did it paint" has not checked the colour.** This is the one
+  that has now cost three review findings across two tickets, so it is worth stating as a rule
+  rather than as a story. PET-64's walk verified that all twelve category chips painted a real
+  colour, that none was transparent, and that the twelve were mutually distinct - twenty-eight
+  green checks - and every one of those passed for a tile measuring 1.1:1 against the card it
+  sits on, because none of them ever looked at the card. **Measure the subject against the
+  surface behind it**, in both themes, and composite first: paint the fill over the background
+  on a 1x1 canvas and read the pixel back, since `getComputedStyle` reports a translucent colour
+  uncomposited and a WCAG ratio computed from that is a ratio for a colour nobody sees. Two
+  numbers make a good pair of controls, both already on record from independent runs: `base-300`
+  measures ~1.16:1 against `base-100` and must fail, and `base-content/50` measures ~3.4:1 light
+  and ~4.8:1 dark and must pass. A third worth knowing about: **a class Tailwind never compiled
+  reports a ratio of exactly 1.0**, indistinguishable from a colour identical to the background,
+  so a control that passes tells you the harness works *and* that the class exists.
 - **Headless starts in the light theme.** This app ships `light` and `dark` selected by
   `prefers-color-scheme` with no controller, so anything theme-specific needs
   `Emulation.setEmulatedMedia` - and a check that silently only ever ran in light is half a

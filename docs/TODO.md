@@ -213,7 +213,7 @@ are offered to every new account. Neither is a blocker, and neither should be an
 **PET-64 answered both, and the two paragraphs above are dated to before it.** The chip list is
 admin-managed data in central rather than a ten-name constant, and the twelve seeded templates
 retire Bills, Subscriptions, Housing and Shopping outright - so A7's seam is gone with the names
-that sat on it. The palette is the sixteen daisyUI semantic tokens, so no two categories are
+that sat on it. The palette is the seventeen daisyUI semantic tokens, so no two categories are
 forced onto one colour; three seeded pairs are still deliberately close in OKLab, which is a
 legibility call rather than a shortage, and `frontend/src/components/ui/categoryColour.ts` names
 all three with their measured ΔE. What still holds unchanged is the constraint the first bullet
@@ -1136,7 +1136,7 @@ indirect - it was incoherent.** `primary` is the one token daisyUI values differ
 so Entertainment (`#422ad5` light, `#605dff` dark) and Education (`#e0e7ff`, `#edf1fe`) have no
 single hex value at all: a stored one would record one and paint the other half the time. So
 `categories.color` stores the daisyUI **token** verbatim, `CreateCategoryDto` validates it with
-`@IsIn(COLOUR_TOKENS)`, and the sixteen tokens are the palette.
+`@IsIn(COLOUR_TOKENS)`, and the seventeen tokens are the palette.
 
 Three things fell out of it that are worth knowing before touching that file:
 
@@ -1147,13 +1147,18 @@ Three things fell out of it that are worth knowing before touching that file:
   renders. Validation checks the allowlist; `enabled` is presentation.
 - **The inline-`style` alternative is closed off, not merely unchosen.** The class map is now
   keyed by the contract's own union, so `Record<CategoryColour, string>` is an exhaustiveness
-  proof: a seventeenth token backend-side breaks the frontend build until the map covers it.
+  proof: an eighteenth token backend-side breaks the frontend build until the map covers it.
   That guarantee is what an inline `style` would have traded away, and it applies to the 8px dot
   and the donut's SVG `fill` as well as the tile.
 - **`FALLBACK_CATEGORY` stopped being the exception.** Its `#98A0AE` was the retired token
-  layer's `--color-text-tertiary`; it carries `warning-content` now and resolves like any other
+  layer's `--color-text-tertiary`; it carries `base-content/50` now and resolves like any other
   category. The neutral grey in `categoryColour.ts` is left for one case only - a `categoryId`
-  that matched nothing in the account's list.
+  that matched nothing in the account's list, which is the same colour by a different route.
+  PET-64 first put it on `warning-content` and the review of that branch reversed it: nobody had
+  measured the token, and it is 1.713:1 against the dark card, which silently undid the fix
+  PET-23 had made for this exact row. `COLOUR_CONTRAST` in `template-tokens.ts` is the measured
+  table that now exists so the same mistake cannot be made from plausibility again - of the
+  sixteen semantic tokens, only `primary` and `secondary` clear 3:1 in both themes.
 
 ### An unknown category id in the URL shows no-results with the select reading "All categories"
 

@@ -715,6 +715,11 @@ describe('openapi.json', () => {
       'warning-content',
       'error',
       'error-content',
+      // The seventeenth, and the only one that is not a plain semantic token.
+      // It is here because the other sixteen cannot supply a muted colour that
+      // is visible in both themes - `COLOUR_CONTRAST` in template-tokens.ts
+      // carries the measured table - and the `Uncategorized` fallback needs one.
+      'base-content/50',
     ];
 
     const ICON_NAMES = [
@@ -736,7 +741,7 @@ describe('openapi.json', () => {
     // Written out here rather than imported from template-tokens.ts on purpose.
     // Importing would make this assert the constant against itself, which is
     // the failure `SIDEBAR_HREFS`' own note describes: the point is that the
-    // *published contract* carries these sixteen and these thirteen, so a
+    // *published contract* carries these seventeen and these thirteen, so a
     // deliberate change has to be made in two places and an accidental one
     // fails here.
 

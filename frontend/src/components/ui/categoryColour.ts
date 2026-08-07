@@ -17,7 +17,7 @@ import {
 
 import type { components } from '@/types/api';
 
-// The sixteen daisyUI semantic colour tokens and the thirteen lucide icons a
+// The seventeen daisyUI semantic colour tokens and the thirteen lucide icons a
 // category can carry, mapped onto what actually paints them (PET-64).
 //
 // Four things about this file are load-bearing:
@@ -29,8 +29,8 @@ import type { components } from '@/types/api';
 //     runtime name cannot become a component without a static map like this one.
 //  2. **The keys are the contract's own unions, not a list restated here.**
 //     `CreateCategoryDto.color` and `.icon` publish real OpenAPI enums, so a
-//     `Record` keyed by them is its own exhaustiveness proof: adding a
-//     seventeenth token to `backend/src/database/central/template-tokens.ts` and
+//     `Record` keyed by them is its own exhaustiveness proof: adding an
+//     eighteenth token to `backend/src/database/central/template-tokens.ts` and
 //     running `api:sync` breaks this file's build until the map covers it. That
 //     is the whole payoff of the token allowlist, and it is why skipping
 //     `api:sync` is catastrophic rather than untidy - the union degrades to
@@ -78,6 +78,12 @@ export type IconName = components['schemas']['CreateCategoryDto']['icon'];
  * Each value pairs the tile's background with the colour a glyph drawn on it
  * with `currentColor` should take - so for a base token that is its own
  * `-content` partner, and for a `-content` token it is the base it came from.
+ *
+ * `base-content/50` is the one that follows neither rule, because it has no
+ * partner: it is the page's own ink at half strength, so the glyph takes
+ * `base-100`, the surface that ink is normally drawn on. That inverts to a light
+ * glyph on mid grey in light and a dark glyph on light grey in dark, which is
+ * the pairing that survives both themes.
  */
 export const CATEGORY_TILE: Record<CategoryColour, string> = {
   primary: 'bg-primary text-primary-content',
@@ -96,6 +102,7 @@ export const CATEGORY_TILE: Record<CategoryColour, string> = {
   'warning-content': 'bg-warning-content text-warning',
   error: 'bg-error text-error-content',
   'error-content': 'bg-error-content text-error',
+  'base-content/50': 'bg-base-content/50 text-base-100',
 };
 
 /**
@@ -130,10 +137,14 @@ export const CATEGORY_DOT: Record<CategoryColour, string> = {
   'warning-content': 'bg-warning-content',
   error: 'bg-error',
   'error-content': 'bg-error-content',
+  // Deliberately identical to `CATEGORY_DOT_NEUTRAL` below. They are the same
+  // colour for the same measured reason, and the duplication is this file's
+  // first rule - every class written out in full - rather than an oversight.
+  'base-content/50': 'bg-base-content/50',
 };
 
 /**
- * The same sixteen colours as a CSS value, for an SVG `fill`.
+ * The same seventeen colours as a CSS value, for an SVG `fill`.
  *
  * **A third map rather than a reuse of `CATEGORY_DOT`, because `fill` is an SVG presentation
  * attribute and a Tailwind class is not a valid value for one.** `bg-error` in a `fill` resolves
@@ -163,6 +174,11 @@ export const CATEGORY_FILL: Record<CategoryColour, string> = {
   'warning-content': 'var(--color-warning-content)',
   error: 'var(--color-error)',
   'error-content': 'var(--color-error-content)',
+  // The `color-mix` Tailwind's own `/50` modifier compiles to, written out
+  // because a `fill` cannot take the class. Same colour as the `CATEGORY_DOT`
+  // entry above by construction, which is what keeps the donut's Uncategorized
+  // slice and its legend dot from drifting apart.
+  'base-content/50': 'color-mix(in oklab, var(--color-base-content) 50%, transparent)',
 };
 
 /**
@@ -200,7 +216,7 @@ export const CATEGORY_ICON: Record<IconName, LucideIcon> = {
 // answered for the `Uncategorized` fallback category, whose `#98A0AE` was
 // outside the eight-colour palette on purpose, and for any well-formed hex a
 // category might carry that the map did not know. Neither case exists now: the
-// fallback carries `warning-content` like any other category, and `color` is a
+// fallback carries `base-content/50` like any other category, and `color` is a
 // closed enum the API validates. What is left is a `categoryId` that matched
 // nothing in the account's list, and `null`.
 
@@ -233,8 +249,11 @@ export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
  * in dark, which is the near-invisibility PET-22 already measured and rejected for the trend
  * chart's muted bars. Reaching for it here reintroduced that finding on a different chart.
  *
- * `base-content/50` measures **3.382:1** in light and **4.743:1** in dark against the same card,
- * clearing the 3:1 non-text contrast bar in both.
+ * `base-content/50` measures **3.401:1** in light and **4.769:1** in dark against the same card,
+ * clearing the 3:1 non-text contrast bar in both. (PET-23 recorded 3.382 and 4.743; PET-64's
+ * re-measurement through a rebuilt harness reports the figures above, and the third decimal is
+ * compositing noise rather than a change - what matters is that both runs clear the bar and both
+ * report `base-300` failing it in the same breath.)
  *
  * It and `CATEGORY_FILL_NEUTRAL` below are the same colour by construction - Tailwind's `/50`
  * modifier compiles to exactly the `color-mix` that one is written as - which is what keeps a
@@ -243,11 +262,18 @@ export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
  * daisyUI's `currentColor` drop shadow into an opaque smudge, and a fallback that reintroduced it
  * would reintroduce that bug on exactly the path nobody looks at.
  *
- * **This stopped being the Uncategorized slice's colour at PET-64**, which is worth knowing
- * because the note that used to live here argued at length that it was. That category carries
- * `warning-content` now and resolves through `CATEGORY_DOT` like any other. The contrast argument
- * still holds for what remains - the backend's orphan fold means an unresolvable row can still be
- * real money - so the measurement stays rather than reverting to `base-300`.
+ * **It is the Uncategorized slice's colour again, and the round trip is worth recording.** PET-64
+ * moved that category onto `warning-content` and left a note here saying this had "stopped being"
+ * its colour. Nobody had measured `warning-content`: it is **1.713:1** against the dark card, so
+ * the change quietly undid the fix PET-23 had made for exactly this row, on exactly this argument.
+ * The review of PET-64 caught it and the category is back on `base-content/50` - as a real
+ * seventeenth entry in `COLOUR_TOKENS` this time, so it resolves through `CATEGORY_DOT` like any
+ * other colour rather than through this constant.
+ *
+ * So the two are now the same colour by two different routes, which is intended: this one answers
+ * for a category that could not be resolved *at all*, and the map entry answers for the
+ * `Uncategorized` row. Both are "spend nobody can attribute", both can be real money through the
+ * backend's orphan fold, and there is no reason for them to look different.
  */
 export const CATEGORY_DOT_NEUTRAL = 'bg-base-content/50';
 

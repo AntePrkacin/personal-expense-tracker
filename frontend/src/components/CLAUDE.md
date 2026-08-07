@@ -76,13 +76,13 @@ their markup.
 
 - **`ui/categoryColour.ts` holds four maps and four lookups as of PET-64, and the keys are the
   contract's own unions.** Read the bullet below for the three colour maps, which are unchanged in
-  shape; three things about them changed underneath. The keys are the **sixteen daisyUI semantic
+  shape; three things about them changed underneath. The keys are the **seventeen daisyUI semantic
   tokens** rather than eight colour words, because `categories.color` stores the token verbatim -
   a hex was incoherent, not merely indirect, since `primary` is valued differently per theme and
   several categories have no single hex at all. The hex bridge (`CATEGORY_COLOUR_BY_HEX`) is
   **gone** with it, so the three lookups take a token and normalise no case. And the keys are read
   out of `components['schemas']['CreateCategoryDto']['color']`, which makes each `Record` an
-  exhaustiveness proof: a seventeenth token backend-side breaks this build until the map covers
+  exhaustiveness proof: an eighteenth token backend-side breaks this build until the map covers
   it. That guarantee is the whole payoff of the allowlist, and it is why skipping `api:sync` is
   catastrophic rather than untidy - the union degrades to `string`, `Record<string, string>`
   accepts any subset of keys, and every tile renders grey with the build green.
@@ -127,11 +127,17 @@ their markup.
   **3.401:1** light and **4.769:1** dark through the same harness.
   **What reaches those greys narrowed sharply at PET-64.** They used to answer for the
   `Uncategorized` fallback, whose `#98A0AE` was outside the palette on purpose, and for any
-  unknown hex a category might carry. Neither exists now: the fallback carries `warning-content`
-  and resolves like any other category, and `color` is a closed enum the API validates. What is
-  left is a `categoryId` that matched nothing in the account's list. The contrast measurement
-  still earns its place, because the backend's orphan fold means an unresolvable row can still be
-  real money.
+  unknown hex a category might carry. Neither exists now: the fallback resolves like any other
+  category, and `color` is a closed enum the API validates. What is left is a `categoryId` that
+  matched nothing in the account's list. The contrast measurement still earns its place, because
+  the backend's orphan fold means an unresolvable row can still be real money.
+  **The fallback is back on this exact colour, by a different route, and the round trip is worth
+  knowing.** PET-64 moved it to `warning-content` on the claim that a real theme token is visible
+  in both themes; measured, that is **1.713:1** against the dark card, so the change silently
+  undid the fix PET-23 had made for this row on this argument. It carries `base-content/50` again
+  as a real seventeenth entry in the contract's enum, so it resolves through `CATEGORY_DOT` like
+  any other colour rather than through the neutral constant - the two are the same colour reached
+  two ways, deliberately, since both mean "spend nobody can attribute".
 
 ## The direct children
 

@@ -25,7 +25,7 @@
  */
 
 /**
- * The sixteen daisyUI semantic colour tokens, verbatim as the class suffix.
+ * The seventeen daisyUI semantic colour tokens, verbatim as the class suffix.
  *
  * Stored on `categories.color` as written here, not as a hex. Hex is not merely
  * indirect, it is **incoherent**: `primary` is valued differently per theme, so
@@ -33,8 +33,17 @@
  * `#edf1fe`) have no single hex, and a stored one would record one value and
  * paint the other half the time.
  *
- * The `base-*` tokens are deliberately absent. They are the page's own surfaces,
- * so a category painted in one is a category painted in nothing.
+ * The `base-100/200/300` surfaces are deliberately absent. They are the page's
+ * own backgrounds, so a category painted in one is a category painted in
+ * nothing - `base-300` measures 1.16:1 against the card and PET-22 and PET-23
+ * each rejected it by name after measuring it.
+ *
+ * **`base-content/50` is the one exception and it is not a surface**, it is the
+ * *ink* on those surfaces at half strength - a mid grey in light and a light
+ * grey in dark, measured 3.401:1 and 4.769:1 against the card. It is here
+ * because the sixteen semantic tokens cannot supply a muted colour that is
+ * visible in both themes, which is a measured fact rather than an impression;
+ * see the table on `COLOUR_CONTRAST` below.
  */
 export const COLOUR_TOKENS = [
   'primary',
@@ -53,9 +62,60 @@ export const COLOUR_TOKENS = [
   'warning-content',
   'error',
   'error-content',
+  'base-content/50',
 ] as const;
 
 export type ColourToken = (typeof COLOUR_TOKENS)[number];
+
+/**
+ * What each token measures against the card it is drawn on, light then dark.
+ *
+ * **Measured, not estimated**, in headless Chromium against the installed
+ * daisyUI, by painting each token over `base-100` on a canvas and computing the
+ * WCAG ratio - the method `frontend/CLAUDE.md` requires, because Chromium
+ * reports `oklch()` and a token carrying an alpha means nothing until it is
+ * composited. The harness is cross-validated: it reports `base-300` at 1.16
+ * against PET-22's independently recorded 1.157, and `base-content/50` at
+ * 3.401 / 4.769 against PET-23's own figures for the same colour.
+ *
+ * **The number that matters is that only `primary` and `secondary` clear 3:1 in
+ * both themes.** Every other semantic token is near-invisible in one of them,
+ * because daisyUI pairs each colour with a `-content` that is deliberately at
+ * the opposite end of the lightness range - which is exactly what makes it
+ * legible *as text on its own colour* and exactly what makes it illegible as a
+ * fill on the page's own surface. That is a property of the design system, not
+ * of any one assignment here, so it cannot be fixed by re-picking a colour:
+ * twelve categories cannot all be distinct and all clear 3:1.
+ *
+ * PET-64 accepted that for the twelve category templates, on the argument its
+ * PR records - the ring is `aria-hidden`, the legend names every slice in real
+ * text, and every glyph clears 3:1 on its own tile, so colour carries no
+ * information WCAG 1.4.11 governs. This table exists so the next person weighing
+ * that decision argues with numbers instead of re-deriving them, and so nobody
+ * writes "visible in both themes" about a token again without looking.
+ *
+ * Not exported to the API and not a runtime check - it is documentation with a
+ * type on it, kept beside the list it describes so the two cannot drift.
+ */
+export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
+  primary: [8.321, 3.399],
+  'primary-content': [1.232, 14.037],
+  secondary: [3.67, 4.316],
+  'secondary-content': [1.208, 13.109],
+  accent: [1.903, 8.322],
+  'accent-content': [9.686, 1.635],
+  neutral: [19.895, 1.256],
+  'neutral-content': [1.269, 12.48],
+  info: [2.221, 7.13],
+  'info-content': [14.073, 1.125],
+  success: [1.959, 8.084],
+  'success-content': [10.034, 1.578],
+  warning: [1.763, 8.983],
+  'warning-content': [9.245, 1.713],
+  error: [2.864, 5.53],
+  'error-content': [15.702, 1.009],
+  'base-content/50': [3.401, 4.769],
+};
 
 /**
  * The thirteen lucide icon names this app imports, in lucide's own kebab-case.

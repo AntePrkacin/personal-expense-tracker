@@ -66,7 +66,7 @@ export function TransactionRow({ transaction, category, query }: TransactionRowP
               separates them for a sighted reader rather than an accessible channel.
 
               No text colour stated here: `ui/categoryColour.ts` pairs each background with
-              its content partner, so the glyph's `currentColor` is legible on all sixteen
+              its content partner, so the glyph's `currentColor` is legible on all seventeen
               tokens and on the neutral fallback. `rounded-field` is daisyUI's field radius,
               the theme's answer for a small tile. */}
           <span

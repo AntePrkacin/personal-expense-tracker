@@ -348,7 +348,7 @@ export interface components {
              * @example secondary
              * @enum {string}
              */
-            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
             /**
              * @description A lucide icon name, in lucide’s own kebab-case.
              * @example utensils
@@ -371,7 +371,7 @@ export interface components {
              * @example accent-content
              * @enum {string}
              */
-            token: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            token: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
             /**
              * @description What to show beside it.
              * @example Pine
@@ -525,7 +525,7 @@ export interface components {
              * @example success
              * @enum {string}
              */
-            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
             /**
              * @description Nullable because the column is, not because a new category may omit one:
              *     `CreateCategoryDto.icon` is required as of PET-64 and `UpdateCategoryDto`
@@ -634,7 +634,7 @@ export interface components {
              * @example success
              * @enum {string}
              */
-            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
             /** @description Major units (e.g. 400.00), stored as integer cents. Omit for no cap. */
             monthlyCap?: number;
             /**
@@ -665,7 +665,7 @@ export interface components {
              * @example success
              * @enum {string}
              */
-            color?: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            color?: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
             /** @description Major units. `null` clears the cap, leaving the category uncapped. */
             monthlyCap?: number | null;
             /**
@@ -687,7 +687,7 @@ export interface components {
              * @example success
              * @enum {string}
              */
-            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
             /** @description Major units spent in this category during the current period. */
             spent: number;
         };
@@ -709,7 +709,7 @@ export interface components {
              * @example success
              * @enum {string}
              */
-            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
             /**
              * @description **Here for the recent-transactions card, not for the donut.**
              *
