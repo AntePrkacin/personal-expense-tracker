@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Category colors, icons and descriptions preview</title>
+
+    <!--
+      Pinned to exactly what frontend/package.json installs, so the colours on this page are
+      the colours the app paints. An earlier version of this file pinned daisyUI 4.12.10 and
+      the Tailwind v3 Play CDN, where the four `*-content` tokens all resolve to pure black -
+      three of these tiles rendered identically and none of them matched the app.
+
+      daisyui.css already carries the `light` and `dark` themes, which is the pair
+      globals.css registers, so themes.css (all 35) is deliberately not loaded.
+    -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+    <script src="https://unpkg.com/lucide@1.29.0"></script>
+</head>
+<body class="bg-base-200 text-base-content min-h-screen p-8">
+    <div class="card bg-base-100 mx-auto max-w-4xl shadow-sm">
+      <div class="card-body gap-0">
+
+        <div class="border-base-300 mb-6 flex items-center justify-between border-b pb-4">
+            <h1 class="text-3xl font-bold">Category final preview</h1>
+            <!--
+              daisyUI's own theme-controller: the checkbox switches the theme in CSS, so this
+              page needs no theme JavaScript. The app itself has no controller - it selects
+              light/dark from the OS - and this one exists only so both themes can be compared
+              side by side here.
+            -->
+            <label class="flex cursor-pointer items-center gap-2">
+                <i data-lucide="sun" class="size-5" aria-hidden="true"></i>
+                <span class="sr-only">Dark theme</span>
+                <input type="checkbox" value="dark" class="toggle theme-controller" />
+                <i data-lucide="moon" class="size-5" aria-hidden="true"></i>
+            </label>
+        </div>
+
+        <p class="mb-8 max-w-2xl opacity-80">
+            The proposed 13 categories. Each icon sits on the daisyUI background token named
+            beside it, with the paired content colour on the glyph. Toggle above to check both
+            themes - a token that reads well in light does not necessarily read at all in dark.
+        </p>
+
+        <div class="space-y-6">
+
+            <!-- Groceries -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-success text-success-content rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="shopping-basket" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Groceries <span class="ml-2 text-sm font-normal italic">(success)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Food, beverages, and household essentials bought to consume at home.</p>
+                </div>
+            </div>
+
+            <!-- Dining Out -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-secondary text-secondary-content rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="utensils" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Dining Out <span class="ml-2 text-sm font-normal italic">(secondary)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Restaurants, coffee shops, takeout, delivery, and fast food.</p>
+                </div>
+            </div>
+
+            <!-- Transportation -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-info text-info-content rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="car" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Transportation <span class="ml-2 text-sm font-normal italic">(info)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Gas, public transit, rideshares, parking, and vehicle maintenance.</p>
+                </div>
+            </div>
+
+            <!-- Utilities -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-accent text-accent-content rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="zap" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Utilities <span class="ml-2 text-sm font-normal italic">(accent)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Essential home services like electricity, water, internet, and phone plans.</p>
+                </div>
+            </div>
+
+            <!-- Healthcare -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-error text-error-content rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="heart-pulse" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Healthcare <span class="ml-2 text-sm font-normal italic">(error)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Doctor visits, pharmacy, dental, therapy, and medical bills.</p>
+                </div>
+            </div>
+
+            <!-- Entertainment -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-primary text-primary-content rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="tv" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Entertainment <span class="ml-2 text-sm font-normal italic">(primary)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Movies, concerts, gaming, hobbies, and streaming subscriptions.</p>
+                </div>
+            </div>
+
+            <!-- Education -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-primary-content text-primary rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="graduation-cap" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Education <span class="ml-2 text-sm font-normal italic">(primary-content)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Tuition, courses, books, and school supplies.</p>
+                </div>
+            </div>
+
+            <!-- Travel -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-secondary-content text-secondary rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="plane" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Travel <span class="ml-2 text-sm font-normal italic">(secondary-content)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Flights, hotels, rental cars, and vacation expenses.</p>
+                </div>
+            </div>
+
+            <!-- Personal Care -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-accent-content text-accent rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="scissors" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Personal Care <span class="ml-2 text-sm font-normal italic">(accent-content)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Haircuts, gym memberships, cosmetics, and hygiene products.</p>
+                </div>
+            </div>
+
+            <!-- Gifts -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-success-content text-success rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="gift" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Gifts <span class="ml-2 text-sm font-normal italic">(success-content)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Presents for birthdays and holidays, as well as charity and donations.</p>
+                </div>
+            </div>
+
+            <!-- Family & pets -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-info-content text-info rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="paw-print" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Family &amp; pets <span class="ml-2 text-sm font-normal italic">(info-content)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Childcare, baby supplies, pet care, vet bills, and family activities.</p>
+                </div>
+            </div>
+
+            <!-- Loans & Debt -->
+            <div class="border-base-300 flex items-center gap-6 border-b pb-4">
+                <div class="bg-warning text-warning-content rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <i data-lucide="landmark" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Loans &amp; Debt <span class="ml-2 text-sm font-normal italic">(warning)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Mortgage payments, car loans, credit card payments, and student loans.</p>
+                </div>
+            </div>
+
+            <!-- Uncategorized -->
+            <div class="flex items-center gap-6">
+                <div class="bg-warning-content text-warning rounded-box flex size-16 shrink-0 items-center justify-center shadow-sm">
+                    <!-- circle-question-mark, not circle-help: the latter is a deprecated alias
+                         of it in the installed lucide, and this file is read as a spec. -->
+                    <i data-lucide="circle-question-mark" class="size-8" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Uncategorized <span class="ml-2 text-sm font-normal italic">(warning-content)</span></h2>
+                    <p class="mt-1 text-sm italic opacity-70">Any transaction that doesn't have its own category.</p>
+                </div>
+            </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
