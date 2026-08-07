@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { CategoryTemplate } from '@/lib/categoryTemplates';
@@ -388,6 +388,77 @@ describe('AC4: Back keeps both steps values', () => {
     renderScreen();
 
     expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
+  });
+});
+
+describe('a stored pick that is no longer offered', () => {
+  // The membership filter `parseDraft` lost at PET-64, restored where the two
+  // halves actually meet. That module used to drop a value the picker could not
+  // have produced; with an admin-managed list it is React-free and fetches
+  // nothing, so it only dedupes and caps now.
+  //
+  // Left unreconciled, a dead id rides the draft to step 3, `AuthService`
+  // answers 400 and `RegisterForm` renders its generic failure line - and the
+  // draft is untouched by a rejected submit, so every retry sends the same dead
+  // id and the one control that could clear it is a chip the screen no longer
+  // draws. The user cannot leave onboarding without emptying sessionStorage.
+
+  const withStored = (categories: string[]) =>
+    sessionStorage.setItem(
+      SETUP_DRAFT_KEY,
+      JSON.stringify({ currency: 'USD', budget: '2,000', categories }),
+    );
+
+  it('drops the dead id and keeps the live ones', async () => {
+    withStored(['id-groceries', 'id-retired', 'id-omega']);
+
+    renderScreen();
+
+    await waitFor(() => expect(storedCategories()).toEqual(['id-groceries', 'id-omega']));
+  });
+
+  it('rewrites the survivors in the offered order', async () => {
+    // Same rebuild `toggle` does, so a reconciled draft and a toggled one are
+    // canonical in the same way rather than in two subtly different ways.
+    withStored(['id-omega', 'id-retired', 'id-groceries']);
+
+    renderScreen();
+
+    await waitFor(() => expect(storedCategories()).toEqual(['id-groceries', 'id-omega']));
+  });
+
+  it('leaves the rest of the draft alone', async () => {
+    withStored(['id-retired']);
+
+    renderScreen();
+
+    await waitFor(() => expect(storedCategories()).toEqual([]));
+    expect(storedDraft()).toMatchObject({ currency: 'USD', budget: '2,000' });
+  });
+
+  it('writes nothing at all when every stored id is still offered', async () => {
+    // The ordinary visit. The effect is guarded on "would this change
+    // anything", so it must not cost a sessionStorage write per render - and
+    // must not fight the provider's own no-write-on-mount rule.
+    renderScreen();
+
+    await waitFor(() => expect(chips().length).toBeGreaterThan(0));
+    expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
+  });
+
+  it('never reconciles against an empty list, which is the degraded read', async () => {
+    // **The exception that matters most.** `readCategoryTemplates` degrades to
+    // `[]` rather than throwing, so "no chips" means "the backend could not be
+    // read" as much as it means "an admin disabled everything" - deliberately
+    // indistinguishable, because Continue is unconditional (A4). Reconciling
+    // here would read a momentary outage as proof that every chip the user
+    // picked is gone and silently delete a correct selection.
+    withStored(['id-groceries', 'id-omega']);
+
+    renderScreen([]);
+
+    await waitFor(() => expect(screen.getByRole('heading')).toBeInTheDocument());
+    expect(storedCategories()).toEqual(['id-groceries', 'id-omega']);
   });
 });
 

@@ -381,7 +381,24 @@ a rewording. `readCategories` **cannot filter a canonical list any more**, becau
 canonical list in a React-free module that fetches nothing - duplicating the fetched one here
 would be a second authority that goes stale. So it dedupes and caps and nothing else, membership
 becomes the server's to reject (a 400 from `AuthService`), and the stored order is the click
-order rather than the designed one. Nothing depends on that order: the seed writes categories in
+order rather than the designed one.
+
+**"Membership becomes the server's to reject" was not a sufficient answer, and the review of
+PET-64 is where that came out.** The server does reject it, and the rejection is unrecoverable:
+`RegisterForm` renders a 400 as its generic failure line, a rejected submit leaves the draft
+untouched, so every retry sends the same dead id - and the one control that could clear it is a
+chip step 2 no longer draws. The user cannot leave onboarding without emptying sessionStorage by
+hand. Three ordinary ways in: an admin disables a template between two visits, a tab sits open
+across a deploy, or the value came from that tab's devtools console. So the filter is restored
+in **`CategoryPicker`**, the one place holding both the stored pick and the offered list, as a
+mount effect guarded on "would this change anything" - an effect rather than a render-phase
+adjustment because it writes to sessionStorage and notifies a store, which is a side effect that
+does not belong in render. Two things about it not to undo. `toggle`'s own rebuild is **not** a
+substitute, because it fires only if the user touches a chip and the broken case is the user who
+clicks straight through. And it **never reconciles against an empty list**: `readCategoryTemplates`
+degrades to `[]` rather than throwing, so an empty list is a failed read as much as it is an
+empty palette, and treating it as authoritative would delete a correct selection over a
+momentary outage - the worse of the two failures, on the likelier of the two causes. Nothing depends on that order: the seed writes categories in
 the template's own `sort_order` backend-side. The cap is a literal matching `RegisterDto`'s own,
 which is the half of the old guarantee that survives - it is what keeps a devtools-written draft
 inside `@ArrayMaxSize`.
