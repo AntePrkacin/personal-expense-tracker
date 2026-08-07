@@ -1359,6 +1359,48 @@ record it.
   global `fetch` and passes `RequestInit` through untouched. Recorded here because the old
   README was its only home outside a frozen plan file.
 
+---
+
+### Income is not a category, and adding one would be the worst way to support it
+
+This app has no concept of money coming in, and that is recorded rather than overlooked:
+`docs/project-management/01-brief-personal-expense-tracker.md` says "every amount is an expense;
+nothing records money coming in", and ADD-4 with A13 says "amounts are entered as positive numbers
+and rendered as negative expenses everywhere else. There is no income concept."
+`transactions.amount_cents` is a plain magnitude with no sign, and `formatNegative` applies the
+minus at render time. So "expense" is not a property of a row here, it is an assumption baked into
+the type.
+
+The question that keeps arising is whether a salary could just be a category, either a new
+`Income` one or folded into an existing one. **It cannot, and the category answer is worse than
+doing nothing, because it fails silently.** A positive amount in an `Income` category is
+indistinguishable from spending to every aggregate in the app: `DashboardService`'s `spent` sums
+the transaction list, so payday inflates it; the donut renders Income as the largest slice of
+"spending by category"; `averagePerDay` becomes meaningless; a weekly bar spikes; `BudgetCard` can
+read over budget *because* the user got paid; `topCategory` is always Income. A `monthlyCap` on
+income is nonsense, and the status bands invert with it, so `over` would mean "earned more than
+expected" and render in the danger colour. `RuleBasedInsightGenerator` would warn about the
+over-cap and project income as spend. Nothing there throws; the numbers are simply wrong on every
+screen.
+
+**The axis income differs on is the transaction, not the category.** Supporting it means a sign or
+a `type` on `transactions` - additively, so it satisfies this file's own rule about a user-scope
+migration running unattended one user at a time - and then every aggregate in `CategoriesService`,
+`TransactionsService`, `DashboardService` and `RuleBasedInsightGenerator` filtering or signing on
+it. That is a large ticket and it does not exist.
+
+**The tempting middle option is an `isIncome` flag on the category, and it should be rejected.**
+Aggregates would exclude flagged categories, which is cheap, but it makes a row's meaning depend on
+its category, so recategorising a transaction silently flips its sign. The case that settles it is
+**refunds**: a supermarket refund should reduce Groceries rather than count as income, and no
+category-level flag can express that while a transaction-level sign can.
+
+**PET-64 makes this cheaper later rather than harder.** Once category templates live in central,
+income categories are a `kind` column (`expense` | `income`) on `category_templates` plus a filter
+in the picker: admin-managed rows, no new mechanism, no user-data migration. So the template work
+is worth doing before this rather than after, and this entry exists so the next person costing
+income starts from the transaction model instead of from the category list.
+
 ## Operational
 
 ### Unverified registrations accumulate, and hold their address

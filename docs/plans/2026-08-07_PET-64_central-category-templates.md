@@ -284,10 +284,17 @@ Mind the throttler on the public route, and remember that a bare `@SkipThrottle(
 ### 6. Registration and seeding
 
 - `RegisterDto.categories` becomes template **ids**. `@IsIn(STARTER_CATEGORY_NAMES)` cannot
-  survive, so it becomes a shape check plus the existing `@ArrayUnique`/`@ArrayMaxSize`, with
-  membership resolved against central. An unknown id is a 400, consistent with the existing rule
-  that "a malformed address is a fact about the input, not about the account", and it leaks no
-  account existence.
+  survive, so it becomes a shape check plus `@ArrayUnique`, with membership resolved against
+  central. An unknown id is a 400, consistent with the existing rule that "a malformed address is
+  a fact about the input, not about the account", and it leaks no account existence.
+- **`@ArrayMaxSize` needs a real number, and this is not a detail.** `register.dto.ts:104` reads
+  `@ArrayMaxSize(STARTER_CATEGORY_NAMES.length)`, deriving its bound from the constant this ticket
+  deletes. There is no compile-time length once the list is a table, and **this is a `@Public()`
+  unauthenticated endpoint**, so dropping the bound leaves an unbounded array on the one route
+  anybody can post to. Pick a fixed literal ceiling well above any plausible template count and
+  say in a comment that it is a hard cap rather than the list's length. Do **not** make it a count
+  query: that would put a database read in front of validation on the route whose timing
+  properties `backend/CLAUDE.md` is most careful about.
 - That lookup is one indexed central read and must stay **ahead of** the floated token-issue and
   mail-send, so the empty-202 timing property `backend/CLAUDE.md` documents still holds.
 - `users.onboarding_payload` now stashes ids.
@@ -304,9 +311,18 @@ Mind the throttler on the public route, and remember that a bare `@SkipThrottle(
 - **`frontend/src/app/setup/starterCategories.ts` is deleted**, and with it the
   `AssertNever<Exclude<...>>` guard. The chip list is data now, so `api.d.ts` cannot carry a union
   for it.
-- `/setup/categories` becomes async and fetches the public endpoint server-side. It cannot use
-  `authorizedGet`, since there is no session yet, so it goes through `lib/backend.ts` directly.
-  Follow `lib/transactions.ts` for the classified-failure policy.
+- **`/setup/categories` becoming async is a props refactor across four files, not one clause.**
+  Today `page.tsx` is a thin wrapper returning `<SetupCategoriesScreen />`, the screen is
+  synchronous, and both it and `CategoryPicker` read `STARTER_CATEGORIES` by import. Once the list
+  is fetched, the split has to become the one `frontend/src/app/CLAUDE.md` already calls "the shape
+  the other three should copy": **`page.tsx` async and doing the read, the screen synchronous and
+  taking the categories as a required prop**, passing them down to `CategoryPicker` as a prop too.
+  That is not stylistic. Storybook cannot render an async Server Component, and the story harness
+  builds each story from `render` or `meta.component` while never applying the meta's decorators,
+  so a screen that fetches for itself cannot have a story at all. `SetupCategoriesScreen.stories.tsx`
+  and `SetupCategoriesScreen.test.tsx` then hand in stand-in data instead of importing the constant.
+- The read itself cannot use `authorizedGet`, since there is no session yet, so it goes through
+  `lib/backend.ts` directly. Follow `lib/transactions.ts` for the classified-failure policy.
 - **`app/setup/draft.ts` loses a guarantee, and this plan states it rather than letting it be
   discovered.** `parseDraft` currently drops unknown category names by filtering against the
   canonical list. With ids it can only dedupe and cap; membership becomes the server's to reject.
@@ -444,7 +460,11 @@ nine"). The prose copies are in `starter-categories.ts`, `create-category.dto.ts
 - [ ] `npm run api:sync` from the root; commit both artifacts
 - [ ] Rewrite `categoryColour.ts` and its test, including `categoryDotClass` and
       `CATEGORY_DOT_NEUTRAL`
-- [ ] Delete `starterCategories.ts`; make `/setup/categories` async; move the draft to ids
+- [ ] Give `RegisterDto.categories` a literal `@ArrayMaxSize` ceiling, since its bound currently
+      comes from the deleted constant and the route is public
+- [ ] Delete `starterCategories.ts`; split `/setup/categories` into an async page and a
+      prop-taking screen, thread the list through `CategoryPicker`, and re-point its stories and
+      tests at stand-in data; move the draft to ids
 - [ ] Both `<ShoppingBag />` sites draw the real icon: `TransactionRow` and
       `[id]/CategoryContextCard`; widen `CategoryLabel` with `icon`
 - [ ] Repoint `seed-showcase.ts` at template ids; fix its two name lookups and its count comment
