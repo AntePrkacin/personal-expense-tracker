@@ -77,13 +77,18 @@ their markup.
 - **`ui/categoryColour.ts` holds three maps and three lookups, and which one you want depends on
   what is being painted.** `CATEGORY_TILE` (background plus its `-content` half) for an icon tile,
   `CATEGORY_DOT` (background alone) for a mark with no content on it, and `CATEGORY_FILL`
-  (`var(--color-*)` strings) for an **SVG `fill`**, which PET-23's donut slices are. The third
-  exists because a Tailwind class is not a valid value for a presentation attribute: `fill="bg-error"`
-  paints nothing at all, with no error anywhere. Each has a `categoryTileClass` / `categoryDotClass`
-  / `categoryFillVar` lookup taking a stored hex, all three carrying the same `Object.hasOwn` guard
-  and uppercase normalisation, and all three falling back to a neutral grey. The suite pins
-  the three maps against each other, so a ninth colour added to one and not the others fails there
-  rather than leaving a hole in a ring.
+  (`var(--color-*)` strings) for an **SVG `fill`**, which PET-23's donut slices are. The second
+  exists because daisyUI's `status` draws its shadow from `currentColor`, so a tile value turns
+  that shadow into an opaque smudge; the third because a Tailwind class is not a valid value for a
+  presentation attribute, so `fill="bg-error"` paints nothing at all, with no error anywhere. Each
+  has a `categoryTileClass` / `categoryDotClass` / `categoryFillVar` lookup taking a stored hex, all
+  three carrying the same `Object.hasOwn` guard and uppercase normalisation, and all three falling
+  back to a neutral grey. The suite pins the three maps against each other, so a ninth colour added
+  to one and not the others fails there rather than leaving a hole in a ring.
+  **The eight colour words map onto theme colours nearest-match, and it is lossy on purpose**:
+  orange and yellow both land on `warning`, accepted because category colours are decoration. The
+  words are the stable identity the category rows and the picker use, and only the rendered hue
+  follows the theme - so do not "fix" the collision by reaching for a raw palette value.
   **Two neutral greys, not one, and the review of PET-23 is why.** The tile keeps `base-300`; the
   dot and the fill are `base-content/50`, which is the same colour written twice (Tailwind's `/50`
   compiles to the `color-mix` the fill spells out). The split is whether anything is drawn on top:
@@ -94,15 +99,6 @@ their markup.
   being a nicety because the backend's orphan fold routes real money into that slice, so an
   invisible one is the donut's ring failing to close by another route. The replacement measures
   **3.401:1** light and **4.769:1** dark through the same harness.
-
-- **`ui/categoryColour.ts` maps the eight stored colour words onto theme colours**,
-  nearest-match and lossy on purpose: orange and yellow both land on `warning`, accepted because
-  category colours are decoration. The colour words are the stable identity the category rows
-  and the picker use; only the rendered hue follows the theme. Do not "fix" the collision by
-  reaching for a raw palette value. It exports the tile **and** `CATEGORY_DOT`, the background
-  without its `-content` half, because daisyUI's `status` draws a shadow from `currentColor` -
-  a tile value turns that shadow into an opaque smudge, and its suite pins the two maps
-  together so they cannot drift.
 
 ## The direct children
 
