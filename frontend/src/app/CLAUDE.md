@@ -1352,9 +1352,15 @@ hand-written copy of `/transactions`.
 has, and is the first place that gap renders as a wrong word instead of a plausible one.**
 `formatRelativeDate` defaults its `today` to the frontend host's own local zone, while
 `daysLeft`, the trend chart's highlight and the buckets themselves are all resolved backend-side
-against `APP_TIMEZONE`. On a host running UTC, in the hour between midnight in the two zones, a
-transaction the backend counts as today's can read a day's date here instead of "Today". Not
-fixed here, deliberately: the honest fix is a zone the frontend reads too, and `docs/TODO.md`
+against `APP_TIMEZONE`. The window is the **full zone offset** rather than an hour, which is the
+correction PET-22's review already made to `TrendCard`'s version of this paragraph above, and it
+runs in both directions. A host _ahead_ of the configured zone gets the benign one: a transaction
+the backend counts as today's reads its short date instead of "Today". A host _behind_ it - which
+a UTC deployment against `Europe/Zagreb` is - gets the worse one, because the frontend's `today`
+is then a day **earlier** than the backend's, so yesterday's transaction reads "Today" while
+today's reads its short date. One row is missing a word and the other asserts something false,
+which is what makes this the first figure on the dashboard whose skew is not merely plausible.
+Not fixed here, deliberately: the honest fix is a zone the frontend reads too, and `docs/TODO.md`
 records it beside the per-user timezone item it already owes.
 
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of

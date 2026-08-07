@@ -1279,13 +1279,22 @@ dashboard's recent-transactions caption calls `formatRelativeDate`, whose defaul
 `todayIsoDate()` off the frontend host's own local zone - the frontend has no `APP_TIMEZONE`
 equivalent to read instead, confirmed by `rg -in --hidden 'APP_TIMEZONE|process.env.TZ|timeZone'
 frontend/src frontend/.env.example -g '!node_modules'` finding nothing but the two test files
-that set `TZ` on themselves. On a host running UTC, in the hour between midnight in Zagreb and
-midnight UTC, a transaction the backend already counts as today's reads its short date instead
-of "Today" here. Every other figure on the page has the identical mismatch and it is silent,
-because a wrong number in that window still looks plausible; this is the first place it prints a
-wrong *word*, which is the only reason it is worth a second entry rather than folding into the
-one above. The fix is the same one: a zone the frontend reads too, not a second guess bolted
-onto one formatter.
+that set `TZ` on themselves. The window is the **full zone offset**, not an hour - two hours
+against `Europe/Zagreb` under CEST and one under CET - the same correction PET-22's review made
+to this entry's neighbour above.
+
+**It runs in both directions, and the one worth fixing first is the false positive.** With the
+frontend host *behind* the configured zone, which a UTC deployment against `Europe/Zagreb` is,
+the frontend's `today` is a day earlier than the backend's for the length of the offset: so a
+transaction entered *yesterday* reads "Today" and the one entered *just now* reads its short
+date. At 00:30 in Zagreb on 7 August the frontend answers `2025-08-06` while the backend's period
+day is `2025-08-07`, and both rows are mislabelled. Ahead of the configured zone only the benign
+direction happens - a transaction the backend counts as today's reads its short date instead of
+"Today". Every other figure on the page has the identical mismatch and it is silent, because a
+wrong number in that window still looks plausible; this is the first place it prints a wrong
+*word*, and the only place it prints one that is affirmatively false rather than merely absent.
+That is why it is worth a second entry rather than folding into the one above. The fix is the
+same one: a zone the frontend reads too, not a second guess bolted onto one formatter.
 
 ### Transaction search is case-insensitive for ASCII only
 

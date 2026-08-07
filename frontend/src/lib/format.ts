@@ -205,10 +205,13 @@ export function formatIsoDayMonth(iso: string): string {
  * The whole-day difference from `from` to `to`, or `null` when either is not a calendar date.
  *
  * Both sides go through `partsFromIso` and the subtraction happens on `Date.UTC` of those
- * parts rather than on the local `Date`s `dateFromIso` would hand back - the local pair are 24
- * hours apart on most days and not on the day either side crosses a DST transition, which would
- * round "Yesterday" to "Today" or back for exactly one day a year. `Date.UTC` never observes a
- * DST transition, so this is day arithmetic on the calendar parts and nothing about an instant.
+ * parts rather than on the local `Date`s `dateFromIso` would hand back. Those are 24 hours
+ * apart on most days and 23 or 25 across a DST transition, so a local subtraction would be
+ * relying on `Math.round` to absorb the hour - which it does, for a one-hour shift over one
+ * day. That is a narrow guarantee to build day arithmetic on: it holds only while the rounding
+ * stays, only for one-day gaps, and only for zones whose transition is an hour. `Date.UTC`
+ * never observes a transition at all, so this is arithmetic on the calendar parts and nothing
+ * about an instant, and the rounding is left in only to absorb float error.
  */
 function daysBetween(from: string, to: string): number | null {
   const fromParts = partsFromIso(from);
@@ -239,6 +242,12 @@ function daysBetween(from: string, to: string): number | null {
  * through `APP_TIMEZONE`. `docs/TODO.md` records the gap next to the per-user timezone item it
  * already owes; closing it needs a zone the frontend reads too; this formatter has no such
  * setting to reach for.
+ *
+ * That gap runs in **both** directions and the worse one is the false positive. With the host
+ * behind the configured zone, the frontend's `today` is a day earlier than the backend's for
+ * the length of the offset - so yesterday's transaction reads "Today" while today's reads its
+ * short date. One row is merely missing a word; the other asserts something untrue. Ahead of
+ * the configured zone it is the benign direction only, a missing "Today".
  */
 export function formatRelativeDate(iso: string, today: string = todayIsoDate()): string {
   const diff = daysBetween(iso, today);
