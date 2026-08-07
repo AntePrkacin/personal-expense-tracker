@@ -129,21 +129,21 @@ rows, taking `recentTransactions` and `categories` off one summary. A Server Com
 
 ## Tasks
 
-- [ ] Commit this plan alone and open the draft PR against
+- [x] Commit this plan alone and open the draft PR against
       `feat/PET-23-spending-by-category-donut`
-- [ ] `lib/format.ts`: `formatRelativeDate`, with cases for today, yesterday, older, a future date
+- [x] `lib/format.ts`: `formatRelativeDate`, with cases for today, yesterday, older, a future date
       and a zone behind UTC
-- [ ] `(app)/dashboard/RecentTransactionsCard.tsx` and its suite: three rows newest first, the
+- [x] `(app)/dashboard/RecentTransactionsCard.tsx` and its suite: three rows newest first, the
       relative captions, the coloured tile, the right-aligned negative amount, the "View all" href,
       one and two rows, an unresolvable category
-- [ ] `(app)/dashboard/page.tsx`: fill the recent slot
-- [ ] Stories: `Shell/Recent transactions` with the mock's three rows plus a one-row variant;
+- [x] `(app)/dashboard/page.tsx`: fill the recent slot
+- [x] Stories: `Shell/Recent transactions` with the mock's three rows plus a one-row variant;
       re-check `Screens/04 Dashboard` against node `21:4`
-- [ ] Docs: `frontend/CLAUDE.md` (the third date formatter, under Formatting and dates),
+- [x] Docs: `frontend/CLAUDE.md` (the third date formatter, under Formatting and dates),
       `frontend/src/app/CLAUDE.md` (the free join, and why the rows are not links), root
       `CLAUDE.md`, `docs/TODO.md` (the server zone against `APP_TIMEZONE`, beside the per-user
       timezone item)
-- [ ] Comment on PET-24 with the no-extra-read finding, the formatter's placement, and the zone gap
+- [x] Comment on PET-24 with the no-extra-read finding, the formatter's placement, and the zone gap
       this card surfaces without closing
 
 No `npm run api:sync`: nothing here changes a request or response body.
