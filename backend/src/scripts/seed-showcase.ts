@@ -105,11 +105,41 @@ function dateMonthsAgo(
 }
 
 /**
- * The showcase user, created and verified if this is the first run.
+ * What registration would have collected. Major units, like a real onboarding
+ * payload: `VerificationService` runs it through `toCents`.
+ */
+const ONBOARDING_PAYLOAD = {
+  firstName: 'Showcase',
+  lastName: 'User',
+  currency: 'USD',
+  monthlyBudget: BUDGET_CENTS / 100,
+  monthStartDay: 1,
+  categories: STARTER_CATEGORY_NAMES,
+};
+
+/**
+ * The showcase user, provisioned for whichever mode this run is targeting.
  *
- * Verification is what provisions everything, so it is driven through a real
- * login token rather than reaching past it. An account that already verified
- * has no onboarding payload left and skips straight through.
+ * Provisioning is driven through a real login token rather than reached past,
+ * so the account is built exactly the way verification builds one.
+ *
+ * **Two states need provisioning, not one, and reading `onboardingPayload`
+ * alone finds only the first.** A never-verified account still carries its
+ * payload, which is the obvious case. But an account verified in *local* mode
+ * has no `db_url` - local provisioning never calls the Platform API - and no
+ * payload either, because provisioning clears it strictly last. In cloud mode
+ * that account looks finished and has no database at all, so the seed would
+ * declare it ready and then die opening it. That is not hypothetical: it is
+ * what the first cloud run did, against a `dummy@spendifico.eu` a local run had
+ * left in `backend/databases/`.
+ *
+ * Re-stashing the payload puts such an account back into the state verification
+ * knows how to finish, which is the same "a resent link completes a
+ * half-provisioned account" path the backend already guarantees. Every step of
+ * it is idempotent: the database is skipped when `db_url` is set, the profile
+ * insert is `onConflictDoNothing`, and the category seed is skipped when any
+ * row exists. The payload is rewritten rather than reused, so a stale one from
+ * an interrupted run cannot decide this account's categories.
  */
 async function ensureShowcaseUser(
   app: INestApplicationContext,
@@ -120,16 +150,7 @@ async function ensureShowcaseUser(
 
   let user = await usersService.findByEmail(SHOWCASE_EMAIL);
   if (!user) {
-    await usersService.createPending(SHOWCASE_EMAIL, {
-      firstName: 'Showcase',
-      lastName: 'User',
-      currency: 'USD',
-      // The onboarding payload speaks major units; VerificationService runs it
-      // through toCents, the same as a real registration.
-      monthlyBudget: BUDGET_CENTS / 100,
-      monthStartDay: 1,
-      categories: STARTER_CATEGORY_NAMES,
-    });
+    await usersService.createPending(SHOWCASE_EMAIL, ONBOARDING_PAYLOAD);
     user = await usersService.findByEmail(SHOWCASE_EMAIL);
   }
 
@@ -137,7 +158,16 @@ async function ensureShowcaseUser(
     throw new Error(`Could not read back the showcase user ${SHOWCASE_EMAIL}.`);
   }
 
-  if (user.onboardingPayload) {
+  const verifiable = await usersService.findById(user.id);
+  if (!verifiable) {
+    throw new Error(`Could not read back the showcase user ${SHOWCASE_EMAIL}.`);
+  }
+
+  const missingCloudDatabase =
+    SEED_MODE === 'cloud' && verifiable.dbUrl === null;
+
+  if (verifiable.onboardingPayload || missingCloudDatabase) {
+    await usersService.stashOnboardingPayload(user.id, ONBOARDING_PAYLOAD);
     const rawToken = await loginTokenService.issue(user.id);
     await verificationService.verify(rawToken);
   }

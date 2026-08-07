@@ -34,7 +34,16 @@ a cloud one. Two consequences worth knowing:
 
 Re-running either command is safe. An existing showcase user is reused rather than duplicated, the
 profile is re-asserted, and the transactions are replaced wholesale inside one database
-transaction rather than appended to.
+transaction rather than appended to. Seeding cloud after seeding local is safe too: an account
+provisioned in local mode has no `db_url`, and the script re-provisions it rather than assuming a
+cleared onboarding payload means it is ready.
+
+**Do not point both modes at the same `DATABASE_DIR`.** The two modes use the same file paths -
+`app.db` and `users/<db-name>.db` - but cloud mode opens them as sync replicas and local mode as
+plain SQLite files. A directory that has been used for both ends up with a mix, and the local-mode
+leftovers are not replicas of anything. If you have seeded locally into `backend/databases/` and
+now want the cloud, either move the stale `users/*.db` files aside or point `DATABASE_DIR` at a
+different directory for one of the two.
 
 ## 1. Seeding the local environment
 
