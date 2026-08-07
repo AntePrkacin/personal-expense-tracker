@@ -296,6 +296,68 @@ describe('RuleBasedInsightGenerator', () => {
     });
   });
 
+  it('does not call a place you shop regularly a subscription', async () => {
+    // Konzum in four distinct months, which is what the rule used to consider
+    // sufficient - but several times a month and never the same amount. The
+    // showcase seed reported all 26 of its merchants this way.
+    const habit = [
+      ['2025-07-02', 41],
+      ['2025-07-19', 12],
+      ['2025-08-04', 63],
+      ['2025-08-22', 28],
+      ['2025-09-09', 17],
+      ['2025-10-01', 55],
+    ].map(([date, amount], i) =>
+      tx({
+        id: `k${i}`,
+        merchant: 'Konzum',
+        amount: amount as number,
+        date: date as string,
+      }),
+    );
+    build({ all: habit, current: [] });
+
+    const set = await generator.generate(USER_ID);
+
+    expect(
+      set?.cards.find((c) => c.title.includes('recurring')),
+    ).toBeUndefined();
+  });
+
+  it('names at most five subscriptions and counts the rest', async () => {
+    const months = ['2025-08', '2025-09', '2025-10'];
+    const seven = [
+      'Rent',
+      'Netflix',
+      'Spotify',
+      'Gym',
+      'HBO',
+      'iCloud',
+      'News',
+    ];
+    const all = seven.flatMap((merchant, index) =>
+      months.map((month) =>
+        tx({
+          id: `${merchant}-${month}`,
+          merchant,
+          // Descending, so the naming order is predictable: 70, 60, 50...
+          amount: 70 - index * 10,
+          date: `${month}-05`,
+        }),
+      ),
+    );
+    build({ all, current: [] });
+
+    const set = await generator.generate(USER_ID);
+    const card = set?.cards.find((c) => c.title.includes('recurring'));
+
+    expect(card).toEqual({
+      tone: 'neutral',
+      title: '7 recurring subscriptions',
+      body: 'Rent, Netflix, Spotify, Gym, HBO and 2 more total $280/mo',
+    });
+  });
+
   it('omits a rule that has nothing to say', async () => {
     // One uncapped category, one month of history, spend only in the current
     // period: no over-cap, no month-over-month, no recurring - projection only.

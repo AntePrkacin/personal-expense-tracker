@@ -473,6 +473,18 @@ calendar months (`RECURRING_MONTHS`), the number most likely to be tuned - which
 seam: a later `LlmInsightGenerator` replaces the whole class through the one `INSIGHT_GENERATOR`
 provider binding in `InsightsModule`, storage, the read and the frontend untouched.
 
+**Three months is necessary and nowhere near sufficient, and treating it as sufficient was a bug.**
+Anywhere a person shops regularly clears that bar exactly as easily as Netflix does, so a
+supermarket, a petrol station and a café were all reported as subscriptions. Two further conditions
+separate a subscription from a habit, and both are about behaviour rather than about guessing
+brands from a keyword list: it bills **once a month** (`charges === months`), where somewhere you
+shop is visited whenever you need something, and it bills **the same amount** (every month within
+`RECURRING_TOLERANCE` of the mean), where a shop's total is whatever was in the basket. The card
+also names at most `RECURRING_NAMED` merchants and counts the remainder, because the title's count
+and the combined total stay honest while an unbounded name list turns the card into a paragraph.
+PET-60's showcase seed is what made this visible - it named all 26 of its merchants in one
+sentence - but the defect was the rule's, not the seed's, and real data trips it too.
+
 **The single-run guard is enforced at the database, and an abandoned run self-heals.** The
 409 is not left to a check-then-insert: a partial unique index on `status = 'generating'` (the
 `categories_fallback_idx` shape) makes a second concurrent insert fail at the database, and that

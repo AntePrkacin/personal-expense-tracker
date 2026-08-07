@@ -35,7 +35,16 @@ import { UsersService } from '../users/users.service';
  * transaction rather than appended to.
  */
 
-/** The showcase account. Not a real inbox; the login link comes out of the logs. */
+/**
+ * The showcase account.
+ *
+ * A deliverable address, not a placeholder: it is an alias on the project's own
+ * domain that forwards to `spendifico@gmail.com`, the same inbox
+ * `login@spendifico.eu` lands in. So in cloud mode with MailPace configured, a
+ * login link for this account really does arrive and really can be clicked -
+ * which is what makes the showcase demonstrable from a phone rather than only
+ * from the terminal that has the logs.
+ */
 const SHOWCASE_EMAIL = 'dummy@spendifico.eu';
 
 /**
@@ -67,6 +76,24 @@ const MAX_DAY_OF_MONTH = 28;
 
 /** Share of transactions assigned to the fallback category, as a percentage. */
 const UNCATEGORIZED_PERCENT = 5;
+
+/**
+ * Fixed monthly charges, so the account has real subscriptions in it.
+ *
+ * They are deliberately not part of the random merchant pool. A subscription is
+ * recognised by behaviour rather than by name - one charge a month, the same
+ * amount every month - and drawing these from the pool as well would give them
+ * a second charge in some months and break exactly the property the insight
+ * rule looks for. Each bills on its own day so the transaction list does not
+ * show five identical-looking rows stacked on one date.
+ */
+const SUBSCRIPTIONS = [
+  { merchant: 'Netflix', amountCents: 1399, dayOfMonth: 3 },
+  { merchant: 'Spotify', amountCents: 1099, dayOfMonth: 7 },
+  { merchant: 'HBO Max', amountCents: 999, dayOfMonth: 12 },
+  { merchant: 'Strava', amountCents: 799, dayOfMonth: 18 },
+  { merchant: 'iCloud', amountCents: 299, dayOfMonth: 24 },
+];
 
 /** `{ year, month (0-11), day }` out of a `YYYY-MM-DD` string. */
 function parseDate(date: string): { year: number; month: number; day: number } {
@@ -306,6 +333,13 @@ async function seed(app: INestApplicationContext): Promise<void> {
   );
   const merchantNames = [...merchantPool.keys()];
 
+  // Falls back to any pickable category rather than throwing: the starter set
+  // is the seed's own choice, but nothing stops a re-run against an account
+  // whose categories were edited through the API.
+  const subscriptionsCategory =
+    allCategories.find((c) => c.name === 'Subscriptions') ??
+    pickableCategories[0];
+
   // Today in the app's own zone, not the machine's, so a run just either side
   // of local midnight agrees with every month-scoped figure the dashboard
   // computes - all of which resolve their window against APP_TIMEZONE.
@@ -348,6 +382,30 @@ async function seed(app: INestApplicationContext): Promise<void> {
         : faker.number.int({ min: 300_000, max: 480_000 })) * elapsed,
     );
 
+    // Subscriptions bill on their own day, so the current month gets only the
+    // ones whose day has already passed - the same clamp as everything else.
+    const dueSubscriptions = SUBSCRIPTIONS.filter(
+      (subscription) => subscription.dayOfMonth <= lastDay,
+    );
+    for (const subscription of dueSubscriptions) {
+      rows.push({
+        id: newId(),
+        merchant: subscription.merchant,
+        categoryId: subscriptionsCategory.id,
+        amountCents: subscription.amountCents,
+        date: dateMonthsAgo(today, monthsAgo, subscription.dayOfMonth),
+      });
+    }
+
+    // They come out of the month's budget rather than on top of it, so the
+    // totals still land where the over-budget months need them.
+    const subscriptionCents = dueSubscriptions.reduce(
+      (sum, subscription) => sum + subscription.amountCents,
+      0,
+    );
+    const variableTarget = Math.max(1, target - subscriptionCents);
+    const variableCount = Math.max(1, count - dueSubscriptions.length);
+
     // Concentrated rather than smeared. An over-budget month spread evenly puts
     // every category about 15% up and none of them over its cap, so the donut,
     // the category cards and the over-cap insight have nothing to show - which
@@ -358,7 +416,7 @@ async function seed(app: INestApplicationContext): Promise<void> {
     );
     const hotPercent = isOverBudget ? 55 : 30;
 
-    for (const amountCents of splitAmounts(target, count)) {
+    for (const amountCents of splitAmounts(variableTarget, variableCount)) {
       const roll = faker.number.int({ min: 1, max: 100 });
       let categoryId: string;
       if (roll <= UNCATEGORIZED_PERCENT) {

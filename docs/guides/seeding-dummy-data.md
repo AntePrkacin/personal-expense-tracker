@@ -91,8 +91,11 @@ so the seed cannot run while the backend is up in cloud mode.
    mise run dev
    ```
 5. **Log in**:
-   Go to `http://localhost:4200` and enter `dummy@spendifico.eu`. `dummy@spendifico.eu` is not a
-   real inbox, so take the login link out of the backend terminal logs.
+   Go to `http://localhost:4200` and enter `dummy@spendifico.eu`. That is a **deliverable
+   address**, not a placeholder: it is an alias on the project's own domain forwarding to
+   `spendifico@gmail.com`, the same inbox `login@spendifico.eu` lands in. So with
+   `MAILPACE_API_TOKEN` set the login link really arrives and can be clicked, including from a
+   phone. Without MailPace credentials the backend logs the link instead, as always.
 
 ## What gets generated
 
@@ -103,6 +106,10 @@ so the seed cannot run while the backend is up in cloud mode.
 - **26 merchants**: 22 generated names dealt round-robin over the categories so every category has
   at least two of its own, plus `dm`, `Müller`, `Konzum` and `Lidl` mapped exclusively to
   Groceries. About 20% of merchants are valid for two categories, the rest for one.
+- **Five subscriptions** - Netflix, Spotify, HBO Max, Strava and iCloud, about $46/mo combined -
+  each billing once a month, on its own day, at the same amount every month. They are deliberately
+  kept out of the random merchant pool: the insights generator recognises a subscription by that
+  behaviour rather than by name, and a second charge in some month would break it.
 - **Roughly 1,100-1,400 transactions** over 18 months - 60 to 80 per month, so the exact total
   differs on every run. About 5% land on `Uncategorized`.
 - **Six over-budget months**, at about 115% of the budget, with the overspend concentrated in two
@@ -117,3 +124,6 @@ were finished is what would make the dashboard read a full month's spending on t
 
 Dates never fall after the 28th, matching the 1-28 range the profile's `monthStartDay` is
 constrained to.
+
+Between them, these make all four insight rules fire on a freshly seeded account: a category over
+its cap, a month-over-month move, an end-of-month projection, and the five subscriptions.
