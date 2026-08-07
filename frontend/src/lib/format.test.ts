@@ -5,6 +5,7 @@ import {
   formatIsoDate,
   formatIsoDayMonth,
   formatNegative,
+  formatRelativeDate,
   formatWhole,
   initials,
   monthLabel,
@@ -21,6 +22,29 @@ import {
 // works right up until someone retypes it, and then the diff is unreadable.
 
 const MINUS = '−';
+
+/**
+ * Runs `body` with the process pinned to `zone`, restoring whatever `TZ` held before it.
+ *
+ * **The restore has to `delete` rather than assign when `TZ` was unset, which it is here** -
+ * `jest.config.ts` pins no zone. Writing `undefined` into a `process.env` key stores the
+ * *string* `"undefined"`, which Node's tzset rejects and falls back to UTC on, so every test
+ * after the first zone-pinned one would run under UTC rather than the machine's own zone -
+ * silently disabling exactly the zone sensitivity these three tests exist to exercise, and
+ * `formatRelativeDate`'s real-clock default with them. That was the shape three copies of this
+ * block shipped in before it was lifted here.
+ */
+function inZone(zone: string, body: () => void) {
+  const original = process.env.TZ;
+  process.env.TZ = zone;
+
+  try {
+    body();
+  } finally {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  }
+}
 
 describe('formatCurrency', () => {
   it('formats a whole amount with cents', () => {
@@ -202,15 +226,10 @@ describe('formatIsoDate', () => {
   // a field quietly showing the day before the one the user picked. lib/date.ts's own
   // suite pins the parsing half; this pins that formatting goes through it.
   it('keeps the day it was given in a zone behind UTC', () => {
-    const original = process.env.TZ;
-    process.env.TZ = 'America/New_York';
-
-    try {
+    inZone('America/New_York', () => {
       expect(formatIsoDate('2025-10-08')).toBe('Oct 8, 2025');
       expect(formatIsoDate('2025-01-01')).toBe('Jan 1, 2025');
-    } finally {
-      process.env.TZ = original;
-    }
+    });
   });
 
   it('renders a leap day', () => {
@@ -249,15 +268,10 @@ describe('formatIsoDayMonth', () => {
   // this function has its own `dateFromIso` call, so a new `new Date(iso)` here would
   // print the previous day in every zone behind UTC with the other test still green.
   it('keeps the day it was given in a zone behind UTC', () => {
-    const original = process.env.TZ;
-    process.env.TZ = 'America/New_York';
-
-    try {
+    inZone('America/New_York', () => {
       expect(formatIsoDayMonth('2025-10-08')).toBe('Oct 8');
       expect(formatIsoDayMonth('2025-01-01')).toBe('Jan 1');
-    } finally {
-      process.env.TZ = original;
-    }
+    });
   });
 
   it.each(['', '2025-02-30', 'not a date', '2025-10-08T00:00:00Z'])(
@@ -266,6 +280,79 @@ describe('formatIsoDayMonth', () => {
       expect(formatIsoDayMonth(iso)).toBe('');
     },
   );
+});
+
+describe('formatRelativeDate', () => {
+  const TODAY = '2025-10-08';
+
+  it('reads "Today" for the day itself', () => {
+    expect(formatRelativeDate(TODAY, TODAY)).toBe('Today');
+  });
+
+  it('reads "Yesterday" for one day back', () => {
+    expect(formatRelativeDate('2025-10-07', TODAY)).toBe('Yesterday');
+  });
+
+  it('reads the short date beyond yesterday', () => {
+    expect(formatRelativeDate('2025-10-05', TODAY)).toBe('Oct 5');
+  });
+
+  // AC2's mock draws a same-day boundary crossing into a new month, so "Yesterday" has to
+  // survive it rather than only working within one calendar page.
+  it('reads "Yesterday" across a month boundary', () => {
+    expect(formatRelativeDate('2025-09-30', '2025-10-01')).toBe('Yesterday');
+  });
+
+  it('reads "Yesterday" across a year boundary', () => {
+    expect(formatRelativeDate('2024-12-31', '2025-01-01')).toBe('Yesterday');
+  });
+
+  // The Add transaction modal's date field allows a future date, and it is deliberately not
+  // a fifth case here: "Tomorrow" is not in the design, so a day ahead falls through to the
+  // same short date a week ahead would get.
+  it('reads the short date for a future day, rather than inventing "Tomorrow"', () => {
+    expect(formatRelativeDate('2025-10-09', TODAY)).toBe('Oct 9');
+  });
+
+  it('is empty for a string that is not a calendar date', () => {
+    expect(formatRelativeDate('not a date', TODAY)).toBe('');
+  });
+
+  // The regression `formatIsoDate` and `formatIsoDayMonth` both pin, reached through this
+  // function: the **fall-through** branch is the zone-sensitive one, because it is the only
+  // path here that builds a `Date`. "Today" and "Yesterday" come out of `Date.UTC` arithmetic
+  // over parsed parts and would read the same under every zone, so asserting those two here -
+  // which an earlier version of this test did - could not fail for the reason it named.
+  it('keeps the day it was given in a zone behind UTC', () => {
+    inZone('America/New_York', () => {
+      expect(formatRelativeDate('2025-10-05', TODAY)).toBe('Oct 5');
+      expect(formatRelativeDate('2025-01-01', '2025-01-08')).toBe('Jan 1');
+    });
+  });
+
+  // What `daysBetween`'s `Date.UTC` diff really buys, and the assertion that fails without it.
+  // Local midnight to local midnight is 23 hours across New York's spring transition and 25
+  // across its autumn one, so an implementation subtracting the local `Date`s `dateFromIso`
+  // hands back and truncating either way answers 0 or 2 rather than 1 - "Today" for the
+  // previous day, or a short date for it.
+  it.each([
+    ['2025-03-09', '2025-03-10', 'spring forward, a 23-hour local day'],
+    ['2025-11-02', '2025-11-03', 'autumn back, a 25-hour local day'],
+  ])('reads "Yesterday" from %s to %s (%s)', (iso, today) => {
+    inZone('America/New_York', () => {
+      expect(formatRelativeDate(iso, today)).toBe('Yesterday');
+    });
+  });
+
+  it('defaults to the real today, so a fixture is not required to call it', () => {
+    jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8));
+
+    try {
+      expect(formatRelativeDate('2025-10-08')).toBe('Today');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('formatAmountInput', () => {

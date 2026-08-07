@@ -3,6 +3,7 @@ import { readDashboard } from '@/lib/dashboard';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
+import { RecentTransactionsCard } from './RecentTransactionsCard';
 import { TrendCard } from './TrendCard';
 
 // 04 Dashboard (Figma node 21:4), and 05 in its empty state.
@@ -13,12 +14,12 @@ import { TrendCard } from './TrendCard';
 // means signed out, and everything else throws so a reload retries rather than bouncing into
 // the `/dashboard`-to-`/login` loop PET-52 unpicked.
 //
-// **Two of the five slots are still placeholders, and that is sequencing rather than a
-// conditional.** `DashboardScreen`'s five props are all required - every card renders in both
-// the populated and the empty state, so there is no state in which one is absent - and PET-21
-// shipped the geometry so the grid was reviewable, with each remaining card a one-line change
-// at this call site. PET-22 filled `trendCard` and PET-23 `donutCard`; PET-24
-// (`recentTransactionsCard`) and PET-25 (`insightCard`) are still one line each.
+// **One slot is still a placeholder, and that is sequencing rather than a conditional.**
+// `DashboardScreen`'s five props are all required - every card renders in both the populated
+// and the empty state, so there is no state in which one is absent - and PET-21 shipped the
+// geometry so the grid was reviewable, with each remaining card a one-line change at this call
+// site. PET-22 filled `trendCard`, PET-23 `donutCard` and PET-24 `recentTransactionsCard`;
+// PET-25 (`insightCard`) is still one line.
 //
 // No `export const dynamic`: the cookie read behind `readDashboard()` opts this route out of
 // static rendering on its own, exactly as it does everywhere else in the app.
@@ -31,7 +32,12 @@ export default async function DashboardPage() {
       budgetCard={<BudgetCard {...summary} />}
       trendCard={<TrendCard weeklyBuckets={summary.weeklyBuckets} daysLeft={summary.daysLeft} />}
       donutCard={<CategoryDonut categories={summary.categories} spent={summary.spent} />}
-      recentTransactionsCard={<div /> /* PET-24 */}
+      recentTransactionsCard={
+        <RecentTransactionsCard
+          recentTransactions={summary.recentTransactions}
+          categories={summary.categories}
+        />
+      }
       insightCard={<div /> /* PET-25 */}
     />
   );

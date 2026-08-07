@@ -1326,6 +1326,43 @@ categories tied at $100 named `Bills` and `arcade` put `Bills` in PET-21's "Top 
 ordering is real, and it is the backend's to choose for both surfaces rather than this card's to
 have an opinion about.
 
+**PET-24 filled the fourth slot, `RecentTransactionsCard`, and its one finding worth arguing is
+that the join it draws costs no request.** A row in `recentTransactions` is a
+`TransactionResponseDto` and carries only a `categoryId`, no name and no colour, which looks like
+the same gap `TransactionsTable` solves with a second read - `docs/TODO.md`'s redundant-request
+item for that screen. The dashboard response does not have that problem: `categories` already
+publishes every category with `spent > 0` this period, `amount` is validated `@IsPositive` so no
+live transaction contributes zero, and `recentTransactions` is documented as up to three live
+transactions **in the current period**. So every recent row's category necessarily has nonzero
+spend this period and necessarily appears in `categories` already in hand, and the card's join is
+a `Map` lookup over one response rather than a second fetch. It still falls back rather than
+trusting that chain: an unresolved `categoryId` renders the neutral tile and drops the name from
+the caption, keeping only the date, because the invariant is implied by the contract rather than
+stated by it.
+
+**The rows are not links, for the same reason PET-34's link belongs on the transactions table's
+merchant cell rather than on the row.** A link wrapping a whole row takes its accessible name
+from everything inside it, so a row here would announce "Whole Foods Groceries Today −$24.00" -
+except this card has no detail route to link to at all, so there is no cell that could plausibly
+carry it either. The rows stay plain markup and the card's one navigation is "View all", `ui/
+Button`'s `href` variant reading its destination from `SIDEBAR_HREFS` rather than a sixth
+hand-written copy of `/transactions`.
+
+**Its relative caption inherits the server-zone gap every other figure on this screen already
+has, and is the first place that gap renders as a wrong word instead of a plausible one.**
+`formatRelativeDate` defaults its `today` to the frontend host's own local zone, while
+`daysLeft`, the trend chart's highlight and the buckets themselves are all resolved backend-side
+against `APP_TIMEZONE`. The window is the **full zone offset** rather than an hour, which is the
+correction PET-22's review already made to `TrendCard`'s version of this paragraph above, and it
+runs in both directions. A host _ahead_ of the configured zone gets the benign one: a transaction
+the backend counts as today's reads its short date instead of "Today". A host _behind_ it - which
+a UTC deployment against `Europe/Zagreb` is - gets the worse one, because the frontend's `today`
+is then a day **earlier** than the backend's, so yesterday's transaction reads "Today" while
+today's reads its short date. One row is missing a word and the other asserts something false,
+which is what makes this the first figure on the dashboard whose skew is not merely plausible.
+Not fixed here, deliberately: the honest fix is a zone the frontend reads too, and `docs/TODO.md`
+records it beside the per-user timezone item it already owes.
+
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show
 you is the result: the transactions **table** is PET-29's slot, so saving from the Transactions

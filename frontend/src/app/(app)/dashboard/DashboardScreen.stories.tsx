@@ -1,17 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
+import { addDays } from '@/lib/calendar';
+import { todayIsoDate } from '@/lib/date';
+
 import { AddTransactionProvider } from '../AddTransactionProvider';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
+import { RecentTransactionsCard } from './RecentTransactionsCard';
 import { TrendCard } from './TrendCard';
 
 // 04 Dashboard (Figma node 21:4), diffed against the frame's own numbers (node 22:55).
 //
-// **Three of the five cards are built.** The remaining two render exactly what `page.tsx`
-// renders in production - empty placeholder `<div />`s - so this story is honest about what has
-// shipped rather than mocking up cards that do not exist yet. PET-24 and PET-25 each replace one
-// placeholder here as they land, and the grid geometry is already reviewable.
+// **Four of the five cards are built.** The remaining one renders exactly what `page.tsx`
+// renders in production - an empty placeholder `<div />` - so this story is honest about what
+// has shipped rather than mocking up a card that does not exist yet. PET-25 replaces that
+// placeholder here as it lands, and the grid geometry is already reviewable.
 //
 // `TrendCard`'s own states are `Shell/Spending trend`'s; this story carries only the one that
 // matches node 22:55. **Its buckets and `BUDGET.daysLeft` describe the same moment**, which they
@@ -46,6 +50,62 @@ const BUDGET = {
   },
 };
 
+// Node 21:4's own five categories, shared between the donut and the recent list below exactly
+// as the real `DashboardResponseDto` shares one `categories` array between both: every recent
+// row's category id is one of these five, the invariant `RecentTransactionsCard`'s join relies
+// on rather than a second request.
+const CATEGORIES = [
+  { id: 'c1', name: 'Groceries', color: '#57B368', spent: 397, percent: 32.02 },
+  { id: 'c2', name: 'Dining out', color: '#EF6F6C', spent: 298, percent: 24.03 },
+  { id: 'c3', name: 'Transport', color: '#3F8EE6', spent: 223, percent: 17.98 },
+  { id: 'c4', name: 'Shopping', color: '#CE6FB8', spent: 174, percent: 14.03 },
+  { id: 'c5', name: 'Other', color: '#E7C24A', spent: 148, percent: 11.94 },
+];
+
+// DSH-7's own three rows: "Today" and "Yesterday" are the specification rather than sample
+// data, proving the relative caption; the third exercises the short date beyond them.
+//
+// **Dated off the real clock rather than fixed, and that is the opposite of `TrendCard`'s own
+// stories.** Those fixed their buckets and had the card read a `daysLeft` prop instead, because
+// the card takes no clock at all. This one has no such prop - `formatRelativeDate`'s `today`
+// defaults to `todayIsoDate()`, the same read `RecentTransactionsCard` makes - so riding along
+// with it rather than fighting it is what keeps "Today" and "Yesterday" showing whenever this
+// story is opened, instead of freezing into stale short dates the day after it was written.
+const TODAY = todayIsoDate();
+
+const RECENT_TRANSACTIONS = [
+  {
+    id: 't1',
+    merchant: 'Whole Foods',
+    categoryId: 'c1',
+    amount: 24,
+    date: TODAY,
+    note: null,
+    createdAt: `${TODAY}T18:00:00.000Z`,
+    updatedAt: `${TODAY}T18:00:00.000Z`,
+  },
+  {
+    id: 't2',
+    merchant: 'Uber',
+    categoryId: 'c3',
+    amount: 18.5,
+    date: addDays(TODAY, -1) ?? TODAY,
+    note: null,
+    createdAt: `${addDays(TODAY, -1) ?? TODAY}T09:00:00.000Z`,
+    updatedAt: `${addDays(TODAY, -1) ?? TODAY}T09:00:00.000Z`,
+  },
+  {
+    id: 't3',
+    merchant: 'Amazon',
+    categoryId: 'c4',
+    amount: 15.99,
+    date: addDays(TODAY, -5) ?? TODAY,
+    note: null,
+    createdAt: `${addDays(TODAY, -5) ?? TODAY}T14:00:00.000Z`,
+    updatedAt: `${addDays(TODAY, -5) ?? TODAY}T14:00:00.000Z`,
+  },
+];
+
 const meta: Meta<typeof DashboardScreen> = {
   title: 'Screens/04 Dashboard',
   component: DashboardScreen,
@@ -77,21 +137,17 @@ export const Default: Story = {
             />
           }
           donutCard={
-            // The five categories node 21:4 draws, summing to `BUDGET.spent` so the donut's
-            // centre and the budget card's readout are the same figure on one screen, which is
-            // AC2 and is what the real response guarantees.
-            <CategoryDonut
-              categories={[
-                { id: 'c1', name: 'Groceries', color: '#57B368', spent: 397, percent: 32.02 },
-                { id: 'c2', name: 'Dining out', color: '#EF6F6C', spent: 298, percent: 24.03 },
-                { id: 'c3', name: 'Transport', color: '#3F8EE6', spent: 223, percent: 17.98 },
-                { id: 'c4', name: 'Shopping', color: '#CE6FB8', spent: 174, percent: 14.03 },
-                { id: 'c5', name: 'Other', color: '#E7C24A', spent: 148, percent: 11.94 },
-              ]}
-              spent={BUDGET.spent}
+            // Summing to `BUDGET.spent` so the donut's centre and the budget card's readout are
+            // the same figure on one screen, which is AC2 and is what the real response
+            // guarantees.
+            <CategoryDonut categories={CATEGORIES} spent={BUDGET.spent} />
+          }
+          recentTransactionsCard={
+            <RecentTransactionsCard
+              recentTransactions={RECENT_TRANSACTIONS}
+              categories={CATEGORIES}
             />
           }
-          recentTransactionsCard={<div />}
           insightCard={<div />}
         />
       </div>

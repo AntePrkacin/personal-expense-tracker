@@ -1,4 +1,4 @@
-import { dateFromIso } from './date';
+import { dateFromIso, partsFromIso, todayIsoDate } from './date';
 
 // Display formatting: money, the two forms a stored name takes on screen, the
 // two forms the current period takes in the page header, the two forms a single
@@ -199,6 +199,61 @@ const DAY_AND_MONTH = new Intl.DateTimeFormat('en-US', {
 export function formatIsoDayMonth(iso: string): string {
   const date = dateFromIso(iso);
   return date === null ? '' : DAY_AND_MONTH.format(date);
+}
+
+/**
+ * The whole-day difference from `from` to `to`, or `null` when either is not a calendar date.
+ *
+ * Both sides go through `partsFromIso` and the subtraction happens on `Date.UTC` of those
+ * parts rather than on the local `Date`s `dateFromIso` would hand back. Those are 24 hours
+ * apart on most days and 23 or 25 across a DST transition, so a local subtraction would be
+ * relying on `Math.round` to absorb the hour - which it does, for a one-hour shift over one
+ * day. That is a narrow guarantee to build day arithmetic on: it holds only while the rounding
+ * stays, only for one-day gaps, and only for zones whose transition is an hour. `Date.UTC`
+ * never observes a transition at all, so this is arithmetic on the calendar parts and nothing
+ * about an instant, and the rounding is left in only to absorb float error.
+ */
+function daysBetween(from: string, to: string): number | null {
+  const fromParts = partsFromIso(from);
+  const toParts = partsFromIso(to);
+  if (fromParts === null || toParts === null) return null;
+
+  const fromUtc = Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day);
+  const toUtc = Date.UTC(toParts.year, toParts.month - 1, toParts.day);
+  return Math.round((toUtc - fromUtc) / 86_400_000);
+}
+
+/**
+ * A `YYYY-MM-DD` string as "Today", "Yesterday", or `formatIsoDayMonth(iso)` beyond that -
+ * the dashboard's recent-transactions caption (DSH-7).
+ *
+ * **`today` is a parameter with a default, not a bare clock read.** `todayIsoDate()` answers it,
+ * matching the shape `lib/date.ts`'s own helpers take, so a suite can pin "Yesterday" without
+ * faking a timer - the one case here where a test that quietly passes at midnight is worse than
+ * no test at all.
+ *
+ * A future date - reachable, since the Add transaction modal's date field allows one - is not a
+ * case this handles specially: it falls through to the short date exactly like any other day
+ * that is not today or yesterday, rather than inventing a fourth string ("Tomorrow") nothing
+ * designs.
+ *
+ * **This still cannot answer whose "today" it is.** The default reads the *frontend host's*
+ * local zone, while every other figure on this screen is scoped to a period the backend resolved
+ * through `APP_TIMEZONE`. `docs/TODO.md` records the gap next to the per-user timezone item it
+ * already owes; closing it needs a zone the frontend reads too; this formatter has no such
+ * setting to reach for.
+ *
+ * That gap runs in **both** directions and the worse one is the false positive. With the host
+ * behind the configured zone, the frontend's `today` is a day earlier than the backend's for
+ * the length of the offset - so yesterday's transaction reads "Today" while today's reads its
+ * short date. One row is merely missing a word; the other asserts something untrue. Ahead of
+ * the configured zone it is the benign direction only, a missing "Today".
+ */
+export function formatRelativeDate(iso: string, today: string = todayIsoDate()): string {
+  const diff = daysBetween(iso, today);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return formatIsoDayMonth(iso);
 }
 
 // The amount field as it is being typed into (02 Setup's "Monthly budget", and

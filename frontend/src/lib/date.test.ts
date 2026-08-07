@@ -17,9 +17,23 @@ const ORIGINAL_TZ = process.env.TZ;
 
 import { dateFromIso, isoFromParts, partsFromIso, todayIsoDate } from './date';
 
-afterAll(() => {
-  process.env.TZ = ORIGINAL_TZ;
-});
+/**
+ * Puts `TZ` back the way it was found.
+ *
+ * **A plain `process.env.TZ = ORIGINAL_TZ` does not do that**, because `TZ` is unset here -
+ * `jest.config.ts` pins no zone - and writing `undefined` into a `process.env` key stores the
+ * *string* `"undefined"`. Node's tzset rejects that and falls back to UTC, so every assertion
+ * after the first `inZone` would run under UTC rather than the machine's own zone. That is
+ * benign in this file, where every zone-sensitive test pins its zone explicitly, and it is the
+ * whole point of the one in `format.test.ts` - so both restore the same way rather than one of
+ * them relying on being the harmless copy.
+ */
+function restoreTz() {
+  if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+  else process.env.TZ = ORIGINAL_TZ;
+}
+
+afterAll(restoreTz);
 
 /** Runs `body` with the process pinned to `zone`. */
 function inZone(zone: string, body: () => void) {
@@ -27,7 +41,7 @@ function inZone(zone: string, body: () => void) {
   try {
     body();
   } finally {
-    process.env.TZ = ORIGINAL_TZ;
+    restoreTz();
   }
 }
 
