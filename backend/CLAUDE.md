@@ -371,12 +371,19 @@ window once.
 Five things about the figures are easy to get wrong:
 
 - **The account-wide total is summed from the transaction list, never from the per-category
-  rows.** A transaction whose category was deleted moments after it was created (see
-  `TransactionsService`'s own note on that race) would not appear in any live category row, and
-  summing categories instead would silently under-report `spent` - the one figure the top stat
-  tile exists to get right. The same reasoning makes the donut's percentages relative to that
-  total rather than to the sum of the slices: the two can disagree by the same rare margin, and
-  disagreeing in the total would be worse.
+  rows**, and the donut's percentages are relative to that total rather than to the sum of the
+  slices. Both still hold; the reason has changed. It used to be that the two figures could
+  genuinely disagree, because a transaction whose category was deleted moments after it was
+  created (see `TransactionsService`'s own note on that race) appeared in no live category row -
+  so the slices were allowed to sum to just under 100% and this file preferred a visible
+  shortfall in one slice to a hidden one inside every percentage. **PET-23 removed the
+  shortfall instead of choosing where to put it**: `CategoriesService.withSpend` folds spend
+  matching no live category into the Uncategorized fallback, so every transaction in the period
+  is counted in exactly one row, the rows sum to `spent` exactly, and the percentages sum to 100.
+  The donut relies on that, because its ring is required to close. Keeping the two derivations
+  independent is now a **check** rather than a hedge: if the fold ever regresses, the
+  percentages visibly fail to reach 100 instead of the total quietly shrinking to match. See
+  `docs/TODO.md`'s invariant entry for what the write path still cannot guarantee.
 - **`averagePerDay` divides by days elapsed, counting today, never by the days in the whole
   period.** Elapsed is the rate that answers "am I burning too fast"; dividing by the full
   period on day 2 makes a number that looks like success and means nothing. It is never zero,

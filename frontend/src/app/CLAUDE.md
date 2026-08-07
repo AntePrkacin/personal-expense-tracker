@@ -1237,6 +1237,48 @@ in dark**, and `base-300` still measures **1.115:1** through the identical harne
 number is the point of re-running it - a check that has never been seen to fail is not evidence,
 and this one is now on record failing for the token it rejected.
 
+**PET-23 filled the third slot, `CategoryDonut`, and the requirement it was built to is stronger
+than the one its plan was written to.** That plan designed a ring **deliberately allowed not to
+close**, on the reasoning that a transaction whose category was tombstoned leaves the slices
+summing to just under 100 and that a visible gap beats a shortfall hidden inside every
+percentage. The product decision reversed it: the ring always closes, the centre reads the
+period's total, and the percentages sum to 100. The old argument was right about the facts and
+wrong that the gap had to be **shown** rather than removed.
+
+**Three unrelated things can stop a donut closing, and the plan only knew the rarest.** Display
+rounding is the one that would have shipped: five slices at 32.4 / 24.3 / 18.2 / 14.2 / 10.9 each
+round correctly alone and sum to 99, on most accounts, with nothing wrong with the data. That is
+`donut.ts`'s `apportionPercents`, largest-remainder, and its accepted cost is that a slice can
+read a point off its own rounding - on those five the floors total 98, so two points are handed
+out and the 32.4 shows 33. The underlying values were already fine. And the orphan case is
+narrower than "a deleted category", because `DELETE /api/categories/:id` reassigns to the
+Uncategorized fallback before tombstoning; only the check-then-write race can orphan anything.
+
+**That last one is fixed in the backend rather than in this card**, because the money belongs to
+a category the user can no longer see and that is exactly what Uncategorized is for.
+`CategoriesService.withSpend` folds it in, which restores _every transaction is counted in
+exactly one row_ for the categories list and the month stats too, not just here.
+`docs/TODO.md` carries the VERY IMPORTANT invariant entry and the part of it the write path
+still cannot guarantee.
+
+**The ring is closed by two independent mechanisms and that is deliberate.** The arcs are driven
+by `dataKey="spent"`, which Recharts normalises against the sum of the values it holds, so the
+geometry closes even if a future response's percentages did not add up. A chart's correctness
+should not rest on a field being well-behaved.
+
+**`Pie` carries a second focusable default beyond `accessibilityLayer`.** Its own `rootTabIndex`
+defaults to 0, so switching the accessibility layer off was not enough and the ring stayed in the
+tab order inside an `aria-hidden` subtree. Both are off now. Found by the suite asserting the
+negative rather than by enumerating known defaults, which is the argument for writing that
+assertion on every chart.
+
+**The donut is `aria-hidden` with no `sr-only` twin, unlike the trend chart, and the difference
+is the legend.** Here the legend already names every slice with its amount and its percentage in
+real text, so it is a strict **superset** of the hover tooltip and there is nothing to mirror.
+The trend chart's tooltip carried a date range that appeared nowhere else, which is why that one
+needed a list. The tooltip shows the **apportioned** integer rather than rounding again, so a
+slice and its legend row cannot disagree by a point.
+
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show
 you is the result: the transactions **table** is PET-29's slot, so saving from the Transactions

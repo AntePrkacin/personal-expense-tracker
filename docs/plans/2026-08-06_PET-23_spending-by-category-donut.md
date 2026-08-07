@@ -189,3 +189,102 @@ since the slice colours and the card surface are both theme-resolved and the fra
 of the two themes.
 
 Then `Shell/Spending by category` and `Screens/04 Dashboard` in Storybook.
+
+## Reversal: two of the decisions above are superseded, and the ring now always closes
+
+Everything above is the record of how this card was designed before implementation. Two of its
+Decisions are no longer what ships, and the second is the more important of the two.
+
+**No charting library becomes Recharts.** PET-22 adopted Recharts 3.10.1 (MIT) for the epic and
+retrofitted the trend chart onto it, so this card inherits the library rather than the
+prohibition. The argument in that plan was sound about one chart and wrong about its scope; the
+full account, including why ApexCharts was rejected on its licence and what the dependency costs
+in bundle weight, is in `docs/plans/2026-08-06_PET-22_weekly-spending-trend.md`. The practical
+consequence here is that **the cumulative arc geometry this plan called for does not exist**:
+Recharts derives every arc from the values it is handed, so `donut.ts` is a sort and a rounding
+rather than a `stroke-dasharray` calculation.
+
+**"The ring is built to tolerate not closing" is reversed outright, by product decision.** That
+section is the most detailed argument in this plan and it now describes the opposite of the
+requirement. The requirement is:
+
+1. the ring is **always** closed, and
+2. the centre shows exactly the period's total spend while the category percentages sum to 100%.
+
+The old reasoning was not wrong about the facts. `categoriesOf` really did compute each `percent`
+against `totalCents`, and a transaction whose category was tombstoned really could leave the
+slices summing to just under 100. Where it went wrong was in concluding that the gap therefore had
+to be **shown**. It framed the choice as "a visible shortfall in one slice, or the same shortfall
+hidden inside every percentage" and picked the first, when the third option was to stop having a
+shortfall.
+
+### Three separate causes, only one of which was the one the plan described
+
+Investigating the requirement turned up that a donut can fail to close for three unrelated
+reasons, and the plan above only knew about the rarest:
+
+- **Display rounding, which happens constantly.** Five slices at 32.4 / 24.3 / 18.2 / 14.2 / 10.9
+  each round correctly on their own and sum to 99. This has nothing to do with the data and would
+  have shipped as a visible defect on most accounts.
+- **The underlying values, which were already right.** `totalCents` is the sum of every
+  transaction's cents and each category's `spent` is its own transactions' cents, so in the
+  ordinary case they match exactly and the percentages already summed to 100.
+- **Orphaned spend, the case this plan wrote around**, and rarer than it implied.
+
+### The orphan case is narrower than "a deleted category" and is fixed at source
+
+`DELETE /api/categories/:id` **reassigns** a category's transactions to the Uncategorized fallback
+before tombstoning it, so ordinary deletion accounts for everything and never orphans anything.
+The fallback is a real `is_fallback = 1` row seeded into every user database. The only genuine
+hole is the check-then-write race: `assertCategoryExists` is an unlocked SELECT, so a create can
+pass it, have the concurrent delete's reassignment sweep past, and land with the dead id.
+
+So the fix is a backend one. `CategoriesService.withSpend` now folds spend matching no live
+category into the fallback row, which restores the invariant *every transaction in the period is
+counted in exactly one row* for every reader at once - the categories list and the month stats,
+not only this card. `dashboard-response.dto.ts` publishes the guarantee, and
+`test/dashboard.e2e-spec.ts` carries the regression guard: it tombstones a category directly,
+without the reassignment the API would do, and asserts the percentages still sum to 100. Three of
+its four assertions fail without the fold, which is how the guard is known to discriminate.
+
+**Closing the write race is deliberately not part of this**, and `docs/TODO.md` carries it as a
+VERY IMPORTANT invariant entry. The obvious fix, wrapping check and write in `db.transaction()`,
+is forbidden by a documented constraint in both services: the embedded driver refuses overlapping
+transactions rather than queueing them, so a second transactional call site on a user database
+trades a rare correctness bug for a common availability one. The conditional-write shape that
+would respect the constraint is written down there.
+
+### The percentages are apportioned, not rounded
+
+`donut.ts`'s `apportionPercents` floors every value and hands the leftover points to the largest
+fractional remainders, so the column always reads 100. The accepted cost is that a slice can show
+one point away from its own rounding: on the frame's own five values the floors give 98, so two
+points are handed out and the 32.4 displays 33. The alternative is a legend that visibly sums to
+99 under a ring that visibly closes.
+
+The ring itself is closed by a second, independent mechanism: the arcs are driven by `dataKey="spent"`
+and Recharts normalises against the sum of the values it holds. So the geometry closes even if a
+future response's percentages did not sum to 100, which is deliberate - the ring's correctness
+should not depend on a field being well-behaved.
+
+### Two Recharts defaults had to be turned off, and the second was new
+
+`accessibilityLayer` defaults to `true` and puts `role="application"` and `tabindex="0"` on the
+svg, which PET-22 already found. **`Pie` then carries a second one**: its own `rootTabIndex`
+defaults to 0, so disabling the accessibility layer was not enough and the ring stayed in the tab
+order inside an `aria-hidden` subtree. Found by the suite asserting the negative rather than by
+listing known defaults, which is the argument for writing that assertion at all.
+
+### The tooltip is new relative to this plan
+
+This plan specified no tooltip, on the grounds that the legend already carries every fact. A
+tooltip naming the hovered category was added anyway: the ring is pure colour, so hovering a slice
+otherwise means tracing a hue back to the legend by eye, which is the colour-alone problem the
+legend exists to solve, reintroduced for the one person pointing directly at the thing. It shows
+the **apportioned** percentage, the same integer the legend row shows, so the two surfaces cannot
+disagree by a point.
+
+The ring stays `aria-hidden` with the legend as its accessible equivalent. That is safe here in a
+way it was not on the trend chart, because the legend is a strict superset of the tooltip: every
+name, amount and percentage is already in real text, so nothing needs mirroring into an `sr-only`
+line.

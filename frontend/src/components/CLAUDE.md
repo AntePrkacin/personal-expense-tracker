@@ -74,6 +74,17 @@ their markup.
   for that drawer: the pathname effect that used to close it cannot see a click on the section
   already open, and only a client parent may pass a function.
 
+- **`ui/categoryColour.ts` holds three maps and three lookups, and which one you want depends on
+  what is being painted.** `CATEGORY_TILE` (background plus its `-content` half) for an icon tile,
+  `CATEGORY_DOT` (background alone) for a mark with no content on it, and `CATEGORY_FILL`
+  (`var(--color-*)` strings) for an **SVG `fill`**, which PET-23's donut slices are. The third
+  exists because a Tailwind class is not a valid value for a presentation attribute: `fill="bg-error"`
+  paints nothing at all, with no error anywhere. Each has a `categoryTileClass` / `categoryDotClass`
+  / `categoryFillVar` lookup taking a stored hex, all three carrying the same `Object.hasOwn` guard
+  and uppercase normalisation, and all three falling back to the same neutral grey. The suite pins
+  the three maps against each other, so a ninth colour added to one and not the others fails there
+  rather than leaving a hole in a ring.
+
 - **`ui/categoryColour.ts` maps the eight stored colour words onto theme colours**,
   nearest-match and lossy on purpose: orange and yellow both land on `warning`, accepted because
   category colours are decoration. The colour words are the stable identity the category rows
