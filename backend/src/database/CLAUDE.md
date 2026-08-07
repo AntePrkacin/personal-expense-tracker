@@ -129,6 +129,26 @@ that hole with `ignoreEnvFile: process.env.NODE_ENV === 'test'` (Jest sets `NODE
 itself). Remove either half and a developer with a filled-in `.env` runs the suite against
 production infrastructure.
 
+**One `DATABASE_DIR` must not serve both modes, and the failure is silent in one direction.**
+Both modes use the same paths - `app.db` and `users/<db-name>.db` - but cloud mode opens them as
+sync replicas and local mode as plain files. Rows written while the file was a plain local file are
+not in the sync engine's change log when it later adopts that file, so `push()` never sends them
+while every later write pushes normally. The replica syncs; those rows simply do not. PET-60 hit
+exactly this: a local seed run put `dummy@spendifico.eu` in the central replica, a later cloud run
+pushed everything except that row, and the deployed backend could not find the account - answering
+the usual empty 202 and mailing nothing. Deleting the central replica and letting it re-bootstrap
+from the cloud is the repair; separate directories are the prevention.
+
+**Three callers now share that pattern, and a fourth should copy it rather than invent
+something.** `test/setup-e2e.ts` under `NODE_ENV=test`, `src/openapi.env.ts` under
+`OPENAPI_EMIT`, and `src/scripts/seed-showcase.env.ts` under `SEED_LOCAL`. Each is a
+side-effect-only module that scrubs `TURSO_*` out of `process.env` and sets the flag
+`AppModule` reads, and each must be imported before `app.module.ts` - `ConfigModule.forRoot()`
+is evaluated inside the `imports` array, so it runs at import time. The seed script is the one
+where the mistake would be visible rather than silent: it is a developer-facing command, so
+`--local` reaching Turso Cloud would provision a real database under a name that says
+`dummy`.
+
 ## Not built here
 
 `backend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

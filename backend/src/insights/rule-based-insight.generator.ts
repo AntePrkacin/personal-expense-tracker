@@ -34,6 +34,21 @@ const MONTHS = [
 const RECURRING_MONTHS = 3;
 
 /**
+ * How far a month's charge may stray from the merchant's mean and still read as
+ * the same subscription. A subscription bills the same amount every month; a
+ * habit does not.
+ */
+const RECURRING_TOLERANCE = 0.15;
+
+/**
+ * How many are named before the rest are merely counted.
+ *
+ * Without a cap the card is a wall of merchant names - the showcase seed put 26
+ * in one sentence. The count in the title still covers all of them.
+ */
+const RECURRING_NAMED = 5;
+
+/**
  * The deterministic generator: the four designed content rules over the user's
  * real data, filling templated copy. No external API, no key, no
  * non-determinism - which is what lets the specs assert AC-exact strings.
@@ -249,10 +264,23 @@ function projectionCard(
 }
 
 /**
- * Merchants seen in at least `RECURRING_MONTHS` distinct months, named with
- * their combined monthly total (each merchant's mean monthly charge), in the
- * neutral tone. Reads the whole history, not one period. Omitted when nothing
- * recurs.
+ * Subscriptions, named with their combined monthly total (each merchant's mean
+ * monthly charge), in the neutral tone. Reads the whole history, not one
+ * period. Omitted when nothing recurs.
+ *
+ * **Appearing in three months is necessary and nowhere near sufficient**, and
+ * treating it as sufficient is what this rule used to do. Anywhere a person
+ * shops regularly clears that bar just as easily as Netflix does, so a
+ * supermarket, a petrol station and a café were all reported as subscriptions.
+ * The showcase seed made it unmissable by naming all 26 of its merchants in one
+ * sentence, but real data trips it too - the bug was never the seed's.
+ *
+ * Two further conditions separate a subscription from a habit. It bills **once
+ * a month**, where somewhere you shop is visited whenever you need something.
+ * And it bills **the same amount**, where a shop's total is whatever was in the
+ * basket. Both are cheap to check and neither needs a category or a keyword
+ * list, which is what keeps this rule about behaviour rather than about
+ * guessing brands.
  */
 function recurringMerchantCard(
   allTransactions: TransactionResponseDto[],
@@ -260,25 +288,47 @@ function recurringMerchantCard(
 ): GeneratedCard | null {
   const byMerchant = new Map<
     string,
-    { totalCents: number; months: Set<string> }
+    { charges: number; monthlyCents: Map<string, number> }
   >();
 
   for (const transaction of allTransactions) {
     const entry = byMerchant.get(transaction.merchant) ?? {
-      totalCents: 0,
-      months: new Set<string>(),
+      charges: 0,
+      monthlyCents: new Map<string, number>(),
     };
-    entry.totalCents += toCents(transaction.amount);
-    entry.months.add(transaction.date.slice(0, 7));
+    const month = transaction.date.slice(0, 7);
+    entry.charges += 1;
+    entry.monthlyCents.set(
+      month,
+      (entry.monthlyCents.get(month) ?? 0) + toCents(transaction.amount),
+    );
     byMerchant.set(transaction.merchant, entry);
   }
 
   const recurring = [...byMerchant.entries()]
-    .filter(([, entry]) => entry.months.size >= RECURRING_MONTHS)
-    .map(([merchant, entry]) => ({
-      merchant,
-      monthlyCents: entry.totalCents / entry.months.size,
-    }))
+    .filter(([, entry]) => {
+      if (entry.monthlyCents.size < RECURRING_MONTHS) {
+        return false;
+      }
+      // Once a month, every month it appears in.
+      if (entry.charges !== entry.monthlyCents.size) {
+        return false;
+      }
+      const totals = [...entry.monthlyCents.values()];
+      const mean =
+        totals.reduce((sum, cents) => sum + cents, 0) / totals.length;
+      return totals.every(
+        (cents) => Math.abs(cents - mean) <= mean * RECURRING_TOLERANCE,
+      );
+    })
+    .map(([merchant, entry]) => {
+      const totals = [...entry.monthlyCents.values()];
+      return {
+        merchant,
+        monthlyCents:
+          totals.reduce((sum, cents) => sum + cents, 0) / totals.length,
+      };
+    })
     .sort((a, b) => b.monthlyCents - a.monthlyCents);
 
   if (recurring.length === 0) {
@@ -288,7 +338,12 @@ function recurringMerchantCard(
   const combined = money(
     fromCents(recurring.reduce((total, item) => total + item.monthlyCents, 0)),
   );
-  const names = joinNames(recurring.map((item) => item.merchant));
+
+  // The title counts them all, so the total does too - only the naming is
+  // capped.
+  const named = recurring.slice(0, RECURRING_NAMED).map((it) => it.merchant);
+  const unnamed = recurring.length - named.length;
+  const names = joinNames(unnamed > 0 ? [...named, `${unnamed} more`] : named);
   const plural = recurring.length !== 1;
 
   return {

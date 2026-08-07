@@ -183,13 +183,19 @@ correct value was determined and why it must be exact rather than a safe-feeling
 **Raise the per-IP auth limit before any event where a group signs up together, and put it back
 after.** This is an operational toggle, not a code change: the value lives in `fly.toml`'s `[env]`.
 
+`fly.toml` carries two commented profiles, **DEFAULT** and **DEVELOPMENT**, with one of them
+active. That file is the single home for the numbers; this guide deliberately names none of them,
+so read it there rather than trusting a figure quoted anywhere else. **Check which profile is
+active before an event** - a DEVELOPMENT profile left in place is already loose, and a DEFAULT one
+is not enough for a room.
+
 The trap is the per-IP limiter. A room full of people on **one venue WiFi** all share a single
 caller IP, so they share a single per-IP bucket. And a full signup spends **two** of that IP's
 knocks - `register`, then `verify` when the emailed link is opened (`verify` is exempt from the
-per-email limiter but **not** the per-IP one; `session` is exempt from both). So at the production
-value of 15, one shared network completes only about **7 signups per 15 minutes** before everyone
-else gets a `429`. The per-email limiter (3) is not the constraint here, because each person uses
-their own address and knocks it once.
+per-email limiter but **not** the per-IP one; `session` is exempt from both). So the DEFAULT per-IP
+value lets one shared network complete only about **seven signups per 15 minutes** before everyone
+else gets a `429`. The per-email limiter is not the constraint here, because each person uses their
+own address and knocks it once.
 
 For an event, estimate two-to-four knocks per attendee (signup plus retries), and set the limit
 with headroom - roughly `10 x attendees`:
@@ -200,9 +206,15 @@ cd backend
 fly deploy --remote-only --ha=false
 ```
 
-Afterwards, set it back to `15` and redeploy. `AUTH_RATE_LIMIT` (per-email) and `AUTH_RATE_TTL_S`
-(the 15-minute window) rarely need touching. The alternative - asking attendees to use mobile data
-instead of the shared WiFi, giving each their own IP - works but is fragile to rely on.
+Afterwards, restore the DEFAULT profile and redeploy. `AUTH_RATE_TTL_S` (the 15-minute window)
+rarely needs touching. The alternative - asking attendees to use mobile data instead of the shared
+WiFi, giving each their own IP - works but is fragile to rely on.
+
+**A raised limit is a weakened abuse control, and nothing expires it.** The per-email limiter is
+what stops a script sending unlimited login mail to an address somebody else owns, so a temporary
+profile that nobody restores is a standing hole rather than a tidiness problem. Whoever raises it
+owns putting it back, and the deploy that restores it is as necessary as the one that raised it -
+merging alone changes nothing on the machine.
 
 ## The machine runs continuously, and autostop was rejected
 
