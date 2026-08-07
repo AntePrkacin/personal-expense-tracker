@@ -3,13 +3,21 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { AddTransactionProvider } from '../AddTransactionProvider';
 import { BudgetCard } from './BudgetCard';
 import { DashboardScreen } from './DashboardScreen';
+import { TrendCard } from './TrendCard';
 
 // 04 Dashboard (Figma node 21:4), diffed against the frame's own numbers (node 22:55).
 //
-// **This ticket ships one of the five cards.** The other four render exactly what `page.tsx`
-// renders in production - empty placeholder `<div />`s - so this story is honest about what
-// PET-21 ships rather than mocking up cards that do not exist yet. PET-22 through PET-25 each
-// replace one placeholder here as they land, and the grid geometry is already reviewable.
+// **This ticket ships two of the five cards.** The remaining three render exactly what
+// `page.tsx` renders in production - empty placeholder `<div />`s - so this story is honest
+// about what has shipped rather than mocking up cards that do not exist yet. PET-23 through
+// PET-25 each replace one placeholder here as they land, and the grid geometry is already
+// reviewable.
+//
+// `TrendCard`'s own states are `Shell/Spending trend`'s; this story carries only the one that
+// matches node 22:55. **Its buckets and `BUDGET.daysLeft` describe the same moment**, which they
+// did not before: the trend card used to anchor its boundaries to the real clock while the
+// budget card claimed 8 days left, so the two halves of one response disagreed on screen. Both
+// now read the one `daysLeft` this fixture states.
 //
 // **The provider is inside `render` rather than in a decorator**, the same reason
 // `TransactionsScreen.stories.tsx` gives: the smoke harness in `screens.stories.test.tsx` never
@@ -57,7 +65,17 @@ export const Default: Story = {
       <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
         <DashboardScreen
           budgetCard={<BudgetCard {...BUDGET} />}
-          trendCard={<div />}
+          trendCard={
+            <TrendCard
+              weeklyBuckets={[
+                { startDate: '2025-10-01', endDate: '2025-10-08', total: 280 },
+                { startDate: '2025-10-08', endDate: '2025-10-15', total: 410 },
+                { startDate: '2025-10-15', endDate: '2025-10-22', total: 250 },
+                { startDate: '2025-10-22', endDate: '2025-10-29', total: 300 },
+              ]}
+              daysLeft={BUDGET.daysLeft}
+            />
+          }
           donutCard={<div />}
           recentTransactionsCard={<div />}
           insightCard={<div />}

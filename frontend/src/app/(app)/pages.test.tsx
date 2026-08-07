@@ -113,9 +113,12 @@ beforeEach(() => {
   // unavailable one rather than rendering a table with every category cell blank.
   (readCategoryLabels as jest.Mock).mockResolvedValue({ ok: true, data: [] });
 
-  // Zeroes are enough: `BudgetCard.test.tsx` is the card's own subject, and this file asserts
-  // the header. `readDashboard` throws rather than returning a rejection, matching the shape
-  // `lib/dashboard.ts` actually has - there is no `{ ok }` wrapper to mock here.
+  // Zeroes are enough: `BudgetCard.test.tsx` and `TrendCard.test.tsx` are the cards' own
+  // subjects, and this file asserts the header. An empty `weeklyBuckets` also means
+  // `TrendCard` renders nothing here, which is its own documented behaviour for a period
+  // with no transactions rather than a gap this fixture leaves untested. `readDashboard`
+  // throws rather than returning a rejection, matching the shape `lib/dashboard.ts` actually
+  // has - there is no `{ ok }` wrapper to mock here.
   (readDashboard as jest.Mock).mockResolvedValue({
     spent: 0,
     monthlyBudget: 2000,

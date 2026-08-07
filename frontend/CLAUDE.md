@@ -201,6 +201,62 @@ carries `'use client'` internally, which costs nothing here: a Server Component 
 and stays a Server Component, so `ui/Sidebar`, `ui/Button` and `(app)/layout.tsx` all still
 render on the server with icons in them.
 
+## The chart library
+
+**Recharts is how a chart is drawn in this app, as of PET-22's retrofit.** Before it, the two
+dashboard charts were hand-rolled and PET-22's plan argued that at length for the whole epic; the
+reversal and what survives it are in `docs/plans/2026-08-06_PET-22_weekly-spending-trend.md`. The
+short version is that the argument was right about one chart and wrong about its scope. Do not
+hand-roll a new chart, and do not add a second charting library.
+
+**It is MIT, and the obvious alternative is not.** The daisyUI Blueprint MCP recommends
+ApexCharts and its skill guide presents the paid tier as a watermark on a few premium features.
+The `LICENSE` in the published package says something else: ApexCharts 6 is dual-licensed on
+**organisation revenue**, free only below $2M a year, with a further paid tier for
+redistribution. Read a licence out of the tarball before adopting a dependency on a tool's
+recommendation, and note the Blueprint server will keep recommending it - `docs/agents/claude-tooling.md`
+already sets out which of its stages earn how much trust.
+
+**It is not cheap, and the number is on record so nobody has to guess.** Recharts 3 brings
+`@reduxjs/toolkit`, `react-redux`, `immer`, `reselect` and `victory-vendor` (five d3 packages).
+Built client chunks went from 879,657 to 1,230,462 bytes on the branch that added it: **+343 KB,
++40%**. The second chart is nearly free and the first was not, which is the whole reason it is
+worth using for the second.
+
+Four rules for writing one, each of which cost something to learn:
+
+- **A chart is a client component and the card around it is not.** Recharts measures its own box
+  through a `ResizeObserver`, so it cannot render on the server. Push the boundary into the
+  smallest wrapper - `(app)/dashboard/TrendChart.tsx` is the pattern - and keep the heading, the
+  caption and anything a screen reader needs as server-rendered HTML beside it. This does not
+  make the library cheaper in the bundle; it keeps the card's text assertable and available
+  before hydration.
+
+- **Colour goes in as `var(--color-*)` on a `fill`, never as a Tailwind class.** `fill` is an SVG
+  presentation attribute and a class string is not a valid value for one, so `CATEGORY_DOT`'s
+  habit of handing out whole `bg-*` literals does not transfer. A `var()` reference in the
+  attribute is resolved by the browser exactly as the class would be, so it follows the theme
+  with no JavaScript and needs no `dark:` variant - confirmed by flipping
+  `prefers-color-scheme` mid-walk and watching the computed fill change. An alpha is a separate
+  `fillOpacity`, and a translucent fill still has to be **composited and measured**, because
+  `getComputedStyle` reports it uncomposited.
+
+- **`accessibilityLayer={false}`, explicitly.** It defaults to **`true`** in Recharts 3, and
+  declining to enable something is not the same as disabling it. Left alone it puts
+  `role="application"` and `tabindex="0"` on the `<svg>`: a tab stop on a card that has no
+  keyboard interface, and a role telling assistive technology to leave browse mode and forward
+  every key to it. It is worse inside an `aria-hidden` plot, which is the ordinary arrangement
+  here, because `aria-hidden` does not remove focusable descendants from the tab order - so the
+  default produced an element that was focusable and unannounceable at once. Assert the negative
+  in the suite; a comment saying the layer is unused is what shipped the bug.
+
+- **No Jest suite may assert a chart's geometry.** jsdom implements no `ResizeObserver` and runs
+  no layout, so `jest.setup.ts` supplies a stub and an invented box just to make the chart render
+  at all - and Recharts does not throw without one, it renders nothing and passes every
+  assertion that counts elements. Suites assert counts, fills, text and roles. Heights, widths
+  and proportions are browser checks, measured with `getBoundingClientRect()` on the laid-out
+  nodes.
+
 ## Storybook
 
 Storybook keeps three sections: **Components** for `ui/`, **Screens** for the frames, **Shell**
@@ -329,11 +385,12 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   screen renders its designed header, and the shell is really gated and really shows the signed-in
   user's profile as of PET-52. What is missing is everything below the header on **two** of the
   four: the AI Insights and Settings `<main>` elements are empty. Dashboard is no longer one of
-  them as of PET-21: its `<main>` is a grid holding the real Monthly budget card and four
-  placeholder `<div />`s, one per still-unbuilt card - PET-22 (spending trend), PET-23 (category
-  donut), PET-24 (recent transactions) and PET-25 (insight teaser) - so the geometry is reviewable
-  now and each is a one-line change at `page.tsx`'s call site when its own ticket lands.
-  Transactions is the exception that came before it, and as of PET-29 it is a **complete** screen
+  them as of PET-21: its `<main>` is a grid holding the real Monthly budget card, and PET-22 filled
+  the second, the weekly spending trend chart. Three placeholder `<div />`s remain, one per
+  still-unbuilt card - PET-23 (category donut), PET-24 (recent transactions) and PET-25 (insight
+  teaser) - so the geometry is reviewable now and each is a one-line change at `page.tsx`'s call
+  site when its own ticket lands. Transactions is the exception that came before it, and as of
+  PET-29 it is a **complete** screen
   rather than a partial one: the tab bar
   and its real count badge, both empty states, the filter bar and the table are all built, and the
   two slots PET-30 left are filled by `page.tsx`. They are still slots rather than direct imports,

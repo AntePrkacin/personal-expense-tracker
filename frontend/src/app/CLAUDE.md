@@ -1118,8 +1118,8 @@ endpoint takes no filters at all, so there is no ambiguous-empty case for one to
 importing them, the same reason `TransactionsScreen`'s two are slots - both need reads or state
 the screen itself cannot supply, and Storybook has to be able to hand it stand-ins - and this
 ticket ships one of the five, `BudgetCard`, built from the read at the call site; the other four
-are placeholder `<div />`s naming the ticket that fills them (PET-22 to PET-25). AI Insights and
-Settings are the two screens whose `<main>` is still empty and still fetches nothing.
+were placeholder `<div />`s naming the ticket that fills them. AI Insights and Settings are the
+two screens whose `<main>` is still empty and still fetches nothing.
 
 **That card reads no clock at all, and its "days left" caption names no month, which amends node
 22:55.** The frame draws "8 days left in October" and the review of PET-21 found the two halves of
@@ -1136,6 +1136,106 @@ on the last day of every period, and the card's whole-dollar figures are **round
 remainder derived from the rounded pair**, so "$1,241 of $2,000" can never sit beside a "left"
 figure that fails to add up to the budget. Giving the period a real name is a backend field
 (`docs/TODO.md` records it), not a second guess here.
+
+**PET-22 filled the second slot, `TrendCard`, and it inherits both of PET-21's review lessons
+before shipping rather than after.** The card is DSH-6's weekly bars, drawn with **Recharts** -
+the same branch first shipped them as self-scaled `<div>`s and argued at length for no charting
+library at all, and that decision was reversed before PET-23 was built rather than left to make
+this card the odd one out. The argument was sound for one chart and wrong about its own scope:
+the epic does not stop at two, and PET-23's donut plus everything after it would each have
+hand-rolled their own geometry. What survives the reversal is the colour rule, reached through
+`var(--color-*)` on an SVG `fill` rather than through a class, because a class string is not a
+valid value for a presentation attribute. `frontend/CLAUDE.md`'s The chart library is the
+authority for every rule that governs a new one, including the Recharts default that has to be
+turned off and the reason no Jest suite may measure a chart. Its
+caption reads "Weekly" with **no month name**, for the identical reason `BudgetCard`'s stopped
+naming one: the bars are anchored to `weeklyBuckets`, which shares `daysLeft`'s
+`monthWindow(monthStartDay, today)`, so a window spanning two calendar months has no single name
+and the plan that first drafted this card caught itself repeating the mistake before writing the
+component. **The card reads no clock at all, and the version that did was worse than it claimed.**
+`weeks.ts`'s `currentWeekIndex` first took `todayIsoDate()` off the frontend host, while every
+bucket boundary comes from `APP_TIMEZONE`, and both this file and `docs/TODO.md` recorded that as
+"one week off for up to an hour twice a month" and as not fixable without the card reading
+`monthStartDay` itself. Review of the PR found all three parts wrong: the gap is the full zone
+offset rather than an hour, it straddles every bucket boundary rather than the month's, and on
+the **first day of a period** the frontend's `today` falls before `buckets[0].startDate` so
+`currentWeekIndex` answers `null` and **nothing at all is accented** - AC3 failing outright
+rather than pointing one week off, on a UTC-deployed frontend against the default
+`Europe/Zagreb`. It is fixable, and without a second read: `todayFromDaysLeft` subtracts
+`daysLeft` from the final bucket's `endDate`, which **is** `monthWindow`'s exclusive `end`, so
+the backend's own `today` comes back out of two fields already on the one response. That is
+arithmetic over the API's answer rather than the second-guessing PET-21's `BudgetCard` avoided,
+which is the distinction to carry into any card tempted to read a clock. The lesson generalises:
+**a Server Component's `new Date()` is the frontend host's zone, and every period on this
+dashboard belongs to the backend's.**
+**The API already zero-fills a spend-free week**, so the card must not: `weeklyBucketsOf` on the
+backend pushes every bucket in the period's range with `total: 0` rather than omitting it, and
+its one early return - an **empty** array - is for `transactionCount === 0`, the whole period
+having no spend at all. `TrendCard` renders that empty case as nothing, which PET-26 is what
+replaces with frame 05's own empty-state card rather than a zero-filled axis nobody designed.
+
+**A percentage-height bar needs a plot area that holds nothing but bars, and PET-22 shipped the
+version that did not.** The bars sat directly in the `h-32` column beside their value row, their
+week label and two `gap-1`s, so `height: 100%` resolved against 128px while only 88px was free -
+and a bar is a shrinkable flex item, so every bucket at or above 68.75% of the maximum was
+flex-shrunk to that same 88px. `$410` and `$300` drew the identical bar and AC2 was false on
+screen. The chart now nests the bar in its own `h-32` box, and `TrendCard.test.tsx` carries the
+structural guard: the bar's parent must contain the bar and nothing else. **This generalises to
+PET-23's donut and to any chart after it**, along with the two things that let it through: an
+inline `style.height` is what the component _wrote_ rather than what the browser _drew_, so a
+browser walk over a chart has to measure `getBoundingClientRect()`; and jsdom runs no layout at
+all, so no Jest suite can see this class of defect by construction - it belongs on the same
+browser-check list as `Modal`'s Escape and `BudgetForm`'s caret restore.
+
+**The Recharts retrofit removed that specific bug's mechanism and left both of its lessons
+standing.** There is no `h-32` box and no shrinkable flex item any more: Recharts computes its
+own plot area from the container height minus the margins and the axis band, so a plot area
+cannot be squeezed by a sibling label row because there are no sibling label rows. The margin is
+still stated explicitly rather than left to the library, on the principle that a plot area left
+to a default is the same mistake with a different owner. What did **not** change is the reason
+the defect survived a green suite: `jest.setup.ts` now hands the chart a fixed invented 400x300
+box so it renders at all, which means every bar in a Jest run has a size that came from a
+constant. So the suite asserts counts, fills and text and **never a height**, and AC2 is proven
+in the walk by measuring the laid-out `<path>` elements. The retrofit's walk measures the exact
+pair that collided - `$410` and `$300` - and reports them 35.41px apart.
+
+**The chart draws three tones rather than two, and the third is a state no frame has.** Review
+of PET-22 found that `weeklyBucketsOf` tiles the **whole** period regardless of where today
+falls, so on the 2nd of a 31-day period a user with one transaction gets one real bar and four
+`total: 0` ones - each drawn at `MIN_BAR_PERCENT` and pixel-identical to AC5's genuinely
+spend-free week. That is the shape most accounts show for most of a period and node 22:55, a
+completed month, answers it nowhere. So a bucket after `highlightIndex` is muted and its figure
+dimmed, and `highlightIndex` of `null` mutes nothing - a window we could not place today in is
+not one to guess the past out of. **Neither that state nor the accent may be carried by colour
+alone**, the review's second finding: each is named by an `sr-only` line rather than by
+`aria-current`, which this repo does use on `DateField`'s today but which needs the `gridcell`
+under it to be conveyed reliably, where these columns are generic `div`s. Two more strings with
+no frame behind them, joining A29's list.
+
+**Those per-column `sr-only` spans are now one `sr-only` list, and the retrofit is why.** Every
+figure and caption on the chart is SVG text since it moved to Recharts, and SVG text is reachable
+in principle and useless in practice - a bare run of numbers with nothing tying each to its week.
+So the plot is `aria-hidden` and a visually hidden `<ul>` beside it is the chart's accessible
+equivalent, one `<li>` per week naming its caption, its date range, its amount and its state in a
+single sentence. That is strictly **more** than the spans carried, and it is what stops the new
+tooltip being a mouse-only fact. Recharts' own `accessibilityLayer` was the alternative and is
+deliberately off: see the chart-library section below for what leaving it on actually did.
+
+**The muted tone is `base-content/20` and the obvious `base-300` was wrong**, which only the
+browser could say. `base-300` is the theme's own empty-surface token and computes to
+`oklch(0.95 0 0)` in light - against the card's white `base-100`, a 5px bar of it is invisible,
+so the state meant to fix an ambiguity would have replaced it with nothing at all. Computed
+style cannot report that on its own, because the tone that fixes it carries an alpha: the walk
+composites the bar over the card on a canvas and reads the painted pixel, which is 1.53:1 in
+light and 1.88:1 in dark against roughly 1.09:1 for the token it replaced. **A colour check that
+stops at `getComputedStyle` has not checked a translucent one.**
+
+That tone survived the Recharts retrofit as a `fill` plus a `fillOpacity` rather than a
+`bg-base-content/20` class, which is a **different compositing path to the same visual result**,
+so the walk measured it again instead of inheriting the old numbers: **1.527:1 in light, 1.876:1
+in dark**, and `base-300` still measures **1.115:1** through the identical harness. That last
+number is the point of re-running it - a check that has never been seen to fail is not evidence,
+and this one is now on record failing for the token it rejected.
 
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show

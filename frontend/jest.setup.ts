@@ -70,3 +70,79 @@ if (
     this.dispatchEvent(new Event('close'));
   };
 }
+
+// ---------------------------------------------------------------------------
+// ResizeObserver, which jsdom does not implement either, for Recharts.
+//
+// PET-22's retrofit put the dashboard charts on Recharts, whose
+// `ResponsiveContainer` measures its box and renders no SVG children at all until
+// that measurement comes back nonzero. jsdom runs no layout, so every
+// `getBoundingClientRect()` is 0x0 forever and `window.ResizeObserver` is
+// `undefined` - both verified in this repo before writing this, not assumed.
+//
+// **The failure this prevents is a silent one, which is why it is here rather
+// than in one suite.** Recharts does not throw when `ResizeObserver` is missing;
+// it renders nothing and resolves happily. So a chart test written without this
+// finds zero bars and passes every assertion that counts them, which is worse
+// than a red suite. The smoke test that established this logged `svg count: 0`
+// against a chart that renders four bars in a browser.
+//
+// **Scoped to the observed element, deliberately.** The stub goes onto the node
+// Recharts actually calls `.observe()` on, never onto `Element.prototype`. A
+// global `getBoundingClientRect` override would hand every other suite in the app
+// a fake layout - jsdom's honest zero is load-bearing elsewhere, and this repo has
+// already shipped one defect (PET-22's flex-shrunk bars) that a fake measurement
+// would have hidden rather than revealed.
+//
+// **The size is arbitrary and no test may read meaning into it.** It exists to be
+// nonzero. What a suite may assert is that the right number of bars rendered with
+// the right fills and the right labels; what it may never assert is a width, a
+// height or a proportion, because those are this constant rather than the
+// browser's layout. Chart geometry is a browser check, on the same list as
+// `Modal`'s Escape and `BudgetForm`'s caret restore - `TrendCard.test.tsx` says so
+// at its own call sites.
+// ---------------------------------------------------------------------------
+if (typeof window !== 'undefined' && typeof window.ResizeObserver === 'undefined') {
+  const OBSERVED_WIDTH = 400;
+  const OBSERVED_HEIGHT = 300;
+
+  const fakeRect = (): DOMRect =>
+    ({
+      width: OBSERVED_WIDTH,
+      height: OBSERVED_HEIGHT,
+      top: 0,
+      left: 0,
+      right: OBSERVED_WIDTH,
+      bottom: OBSERVED_HEIGHT,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+
+  class ResizeObserverStub implements ResizeObserver {
+    private readonly callback: ResizeObserverCallback;
+
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+    }
+
+    observe(target: Element) {
+      // Both channels, because which one a given Recharts version reads is an
+      // implementation detail: the entry's `contentRect` and the element's own
+      // `getBoundingClientRect`. Supplying one and guessing right is the kind of
+      // thing that breaks on a minor upgrade with no test able to say why.
+      Object.defineProperty(target, 'getBoundingClientRect', {
+        configurable: true,
+        value: fakeRect,
+      });
+
+      this.callback([{ target, contentRect: fakeRect() } as ResizeObserverEntry], this);
+    }
+
+    unobserve() {}
+
+    disconnect() {}
+  }
+
+  window.ResizeObserver = ResizeObserverStub;
+}
