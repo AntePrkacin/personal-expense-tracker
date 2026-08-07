@@ -253,11 +253,15 @@ describe('the empty state (AC3, PET-26)', () => {
     expect(screen.queryByText('Whole Foods')).not.toBeInTheDocument();
   });
 
-  it('carries no "View all" of its own, unlike the populated header', () => {
+  it('keeps "View all", because `isEmpty` is the period\'s flag and not the account\'s', () => {
+    // The review finding, stated directly. A returning user with months of history opens the
+    // dashboard on the first day of a new period and reaches this branch - dropping the link
+    // would tell them they have no transactions *and* delete the one route from this card to
+    // the list where their history actually is.
     render(
       <RecentTransactionsCard recentTransactions={[]} categories={CATEGORIES} isEmpty={true} />,
     );
 
-    expect(screen.queryByRole('link', { name: 'View all' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View all' })).toHaveAttribute('href', '/transactions');
   });
 });

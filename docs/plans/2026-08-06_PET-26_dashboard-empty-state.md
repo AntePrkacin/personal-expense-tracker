@@ -220,10 +220,60 @@ the screen carries one spelling of one condition. Its rendered output on frame 0
       designer answer yet, so no change there
 - [x] Comment on PET-26 recording that the teaser clause was satisfied in PET-25, and that its prop
       was aligned onto the shared condition here
+- [x] Review of this branch: `BudgetCard.tsx`'s caption needs `daysLeft` as well as `isEmpty`,
+      `RecentTransactionsCard.tsx` keeps its "View all" in the empty branch, and `CategoryDonut.tsx`
+      branches its ring name and caption on `spent` the way its centre figure already did. Cases and
+      stories for all three; see the section below for why each is a defect rather than a preference
+- [x] Review of this branch: `weeks.ts`'s `currentWeekIndex` docblock said `TrendCard` "renders
+      nothing" for an account with no transactions, which stopped being literally true when this
+      ticket gave that card a designed treatment to render instead
 
 No `npm run api:sync`: nothing here changes a request or response body. PET-25's regenerated
 artifacts are in `main` now rather than inherited through the stack, so there is nothing to
 regenerate and a diff on either would mean something else went wrong.
+
+## What the review of this branch changed
+
+Three of the decisions above shipped as written and were wrong, and all three failed the same way:
+**they read frame 05 as a description of an account rather than of a period.** The frame draws a
+brand-new user on day one. `isEmpty` is `transactionCount === 0`, which is that user *and* every
+established account at the start of a period *and* every light account that has simply not spent
+anything yet this month. Copy that is true of the first is false of the other two.
+
+**"Full month ahead" needed a second condition, and the plan's own argument for one condition is
+what hid it.** Resolving `isEmpty` once in `page.tsx` is right and stays; what does not follow is
+that a card may branch on nothing else. `BudgetCard.tsx` argued correctly that `daysLeft` has no
+value meaning "empty" and did not notice the converse: `transactionCount` has no value meaning
+"the period just started". An account with nothing logged on the 28th of a period beginning on the
+1st has `daysLeft` of 4, and the shipped caption replaced that accurate count with a claim the
+month had not begun. The fix is `daysLeft >= SHORTEST_PERIOD_DAYS`, 28, which is not a designed
+threshold but a derived bound - a period runs `monthStartDay` to `monthStartDay`, so it is 28 to 31
+days and anything at or above 28 has at most three days elapsed. February picks the number, not us.
+Below it the card draws the count it draws in every other state. Nothing on the response carries the
+period's length, so this is the strongest honest claim available; `docs/TODO.md`'s period-label item
+is where a real field would land.
+
+**The "no interactive controls" rule above holds for three of the four treatments and not for the
+recent-transactions card.** The rule is a correct reading of the frame and the right call for the
+trend card, the donut and the budget card, none of which has navigation to lose. The recent list
+does: dropping "View all" meant a returning user opening `/dashboard` on the first day of a new
+period was told "No transactions yet" *and* had the one route from that card to their actual history
+deleted. Of the two halves that is the worse one, since the copy is at least scoped to a card about
+this period while a missing link is a dead end. The header is now identical in both branches, which
+also removes the duplicate markup the split had created.
+
+**The donut was already making this distinction and made it in only one of three places.** Its
+centre figure prints `formatWhole(spent)` precisely so the dangling-category race cannot report real
+spend as none - the plan's own last task bullet says so. The ring's accessible name and the caption
+underneath were single strings that both claimed nothing had been spent, so the `EmptyWithSpend`
+story rendered "$124 / Total spent" beside "once you start spending", and a screen-reader user got
+only the false half, since that ring's name is the whole of what the region announces. Both now
+branch on `spent > 0` alongside the figure. Frame 05's own copy is untouched for the account that
+really has spent nothing.
+
+**Two more strings, and unlike the five above these are ours.** The unattributed ring name and
+caption describe a race the design file has no reason to know about, so they join A29's
+invented-copy list rather than the designed-copy entry this ticket added.
 
 ## Verification
 

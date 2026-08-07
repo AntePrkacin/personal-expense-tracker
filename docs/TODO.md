@@ -1715,6 +1715,19 @@ that keeps Figma's UK "categorised" in the transactions empty state. Logged here
 review has one place to check every designed string that shipped, this list and A30's spelling
 notes included, rather than only the ones this repo had to invent.
 
+**Two of the five are now conditional, and the review of PET-26 is why.** "Full month ahead" draws
+only when the account is empty **and** `daysLeft` is at least 28, because emptiness says nothing
+about how far into a period the user is - an account that has logged nothing by the 28th of a
+period beginning on the 1st has four days left, and the frame's sentence would be false over an
+accurate count. And the donut's "Your category breakdown appears here once you start spending"
+draws only when `spent` is 0; the dangling-category race reaches the same empty ring with real
+money on it, where that sentence contradicts the figure in the middle of the ring. Both fall back
+to copy this repo wrote, so **A29's invented-copy list gains two strings** - the donut's "No
+category breakdown available" ring name and "This period's spending is not attributed to any
+category." - while the budget card falls back to the days-left count it already draws in every
+other state. A designer reading this list should know that two of the five designed strings are
+reachable in fewer situations than frame 05 implies.
+
 ---
 
 ## Scaling, when it is actually needed

@@ -325,7 +325,11 @@ describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
       spent: 50,
       monthlyBudget: 2000,
       remaining: 1950,
-      daysLeft: 8,
+      // 31 rather than 8: `BudgetCard`'s caption needs a `daysLeft` proving the period has
+      // barely started before it will draw the frame's copy, so a late-period value would make
+      // the assertion below fail for a reason that has nothing to do with the threading this
+      // test is about. `BudgetCard.test.tsx` owns that condition.
+      daysLeft: 31,
       transactionCount: 0,
       averagePerDay: 0,
       topCategory: null,

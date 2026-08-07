@@ -108,7 +108,7 @@ describe('an empty account', () => {
 
 describe('the empty state (AC2, PET-26)', () => {
   it('swaps the caption to "Full month ahead" rather than the days-left count', () => {
-    render(<BudgetCard {...ON_TRACK} isEmpty={true} topCategory={null} />);
+    render(<BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={31} topCategory={null} />);
 
     expect(screen.getByText('Full month ahead')).toBeInTheDocument();
     expect(screen.queryByText(/days? left/)).not.toBeInTheDocument();
@@ -122,6 +122,7 @@ describe('the empty state (AC2, PET-26)', () => {
       <BudgetCard
         {...ON_TRACK}
         isEmpty={true}
+        daysLeft={31}
         spent={0}
         remaining={2000}
         transactionCount={0}
@@ -137,14 +138,38 @@ describe('the empty state (AC2, PET-26)', () => {
     expect(screen.getByText('$2,000 left')).toBeInTheDocument();
   });
 
-  it('ignores `daysLeft` for the caption, which carries no signal about emptiness', () => {
-    // The caption has to come from the shared flag rather than from `daysLeft` reaching some
-    // special value, because `daysLeft` counts down identically whether or not anything has
-    // ever been spent.
-    render(<BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={30} />);
+  it('needs `isEmpty`, since `daysLeft` alone carries no signal about emptiness', () => {
+    // The half that was right in the first version: `daysLeft` counts down identically whether
+    // or not anything has ever been spent, so no value of it can put this caption on the card.
+    render(<BudgetCard {...ON_TRACK} isEmpty={false} daysLeft={31} />);
 
+    expect(screen.getByText('31 days left')).toBeInTheDocument();
+    expect(screen.queryByText('Full month ahead')).not.toBeInTheDocument();
+  });
+
+  it('keeps the accurate count for an account that is empty late in its period', () => {
+    // The review finding, stated directly. A period starting on the 1st, nothing logged by the
+    // 28th: `daysLeft` is 4 and "Full month ahead" would be a false sentence replacing a true
+    // one. Every light account passes through this state, so it is not an edge case.
+    render(<BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={4} topCategory={null} />);
+
+    expect(screen.getByText('4 days left')).toBeInTheDocument();
+    expect(screen.queryByText('Full month ahead')).not.toBeInTheDocument();
+  });
+
+  it('holds the frame\'s copy down to the shortest period a "full month" can be', () => {
+    // 28 is February's own length rather than a chosen cutoff, which is what makes the claim
+    // safe in every month: at `daysLeft` of 28 at most three days have elapsed whatever the
+    // period's real length is. One day below it, the card stops claiming.
+    const { unmount } = render(
+      <BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={28} topCategory={null} />,
+    );
     expect(screen.getByText('Full month ahead')).toBeInTheDocument();
-    expect(screen.queryByText('30 days left')).not.toBeInTheDocument();
+    unmount();
+
+    render(<BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={27} topCategory={null} />);
+    expect(screen.getByText('27 days left')).toBeInTheDocument();
+    expect(screen.queryByText('Full month ahead')).not.toBeInTheDocument();
   });
 });
 

@@ -1440,6 +1440,27 @@ card gets its own small local markup instead, scaled down from `EmptyState`'s ow
 (`RecentTransactionsCard`), and left a plain muted glyph where the frame draws one with no tint at
 all (`TrendCard`, and the donut's ring itself).
 
+**The review of this branch found three cards reading frame 05 as a fact about an _account_ when
+`isEmpty` is a fact about a _period_, and that is the trap to carry into any empty state here.**
+The frame draws a brand-new user on day one; `transactionCount === 0` is also every established
+account at the start of a period and every light account that has not spent anything yet this
+month. Copy true of the first is false of the other two. Three consequences, all shipped and all
+now fixed. **`BudgetCard`'s caption needs a second condition**: `daysLeft >= 28` alongside
+`isEmpty`, because emptiness carries no information about time remaining and the card was replacing
+an accurate "4 days left" with a claim the month had not started. 28 is a derived bound rather than
+an invented threshold - a period is 28 to 31 days, so at or above it at most three days have
+elapsed - and below it the card draws the count it draws in every other state. **`RecentTransactionsCard`
+keeps its "View all"**, which amends the plan's rule that no empty treatment carries an interactive
+control: that rule is right for the three treatments with no navigation to lose, and wrong here,
+where dropping the link told a returning user they had no transactions and simultaneously deleted
+the one route from the card to the history they do have. **`CategoryDonut`'s ring name and caption
+branch on `spent`** the way its centre figure already did: the dangling-category race renders that
+ring with real money in the middle of it, and "once you start spending" beside "$124" is the card
+contradicting itself - worse through a screen reader, where the ring's name is the whole of what
+the region announces. The general form is the lesson `TransactionsScreen`'s no-results copy and
+`InsightTeaserCard`'s third state each paid for separately: **an empty state has to be honest about
+which emptiness it is describing**, and on this screen "empty" always means the period.
+
 **Five new strings join what A29 owes**, `docs/TODO.md` is where they are logged. Unlike the
 undesigned-state copy that list otherwise tracks, these five are read straight off frame 05 -
 "Full month ahead", "No spending to chart yet", "No transactions yet" and its body line, and the

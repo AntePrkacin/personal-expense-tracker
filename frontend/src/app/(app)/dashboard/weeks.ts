@@ -65,8 +65,12 @@ export function todayFromDaysLeft(buckets: WeeklyBucket[], daysLeft: number): st
  * special final-bucket branch.
  *
  * **`null` for the empty array and for a `today` outside every bucket, and both are ordinary.**
- * `weeklyBuckets` is `[]` exactly when `transactionCount === 0` - `TrendCard.tsx` renders nothing
- * for that account rather than calling this at all - and `today` can fall after the last bucket
+ * `weeklyBuckets` is `[]` exactly when `transactionCount === 0`, and `TrendCard.tsx` returns
+ * PET-26's frame 05 treatment for that account before reaching this - it guards on the screen's
+ * shared `isEmpty` rather than on the array, which is the same condition by that biconditional.
+ * So the empty-array arm here is unreachable through the card and is kept for the reason every
+ * other guard in this module is: it reads a network response, and a shape it cannot use must not
+ * throw inside a card. `today` can also fall after the last bucket
  * for the same reason `daysLeft` can momentarily read 0 at the midnight boundary
  * (`backend/CLAUDE.md`'s Dashboard section): the endpoint resolves the period more than once
  * per request, so the window and `today` can land on either side of it for an instant. Neither

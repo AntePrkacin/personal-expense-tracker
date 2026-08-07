@@ -48,16 +48,27 @@ export function RecentTransactionsCard({
   categories,
   isEmpty,
 }: RecentTransactionsCardProps) {
+  // **The header is identical in both states, and the review of PET-26 is what made it so.**
+  // The first version dropped "View all" from the empty branch, on frame 05's rule that no empty
+  // treatment carries an interactive control of its own. That rule reads correctly for a new
+  // account and fails for the state it cannot see: `isEmpty` is the **period's** flag, so a
+  // returning user with months of history opens `/dashboard` on the first day of a new period and
+  // gets "No transactions yet" with the one route to their actual history deleted from the card.
+  // Of the two halves that is the worse one - the copy is at least scoped to a card about this
+  // period, while a missing link is a dead end - so the control stays and the rule is amended
+  // here rather than in the four other treatments, which have no navigation to lose.
+  const header = (
+    <div className="flex items-center justify-between">
+      <h2 className="text-base font-semibold">Recent transactions</h2>
+      <Button label="View all" variant="text" href={SIDEBAR_HREFS.transactions} />
+    </div>
+  );
+
   if (isEmpty) {
     return (
       <section className="card bg-base-100 shadow-sm">
         <div className="card-body gap-4">
-          {/* No "View all" here, unlike the populated header below: frame 05 draws every
-              empty treatment with no interactive control of its own, and puts the screen's one
-              call to action on the teaser card instead - `docs/plans/2026-08-06_PET-26_dashboard-empty-state.md`
-              states the rule and `page.tsx`'s own header `AddTransactionButton` is the other
-              half of it. */}
-          <h2 className="text-base font-semibold">Recent transactions</h2>
+          {header}
 
           {/* The circle and its tint are `components/EmptyState.tsx`'s own treatment, scaled
               down: `size-14` (56px) against that component's `size-18` (72px), because this
@@ -86,10 +97,7 @@ export function RecentTransactionsCard({
   return (
     <section className="card bg-base-100 shadow-sm">
       <div className="card-body gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Recent transactions</h2>
-          <Button label="View all" variant="text" href={SIDEBAR_HREFS.transactions} />
-        </div>
+        {header}
 
         <ul className="flex flex-col gap-3">
           {recentTransactions.map((transaction) => {

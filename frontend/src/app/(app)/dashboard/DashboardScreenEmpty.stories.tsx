@@ -20,6 +20,13 @@ import { TrendCard } from './TrendCard';
 // screen's own flag rather than a sixth spelling of it - so this story hands it an empty
 // `categories` array instead, which is what a real `transactionCount: 0` response also carries.
 //
+// **`daysLeft` is 31, and after the review of PET-26 that is load-bearing rather than filler.**
+// Frame 05 draws a brand-new account, so this story has to be at the *start* of a period for
+// `BudgetCard` to draw the frame's "Full month ahead" at all - the caption needs both `isEmpty`
+// and a `daysLeft` that proves the period has barely begun, since an empty account four days from
+// the end of its period is a different and undesigned state. `Shell/Budget card`'s own
+// `EmptyLateInPeriod` is where that one is reviewed; this frame stays what the designer drew.
+//
 // **`monthlyBudget` still comes off the fixture rather than a literal `$2,000`**, because AC2's
 // "$0 of $2,000" is exactly what a zero `spent` formats to against whatever budget the account
 // set during onboarding - a hardcoded caption here would be the bug PET-26's plan warns against
@@ -53,14 +60,14 @@ export const Empty: Story = {
               spent={0}
               monthlyBudget={2000}
               remaining={2000}
-              daysLeft={8}
+              daysLeft={31}
               transactionCount={0}
               averagePerDay={0}
               topCategory={null}
               isEmpty={true}
             />
           }
-          trendCard={<TrendCard weeklyBuckets={[]} daysLeft={8} isEmpty={true} />}
+          trendCard={<TrendCard weeklyBuckets={[]} daysLeft={31} isEmpty={true} />}
           donutCard={<CategoryDonut categories={[]} spent={0} />}
           recentTransactionsCard={
             <RecentTransactionsCard recentTransactions={[]} categories={[]} isEmpty={true} />
