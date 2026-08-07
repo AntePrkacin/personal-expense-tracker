@@ -586,6 +586,59 @@ card has `highlightIndex` in hand either way, so switching costs a line. It ship
 that keeps the axis stable as weeks land, which is the property the running total in the card
 above it already has.
 
+**The Recharts retrofit changed how those two strings are delivered and added a third surface to
+sign off.** The per-column `sr-only` spans became one `sr-only` list, since every figure on the
+chart is SVG text now and the plot is `aria-hidden`; each week reads as one sentence naming its
+caption, its date range, its amount and its state. And the chart gained a **hover tooltip**
+carrying the bucket's date range and amount, which amends AC4's "no tooltip" and is recorded on
+the ticket. So what A29 owes here is now three things rather than two: the muted state, the two
+state names, and the tooltip's existence and content. The tooltip is the one worth a designer's
+attention soonest, because it is the only place the app admits that a **short final bucket** is
+short - `weeklyBucketsOf` ends the last bucket at the period end, so a two or three day stub is
+captioned "Week 5" beside four full weeks, and the range in the tooltip is the sole correction.
+A pointer-only fact would have been the wrong home for that, which is why the list carries it
+too.
+
+### The dashboard's chart states need seeded data, and the seed script does not exist yet
+
+Two of PET-22's acceptance criteria have never been checked against a running backend, only
+against Storybook fixtures built by hand to match what the API is *believed* to send. That is a
+weaker check than it looks: the fixture and the component were written by the same person from
+the same reading of the contract, so a misreading of `weeklyBucketsOf` would appear in both and
+cancel out. The pair is **AC5** (a spend-free week still appears with a zero value rather than
+being dropped) and the **short final bucket** (`weeklyBucketsOf` ends its last bucket at the
+period end, so a period that is not a clean multiple of seven draws a two or three day stub
+captioned like a full week).
+
+**What blocks them is data, not effort.** Both need an account sitting at a specific point in a
+specific period:
+
+- AC5 needs a **past** week with no spending, which means at least two weeks elapsed with a gap
+  between two spending weeks. A future-dated transaction does not substitute, because a week
+  after today renders in the muted "upcoming" tone and is a different state.
+- The short final bucket needs today to fall in a period whose length leaves a remainder. This
+  one is occasionally free: at the default `monthStartDay: 1`, any 31-day month tiles into five
+  buckets whose last is three days.
+- Reaching either deliberately means setting `monthStartDay`, and **no screen can**: the Settings
+  preferences card is PET-47 and is not built, so today it is a `PATCH /api/profile` by hand or a
+  direct write to the user database.
+
+**Deferred until there is a dummy-content script, and it should be built on that script rather
+than beside it.** Seeding a believable account is wanted for far more than this - every empty
+state has a populated twin nobody can see without typing transactions in one at a time, and the
+same is true of PET-23's donut (a category shortfall, which the backend documents as reachable
+through a dangling category, has no manual route to it at all). So the thing to write is one
+script that can put an account into a named scenario, and these two checks become two of its
+scenarios rather than a fixture of their own. Writing a bespoke harness for the trend chart now
+would be the throwaway version of it.
+
+When that lands, the verification is a headless Chromium walk of `/dashboard` like the one
+PET-22's retrofit already uses on Storybook, plus a run in a visible browser so a human can
+confirm the same states. The walk's assertions are already written and are the ones to reuse: the
+zero week keeps its caption over a floored bar and is drawn in the ordinary tone rather than the
+muted one, and the short bucket's tooltip reads its true range, which for a bucket ending
+`2026-09-01` is `Aug 29 – Aug 31` and never `Sep 1`, since `endDate` is exclusive.
+
 ### A visible theme toggle is deferred, and adding one costs the automatic behaviour
 
 PET-57 ships daisyUI's built-in `light` / `dark` pair selected by `prefers-color-scheme`, with

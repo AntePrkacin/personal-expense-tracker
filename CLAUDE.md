@@ -146,6 +146,7 @@ read the file before you write the change, not after.
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
 | open the Figma file, or implement a designed screen                 | `frontend/CLAUDE.md`, Figma against daisyUI |
 | write a daisyUI class, or wonder why one paints nothing             | `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight |
+| add or change a chart, or reach for a charting library              | `frontend/CLAUDE.md`, The chart library |
 | run the daisyUI Blueprint MCP                                       | `docs/agents/claude-tooling.md` |
 | verify a UI change in a browser                                     | `docs/agents/claude-tooling.md` |
 | add or change anything in `frontend/src/components/`                | `frontend/src/components/CLAUDE.md` |

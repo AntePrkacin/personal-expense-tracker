@@ -291,3 +291,88 @@ was running in this session to do that against. The source-level argument in Dec
 and the loop pushes every bucket including zero ones) still stands on inspection of
 `backend/src/dashboard/dashboard.service.ts`, but it has not been confirmed live the way the plan
 asks. Whoever takes this out of draft should run the two backend-dependent checks before merge.
+
+## Reversal: the no-library decision above is superseded, and this card now uses Recharts
+
+The Decisions section opens with **"No charting library, here or in PET-23"** and calls that "the
+decision this branch owns for the epic". That decision was reversed before PET-23 was built, and
+this card was retrofitted rather than left as the odd one out. The section above is left standing
+because its reasoning is still the honest record of why the first version looked the way it did,
+but do not read it as current: `TrendCard` no longer contains a `<div>` with a proportional
+height.
+
+**What changed is the premise, not the argument.** Every bullet above is still true of *one*
+chart in isolation: AC4 really does forbid interaction, a library's axes and transitions really
+were unwanted, and re-theming one really would have cost more than fourteen lines of markup. What
+the bullets got wrong is the scope they claimed. The last one is the tell - "added for two cards"
+- because the epic does not stop at two. PET-23's donut would have hand-rolled cumulative arc
+geometry, and each chart after it would have hand-rolled its own, every one of them carrying its
+own version of the plot-area and minimum-height problems this branch already found the hard way.
+The library is bought once and amortised across all of them.
+
+**Recharts 3.10.1, and the licence is why it is not the obvious alternative.** The daisyUI
+Blueprint MCP recommends ApexCharts, and its skill guide describes the paid tier as a watermark
+on a few premium features. Reading the actual `LICENSE` out of the published npm tarball says
+otherwise: ApexCharts 6 is dual-licensed on **organisation revenue**, free only under $2M a year,
+with a separate paid tier for redistribution. That is a commitment rather than a dependency.
+Recharts is plain MIT.
+
+**The cost, measured rather than estimated.** Recharts 3 pulls in `@reduxjs/toolkit`,
+`react-redux`, `immer`, `reselect` and `victory-vendor` (which wraps five d3 packages). Built
+client chunks went from **879,657 to 1,230,462 bytes, +343 KB and +40%**, measured by building
+this branch with and without the chart. That is the price of the decision and it is worth
+restating whenever the next chart is added, because the next one is nearly free and this one was
+not.
+
+### Three things the retrofit changed, beyond the render
+
+- **`weeks.ts` gained `bucketRangeLabel` and lost nothing.** `todayFromDaysLeft` and
+  `currentWeekIndex` are untouched, deliberately: the timezone reasoning in this plan's review
+  sections cost three rounds to get right, and the chart component never receives `daysLeft`, a
+  bucket or a clock. `TrendCard` resolves every tone on the server and hands the plot finished
+  answers, so there is no code path through which a library could form its own opinion about
+  what "today" is.
+- **AC4 is amended: the chart has a hover tooltip.** It carries the bucket's own date range and
+  its amount. The argument is narrow rather than "the library makes it easy": the range is the
+  one fact on the response this card discarded, and it is the only thing on screen that can
+  explain a **short final bucket** - `weeklyBucketsOf` ends its last bucket at the period end, so
+  a 31-day period draws a two or three day stub beside full weeks and captions it "Week 5" like
+  any other. `endDate` is exclusive, so the label ends on `addDays(endDate, -1)`; printing it
+  verbatim would make every adjacent pair of weeks share a date. The ticket carries the
+  amendment.
+- **The per-bar `sr-only` spans became one `sr-only` list, and it says more than they did.** The
+  figures and captions are SVG text now, so the plot is `aria-hidden` and the list is its
+  accessible equivalent, naming each week's range, amount and state in one sentence. A tooltip is
+  pointer-only, so without this the range would have reached mouse users and nobody else.
+
+### The defect the retrofit introduced, and what caught it
+
+**Recharts 3 defaults `accessibilityLayer` to `true`**, which puts `role="application"` and
+`tabindex="0"` on its own `<svg>`. Declining to enable it is not the same as disabling it, and
+the first version of `TrendChart.tsx` carried a comment saying the layer was not used while the
+default quietly supplied it. That put a tab stop on a card whose ticket says display only, and it
+put it **inside the `aria-hidden` subtree** - so it was focusable and simultaneously invisible to
+the screen reader that would have to explain it, the footgun `frontend/src/app/CLAUDE.md` already
+records for the Welcome panel. `accessibilityLayer={false}` is now explicit. The suite's "puts
+nothing in the tab order and claims no application role" case is what found it, and is the reason
+that case asserts a negative rather than trusting the comment.
+
+### What the browser walk measured this time
+
+Seventeen checks over both themes, all passing, including a discriminator proving the harness can
+fail. AC2's geometry is measured with `getBoundingClientRect()` rather than read back off an
+inline style, which is the mistake the round-two review caught: the four bars measure 90.15,
+132.00, 80.49 and 96.59 against expected 90.15, 132.00, 80.49 and 96.59, and the `$410` and
+`$300` bars - the exact pair that drew identically in the shipped defect - are 35.41px apart. The
+muted tone is composited on a canvas and the painted pixel read, giving **1.527:1 in light and
+1.876:1 in dark**; the rejected `base-300` token still measures **1.115:1** through the same
+harness, so the check is seen to fail before its passes are trusted. The fill re-resolves across
+a `prefers-color-scheme` flip with no JavaScript, confirming a `var(--color-*)` string in an SVG
+`fill` attribute behaves exactly as the equivalent Tailwind class would. Both themes are emulated
+explicitly rather than one assumed, for the reason the round-three walk recorded.
+
+### Still not verified
+
+Unchanged and still owed: **AC5 and the short-final-bucket case against a running backend.** Both
+are confirmed at source and in Storybook against hand-built fixtures, and neither has been run
+against a live `GET /api/dashboard`.
