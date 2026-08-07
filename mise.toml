@@ -168,3 +168,17 @@ depends = ["dev:backend", "dev:frontend"]
 description = "Dispatch the Fly deploy workflow and stream it to completion"
 raw = true
 run = "scripts/deploy-backend.sh"
+
+# Two tasks rather than one with a flag, because the two targets are not
+# equally forgiving: a mistaken local run writes a gitignored SQLite file, a
+# mistaken cloud run creates a real database and 1,200-odd rows in the shared
+# Turso organization. Reaching the cloud has to be typed out.
+[tasks."seed:showcase"]
+description = "Seed the showcase user into the local SQLite files"
+dir = "backend"
+run = "npx ts-node src/scripts/seed-showcase.ts --local"
+
+[tasks."seed:showcase:cloud"]
+description = "Seed the showcase user into Turso Cloud (needs backend/.env)"
+dir = "backend"
+run = "npx ts-node src/scripts/seed-showcase.ts --cloud"

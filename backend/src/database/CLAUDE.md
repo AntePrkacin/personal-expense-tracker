@@ -129,6 +129,16 @@ that hole with `ignoreEnvFile: process.env.NODE_ENV === 'test'` (Jest sets `NODE
 itself). Remove either half and a developer with a filled-in `.env` runs the suite against
 production infrastructure.
 
+**Three callers now share that pattern, and a fourth should copy it rather than invent
+something.** `test/setup-e2e.ts` under `NODE_ENV=test`, `src/openapi.env.ts` under
+`OPENAPI_EMIT`, and `src/scripts/seed-showcase.env.ts` under `SEED_LOCAL`. Each is a
+side-effect-only module that scrubs `TURSO_*` out of `process.env` and sets the flag
+`AppModule` reads, and each must be imported before `app.module.ts` - `ConfigModule.forRoot()`
+is evaluated inside the `imports` array, so it runs at import time. The seed script is the one
+where the mistake would be visible rather than silent: it is a developer-facing command, so
+`--local` reaching Turso Cloud would provision a real database under a name that says
+`dummy`.
+
 ## Not built here
 
 `backend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
