@@ -648,6 +648,16 @@ A repair pass for rows already orphaned belongs with it: one
 `UPDATE transactions SET category_id = <fallback> WHERE category_id NOT IN (SELECT id FROM
 categories WHERE deleted_at IS NULL)`, idempotent and almost always zero rows.
 
+**The review of PET-23 found what the unrepaired row costs a client, so the repair has a second
+reason to happen and a note to delete when it does.** Because the fold attributes on read and
+changes nothing in storage, the two endpoints disagree about exactly one row: `GET /categories`
+can report Uncategorized with a `transactionCount` that
+`GET /transactions?categoryId=<fallback id>` will not return, since that filter matches the id
+still stored on the row. Counted, and not enumerable. It is documented on
+`CategoryResponseDto.spent` and `.transactionCount` rather than left for a client to discover,
+and the `UPDATE` above is what makes both descriptions deletable. Until then, do not build a
+"see these transactions" link off that count for the fallback row.
+
 **One stale claim to fix while in there.** Both service files say `LoginTokenService.issue()` is
 the app's only transactional call site. `insights.service.ts` added a second one on a user
 database, so the sentence is no longer true.

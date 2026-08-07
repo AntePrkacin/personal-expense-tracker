@@ -430,6 +430,15 @@ export class CategoriesService {
    * one. `docs/TODO.md` carries the conditional-write fix that would respect that constraint.
    * Until then this makes the money add up on the way out, which is what every reader needs.
    *
+   * **What it costs, stated so no screen builds on the wrong half of it.** The fold happens on
+   * read and repairs nothing in storage, so an orphaned transaction is counted on the fallback
+   * row while still carrying the tombstoned category's id. The two endpoints therefore disagree
+   * about that one row: `GET /categories` can report Uncategorized with a `transactionCount` that
+   * `GET /transactions?categoryId=<fallback id>` will not return, because the filter matches the
+   * stored id. `CategoryResponseDto` says so on both fields, since a client cannot see this from
+   * the shape. What it is safe to build on is the sum - every transaction in the period is counted
+   * in exactly one row - which is what the donut and the month stats need and all they need.
+   *
    * Skipped entirely when the caller asked for one non-fallback category, since there is then no
    * row for the orphans to land in and no reason to pay for the query.
    */

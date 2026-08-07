@@ -436,9 +436,9 @@ export interface components {
             isFallback: boolean;
             /** @description Major units. Null means uncapped, which is not a cap of 0. */
             monthlyCap: number | null;
-            /** @description Major units spent in this category during the current period. */
+            /** @description Major units spent in this category during the current period. On the fallback (`isFallback`) row this also carries spend whose category no longer exists, so these figures always sum to the period total; see `transactionCount` for what that costs. */
             spent: number;
-            /** @description Transactions counted in `spent`. */
+            /** @description Transactions counted in `spent`. On the fallback (`isFallback`) row this can exceed what `GET /transactions?categoryId=<this id>` returns: orphaned transactions are attributed here on read but still store the id of the deleted category, so they are counted and not enumerable. Do not present this count as a link to a filtered list for that one row. */
             transactionCount: number;
             /** @description Percentage of the cap used, unrounded. Null when uncapped. Round it for display; the status is decided on cents, so rounding cannot disagree with it. */
             percentUsed: number | null;
