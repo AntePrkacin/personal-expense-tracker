@@ -386,6 +386,15 @@ Decision 2 already names; `[id]/CategoryContextCard.tsx:114` is the second, in P
 page, and it renders the identical placeholder in the identical `size-9 rounded-field` tile. Both
 become the real per-category icon, or the close-pair decision only half holds.
 
+> **There were three, and this sweep missed one.** `(app)/dashboard/RecentTransactionsCard.tsx`
+> draws the same tile with the same placeholder, and it was found during implementation by
+> `grep -rn ShoppingBag src/` rather than by this inventory. It needed a contract change the plan
+> did not anticipate: `DashboardCategoryDto` gained an `icon` field, for that tile alone - the
+> donut's slices are bare colour and need none, and the card joins its category off the same
+> response, so the join still costs no second request. The general lesson is the one this section
+> was written to teach and did not quite manage: **sweep with a tool, not by reading**, and re-run
+> the sweep after the change to prove no site is left.
+
 **`categoryColour.ts` exports more than this plan first named.** Beside `CATEGORY_TILE`,
 `CATEGORY_DOT`, `CATEGORY_COLOUR_BY_HEX`, `CATEGORY_TILE_NEUTRAL` and `categoryTileClass`, `main`
 also has **`categoryDotClass`** and **`CATEGORY_DOT_NEUTRAL`**, and `[id]/TransactionDetailScreen.tsx:76`
@@ -448,32 +457,32 @@ nine"). The prose copies are in `starter-categories.ts`, `create-category.dto.ts
 - [x] Rename and rewrite the preview HTML against the installed daisyUI 5 and Tailwind v4
 - [x] Replace this plan with the template architecture
 - [x] Open PET-64, rebase onto `main`, rename the branch, open a draft PR
-- [ ] Wait for PET-23 to merge, since it also rewrites `categoryColour.ts`
-- [ ] Add `backend/src/database/central/template-tokens.ts` with `COLOUR_TOKENS` and `ICON_NAMES`
-- [ ] Add the three template tables to `central/schema.ts`; generate with `drizzle.central.config.ts`
-- [ ] Seed the templates idempotently in `openCentralDatabase`, guarded on "any row exists"
-- [ ] Add `backend/src/templates/` with the public categories read and the guarded palette read
-- [ ] Switch `color` and `icon` on all four category DTOs to `@IsIn` with an explicit `enum:`
-- [ ] Switch `RegisterDto.categories` to template ids, resolved ahead of the floated work
-- [ ] Rewrite `seedStarterCategories` to copy from central; keep `FALLBACK_CATEGORY` a code constant
-- [ ] Backend tests, including the `openapi.e2e-spec.ts` enum assertions
-- [ ] `npm run api:sync` from the root; commit both artifacts
-- [ ] Rewrite `categoryColour.ts` and its test, including `categoryDotClass` and
+- [x] Wait for PET-23 to merge, since it also rewrites `categoryColour.ts`
+- [x] Add `backend/src/database/central/template-tokens.ts` with `COLOUR_TOKENS` and `ICON_NAMES`
+- [x] Add the three template tables to `central/schema.ts`; generate with `drizzle.central.config.ts`
+- [x] Seed the templates idempotently in `openCentralDatabase`, guarded on "any row exists"
+- [x] Add `backend/src/templates/` with the public categories read and the guarded palette read
+- [x] Switch `color` and `icon` on all four category DTOs to `@IsIn` with an explicit `enum:`
+- [x] Switch `RegisterDto.categories` to template ids, resolved ahead of the floated work
+- [x] Rewrite `seedStarterCategories` to copy from central; keep `FALLBACK_CATEGORY` a code constant
+- [x] Backend tests, including the `openapi.e2e-spec.ts` enum assertions
+- [x] `npm run api:sync` from the root; commit both artifacts
+- [x] Rewrite `categoryColour.ts` and its test, including `categoryDotClass` and
       `CATEGORY_DOT_NEUTRAL`
-- [ ] Give `RegisterDto.categories` a literal `@ArrayMaxSize` ceiling, since its bound currently
+- [x] Give `RegisterDto.categories` a literal `@ArrayMaxSize` ceiling, since its bound currently
       comes from the deleted constant and the route is public
-- [ ] Delete `starterCategories.ts`; split `/setup/categories` into an async page and a
+- [x] Delete `starterCategories.ts`; split `/setup/categories` into an async page and a
       prop-taking screen, thread the list through `CategoryPicker`, and re-point its stories and
       tests at stand-in data; move the draft to ids
-- [ ] Both `<ShoppingBag />` sites draw the real icon: `TransactionRow` and
+- [x] Both `<ShoppingBag />` sites draw the real icon: `TransactionRow` and
       `[id]/CategoryContextCard`; widen `CategoryLabel` with `icon`
-- [ ] Repoint `seed-showcase.ts` at template ids; fix its two name lookups and its count comment
-- [ ] Fix the fixtures section 10 lists: hexes, `icon: 'cup'`/`'box'`, `#22C55E`, and the
+- [x] Repoint `seed-showcase.ts` at template ids; fix its two name lookups and its count comment
+- [x] Fix the fixtures section 10 lists: hexes, `icon: 'cup'`/`'box'`, `#22C55E`, and the
       `color: 'teal'` negative case
-- [ ] Update the count assertions that fail, not only the prose that rots
-- [ ] Update the documentation in sections 8 and 10; close the two `docs/TODO.md` entries
-- [ ] Full verification pass, including the two-theme browser walk on a re-provisioned account
-- [ ] Re-run `mise run seed:showcase` end to end, the only thing that exercises provisioning
+- [x] Update the count assertions that fail, not only the prose that rots
+- [x] Update the documentation in sections 8 and 10; close the two `docs/TODO.md` entries
+- [x] Full verification pass, including the two-theme browser walk on a re-provisioned account
+- [x] Re-run `mise run seed:showcase` end to end, the only thing that exercises provisioning
       against real data
 
 ## Risks worth stating
