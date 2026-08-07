@@ -87,9 +87,11 @@ const MODULES: [name: string, module: StoryModule][] = [
   // uncapped category, one over its cap, and a transaction with no note - which makes this
   // module the review surface for them rather than only a diff against the design.
   ['TransactionDetailScreen', TransactionDetailScreen as StoryModule],
-  // Frame 04, PET-21's own. Four of its five slots are the placeholder `<div />`s
-  // `page.tsx` actually renders today; `Shell/Budget card` is where the card itself, the
-  // fifth, is reviewed.
+  // Frame 04, PET-21's own. All five of its slots are real cards as of PET-25; each card's own
+  // states are reviewed under its own `Shell/...` story (`Shell/Budget card`,
+  // `Shell/Spending trend`, `Shell/Spending by category`, `Shell/Recent transactions`,
+  // `Shell/AI insight teaser`), and this module carries the one combination that matches node
+  // 22:55.
   ['DashboardScreen', DashboardScreen as StoryModule],
 ];
 
