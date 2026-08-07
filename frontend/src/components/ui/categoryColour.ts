@@ -61,6 +61,31 @@ export const CATEGORY_DOT: Record<CategoryColour, string> = {
   pink: 'bg-secondary',
 };
 
+/**
+ * The same eight colours as a CSS value, for an SVG `fill`.
+ *
+ * **A third map rather than a reuse of `CATEGORY_DOT`, because `fill` is an SVG presentation
+ * attribute and a Tailwind class is not a valid value for one.** `bg-error` in a `fill` resolves
+ * to nothing at all: no error, no colour, an unpainted slice. PET-23's donut is the first thing
+ * here that colours an SVG rather than a box, and every chart after it has the same problem.
+ *
+ * A `var(--color-*)` reference is a live one, resolved by the browser exactly as the class is, so
+ * a slice follows the light/dark theme with no JavaScript and no `dark:` variant - verified in a
+ * browser by flipping `prefers-color-scheme` and re-reading the computed fill. The values pair
+ * one-to-one with `CATEGORY_DOT` and `categoryColour.test.ts` pins that, so a ninth colour added
+ * to one and not the others fails there rather than painting a hole in the ring.
+ */
+export const CATEGORY_FILL: Record<CategoryColour, string> = {
+  coral: 'var(--color-error)',
+  orange: 'var(--color-warning)',
+  yellow: 'var(--color-warning)',
+  green: 'var(--color-success)',
+  teal: 'var(--color-accent)',
+  blue: 'var(--color-info)',
+  violet: 'var(--color-primary)',
+  pink: 'var(--color-secondary)',
+};
+
 // Everything below is the bridge from what the API stores to what the map above is keyed
 // by, and it exists because the two speak different languages on purpose.
 //
@@ -151,18 +176,21 @@ export function categoryTileClass(hex: string | null | undefined): string {
 }
 
 /**
- * The same lookup for a `status` dot, added by PET-34.
+ * The same lookup for a `status` dot, for a mark with no content on it.
  *
- * The two existing `CATEGORY_DOT` call sites - the onboarding chip and the Welcome panel -
- * index it by colour **word**, because each of them owns the word already. A screen rendering
- * a category that came off the API has a hex instead, and the only hex-keyed path here
- * returned the tile - whose `text-*-content` half is exactly what must not reach a `status`.
- * So this is the missing half of the pair rather than a convenience: without it the transaction
- * detail's category chip would have had a smudge under its dot, or a second colour lookup
+ * **Two tickets needed it independently, which is why this names both call sites.** PET-34's
+ * transaction detail draws a category chip; PET-23's donut legend draws a coloured dot with the
+ * category name beside it in real text. The two existing `CATEGORY_DOT` call sites - the
+ * onboarding chip and the Welcome panel - index it by colour **word**, because each of them owns
+ * the word already. A screen rendering a category that came off the API has a hex instead, and
+ * the only hex-keyed path here returned the tile - whose `text-*-content` half is exactly what
+ * must not reach a `status`. So this is the missing half of the pair rather than a convenience:
+ * without it either consumer would have had a smudge under its dot, or a second colour lookup
  * written out at the call site.
  *
- * Every note on `categoryTileClass` applies unchanged, `Object.hasOwn` included and for the
- * same reason.
+ * Every note on `categoryTileClass` applies unchanged, `Object.hasOwn` included and for the same
+ * reason, and so does the uppercase normalisation - `CreateCategoryDto` accepts `#57b368` while
+ * the seed writes `#57B368`.
  */
 export function categoryDotClass(hex: string | null | undefined): string {
   if (hex === null || hex === undefined) {
@@ -174,4 +202,32 @@ export function categoryDotClass(hex: string | null | undefined): string {
   return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
     ? CATEGORY_DOT[CATEGORY_COLOUR_BY_HEX[key]!]
     : CATEGORY_DOT_NEUTRAL;
+}
+
+/**
+ * The neutral fill, for a colour outside the eight.
+ *
+ * Stands to `CATEGORY_FILL` as `CATEGORY_DOT_NEUTRAL` stands to `CATEGORY_DOT`, and that one is
+ * declared above beside `CATEGORY_TILE_NEUTRAL` rather than here, which is where the shared
+ * no-content-half reasoning lives.
+ */
+export const CATEGORY_FILL_NEUTRAL = 'var(--color-base-300)';
+
+/**
+ * The CSS colour for a stored category colour, for an SVG `fill`.
+ *
+ * The donut's slices. Falls back to the same neutral grey the tile and the dot do, which is the
+ * designed answer for the fallback category's own `#98A0AE` rather than an accident - dropping an
+ * unresolvable slice would make the ring not close, and the ring closing is PET-23's requirement.
+ */
+export function categoryFillVar(hex: string | null | undefined): string {
+  if (hex === null || hex === undefined) {
+    return CATEGORY_FILL_NEUTRAL;
+  }
+
+  const key = hex.toUpperCase();
+
+  return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
+    ? CATEGORY_FILL[CATEGORY_COLOUR_BY_HEX[key]!]
+    : CATEGORY_FILL_NEUTRAL;
 }

@@ -2,16 +2,16 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import { AddTransactionProvider } from '../AddTransactionProvider';
 import { BudgetCard } from './BudgetCard';
+import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
 import { TrendCard } from './TrendCard';
 
 // 04 Dashboard (Figma node 21:4), diffed against the frame's own numbers (node 22:55).
 //
-// **This ticket ships two of the five cards.** The remaining three render exactly what
-// `page.tsx` renders in production - empty placeholder `<div />`s - so this story is honest
-// about what has shipped rather than mocking up cards that do not exist yet. PET-23 through
-// PET-25 each replace one placeholder here as they land, and the grid geometry is already
-// reviewable.
+// **Three of the five cards are built.** The remaining two render exactly what `page.tsx`
+// renders in production - empty placeholder `<div />`s - so this story is honest about what has
+// shipped rather than mocking up cards that do not exist yet. PET-24 and PET-25 each replace one
+// placeholder here as they land, and the grid geometry is already reviewable.
 //
 // `TrendCard`'s own states are `Shell/Spending trend`'s; this story carries only the one that
 // matches node 22:55. **Its buckets and `BUDGET.daysLeft` describe the same moment**, which they
@@ -76,7 +76,21 @@ export const Default: Story = {
               daysLeft={BUDGET.daysLeft}
             />
           }
-          donutCard={<div />}
+          donutCard={
+            // The five categories node 21:4 draws, summing to `BUDGET.spent` so the donut's
+            // centre and the budget card's readout are the same figure on one screen, which is
+            // AC2 and is what the real response guarantees.
+            <CategoryDonut
+              categories={[
+                { id: 'c1', name: 'Groceries', color: '#57B368', spent: 397, percent: 32.02 },
+                { id: 'c2', name: 'Dining out', color: '#EF6F6C', spent: 298, percent: 24.03 },
+                { id: 'c3', name: 'Transport', color: '#3F8EE6', spent: 223, percent: 17.98 },
+                { id: 'c4', name: 'Shopping', color: '#CE6FB8', spent: 174, percent: 14.03 },
+                { id: 'c5', name: 'Other', color: '#E7C24A', spent: 148, percent: 11.94 },
+              ]}
+              spent={BUDGET.spent}
+            />
+          }
           recentTransactionsCard={<div />}
           insightCard={<div />}
         />
