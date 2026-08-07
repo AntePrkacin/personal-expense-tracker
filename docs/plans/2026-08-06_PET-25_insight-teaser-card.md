@@ -149,6 +149,41 @@ Server Component; `AddTransactionButton` carries its own client boundary.
 - [x] Comment on PET-25 confirming the widen shipped, and note on PET-26 that AC3/AC4 are satisfied
       here
 
+## Review fixes
+
+Seven findings on PR #54, two of them behaviour and five stale prose. All applied on the same
+branch.
+
+- [x] **The unlock copy was the only state a real account could reach.** Nothing in either app
+      calls `POST /api/insights/generate`, so `insight` is null for every account and the card
+      told a user with two hundred expenses that insights unlock after their first. The card takes
+      `transactionCount` now and splits the null: frame 44:706's copy at zero, honest pending copy
+      above it, with the ready state's link to Insights. Two shapes still, no `generating` state.
+      New `Pending` story, two new specs, and `docs/TODO.md` records the cause as PET-44's.
+- [x] **Both controls spanned the card.** `card-body` declares no `align-items`, so daisyUI's
+      default `stretch` applied to a `btn` that was its direct child. Each control sits in a
+      `card-actions` wrapper (`align-items: flex-start`) now.
+- [x] Three files claimed `docs/agents/api-contract.md` carried the widened-teaser note; it has no
+      mention of insights at all. The claims are gone and `backend/CLAUDE.md` says in as many
+      words that it is the note's only home, which is what the checklist above already decided.
+- [x] `frontend/src/app/CLAUDE.md`'s Add-transaction paragraph had its closing clause split off
+      into a stray markdown list item. Rejoined.
+- [x] `(app)/AddTransactionButton.tsx` still said three triggers exist and the teaser had no host
+      UI, contradicting `frontend/src/app/CLAUDE.md`'s four in the same diff.
+- [x] `(app)/dashboard/DashboardScreen.tsx` still described `insightCard` as a placeholder `<div />`
+      at the call site, in both the header comment and the prop docblock.
+- [x] `insights.service.ts`'s comment said the SQL filter saves `latestReadySummary` a second
+      guard, where that method adds exactly one - `InsightSetRow` types both columns
+      `string | null`, so narrowing forces it. Both that comment and `backend/CLAUDE.md`'s copy of
+      the claim now say so.
+
+**Verified in headless Chromium against Storybook**, because the stretched button is precisely the
+class of defect `frontend/CLAUDE.md` says no gate can see. The control measures 138/159/145px
+against a 732px content box in the three `Shell/AI insight teaser` stories, and 145px against 399px
+inside `Screens/04 Dashboard` at 1440 - the narrow right column the review named. The walk probes
+the pre-fix markup in the same run by cloning the control back under `card-body`: it measures the
+full 732 and 399 there, so the harness is on record failing for the markup it rejected.
+
 **`npm run api:sync` is required on this branch.** It is the one branch in the stack that changes a
 response body, and drift is a CI failure in two halves - the backend job regenerates the spec and
 the frontend job regenerates the types, each failing on a non-empty `git diff`.

@@ -1678,6 +1678,28 @@ answer is a policy decision, not a capacity one: keep the last N sets, or keep a
 or keep everything and index `generated_at`. Worth settling before any automatic or scheduled
 regeneration, which is what would turn a slow accrual into an unbounded one.
 
+### Nothing in the running app generates an insight set, so the dashboard teaser can only be pending
+
+`POST /api/insights/generate` works and is called by nobody. Nothing in `frontend/src` fetches it,
+`/insights` is still PET-44's empty `<main>` with an inert "Regenerate" in its header, and no backend
+path generates on a transaction write. So `DashboardResponseDto.insight` is null for every account
+that exists, and `InsightTeaserCard`'s ready state is reachable only from Storybook or by inserting
+a row by hand.
+
+Found by the review of PET-25, where it mattered because the card had one non-ready state and its
+copy said "Insights unlock after your first expense." - shown to an account with two hundred of
+them. That half is fixed: the card takes `transactionCount` and draws honest pending copy above
+zero. What is not fixed is the cause, and it is PET-44's: the "Regenerate" button becoming real is
+what gives every account a way to reach the state the frame draws. Recorded here rather than
+worked around because a generate-on-write trigger is the tempting shortcut and is the wrong shape -
+generation is deliberately asynchronous and one-run-at-a-time (`backend/CLAUDE.md`, Insights), so a
+write path firing it would 409 against itself on any burst of saves.
+
+Two smaller things fall out of it. The teaser's pending copy is ours and owes A29 sign-off with the
+rest. And `Screens/04 Dashboard` deliberately fixtures the ready state, because it is the frame
+being diffed against node 21:4 - so that story shows a screen the running app cannot produce, and
+its comment says so.
+
 ---
 
 ## Scaling, when it is actually needed

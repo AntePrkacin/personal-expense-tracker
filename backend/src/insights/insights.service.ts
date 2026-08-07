@@ -284,8 +284,13 @@ export class InsightsService {
           // A `ready` row without its content is a broken invariant, not an
           // answer, so it is skipped here rather than downstream: an older
           // complete set then still serves, the same way AC6 lets one outlive a
-          // `failed` run. Filtered in SQL so `latestReadySummary` inherits it
-          // rather than guarding the same invariant a second, different way.
+          // `failed` run. Filtered in SQL so both readers inherit it rather than
+          // each deciding for itself what a half-written set means. Note this
+          // does not save `latestReadySummary` a null check: `InsightSetRow`
+          // types both columns `string | null`, so narrowing forces a redundant
+          // guard there, and the alternative - projecting the two columns so the
+          // row type carries the guarantee - would narrow the row `getSet` reads
+          // the rest of its fields off.
           isNotNull(insightSets.summaryHeadline),
           isNotNull(insightSets.summaryBody),
           isNull(insightSets.deletedAt),

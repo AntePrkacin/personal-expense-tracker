@@ -466,9 +466,12 @@ way `transactions.category_id` is), because a set and its cards are only ever wr
 **The dashboard teaser widened from a `string` to `InsightSummaryDto` at PET-25.**
 `latestReadySummary` hands `DashboardResponseDto.insight` the latest ready set's headline **and**
 body, replacing `latestReadyTeaser`, which honoured PET-20's committed `string | null` only until
-PET-25's card needed the body the frame was already drawing. The Dashboard section above and
-`docs/agents/api-contract.md` both carry the note. If frame 04's teaser ever needs a tone on top
-of that, that is a further contract change to weigh, not one taken here unasked.
+PET-25's card needed the body the frame was already drawing. The Dashboard section above carries
+the note, and **this file is its only home**: `docs/agents/api-contract.md` describes the pipeline
+rather than the fields that travel through it, and a one-field widen with no new mechanic gives it
+nothing to say. Three places on PET-25's branch claimed that file carried the note too, which sent
+the next reader to a file with no mention of insights in it at all. If frame 04's teaser ever needs
+a tone on top of that, that is a further contract change to weigh, not one taken here unasked.
 
 **Generation is genuinely asynchronous, and one run at a time.** `POST /api/insights/generate`
 writes the `generating` row, commits it, and returns **202** before floating the work with a logging
@@ -535,7 +538,10 @@ fixed here.
 half-written set behaves like a `failed` one: the previous complete set stays the answer, which is
 AC6's rule applied to a different way of being broken. Doing it in the query rather than in `getSet`
 is what keeps `latestReadySummary` honest too, since the dashboard teaser reads the same row
-through the same helper and would otherwise need its own copy of the check.
+through the same helper and would otherwise be deciding for itself what a half-written set means.
+It does **not** save that method a null check, and the comment in `insights.service.ts` that
+claimed it did was wrong: `InsightSetRow` types both columns `string | null`, so narrowing forces
+a redundant guard there whatever the query filters.
 
 **Translating a unique-constraint failure means reading `cause`, never `error.message`.** Drizzle
 wraps every driver error, so the top-level message is the failed SQL and the constraint text is one

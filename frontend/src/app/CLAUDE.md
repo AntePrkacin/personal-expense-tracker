@@ -974,10 +974,9 @@ modal would mount two `<dialog>` elements there, with two focus traps and two co
 field id, which `ui/FieldShell` requires as a literal prop precisely because `useId` would force
 `'use client'` onto the field layer. Duplicate ids make `getByLabelText` ambiguous, which is the
 failure PET-30's own `pages.test.tsx` comment already names. The payoff is that PET-25's DSH-9
-teaser added its trigger in two lines with no prop threading through `<main>` - the empty state's
-`AddTransactionButton`, its "Add transaction →" the one label variant this component ever needed
-
-- exactly as predicted here before it landed. PET-44's INS-7 card still owes the same two lines.
+teaser added its trigger in two lines with no prop threading through `<main>` - the unlock state's
+`AddTransactionButton`, its "Add transaction →" the one label variant this component ever needed,
+exactly as predicted here before it landed. PET-44's INS-7 card still owes the same two lines.
 
 **A closed modal renders nothing, and the reason is text queries rather than role queries.** A
 closed `<dialog>` is `display: none`, so `queryByRole` cannot see inside it - but
@@ -1369,14 +1368,26 @@ records it beside the per-user timezone item it already owes.
 **PET-25 filled the fifth and last slot, `InsightTeaserCard`, and the Dashboard grid is complete
 as of this ticket.** `DashboardResponseDto.insight` widened from `string | null` to
 `InsightSummaryDto | null` to carry the body AC1's frame draws alongside the headline - the one
-backend change in this stack, and `backend/CLAUDE.md`'s Dashboard section and
-`docs/agents/api-contract.md` both carry the note. The card reads no clock and composes no
+backend change in this stack, and `backend/CLAUDE.md`'s Dashboard section is that note's only
+home. The card reads no clock and composes no
 window, unlike its four siblings: `insight` is either a summary or `null`, and the card's whole
-job is choosing which of two static shapes to render around whichever string it is handed. **The
-condition is `insight === null`, and it needs no third state** - the contract documents null as
-covering both "nothing generated yet" and "the first run is still in flight", and a teaser has
-nothing useful to say in either. The card that needs a `generating` skeleton is PET-44's, reading
-`GET /api/insights` directly rather than this field.
+job is choosing which of two static shapes to render around whichever strings it is handed.
+
+**A null `insight` is two different accounts, and the review of this branch is what found it.**
+That paragraph used to end "the condition is `insight === null`, and it needs no third state",
+defended on the contract folding "nothing generated yet" and "the first run is still in flight"
+into one null. Both halves of that are true and the conclusion did not follow, because **nothing
+in either app generates a set**: no frontend caller of `POST /api/insights/generate`, `/insights`
+still an empty `<main>` (PET-44), and no backend path generating on a write. So `insight` is null
+for every account there is, and the unlock copy - "Insights unlock after your first expense." over
+an "Add transaction" - was the only state a running app could reach, shown to an account with two
+hundred of them. The card now takes `transactionCount` beside `insight` and splits the null: at
+zero it draws frame 44:706's designed copy, above zero it says nothing has been analysed yet and
+offers the same link to Insights the ready state does. Still two shapes rather than three, still
+no `generating` skeleton - that card is PET-44's, reading `GET /api/insights` directly rather than
+this field - and the two new strings join what A29 owes a designer. The lesson is the one
+`TransactionsScreen`'s no-results copy already paid for: **an empty state has to be honest about
+which emptiness it is describing**, and the reachable state is the one to check first.
 
 **The AI Insights and Settings `<main>` elements are now the only two still empty and still
 fetching nothing.** Every trap statement above naming "the Dashboard, AI Insights and Settings"

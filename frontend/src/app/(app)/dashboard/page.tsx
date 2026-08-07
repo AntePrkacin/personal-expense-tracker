@@ -38,7 +38,9 @@ export default async function DashboardPage() {
           categories={summary.categories}
         />
       }
-      insightCard={<InsightTeaserCard insight={summary.insight} />}
+      insightCard={
+        <InsightTeaserCard insight={summary.insight} transactionCount={summary.transactionCount} />
+      }
     />
   );
 }

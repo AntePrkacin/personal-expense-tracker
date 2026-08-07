@@ -14,9 +14,12 @@ import { TrendCard } from './TrendCard';
 // 04 Dashboard (Figma node 21:4), diffed against the frame's own numbers (node 22:55).
 //
 // **All five cards are built as of PET-25.** `Shell/AI insight teaser` is where the fifth,
-// `InsightTeaserCard`, is reviewed in both of its states; this story carries only the ready one,
-// matching a screen that has generated a set - the same division `Shell/Spending trend` and
-// `Screens/04 Dashboard` already draw for the other cards.
+// `InsightTeaserCard`, is reviewed in all three of its states; this story carries only the ready
+// one, matching a screen that has generated a set - the same division `Shell/Spending trend` and
+// `Screens/04 Dashboard` already draw for the other cards. Worth knowing that a **running** app
+// cannot reach that state yet: nothing in either half calls `POST /api/insights/generate`, so
+// every real account draws the teaser's pending copy. This story is the frame diffed against node
+// 21:4, which draws a generated set, so it keeps the fixture rather than the reachable state.
 //
 // `TrendCard`'s own states are `Shell/Spending trend`'s; this story carries only the one that
 // matches node 22:55. **Its buckets and `BUDGET.daysLeft` describe the same moment**, which they
@@ -155,6 +158,7 @@ export const Default: Story = {
                 headline: 'You are on track this month',
                 body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
               }}
+              transactionCount={BUDGET.transactionCount}
             />
           }
         />
