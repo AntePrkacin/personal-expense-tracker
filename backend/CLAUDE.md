@@ -422,12 +422,12 @@ Six things about the figures are easy to get wrong:
   wants it excluded from this tile is an open question recorded on the ticket, not one this branch
   answers unasked.
 
-**`insight` is the latest insight set's headline, or `null`.** PET-41 filled the field the
-dashboard shipped as `string | null`: `DashboardService` composes `InsightsService.latestReadyTeaser`,
-so the teaser is the summary headline of the most recent `ready` set and `null` when none has been
-generated (including while the first run is still in flight). It stayed a plain string rather than
-growing into an object, which is what kept PET-41 a one-field fill with no shape change - see
-`## Insights`.
+**`insight` is the latest insight set's headline and body, or `null`.** PET-41 filled the field
+the dashboard shipped as `string | null`, and PET-25 widened it to `InsightSummaryDto | null`:
+`DashboardService` composes `InsightsService.latestReadySummary`, so the teaser is the summary of
+the most recent `ready` set and `null` when none has been generated (including while the first run
+is still in flight). It stayed a plain string through PET-41 because the dashboard had no
+consumer for the body yet; PET-25 is the first ticket to render one - see `## Insights`.
 
 **`TransactionsModule` exports `TransactionsService`, the same reason `CategoriesModule`
 exports `CategoriesService`.** Without it, `DashboardModule` importing `TransactionsModule` for
@@ -463,10 +463,12 @@ Do not "fix" this toward the format-at-the-DTO convention: a persisted generatio
 view. The tables are FK-less like the rest of the schema (`insights.set_id` is a plain column, the
 way `transactions.category_id` is), because a set and its cards are only ever written together.
 
-**The dashboard teaser is a `string`, by inheritance.** `latestReadyTeaser` hands
-`DashboardResponseDto.insight` the latest ready set's summary headline, which honoured PET-20's
-committed `string | null` with no shape change. If frame 04's teaser ever needs a tone or title, that
-is a contract change to weigh at PET-25, not one taken here unasked.
+**The dashboard teaser widened from a `string` to `InsightSummaryDto` at PET-25.**
+`latestReadySummary` hands `DashboardResponseDto.insight` the latest ready set's headline **and**
+body, replacing `latestReadyTeaser`, which honoured PET-20's committed `string | null` only until
+PET-25's card needed the body the frame was already drawing. The Dashboard section above and
+`docs/agents/api-contract.md` both carry the note. If frame 04's teaser ever needs a tone on top
+of that, that is a further contract change to weigh, not one taken here unasked.
 
 **Generation is genuinely asynchronous, and one run at a time.** `POST /api/insights/generate`
 writes the `generating` row, commits it, and returns **202** before floating the work with a logging
@@ -532,8 +534,8 @@ fixed here.
 `latestReadySet` filters `summary_headline`/`summary_body IS NOT NULL` alongside the status, so a
 half-written set behaves like a `failed` one: the previous complete set stays the answer, which is
 AC6's rule applied to a different way of being broken. Doing it in the query rather than in `getSet`
-is what keeps `latestReadyTeaser` honest too, since the dashboard teaser reads the same row through
-the same helper and would otherwise need its own copy of the check.
+is what keeps `latestReadySummary` honest too, since the dashboard teaser reads the same row
+through the same helper and would otherwise need its own copy of the check.
 
 **Translating a unique-constraint failure means reading `cause`, never `error.message`.** Drizzle
 wraps every driver error, so the top-level message is the failed SQL and the constraint text is one

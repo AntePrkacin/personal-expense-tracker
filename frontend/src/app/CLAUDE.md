@@ -967,14 +967,17 @@ effect body, so the effect version needed two seams to express one event.
 **The Add transaction modal is mounted once, on the layout, and that is a correctness requirement
 rather than a tidiness one.** `AddTransactionProvider` holds it, `AddTransactionButton` is the
 trigger every entry point renders, and `useAddTransaction()` throws outside the provider rather
-than returning a no-op. Three triggers exist - the Dashboard header, the Transactions header and
-the Transactions empty card - and the last two are on **one page**: a component owning its own
+than returning a no-op. Four triggers exist - the Dashboard header, the Dashboard insight teaser's
+empty state, the Transactions header and the Transactions empty card - and the last two are on
+**one page**: a component owning its own
 modal would mount two `<dialog>` elements there, with two focus traps and two copies of every
 field id, which `ui/FieldShell` requires as a literal prop precisely because `useId` would force
 `'use client'` onto the field layer. Duplicate ids make `getByLabelText` ambiguous, which is the
-failure PET-30's own `pages.test.tsx` comment already names. The payoff is that PET-20's DSH-9
-teaser and PET-44's INS-7 card each add a trigger in two lines with no prop threading through
-`<main>`.
+failure PET-30's own `pages.test.tsx` comment already names. The payoff is that PET-25's DSH-9
+teaser added its trigger in two lines with no prop threading through `<main>` - the empty state's
+`AddTransactionButton`, its "Add transaction →" the one label variant this component ever needed
+
+- exactly as predicted here before it landed. PET-44's INS-7 card still owes the same two lines.
 
 **A closed modal renders nothing, and the reason is text queries rather than role queries.** A
 closed `<dialog>` is `display: none`, so `queryByRole` cannot see inside it - but
@@ -1362,6 +1365,23 @@ today's reads its short date. One row is missing a word and the other asserts so
 which is what makes this the first figure on the dashboard whose skew is not merely plausible.
 Not fixed here, deliberately: the honest fix is a zone the frontend reads too, and `docs/TODO.md`
 records it beside the per-user timezone item it already owes.
+
+**PET-25 filled the fifth and last slot, `InsightTeaserCard`, and the Dashboard grid is complete
+as of this ticket.** `DashboardResponseDto.insight` widened from `string | null` to
+`InsightSummaryDto | null` to carry the body AC1's frame draws alongside the headline - the one
+backend change in this stack, and `backend/CLAUDE.md`'s Dashboard section and
+`docs/agents/api-contract.md` both carry the note. The card reads no clock and composes no
+window, unlike its four siblings: `insight` is either a summary or `null`, and the card's whole
+job is choosing which of two static shapes to render around whichever string it is handed. **The
+condition is `insight === null`, and it needs no third state** - the contract documents null as
+covering both "nothing generated yet" and "the first run is still in flight", and a teaser has
+nothing useful to say in either. The card that needs a `generating` skeleton is PET-44's, reading
+`GET /api/insights` directly rather than this field.
+
+**The AI Insights and Settings `<main>` elements are now the only two still empty and still
+fetching nothing.** Every trap statement above naming "the Dashboard, AI Insights and Settings"
+as the unbuilt three is dated to before this ticket; Dashboard's own `<main>` is real as of
+PET-21 and complete as of this one.
 
 PET-31 adds a second thing that is real and a matching trap. **The app writes now**, from any of
 the three Add transaction triggers, and the write is the only one in the app. What it cannot show
