@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { InsightSummaryDto } from '../../insights/dto/insight-set-response.dto';
 import { TransactionResponseDto } from '../../transactions/dto/transaction-response.dto';
 
 /** One 7-day slice of the trend chart. */
@@ -127,10 +128,10 @@ export class DashboardResponseDto {
   recentTransactions!: TransactionResponseDto[];
 
   @ApiProperty({
-    type: String,
+    type: InsightSummaryDto,
     nullable: true,
     description:
-      'The headline of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight).',
+      'The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight).',
   })
-  insight!: string | null;
+  insight!: InsightSummaryDto | null;
 }

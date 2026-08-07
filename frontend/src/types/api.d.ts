@@ -234,7 +234,7 @@ export interface paths {
         };
         /**
          * Every figure the dashboard draws, for the current period.
-         * @description `remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.
+         * @description `remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline and body, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.
          */
         get: operations["DashboardController_get"];
         put?: never;
@@ -574,6 +574,12 @@ export interface components {
             /** @description Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap. Across the whole `categories` array these sum to 100: spend belonging to no live category is folded into the Uncategorized fallback, so every transaction in the period is counted in exactly one entry. Round for display with an apportionment that preserves the total, since rounding each value independently can sum to 99 or 101. */
             percent: number;
         };
+        InsightSummaryDto: {
+            /** @example You are on track this month */
+            headline: string;
+            /** @example You've spent $1,240 of your $2,000 budget with 11 days to go. */
+            body: string;
+        };
         DashboardResponseDto: {
             /** @description Major units spent so far this period. */
             spent: number;
@@ -595,14 +601,8 @@ export interface components {
             categories: components["schemas"]["DashboardCategoryDto"][];
             /** @description Up to 3 most recent transactions in the current period, newest first. */
             recentTransactions: components["schemas"]["TransactionResponseDto"][];
-            /** @description The headline of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). */
-            insight: string | null;
-        };
-        InsightSummaryDto: {
-            /** @example You are on track this month */
-            headline: string;
-            /** @example You've spent $1,240 of your $2,000 budget with 11 days to go. */
-            body: string;
+            /** @description The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). */
+            insight: components["schemas"]["InsightSummaryDto"] | null;
         };
         InsightCardDto: {
             /**

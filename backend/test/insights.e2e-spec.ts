@@ -337,7 +337,10 @@ describe('Insight endpoints (e2e)', () => {
 
     const body = dashboardBody(await dashboard().expect(200));
 
-    expect(body.insight).toBe('You are on track this month');
+    expect(body.insight).toEqual({
+      headline: 'You are on track this month',
+      body: "You've spent $1,240 of your $2,000 budget.",
+    });
   });
 
   it('gives the dashboard teaser null when nothing has generated', async () => {

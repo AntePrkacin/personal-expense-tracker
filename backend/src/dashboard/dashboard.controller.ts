@@ -31,7 +31,7 @@ export class DashboardController {
   @ApiOperation({
     summary: 'Every figure the dashboard draws, for the current period.',
     description:
-      '`remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.',
+      '`remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline and body, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.',
   })
   @ApiOkResponse({ type: DashboardResponseDto })
   @ApiErrorResponse(HttpStatus.UNAUTHORIZED)

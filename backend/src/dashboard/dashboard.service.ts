@@ -70,12 +70,12 @@ export class DashboardService {
     const { categories: categoryRows, allocation } =
       await this.categories.list(userId);
 
-    // The teaser from the latest ready insight set, or null when none has been
-    // generated. Composed like everything else here rather than read from the
-    // insights tables directly. Sequential, not a Promise.all, for the same
-    // reason the rest of this method is: the embedded driver prefers one
+    // The teaser summary from the latest ready insight set, or null when none
+    // has been generated. Composed like everything else here rather than read
+    // from the insights tables directly. Sequential, not a Promise.all, for the
+    // same reason the rest of this method is: the embedded driver prefers one
     // statement at a time on the cached connection.
-    const insight = await this.insights.latestReadyTeaser(userId);
+    const insight = await this.insights.latestReadySummary(userId);
 
     // The source of truth for the account-wide total, deliberately not a sum
     // of `categoryRows`' own `spent` fields even though the two now agree.
