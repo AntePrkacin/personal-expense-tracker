@@ -61,27 +61,45 @@ rendering.
 ## Decision 2: the palette — AGREED
 
 **The thirteen assignments exactly as originally drawn.**
-`docs/explainers/category-colors-icons-description-preview.html` is the sign-off artifact and now
-renders against the real installed versions.
+`docs/explainers/category-colors-icons-description-preview.html` is the sign-off artifact. It
+renders against the real installed versions **and in the app's real context**: the same surfaces
+(`bg-base-200` page, `bg-base-100` card inside the transactions table's own wrapper) and the same
+three marks at the sizes the app draws them, verified by measurement rather than by eye. That last
+part matters, because a token that reads fine as a 36px tile behind a glyph can be invisible as the
+8px dot beside a category name, and only the dot column shows it.
+
+| Mark | Where | Size |
+| --- | --- | --- |
+| Tile | `TransactionRow.tsx`, the merchant cell | `size-9 rounded-field`, `size-4.5` glyph |
+| Dot | the same row's category cell | `size-2 rounded-full`, no glyph |
+| Chip | `CategoryChip.tsx`, onboarding step 2 | `status status-lg`, no glyph |
 
 | Category       | Token               | Icon                  |
 | -------------- | ------------------- | --------------------- |
 | Groceries      | `success`           | `shopping-basket`     |
-| Dining Out     | `secondary`         | `utensils`            |
+| Dining out     | `secondary`         | `utensils`            |
 | Transportation | `info`              | `car`                 |
 | Utilities      | `accent`            | `zap`                 |
 | Healthcare     | `error`             | `heart-pulse`         |
 | Entertainment  | `primary`           | `tv`                  |
 | Education      | `primary-content`   | `graduation-cap`      |
 | Travel         | `secondary-content` | `plane`               |
-| Personal Care  | `accent-content`    | `scissors`            |
+| Personal care  | `accent-content`    | `scissors`            |
 | Gifts          | `success-content`   | `gift`                |
 | Family & pets  | `info-content`      | `paw-print`           |
-| Loans & Debt   | `warning`           | `landmark`            |
+| Loans & debt   | `warning`           | `landmark`            |
 | Uncategorized  | `warning-content`   | `circle-question-mark` |
 
 `circle-question-mark`, not `circle-help`: the latter is a deprecated alias of it in the installed
 lucide 1.29.0. All thirteen names are verified to exist there.
+
+**Category names are sentence case: first letter capital, everything else lower.** So "Dining out",
+"Personal care", "Loans & debt", not "Dining Out", "Personal Care", "Loans & Debt". This is not a
+new convention, it is the one `starter-categories.ts` already follows with "Dining out", and it
+matters more now than it did: the admin panel will let someone type a name straight into
+`category_templates`, so the rule needs to be written down where they can find it and enforced on
+the write endpoint when that ships. The seed data in this ticket is what sets the precedent
+everything after it copies.
 
 ### Why the contrast objection does not bind
 
@@ -110,7 +128,7 @@ Measured in OKLab, where roughly 0.10 is the floor for telling two categories ap
 
 | ΔE    | Pair                  | Tokens                                    |
 | ----- | --------------------- | ----------------------------------------- |
-| 0.029 | Personal Care / Gifts | `accent-content` / `success-content`      |
+| 0.029 | Personal care / Gifts | `accent-content` / `success-content`      |
 | 0.037 | Education / Travel    | `primary-content` / `secondary-content`   |
 | 0.060 | Groceries / Utilities | `success` / `accent` (already ships today) |
 
@@ -162,21 +180,34 @@ Consequences:
   the eight-color category palette... Do not 'fix' it to a palette color"), `backend/CLAUDE.md`'s
   Category endpoints section, and `categoryColour.ts`'s `CATEGORY_TILE_NEUTRAL` comment.
 
-## Decision 4: `description` stays on the template — AGREED
+## Decision 4: the description seeds the user's `note` — AGREED
 
 The original plan added a `description` column to the user-scope `categories` table. It should not.
 `categories` already has `note`, editable through both DTOs and returned in `CategoryResponseDto`,
 so a second free-text column would need a stated difference and has none.
 
-The descriptions in the table above are **onboarding copy**: they help someone choose a chip. They
-belong on `category_templates` and are read by the onboarding screen. Nothing copies them into the
-user's own row.
+Instead the template's `description` is **copied into `categories.note`** when a category is
+seeded, alongside its name, colour and icon. The description lives on the template so the admin can
+edit it centrally, and each user gets their own copy at provisioning, which they then own.
+
+Three things follow from that, and the third is the one to watch:
+
+- **`note` stops being empty on a fresh account.** Every seeded category arrives with the
+  template's sentence in it. `CategoryResponseDto` already returns the field, so nothing about the
+  contract changes and no screen breaks; it simply has content where it previously had none.
+- **A user editing the note overwrites the description, permanently and correctly.** It is their
+  copy from the moment it is written. An admin later editing the template does **not** reach back
+  into anybody's existing categories, and should not: that row is user data now. Only new
+  provisions pick up the new wording.
+- **`note` surfaces on no screen today** (CED-4, A42), so seeding it has no visible effect until
+  PET-37 and PET-38 build the category modals. Worth knowing before someone concludes the seed
+  failed because nothing shows.
 
 **This is what keeps the user scope untouched.** No new user-scope column means no user-scope
 migration, and `backend/src/database/CLAUDE.md` is explicit that such a migration runs unattended
-against live data one user at a time. `icon` already exists on `categories` and stays nullable, and
-`color` keeps its name, `text` type and `NOT NULL`, so `db:generate:user` should report no changes.
-Treat it as a signal if it does not.
+against live data one user at a time. `note` already exists and is nullable, `icon` already exists
+and stays nullable, and `color` keeps its name, `text` type and `NOT NULL`, so `db:generate:user`
+should report no changes. Treat it as a signal if it does not.
 
 There is also **no data migration**: there are no real users and test accounts are purged. Wipe
 local dev databases and re-provision, since existing rows hold hexes that no longer resolve.
@@ -260,11 +291,13 @@ Mind the throttler on the public route, and remember that a bare `@SkipThrottle(
 - That lookup is one indexed central read and must stay **ahead of** the floated token-issue and
   mail-send, so the empty-202 timing property `backend/CLAUDE.md` documents still holds.
 - `users.onboarding_payload` now stashes ids.
-- `seedStarterCategories` reads the picked templates from central and copies name, colour and icon
-  into the user's database. **`FALLBACK_CATEGORY` stays a code constant** and stays out of
-  `category_templates`, for the reason that file already gives: it must never appear as a pickable
-  chip, and its name is a system invariant the API answers 409 for. Its colour becomes
-  `warning-content` and its icon `circle-question-mark`.
+- `seedStarterCategories` reads the picked templates from central and copies name, colour, icon and
+  the template's `description` into the user's `note` column, per Decision 4.
+  **`FALLBACK_CATEGORY` stays a code constant** and stays out of `category_templates`, for the
+  reason that file already gives: it must never appear as a pickable chip, and its name is a system
+  invariant the API answers 409 for. Its colour becomes `warning-content`, its icon
+  `circle-question-mark`, and it needs a `note` sentence of its own since it has no template to
+  take one from.
 
 ### 7. Frontend
 
