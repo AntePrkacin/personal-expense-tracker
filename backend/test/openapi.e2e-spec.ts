@@ -587,14 +587,19 @@ describe('openapi.json', () => {
       ]);
     });
 
-    it('publishes insight as a nullable string filled from the latest insight set', () => {
-      expect(schema('DashboardResponseDto').properties!.insight).toMatchObject({
-        type: 'string',
-        nullable: true,
-      });
-      expect(
-        schema('DashboardResponseDto').properties!.insight.description,
-      ).toMatch(/insight set/i);
+    it('publishes insight as a nullable reference to the summary, not a bare string', () => {
+      const insight = schema('DashboardResponseDto').properties!.insight as {
+        $ref?: string;
+        allOf?: { $ref?: string }[];
+        nullable?: boolean;
+        description?: string;
+      };
+
+      expect(insight.$ref ?? insight.allOf?.[0]?.$ref).toBe(
+        '#/components/schemas/InsightSummaryDto',
+      );
+      expect(insight.nullable).toBe(true);
+      expect(insight.description).toMatch(/insight set/i);
     });
 
     it('publishes topCategory as a nullable reference, not a bare object', () => {

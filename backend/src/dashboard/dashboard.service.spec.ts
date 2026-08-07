@@ -1,6 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import type { CategoriesService } from '../categories/categories.service';
 import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
+import type { InsightSummaryDto } from '../insights/dto/insight-set-response.dto';
 import type { InsightsService } from '../insights/insights.service';
 import type { TransactionResponseDto } from '../transactions/dto/transaction-response.dto';
 import type { TransactionsService } from '../transactions/transactions.service';
@@ -20,7 +21,13 @@ describe('DashboardService', () => {
   let currentWindow: jest.Mock;
   let categoriesList: jest.Mock;
   let transactionsList: jest.Mock;
-  let insightTeaser: jest.Mock;
+  let insightSummaryFn: jest.Mock;
+
+  const insightSummary = (overrides: Partial<InsightSummaryDto> = {}) => ({
+    headline: 'You are on track this month',
+    body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
+    ...overrides,
+  });
 
   const category = (
     overrides: Partial<CategoryResponseDto> = {},
@@ -61,7 +68,7 @@ describe('DashboardService', () => {
     categories?: CategoryResponseDto[];
     transactions?: TransactionResponseDto[];
     monthlyBudget?: number;
-    insight?: string | null;
+    insight?: InsightSummaryDto | null;
   }) => {
     currentWindow = jest
       .fn()
@@ -80,12 +87,12 @@ describe('DashboardService', () => {
       transactions: options?.transactions ?? [],
       total: options?.transactions?.length ?? 0,
     });
-    insightTeaser = jest.fn().mockResolvedValue(options?.insight ?? null);
+    insightSummaryFn = jest.fn().mockResolvedValue(options?.insight ?? null);
 
     service = new DashboardService(
       { currentWindow, list: categoriesList } as unknown as CategoriesService,
       { list: transactionsList } as unknown as TransactionsService,
-      { latestReadyTeaser: insightTeaser } as unknown as InsightsService,
+      { latestReadySummary: insightSummaryFn } as unknown as InsightsService,
       { get: () => 'Europe/Zagreb' } as unknown as ConfigService,
     );
   };
@@ -334,16 +341,17 @@ describe('DashboardService', () => {
     });
   });
 
-  it('passes the insight teaser through from the composed InsightsService', async () => {
+  it('passes the insight summary through from the composed InsightsService', async () => {
     at('2026-08-15T12:00:00Z');
-    buildService({ insight: 'You are on track this month' });
+    const summary = insightSummary();
+    buildService({ insight: summary });
 
     const result = await service.get(USER_ID);
 
     // Composed like everything else here, not read from the insights tables:
-    // the field is exactly what latestReadyTeaser returned.
-    expect(insightTeaser).toHaveBeenCalledWith(USER_ID);
-    expect(result.insight).toBe('You are on track this month');
+    // the field is exactly what latestReadySummary returned.
+    expect(insightSummaryFn).toHaveBeenCalledWith(USER_ID);
+    expect(result.insight).toEqual(summary);
   });
 
   it('leaves insight null when no set has been generated', async () => {

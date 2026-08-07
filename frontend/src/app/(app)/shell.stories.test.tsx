@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
 import * as BudgetCard from './dashboard/BudgetCard.stories';
+import * as InsightTeaserCard from './dashboard/InsightTeaserCard.stories';
 import * as RecentTransactionsCard from './dashboard/RecentTransactionsCard.stories';
 import * as TrendCard from './dashboard/TrendCard.stories';
 import * as Modal from './Modal.stories';
@@ -35,6 +36,7 @@ const MODULES: [name: string, module: StoryModule][] = [
   ['BudgetCard', BudgetCard as StoryModule],
   ['TrendCard', TrendCard as StoryModule],
   ['RecentTransactionsCard', RecentTransactionsCard as StoryModule],
+  ['InsightTeaserCard', InsightTeaserCard as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

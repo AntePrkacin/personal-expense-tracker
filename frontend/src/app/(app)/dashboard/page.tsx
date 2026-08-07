@@ -3,6 +3,7 @@ import { readDashboard } from '@/lib/dashboard';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
+import { InsightTeaserCard } from './InsightTeaserCard';
 import { RecentTransactionsCard } from './RecentTransactionsCard';
 import { TrendCard } from './TrendCard';
 
@@ -14,12 +15,11 @@ import { TrendCard } from './TrendCard';
 // means signed out, and everything else throws so a reload retries rather than bouncing into
 // the `/dashboard`-to-`/login` loop PET-52 unpicked.
 //
-// **One slot is still a placeholder, and that is sequencing rather than a conditional.**
-// `DashboardScreen`'s five props are all required - every card renders in both the populated
-// and the empty state, so there is no state in which one is absent - and PET-21 shipped the
-// geometry so the grid was reviewable, with each remaining card a one-line change at this call
-// site. PET-22 filled `trendCard`, PET-23 `donutCard` and PET-24 `recentTransactionsCard`;
-// PET-25 (`insightCard`) is still one line.
+// **The grid is complete as of this branch.** `DashboardScreen`'s five props are all
+// required - every card renders in both the populated and the empty state, so there is no
+// state in which one is absent - and PET-21 shipped the geometry so the grid was reviewable,
+// with each remaining card a one-line change at this call site. PET-22 filled `trendCard`,
+// PET-23 `donutCard`, PET-24 `recentTransactionsCard` and PET-25 `insightCard`.
 //
 // No `export const dynamic`: the cookie read behind `readDashboard()` opts this route out of
 // static rendering on its own, exactly as it does everywhere else in the app.
@@ -38,7 +38,9 @@ export default async function DashboardPage() {
           categories={summary.categories}
         />
       }
-      insightCard={<div /> /* PET-25 */}
+      insightCard={
+        <InsightTeaserCard insight={summary.insight} transactionCount={summary.transactionCount} />
+      }
     />
   );
 }

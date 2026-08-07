@@ -216,19 +216,20 @@ describe('InsightsService', () => {
     });
   });
 
-  describe('latestReadyTeaser', () => {
-    it('returns the latest ready set headline for the dashboard', async () => {
+  describe('latestReadySummary', () => {
+    it('returns the latest ready set headline and body for the dashboard', async () => {
       db.select.mockReturnValueOnce(queryChain([readyRow()]));
 
-      await expect(service.latestReadyTeaser('user-id')).resolves.toBe(
-        'You are on track this month',
-      );
+      await expect(service.latestReadySummary('user-id')).resolves.toEqual({
+        headline: 'You are on track this month',
+        body: "You've spent $1,240 of your $2,000 budget.",
+      });
     });
 
     it('returns null when there is no ready set', async () => {
       db.select.mockReturnValueOnce(queryChain([]));
 
-      await expect(service.latestReadyTeaser('user-id')).resolves.toBeNull();
+      await expect(service.latestReadySummary('user-id')).resolves.toBeNull();
     });
   });
 

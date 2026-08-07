@@ -398,9 +398,9 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   four: the AI Insights and Settings `<main>` elements are empty. Dashboard is no longer one of
   them as of PET-21: its `<main>` is a grid holding the real Monthly budget card, PET-22 filled
   the second, the weekly spending trend chart, PET-23 the third, the spending-by-category donut,
-  and PET-24 the fourth, the recent transactions card. One placeholder `<div />` remains,
-  PET-25's insight teaser - so the geometry is reviewable now and it is a one-line change at
-  `page.tsx`'s call site when its ticket lands. Transactions is the exception that came before it, and as of
+  PET-24 the fourth, the recent transactions card, and PET-25 the fifth and last, the AI insight
+  teaser - so Dashboard is a **complete** screen too, the same word this list uses for
+  Transactions below. Transactions is the exception that came before it, and as of
   PET-29 it is a **complete** screen
   rather than a partial one: the tab bar
   and its real count badge, both empty states, the filter bar and the table are all built, and the

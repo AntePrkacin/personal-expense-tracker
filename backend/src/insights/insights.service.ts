@@ -12,6 +12,7 @@ import {
 import type {
   InsightCardDto,
   InsightSetResponseDto,
+  InsightSummaryDto,
 } from './dto/insight-set-response.dto';
 import { INSIGHT_GENERATOR, type InsightGenerator } from './insight-generator';
 
@@ -248,18 +249,26 @@ export class InsightsService {
   }
 
   /**
-   * The latest ready set's summary headline, for the dashboard teaser.
+   * The latest ready set's summary, for the dashboard teaser.
    *
-   * A string or null, deliberately narrow: `DashboardResponseDto.insight` is
-   * `string | null` (PET-20's committed contract), so this hands it exactly that
-   * and no more. Null whenever there is no ready set, including while the first
-   * run is still generating.
+   * `DashboardResponseDto.insight` widened to `InsightSummaryDto | null` at
+   * PET-25, the first ticket to render the body as well as the headline. Null
+   * whenever there is no ready set, including while the first run is still
+   * generating.
    */
-  async latestReadyTeaser(userId: string): Promise<string | null> {
+  async latestReadySummary(userId: string): Promise<InsightSummaryDto | null> {
     const db = await this.userDatabases.getUserDb(userId);
     const ready = await this.latestReadySet(db);
 
-    return ready?.summaryHeadline ?? null;
+    if (
+      !ready ||
+      ready.summaryHeadline === null ||
+      ready.summaryBody === null
+    ) {
+      return null;
+    }
+
+    return { headline: ready.summaryHeadline, body: ready.summaryBody };
   }
 
   /** The newest completed set, or null if none has ever completed. */
@@ -275,8 +284,13 @@ export class InsightsService {
           // A `ready` row without its content is a broken invariant, not an
           // answer, so it is skipped here rather than downstream: an older
           // complete set then still serves, the same way AC6 lets one outlive a
-          // `failed` run. Filtered in SQL so `latestReadyTeaser` inherits it
-          // rather than guarding the same invariant a second, different way.
+          // `failed` run. Filtered in SQL so both readers inherit it rather than
+          // each deciding for itself what a half-written set means. Note this
+          // does not save `latestReadySummary` a null check: `InsightSetRow`
+          // types both columns `string | null`, so narrowing forces a redundant
+          // guard there, and the alternative - projecting the two columns so the
+          // row type carries the guarantee - would narrow the row `getSet` reads
+          // the rest of its fields off.
           isNotNull(insightSets.summaryHeadline),
           isNotNull(insightSets.summaryBody),
           isNull(insightSets.deletedAt),

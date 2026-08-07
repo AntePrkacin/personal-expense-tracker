@@ -936,7 +936,7 @@
     },
     "/api/dashboard": {
       "get": {
-        "description": "`remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.",
+        "description": "`remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline and body, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.",
         "operationId": "DashboardController_get",
         "parameters": [],
         "responses": {
@@ -1755,6 +1755,23 @@
           "percent"
         ]
       },
+      "InsightSummaryDto": {
+        "type": "object",
+        "properties": {
+          "headline": {
+            "type": "string",
+            "example": "You are on track this month"
+          },
+          "body": {
+            "type": "string",
+            "example": "You've spent $1,240 of your $2,000 budget with 11 days to go."
+          }
+        },
+        "required": [
+          "headline",
+          "body"
+        ]
+      },
       "DashboardResponseDto": {
         "type": "object",
         "properties": {
@@ -1814,9 +1831,14 @@
             }
           },
           "insight": {
-            "type": "string",
             "nullable": true,
-            "description": "The headline of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight)."
+            "description": "The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight).",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InsightSummaryDto"
+              }
+            ]
           }
         },
         "required": [
@@ -1831,23 +1853,6 @@
           "categories",
           "recentTransactions",
           "insight"
-        ]
-      },
-      "InsightSummaryDto": {
-        "type": "object",
-        "properties": {
-          "headline": {
-            "type": "string",
-            "example": "You are on track this month"
-          },
-          "body": {
-            "type": "string",
-            "example": "You've spent $1,240 of your $2,000 budget with 11 days to go."
-          }
-        },
-        "required": [
-          "headline",
-          "body"
         ]
       },
       "InsightCardDto": {
