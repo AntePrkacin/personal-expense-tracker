@@ -5,6 +5,7 @@ import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { categoryTemplateIds } from './category-templates';
 import { LoginTokenService } from './../src/auth/login-token.service';
 import type { CategoryResponseDto } from './../src/categories/dto/category-response.dto';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
@@ -131,6 +132,10 @@ describe('Transaction reads (e2e)', () => {
   const nextEmail = () => `Reader${++emailCounter}@Example.COM`;
 
   /** Registers, verifies with a directly issued token, and returns the session. */
+  // Resolved in beforeAll: RegisterDto.categories takes category template
+  // ids, and those are minted by the boot seed into this run's own database.
+  let pickedCategoryIds: string[] = [];
+
   const provision = async () => {
     const email = nextEmail();
     await request(app.getHttpServer())
@@ -141,7 +146,7 @@ describe('Transaction reads (e2e)', () => {
         email,
         currency: 'eur',
         monthlyBudget: 2000.5,
-        categories: ['Transport', 'Groceries'],
+        categories: pickedCategoryIds,
       })
       .expect(202);
     await mailer.waitFor(email.toLowerCase(), 1);
@@ -174,6 +179,11 @@ describe('Transaction reads (e2e)', () => {
     app.setGlobalPrefix('api');
     await app.init();
 
+    pickedCategoryIds = await categoryTemplateIds(app, [
+      'Transportation',
+      'Groceries',
+    ]);
+
     centralDb = app.get<CentralDatabase>(APP_DB);
     loginTokens = app.get(LoginTokenService);
     userDatabases = app.get(UserDatabaseService);
@@ -189,7 +199,7 @@ describe('Transaction reads (e2e)', () => {
       .from(categories)
       .orderBy(asc(categories.name));
     groceriesId = seeded.find((row) => row.name === 'Groceries')!.id;
-    transportId = seeded.find((row) => row.name === 'Transport')!.id;
+    transportId = seeded.find((row) => row.name === 'Transportation')!.id;
 
     // Six rows, and every assertion below counts on this being all of them.
     //
@@ -354,7 +364,7 @@ describe('Transaction reads (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/categories')
         .set('Authorization', `Bearer ${bearer}`)
-        .send({ name: 'Wildcard probe', color: '#8A79F1' })
+        .send({ name: 'Wildcard probe', color: 'primary', icon: 'gift' })
         .expect(201);
       const probeId = (response.body as CategoryResponseDto).id;
 
@@ -612,7 +622,7 @@ describe('Transaction reads (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/categories')
         .set('Authorization', `Bearer ${bearer}`)
-        .send({ name, color: '#8A79F1' })
+        .send({ name, color: 'primary', icon: 'gift' })
         .expect(201);
       return (response.body as CategoryResponseDto).id;
     };

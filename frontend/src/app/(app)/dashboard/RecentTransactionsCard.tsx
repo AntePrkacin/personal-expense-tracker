@@ -1,7 +1,7 @@
-import { ReceiptText, ShoppingBag } from 'lucide-react';
+import { ReceiptText } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { categoryTileClass } from '@/components/ui/categoryColour';
+import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
 import { SIDEBAR_HREFS } from '@/components/ui/Sidebar';
 import { formatNegative, formatRelativeDate } from '@/lib/format';
 import type { DashboardSummary } from '@/lib/dashboard';
@@ -111,13 +111,26 @@ export function RecentTransactionsCard({
               .filter(Boolean)
               .join(' · ');
 
+            // Per row rather than per category, unlike `TransactionsTable`'s index:
+            // this list is capped at three, so a `Map` of resolved components
+            // would cost more to build than the three lookups it saves.
+            const Icon = categoryIcon(category?.icon);
+
             return (
               <li key={transaction.id} className="flex items-center gap-3">
                 <span
                   aria-hidden="true"
                   className={`rounded-field flex size-9 shrink-0 items-center justify-center ${categoryTileClass(category?.color)}`}
                 >
-                  <ShoppingBag className="size-4.5" aria-hidden="true" />
+                  {/* **The third tile site, and the one PET-64's own blast radius missed.**
+                      It drew `<ShoppingBag />` for every category, exactly as the
+                      transactions table and the detail page's sibling list did - the plan
+                      inventoried those two and stopped. Leaving it would have made this the
+                      one place a reader still cannot tell Personal care from Gifts, which is
+                      the whole reason the per-category icon shipped with the palette.
+                      `DashboardCategoryDto` gained `icon` for this tile alone; the donut's
+                      slices are bare colour and need none. */}
+                  {Icon === null ? null : <Icon className="size-4.5" aria-hidden="true" />}
                 </span>
 
                 {/* `min-w-0` is load-bearing: a flex item's default `min-width: auto` floors

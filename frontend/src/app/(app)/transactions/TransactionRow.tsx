@@ -1,4 +1,4 @@
-import { ShoppingBag } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { CATEGORY_TILE_NEUTRAL } from '@/components/ui/categoryColour';
@@ -27,8 +27,14 @@ import { TransactionRowMenu } from './TransactionRowMenu';
 // own daisyUI classes in place. Nothing here is worth extracting until a second screen draws
 // this same five-cell row.
 
-/** The tile's colour and the dot's, plus the name, resolved by `TransactionsTable`. */
-export type RowCategory = { name: string; tileClass: string };
+/**
+ * The tile's colour and the dot's, the glyph, and the name - all resolved by
+ * `TransactionsTable` so the lookups happen once per category rather than once per row.
+ *
+ * `Icon` is `null` when the stored icon resolves to no lucide component, which leaves
+ * the tile empty rather than drawing a mark that says something else.
+ */
+export type RowCategory = { name: string; tileClass: string; Icon: LucideIcon | null };
 
 type TransactionRowProps = {
   transaction: Transaction;
@@ -54,24 +60,27 @@ export function TransactionRow({ transaction, category, query }: TransactionRowP
       <td>
         <div className="flex items-center gap-3">
           {/* Hidden because it carries nothing the CATEGORY cell does not already say in
-              words, and the colour cannot identify a category on its own: two of the ten
-              starters share a colour *word* (Subscriptions with Transport, Other with Bills),
-              and `ui/categoryColour.ts` then maps orange and yellow both onto `warning`, so
-              Shopping, Bills and Other render one hue and Transport and Subscriptions another.
+              words, and neither the colour nor the glyph is asked to identify a category on
+              its own: `ui/categoryColour.ts` names three seeded colour pairs that are
+              deliberately close enough in OKLab to read as one hue, and the icon is what
+              separates them for a sighted reader rather than an accessible channel.
 
               No text colour stated here: `ui/categoryColour.ts` pairs each background with
-              its `-content` partner, so the glyph's `currentColor` is legible on all eight
-              and on the neutral fallback. `rounded-field` is daisyUI's field radius, the
-              theme's answer for a small tile. */}
+              its content partner, so the glyph's `currentColor` is legible on all sixteen
+              tokens and on the neutral fallback. `rounded-field` is daisyUI's field radius,
+              the theme's answer for a small tile. */}
           <span
             aria-hidden="true"
             className={`rounded-field flex size-9 shrink-0 items-center justify-center ${category?.tileClass ?? CATEGORY_TILE_NEUTRAL}`}
           >
-            {/* Figma's placeholder mark for every category, which is why one glyph serves all
-                eight colours. No colour stated: `ui/categoryColour.ts` pairs each background
-                with its `-content` partner, and lucide strokes `currentColor`, so the mark
-                follows the tile. */}
-            <ShoppingBag className="size-4.5" aria-hidden="true" />
+            {/* **The category's own mark as of PET-64.** This drew `<ShoppingBag />` for every
+                category - Figma's placeholder - which is exactly what the close colour pairs
+                could not survive: without a per-category glyph, Personal care and Gifts are
+                one tile. Empty rather than a stand-in when the icon does not resolve, since a
+                wrong mark says something a missing one does not. */}
+            {category?.Icon == null ? null : (
+              <category.Icon className="size-4.5" aria-hidden="true" />
+            )}
           </span>
 
           {/* **The link is on this cell alone, not on the row**, and PET-34 is the ticket that

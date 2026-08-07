@@ -114,9 +114,10 @@ so the seed cannot run while the backend is up in cloud mode.
 
 - **A profile** with a $5,000 monthly budget and `monthStartDay` 1, rewritten on every run so the
   caps below always add up against the budget actually stored.
-- **Eleven categories** - the ten starter chips plus `Uncategorized` - each with a monthly cap, the
-  caps summing to exactly the $5,000 budget.
-- **26 merchants**: 22 generated names dealt round-robin over the categories so every category has
+- **Thirteen categories** - every category template plus `Uncategorized` - each with a monthly
+  cap, the caps summing to exactly the $5,000 budget. The templates are read out of central at
+  run time rather than hard-coded, so this count follows whatever an admin has enabled.
+- **30 merchants**: 26 generated names dealt round-robin over the categories so every category has
   at least two of its own, plus `dm`, `Müller`, `Konzum` and `Lidl` mapped exclusively to
   Groceries. About 20% of merchants are valid for two categories, the rest for one.
 - **Five subscriptions** - Netflix, Spotify, HBO Max, Strava and iCloud, about $46/mo combined -

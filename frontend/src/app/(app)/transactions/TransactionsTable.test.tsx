@@ -25,8 +25,18 @@ function transaction(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 const CATEGORIES: CategoryLabel[] = [
-  { id: '0198c2a1-0000-7000-8000-0000000000a1', name: 'Groceries', color: '#57B368' },
-  { id: '0198c2a1-0000-7000-8000-0000000000a2', name: 'Transport', color: '#3F8EE6' },
+  {
+    id: '0198c2a1-0000-7000-8000-0000000000a1',
+    name: 'Groceries',
+    color: 'success' as const,
+    icon: 'shopping-basket' as const,
+  },
+  {
+    id: '0198c2a1-0000-7000-8000-0000000000a2',
+    name: 'Transport',
+    color: 'info' as const,
+    icon: 'car' as const,
+  },
 ];
 
 const UBER = transaction({
@@ -58,12 +68,12 @@ function renderTable(
 /**
  * The background half of a stored colour's tile classes, as a bare selector.
  *
- * `categoryTileClass` returns a background paired with its `-content` partner, and only the
+ * `categoryTileClass` returns a background paired with its content partner, and only the
  * background identifies the colour - so this takes the first class rather than the string,
  * which as a `.a b` selector would mean something else entirely.
  */
-function tileBackground(hex: string): string {
-  return categoryTileClass(hex).split(' ')[0]!;
+function tileBackground(token: string): string {
+  return categoryTileClass(token).split(' ')[0]!;
 }
 
 describe('the columns', () => {
@@ -154,12 +164,13 @@ describe('the rows', () => {
     //
     // The two selectors are derived from `categoryTileClass` rather than typed out, so this
     // asserts that the join reached the right colour without restating which theme colour
-    // green happens to map to - that is `categoryColour.test.ts`'s to pin, and it changed
-    // once already when PET-57 moved the map onto semantic colours. Each colour appears
-    // twice per row, on the tile and on the dot.
+    // `success` happens to compile to - that is `categoryColour.test.ts`'s to pin, and it
+    // changed twice already: PET-57 moved the map onto semantic colours, and PET-64 made
+    // the stored value the token itself. Each colour appears twice per row, on the tile
+    // and on the dot.
     const { container } = renderTable([transaction(), UBER]);
-    const green = tileBackground('#57B368');
-    const blue = tileBackground('#3F8EE6');
+    const green = tileBackground('success');
+    const blue = tileBackground('info');
 
     expect(screen.getByText('Groceries')).toBeInTheDocument();
     expect(screen.getByText('Transport')).toBeInTheDocument();

@@ -21,7 +21,12 @@ export interface OnboardingPayload {
   monthlyBudget: number;
   /** 1-28, already defaulted by the DTO. */
   monthStartDay: number;
-  /** Starter category names the user picked; may be empty (A4 enforces none). */
+  /**
+   * `category_templates.id` values the user picked; may be empty (A4 enforces
+   * no minimum). Ids rather than names since PET-64: the offered list is admin
+   * data now, so a name is no longer a stable key anything could validate
+   * against. Membership was checked against central before this was stashed.
+   */
   categories: string[];
 }
 
@@ -229,3 +234,166 @@ export const sessions = sqliteTable(
 
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
+
+/**
+ * The three **template** tables, the fourth sanctioned exception to "central
+ * holds only an email and a pointer" - and the first one that is not about a
+ * credential outliving the database it belongs to.
+ *
+ * They hold what onboarding *offers* and what the category picker *offers*:
+ * which default categories exist, and which colours and icons a user may
+ * choose from. That is not user data at all. It belongs to nobody, it is the
+ * same for everybody, and a super admin edits it - which is precisely why it
+ * cannot be a TypeScript constant any more. `user/schema.ts` says closed sets
+ * are constrained in TypeScript rather than in SQLite, and that holds for a set
+ * that only changes with a deploy. An admin-editable set is not that: it is
+ * data, and central is the only database that can hold it.
+ *
+ * A user's own database keeps holding only that user's own categories, exactly
+ * as before. Provisioning **copies** from here; nothing reads across afterwards,
+ * and an admin editing a template does not reach back into anybody's rows.
+ *
+ * All three follow this file's conventions unchanged: UUIDv7 text primary key
+ * from `newId()`, `timestamp_ms` instants, no foreign keys (see the note on
+ * `login_links.user_id`), and a partial unique index over the live rows.
+ */
+export const colourTemplates = sqliteTable(
+  'colour_templates',
+  {
+    // Same primary-key caveat as `users.id`. See docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // One of `COLOUR_TOKENS` in template-tokens.ts, verbatim as the daisyUI
+    // class suffix. NOT constrained here: the DTO's `@IsIn` is the enforcement
+    // and the one that publishes an OpenAPI enum, and a CHECK constraint would
+    // be a second authority that drifts the day a seventeenth token ships.
+    token: text('token').notNull(),
+
+    // What a person picking a colour actually reads. "Accent Content" is not a
+    // colour anybody picks, so the human word lives here rather than being
+    // derived from the token - and it is the admin's to edit.
+    label: text('label').notNull(),
+
+    sortOrder: integer('sort_order').notNull(),
+
+    // Presentation, never validation. The picker offers what is enabled; a
+    // category already carrying a since-disabled colour keeps rendering, which
+    // is why `@IsIn` checks the allowlist and not this flag.
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    // Partial, the `users_email_live_unique` shape: one live row per token, and
+    // a deleted one must not keep the token spoken for forever.
+    uniqueIndex('colour_templates_token_live_unique')
+      .on(table.token)
+      .where(isNull(table.deletedAt)),
+  ],
+);
+
+export type ColourTemplateRow = typeof colourTemplates.$inferSelect;
+export type NewColourTemplateRow = typeof colourTemplates.$inferInsert;
+
+/** One offerable icon. Everything on `colour_templates` applies unchanged. */
+export const iconTemplates = sqliteTable(
+  'icon_templates',
+  {
+    id: text('id').primaryKey().notNull(),
+
+    // One of `ICON_NAMES`, in lucide's own kebab-case.
+    name: text('name').notNull(),
+
+    label: text('label').notNull(),
+    sortOrder: integer('sort_order').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    uniqueIndex('icon_templates_name_live_unique')
+      .on(table.name)
+      .where(isNull(table.deletedAt)),
+  ],
+);
+
+export type IconTemplateRow = typeof iconTemplates.$inferSelect;
+export type NewIconTemplateRow = typeof iconTemplates.$inferInsert;
+
+/**
+ * One default category onboarding may offer, with the presentation an admin
+ * controls.
+ *
+ * **Names are sentence case**: "Dining out", "Personal care", "Loans & debt",
+ * not "Dining Out". That is not a new convention, it is the one the seed data
+ * has always followed - and it starts mattering once somebody can type a name
+ * straight into this table, so it is written down here and enforced on the
+ * write endpoint when that ships.
+ *
+ * `Uncategorized` is deliberately **not** in here. It must never appear as a
+ * pickable chip and its name is a system invariant the API answers 409 for, so
+ * it stays `FALLBACK_CATEGORY`, a code constant in
+ * `src/database/user/starter-categories.ts`.
+ */
+export const categoryTemplates = sqliteTable(
+  'category_templates',
+  {
+    id: text('id').primaryKey().notNull(),
+
+    name: text('name').notNull(),
+
+    // Plain text, no references(), like every other id in this schema. A
+    // colour or icon template that is soft-deleted while a category template
+    // points at it resolves to nothing, which the read filters out.
+    colourId: text('colour_id').notNull(),
+    iconId: text('icon_id').notNull(),
+
+    // Copied into the user's own `categories.note` at provisioning, per the
+    // decision that the user scope needs no new column: `note` already exists,
+    // is editable through both DTOs and is returned by CategoryResponseDto, so
+    // a second free-text column would need a stated difference and has none.
+    // It lives here so an admin can edit the wording centrally; each user gets
+    // their own copy the moment they are provisioned, and owns it from then on.
+    description: text('description').notNull(),
+
+    sortOrder: integer('sort_order').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    uniqueIndex('category_templates_name_live_unique')
+      .on(table.name)
+      .where(isNull(table.deletedAt)),
+    // Registration resolves the picked ids against this table on the one
+    // unauthenticated route in the app, and the public read orders by it.
+    index('category_templates_sort_order_idx').on(table.sortOrder),
+  ],
+);
+
+export type CategoryTemplateRow = typeof categoryTemplates.$inferSelect;
+export type NewCategoryTemplateRow = typeof categoryTemplates.$inferInsert;

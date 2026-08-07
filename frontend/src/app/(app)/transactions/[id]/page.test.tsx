@@ -41,7 +41,7 @@ const DETAIL: TransactionDetail = {
   category: {
     id: '0198c2a1-0000-7000-8000-0000000000a1',
     name: 'Groceries',
-    color: '#57B368',
+    color: 'success',
     icon: null,
     note: null,
     isFallback: false,

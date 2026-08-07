@@ -49,7 +49,7 @@ const BUDGET = {
   topCategory: {
     id: '0198c2a1-0000-7000-8000-0000000000a1',
     name: 'Groceries',
-    color: 'green',
+    color: 'success' as const,
     spent: 397,
   },
 };
@@ -59,11 +59,46 @@ const BUDGET = {
 // row's category id is one of these five, the invariant `RecentTransactionsCard`'s join relies
 // on rather than a second request.
 const CATEGORIES = [
-  { id: 'c1', name: 'Groceries', color: '#57B368', spent: 397, percent: 32.02 },
-  { id: 'c2', name: 'Dining out', color: '#EF6F6C', spent: 298, percent: 24.03 },
-  { id: 'c3', name: 'Transport', color: '#3F8EE6', spent: 223, percent: 17.98 },
-  { id: 'c4', name: 'Shopping', color: '#CE6FB8', spent: 174, percent: 14.03 },
-  { id: 'c5', name: 'Other', color: '#E7C24A', spent: 148, percent: 11.94 },
+  {
+    id: 'c1',
+    name: 'Groceries',
+    color: 'success' as const,
+    icon: 'shopping-basket' as const,
+    spent: 397,
+    percent: 32.02,
+  },
+  {
+    id: 'c2',
+    name: 'Dining out',
+    color: 'error' as const,
+    icon: 'utensils' as const,
+    spent: 298,
+    percent: 24.03,
+  },
+  {
+    id: 'c3',
+    name: 'Transport',
+    color: 'info' as const,
+    icon: 'car' as const,
+    spent: 223,
+    percent: 17.98,
+  },
+  {
+    id: 'c4',
+    name: 'Shopping',
+    color: 'secondary' as const,
+    icon: 'shopping-basket' as const,
+    spent: 174,
+    percent: 14.03,
+  },
+  {
+    id: 'c5',
+    name: 'Other',
+    color: 'warning-content' as const,
+    icon: 'shopping-basket' as const,
+    spent: 148,
+    percent: 11.94,
+  },
 ];
 
 // DSH-7's own three rows: "Today" and "Yesterday" are the specification rather than sample

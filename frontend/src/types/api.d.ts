@@ -21,6 +21,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/templates/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The starter categories onboarding offers.
+         * @description Public, because onboarding step 2 runs before an account exists. Send the `id`s of the picked entries as `RegisterDto.categories`; each picked template becomes one of the account’s categories at verification, carrying this `name`, `color`, `icon` and `description` (as the category’s `note`). The order is the one to render.
+         */
+        get: operations["TemplatesController_categories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/templates/palette": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The colours and icons a category may be given.
+         * @description What the create and edit category picker offers, with the label to show for each. This is what an admin currently has **enabled**, which can be a strict subset of what `POST /api/categories` accepts - a category already carrying a since-disabled colour keeps working.
+         */
+        get: operations["TemplatesController_palette"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/register": {
         parameters: {
             query?: never;
@@ -292,6 +332,76 @@ export interface components {
         HelloResponseDto: {
             message: string;
         };
+        CategoryTemplateDto: {
+            /**
+             * Format: uuid
+             * @description What `RegisterDto.categories` takes. Not a category id - the account does not exist yet.
+             */
+            id: string;
+            /**
+             * @description Sentence case: first letter capital, everything else lower. Admin-authored, so this is a plain string rather than an enum.
+             * @example Dining out
+             */
+            name: string;
+            /**
+             * @description A daisyUI semantic colour token, which is what `categories.color` stores. Not a hex: `primary` is valued differently per theme, so several of these have no single hex value.
+             * @example secondary
+             * @enum {string}
+             */
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            /**
+             * @description A lucide icon name, in lucide’s own kebab-case.
+             * @example utensils
+             * @enum {string}
+             */
+            icon: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark";
+            /**
+             * @description Copied into the user’s own `note` when the category is seeded, after which it is theirs. Editing the template later does not reach back into existing accounts.
+             * @example Restaurants, coffee shops, takeout, delivery, and fast food.
+             */
+            description: string;
+        };
+        CategoryTemplatesResponseDto: {
+            /** @description The enabled category templates, in the order onboarding draws its chips. The order is part of the contract: render them as given rather than sorting. */
+            categories: components["schemas"]["CategoryTemplateDto"][];
+        };
+        PaletteColourDto: {
+            /**
+             * @description What to send as a category’s `color`.
+             * @example accent-content
+             * @enum {string}
+             */
+            token: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            /**
+             * @description What to show beside it.
+             * @example Pine
+             */
+            label: string;
+        };
+        PaletteIconDto: {
+            /**
+             * @description What to send as a category’s `icon`.
+             * @example paw-print
+             * @enum {string}
+             */
+            name: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark";
+            /** @example Paw */
+            label: string;
+        };
+        PaletteResponseDto: {
+            /** @description In admin order. */
+            colors: components["schemas"]["PaletteColourDto"][];
+            /** @description In admin order. */
+            icons: components["schemas"]["PaletteIconDto"][];
+        };
+        ErrorResponseDto: {
+            /** @description String for most errors; an array for class-validator's field messages. */
+            message: string | string[];
+            statusCode: number;
+            error: string;
+            timestamp: string;
+            path: string;
+        };
         RegisterDto: {
             /**
              * @description ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.
@@ -307,27 +417,12 @@ export interface components {
             monthlyBudget: number;
             /** @description Capped at 28 so the day exists in every month. */
             monthStartDay?: number;
+            /** @description Ids from `GET /api/templates/categories`. May be empty. Unknown ids are a 400. */
+            categories: string[];
             firstName: string;
             lastName: string;
             /** Format: email */
             email: string;
-            /**
-             * @description The starter chips picked on screen 03, by name.
-             *
-             *     Required but allowed to be empty: A4 records that no minimum is enforced,
-             *     and a user who deselects everything is making a valid choice. Required
-             *     rather than optional so a frontend that stops sending the field fails
-             *     loudly instead of silently seeding nothing.
-             */
-            categories: ("Groceries" | "Dining out" | "Transport" | "Shopping" | "Housing" | "Health" | "Entertainment" | "Bills" | "Subscriptions" | "Other")[];
-        };
-        ErrorResponseDto: {
-            /** @description String for most errors; an array for class-validator's field messages. */
-            message: string | string[];
-            statusCode: number;
-            error: string;
-            timestamp: string;
-            path: string;
         };
         RequestLoginLinkDto: {
             /** Format: email */
@@ -426,11 +521,18 @@ export interface components {
             /** @example Groceries */
             name: string;
             /**
-             * @description Hex, `#RRGGBB`.
-             * @example #57B368
+             * @description A daisyUI semantic colour token, not a hex - several of these have no single hex value, being themed per light and dark.
+             * @example success
+             * @enum {string}
              */
-            color: string;
-            icon: string | null;
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            /**
+             * @description Nullable because the column is, not because a new category may omit one:
+             *     `CreateCategoryDto.icon` is required as of PET-64 and `UpdateCategoryDto`
+             *     cannot clear it, so only a row predating that can be null.
+             * @enum {string|null}
+             */
+            icon: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark" | null;
             note: string | null;
             /** @description True for the one `Uncategorized` category every account has. It cannot be deleted or renamed, deleting any other category moves its transactions here, and the transaction form preselects it. */
             isFallback: boolean;
@@ -517,24 +619,61 @@ export interface components {
         };
         CreateCategoryDto: {
             /**
-             * @description Hex, `#RRGGBB`. The eight category colors come from Figma frame 03.
-             * @example #57B368
+             * @description A daisyUI semantic colour token, not a hex.
+             *
+             *     **Hex was not merely indirect here, it was incoherent.** `primary` is the
+             *     one token daisyUI values differently per theme, so Entertainment
+             *     (`#422ad5` light, `#605dff` dark) and Education (`#e0e7ff`, `#edf1fe`) have
+             *     no single hex value at all - a stored one would record one and paint the
+             *     other half the time. The token is the stable identity; the theme resolves
+             *     the hue.
+             *
+             *     `GET /api/templates/palette` is what a picker offers, and it can be a
+             *     strict subset of this list: `enabled` is presentation and this is
+             *     validation, so a category carrying a since-disabled colour still saves.
+             * @example success
+             * @enum {string}
              */
-            color: string;
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
             /** @description Major units (e.g. 400.00), stored as integer cents. Omit for no cap. */
             monthlyCap?: number;
+            /**
+             * @description A lucide icon name, and **required** as of PET-64.
+             *
+             *     It was `@IsString() @MaxLength(60)` and optional, which accepted `cup` and
+             *     `box` - neither of which is a lucide name, so neither could ever render.
+             *     Narrowing it to the allowlist is what makes `Record<IconName, LucideIcon>`
+             *     on the frontend an exhaustiveness proof, and requiring it is free now and
+             *     expensive later.
+             *
+             *     The column stays **nullable**, deliberately: tightening `categories.icon`
+             *     to NOT NULL would be the one user-scope migration in this whole change, and
+             *     `backend/src/database/CLAUDE.md` is explicit that such a migration runs
+             *     unattended against live data one user at a time. The DTO is what enforces
+             *     the invariant going forward.
+             * @example shopping-basket
+             * @enum {string}
+             */
+            icon: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark";
             name: string;
-            /** @description A name from the frontend's own icon set. Never resolved to an asset here. */
-            icon?: string;
             /** @description Captured, but surfaces on no screen today (CED-4, A42). */
             note?: string;
         };
         UpdateCategoryDto: {
-            /** @example #57B368 */
-            color?: string;
+            /**
+             * @description A daisyUI semantic colour token. See `CreateCategoryDto.color`.
+             * @example success
+             * @enum {string}
+             */
+            color?: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
             /** @description Major units. `null` clears the cap, leaving the category uncapped. */
             monthlyCap?: number | null;
-            icon?: string | null;
+            /**
+             * @description A lucide icon name. Not clearable - see the class comment.
+             * @example shopping-basket
+             * @enum {string}
+             */
+            icon?: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark";
             note?: string | null;
             name?: string;
         };
@@ -544,10 +683,11 @@ export interface components {
             /** @example Groceries */
             name: string;
             /**
-             * @description Hex, `#RRGGBB`.
-             * @example #57B368
+             * @description A daisyUI semantic colour token, not a hex.
+             * @example success
+             * @enum {string}
              */
-            color: string;
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
             /** @description Major units spent in this category during the current period. */
             spent: number;
         };
@@ -565,10 +705,23 @@ export interface components {
             /** @example Groceries */
             name: string;
             /**
-             * @description Hex, `#RRGGBB`.
-             * @example #57B368
+             * @description A daisyUI semantic colour token, not a hex.
+             * @example success
+             * @enum {string}
              */
-            color: string;
+            color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content";
+            /**
+             * @description **Here for the recent-transactions card, not for the donut.**
+             *
+             *     The donut's slices are bare colour and need none. `RecentTransactionsCard`
+             *     draws the same `size-9` tile the transactions table does, and joins it off
+             *     this array rather than making a second request - see `backend/CLAUDE.md`'s
+             *     note on why that join is free. Without this field that tile is the one
+             *     place left drawing a placeholder mark for every category, which is exactly
+             *     what the close colour pairs cannot survive.
+             * @enum {string|null}
+             */
+            icon: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark" | null;
             /** @description Major units spent in this category during the current period. */
             spent: number;
             /** @description Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap. Across the whole `categories` array these sum to 100: spend belonging to no live category is folded into the Uncategorized fallback, so every transaction in the period is counted in exactly one entry. Round for display with an apportionment that preserves the total, since rounding each value independently can sum to 99 or 101. */
@@ -657,6 +810,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HelloResponseDto"];
+                };
+            };
+        };
+    };
+    TemplatesController_categories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryTemplatesResponseDto"];
+                };
+            };
+        };
+    };
+    TemplatesController_palette: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaletteResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
                 };
             };
         };

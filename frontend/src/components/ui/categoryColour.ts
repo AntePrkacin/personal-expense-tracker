@@ -1,38 +1,101 @@
-// The eight category colours, mapped onto daisyUI theme colours (PET-57).
+import {
+  Car,
+  CircleQuestionMark,
+  Gift,
+  GraduationCap,
+  HeartPulse,
+  Landmark,
+  PawPrint,
+  Plane,
+  Scissors,
+  ShoppingBasket,
+  Tv,
+  Utensils,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
+
+import type { components } from '@/types/api';
+
+// The sixteen daisyUI semantic colour tokens and the thirteen lucide icons a
+// category can carry, mapped onto what actually paints them (PET-64).
 //
-// Three things about this file are load-bearing:
+// Four things about this file are load-bearing:
 //
 //  1. Every class is written out in full. Tailwind's scanner reads this file as
-//     raw text, so an interpolated `bg-${tone}` would be found by nobody and
-//     compile to nothing - a transparent tile, no build error.
-//  2. The keys are colour words rather than Figma token names, because that is
-//     what the category form offers when you pick a colour, and the stored
-//     category rows carry them.
-//  3. The values are theme colours, not fixed hues, so the tiles follow the
-//     active light/dark theme. The mapping is nearest-match by design and it is
-//     lossy on purpose: orange and yellow both land on `warning`, which PET-57
-//     accepted because category colours are decoration, not semantics. The
-//     colour words stay the stable identity; only the rendered hue is themed.
+//     raw text, so an interpolated `bg-${token}` would be found by nobody and
+//     compile to nothing - a transparent tile, no build error. The same is true
+//     of the icons: `lucide-react` resolves by import at build time, so a
+//     runtime name cannot become a component without a static map like this one.
+//  2. **The keys are the contract's own unions, not a list restated here.**
+//     `CreateCategoryDto.color` and `.icon` publish real OpenAPI enums, so a
+//     `Record` keyed by them is its own exhaustiveness proof: adding a
+//     seventeenth token to `backend/src/database/central/template-tokens.ts` and
+//     running `api:sync` breaks this file's build until the map covers it. That
+//     is the whole payoff of the token allowlist, and it is why skipping
+//     `api:sync` is catastrophic rather than untidy - the union degrades to
+//     `string`, `Record<string, string>` accepts any subset of keys, and every
+//     tile renders grey with the build green.
+//  3. The values are theme colours, not fixed hues, so the marks follow the
+//     active light/dark theme. **This replaced a hex map**, and the reason is
+//     sharper than indirection: `primary` is valued differently per theme, so
+//     several of these colours have no single hex at all.
+//  4. **The pairing inverts for a `-content` token, and it looks like a
+//     mistake.** `accent-content` maps to `bg-accent-content text-accent`,
+//     because the glyph on that tile has to be legible against it and the
+//     token's own partner is the base colour it was derived from.
 
-export type CategoryColour =
-  'coral' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue' | 'violet' | 'pink';
+/** A stored category colour. Read out of the contract, never restated. */
+export type CategoryColour = components['schemas']['CreateCategoryDto']['color'];
+
+/** A stored category icon, same rule. Required on create as of PET-64. */
+export type IconName = components['schemas']['CreateCategoryDto']['icon'];
+
+// **Three of the thirteen seeded colour pairs are visibly close, deliberately.**
+// Measured in OKLab, where roughly 0.10 is the floor for telling two categories
+// apart:
+//
+//   ΔE 0.029  Personal care / Gifts     accent-content / success-content
+//   ΔE 0.037  Education / Travel        primary-content / secondary-content
+//   ΔE 0.060  Groceries / Utilities     success / accent
+//
+// Kept rather than re-picked. Breaking Education / Travel would force one onto a
+// near-black tile, since `primary-content`, `secondary-content` and
+// `neutral-content` are all near-white and only one pale tile is possible - a
+// large visual change to fix something invisible, in a channel that carries
+// nothing. Near-identical also beats exact reuse: `accent-content` and
+// `success-content` differ in hue (188° against 169°) and can separate on a
+// wide-gamut display, where a reused token never can.
+//
+// **What makes it safe is that each category has its own icon**, which is why
+// `CATEGORY_ICON` below landed in the same ticket as this palette rather than
+// after it. `categoryColour.test.ts` pins all three pairs, so the map cannot
+// read as thirteen distinct colours while rendering ten.
 
 /**
- * Background and content utility for a category's icon tile, keyed by colour name.
+ * Background and content utility for a category's icon tile, keyed by token.
  *
- * Each value pairs the tile's background with its `-content` colour, so a glyph
- * drawn on the tile with `currentColor` follows the theme rather than assuming
- * white - the same pairing every daisyUI status colour ships with.
+ * Each value pairs the tile's background with the colour a glyph drawn on it
+ * with `currentColor` should take - so for a base token that is its own
+ * `-content` partner, and for a `-content` token it is the base it came from.
  */
 export const CATEGORY_TILE: Record<CategoryColour, string> = {
-  coral: 'bg-error text-error-content',
-  orange: 'bg-warning text-warning-content',
-  yellow: 'bg-warning text-warning-content',
-  green: 'bg-success text-success-content',
-  teal: 'bg-accent text-accent-content',
-  blue: 'bg-info text-info-content',
-  violet: 'bg-primary text-primary-content',
-  pink: 'bg-secondary text-secondary-content',
+  primary: 'bg-primary text-primary-content',
+  'primary-content': 'bg-primary-content text-primary',
+  secondary: 'bg-secondary text-secondary-content',
+  'secondary-content': 'bg-secondary-content text-secondary',
+  accent: 'bg-accent text-accent-content',
+  'accent-content': 'bg-accent-content text-accent',
+  neutral: 'bg-neutral text-neutral-content',
+  'neutral-content': 'bg-neutral-content text-neutral',
+  info: 'bg-info text-info-content',
+  'info-content': 'bg-info-content text-info',
+  success: 'bg-success text-success-content',
+  'success-content': 'bg-success-content text-success',
+  warning: 'bg-warning text-warning-content',
+  'warning-content': 'bg-warning-content text-warning',
+  error: 'bg-error text-error-content',
+  'error-content': 'bg-error-content text-error',
 };
 
 /**
@@ -51,18 +114,26 @@ export const CATEGORY_TILE: Record<CategoryColour, string> = {
  * with its dot, so the pair cannot drift.
  */
 export const CATEGORY_DOT: Record<CategoryColour, string> = {
-  coral: 'bg-error',
-  orange: 'bg-warning',
-  yellow: 'bg-warning',
-  green: 'bg-success',
-  teal: 'bg-accent',
-  blue: 'bg-info',
-  violet: 'bg-primary',
-  pink: 'bg-secondary',
+  primary: 'bg-primary',
+  'primary-content': 'bg-primary-content',
+  secondary: 'bg-secondary',
+  'secondary-content': 'bg-secondary-content',
+  accent: 'bg-accent',
+  'accent-content': 'bg-accent-content',
+  neutral: 'bg-neutral',
+  'neutral-content': 'bg-neutral-content',
+  info: 'bg-info',
+  'info-content': 'bg-info-content',
+  success: 'bg-success',
+  'success-content': 'bg-success-content',
+  warning: 'bg-warning',
+  'warning-content': 'bg-warning-content',
+  error: 'bg-error',
+  'error-content': 'bg-error-content',
 };
 
 /**
- * The same eight colours as a CSS value, for an SVG `fill`.
+ * The same sixteen colours as a CSS value, for an SVG `fill`.
  *
  * **A third map rather than a reuse of `CATEGORY_DOT`, because `fill` is an SVG presentation
  * attribute and a Tailwind class is not a valid value for one.** `bg-error` in a `fill` resolves
@@ -72,68 +143,80 @@ export const CATEGORY_DOT: Record<CategoryColour, string> = {
  * A `var(--color-*)` reference is a live one, resolved by the browser exactly as the class is, so
  * a slice follows the light/dark theme with no JavaScript and no `dark:` variant - verified in a
  * browser by flipping `prefers-color-scheme` and re-reading the computed fill. The values pair
- * one-to-one with `CATEGORY_DOT` and `categoryColour.test.ts` pins that, so a ninth colour added
- * to one and not the others fails there rather than painting a hole in the ring.
+ * one-to-one with `CATEGORY_DOT` and `categoryColour.test.ts` pins that, so a seventeenth colour
+ * added to one and not the others fails there rather than painting a hole in the ring.
  */
 export const CATEGORY_FILL: Record<CategoryColour, string> = {
-  coral: 'var(--color-error)',
-  orange: 'var(--color-warning)',
-  yellow: 'var(--color-warning)',
-  green: 'var(--color-success)',
-  teal: 'var(--color-accent)',
-  blue: 'var(--color-info)',
-  violet: 'var(--color-primary)',
-  pink: 'var(--color-secondary)',
+  primary: 'var(--color-primary)',
+  'primary-content': 'var(--color-primary-content)',
+  secondary: 'var(--color-secondary)',
+  'secondary-content': 'var(--color-secondary-content)',
+  accent: 'var(--color-accent)',
+  'accent-content': 'var(--color-accent-content)',
+  neutral: 'var(--color-neutral)',
+  'neutral-content': 'var(--color-neutral-content)',
+  info: 'var(--color-info)',
+  'info-content': 'var(--color-info-content)',
+  success: 'var(--color-success)',
+  'success-content': 'var(--color-success-content)',
+  warning: 'var(--color-warning)',
+  'warning-content': 'var(--color-warning-content)',
+  error: 'var(--color-error)',
+  'error-content': 'var(--color-error-content)',
 };
 
-// Everything below is the bridge from what the API stores to what the map above is keyed
-// by, and it exists because the two speak different languages on purpose.
-//
-// `CategoryResponseDto.color` is a hex string. This file's keys are colour words, because
-// point 2 above says that is what the category form offers when you pick a colour - and
-// because a Tailwind class cannot be built from a hex at runtime anyway, which is point 1.
-// So a screen rendering a stored category needs a lookup, and PET-29's table is the first
-// screen that does. `app/setup/starterCategories.ts` is the same bridge in the other
-// direction and for a fixed list, which is why it needs no lookup at all.
-
 /**
- * The eight Foundations colours by their stored hex.
+ * The lucide component for a stored icon name.
  *
- * Uppercase keys, and callers normalise before looking up. That is required rather than
- * defensive: `CreateCategoryDto` validates the colour with `/^#[0-9A-Fa-f]{6}$/`, so
- * `#57b368` is a value the API accepts and stores as typed, while
- * `backend/src/database/user/starter-categories.ts` seeds the same colour uppercase.
+ * **The map exists because `lucide-react` imports by name at build time.**
+ * `icons[name]` off the library's own barrel would work and would also pull
+ * every glyph it ships into the bundle; a static map imports exactly thirteen.
  *
- * The hexes are the backend's stored seed values, not a frontend token: PET-57 retired
- * `globals.css`'s hand-rolled palette and `globals.test.ts` with it, so this file is now
- * their single frontend home. `backend/src/database/user/starter-categories.ts` seeds
- * each one uppercase, which is the casing this map keys on.
+ * `Record<IconName, LucideIcon>` is the exhaustiveness proof the contract's enum
+ * buys: a fourteenth name added to `ICON_NAMES` backend-side and synced breaks
+ * this build rather than rendering a hole where a glyph belongs.
  */
-export const CATEGORY_COLOUR_BY_HEX: Record<string, CategoryColour> = {
-  '#EF6F6C': 'coral',
-  '#F29A3D': 'orange',
-  '#E7C24A': 'yellow',
-  '#57B368': 'green',
-  '#34B9AE': 'teal',
-  '#3F8EE6': 'blue',
-  '#8A79F1': 'violet',
-  '#CE6FB8': 'pink',
+export const CATEGORY_ICON: Record<IconName, LucideIcon> = {
+  'shopping-basket': ShoppingBasket,
+  utensils: Utensils,
+  car: Car,
+  zap: Zap,
+  'heart-pulse': HeartPulse,
+  tv: Tv,
+  'graduation-cap': GraduationCap,
+  plane: Plane,
+  scissors: Scissors,
+  gift: Gift,
+  'paw-print': PawPrint,
+  landmark: Landmark,
+  // Not `CircleHelp`, which is a deprecated alias of it in lucide 1.29.0.
+  'circle-question-mark': CircleQuestionMark,
 };
 
+// Everything below is the fallback path: what to paint when a category could not
+// be resolved at all.
+//
+// **It is a much narrower job than it used to be.** Until PET-64 these also
+// answered for the `Uncategorized` fallback category, whose `#98A0AE` was
+// outside the eight-colour palette on purpose, and for any well-formed hex a
+// category might carry that the map did not know. Neither case exists now: the
+// fallback carries `warning-content` like any other category, and `color` is a
+// closed enum the API validates. What is left is a `categoryId` that matched
+// nothing in the account's list, and `null`.
+
 /**
- * The tile for a colour outside the eight.
+ * The tile for a category that could not be resolved.
  *
- * **`bg-base-300` looks like a mistake and is not.** `#98A0AE`, `FALLBACK_CATEGORY.color`
- * in the backend's own file, is the "Uncategorized" grey that file says is deliberately
- * outside the palette. Under daisyUI a colour that is nobody's category colour has no
- * status meaning to reach for, so the theme-aware stand-in is a base shade rather than one
- * of `error`/`warning`/`success`/etc - a base shade is exactly what has no semantic weight
- * to spend. `text-base-content` is the paired content colour, the same pairing every entry
+ * **`bg-base-300` looks like a mistake and is not.** Under daisyUI a mark that is
+ * nobody's category has no status meaning to reach for, so the theme-aware
+ * stand-in is a base shade rather than one of `error`/`warning`/`success` - a
+ * base shade is exactly what has no semantic weight to spend.
+ * `text-base-content` is the paired content colour, the same pairing every entry
  * in `CATEGORY_TILE` above carries.
  *
- * A bare string rather than a ninth entry in the maps above, because `CategoryColour` stays
- * eight keys: widening it would offer this grey to the onboarding chips and to the colour picker
- * frame 19 draws, as if it were a colour somebody could pick.
+ * A bare string rather than a seventeenth entry in the maps above, because
+ * `CategoryColour` is the contract's union and widening it here would be this
+ * file disagreeing with the API about what a category may store.
  *
  * **`CATEGORY_DOT_NEUTRAL` and `CATEGORY_FILL_NEUTRAL` deliberately do not follow this one**, and
  * the reason is the glyph: the tile has content drawn on it and they do not. See their own note.
@@ -150,16 +233,8 @@ export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
  * in dark, which is the near-invisibility PET-22 already measured and rejected for the trend
  * chart's muted bars. Reaching for it here reintroduced that finding on a different chart.
  *
- * **This is not a decorative state, which is what makes it worth contrast rather than restraint.**
- * `CategoriesService.foldOrphansIntoFallback` attributes every orphaned transaction to
- * Uncategorized, so this is the colour real money is drawn in - and PET-23's requirement is that
- * the ring closes, which a slice nobody can see fails by another route.
- *
  * `base-content/50` measures **3.382:1** in light and **4.743:1** in dark against the same card,
- * clearing the 3:1 non-text contrast bar in both. That is one step darker than
- * `FALLBACK_CATEGORY.color`'s own `#98A0AE` (2.66:1 in light), and the divergence is deliberate:
- * `frontend/CLAUDE.md` gives colour to daisyUI and structure to Figma, so a stored hex is not the
- * authority over a rendered hue, and clearing the bar is worth more than matching the grey.
+ * clearing the 3:1 non-text contrast bar in both.
  *
  * It and `CATEGORY_FILL_NEUTRAL` below are the same colour by construction - Tailwind's `/50`
  * modifier compiles to exactly the `color-mix` that one is written as - which is what keeps a
@@ -167,35 +242,35 @@ export const CATEGORY_TILE_NEUTRAL = 'bg-base-300 text-base-content';
  * the whole reason `CATEGORY_DOT` exists as a second map: on a mark with no content it turns
  * daisyUI's `currentColor` drop shadow into an opaque smudge, and a fallback that reintroduced it
  * would reintroduce that bug on exactly the path nobody looks at.
+ *
+ * **This stopped being the Uncategorized slice's colour at PET-64**, which is worth knowing
+ * because the note that used to live here argued at length that it was. That category carries
+ * `warning-content` now and resolves through `CATEGORY_DOT` like any other. The contrast argument
+ * still holds for what remains - the backend's orphan fold means an unresolvable row can still be
+ * real money - so the measurement stays rather than reverting to `base-300`.
  */
 export const CATEGORY_DOT_NEUTRAL = 'bg-base-content/50';
 
 /**
  * The background utility for a stored category colour.
  *
- * Falls back to the neutral tile for a hex outside the eight, for a category that could not
- * be resolved at all, and for anything malformed. Unreachable through the UI today - every
- * category is one of the ten starters, and no screen can create another yet - but
- * `CreateCategoryDto` accepts any well-formed hex, so the day category writes ship, an
- * unpalette colour renders grey rather than transparent. `docs/TODO.md` records what that
- * ticket owes: either a picker restricted to the eight, or a rendering path that does not
- * go through a class map.
+ * Falls back to the neutral tile for a category that could not be resolved, and for anything
+ * malformed. `CreateCategoryDto.color` is a closed enum, so a value outside the map means the
+ * contract and this file have drifted - which `api:sync` is what prevents, and which this guard
+ * renders as grey rather than transparent if it ever happens anyway.
  */
-export function categoryTileClass(hex: string | null | undefined): string {
-  if (hex === null || hex === undefined) {
+export function categoryTileClass(color: string | null | undefined): string {
+  if (color === null || color === undefined) {
     return CATEGORY_TILE_NEUTRAL;
   }
 
   // `Object.hasOwn` rather than a bare index. The key is a stored value that reaches here from
   // the API, and a plain object lookup also finds everything on `Object.prototype` - so a
   // colour of `constructor` or `toString` would return a function where a class string is
-  // expected. Uppercasing happens to defeat that today, since none of those keys carry
-  // capitals, but that is luck rather than a guard and it would stop being true the moment
-  // this stopped normalising case.
-  const key = hex.toUpperCase();
-
-  return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
-    ? CATEGORY_TILE[CATEGORY_COLOUR_BY_HEX[key]!]
+  // expected. The case normalisation this used to do is gone with the hex: a token is a fixed
+  // lowercase string the API validates, so `Success` is not a value it can store.
+  return Object.hasOwn(CATEGORY_TILE, color)
+    ? CATEGORY_TILE[color as CategoryColour]
     : CATEGORY_TILE_NEUTRAL;
 }
 
@@ -204,32 +279,40 @@ export function categoryTileClass(hex: string | null | undefined): string {
  *
  * **Two tickets needed it independently, which is why this names both call sites.** PET-34's
  * transaction detail draws a category chip; PET-23's donut legend draws a coloured dot with the
- * category name beside it in real text. The two existing `CATEGORY_DOT` call sites - the
- * onboarding chip and the Welcome panel - index it by colour **word**, because each of them owns
- * the word already. A screen rendering a category that came off the API has a hex instead, and
- * the only hex-keyed path here returned the tile - whose `text-*-content` half is exactly what
- * must not reach a `status`. So this is the missing half of the pair rather than a convenience:
- * without it either consumer would have had a smudge under its dot, or a second colour lookup
- * written out at the call site.
+ * category name beside it in real text. Both must not receive a `CATEGORY_TILE` value, whose
+ * `text-*-content` half turns daisyUI's `currentColor` drop shadow into an opaque smudge.
  *
  * Every note on `categoryTileClass` applies unchanged, `Object.hasOwn` included and for the same
- * reason, and so does the uppercase normalisation - `CreateCategoryDto` accepts `#57b368` while
- * the seed writes `#57B368`.
+ * reason.
  */
-export function categoryDotClass(hex: string | null | undefined): string {
-  if (hex === null || hex === undefined) {
+export function categoryDotClass(color: string | null | undefined): string {
+  if (color === null || color === undefined) {
     return CATEGORY_DOT_NEUTRAL;
   }
 
-  const key = hex.toUpperCase();
-
-  return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
-    ? CATEGORY_DOT[CATEGORY_COLOUR_BY_HEX[key]!]
+  return Object.hasOwn(CATEGORY_DOT, color)
+    ? CATEGORY_DOT[color as CategoryColour]
     : CATEGORY_DOT_NEUTRAL;
 }
 
 /**
- * The neutral fill, for a colour outside the eight.
+ * The lucide component for a stored icon name, or `null`.
+ *
+ * **`null` rather than a stand-in glyph, because the caller already has a tile to draw.** An
+ * unresolvable icon is a category from before the column was constrained, or one the map has
+ * drifted from; both call sites render the tile with nothing in it, which reads as a category
+ * with no icon rather than as a wrong one.
+ */
+export function categoryIcon(name: string | null | undefined): LucideIcon | null {
+  if (name === null || name === undefined) {
+    return null;
+  }
+
+  return Object.hasOwn(CATEGORY_ICON, name) ? CATEGORY_ICON[name as IconName] : null;
+}
+
+/**
+ * The neutral fill, for a category that could not be resolved.
  *
  * Stands to `CATEGORY_FILL` as `CATEGORY_DOT_NEUTRAL` stands to `CATEGORY_DOT`, and that one is
  * declared above beside `CATEGORY_TILE_NEUTRAL` rather than here, which is where the contrast
@@ -243,18 +326,16 @@ export const CATEGORY_FILL_NEUTRAL =
 /**
  * The CSS colour for a stored category colour, for an SVG `fill`.
  *
- * The donut's slices. Falls back to the same neutral grey the tile and the dot do, which is the
- * designed answer for the fallback category's own `#98A0AE` rather than an accident - dropping an
- * unresolvable slice would make the ring not close, and the ring closing is PET-23's requirement.
+ * The donut's slices. Falls back to the neutral grey the tile and the dot do, which is what keeps
+ * the ring closed: dropping an unresolvable slice would make it not close, and the ring closing is
+ * PET-23's requirement.
  */
-export function categoryFillVar(hex: string | null | undefined): string {
-  if (hex === null || hex === undefined) {
+export function categoryFillVar(color: string | null | undefined): string {
+  if (color === null || color === undefined) {
     return CATEGORY_FILL_NEUTRAL;
   }
 
-  const key = hex.toUpperCase();
-
-  return Object.hasOwn(CATEGORY_COLOUR_BY_HEX, key)
-    ? CATEGORY_FILL[CATEGORY_COLOUR_BY_HEX[key]!]
+  return Object.hasOwn(CATEGORY_FILL, color)
+    ? CATEGORY_FILL[color as CategoryColour]
     : CATEGORY_FILL_NEUTRAL;
 }

@@ -185,7 +185,12 @@ classes the one exception, as the visible half of an aria attribute the same tes
 
 **`lucide-react` is the icon library, and there are no hand-traced glyphs left.** Every mark in
 the app was a hand-drawn inline `<svg>` with its Figma node id in the comment until PET-33
-introduced the dependency and migrated all thirteen. It is named here rather than in
+introduced the dependency and migrated all thirteen. **PET-64 added the one case where a glyph
+is chosen at runtime rather than imported at a call site**: a category carries an icon _name_,
+and `ui/categoryColour.ts`'s `CATEGORY_ICON` is the static map that turns thirteen of them into
+components. Reach for that map rather than `lucide-react`'s own barrel - `icons[name]` works and
+pulls every glyph the library ships into the bundle - and note the map is keyed by the
+contract's published enum, so it is an exhaustiveness proof rather than a lookup table. It is named here rather than in
 `frontend/src/components/CLAUDE.md` because routes draw glyphs too - `(app)/layout.tsx`'s
 hamburger and `(app)/DateField.tsx`'s month arrows are not components. Import the icon, size it
 with a Tailwind `size-*` class, and pass `aria-hidden="true"` **explicitly**: lucide renders a
@@ -450,7 +455,17 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   transaction row carries only a `categoryId` and the table joins the name and the tile colour
   onto it. A screen wanting a cap or a spend widens the right one or adds a third; do not open
   either up, since the point of the narrowing is that a cap and a month's spend never reach a
-  browser bundle drawing neither. Note that module deliberately **never redirects** - its
+  browser bundle drawing neither. PET-64 added `icon` to the **wide** one only, for that exact
+  reason: the table's tile draws the category's own glyph now, and the `<select>` draws neither
+  tile nor glyph.
+  **PET-64 also added the app's first unauthenticated read**, `lib/categoryTemplates.ts`, and it
+  is the one that goes through none of the above. Onboarding step 2 runs before an account
+  exists, so there is no cookie for `authorizedGet` to lift and no 401 to classify; it calls the
+  `@Public()` `GET /api/templates/categories` directly. Its failure policy is a **third** one:
+  it degrades to an empty list rather than throwing, because the chips are a selection on a step
+  whose Continue is unconditional (A4), so an unreachable backend costs the user their starter
+  categories rather than the whole onboarding flow. Do not copy that policy to a read that _is_
+  the content of its screen - `lib/transactions.ts` is right to throw. Note that module deliberately **never redirects** - its
   route-handler caller would be handed an HTML login page with a 200 on it - so a Server
   Component using it applies the 401 policy at the call site, which
   `app/(app)/transactions/page.tsx` is the worked example of.

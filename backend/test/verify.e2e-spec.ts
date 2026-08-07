@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { categoryTemplateIds } from './category-templates';
 import { LoginTokenService } from './../src/auth/login-token.service';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
 import { newId } from './../src/common/ids';
@@ -56,6 +57,10 @@ describe('Verification and sessions (e2e)', () => {
   let emailCounter = 0;
   const nextEmail = () => `Verifier${++emailCounter}@Example.COM`;
 
+  // Resolved in beforeAll: RegisterDto.categories takes category template
+  // ids, and those are minted by the boot seed into this run's own database.
+  let pickedCategoryIds: string[] = [];
+
   const registration = (email: string) => ({
     firstName: 'Marko',
     lastName: 'Kovac',
@@ -63,7 +68,7 @@ describe('Verification and sessions (e2e)', () => {
     currency: 'eur',
     monthlyBudget: 2000.5,
     monthStartDay: 15,
-    categories: ['Transport', 'Groceries'],
+    categories: pickedCategoryIds,
   });
 
   // See the note on the same helper in auth.e2e-spec.ts for why this is
@@ -147,6 +152,11 @@ describe('Verification and sessions (e2e)', () => {
     app.setGlobalPrefix('api');
     await app.init();
 
+    pickedCategoryIds = await categoryTemplateIds(app, [
+      'Transportation',
+      'Groceries',
+    ]);
+
     centralDb = app.get<CentralDatabase>(APP_DB);
     loginTokens = app.get(LoginTokenService);
     userDatabases = app.get(UserDatabaseService);
@@ -194,14 +204,28 @@ describe('Verification and sessions (e2e)', () => {
         monthStartDay: 15,
       });
 
-      // Sorted by name here, so this pins the set and the real Figma colors
-      // rather than the insert order - canonical order is the unit test's job.
-      // Uncategorized is seeded for everybody and offered to nobody, and its
-      // neutral is deliberately not from the eight-color category palette.
+      // Sorted by name here, so this pins the set and the colours the
+      // templates carry rather than the insert order - canonical order is the
+      // unit test's job. Uncategorized is seeded for everybody and offered to
+      // nobody, and it is the one row with no template behind it, so its token
+      // comes from FALLBACK_CATEGORY instead.
+      //
+      // Tokens rather than hexes since PET-64: `primary` is valued differently
+      // per theme, so several of these have no single hex to store.
       expect(seeded.map((row) => [row.name, row.color])).toEqual([
-        ['Groceries', '#57B368'],
-        ['Transport', '#3F8EE6'],
-        ['Uncategorized', '#98A0AE'],
+        ['Groceries', 'success'],
+        ['Transportation', 'info'],
+        ['Uncategorized', 'warning-content'],
+      ]);
+
+      // The template's description is copied into the user's own `note`, which
+      // is what keeps the user scope free of a new column. Every seeded row
+      // carries one, the fallback included.
+      expect(seeded.every((row) => (row.note ?? '').length > 0)).toBe(true);
+      expect(seeded.map((row) => row.icon)).toEqual([
+        'shopping-basket',
+        'car',
+        'circle-question-mark',
       ]);
       expect(seeded.filter((row) => row.isFallback)).toHaveLength(1);
       expect(seeded.find((row) => row.isFallback)?.name).toBe('Uncategorized');

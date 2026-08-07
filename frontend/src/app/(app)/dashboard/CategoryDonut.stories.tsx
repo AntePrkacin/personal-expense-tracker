@@ -13,11 +13,46 @@ import { CategoryDonut } from './CategoryDonut';
 
 /** Node 21:4's own five categories. Their percentages naively round to 99, which is the point. */
 const FIVE_CATEGORIES = [
-  { id: 'c1', name: 'Groceries', color: '#57B368', spent: 397, percent: 32.4 },
-  { id: 'c2', name: 'Dining out', color: '#EF6F6C', spent: 298, percent: 24.3 },
-  { id: 'c3', name: 'Transport', color: '#3F8EE6', spent: 223, percent: 18.2 },
-  { id: 'c4', name: 'Shopping', color: '#CE6FB8', spent: 174, percent: 14.2 },
-  { id: 'c5', name: 'Other', color: '#E7C24A', spent: 148, percent: 10.9 },
+  {
+    id: 'c1',
+    name: 'Groceries',
+    color: 'success' as const,
+    icon: 'shopping-basket' as const,
+    spent: 397,
+    percent: 32.4,
+  },
+  {
+    id: 'c2',
+    name: 'Dining out',
+    color: 'error' as const,
+    icon: 'utensils' as const,
+    spent: 298,
+    percent: 24.3,
+  },
+  {
+    id: 'c3',
+    name: 'Transport',
+    color: 'info' as const,
+    icon: 'car' as const,
+    spent: 223,
+    percent: 18.2,
+  },
+  {
+    id: 'c4',
+    name: 'Shopping',
+    color: 'secondary' as const,
+    icon: 'shopping-basket' as const,
+    spent: 174,
+    percent: 14.2,
+  },
+  {
+    id: 'c5',
+    name: 'Other',
+    color: 'warning-content' as const,
+    icon: 'shopping-basket' as const,
+    spent: 148,
+    percent: 10.9,
+  },
 ];
 
 const meta: Meta<typeof CategoryDonut> = {
@@ -48,7 +83,16 @@ export const FiveCategories: Story = {
  */
 export const SingleCategory: Story = {
   args: {
-    categories: [{ id: 'c1', name: 'Groceries', color: '#57B368', spent: 86.4, percent: 100 }],
+    categories: [
+      {
+        id: 'c1',
+        name: 'Groceries',
+        color: 'success' as const,
+        icon: 'shopping-basket' as const,
+        spent: 86.4,
+        percent: 100,
+      },
+    ],
     spent: 86.4,
   },
 };
@@ -64,8 +108,22 @@ export const SingleCategory: Story = {
 export const WithUncategorized: Story = {
   args: {
     categories: [
-      { id: 'c1', name: 'Groceries', color: '#57B368', spent: 60, percent: 60 },
-      { id: 'c2', name: 'Uncategorized', color: '#98A0AE', spent: 40, percent: 40 },
+      {
+        id: 'c1',
+        name: 'Groceries',
+        color: 'success' as const,
+        icon: 'shopping-basket' as const,
+        spent: 60,
+        percent: 60,
+      },
+      {
+        id: 'c2',
+        name: 'Uncategorized',
+        color: 'warning-content' as const,
+        icon: 'circle-question-mark' as const,
+        spent: 40,
+        percent: 40,
+      },
     ],
     spent: 100,
   },
@@ -78,10 +136,38 @@ export const WithUncategorized: Story = {
 export const RoundingOverflows: Story = {
   args: {
     categories: [
-      { id: 'a', name: 'Groceries', color: '#57B368', spent: 306, percent: 30.6 },
-      { id: 'b', name: 'Dining out', color: '#EF6F6C', spent: 306, percent: 30.6 },
-      { id: 'c', name: 'Transport', color: '#3F8EE6', spent: 196, percent: 19.6 },
-      { id: 'd', name: 'Shopping', color: '#CE6FB8', spent: 192, percent: 19.2 },
+      {
+        id: 'a',
+        name: 'Groceries',
+        color: 'success' as const,
+        icon: 'shopping-basket' as const,
+        spent: 306,
+        percent: 30.6,
+      },
+      {
+        id: 'b',
+        name: 'Dining out',
+        color: 'error' as const,
+        icon: 'utensils' as const,
+        spent: 306,
+        percent: 30.6,
+      },
+      {
+        id: 'c',
+        name: 'Transport',
+        color: 'info' as const,
+        icon: 'car' as const,
+        spent: 196,
+        percent: 19.6,
+      },
+      {
+        id: 'd',
+        name: 'Shopping',
+        color: 'secondary' as const,
+        icon: 'shopping-basket' as const,
+        spent: 192,
+        percent: 19.2,
+      },
     ],
     spent: 1000,
   },
@@ -94,13 +180,62 @@ export const RoundingOverflows: Story = {
 export const ManySmallCategories: Story = {
   args: {
     categories: [
-      { id: 'a', name: 'Groceries', color: '#57B368', spent: 120, percent: 24 },
-      { id: 'b', name: 'Dining out', color: '#EF6F6C', spent: 95, percent: 19 },
-      { id: 'c', name: 'Transport', color: '#3F8EE6', spent: 78, percent: 15.6 },
-      { id: 'd', name: 'Shopping', color: '#CE6FB8', spent: 61, percent: 12.2 },
-      { id: 'e', name: 'Health', color: '#34B9AE', spent: 55, percent: 11 },
-      { id: 'f', name: 'Bills', color: '#8A79F1', spent: 48, percent: 9.6 },
-      { id: 'g', name: 'Other', color: '#F29A3D', spent: 43, percent: 8.6 },
+      {
+        id: 'a',
+        name: 'Groceries',
+        color: 'success' as const,
+        icon: 'shopping-basket' as const,
+        spent: 120,
+        percent: 24,
+      },
+      {
+        id: 'b',
+        name: 'Dining out',
+        color: 'error' as const,
+        icon: 'utensils' as const,
+        spent: 95,
+        percent: 19,
+      },
+      {
+        id: 'c',
+        name: 'Transport',
+        color: 'info' as const,
+        icon: 'car' as const,
+        spent: 78,
+        percent: 15.6,
+      },
+      {
+        id: 'd',
+        name: 'Shopping',
+        color: 'secondary' as const,
+        icon: 'shopping-basket' as const,
+        spent: 61,
+        percent: 12.2,
+      },
+      {
+        id: 'e',
+        name: 'Health',
+        color: 'accent' as const,
+        icon: 'shopping-basket' as const,
+        spent: 55,
+        percent: 11,
+      },
+      {
+        id: 'f',
+        name: 'Bills',
+        color: 'primary' as const,
+        icon: 'shopping-basket' as const,
+        spent: 48,
+        percent: 9.6,
+      },
+      {
+        id: 'g',
+        name: 'Other',
+        color: 'warning' as const,
+        icon: 'shopping-basket' as const,
+        spent: 43,
+        percent: 8.6,
+      },
     ],
     spent: 500,
   },
@@ -119,9 +254,30 @@ export const ManySmallCategories: Story = {
 export const SameColourNeighbours: Story = {
   args: {
     categories: [
-      { id: 'a', name: 'Dining out', color: '#F29A3D', spent: 40, percent: 40 },
-      { id: 'b', name: 'Shopping', color: '#E7C24A', spent: 35, percent: 35 },
-      { id: 'c', name: 'Transport', color: '#3F8EE6', spent: 25, percent: 25 },
+      {
+        id: 'a',
+        name: 'Dining out',
+        color: 'warning' as const,
+        icon: 'utensils' as const,
+        spent: 40,
+        percent: 40,
+      },
+      {
+        id: 'b',
+        name: 'Shopping',
+        color: 'warning-content' as const,
+        icon: 'shopping-basket' as const,
+        spent: 35,
+        percent: 35,
+      },
+      {
+        id: 'c',
+        name: 'Transport',
+        color: 'info' as const,
+        icon: 'car' as const,
+        spent: 25,
+        percent: 25,
+      },
     ],
     spent: 100,
   },

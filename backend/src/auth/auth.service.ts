@@ -1,9 +1,15 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isUniqueViolation } from '../common/unique-violation';
 import type { OnboardingPayload } from '../database/central/schema';
 import { renderLoginLinkEmail } from '../mail/login-link.template';
 import { MAILER, type Mailer } from '../mail/mailer';
+import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginTokenService } from './login-token.service';
@@ -40,6 +46,7 @@ export class AuthService {
     private readonly loginTokens: LoginTokenService,
     @Inject(MAILER) private readonly mailer: Mailer,
     private readonly config: ConfigService,
+    private readonly templates: TemplatesService,
   ) {}
 
   /**
@@ -49,6 +56,12 @@ export class AuthService {
    * "Finish setup" from needing the loading state A19 does not design.
    */
   async register(dto: RegisterDto): Promise<void> {
+    // Ahead of everything, and specifically ahead of the floated work below.
+    // It is the membership check `RegisterDto.categories` cannot do for itself
+    // now that the offered list is a table, and it must not move: after the
+    // float, a 400 would arrive too late to be a 400 at all.
+    await this.assertCategoryTemplatesExist(dto.categories);
+
     const userId = await this.resolveRegistration(dto.email, {
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -59,6 +72,37 @@ export class AuthService {
     });
 
     this.floatLoginLink(userId, dto.email);
+  }
+
+  /**
+   * Rejects a registration naming a category template that is not there.
+   *
+   * **One indexed read, and it says nothing about any account.** It runs before
+   * the directory lookup, so it costs the same whether or not the address
+   * exists and cannot become a second timing channel - the property the empty
+   * 202 is built on. `@ArrayUnique` upstream means the counts compare directly.
+   *
+   * A 400 rather than dropping the unknown ids silently: a frontend sending an
+   * id the API does not know is a frontend out of step with the templates, and
+   * seeding whatever survived a filter would hand the user an account missing
+   * categories they picked, with nothing anywhere saying so.
+   */
+  private async assertCategoryTemplatesExist(ids: string[]): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const found = await this.templates.resolve(ids);
+    if (found.length === ids.length) {
+      return;
+    }
+
+    const known = new Set(found.map((template) => template.id));
+    const missing = ids.filter((id) => !known.has(id));
+
+    throw new BadRequestException(
+      `categories contains unknown category template ids: ${missing.join(', ')}`,
+    );
   }
 
   /**

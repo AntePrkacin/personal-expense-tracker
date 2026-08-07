@@ -115,8 +115,10 @@ all central knows.
 **`SessionGuard` is an `APP_GUARD`, so every route is guarded unless it says otherwise.**
 It arrived per-route, back when one endpoint was guarded and marking four public ones to
 protect it would have been absurd; the transaction endpoints tipped the balance and PET-27
-made the flip. Exactly four routes carry `@Public()` (`src/auth/public.decorator.ts`):
-hello, register, login-link and verify. **Note the failure direction reversed**, which is
+made the flip. Exactly **five** routes carry `@Public()` (`src/auth/public.decorator.ts`):
+hello, register, login-link, verify and PET-64's `GET /api/templates/categories` - the first
+public route that is not part of getting a credential, and public because onboarding step 2
+draws its chips before an account exists. See `## Templates`. **Note the failure direction reversed**, which is
 the real reason to prefer this: a forgotten `@Public()` 401s a public route loudly on the
 first request, where a forgotten `@UseGuards` used to leave an endpoint silently open. The
 guard's public check is a pure metadata read - no header, no body, no query - so it sits
@@ -296,6 +298,21 @@ Its color, `#98A0AE`, is the design system's `--color-text-tertiary` rather than
 eight category colors. White was chosen first and reversed: since this is the category the
 transaction form preselects, it is likely to hold the largest donut slice, and white would
 have rendered that slice, the legend swatch and the list dot as nothing.
+
+**PET-64 reversed the first half of that and kept the second.** `categories.color` stores a
+daisyUI semantic token now rather than a hex, so there is no off-palette neutral left to reach
+for: `--color-text-tertiary` went with the token layer PET-57 retired, and the paragraph above
+is dated to before that caught up with this row. The fallback carries **`warning-content`**,
+with `circle-question-mark` as its icon, both from the same allowlist every other category draws
+from. What still holds is the reason white was rejected - this row can hold the largest donut
+slice, so its colour has to be visible against the card in both themes, which is exactly what a
+real theme token gives it and a hex could not promise. Its `note` is written in
+`FALLBACK_CATEGORY` too, since it is the one category with no template to copy a description
+from.
+
+**It is deliberately not a `category_templates` row**, for the same reason it was never in
+`STARTER_CATEGORIES`: that table is the onboarding chip list, this must never appear there, and
+its name is a system invariant rather than something an admin may rename. See `## Templates`.
 
 Five things about the rest of it are easy to get wrong:
 
@@ -557,6 +574,53 @@ own ESM module, so under Jest's module registry that is a different realm with a
 global and `cause instanceof Error` is `false` for an object that prints as one. The only test that
 catches any of this is one that forces a real collision, which is why `test/insights.e2e-spec.ts`
 races two runs rather than asserting a hand-written message.
+
+## Templates
+
+**`src/templates/` serves the admin-managed data behind onboarding and the category picker, and
+it is the first step toward a super-admin panel.** Two reads over central's three template
+tables: `GET /api/templates/categories`, the fifth `@Public()` route, answering the starter
+chips onboarding step 2 draws; and `GET /api/templates/palette`, guarded, answering which
+colours and icons a create-or-edit category picker may offer, each with the label to show for
+it. `backend/src/database/CLAUDE.md` owns why those tables are in central at all - the fourth
+sanctioned exception - and why the seed runs at boot.
+
+**Deliberately not part of `CategoriesModule`.** That module is user-scope: every row it touches
+belongs to one person and it opens the caller's own database. These tables belong to nobody and
+are the same for everybody, which is the whole distinction. `TemplatesService` is exported
+because both halves of the access flow compose it.
+
+Four things about it are easy to get wrong:
+
+- **The public route is public because onboarding has no session, and it carries no throttler.**
+  `ThrottlerModule` is configured inside `AuthModule` and `ThrottlerGuard` sits on
+  `AuthController` alone, so there is nothing here to skip - which is worth stating rather than
+  leaving to be discovered, since a bare `@SkipThrottle()` means `{ default: true }` and would
+  silently skip nothing anyway. The route reads no request state and returns the same bytes to
+  everybody, so it enumerates nothing.
+- **Validation checks the code-side allowlist and never the `enabled` flag.** `enabled` is
+  presentation: the palette read offers what is enabled, while `@IsIn(COLOUR_TOKENS)` accepts the
+  whole allowlist - so a category carrying a since-disabled colour still saves and still renders.
+  `error-content` ships disabled for exactly that reason, measuring 1.01:1 against the dark card.
+  The two lists being different is the design, not drift.
+- **Registration takes template ids, and the membership check must stay ahead of the floated
+  work.** `RegisterDto.categories` is a shape check plus `@ArrayUnique` - `@IsIn` has nothing to
+  close over once the list is a table - and `AuthService.register` resolves the ids against
+  central **before** the directory lookup and before the token issue and mail send. It costs the
+  same whether or not the address exists, so it cannot become a second timing channel, and after
+  the float a 400 would arrive too late to be a 400 at all. Its `@ArrayMaxSize` is a **literal
+  ceiling** rather than the list's length, and deliberately not a count query: that would put a
+  database read in front of validation on the one route anybody can post to.
+- **Verification copies rather than references, and tolerates a template that vanished.**
+  `seedStarterCategories` writes name, colour, icon and the template's `description` into the
+  user's own `categories` row - the description becoming `note`, which is what keeps this whole
+  change free of a user-scope migration. A template tombstoned between the form and the click
+  simply comes back missing from `resolve()` and is skipped with a warning: refusing to verify a
+  live login link over a category the user can no longer be given would strand the account.
+
+The **write** side is explicitly out of scope. There is no role or permission concept anywhere -
+central `users` holds an id, an email and a database pointer, and `SessionGuard` is the only
+guard - so `users.role`, a `SuperAdminGuard` and the admin UI are their own later ticket.
 
 ## Profile and preferences
 

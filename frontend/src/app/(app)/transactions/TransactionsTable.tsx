@@ -1,4 +1,4 @@
-import { categoryTileClass } from '@/components/ui/categoryColour';
+import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
 import type { CategoryLabel } from '@/lib/categories';
 import { toQuery } from '@/lib/transactionQuery';
 import type { Transaction, TransactionFilters } from '@/lib/transactions';
@@ -64,15 +64,21 @@ type TransactionsTableProps = {
 /**
  * The `categoryId` join, done once for the whole table.
  *
- * A row carries only `categoryId` - PET-28 publishes no name or colour on it - so the name
- * and the tile have to come from `GET /api/categories`. A `Map` rather than a `find` per
- * row, which is the difference between one pass and a hundred over the same ten categories.
+ * A row carries only `categoryId` - PET-28 publishes no name or colour on it - so the name,
+ * the tile and the glyph have to come from `GET /api/categories`. A `Map` rather than a
+ * `find` per row, which is the difference between one pass and a hundred over the same
+ * dozen categories - and the lookups are resolved here too, so a hundred rows in one
+ * category cost one `categoryIcon` call rather than a hundred.
  */
 function categoryIndex(categories: CategoryLabel[]): Map<string, RowCategory> {
   return new Map(
     categories.map((category) => [
       category.id,
-      { name: category.name, tileClass: categoryTileClass(category.color) },
+      {
+        name: category.name,
+        tileClass: categoryTileClass(category.color),
+        Icon: categoryIcon(category.icon),
+      },
     ]),
   );
 }

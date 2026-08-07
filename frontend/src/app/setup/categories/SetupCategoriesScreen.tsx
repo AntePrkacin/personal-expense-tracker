@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/Button';
+import type { CategoryTemplate } from '@/lib/categoryTemplates';
 import { ACCESS_ROUTES } from '@/lib/routes';
 
 import { SetupShell } from '../SetupShell';
@@ -8,7 +9,10 @@ import { CategoryPicker } from './CategoryPicker';
 //
 // A separate component from page.tsx for the reason WelcomeScreen and
 // SetupBudgetScreen are: Storybook renders the screen, and a route file is not
-// something you can hand a decorator.
+// something you can hand a decorator. **PET-64 turned that from a convention into a
+// requirement**: the chips are fetched now, `page.tsx` is async, and Storybook cannot
+// render an async Server Component - so the list arrives as a prop and this file stays
+// synchronous.
 //
 // A Server Component, and so are both of its exits. Only CategoryPicker needs the
 // client, because only the chips hold state.
@@ -19,8 +23,9 @@ import { CategoryPicker } from './CategoryPicker';
 // exception rather than the pattern: BudgetForm is a `form` with a submit button only
 // because its navigation is conditional on validation, and an anchor cannot be
 // blocked. Copying that shape here would invent a validation seam A4 says does not
-// exist, so SetupCategoriesScreen.test.tsx asserts two links and ten buttons - the
-// inverted mirror of step 1's one and one.
+// exist, so SetupCategoriesScreen.test.tsx asserts two links and one button per chip -
+// the inverted mirror of step 1's one and one. It used to say "ten buttons"; the count
+// is the length of the fetched list now, so the suite counts rather than restating.
 
 /**
  * The card's supporting copy (CAT-1).
@@ -38,7 +43,21 @@ import { CategoryPicker } from './CategoryPicker';
 const SUPPORTING_COPY =
   "Choose what you'd like to track. Tap to toggle - you can always add or edit categories later.";
 
-export function SetupCategoriesScreen() {
+type SetupCategoriesScreenProps = {
+  /**
+   * The chips to offer, in the order the API returned them.
+   *
+   * Required rather than defaulted to `[]`, for the reason `frontend/CLAUDE.md`
+   * gives about the typecheck: `npm run build` never reads `*.test.tsx`, so a
+   * default would let a call site quietly render a screen with no chips and
+   * nothing would say so. An **empty array is still a legitimate value** - it is
+   * what an unreachable backend produces - so the screen renders the card with
+   * no chips in it rather than treating empty as an error.
+   */
+  categories: CategoryTemplate[];
+};
+
+export function SetupCategoriesScreen({ categories }: SetupCategoriesScreenProps) {
   return (
     <SetupShell step={2}>
       {/* The card's own gap is 20px (gap-5 on the shell); the overline, heading and
@@ -55,7 +74,7 @@ export function SetupCategoriesScreen() {
         <p className="text-base-content/70">{SUPPORTING_COPY}</p>
       </div>
 
-      <CategoryPicker />
+      <CategoryPicker categories={categories} />
 
       {/* pt-1.5 is the designed 6px above this row, on top of the card's own gap-5.
           Back points at the constant rather than a literal: step 1's `href="/"` is

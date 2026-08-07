@@ -123,6 +123,8 @@ interface SpentCategoryRow {
   id: string;
   name: string;
   color: string;
+  /** For the recent-transactions card's tile, not for the donut. */
+  icon: string | null;
   spent: number;
 }
 
@@ -202,6 +204,7 @@ function categoriesOf(
         id: row.id,
         name: row.name,
         color: row.color,
+        icon: row.icon,
         spent: row.spent,
         percent: totalCents === 0 ? 0 : (spentCents / totalCents) * 100,
       };

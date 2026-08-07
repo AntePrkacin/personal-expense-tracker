@@ -1,8 +1,6 @@
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
 import type { components } from '@/types/api';
 
-import { STARTER_CATEGORIES, type StarterCategoryName } from './starterCategories';
-
 // The onboarding draft: everything screens 02, 03 and 22 collect before there is
 // an account to save it to.
 //
@@ -48,19 +46,24 @@ export type SetupDraft = {
    */
   budget: string;
   /**
-   * The starter chips picked on screen 03, **by name**, in the canonical order
-   * `STARTER_CATEGORIES` declares rather than the order they were clicked.
+   * The starter chips picked on screen 03, **by `category_templates.id`**.
    *
-   * Names because that is what the API takes: `RegisterDto.categories` is
-   * `@IsIn(STARTER_CATEGORY_NAMES)`, so names are what eventually cross the wire
-   * and an id would be a translation layer with nothing on the other side of it.
-   * Typed as the union rather than `string[]` so step 3 can hand this array
-   * straight to the register body.
+   * Ids since PET-64, and that reverses what this field used to say in as many
+   * words: it held names, because `RegisterDto.categories` was
+   * `@IsIn(STARTER_CATEGORY_NAMES)` and "an id would be a translation layer with
+   * nothing on the other side of it". There is something on the other side now -
+   * an admin-managed table - so a name is no longer a stable key and the API
+   * takes ids.
+   *
+   * Plain `string[]` rather than a union, for the same reason: the offered list
+   * is data, so the contract publishes no enum for it and there is nothing to
+   * type this as. `RegisterDto.categories` is `string[]` too, so step 3 still
+   * hands this array straight to the register body with no cast.
    *
    * Empty is a legitimate value, not a missing one: A4 enforces no minimum and a
    * user who deselects everything has made a choice (CAT-4, AC3).
    */
-  categories: StarterCategoryName[];
+  categories: string[];
   /**
    * Screen 22's three fields (REG-2), held here rather than in the register form's
    * own state.
@@ -117,31 +120,48 @@ function readString(source: Record<string, unknown>, key: string, fallback: stri
 }
 
 /**
- * The picked chips, filtered to names the API will accept and put back in
- * canonical order.
+ * A hard ceiling on the stored selection, matching `RegisterDto`'s own.
+ *
+ * The DTO's bound is a literal for the reason that file gives - there is no
+ * compile-time length once the offered list is a table - and this is the same
+ * number for the same reason. Deliberately not the length of the fetched list:
+ * this module is React-free and fetches nothing.
+ */
+const MAX_PICKED_CATEGORIES = 100;
+
+/**
+ * The picked chips, deduplicated and capped.
  *
  * Total the same way `readString` is, and canonicalised for the same reason the
- * budget is - see the note on `parseDraft` below. `RegisterDto` carries `@IsIn`,
- * `@ArrayUnique` and `@ArrayMaxSize`, so a stored array holding an unknown name, a
- * duplicate or a non-string is a guaranteed 400 on a screen with no error state
- * designed for it (A29). Dropping the unusable entries here means everything this
- * module hands out is something the picker could have produced itself.
+ * budget is - see the note on `parseDraft` below. `RegisterDto` carries
+ * `@ArrayUnique`, `@ArrayMaxSize` and `@IsUUID`, so a stored array holding a
+ * duplicate, a non-string or two hundred entries is a guaranteed 400 on a screen
+ * with no error state designed for it (A29).
  *
- * Filtering `STARTER_CATEGORIES` rather than the stored array is what does three
- * jobs at once: it drops the unknown, collapses the duplicated, and returns the
- * survivors in the designed order, so two identical selections serialize to
- * identical strings whatever order they were clicked in.
+ * **It has lost a guarantee, and this states it rather than letting it be
+ * discovered.** It used to filter the canonical list, which dropped unknown
+ * names, collapsed duplicates and restored the designed order in one pass - so
+ * "everything this module hands out is something the picker could have produced"
+ * held completely. With ids there is no canonical list here to filter against:
+ * the offered set is fetched by the page, and duplicating it into a React-free
+ * module would be a second authority that goes stale. So membership becomes the
+ * server's to reject, and what survives is the deduplication and the cap.
+ *
+ * Order is the stored order rather than the designed one, for the same reason.
+ * Two identical selections clicked in different orders therefore serialize to
+ * different strings - which nothing depends on, since the seed orders by the
+ * template's own `sort_order` backend-side.
  *
  * An empty array is preserved rather than treated as absent. Deselecting every chip
  * is a valid choice (A4), and falling back to a default would silently undo it.
  */
-function readCategories(source: Record<string, unknown>): StarterCategoryName[] {
+function readCategories(source: Record<string, unknown>): string[] {
   const stored = source.categories;
   if (!Array.isArray(stored)) return [];
 
-  const picked = new Set(stored);
-  return STARTER_CATEGORIES.filter((category) => picked.has(category.name)).map(
-    (category) => category.name,
+  return [...new Set(stored.filter((value): value is string => typeof value === 'string'))].slice(
+    0,
+    MAX_PICKED_CATEGORIES,
   );
 }
 

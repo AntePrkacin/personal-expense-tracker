@@ -24,7 +24,10 @@ password field anywhere. A **NestJS 11** API serves `/api` on port **3000**; a *
 App Router frontend runs on **4200** and is the only thing that calls it. One HTTP contract is
 generated from the backend and committed, Drizzle ORM over Turso's SQLite engine gives **every
 user their own database**, and the interface is built on a stock daisyUI design system you can
-browse in Storybook on **6006**. The repo is also a Decode Academy final project, which is why
+browse in Storybook on **6006**. As of PET-64 the central database also holds **template** data -
+which starter categories onboarding offers, and which colours and icons a category may carry -
+as the first step toward a super-admin panel; `backend/src/database/CLAUDE.md` is the authority
+for why that is not a breach of "central holds only an email and a pointer". The repo is also a Decode Academy final project, which is why
 the team tooling is real rather than illustrative.
 
 The two halves are each substantially built and **the access flow now runs end to end between
@@ -143,6 +146,7 @@ read the file before you write the change, not after.
 | add or change a category endpoint, or touch the fallback category   | `backend/CLAUDE.md`, Category endpoints |
 | add or change the dashboard endpoint                                | `backend/CLAUDE.md`, Dashboard   |
 | add or change the insights endpoint                                 | `backend/CLAUDE.md`, Insights    |
+| touch a category template, a colour token or an icon name           | `backend/CLAUDE.md`, Templates   |
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |

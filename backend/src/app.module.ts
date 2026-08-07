@@ -12,6 +12,7 @@ import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { InsightsModule } from './insights/insights.module';
 import { ProfileModule } from './profile/profile.module';
+import { TemplatesModule } from './templates/templates.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { UsersModule } from './users/users.module';
 
@@ -42,6 +43,7 @@ import { UsersModule } from './users/users.module';
     }),
     DatabaseModule,
     UsersModule,
+    TemplatesModule,
     AuthModule,
     ProfileModule,
     TransactionsModule,

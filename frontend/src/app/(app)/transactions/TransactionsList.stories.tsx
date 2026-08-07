@@ -40,13 +40,13 @@ export default meta;
 type Story = StoryObj<typeof TransactionsScreen>;
 
 const CATEGORIES: CategoryLabel[] = [
-  { id: 'c1', name: 'Groceries', color: '#57B368' },
-  { id: 'c2', name: 'Transport', color: '#3F8EE6' },
-  { id: 'c3', name: 'Entertainment', color: '#8A79F1' },
-  { id: 'c4', name: 'Dining out', color: '#EF6F6C' },
-  { id: 'c5', name: 'Shopping', color: '#E7C24A' },
-  { id: 'c6', name: 'Housing', color: '#34B9AE' },
-  { id: 'c7', name: 'Health', color: '#CE6FB8' },
+  { id: 'c1', name: 'Groceries', color: 'success' as const, icon: 'shopping-basket' as const },
+  { id: 'c2', name: 'Transport', color: 'info' as const, icon: 'car' as const },
+  { id: 'c3', name: 'Entertainment', color: 'primary' as const, icon: 'tv' as const },
+  { id: 'c4', name: 'Dining out', color: 'error' as const, icon: 'utensils' as const },
+  { id: 'c5', name: 'Shopping', color: 'warning-content' as const, icon: 'gift' as const },
+  { id: 'c6', name: 'Housing', color: 'accent' as const, icon: 'zap' as const },
+  { id: 'c7', name: 'Health', color: 'secondary' as const, icon: 'heart-pulse' as const },
 ];
 
 /** Frame 06's ten rows, in its order, with the amounts and dates it draws. */

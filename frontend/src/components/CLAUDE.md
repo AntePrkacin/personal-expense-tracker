@@ -74,8 +74,29 @@ their markup.
   for that drawer: the pathname effect that used to close it cannot see a click on the section
   already open, and only a client parent may pass a function.
 
-- **`ui/categoryColour.ts` holds three maps and three lookups, and which one you want depends on
-  what is being painted.** `CATEGORY_TILE` (background plus its `-content` half) for an icon tile,
+- **`ui/categoryColour.ts` holds four maps and four lookups as of PET-64, and the keys are the
+  contract's own unions.** Read the bullet below for the three colour maps, which are unchanged in
+  shape; three things about them changed underneath. The keys are the **sixteen daisyUI semantic
+  tokens** rather than eight colour words, because `categories.color` stores the token verbatim -
+  a hex was incoherent, not merely indirect, since `primary` is valued differently per theme and
+  several categories have no single hex at all. The hex bridge (`CATEGORY_COLOUR_BY_HEX`) is
+  **gone** with it, so the three lookups take a token and normalise no case. And the keys are read
+  out of `components['schemas']['CreateCategoryDto']['color']`, which makes each `Record` an
+  exhaustiveness proof: a seventeenth token backend-side breaks this build until the map covers
+  it. That guarantee is the whole payoff of the allowlist, and it is why skipping `api:sync` is
+  catastrophic rather than untidy - the union degrades to `string`, `Record<string, string>`
+  accepts any subset of keys, and every tile renders grey with the build green.
+  **The fourth map is `CATEGORY_ICON`**, `Record<IconName, LucideIcon>` over the thirteen lucide
+  names the contract publishes, with a `categoryIcon()` lookup returning `null` rather than a
+  stand-in glyph. It exists for the same reason the class maps do - `lucide-react` imports by
+  name at build time, so a runtime string cannot become a component - and it landed in the same
+  ticket as the palette rather than after it, deliberately: **three seeded colour pairs are close
+  enough in OKLab to read as one hue** (Personal care / Gifts at ΔE 0.029, Education / Travel at
+  0.037, Groceries / Utilities at 0.060), so the per-category icon is the channel that separates
+  them. That file names all three with their measurements and its suite pins them, because
+  without both the map reads as thirteen distinct colours and renders ten.
+
+- **The three colour maps, and which one you want depends on what is being painted.** `CATEGORY_TILE` (background plus its `-content` half) for an icon tile,
   `CATEGORY_DOT` (background alone) for a mark with no content on it, and `CATEGORY_FILL`
   (`var(--color-*)` strings) for an **SVG `fill`**, which PET-23's donut slices are. The second
   exists because daisyUI's `status` draws its shadow from `currentColor`, so a tile value turns
@@ -89,6 +110,11 @@ their markup.
   orange and yellow both land on `warning`, accepted because category colours are decoration. The
   words are the stable identity the category rows and the picker use, and only the rendered hue
   follows the theme - so do not "fix" the collision by reaching for a raw palette value.
+  **Read that sentence as dated: PET-64 deleted the words.** The token _is_ what the row stores,
+  so there is no nearest-match step and nothing collides by construction. The lossiness moved to
+  a different place and got smaller - three seeded pairs are close rather than identical, and by
+  measurement rather than by mapping. The prohibition it ends on is the part that survives
+  unchanged: do not reach for a raw palette value.
   **Two neutral greys, not one, and the review of PET-23 is why.** The tile keeps `base-300`; the
   dot and the fill are `base-content/50`, which is the same colour written twice (Tailwind's `/50`
   compiles to the `color-mix` the fill spells out). The split is whether anything is drawn on top:
@@ -99,6 +125,13 @@ their markup.
   being a nicety because the backend's orphan fold routes real money into that slice, so an
   invisible one is the donut's ring failing to close by another route. The replacement measures
   **3.401:1** light and **4.769:1** dark through the same harness.
+  **What reaches those greys narrowed sharply at PET-64.** They used to answer for the
+  `Uncategorized` fallback, whose `#98A0AE` was outside the palette on purpose, and for any
+  unknown hex a category might carry. Neither exists now: the fallback carries `warning-content`
+  and resolves like any other category, and `color` is a closed enum the API validates. What is
+  left is a `categoryId` that matched nothing in the account's list. The contrast measurement
+  still earns its place, because the backend's orphan fold means an unresolvable row can still be
+  real money.
 
 ## The direct children
 

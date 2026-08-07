@@ -73,6 +73,30 @@ registration and set NULL by verification, and it holds `monthlyBudget` in **maj
 with the DTO defaults already applied. None of them is a licence to put more profile data in
 central.
 
+**A fourth exception arrived with PET-64, and it is the first that is not about a credential
+outliving the database it belongs to.** `colour_templates`, `icon_templates` and
+`category_templates` hold what onboarding _offers_ and what a category picker _offers_: which
+default categories exist, and which colours and icons a user may choose from. That is not user
+data at all - it belongs to nobody, it is the same for everybody, and a **super admin** edits
+it, which is the whole reason it cannot stay a TypeScript constant. The rule above about
+constraining closed sets in TypeScript rather than in SQLite holds for a set that only changes
+with a deploy; an admin-editable set is not that, it is data, and central is the only database
+that can hold it. A user's own database keeps holding only that user's own categories:
+provisioning **copies** name, colour, icon and description out of a template into a
+`categories` row, and nothing reads across afterwards, so an admin editing a template does not
+reach back into anybody's account. Read this as sanctioning **template** data specifically, not
+as a second door for profile data.
+
+Two things about those tables are load-bearing. They reference a **code-side allowlist**
+(`central/template-tokens.ts`), never a free-form colour or icon name, because Tailwind cannot
+build a class from runtime data and `lucide-react` imports by name at build time - that
+constraint is what keeps `@IsIn` publishing a real OpenAPI enum, and therefore keeps the
+frontend's class and icon maps exhaustiveness proofs. And the seed runs **programmatically at
+boot**, in `openCentralDatabase` right after `migrate()`, guarded on "any `category_templates`
+row exists": root `CLAUDE.md` forbids hand-editing generated migration SQL, and the guard is
+not only idempotence - it is what stops a restart re-creating a template an admin deliberately
+deleted.
+
 **Tokens.** Creating databases and minting their tokens are control-plane operations that
 no data-plane token can perform, so `TURSO_ORG_TOKEN` is used in exactly one place
 (`TursoPlatformService`) at provisioning time. It does not have to be an organization-wide
