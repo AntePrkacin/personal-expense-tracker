@@ -130,21 +130,23 @@ Server Component; `AddTransactionButton` carries its own client boundary.
 
 ## Tasks
 
-- [ ] Commit this plan alone and open the draft PR against
+- [x] Commit this plan alone and open the draft PR against
       `feat/PET-24-recent-transactions-card`
-- [ ] `insights.service.ts`: `latestReadySummary`, and its spec
-- [ ] `dashboard-response.dto.ts` and `dashboard.service.ts`: the widened field, and its spec
-- [ ] `npm run api:sync` from the root; commit `backend/openapi.json` and
+- [x] `insights.service.ts`: `latestReadySummary`, and its spec
+- [x] `dashboard-response.dto.ts` and `dashboard.service.ts`: the widened field, and its spec
+- [x] `npm run api:sync` from the root; commit `backend/openapi.json` and
       `frontend/src/types/api.d.ts`
-- [ ] `(app)/dashboard/InsightTeaserCard.tsx` and its suite: both states, both controls, the
+- [x] `(app)/dashboard/InsightTeaserCard.tsx` and its suite: both states, both controls, the
       heading structure
-- [ ] `(app)/dashboard/page.tsx`: fill the teaser slot
-- [ ] Stories: `Shell/AI insight teaser` in both states; re-check `Screens/04 Dashboard` against
+- [x] `(app)/dashboard/page.tsx`: fill the teaser slot
+- [x] Stories: `Shell/AI insight teaser` in both states; re-check `Screens/04 Dashboard` against
       node `21:4` and the teaser half of `05` against node `44:706`
-- [ ] Docs: `backend/CLAUDE.md` (Dashboard, the widened field), `docs/agents/api-contract.md`,
-      `frontend/src/app/CLAUDE.md` (the fourth Add transaction trigger, the two-state card), root
-      `CLAUDE.md`
-- [ ] Comment on PET-25 confirming the widen shipped, and note on PET-26 that AC3/AC4 are satisfied
+- [x] Docs: `backend/CLAUDE.md` (Dashboard, the widened field), `frontend/src/app/CLAUDE.md` (the
+      fourth Add transaction trigger, the two-state card), root `CLAUDE.md`. `docs/agents/api-contract.md`
+      needed no edit: its pipeline description already covers an ordinary one-field widen with
+      no new mechanic, and the fact itself belongs to `backend/CLAUDE.md` alone per the
+      fact-ownership rule.
+- [x] Comment on PET-25 confirming the widen shipped, and note on PET-26 that AC3/AC4 are satisfied
       here
 
 **`npm run api:sync` is required on this branch.** It is the one branch in the stack that changes a
