@@ -271,7 +271,7 @@ gate.
 
 ## Formatting and dates
 
-`frontend/src/lib/format.ts` owns display formatting, in six parts. Money: amounts are
+`frontend/src/lib/format.ts` owns display formatting, in seven parts. Money: amounts are
 stored as positive magnitudes and displayed negative, and the sign is U+2212 MINUS SIGN
 rather than the hyphen `Intl.NumberFormat` emits, matching the design. PET-21 added
 `formatWhole()` beside it, the `docs/TODO.md` cents item's answer: the design draws every
@@ -312,7 +312,7 @@ and touches neither `Intl` nor UTC, because a calendar date is a day rather than
 must never follow a locale. That file records the two directions the mistake runs in;
 `lib/calendar.ts` builds the picker's month grid on top of it.
 
-All six parts hard-code `en-US` and its separators. When the currency chosen during onboarding
+All seven parts hard-code `en-US` and its separators, "Today" and "Yesterday" included. When the currency chosen during onboarding
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
 that. The one thing that must **not** follow it is `lib/date.ts`, for the reason above.
 
@@ -331,6 +331,17 @@ and shadow to the theme - and the one deliberate deviation from the frame is `ma
 it fixes 440px: identical at the designed 1440 width, and a narrower window wraps instead of
 overflowing the card's padding, the same call `AccessCard` makes about a viewport Figma never
 draws.
+
+**Relative date is the seventh part, PET-24's `formatRelativeDate(iso, today?)`.** It answers
+"Today", "Yesterday", or `formatIsoDayMonth(iso)` beyond that, for the dashboard's
+recent-transactions caption. `today` is a parameter with a default rather than a bare clock
+read, the same shape `lib/date.ts`'s own helpers take, so "Yesterday" can be pinned in a suite
+without faking a timer. It diffs `Date.UTC` of the two dates' parts rather than subtracting the
+local `Date`s `dateFromIso` would hand back, because that pair is not always 24 hours apart
+across a DST transition. What it cannot answer is whose "today" it is: the default reads the
+frontend host's own zone, while every other figure on the page is scoped to a period the
+backend resolved through `APP_TIMEZONE`, and `docs/TODO.md` records that gap beside the
+per-user timezone item it already owes.
 
 ## The screens
 
@@ -386,10 +397,10 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   user's profile as of PET-52. What is missing is everything below the header on **two** of the
   four: the AI Insights and Settings `<main>` elements are empty. Dashboard is no longer one of
   them as of PET-21: its `<main>` is a grid holding the real Monthly budget card, PET-22 filled
-  the second, the weekly spending trend chart, and PET-23 the third, the spending-by-category
-  donut. Two placeholder `<div />`s remain, one per still-unbuilt card - PET-24 (recent
-  transactions) and PET-25 (insight teaser) - so the geometry is reviewable now and each is a
-  one-line change at `page.tsx`'s call site when its own ticket lands. Transactions is the exception that came before it, and as of
+  the second, the weekly spending trend chart, PET-23 the third, the spending-by-category donut,
+  and PET-24 the fourth, the recent transactions card. One placeholder `<div />` remains,
+  PET-25's insight teaser - so the geometry is reviewable now and it is a one-line change at
+  `page.tsx`'s call site when its ticket lands. Transactions is the exception that came before it, and as of
   PET-29 it is a **complete** screen
   rather than a partial one: the tab bar
   and its real count badge, both empty states, the filter bar and the table are all built, and the

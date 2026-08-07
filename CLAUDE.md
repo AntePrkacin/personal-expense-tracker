@@ -43,10 +43,10 @@ now be corrected as well as removed. PET-34 adds a sixth and the app's first dyn
 row's merchant links to `/transactions/[id]`, which shows one expense in full beside how its
 category is doing against that month's cap, and carries the list's filters there and back. The
 seventh is PET-21's: `/dashboard` reads the dashboard summary and renders its first card, the
-monthly budget, joined by PET-22's second, the weekly spending trend chart, and PET-23's third,
-the spending-by-category donut. What is still missing is most of what the other screens *show*:
-the Dashboard's own remaining two cards, and the AI Insights and Settings `<main>` elements below
-the page header are empty.
+monthly budget, joined by PET-22's second, the weekly spending trend chart, PET-23's third, the
+spending-by-category donut, and PET-24's fourth, the recent transactions list. What is still
+missing is most of what the other screens *show*: the Dashboard's own remaining card, and the AI
+Insights and Settings `<main>` elements below the page header are empty.
 
 ## Repository map
 

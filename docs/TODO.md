@@ -1274,6 +1274,19 @@ described above, and the further from `Europe/Zagreb` they are the worse it gets
 Note the config value fails silently when wrong, the same failure class as `use_tursodb` in
 `backend/src/database/CLAUDE.md`: nothing crashes, the months are just quietly off.
 
+**PET-24 found the same gap rendering as a wrong word instead of a wrong number.** The
+dashboard's recent-transactions caption calls `formatRelativeDate`, whose default `today` reads
+`todayIsoDate()` off the frontend host's own local zone - the frontend has no `APP_TIMEZONE`
+equivalent to read instead, confirmed by `rg -in --hidden 'APP_TIMEZONE|process.env.TZ|timeZone'
+frontend/src frontend/.env.example -g '!node_modules'` finding nothing but the two test files
+that set `TZ` on themselves. On a host running UTC, in the hour between midnight in Zagreb and
+midnight UTC, a transaction the backend already counts as today's reads its short date instead
+of "Today" here. Every other figure on the page has the identical mismatch and it is silent,
+because a wrong number in that window still looks plausible; this is the first place it prints a
+wrong *word*, which is the only reason it is worth a second entry rather than folding into the
+one above. The fix is the same one: a zone the frontend reads too, not a second guess bolted
+onto one formatter.
+
 ### Transaction search is case-insensitive for ASCII only
 
 `GET /api/transactions?search=` is a `LIKE '%term%'` on `transactions.merchant`. SQLite's `LIKE`
