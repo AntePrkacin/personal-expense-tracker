@@ -32,11 +32,19 @@ import { AddTransactionButton } from '../AddTransactionButton';
 // was never started. The card that needs a skeleton is PET-44's, reading `GET /api/insights`
 // directly rather than this one field.
 //
-// **`transactionCount` is the period's count, not the account's**, so an account whose expenses
-// all predate this period reads as empty here. That is the window every other card on this
-// screen is scoped to, and of the two wrong answers for it the designed copy is the better one:
-// it offers a way forward rather than claiming an analysis is pending over spend this period
-// cannot see.
+// **The prop is `isEmpty` as of PET-26, not `transactionCount`.** This card had already computed
+// the screen's shared empty condition, under its own name, before that ticket's branch started -
+// its review is what found the third state above - so aligning it onto `page.tsx`'s
+// `isEmpty = transactionCount === 0` is a rename rather than a behaviour change: a genuinely new
+// account still has `isEmpty: true` and still draws frame 44:706's unlock copy. Every other card
+// on the screen keeps this same boolean; `CategoryDonut` is the one deliberate exception, guarded
+// on its own input instead, and `frontend/src/app/CLAUDE.md` records why.
+//
+// **`isEmpty` is still the period's own flag, not the account's**, because it is `transactionCount
+// === 0` underneath: an account whose expenses all predate this period reads as empty here. That
+// is the window every other card on this screen is scoped to, and of the two wrong answers for it
+// the designed copy is the better one: it offers a way forward rather than claiming an analysis is
+// pending over spend this period cannot see.
 //
 // **The pending copy is ours, so it joins what A29 owes a designer**, alongside the states no
 // frame draws. It points at `/insights` rather than offering to trigger a run, because nothing
@@ -50,7 +58,10 @@ import { AddTransactionButton } from '../AddTransactionButton';
 // **The headline is a heading, not a paragraph**, so the card keeps a real accessible structure
 // in both states rather than two lines of undifferentiated text. AC1's "not hardcoded copy" means
 // this component renders whatever the response carries and owns nothing about its wording.
-export type InsightTeaserCardProps = Pick<DashboardSummary, 'insight' | 'transactionCount'>;
+export type InsightTeaserCardProps = Pick<DashboardSummary, 'insight'> & {
+  /** The screen's shared PET-26 condition, replacing this card's own `transactionCount`. */
+  isEmpty: boolean;
+};
 
 /** Frame 44:706's own copy: no expense has ever been logged, so there is one thing to do. */
 const UNLOCK_COPY = {
@@ -64,11 +75,11 @@ const PENDING_COPY = {
   body: 'Your expenses are logged. Insights land here once an analysis has run.',
 };
 
-export function InsightTeaserCard({ insight, transactionCount }: InsightTeaserCardProps) {
+export function InsightTeaserCard({ insight, isEmpty }: InsightTeaserCardProps) {
   // Three accounts, two shapes. The headline and the body come from whichever of the three
   // copy sources applies, and the one control follows the same condition rather than a second
   // one - so a state cannot end up drawing the wrong button for its own words.
-  const unlock = insight === null && transactionCount === 0;
+  const unlock = insight === null && isEmpty;
   const copy = insight ?? (unlock ? UNLOCK_COPY : PENDING_COPY);
 
   return (

@@ -16,6 +16,7 @@ const ON_TRACK = {
     color: 'green',
     spent: 397,
   },
+  isEmpty: false,
 };
 
 // No fake clock, deliberately: every figure on this card comes off the response, and the
@@ -102,6 +103,73 @@ describe('an empty account', () => {
     render(<BudgetCard {...ON_TRACK} topCategory={null} />);
 
     expect(screen.getByText('—')).toBeInTheDocument();
+  });
+});
+
+describe('the empty state (AC2, PET-26)', () => {
+  it('swaps the caption to "Full month ahead" rather than the days-left count', () => {
+    render(<BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={31} topCategory={null} />);
+
+    expect(screen.getByText('Full month ahead')).toBeInTheDocument();
+    expect(screen.queryByText(/days? left/)).not.toBeInTheDocument();
+  });
+
+  it('reads "$0 of {the budget}" off real zero values rather than a hardcoded figure', () => {
+    // AC2's "$0 of $2,000" is exactly what a zero `spent` already formats to - the load-bearing
+    // fact `docs/plans/2026-08-06_PET-26_dashboard-empty-state.md` names, and the one this test
+    // would catch a hardcoded budget breaking.
+    render(
+      <BudgetCard
+        {...ON_TRACK}
+        isEmpty={true}
+        daysLeft={31}
+        spent={0}
+        remaining={2000}
+        transactionCount={0}
+        averagePerDay={0}
+        topCategory={null}
+      />,
+    );
+
+    // "$0" appears twice - the spend readout and the Avg/day tile - so this checks the count
+    // rather than picking one, which a `getByText` here cannot disambiguate.
+    expect(screen.getAllByText('$0')).toHaveLength(2);
+    expect(screen.getByText('of $2,000')).toBeInTheDocument();
+    expect(screen.getByText('$2,000 left')).toBeInTheDocument();
+  });
+
+  it('needs `isEmpty`, since `daysLeft` alone carries no signal about emptiness', () => {
+    // The half that was right in the first version: `daysLeft` counts down identically whether
+    // or not anything has ever been spent, so no value of it can put this caption on the card.
+    render(<BudgetCard {...ON_TRACK} isEmpty={false} daysLeft={31} />);
+
+    expect(screen.getByText('31 days left')).toBeInTheDocument();
+    expect(screen.queryByText('Full month ahead')).not.toBeInTheDocument();
+  });
+
+  it('keeps the accurate count for an account that is empty late in its period', () => {
+    // The review finding, stated directly. A period starting on the 1st, nothing logged by the
+    // 28th: `daysLeft` is 4 and "Full month ahead" would be a false sentence replacing a true
+    // one. Every light account passes through this state, so it is not an edge case.
+    render(<BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={4} topCategory={null} />);
+
+    expect(screen.getByText('4 days left')).toBeInTheDocument();
+    expect(screen.queryByText('Full month ahead')).not.toBeInTheDocument();
+  });
+
+  it('holds the frame\'s copy down to the shortest period a "full month" can be', () => {
+    // 28 is February's own length rather than a chosen cutoff, which is what makes the claim
+    // safe in every month: at `daysLeft` of 28 at most three days have elapsed whatever the
+    // period's real length is. One day below it, the card stops claiming.
+    const { unmount } = render(
+      <BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={28} topCategory={null} />,
+    );
+    expect(screen.getByText('Full month ahead')).toBeInTheDocument();
+    unmount();
+
+    render(<BudgetCard {...ON_TRACK} isEmpty={true} daysLeft={27} topCategory={null} />);
+    expect(screen.getByText('27 days left')).toBeInTheDocument();
+    expect(screen.queryByText('Full month ahead')).not.toBeInTheDocument();
   });
 });
 

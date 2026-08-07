@@ -73,12 +73,12 @@ type Story = StoryObj<typeof RecentTransactionsCard>;
 
 /** The frame's own three rows, newest first: today, yesterday, then a short date. */
 export const ThreeRows: Story = {
-  args: { recentTransactions: THREE_ROWS, categories: CATEGORIES },
+  args: { recentTransactions: THREE_ROWS, categories: CATEGORIES, isEmpty: false },
 };
 
 /** AC6: fewer than three needs no code, so a shorter array renders shorter with no placeholder rows. */
 export const OneRow: Story = {
-  args: { recentTransactions: [THREE_ROWS[0]!], categories: CATEGORIES },
+  args: { recentTransactions: [THREE_ROWS[0]!], categories: CATEGORIES, isEmpty: false },
 };
 
 /**
@@ -90,10 +90,11 @@ export const UnresolvedCategory: Story = {
   args: {
     recentTransactions: [{ ...THREE_ROWS[0]!, categoryId: 'no-such-category' }],
     categories: CATEGORIES,
+    isEmpty: false,
   },
 };
 
-/** The whole-period-empty case, which renders nothing until PET-26 fills it. */
-export const NoSpendThisPeriod: Story = {
-  args: { recentTransactions: [], categories: CATEGORIES },
+/** Frame 05 (node 44:706): the icon, "No transactions yet" and its body line. */
+export const Empty: Story = {
+  args: { recentTransactions: [], categories: CATEGORIES, isEmpty: true },
 };

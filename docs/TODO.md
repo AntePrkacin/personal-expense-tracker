@@ -1688,8 +1688,9 @@ a row by hand.
 
 Found by the review of PET-25, where it mattered because the card had one non-ready state and its
 copy said "Insights unlock after your first expense." - shown to an account with two hundred of
-them. That half is fixed: the card takes `transactionCount` and draws honest pending copy above
-zero. What is not fixed is the cause, and it is PET-44's: the "Regenerate" button becoming real is
+them. That half is fixed: the card took `transactionCount` (now PET-26's shared `isEmpty`) and
+draws honest pending copy above zero. What is not fixed is the cause, and it is PET-44's: the
+"Regenerate" button becoming real is
 what gives every account a way to reach the state the frame draws. Recorded here rather than
 worked around because a generate-on-write trigger is the tempting shortcut and is the wrong shape -
 generation is deliberately asynchronous and one-run-at-a-time (`backend/CLAUDE.md`, Insights), so a
@@ -1699,6 +1700,33 @@ Two smaller things fall out of it. The teaser's pending copy is ours and owes A2
 rest. And `Screens/04 Dashboard` deliberately fixtures the ready state, because it is the frame
 being diffed against node 21:4 - so that story shows a screen the running app cannot produce, and
 its comment says so.
+
+### PET-26's five empty-state strings are designed copy, not A29's
+
+Frame 05 (node 44:706) draws "Full month ahead" on the budget card, "No spending to chart yet" on
+the trend card, "No transactions yet" and "Your recent expenses will appear here as you add them."
+on the recent-transactions card, and "Your category breakdown appears here once you start
+spending." on the donut. All five are read off the frame rather than invented for it, which is the
+opposite of A29's item above: that one tracks copy this repo wrote because nothing was designed,
+and PET-26's five strings are the designer's own words.
+
+**What is owed.** Not a sign-off on the wording, which already exists - A30's copy pass, the one
+that keeps Figma's UK "categorised" in the transactions empty state. Logged here anyway so a copy
+review has one place to check every designed string that shipped, this list and A30's spelling
+notes included, rather than only the ones this repo had to invent.
+
+**Two of the five are now conditional, and the review of PET-26 is why.** "Full month ahead" draws
+only when the account is empty **and** `daysLeft` is at least 28, because emptiness says nothing
+about how far into a period the user is - an account that has logged nothing by the 28th of a
+period beginning on the 1st has four days left, and the frame's sentence would be false over an
+accurate count. And the donut's "Your category breakdown appears here once you start spending"
+draws only when `spent` is 0; the dangling-category race reaches the same empty ring with real
+money on it, where that sentence contradicts the figure in the middle of the ring. Both fall back
+to copy this repo wrote, so **A29's invented-copy list gains two strings** - the donut's "No
+category breakdown available" ring name and "This period's spending is not attributed to any
+category." - while the budget card falls back to the days-left count it already draws in every
+other state. A designer reading this list should know that two of the five designed strings are
+reachable in fewer situations than frame 05 implies.
 
 ---
 

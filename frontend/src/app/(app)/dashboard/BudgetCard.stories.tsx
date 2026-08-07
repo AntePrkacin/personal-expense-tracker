@@ -34,6 +34,7 @@ export const OnTrack: Story = {
       color: 'green',
       spent: 397,
     },
+    isEmpty: false,
   },
 };
 
@@ -56,10 +57,12 @@ export const OverBudget: Story = {
       color: 'coral',
       spent: 512,
     },
+    isEmpty: false,
   },
 };
 
-/** The contract's null case: nothing spent yet this period. */
+/** The contract's null case: nothing spent yet this period. `isEmpty` stays false here - this
+ * pins the dash on its own, independently of PET-26's caption swap below. */
 export const NoTopCategory: Story = {
   args: {
     ...OnTrack.args,
@@ -68,5 +71,35 @@ export const NoTopCategory: Story = {
     transactionCount: 0,
     averagePerDay: 0,
     topCategory: null,
+    isEmpty: false,
+  },
+};
+
+/**
+ * Frame 05 (node 44:706): a genuinely new account, "$0 of $2,000" and "Full month ahead".
+ *
+ * `daysLeft` is 31 rather than `OnTrack`'s 8, and that is the story rather than a detail. The
+ * caption needs both halves of its condition, so an empty account eight days from the end of its
+ * period is `EmptyLateInPeriod` below instead - see `BudgetCard.tsx` for why the frame's sentence
+ * cannot be drawn from `isEmpty` alone.
+ */
+export const Empty: Story = {
+  args: {
+    ...NoTopCategory.args,
+    daysLeft: 31,
+    isEmpty: true,
+  },
+};
+
+/**
+ * The state the review of PET-26 found, which no frame draws: an account that has logged nothing
+ * this period, four days from the end of it. Frame 05's "Full month ahead" would be false here,
+ * so the caption keeps the accurate count while every other empty treatment on the screen is
+ * unchanged.
+ */
+export const EmptyLateInPeriod: Story = {
+  args: {
+    ...Empty.args,
+    daysLeft: 4,
   },
 };

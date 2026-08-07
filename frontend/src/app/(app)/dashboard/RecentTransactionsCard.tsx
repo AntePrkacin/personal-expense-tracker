@@ -1,4 +1,4 @@
-import { ShoppingBag } from 'lucide-react';
+import { ReceiptText, ShoppingBag } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { categoryTileClass } from '@/components/ui/categoryColour';
@@ -30,17 +30,66 @@ import type { DashboardSummary } from '@/lib/dashboard';
 export type RecentTransactionsCardProps = Pick<
   DashboardSummary,
   'recentTransactions' | 'categories'
->;
+> & {
+  /**
+   * The screen's shared PET-26 condition, not `recentTransactions.length === 0`.
+   *
+   * The two are documented as identical - the field is up to three transactions **in the
+   * current period**, so an empty array and a transaction-free period are the same fact - but
+   * this card takes the flag rather than re-deriving it, the same call `TrendCard` makes about
+   * `weeklyBuckets`: a card computing its own opinion from a field it happens to hold is a sixth
+   * spelling of the one condition `page.tsx` already resolved.
+   */
+  isEmpty: boolean;
+};
 
 export function RecentTransactionsCard({
   recentTransactions,
   categories,
+  isEmpty,
 }: RecentTransactionsCardProps) {
-  // Fewer than three rows needs no code: the contract already returns "up to 3", so a shorter
-  // array renders shorter and a zero-length one renders nothing - the same division PET-22 and
-  // PET-23 both take, and the shared empty condition PET-26 draws frame 05's treatment for.
-  if (recentTransactions.length === 0) {
-    return null;
+  // **The header is identical in both states, and the review of PET-26 is what made it so.**
+  // The first version dropped "View all" from the empty branch, on frame 05's rule that no empty
+  // treatment carries an interactive control of its own. That rule reads correctly for a new
+  // account and fails for the state it cannot see: `isEmpty` is the **period's** flag, so a
+  // returning user with months of history opens `/dashboard` on the first day of a new period and
+  // gets "No transactions yet" with the one route to their actual history deleted from the card.
+  // Of the two halves that is the worse one - the copy is at least scoped to a card about this
+  // period, while a missing link is a dead end - so the control stays and the rule is amended
+  // here rather than in the four other treatments, which have no navigation to lose.
+  const header = (
+    <div className="flex items-center justify-between">
+      <h2 className="text-base font-semibold">Recent transactions</h2>
+      <Button label="View all" variant="text" href={SIDEBAR_HREFS.transactions} />
+    </div>
+  );
+
+  if (isEmpty) {
+    return (
+      <section className="card bg-base-100 shadow-sm">
+        <div className="card-body gap-4">
+          {header}
+
+          {/* The circle and its tint are `components/EmptyState.tsx`'s own treatment, scaled
+              down: `size-14` (56px) against that component's `size-18` (72px), because this
+              glyph sits inside a card that keeps its own header rather than replacing the whole
+              card - `frontend/src/app/CLAUDE.md` records why `EmptyState` itself is the wrong
+              component for any of frame 05's four treatments. */}
+          <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
+            <div
+              aria-hidden="true"
+              className="bg-primary/10 text-primary flex size-14 shrink-0 items-center justify-center rounded-full"
+            >
+              <ReceiptText className="size-6" aria-hidden="true" />
+            </div>
+            <p className="text-sm font-semibold">No transactions yet</p>
+            <p className="text-base-content/60 max-w-70 text-xs">
+              Your recent expenses will appear here as you add them.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   const categoryById = new Map(categories.map((category) => [category.id, category]));
@@ -48,10 +97,7 @@ export function RecentTransactionsCard({
   return (
     <section className="card bg-base-100 shadow-sm">
       <div className="card-body gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Recent transactions</h2>
-          <Button label="View all" variant="text" href={SIDEBAR_HREFS.transactions} />
-        </div>
+        {header}
 
         <ul className="flex flex-col gap-3">
           {recentTransactions.map((transaction) => {

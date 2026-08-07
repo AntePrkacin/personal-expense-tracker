@@ -240,10 +240,61 @@ describe('display only', () => {
   });
 });
 
-describe('the whole period empty, which PET-26 replaces', () => {
-  it('renders nothing rather than an empty ring', () => {
+describe('the empty state (AC4, PET-26)', () => {
+  it('draws the gray ring and the $0 centre for a genuinely empty account', () => {
+    render(<CategoryDonut categories={[]} spent={0} />);
+
+    expect(screen.getByRole('img', { name: /no spending recorded/i })).toBeInTheDocument();
+    expect(screen.getByText('$0')).toBeInTheDocument();
+    expect(screen.getByText('Total spent')).toBeInTheDocument();
+    expect(
+      screen.getByText('Your category breakdown appears here once you start spending.'),
+    ).toBeInTheDocument();
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  it('is named rather than hidden, unlike the populated ring', () => {
+    // There is no legend below to act as this ring's accessible equivalent, so it needs a real
+    // name of its own instead of `aria-hidden`.
     const { container } = render(<CategoryDonut categories={[]} spent={0} />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it('reaches the same treatment through the dangling-category race, with real spend on it', () => {
+    // `categories.length === 0` is a strict superset of the screen-wide empty state: an account
+    // whose transactions' categories are all gone reaches this guard with `spent` still nonzero,
+    // and the centre must say so rather than falsely reading "$0".
+    render(<CategoryDonut categories={[]} spent={124} />);
+
+    expect(screen.getByText('$124')).toBeInTheDocument();
+    expect(screen.queryByText('$0')).not.toBeInTheDocument();
+  });
+
+  it('does not tell that account nothing has been spent, in the caption or in the ring', () => {
+    // The review finding. The centre figure branched on `spent` from the start and the two
+    // strings around it did not, so this exact input rendered "$124 / Total spent" beside a
+    // caption saying spending had not started - and the ring's name, which is the whole of what
+    // that region announces, carried only the false half.
+    render(<CategoryDonut categories={[]} spent={124} />);
+
+    expect(
+      screen.getByRole('img', { name: 'No category breakdown available' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("This period's spending is not attributed to any category."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/once you start spending/)).not.toBeInTheDocument();
+  });
+
+  it("keeps frame 05's own copy for the account that really has spent nothing", () => {
+    // The branch above must not swallow the designed state: `spent: 0` is the true empty
+    // account and still reads exactly as the frame draws it.
+    render(<CategoryDonut categories={[]} spent={0} />);
+
+    expect(
+      screen.getByRole('img', { name: 'No spending recorded this period' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/not attributed to any category/)).not.toBeInTheDocument();
   });
 });

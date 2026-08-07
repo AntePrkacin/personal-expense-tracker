@@ -127,7 +127,20 @@ export const SameColourNeighbours: Story = {
   },
 };
 
-/** The whole-period-empty case, which renders nothing until PET-26 fills it. */
-export const NoSpendThisPeriod: Story = {
+/** Frame 05 (node 44:706): the gray ring, the $0 centre and its caption. */
+export const Empty: Story = {
   args: { categories: [], spent: 0 },
+};
+
+/**
+ * The dangling-category race, not the screen's empty state: real spend with nowhere to draw it,
+ * which is why the centre reads the actual total rather than a hardcoded "$0".
+ *
+ * **Every string on the card has to agree with that figure**, which is what the review of PET-26
+ * found it doing only in the middle. Open this beside `Empty` above: the ring's accessible name
+ * and the caption both change here, because "once you start spending" over "$124" is the card
+ * contradicting itself.
+ */
+export const EmptyWithSpend: Story = {
+  args: { categories: [], spent: 124 },
 };

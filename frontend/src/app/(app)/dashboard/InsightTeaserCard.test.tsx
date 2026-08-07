@@ -9,11 +9,11 @@ import { InsightTeaserCard, type InsightTeaserCardProps } from './InsightTeaserC
 // it - the same reason `DashboardScreen.test.tsx` wraps every render.
 function renderCard(
   insight: InsightTeaserCardProps['insight'],
-  transactionCount: InsightTeaserCardProps['transactionCount'] = 38,
+  isEmpty: InsightTeaserCardProps['isEmpty'] = false,
 ) {
   return render(
     <AddTransactionProvider>
-      <InsightTeaserCard insight={insight} transactionCount={transactionCount} />
+      <InsightTeaserCard insight={insight} isEmpty={isEmpty} />
     </AddTransactionProvider>,
   );
 }
@@ -49,7 +49,7 @@ describe('a ready insight set (AC1, AC2)', () => {
 
 describe('an account with nothing logged (AC3, AC4)', () => {
   it('shows the unlock copy instead of any insight content', () => {
-    renderCard(null, 0);
+    renderCard(null, true);
 
     expect(
       screen.getByRole('heading', { name: 'Insights unlock after your first expense.' }),
@@ -60,7 +60,7 @@ describe('an account with nothing logged (AC3, AC4)', () => {
   });
 
   it('offers Add transaction instead of a link to insights', () => {
-    renderCard(null, 0);
+    renderCard(null, true);
 
     expect(screen.getByRole('button', { name: 'Add transaction →' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Open insights/ })).not.toBeInTheDocument();
@@ -72,7 +72,7 @@ describe('an account with nothing logged (AC3, AC4)', () => {
 // not because there is nothing to analyse.
 describe('expenses logged, nothing generated over them', () => {
   it('does not claim the account has no expenses', () => {
-    renderCard(null, 38);
+    renderCard(null, false);
 
     expect(screen.queryByText('Insights unlock after your first expense.')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'No insights yet.' })).toBeInTheDocument();
@@ -82,7 +82,7 @@ describe('expenses logged, nothing generated over them', () => {
   });
 
   it('links to insights rather than offering Add transaction', () => {
-    renderCard(null, 38);
+    renderCard(null, false);
 
     expect(screen.getByRole('link', { name: 'Open insights →' })).toHaveAttribute(
       'href',

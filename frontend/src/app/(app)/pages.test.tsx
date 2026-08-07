@@ -113,12 +113,13 @@ beforeEach(() => {
   // unavailable one rather than rendering a table with every category cell blank.
   (readCategoryLabels as jest.Mock).mockResolvedValue({ ok: true, data: [] });
 
-  // Zeroes are enough: `BudgetCard.test.tsx` and `TrendCard.test.tsx` are the cards' own
-  // subjects, and this file asserts the header. An empty `weeklyBuckets` also means
-  // `TrendCard` renders nothing here, which is its own documented behaviour for a period
-  // with no transactions rather than a gap this fixture leaves untested. `readDashboard`
-  // throws rather than returning a rejection, matching the shape `lib/dashboard.ts` actually
-  // has - there is no `{ ok }` wrapper to mock here.
+  // Zeroes are enough: `BudgetCard.test.tsx`, `TrendCard.test.tsx` and the rest are the cards'
+  // own subjects, and this file asserts the header. `transactionCount: 0` also means
+  // `page.tsx` resolves `isEmpty: true` and every card but the donut draws PET-26's designed
+  // empty treatment here, which is a gap this fixture leaves to those cards' own suites rather
+  // than one this file's header assertions need to look past. `readDashboard` throws rather
+  // than returning a rejection, matching the shape `lib/dashboard.ts` actually has - there is
+  // no `{ ok }` wrapper to mock here.
   (readDashboard as jest.Mock).mockResolvedValue({
     spent: 0,
     monthlyBudget: 2000,
@@ -306,6 +307,57 @@ describe('the inert header controls', () => {
     expect(screen.queryAllByLabelText('Amount')).toHaveLength(0);
     expect(screen.queryAllByText('Note (optional)')).toHaveLength(0);
     expect(screen.queryByText('Delete this transaction?')).not.toBeInTheDocument();
+  });
+});
+
+describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
+  // `page.tsx` resolves `isEmpty` once, off `transactionCount`, and threads the same boolean to
+  // `BudgetCard`, `TrendCard`, `RecentTransactionsCard` and `InsightTeaserCard`. The risk this
+  // pins against is a page that computed the flag five different ways - `spent === 0` for one
+  // card, the card's own array length for another - which can disagree in principle even though
+  // they happen to agree on every response the backend can send today. So this fixture is
+  // deliberately inconsistent: `transactionCount: 0` beside a nonzero `spent` and real-looking
+  // `weeklyBuckets` and `recentTransactions`, which is unreachable through the real contract but
+  // is exactly the input that would expose a card quietly reading its own field instead of the
+  // shared one.
+  it('keys every card off `transactionCount`, not off its own field', async () => {
+    (readDashboard as jest.Mock).mockResolvedValue({
+      spent: 50,
+      monthlyBudget: 2000,
+      remaining: 1950,
+      // 31 rather than 8: `BudgetCard`'s caption needs a `daysLeft` proving the period has
+      // barely started before it will draw the frame's copy, so a late-period value would make
+      // the assertion below fail for a reason that has nothing to do with the threading this
+      // test is about. `BudgetCard.test.tsx` owns that condition.
+      daysLeft: 31,
+      transactionCount: 0,
+      averagePerDay: 0,
+      topCategory: null,
+      weeklyBuckets: [{ startDate: '2025-10-01', endDate: '2025-10-08', total: 50 }],
+      categories: [],
+      recentTransactions: [
+        {
+          id: 't1',
+          merchant: 'Whole Foods',
+          categoryId: 'cat-1',
+          amount: 50,
+          date: '2025-10-08',
+          note: null,
+          createdAt: '2025-10-08T12:00:00.000Z',
+          updatedAt: '2025-10-08T12:00:00.000Z',
+        },
+      ],
+      insight: null,
+    });
+
+    await renderScreen(DashboardPage);
+
+    expect(screen.getByText('Full month ahead')).toBeInTheDocument();
+    expect(screen.getByText('No spending to chart yet')).toBeInTheDocument();
+    expect(screen.getByText('No transactions yet')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Insights unlock after your first expense.' }),
+    ).toBeInTheDocument();
   });
 });
 

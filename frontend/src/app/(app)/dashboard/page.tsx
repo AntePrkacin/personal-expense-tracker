@@ -21,26 +21,40 @@ import { TrendCard } from './TrendCard';
 // with each remaining card a one-line change at this call site. PET-22 filled `trendCard`,
 // PET-23 `donutCard`, PET-24 `recentTransactionsCard` and PET-25 `insightCard`.
 //
+// **PET-26 resolves the screen's one empty-state condition here, once.** `transactionCount ===
+// 0` - not `spent === 0`, which differs, and not five independent per-card checks, which can
+// disagree and draw a screen half empty and half zeroed. `isEmpty` is threaded to `BudgetCard`,
+// `TrendCard`, `RecentTransactionsCard` and `InsightTeaserCard`, which is what
+// `(app)/pages.test.tsx` pins. `CategoryDonut` deliberately does **not** take it: its empty
+// input is `categories.length === 0`, a strict superset of this flag rather than a sixth
+// spelling of it, and `CategoryDonut.tsx` carries the reasoning.
+//
 // No `export const dynamic`: the cookie read behind `readDashboard()` opts this route out of
 // static rendering on its own, exactly as it does everywhere else in the app.
 
 export default async function DashboardPage() {
   const summary = await readDashboard();
+  const isEmpty = summary.transactionCount === 0;
 
   return (
     <DashboardScreen
-      budgetCard={<BudgetCard {...summary} />}
-      trendCard={<TrendCard weeklyBuckets={summary.weeklyBuckets} daysLeft={summary.daysLeft} />}
+      budgetCard={<BudgetCard {...summary} isEmpty={isEmpty} />}
+      trendCard={
+        <TrendCard
+          weeklyBuckets={summary.weeklyBuckets}
+          daysLeft={summary.daysLeft}
+          isEmpty={isEmpty}
+        />
+      }
       donutCard={<CategoryDonut categories={summary.categories} spent={summary.spent} />}
       recentTransactionsCard={
         <RecentTransactionsCard
           recentTransactions={summary.recentTransactions}
           categories={summary.categories}
+          isEmpty={isEmpty}
         />
       }
-      insightCard={
-        <InsightTeaserCard insight={summary.insight} transactionCount={summary.transactionCount} />
-      }
+      insightCard={<InsightTeaserCard insight={summary.insight} isEmpty={isEmpty} />}
     />
   );
 }

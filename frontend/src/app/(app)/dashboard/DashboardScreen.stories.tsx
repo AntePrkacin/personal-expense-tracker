@@ -128,7 +128,7 @@ export const Default: Story = {
           `(app)` shell's own gutter, since neither wraps a story. */}
       <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
         <DashboardScreen
-          budgetCard={<BudgetCard {...BUDGET} />}
+          budgetCard={<BudgetCard {...BUDGET} isEmpty={false} />}
           trendCard={
             <TrendCard
               weeklyBuckets={[
@@ -138,6 +138,7 @@ export const Default: Story = {
                 { startDate: '2025-10-22', endDate: '2025-10-29', total: 300 },
               ]}
               daysLeft={BUDGET.daysLeft}
+              isEmpty={false}
             />
           }
           donutCard={
@@ -150,6 +151,7 @@ export const Default: Story = {
             <RecentTransactionsCard
               recentTransactions={RECENT_TRANSACTIONS}
               categories={CATEGORIES}
+              isEmpty={false}
             />
           }
           insightCard={
@@ -158,7 +160,7 @@ export const Default: Story = {
                 headline: 'You are on track this month',
                 body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
               }}
-              transactionCount={BUDGET.transactionCount}
+              isEmpty={false}
             />
           }
         />

@@ -1,3 +1,5 @@
+import { ChartNoAxesColumnIncreasing } from 'lucide-react';
+
 import { formatWhole } from '@/lib/format';
 import type { DashboardSummary } from '@/lib/dashboard';
 
@@ -33,10 +35,16 @@ import { bucketRangeLabel, currentWeekIndex, todayFromDaysLeft } from './weeks';
 // `weeklyBucketsOf` in `backend/src/dashboard/dashboard.service.ts` pushes every bucket in the
 // period's range, a week with no spend included at `total: 0`; its one early return is for an
 // account with *no* transactions in the period at all, which answers `[]`. So AC5's "still there
-// with a zero value" is satisfied by rendering the array as it arrives, and this card renders
-// nothing at all for the whole-period-empty case - which is `transactionCount === 0` on the same
-// response - rather than inventing a zero-filled axis nobody designed. PET-26 is what replaces
-// that nothing with frame 05's own empty-state card.
+// with a zero value" is satisfied by rendering the array as it arrives, and the whole-period-empty
+// case - `transactionCount === 0` on the same response - draws PET-26's own frame 05 treatment
+// instead of a zero-filled axis nobody designed.
+//
+// **The empty guard is `isEmpty`, not `weeklyBuckets.length === 0`, even though the two are
+// documented as identical today.** `frontend/src/app/CLAUDE.md` states the biconditional -
+// `weeklyBuckets` is `[]` exactly when the period has no transactions at all - but reading the
+// array here would be this card's own fifth-and-sixth spelling of the screen's one condition,
+// which is exactly what `page.tsx` resolving `isEmpty` once is meant to prevent. The prop is the
+// screen's flag; the array is what the populated branch draws from.
 //
 // **`daysLeft` is on these props to buy a clock rather than a caption.** `BudgetCard` reads the
 // same field to print "26 days left"; this card never prints it, and takes it because
@@ -44,7 +52,10 @@ import { bucketRangeLabel, currentWeekIndex, todayFromDaysLeft } from './weeks';
 // `APP_TIMEZONE`. Review of this PR found the alternative - `todayIsoDate()` off the frontend
 // host - drops the highlight entirely on the first day of a period, so the second field is what
 // the accent bar costs, and it arrives on the response the card is already built from.
-export type TrendCardProps = Pick<DashboardSummary, 'weeklyBuckets' | 'daysLeft'>;
+export type TrendCardProps = Pick<DashboardSummary, 'weeklyBuckets' | 'daysLeft'> & {
+  /** The screen's shared PET-26 condition. */
+  isEmpty: boolean;
+};
 
 /**
  * The shortest a bar's track is ever drawn, as a percentage of the plot area.
@@ -111,11 +122,31 @@ const TONE_DESCRIPTION: Record<TrendRow['tone'], string> = {
   past: '',
 };
 
-export function TrendCard({ weeklyBuckets, daysLeft }: TrendCardProps) {
-  // Nothing to chart for the whole period, which is `transactionCount === 0` on the same
-  // response: PET-26 owns what replaces this with, the shared condition across four cards.
-  if (weeklyBuckets.length === 0) {
-    return null;
+export function TrendCard({ weeklyBuckets, daysLeft, isEmpty }: TrendCardProps) {
+  if (isEmpty) {
+    return (
+      <section className="card bg-base-100 shadow-sm">
+        <div className="card-body gap-4">
+          <div>
+            <h2 className="text-base font-semibold">Spending trend</h2>
+            <p className="text-base-content/60 text-sm">Weekly</p>
+          </div>
+
+          {/* The glyph is decorative, same call `RecentTransactionsCard`'s icon tile and
+              `ui/categoryColour.ts`'s dots make - the caption beside it already says there is
+              nothing to chart. Muted `base-content/30` rather than `primary`: there is nothing
+              here to draw attention to, the same reasoning the donut's gray ring states for
+              itself. */}
+          <div className="flex h-48 flex-col items-center justify-center gap-3">
+            <ChartNoAxesColumnIncreasing
+              className="text-base-content/30 size-11"
+              aria-hidden="true"
+            />
+            <p className="text-base-content/60 text-sm">No spending to chart yet</p>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   const domainMax = domainMaxOf(weeklyBuckets);

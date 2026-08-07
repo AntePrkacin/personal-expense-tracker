@@ -4,6 +4,7 @@ import { render } from '@testing-library/react';
 import * as AddTransactionModal from './(app)/AddTransactionModal.stories';
 import * as EditTransactionModal from './(app)/EditTransactionModal.stories';
 import * as DashboardScreen from './(app)/dashboard/DashboardScreen.stories';
+import * as DashboardScreenEmpty from './(app)/dashboard/DashboardScreenEmpty.stories';
 import * as TransactionDetailScreen from './(app)/transactions/[id]/TransactionDetailScreen.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
@@ -93,6 +94,11 @@ const MODULES: [name: string, module: StoryModule][] = [
   // `Shell/AI insight teaser`), and this module carries the one combination that matches node
   // 22:55.
   ['DashboardScreen', DashboardScreen as StoryModule],
+  // Frame 05, PET-26's own. A second module rather than a second story in the one above, the
+  // same module-carries-one-title reason `TransactionsList`/`TransactionsScreen` split on:
+  // `CategoryDonut` takes no `isEmpty` prop at all, so building this frame inline in
+  // `DashboardScreen.stories.tsx` would mean one file constructing the grid two different ways.
+  ['DashboardScreenEmpty', DashboardScreenEmpty as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

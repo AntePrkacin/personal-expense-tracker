@@ -31,6 +31,18 @@ const CHIP = {
   },
 } as const;
 
+/**
+ * The shortest a budgeting period can be, in days, and therefore the smallest `daysLeft` that
+ * still proves the period has barely started.
+ *
+ * **Not a designed threshold, a derived bound** - the distinction this file already draws when
+ * it refuses to invent a "getting close" chip tone. A period runs from one `monthStartDay` to
+ * the next, so it is 28 to 31 days long and `daysLeft >= 28` means at most three days have
+ * elapsed, whatever the month and whatever the profile's start day. Nothing here picks a cutoff;
+ * February picks it.
+ */
+const SHORTEST_PERIOD_DAYS = 28;
+
 type BudgetCardProps = Pick<
   DashboardSummary,
   | 'spent'
@@ -40,7 +52,13 @@ type BudgetCardProps = Pick<
   | 'transactionCount'
   | 'averagePerDay'
   | 'topCategory'
->;
+> & {
+  /**
+   * The screen's shared PET-26 condition. Necessary but **not sufficient** for the caption to
+   * read "Full month ahead" - see the caption itself for why `daysLeft` gets a say too.
+   */
+  isEmpty: boolean;
+};
 
 export function BudgetCard({
   spent,
@@ -50,6 +68,7 @@ export function BudgetCard({
   transactionCount,
   averagePerDay,
   topCategory,
+  isEmpty,
 }: BudgetCardProps) {
   const overBudget = remaining < 0;
   const tone = overBudget ? CHIP.overBudget : CHIP.onTrack;
@@ -119,11 +138,30 @@ export function BudgetCard({
               Nothing on this response names the period, so the honest sentence is the one that
               does not claim to - `docs/TODO.md` records what a labelled period would need.
 
+              **Frame 05's "Full month ahead" needs both halves of this condition, and the
+              review of PET-26 is why.** `isEmpty` alone was the first version, on the reasoning
+              that `daysLeft` counts down whether or not the account has ever spent anything and
+              so has no value meaning "empty". That is true and the converse is too:
+              `transactionCount === 0` says nothing about time remaining. An account that has
+              logged nothing by the 28th of a period starting on the 1st has `daysLeft` of 4, and
+              the first version replaced an accurate "4 days left" with a sentence claiming the
+              month had not started - a state every light account passes through, not only a
+              brand-new one.
+
+              So emptiness chooses *whether* the frame's copy is eligible and `daysLeft` proves
+              it is *true*. Above `SHORTEST_PERIOD_DAYS` at most three days have elapsed and the
+              sentence holds; below it the caption falls back to the count, which is accurate in
+              every period and is what the populated card draws anyway. Nothing on this response
+              carries the period's length, so this bound is the strongest claim the data
+              supports - `docs/TODO.md` records what a period-length field would buy.
+
               The plural is a local ternary rather than a helper: `daysLeft` is documented as 1
               on the last day of the period and never 0, so "1 days left" is a state every user
               reaches once a month, and this is the app's only pluralized string. */}
           <p className="text-base-content/60">
-            {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left
+            {isEmpty && daysLeft >= SHORTEST_PERIOD_DAYS
+              ? 'Full month ahead'
+              : `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`}
           </p>
         </div>
 
