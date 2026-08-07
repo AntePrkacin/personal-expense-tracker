@@ -38,12 +38,25 @@ transaction rather than appended to. Seeding cloud after seeding local is safe t
 provisioned in local mode has no `db_url`, and the script re-provisions it rather than assuming a
 cleared onboarding payload means it is ready.
 
-**Do not point both modes at the same `DATABASE_DIR`.** The two modes use the same file paths -
+**Do not point both modes at the same `DATABASE_DIR`, and understand what happens if you do,
+because it fails silently and it bit this project.** The two modes use the same file paths -
 `app.db` and `users/<db-name>.db` - but cloud mode opens them as sync replicas and local mode as
-plain SQLite files. A directory that has been used for both ends up with a mix, and the local-mode
-leftovers are not replicas of anything. If you have seeded locally into `backend/databases/` and
-now want the cloud, either move the stale `users/*.db` files aside or point `DATABASE_DIR` at a
-different directory for one of the two.
+plain SQLite files.
+
+Rows written to `app.db` while it was a **plain local file** are invisible to the sync engine that
+later adopts it: they are not in its change log, so `push()` has nothing to send for them, and they
+stay local forever. Every write made after cloud mode took over pushes normally, which is what
+makes this so hard to spot - the replica syncs, just not those rows.
+
+The symptom is a local central directory that has a user the cloud does not, so the seed reports
+success, the app works locally, and the **deployed** backend cannot find the account at all.
+Logging in against production then returns the usual empty 202 and sends no email, because
+`login-link` only mails an address that exists in the directory it can see.
+
+If a `DATABASE_DIR` has been used for both, the repair is to delete the central replica
+(`app.db` and its `-changes`, `-info`, `-log`, `-wal` siblings) and let it re-bootstrap from the
+cloud, which is the source of truth, then seed again. To avoid it entirely, give each mode its own
+directory.
 
 ## 1. Seeding the local environment
 
