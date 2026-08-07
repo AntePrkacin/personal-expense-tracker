@@ -143,22 +143,26 @@ rows. A Server Component.
 
 ## Tasks
 
-- [ ] Commit this plan alone and open the draft PR against `feat/PET-22-weekly-spending-trend`
-- [ ] `ui/categoryColour.ts`: `categoryDotClass()`, with its cases (the eight, an unpalette hex,
+- [x] Commit this plan alone and open the draft PR against `feat/PET-22-weekly-spending-trend`
+- [x] `ui/categoryColour.ts`: `categoryDotClass()`, with its cases (the eight, an unpalette hex,
       the fallback grey, a lowercase hex, a prototype key)
-- [ ] `(app)/dashboard/donut.ts` and its suite: the sort, the name tiebreak, arcs summing to the
+- [x] `(app)/dashboard/donut.ts` and its suite: the sort, the name tiebreak, arcs summing to the
       circumference when the percentages total 100, a short set staying short rather than being
       stretched closed, one hundred percent in a single slice
-- [ ] `(app)/dashboard/CategoryDonut.tsx` and its suite: slice count and order, the centre total,
+- [x] `(app)/dashboard/CategoryDonut.tsx` and its suite: slice count and order, the centre total,
       legend rows largest first, the grey fallback row, the `role="img"` name, dots hidden
-- [ ] `(app)/dashboard/page.tsx`: fill the donut slot
-- [ ] Stories: `Shell/Spending by category` with the mock's five categories, a single-category
+- [x] `(app)/dashboard/page.tsx`: fill the donut slot
+- [x] Stories: `Shell/Spending by category` with the mock's five categories, a single-category
       month, and one unpalette colour; re-check `Screens/04 Dashboard` against node `21:4`
-- [ ] Docs: `frontend/src/components/CLAUDE.md` (the second function on `categoryColour`),
+- [x] Docs: `frontend/src/components/CLAUDE.md` (the second function on `categoryColour`),
       `frontend/src/app/CLAUDE.md` (the sort and its tiebreak, the arc geometry and why the ring is
       allowed not to close), root `CLAUDE.md`
-- [ ] Comment on PET-23 with the sort decision, the AC5 note that the backend already filters, and
+- [x] Comment on PET-23 with the sort decision, the AC5 note that the backend already filters, and
       the empty-`categories` guard PET-26 owes this card
+- [x] Review round: fold orphaned spend into Uncategorized so the ring always closes
+      (AC6), largest-remainder apportionment so the legend sums to 100 (AC4 amended), and a hover
+      tooltip naming the slice (AC7, new) - `backend/src/categories/categories.service.ts`,
+      `(app)/dashboard/donut.ts`, `CategoryDonut.tsx`, `docs/TODO.md`
 
 No `npm run api:sync`: nothing here changes a request or response body.
 
