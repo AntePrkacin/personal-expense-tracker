@@ -346,6 +346,73 @@ from `main`.
 The one place it bites: `categoryColour.ts` gains `CATEGORY_FILL` in PET-23 and is rewritten here.
 Land PET-23 before starting section 7, or resolve that overlap by hand.
 
+### 10. Blast radius, swept against `main`
+
+The sections above describe the change. This one is the inventory of everything else that breaks,
+found by sweeping the base rather than by reasoning about it. Nothing here is optional.
+
+**`backend/src/scripts/seed-showcase.ts` breaks, and it is the least obvious casualty.** PET-60's
+showcase seed boots the real `AppModule` and provisions through the real services, which is exactly
+why it breaks: it hands `STARTER_CATEGORY_NAMES` to the onboarding payload at `:144`, and under
+Decision 5 that field is template ids. It must resolve ids from central instead. Two further
+snags in the same file:
+
+- `:329` `find((c) => c.name === 'Groceries')` and `:340` `find((c) => c.name === 'Subscriptions')`
+  are **name lookups against the seeded set**. "Subscriptions" is the riskier one: it sits on the
+  A7 seam and may not survive the 13-name list. Both fall back to `pickableCategories[0]`, so a
+  miss **degrades silently** into a demo whose subscription story is attached to the wrong
+  category rather than failing loudly.
+- `:210` says "with 22 names over 11 categories". Eleven becomes fourteen, and
+  `docs/guides/seeding-dummy-data.md` repeats the same arithmetic at `:117` and `:119`.
+
+**There are two `<ShoppingBag />` placeholder sites, not one.** `TransactionRow.tsx:67` is the one
+Decision 2 already names; `[id]/CategoryContextCard.tsx:114` is the second, in PET-34's detail
+page, and it renders the identical placeholder in the identical `size-9 rounded-field` tile. Both
+become the real per-category icon, or the close-pair decision only half holds.
+
+**`categoryColour.ts` exports more than this plan first named.** Beside `CATEGORY_TILE`,
+`CATEGORY_DOT`, `CATEGORY_COLOUR_BY_HEX`, `CATEGORY_TILE_NEUTRAL` and `categoryTileClass`, `main`
+also has **`categoryDotClass`** and **`CATEGORY_DOT_NEUTRAL`**, and `[id]/TransactionDetailScreen.tsx:76`
+is a live caller of the first. `CATEGORY_FILL` and `categoryFillVar` do **not** exist on `main`;
+they arrive with PET-23, which section 9 already flags.
+
+**`icon` keeps its nullable column.** Making `CreateCategoryDto.icon` required does **not** mean
+`ALTER TABLE`. Tightening `categories.icon` to `NOT NULL` would be the one user-scope migration in
+this whole change, and it is not worth it: the DTO is what enforces the invariant going forward,
+and `backend/src/database/CLAUDE.md` is explicit that a user-scope migration runs unattended
+against live data one user at a time. Leave the column alone.
+
+**Fixtures that become invalid**, beyond the obvious hexes:
+
+- `backend/test/categories.e2e-spec.ts` sends `icon: 'cup'` (`:333`, `:342`) and `icon: 'box'`
+  (`:442`, `:450`). Neither is a lucide name, so both fail `@IsIn(ICON_NAMES)`.
+- `frontend/src/lib/transactionDetail.test.ts:41` uses `color: '#22C55E'`, which is not even one of
+  the current eight.
+- `backend/test/categories.e2e-spec.ts:385` uses `color: 'teal'` as its **malformed** example. That
+  string becomes a plausible token shape, so the negative case has to be re-pointed at something
+  genuinely rejected, and keeping a `#RRGGBB` there as the now-invalid format is worth doing.
+- Four `[id]/` fixtures carry `icon: null` alongside their hexes.
+
+**Hard-coded counts are assertions, not just prose.** These fail rather than merely rot:
+`categoryColour.test.ts:21-22` (`toHaveLength(8)`, `size).toBe(8)`), `:46-49` (the deliberate
+orange/yellow collision), `starterCategories.test.ts:14,19-30,44,51-53` (the ten names written out,
+and "reuses two colours"), and `SetupCategoriesScreen.test.tsx:83,162,349` ("ten chips", "the other
+nine"). The prose copies are in `starter-categories.ts`, `create-category.dto.ts`,
+`categoryColour.ts`, `starterCategories.ts`, `CategoryPicker.tsx`, `CategoryChip.tsx`,
+`AccessCard.tsx`, `TransactionsTable.tsx`, `TransactionRow.tsx` and `transactions/page.tsx`.
+
+**Documentation beyond the six files section 8 lists:**
+
+- `docs/guides/seeding-dummy-data.md` — the eleven-category and 22-merchant arithmetic.
+- `docs/guides/database.md:26` — its sample curl body `"categories":["Groceries"]` becomes an
+  invalid registration payload the moment Decision 5 lands.
+- `docs/project-management/02-tech-spec-personal-expense-tracker.md` — CED-6 ("the eight Category
+  color tokens from Foundations"), the Foundations palette table, A7, and **A40**, which this
+  ticket settles by fixing the icon set.
+- `docs/TODO.md` closes **two** entries, not one: the colour-picker entry section 8 names, and
+  "The starter category list exists in two files, linked only by a generated type", whose own
+  preferred fix is "a public endpoint serving the starter list" — which is what Decision 5 builds.
+
 ## Verification
 
 - `cd backend && npm run build` (the typecheck), `npm test`, `npm run test:e2e`.
@@ -375,11 +442,19 @@ Land PET-23 before starting section 7, or resolve that overlap by hand.
 - [ ] Rewrite `seedStarterCategories` to copy from central; keep `FALLBACK_CATEGORY` a code constant
 - [ ] Backend tests, including the `openapi.e2e-spec.ts` enum assertions
 - [ ] `npm run api:sync` from the root; commit both artifacts
-- [ ] Rewrite `categoryColour.ts` and its test
+- [ ] Rewrite `categoryColour.ts` and its test, including `categoryDotClass` and
+      `CATEGORY_DOT_NEUTRAL`
 - [ ] Delete `starterCategories.ts`; make `/setup/categories` async; move the draft to ids
-- [ ] `TransactionRow` draws the real icon; widen `CategoryLabel` with `icon`
-- [ ] Update the six documentation files listed above
+- [ ] Both `<ShoppingBag />` sites draw the real icon: `TransactionRow` and
+      `[id]/CategoryContextCard`; widen `CategoryLabel` with `icon`
+- [ ] Repoint `seed-showcase.ts` at template ids; fix its two name lookups and its count comment
+- [ ] Fix the fixtures section 10 lists: hexes, `icon: 'cup'`/`'box'`, `#22C55E`, and the
+      `color: 'teal'` negative case
+- [ ] Update the count assertions that fail, not only the prose that rots
+- [ ] Update the documentation in sections 8 and 10; close the two `docs/TODO.md` entries
 - [ ] Full verification pass, including the two-theme browser walk on a re-provisioned account
+- [ ] Re-run `mise run seed:showcase` end to end, the only thing that exercises provisioning
+      against real data
 
 ## Risks worth stating
 
