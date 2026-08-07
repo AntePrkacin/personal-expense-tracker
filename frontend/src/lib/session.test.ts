@@ -253,6 +253,24 @@ describe('authorizedGet', () => {
     expect(await authorizedGet('/api/profile')).toEqual({ ok: false, reason: 'unavailable' });
   });
 
+  it('reports a 404 as missing rather than unavailable', async () => {
+    // PET-34's arm. `GET /api/transactions/:id` is the only read whose route can answer one,
+    // and the detail page turns this into notFound() - so collapsing it into `unavailable`
+    // would render Next's error page over a transaction that was merely deleted.
+    respondWith(404, {});
+
+    expect(await authorizedGet('/api/transactions/gone')).toEqual({
+      ok: false,
+      reason: 'missing',
+    });
+  });
+
+  it('still reports a 403 as unavailable, so missing is a 404 and not "any 4xx"', async () => {
+    respondWith(403, {});
+
+    expect(await authorizedGet('/api/profile')).toEqual({ ok: false, reason: 'unavailable' });
+  });
+
   it('never throws, whatever the backend does', async () => {
     global.fetch = jest
       .fn()

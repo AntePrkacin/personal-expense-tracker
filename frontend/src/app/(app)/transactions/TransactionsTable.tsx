@@ -1,6 +1,7 @@
 import { categoryTileClass } from '@/components/ui/categoryColour';
 import type { CategoryLabel } from '@/lib/categories';
-import type { Transaction } from '@/lib/transactions';
+import { toQuery } from '@/lib/transactionQuery';
+import type { Transaction, TransactionFilters } from '@/lib/transactions';
 
 import { TransactionRow, type RowCategory } from './TransactionRow';
 
@@ -49,6 +50,15 @@ type TransactionsTableProps = {
   transactions: Transaction[];
   /** The account's categories, for the id-to-name-and-colour join below. */
   categories: CategoryLabel[];
+  /**
+   * What the list is currently filtered by, appended to each row's detail link.
+   *
+   * PET-34's, and it is here rather than in the row because the query string is one string
+   * for the whole table - building it per row would be a hundred `URLSearchParams` for one
+   * answer. The detail page parses it back out so its breadcrumb returns the user to the list
+   * they were actually looking at rather than to the unfiltered default.
+   */
+  filters: TransactionFilters;
 };
 
 /**
@@ -67,8 +77,10 @@ function categoryIndex(categories: CategoryLabel[]): Map<string, RowCategory> {
   );
 }
 
-export function TransactionsTable({ transactions, categories }: TransactionsTableProps) {
+export function TransactionsTable({ transactions, categories, filters }: TransactionsTableProps) {
   const index = categoryIndex(categories);
+  // Once for the table, not once per row.
+  const query = toQuery(filters);
 
   return (
     <div className="rounded-box border-base-300 bg-base-100 overflow-x-auto border">
@@ -114,6 +126,7 @@ export function TransactionsTable({ transactions, categories }: TransactionsTabl
             <TransactionRow
               key={transaction.id}
               transaction={transaction}
+              query={query}
               category={index.get(transaction.categoryId) ?? null}
             />
           ))}

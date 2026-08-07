@@ -48,12 +48,18 @@ type EmptyStateProps = {
    * Absent from Figma, which has no notion of document outline.
    *
    * Defaults to 2 because `PageHeader` owns the `h1` on every `(app)` screen.
+   *
+   * **1 is allowed for the screens that have no `PageHeader` above them**, which as of PET-34
+   * means `transactions/[id]/not-found.tsx`. A code review caught that boundary shipping with
+   * an `h2` as its topmost heading and no `h1` anywhere - the only screen in the shell like it,
+   * and invisible to `(app)/pages.test.tsx`, whose one-`h1`-per-screen sweep never reaches a
+   * not-found boundary. Reach for it only when this card really is the whole page.
    */
-  headingLevel?: 2 | 3 | 4;
+  headingLevel?: 1 | 2 | 3 | 4;
 };
 
 export function EmptyState({ icon, heading, body, action, headingLevel = 2 }: EmptyStateProps) {
-  // Types as 'h2' | 'h3' | 'h4' from the prop union, so no cast is needed.
+  // Types as 'h1' | 'h2' | 'h3' | 'h4' from the prop union, so no cast is needed.
   const Heading = `h${headingLevel}` as const;
 
   return (

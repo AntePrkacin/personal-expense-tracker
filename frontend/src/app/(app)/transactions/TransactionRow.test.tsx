@@ -55,13 +55,17 @@ const GROCERIES: RowCategory = {
  * `useEditTransaction()`, and the edit provider itself calls `useDeleteTransaction()`, so it has
  * to be the inner one here too.
  */
-function renderRow(category: RowCategory | null = GROCERIES, transaction = TRANSACTION) {
+function renderRow(
+  category: RowCategory | null = GROCERIES,
+  transaction = TRANSACTION,
+  query = '',
+) {
   return render(
     <DeleteTransactionProvider>
       <EditTransactionProvider>
         <table>
           <tbody>
-            <TransactionRow transaction={transaction} category={category} />
+            <TransactionRow transaction={transaction} category={category} query={query} />
           </tbody>
         </table>
       </EditTransactionProvider>
@@ -191,13 +195,46 @@ describe('the kebab', () => {
   });
 });
 
-describe('the row makes no navigation claim', () => {
-  it('is not a link, because the detail page is PET-34’s', () => {
-    // AC7's other half. `lib/routes.test.ts` asserts every declared route has a `page.tsx`,
-    // and `/transactions/{id}` has none, so a link here would 404.
+describe('the row navigates now, and only from the merchant', () => {
+  // The inverted assertion. For four tickets this pinned `queryByRole('link')` empty, and
+  // `frontend/src/app/CLAUDE.md` records that it held **by decision** rather than by absence
+  // of features - the detail page did not exist, so a link would have 404d. PET-34 built it,
+  // which makes the old pin the thing that would now hide a regression.
+
+  it('links the merchant to the transaction detail page', () => {
     renderRow();
 
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: TRANSACTION.merchant })).toHaveAttribute(
+      'href',
+      `/transactions/${TRANSACTION.id}`,
+    );
+  });
+
+  it('carries the list filters so the breadcrumb can come back to this view', () => {
+    renderRow(GROCERIES, TRANSACTION, '?period=all&search=whole');
+
+    expect(screen.getByRole('link', { name: TRANSACTION.merchant })).toHaveAttribute(
+      'href',
+      `/transactions/${TRANSACTION.id}?period=all&search=whole`,
+    );
+  });
+
+  it('is the row’s only link, so the row is not one', () => {
+    // The half of the old assertion that survives, and the reason it is worth keeping. A link
+    // wrapping the whole row would take its accessible name from every cell and announce as
+    // "Whole Foods Groceries Oct 8 −$62.40" - and four cell-links would announce the same
+    // destination four times.
+    renderRow();
+
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+  });
+
+  it('names the link with the merchant alone', () => {
+    // The accessible name is the whole argument for putting it on this cell, so it is pinned
+    // rather than left to the markup.
+    renderRow();
+
+    expect(screen.getByRole('link').textContent).toBe(TRANSACTION.merchant);
   });
 });
 

@@ -78,6 +78,18 @@ died with the form open, and those want three different messages - one of which 
 again", because a body the DTO rejects will be rejected again forever. So `authorizedPost` passes
 the status through and the calling action maps it, which is what `lib/createTransaction.ts` does.
 
+**PET-34 gave the read helper a third answer, and it is the one exception to the paragraph
+above.** `authorizedGet` now reports a **404** as `missing` rather than folding it into
+`unavailable`. That is not the write helper's "let the caller see the status" policy arriving by
+the back door: it is one named outcome, because "the thing is not there" and "I could not ask" are
+a 404 page and an error page respectively, and collapsing them puts Next's error boundary over a
+transaction the user merely deleted. It stays a closed union rather than a status for the reason
+the read policy exists at all - every other non-401 really does have one thing to say. Only
+`GET /api/transactions/:id` can produce it, whose own OpenAPI description says a 404 there always
+means the id in the URL, so the other four reads never see the arm and keep throwing on anything
+that is not `unauthenticated`. `lib/transactionDetail.ts` is the worked example: redirect,
+`notFound()`, throw.
+
 **A write must not be told apart from its own success by a parse error.** `authorizedPost`
 deliberately does **not** read the response body: `POST /api/transactions` answers 201 with the
 created row, and returning it looked obviously right until the failure mode showed up - a 2xx

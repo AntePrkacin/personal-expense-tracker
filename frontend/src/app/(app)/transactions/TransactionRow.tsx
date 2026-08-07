@@ -1,4 +1,5 @@
 import { ShoppingBag } from 'lucide-react';
+import Link from 'next/link';
 
 import { CATEGORY_TILE_NEUTRAL } from '@/components/ui/categoryColour';
 import { formatIsoDayMonth, formatNegative } from '@/lib/format';
@@ -33,9 +34,16 @@ type TransactionRowProps = {
   transaction: Transaction;
   /** `null` when the row's `categoryId` matched nothing in the account's list. */
   category: RowCategory | null;
+  /**
+   * The list's current query string, appended to this row's detail link.
+   *
+   * Built once by the table rather than per row. Carrying it is what lets frame 08's
+   * breadcrumb return the user to the list they were looking at instead of the default one.
+   */
+  query: string;
 };
 
-export function TransactionRow({ transaction, category }: TransactionRowProps) {
+export function TransactionRow({ transaction, category, query }: TransactionRowProps) {
   return (
     <tr>
       {/* No padding and no width classes anywhere in this file: daisyUI's `table` sets the
@@ -66,16 +74,33 @@ export function TransactionRow({ transaction, category }: TransactionRowProps) {
             <ShoppingBag className="size-4.5" aria-hidden="true" />
           </span>
 
-          {/* **`whitespace-nowrap`, and deliberately not `truncate`.** It was `min-w-0 truncate`,
-              which came from the `table-fixed` layout this file used to have: with the column
-              widths declared, an over-long merchant had a box to be clipped inside. PET-57 let
-              the browser measure the columns instead, so there is no box - `overflow: hidden`
-              and `text-overflow: ellipsis` had nothing to act on and never fired, and the
-              comment claiming they did was wrong from the moment the widths went. Keeping the
-              rows one line each is the part that was actually load-bearing, and the card's own
-              `overflow-x-auto` is what a long name reaches for now. `base-content` is inherited
-              rather than restated. */}
-          <span className="text-sm font-semibold whitespace-nowrap">{transaction.merchant}</span>
+          {/* **The link is on this cell alone, not on the row**, and PET-34 is the ticket that
+              turned it on - `frontend/src/app/CLAUDE.md` recorded the argument three tickets
+              before it existed. A link wrapping the whole `<tr>` takes its accessible name
+              from everything inside it, so every row would announce as "Whole Foods Groceries
+              Oct 8 −$86.40"; the merchant is the only cell that names the thing being opened.
+              (A `<tr>` cannot legally contain an `<a>` wrapping `<td>`s either, so the
+              alternative was a link per cell, which is four announcements of the same target.)
+
+              `outline-solid` beside `outline-2`: daisyUI's `.link` sets
+              `--tw-outline-style: none` on focus and Tailwind's `outline-2` reads that
+              variable, so the ring computes to a 2px outline of style `none` without it. The
+              trap `frontend/CLAUDE.md` records, on the component it names.
+
+              **`whitespace-nowrap`, and deliberately not `truncate`.** It was `min-w-0
+              truncate`, which came from the `table-fixed` layout this file used to have: with
+              the column widths declared, an over-long merchant had a box to be clipped inside.
+              PET-57 let the browser measure the columns instead, so there is no box -
+              `overflow: hidden` and `text-overflow: ellipsis` had nothing to act on and never
+              fired. Keeping the rows one line each is the part that was actually load-bearing,
+              and the card's own `overflow-x-auto` is what a long name reaches for now.
+              `base-content` is inherited rather than restated. */}
+          <Link
+            href={`/transactions/${transaction.id}${query}`}
+            className="link link-hover text-sm font-semibold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid"
+          >
+            {transaction.merchant}
+          </Link>
         </div>
       </td>
 

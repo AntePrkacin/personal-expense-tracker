@@ -39,9 +39,11 @@ their filters live in the URL, every "Add transaction" button opens a modal that
 writes, and as of PET-33 each row's kebab opens a menu whose "Delete" really removes the
 transaction behind a confirmation dialog. The fifth is PET-32's: that menu's "Edit" opens the same
 form prefilled from the row and saves the fields the user actually changed, so a logged expense can
-now be corrected as well as removed. What is still missing is most of what the other screens
-*show*: the Dashboard, AI Insights and Settings `<main>` elements below the page header are
-empty, and the dashboard summary and transaction detail are called by nobody.
+now be corrected as well as removed. PET-34 adds a sixth and the app's first dynamic route: a
+row's merchant links to `/transactions/[id]`, which shows one expense in full beside how its
+category is doing against that month's cap, and carries the list's filters there and back. What is
+still missing is most of what the other screens *show*: the Dashboard, AI Insights and Settings
+`<main>` elements below the page header are empty, and the dashboard summary is called by nobody.
 
 ## Repository map
 

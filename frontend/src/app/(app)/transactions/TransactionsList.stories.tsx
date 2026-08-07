@@ -113,7 +113,13 @@ function Frame({ filters }: { filters: TransactionFilters }) {
               view={view}
               filters={filters}
               filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
-              table={<TransactionsTable transactions={TRANSACTIONS} categories={CATEGORIES} />}
+              table={
+                <TransactionsTable
+                  transactions={TRANSACTIONS}
+                  categories={CATEGORIES}
+                  filters={filters}
+                />
+              }
             />
           </div>
         </EditTransactionProvider>
@@ -161,7 +167,13 @@ function Frame({ filters }: { filters: TransactionFilters }) {
  * half: the row carries its own values and only the *options* need the network. Review the populated
  * picker on `Screens/11 Edit transaction`, whose categories are a literal.
  *
- * A row click still does nothing, because the detail page is PET-34's.
+ * **The merchant is a link as of PET-34, and the row around it still is not.** That is the last
+ * dead affordance on this screen gone. Two things to check here that no suite can: hovering a
+ * merchant underlines that cell alone rather than the row, and tabbing through reaches one link
+ * per row rather than four. The link carries the bar's current filters in its query string, so
+ * the detail page's breadcrumb can return you to this exact view - which the `Filtered` story
+ * below is the better place to see. Following it in Storybook goes nowhere, because Storybook
+ * routes nothing; `Screens/08 Transaction detail` is where the destination is diffed.
  */
 export const List: Story = {
   render: () => <Frame filters={{}} />,

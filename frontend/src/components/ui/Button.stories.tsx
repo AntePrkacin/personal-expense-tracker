@@ -37,7 +37,9 @@ export const Playground: Story = {};
 /**
  * Every variant with the label it carries in the design. The first three come
  * from the Components tile (node 12:14); `text` and `textDanger` are traced from
- * the frames that use them, since the tile does not draw them.
+ * the frames that use them, since the tile does not draw them. `dangerSoft` is
+ * frame 08's header Delete - the same red as `danger` at a lower emphasis,
+ * because there it sits beside Edit rather than being a dialog's own answer.
  */
 export const AllVariants: Story = {
   render: () => {
@@ -45,6 +47,7 @@ export const AllVariants: Story = {
       primary: 'Add transaction',
       secondary: 'Regenerate',
       danger: 'Delete',
+      dangerSoft: 'Delete',
       text: 'Back',
       textDanger: 'Delete transaction',
     };

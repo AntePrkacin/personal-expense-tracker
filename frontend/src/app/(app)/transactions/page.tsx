@@ -88,7 +88,13 @@ export default async function TransactionsPage({
       // table take a `Transaction[]` instead of a union it would have to re-narrow.
       table={
         view.state === 'populated' ? (
-          <TransactionsTable transactions={view.transactions} categories={categories.data} />
+          <TransactionsTable
+            transactions={view.transactions}
+            categories={categories.data}
+            // PET-34: each row's merchant links to its detail page and carries these along, so
+            // that page's breadcrumb can bring the user back to this exact view.
+            filters={filters}
+          />
         ) : undefined
       }
     />

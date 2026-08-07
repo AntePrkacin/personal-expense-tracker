@@ -343,6 +343,10 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   opening frame 11 prefilled from the row, and the `menu-disabled` and `aria-disabled` above are
   gone with it. A **row click** is now the only dead affordance left on the screen, which makes it
   the one a reviewer is most likely to try; it is PET-34's.
+  **PET-34 built it, and the screen has no dead affordance left.** The merchant cell links to
+  `/transactions/[id]`, the app's first dynamic route. Read the sentence above as history - though
+  "a row click" stays literally true of the other four cells, because the link is on the merchant
+  alone for the accessible-name reason `frontend/src/app/CLAUDE.md` records.
 - **Every read a screen needs for its own data, bar the transactions list and the categories.**
   PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls `GET /api/auth/session` and
   `lib/profile.ts` calls `GET /api/profile`, both lifting the session cookie into an
@@ -352,7 +356,13 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   answer is ambiguous. PET-31 added `lib/categories.ts`, narrowed to what a picker needs.
   All four now go through `authorizedGet` in `lib/session.ts`, which is where the cookie becomes
   a bearer token; do not inline a fifth copy of that. What no screen fetches yet is the
-  dashboard summary, the transaction _detail_, and the categories' **month stats**.
+  dashboard summary. PET-34's `lib/transactionDetail.ts` took the transaction _detail_ **and** the
+  categories' month stats off this list together, in one request: `GET /api/transactions/:id`
+  embeds the whole `CategoryResponseDto`, caps included, so the narrowing above is intact and
+  `lib/categories.ts` was not widened. It is also the read to copy for a **404**, which is the
+  app's third failure policy - `authorizedGet` grew a `missing` arm so a deleted transaction calls
+  `notFound()` instead of throwing like an unreachable backend. No other read's endpoint answers
+  404, so the four above are unchanged.
   `lib/categories.ts` now holds **two** projections over one shared request: `readCategoryOptions`
   for the modal's `<select>`, and PET-29's `readCategoryLabels`, which adds `color` because a
   transaction row carries only a `categoryId` and the table joins the name and the tile colour

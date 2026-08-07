@@ -228,14 +228,21 @@ describe('the inert header controls', () => {
     //
     // **This still holds by decision rather than by absence of features.** PET-29 made every
     // other control on the page real and deliberately left these two, so the assertion is
-    // now the record of that choice rather than a description of an unbuilt screen. The same
-    // is true of the `link` query: a row is not clickable, because the detail page is
-    // PET-34's.
+    // now the record of that choice rather than a description of an unbuilt screen.
+    //
+    // **The page-wide `queryByRole('link')` that used to sit here is gone, and deliberately
+    // not replaced by a count.** It covered two claims at once - the tabs are not links, and a
+    // row is not clickable - and PET-34 made the second one false. Worse, it would still
+    // *pass*: this file mocks the list to `transactions: []`, so there are no rows to link
+    // and the assertion would quietly go vacuous while its comment still claimed to be
+    // pinning something. So each tab is now checked directly, which is the claim that
+    // survives.
     await renderScreen(TransactionsPage);
 
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.getByText('Categories').tagName).toBe('SPAN');
+    expect(screen.getByText('Categories').closest('a')).toBeNull();
+    expect(screen.getByText('All transactions').closest('a')).toBeNull();
   });
 
   it('exposes exactly the three filter selects the design draws', async () => {
