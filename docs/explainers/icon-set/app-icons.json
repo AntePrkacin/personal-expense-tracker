@@ -1,0 +1,178 @@
+{
+  "chrome": [
+    {
+      "name": "align-left",
+      "files": [
+        "app/(app)/transactions/TransactionsEmpty.tsx",
+        "components/ui/Sidebar.tsx"
+      ]
+    },
+    {
+      "name": "chart-no-axes-column-increasing",
+      "files": [
+        "app/(app)/dashboard/TrendCard.tsx"
+      ]
+    },
+    {
+      "name": "check",
+      "files": [
+        "app/setup/categories/CategoryChip.tsx"
+      ]
+    },
+    {
+      "name": "chevron-down",
+      "files": [
+        "app/(app)/dashboard/MonthPill.tsx"
+      ]
+    },
+    {
+      "name": "chevron-left",
+      "files": [
+        "app/(app)/DateField.tsx",
+        "app/(app)/transactions/[id]/TransactionDetailScreen.tsx"
+      ]
+    },
+    {
+      "name": "chevron-right",
+      "files": [
+        "app/(app)/DateField.tsx"
+      ]
+    },
+    {
+      "name": "ellipsis-vertical",
+      "files": [
+        "app/(app)/transactions/TransactionRowMenu.tsx"
+      ]
+    },
+    {
+      "name": "file-question",
+      "files": [
+        "app/(app)/transactions/[id]/not-found.tsx"
+      ]
+    },
+    {
+      "name": "layout-grid",
+      "files": [
+        "components/ui/Sidebar.tsx"
+      ]
+    },
+    {
+      "name": "menu",
+      "files": [
+        "app/(app)/layout.tsx"
+      ]
+    },
+    {
+      "name": "pencil",
+      "files": [
+        "app/(app)/transactions/TransactionRowMenu.tsx"
+      ]
+    },
+    {
+      "name": "receipt-text",
+      "files": [
+        "app/(app)/dashboard/RecentTransactionsCard.tsx"
+      ]
+    },
+    {
+      "name": "search",
+      "files": [
+        "app/(app)/transactions/SearchPill.tsx"
+      ]
+    },
+    {
+      "name": "sliders-horizontal",
+      "files": [
+        "components/ui/Sidebar.tsx"
+      ]
+    },
+    {
+      "name": "sparkle",
+      "files": [
+        "app/(app)/dashboard/InsightTeaserCard.tsx",
+        "components/ui/Sidebar.tsx"
+      ]
+    },
+    {
+      "name": "trash-2",
+      "files": [
+        "app/(app)/DeleteTransactionDialog.tsx",
+        "app/(app)/EditTransactionModal.tsx",
+        "app/(app)/transactions/TransactionRowMenu.tsx",
+        "components/ui/Button.stories.tsx"
+      ]
+    },
+    {
+      "name": "x",
+      "files": [
+        "app/(app)/Modal.tsx"
+      ]
+    }
+  ],
+  "categoryMap": [
+    "baby",
+    "beer",
+    "bike",
+    "bird",
+    "book",
+    "briefcase",
+    "bus",
+    "camera",
+    "car",
+    "circle-question-mark",
+    "coffee",
+    "credit-card",
+    "dumbbell",
+    "eye",
+    "film",
+    "fish",
+    "fuel",
+    "gamepad-2",
+    "gem",
+    "gift",
+    "graduation-cap",
+    "heart",
+    "heart-pulse",
+    "house",
+    "ice-cream-cone",
+    "key-round",
+    "landmark",
+    "music",
+    "package",
+    "palette",
+    "panda",
+    "paw-print",
+    "pencil",
+    "percent",
+    "piggy-bank",
+    "pill",
+    "pizza",
+    "plane",
+    "rabbit",
+    "receipt",
+    "sailboat",
+    "scale",
+    "scissors",
+    "shield",
+    "shirt",
+    "shopping-basket",
+    "shopping-cart",
+    "smartphone",
+    "sofa",
+    "square-parking",
+    "stethoscope",
+    "tag",
+    "tent",
+    "ticket",
+    "trash-2",
+    "tree-palm",
+    "trending-up",
+    "tv",
+    "users",
+    "utensils",
+    "waves",
+    "wifi",
+    "wrench",
+    "zap"
+  ]
+}

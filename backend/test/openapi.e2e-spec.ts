@@ -724,6 +724,7 @@ describe('openapi.json', () => {
     ];
 
     const ICON_NAMES = [
+      // PET-64: one per seeded category, then the fallback's.
       'shopping-basket',
       'utensils',
       'car',
@@ -737,14 +738,73 @@ describe('openapi.json', () => {
       'paw-print',
       'landmark',
       'circle-question-mark',
+      // PET-65: offered to a user's own categories. Order matters as much as
+      // membership here, because `toEqual` on an array is order-sensitive and
+      // `icon_templates.sort_order` is assigned from it.
+      'coffee',
+      'beer',
+      'pizza',
+      'ice-cream-cone',
+      'fuel',
+      'bus',
+      'panda',
+      'bike',
+      'square-parking',
+      'house',
+      'bird',
+      'waves-horizontal',
+      'wifi',
+      'smartphone',
+      'trash-2',
+      'wrench',
+      'sofa',
+      'pill',
+      'stethoscope',
+      'dumbbell',
+      'eye',
+      'tag',
+      'shirt',
+      'package',
+      'gem',
+      'scale',
+      'credit-card',
+      'piggy-bank',
+      'shopping-cart',
+      'percent',
+      'receipt',
+      'trending-up',
+      'shield',
+      'gamepad-2',
+      'music',
+      'film',
+      'ticket',
+      'book',
+      'camera',
+      'palette',
+      'briefcase',
+      'pencil',
+      'fish',
+      'baby',
+      'users',
+      'rabbit',
+      'sailboat',
+      'tree-palm',
+      'key-round',
+      'tent',
+      'heart',
     ];
 
     // Written out here rather than imported from template-tokens.ts on purpose.
     // Importing would make this assert the constant against itself, which is
     // the failure `SIDEBAR_HREFS`' own note describes: the point is that the
-    // *published contract* carries these seventeen and these thirteen, so a
+    // *published contract* carries these seventeen and these sixty-four, so a
     // deliberate change has to be made in two places and an accidental one
     // fails here.
+    //
+    // PET-65 is the worked example of that working. Adding fifty-one icons
+    // failed here first, with a diff naming all fifty-one, which is exactly the
+    // second place the paragraph above promises. Copy the list rather than
+    // reaching for an import when this fails: the duplication is the check.
 
     it.each([
       'CreateCategoryDto',

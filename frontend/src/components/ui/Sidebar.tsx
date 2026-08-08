@@ -53,6 +53,13 @@ export const SIDEBAR_HREFS: Record<SidebarItem, string> = {
 // `Sparkle` is the one to not "correct" to `Sparkles`: the design's AI mark is a single
 // four-pointed concave star, which is what `Sparkle` draws - `Sparkles` adds two smaller ones.
 //
+// **PET-65 gave that a second, harder reason: `sparkles` was removed from the category icon
+// set precisely so this mark stays the product's own.** It was in the palette a user picks
+// from, meaning somebody could have labelled a spending category with the app's AI glyph. The
+// interface-scan section of `docs/explainers/category-icon-set-preview.html` lists every mark
+// this file and its siblings draw, and it exists so the next icon added to either side is
+// checked against the other.
+//
 // `AlignLeft` keeps the ragged short line the traced mark had, which is what stops the
 // Transactions item reading as a second hamburger next to the drawer's own; it draws four
 // lines where the trace drew three. `SlidersHorizontal` is the same kind of near-miss for

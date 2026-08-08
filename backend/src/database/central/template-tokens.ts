@@ -124,18 +124,70 @@ export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
 };
 
 /**
- * The thirteen lucide icon names this app imports, in lucide's own kebab-case.
+ * The sixty-four lucide icon names this app imports, in lucide's own kebab-case.
  *
  * **This is a cross-app contract, which is why it is published rather than kept
  * private.** The frontend's static `CATEGORY_ICON` map must import exactly these
- * thirteen components, and publishing the set as an OpenAPI enum is what makes
+ * sixty-four components, and publishing the set as an OpenAPI enum is what makes
  * `Record<IconName, LucideIcon>` an exhaustiveness proof rather than a map that
  * silently misses a key.
  *
  * `circle-question-mark`, not `circle-help`: the latter is a deprecated alias of
- * it in the installed lucide 1.29.0. All thirteen are verified to exist there.
+ * it in the installed lucide 1.29.0. All sixty-four are verified to exist there.
+ *
+ * **Every name here must be lucide's canonical one, not one of its deprecated
+ * aliases**, and the review of PET-65 found one that was not: `waves` is nothing
+ * but a re-export of `waves-horizontal`, exactly the `circle-help` shape one line
+ * above, and it shipped because an alias imports and renders identically to the
+ * icon it points at. Nothing fails until lucide drops the alias at a major - by
+ * which time the name is in the published OpenAPI enum, in `icon_templates` and in
+ * whatever categories users picked with it, so a rename becomes a contract change
+ * plus a data migration. The cheap tell, if this needs checking again: lucide keys
+ * its category metadata on canonical names only, so an alias comes back untagged.
+ * `waves` was the one untagged name of the sixty-four, and after the swap there
+ * are none.
+ *
+ * **The first thirteen are PET-64's and are load-bearing; the rest are PET-65's
+ * and are a palette.** The opening block is exactly what the twelve seeded
+ * categories carry, plus `circle-question-mark` for the `Uncategorized`
+ * fallback, so removing one of those breaks a seeded category. Everything after
+ * it exists so a user naming a category of their own has something to pick that
+ * is not already spoken for - the same slack the colour list has had since
+ * PET-64, where seventeen tokens back thirteen categories.
+ *
+ * **New names are appended, never interleaved.** `icon_templates.sort_order` is
+ * assigned from this order at seed time, so inserting into the middle would make
+ * a database seeded before the change disagree with one seeded after about the
+ * order of every row past the insertion point, for no gain: an admin reorders
+ * the picker for themselves.
+ *
+ * **Replacing a name in place is the one edit that is exempt from that**, and
+ * seventeen of the fifty-one below are replacements rather than originals. A swap
+ * keeps every other row's position, so the two databases still agree; only the
+ * swapped row's own `name` and `label` differ, and no user category references a
+ * template icon after provisioning copies it.
+ *
+ * **The seventeen were chosen on glyph shape alone, and the block comments below
+ * did not survive it.** They record the spending domain each icon was originally
+ * picked for, and after the visual pass several no longer describe their
+ * contents: `panda` sits under Transport (it replaced `train-front`, which
+ * collided with `bus`), `sailboat` under Personal care, `bird` and
+ * `waves-horizontal` under Home and bills, `fish` under Work and study. That is a
+ * real inconsistency, kept deliberately rather than tidied, because the
+ * alternative is reordering - which is the one thing the paragraph above forbids.
+ * Read the blocks as provenance, not as taxonomy;
+ * `docs/explainers/category-icon-set-preview.html` is the authority for what the
+ * set actually looks like and why each swap happened.
+ *
+ * **Two names are deliberately shared with the app's own interface**, which the
+ * same review found and accepted: `pencil` is also the transaction row menu's
+ * Edit action and `trash-2` its Delete action. A user can therefore pick a mark
+ * that means something else elsewhere in the product. Do not "fix" that without
+ * reading the explainer's interface-scan section, which lists every one of the
+ * seventeen icons `frontend/src` draws outside the category map.
  */
 export const ICON_NAMES = [
+  // PET-64: the twelve seeded categories, then the fallback.
   'shopping-basket',
   'utensils',
   'car',
@@ -149,6 +201,72 @@ export const ICON_NAMES = [
   'paw-print',
   'landmark',
   'circle-question-mark',
+
+  // PET-65 onwards: offered to a user's own categories, grouped by the spending
+  // domain they serve rather than by anything about lucide.
+  // Food and drink
+  'coffee',
+  'beer',
+  'pizza',
+  'ice-cream-cone',
+  // Transport
+  'fuel',
+  'bus',
+  'panda',
+  'bike',
+  'square-parking',
+  // Home and bills
+  'house',
+  'bird',
+  'waves-horizontal',
+  'wifi',
+  'smartphone',
+  'trash-2',
+  'wrench',
+  'sofa',
+  // Health and fitness
+  'pill',
+  'stethoscope',
+  'dumbbell',
+  'eye',
+  // Shopping
+  'tag',
+  'shirt',
+  'package',
+  'gem',
+  // Money
+  'scale',
+  'credit-card',
+  'piggy-bank',
+  'shopping-cart',
+  'percent',
+  'receipt',
+  'trending-up',
+  'shield',
+  // Entertainment and hobbies
+  'gamepad-2',
+  'music',
+  'film',
+  'ticket',
+  'book',
+  'camera',
+  'palette',
+  // Work and study
+  'briefcase',
+  'pencil',
+  'fish',
+  // Family and social
+  'baby',
+  'users',
+  'rabbit',
+  // Personal care
+  'sailboat',
+  // Travel
+  'tree-palm',
+  'key-round',
+  'tent',
+  // Other
+  'heart',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];

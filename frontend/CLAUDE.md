@@ -229,8 +229,9 @@ classes the one exception, as the visible half of an aria attribute the same tes
 the app was a hand-drawn inline `<svg>` with its Figma node id in the comment until PET-33
 introduced the dependency and migrated all thirteen. **PET-64 added the one case where a glyph
 is chosen at runtime rather than imported at a call site**: a category carries an icon _name_,
-and `ui/categoryColour.ts`'s `CATEGORY_ICON` is the static map that turns thirteen of them into
-components. Reach for that map rather than `lucide-react`'s own barrel - `icons[name]` works and
+and `ui/categoryColour.ts`'s `CATEGORY_ICON` is the static map that turns sixty-four of them into
+components - thirteen at PET-64, the rest added by PET-65 so a user naming a category of their own
+is not forced to reuse a glyph a seeded category already carries. Reach for that map rather than `lucide-react`'s own barrel - `icons[name]` works and
 pulls every glyph the library ships into the bundle - and note the map is keyed by the
 contract's published enum, so it is an exhaustiveness proof rather than a lookup table. It is named here rather than in
 `frontend/src/components/CLAUDE.md` because routes draw glyphs too - `(app)/layout.tsx`'s

@@ -1,0 +1,2043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Category icon set preview</title>
+
+    <!--
+      Pinned to exactly what frontend/package.json installs, the reasoning
+      docs/explainers/category-colors-icons-description-preview.html carries in full.
+      lucide 1.29.0 matters twice over here: it is the version the app imports from, and
+      because this page renders every name through it, a name that is not really in 1.29.0
+      draws an empty tile instead of quietly passing review.
+    -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+    <script src="https://unpkg.com/lucide@1.29.0"></script>
+</head>
+
+<!--
+  GENERATED, NOT HAND-WRITTEN. Rebuild rather than edit.
+
+  The grid below IS ICON_NAMES, read straight out of the source. The seventeen swaps have
+  landed, so the page and the source agree again - which is the point of generating it. Rerun
+  the generator after any change to the set and the page follows; hand-edit it and it lies.
+
+    ICON_NAMES     backend/src/database/central/template-tokens.ts   the closed set, in order
+    ICON_SEED      backend/src/database/central/template-seed.ts     the picker label
+    CATEGORY_SEED  the same file                                     which category carries which icon
+    interface icons  scanned out of frontend/src - see the last section
+
+  THE ORDER IS NOT COSMETIC. It is icon_templates.sort_order, assigned from ICON_NAMES at seed
+  time - which is also why a swap is safe where an insertion would not be: replacing a name in
+  place keeps every other row's position, so a database seeded before the change and one seeded
+  after still agree.
+
+  WHY THE SCAN RAN REPEATEDLY. Each round's own picks introduced collisions the round before
+  could not have seen: bot was chosen against book and turned out to be the seeded tv, and
+  squirrel was chosen against bus and turned out to be rabbit. A set this size is not verifiable
+  one pair at a time - it has to be re-read whole after every change, against the whole set.
+
+  THE CATEGORY TAGS ARE LUCIDE'S OWN, AND ARE THE ONE THING HERE THAT IS NOT FROM THIS REPO.
+  lucide-react ships components only, with no category metadata, so the tags come from
+  lucide.dev/api/categories - which serves the current lucide, not the pinned 1.29.0. They are
+  descriptive only: nothing in this app reads them, no template row references them, an icon
+  commonly carries several, and lucide leaves 258 of its 2011 icons untagged entirely.
+-->
+<body class="bg-base-200 text-base-content min-h-screen p-4 sm:p-8">
+  <div class="mx-auto flex max-w-6xl flex-col gap-6">
+
+    <header class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold">Category icon set</h1>
+            <p class="mt-1 text-sm opacity-70">
+                All 64 icons a category may carry, in seed order, tagged with lucide's own categories.
+            </p>
+        </div>
+        <!-- daisyUI's theme-controller switches the theme in CSS, so this page needs no theme JavaScript. -->
+        <label class="flex cursor-pointer items-center gap-2">
+            <i data-lucide="sun" class="size-5" aria-hidden="true"></i>
+            <span class="sr-only">Dark theme</span>
+            <input type="checkbox" value="dark" class="toggle theme-controller" />
+            <i data-lucide="moon" class="size-5" aria-hidden="true"></i>
+        </label>
+    </header>
+
+    <div class="border-base-300 bg-base-100 rounded-box flex items-start gap-3 border p-4 text-sm">
+        <i data-lucide="info" class="size-5 shrink-0 opacity-60" aria-hidden="true"></i>
+        <p>
+            <strong>This grid is <code>ICON_NAMES</code> itself</strong>, generated from the source rather
+            than transcribed, so it cannot drift from what the seed writes. The 17 marked
+            <span class="badge badge-secondary badge-sm">New</span> are PET-65's visual-similarity pass.
+            The <strong>13 ringed</strong> icons are load-bearing - each is what a seeded category is
+            written with at provisioning - and none of them changed. The monospace line under each label is
+            the stored key, the value that travels in the API enum and lands in <code>categories.icon</code>.
+        </p>
+    </div>
+
+    <div class="stats stats-vertical sm:stats-horizontal bg-base-100 border-base-300 border">
+        <div class="stat">
+            <div class="stat-title">Icons</div>
+            <div class="stat-value text-3xl">64</div>
+            <div class="stat-desc">unchanged - every swap is in place</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Seeded</div>
+            <div class="stat-value text-primary text-3xl">13</div>
+            <div class="stat-desc">untouched, as instructed</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Swapped</div>
+            <div class="stat-value text-secondary text-3xl">17</div>
+            <div class="stat-desc">PET-65's visual pass</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Residuals</div>
+            <div class="stat-value text-3xl">3</div>
+            <div class="stat-desc">mild, knowingly accepted</div>
+        </div>
+    </div>
+
+    <ul id="icon-grid" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="shopping"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="shopping-basket" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Basket</p>
+              <p class="font-mono text-xs break-all opacity-70">shopping-basket</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">1</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Groceries</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">shopping</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="food-beverage travel navigation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="utensils" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Utensils</p>
+              <p class="font-mono text-xs break-all opacity-70">utensils</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">2</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Dining out</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">food-beverage</li>
+            <li class="badge badge-ghost badge-sm font-mono">travel</li>
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="transportation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="car" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Car</p>
+              <p class="font-mono text-xs break-all opacity-70">car</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">3</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Transportation</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="connectivity devices photography weather"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="zap" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Bolt</p>
+              <p class="font-mono text-xs break-all opacity-70">zap</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">4</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Utilities</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">connectivity</li>
+            <li class="badge badge-ghost badge-sm font-mono">devices</li>
+            <li class="badge badge-ghost badge-sm font-mono">photography</li>
+            <li class="badge badge-ghost badge-sm font-mono">weather</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="medical"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="heart-pulse" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Heartbeat</p>
+              <p class="font-mono text-xs break-all opacity-70">heart-pulse</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">5</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Healthcare</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">medical</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="devices multimedia communication"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="tv" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Television</p>
+              <p class="font-mono text-xs break-all opacity-70">tv</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">6</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Entertainment</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">devices</li>
+            <li class="badge badge-ghost badge-sm font-mono">multimedia</li>
+            <li class="badge badge-ghost badge-sm font-mono">communication</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="buildings"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="graduation-cap" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Graduation cap</p>
+              <p class="font-mono text-xs break-all opacity-70">graduation-cap</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">7</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Education</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">buildings</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="transportation travel navigation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="plane" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Plane</p>
+              <p class="font-mono text-xs break-all opacity-70">plane</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">8</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Travel</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+            <li class="badge badge-ghost badge-sm font-mono">travel</li>
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="text design tools"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="scissors" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Scissors</p>
+              <p class="font-mono text-xs break-all opacity-70">scissors</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">9</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Personal care</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">text</li>
+            <li class="badge badge-ghost badge-sm font-mono">design</li>
+            <li class="badge badge-ghost badge-sm font-mono">tools</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="gaming account"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="gift" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Gift</p>
+              <p class="font-mono text-xs break-all opacity-70">gift</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">10</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Gifts</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">gaming</li>
+            <li class="badge badge-ghost badge-sm font-mono">account</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="animals"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="paw-print" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Paw</p>
+              <p class="font-mono text-xs break-all opacity-70">paw-print</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">11</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Family &amp; pets</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">animals</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="finance navigation buildings"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="landmark" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Bank</p>
+              <p class="font-mono text-xs break-all opacity-70">landmark</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">12</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Loans &amp; debt</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">finance</li>
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+            <li class="badge badge-ghost badge-sm font-mono">buildings</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4 ring-primary ring-2"
+          data-seeded="true"
+          data-categories="accessibility text notifications"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-primary text-primary-content"
+            >
+              <i data-lucide="circle-question-mark" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Question mark</p>
+              <p class="font-mono text-xs break-all opacity-70">circle-question-mark</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">13</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-primary badge-sm">Seeded</span> <span class="opacity-70">Uncategorized (fallback)</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">accessibility</li>
+            <li class="badge badge-ghost badge-sm font-mono">text</li>
+            <li class="badge badge-ghost badge-sm font-mono">notifications</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="food-beverage"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="coffee" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Coffee</p>
+              <p class="font-mono text-xs break-all opacity-70">coffee</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">14</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">food-beverage</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="food-beverage"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="beer" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Beer</p>
+              <p class="font-mono text-xs break-all opacity-70">beer</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">15</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">food-beverage</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="food-beverage"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="pizza" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Pizza</p>
+              <p class="font-mono text-xs break-all opacity-70">pizza</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">16</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">food-beverage</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="food-beverage"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="ice-cream-cone" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Ice cream</p>
+              <p class="font-mono text-xs break-all opacity-70">ice-cream-cone</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">17</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces cake-slice</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">food-beverage</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="transportation navigation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="fuel" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Fuel pump</p>
+              <p class="font-mono text-xs break-all opacity-70">fuel</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">18</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="transportation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="bus" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Bus</p>
+              <p class="font-mono text-xs break-all opacity-70">bus</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">19</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="animals"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="panda" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Panda</p>
+              <p class="font-mono text-xs break-all opacity-70">panda</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">20</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces train-front</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">animals</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="transportation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="bike" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Bicycle</p>
+              <p class="font-mono text-xs break-all opacity-70">bike</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">21</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="transportation navigation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="square-parking" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Parking</p>
+              <p class="font-mono text-xs break-all opacity-70">square-parking</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">22</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces circle-parking</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="buildings home navigation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="house" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">House</p>
+              <p class="font-mono text-xs break-all opacity-70">house</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">23</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">buildings</li>
+            <li class="badge badge-ghost badge-sm font-mono">home</li>
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="animals"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="bird" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Bird</p>
+              <p class="font-mono text-xs break-all opacity-70">bird</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">24</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces droplets</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">animals</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="weather navigation multimedia sustainability"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="waves-horizontal" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Waves</p>
+              <p class="font-mono text-xs break-all opacity-70">waves-horizontal</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">25</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces flame</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">weather</li>
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+            <li class="badge badge-ghost badge-sm font-mono">multimedia</li>
+            <li class="badge badge-ghost badge-sm font-mono">sustainability</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="connectivity devices"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="wifi" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Wi-Fi</p>
+              <p class="font-mono text-xs break-all opacity-70">wifi</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">26</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">connectivity</li>
+            <li class="badge badge-ghost badge-sm font-mono">devices</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="connectivity devices"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="smartphone" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Phone</p>
+              <p class="font-mono text-xs break-all opacity-70">smartphone</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">27</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">connectivity</li>
+            <li class="badge badge-ghost badge-sm font-mono">devices</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="files mail"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="trash-2" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Bin</p>
+              <p class="font-mono text-xs break-all opacity-70">trash-2</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">28</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">files</li>
+            <li class="badge badge-ghost badge-sm font-mono">mail</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="account development tools"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="wrench" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Wrench</p>
+              <p class="font-mono text-xs break-all opacity-70">wrench</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">29</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">account</li>
+            <li class="badge badge-ghost badge-sm font-mono">development</li>
+            <li class="badge badge-ghost badge-sm font-mono">tools</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="home"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="sofa" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Sofa</p>
+              <p class="font-mono text-xs break-all opacity-70">sofa</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">30</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">home</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="medical"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="pill" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Pill</p>
+              <p class="font-mono text-xs break-all opacity-70">pill</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">31</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">medical</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="science medical"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="stethoscope" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Stethoscope</p>
+              <p class="font-mono text-xs break-all opacity-70">stethoscope</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">32</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">science</li>
+            <li class="badge badge-ghost badge-sm font-mono">medical</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="navigation sports"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="dumbbell" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Dumbbell</p>
+              <p class="font-mono text-xs break-all opacity-70">dumbbell</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">33</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+            <li class="badge badge-ghost badge-sm font-mono">sports</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="accessibility photography design security"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="eye" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Eye</p>
+              <p class="font-mono text-xs break-all opacity-70">eye</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">34</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces glasses</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">accessibility</li>
+            <li class="badge badge-ghost badge-sm font-mono">photography</li>
+            <li class="badge badge-ghost badge-sm font-mono">design</li>
+            <li class="badge badge-ghost badge-sm font-mono">security</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="account"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="tag" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Tag</p>
+              <p class="font-mono text-xs break-all opacity-70">tag</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">35</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces shopping-bag</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">account</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="shopping"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="shirt" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Shirt</p>
+              <p class="font-mono text-xs break-all opacity-70">shirt</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">36</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">shopping</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="files development"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="package" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Package</p>
+              <p class="font-mono text-xs break-all opacity-70">package</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">37</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">files</li>
+            <li class="badge badge-ghost badge-sm font-mono">development</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="gaming development finance"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="gem" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Gem</p>
+              <p class="font-mono text-xs break-all opacity-70">gem</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">38</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">gaming</li>
+            <li class="badge badge-ghost badge-sm font-mono">development</li>
+            <li class="badge badge-ghost badge-sm font-mono">finance</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="navigation science finance"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="scale" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Scales</p>
+              <p class="font-mono text-xs break-all opacity-70">scale</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">39</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces wallet</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">navigation</li>
+            <li class="badge badge-ghost badge-sm font-mono">science</li>
+            <li class="badge badge-ghost badge-sm font-mono">finance</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="account finance"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="credit-card" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Credit card</p>
+              <p class="font-mono text-xs break-all opacity-70">credit-card</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">40</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">account</li>
+            <li class="badge badge-ghost badge-sm font-mono">finance</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="finance"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="piggy-bank" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Piggy bank</p>
+              <p class="font-mono text-xs break-all opacity-70">piggy-bank</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">41</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">finance</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="shopping"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="shopping-cart" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Shopping cart</p>
+              <p class="font-mono text-xs break-all opacity-70">shopping-cart</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">42</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces banknote</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">shopping</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="math development finance shopping"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="percent" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Percent</p>
+              <p class="font-mono text-xs break-all opacity-70">percent</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">43</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces coins</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">math</li>
+            <li class="badge badge-ghost badge-sm font-mono">development</li>
+            <li class="badge badge-ghost badge-sm font-mono">finance</li>
+            <li class="badge badge-ghost badge-sm font-mono">shopping</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="finance travel"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="receipt" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Receipt</p>
+              <p class="font-mono text-xs break-all opacity-70">receipt</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">44</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">finance</li>
+            <li class="badge badge-ghost badge-sm font-mono">travel</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="charts arrows"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="trending-up" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Upward trend</p>
+              <p class="font-mono text-xs break-all opacity-70">trending-up</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">45</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">charts</li>
+            <li class="badge badge-ghost badge-sm font-mono">arrows</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="account security development gaming shapes"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="shield" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Shield</p>
+              <p class="font-mono text-xs break-all opacity-70">shield</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">46</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">account</li>
+            <li class="badge badge-ghost badge-sm font-mono">security</li>
+            <li class="badge badge-ghost badge-sm font-mono">development</li>
+            <li class="badge badge-ghost badge-sm font-mono">gaming</li>
+            <li class="badge badge-ghost badge-sm font-mono">shapes</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="gaming devices"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="gamepad-2" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Game controller</p>
+              <p class="font-mono text-xs break-all opacity-70">gamepad-2</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">47</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">gaming</li>
+            <li class="badge badge-ghost badge-sm font-mono">devices</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="multimedia files"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="music" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Music note</p>
+              <p class="font-mono text-xs break-all opacity-70">music</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">48</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">multimedia</li>
+            <li class="badge badge-ghost badge-sm font-mono">files</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="photography multimedia"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="film" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Film</p>
+              <p class="font-mono text-xs break-all opacity-70">film</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">49</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">photography</li>
+            <li class="badge badge-ghost badge-sm font-mono">multimedia</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="account transportation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="ticket" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Ticket</p>
+              <p class="font-mono text-xs break-all opacity-70">ticket</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">50</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">account</li>
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="text development gaming"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="book" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Book</p>
+              <p class="font-mono text-xs break-all opacity-70">book</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">51</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">text</li>
+            <li class="badge badge-ghost badge-sm font-mono">development</li>
+            <li class="badge badge-ghost badge-sm font-mono">gaming</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="photography devices communication"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="camera" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Camera</p>
+              <p class="font-mono text-xs break-all opacity-70">camera</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">52</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">photography</li>
+            <li class="badge badge-ghost badge-sm font-mono">devices</li>
+            <li class="badge badge-ghost badge-sm font-mono">communication</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="text design photography"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="palette" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Palette</p>
+              <p class="font-mono text-xs break-all opacity-70">palette</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">53</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">text</li>
+            <li class="badge badge-ghost badge-sm font-mono">design</li>
+            <li class="badge badge-ghost badge-sm font-mono">photography</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="transportation"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="briefcase" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Briefcase</p>
+              <p class="font-mono text-xs break-all opacity-70">briefcase</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">54</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="design cursors tools text"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="pencil" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Pencil</p>
+              <p class="font-mono text-xs break-all opacity-70">pencil</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">55</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces laptop</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">design</li>
+            <li class="badge badge-ghost badge-sm font-mono">cursors</li>
+            <li class="badge badge-ghost badge-sm font-mono">tools</li>
+            <li class="badge badge-ghost badge-sm font-mono">text</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="food-beverage animals"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="fish" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Fish</p>
+              <p class="font-mono text-xs break-all opacity-70">fish</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">56</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces newspaper</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">food-beverage</li>
+            <li class="badge badge-ghost badge-sm font-mono">animals</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="accessibility people"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="baby" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Baby</p>
+              <p class="font-mono text-xs break-all opacity-70">baby</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">57</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">accessibility</li>
+            <li class="badge badge-ghost badge-sm font-mono">people</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="account"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="users" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">People</p>
+              <p class="font-mono text-xs break-all opacity-70">users</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">58</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">account</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="animals"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="rabbit" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Rabbit</p>
+              <p class="font-mono text-xs break-all opacity-70">rabbit</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">59</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces hand-heart</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">animals</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="transportation travel"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="sailboat" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Sailboat</p>
+              <p class="font-mono text-xs break-all opacity-70">sailboat</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">60</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces sparkles</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">transportation</li>
+            <li class="badge badge-ghost badge-sm font-mono">travel</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="nature sustainability"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="tree-palm" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Palm tree</p>
+              <p class="font-mono text-xs break-all opacity-70">tree-palm</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">61</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces luggage</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">nature</li>
+            <li class="badge badge-ghost badge-sm font-mono">sustainability</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="security account"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="key-round" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Key</p>
+              <p class="font-mono text-xs break-all opacity-70">key-round</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">62</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces hotel</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">security</li>
+            <li class="badge badge-ghost badge-sm font-mono">account</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="travel nature sustainability"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-base-200 text-base-content"
+            >
+              <i data-lucide="tent" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Tent</p>
+              <p class="font-mono text-xs break-all opacity-70">tent</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">63</span>
+          </div>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">travel</li>
+            <li class="badge badge-ghost badge-sm font-mono">nature</li>
+            <li class="badge badge-ghost badge-sm font-mono">sustainability</li>
+          </ul>
+        </li>
+
+        <li
+          class="rounded-box border-base-300 bg-base-100 flex flex-col gap-3 border p-4"
+          data-seeded="false"
+          data-categories="medical social multimedia emoji gaming shapes"
+        >
+          <div class="flex items-start gap-3">
+            <span
+              class="rounded-field flex size-9 shrink-0 items-center justify-center bg-secondary text-secondary-content"
+            >
+              <i data-lucide="heart" class="size-4.5" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="leading-tight font-semibold">Heart</p>
+              <p class="font-mono text-xs break-all opacity-70">heart</p>
+            </div>
+            <span class="ml-auto font-mono text-xs opacity-40">64</span>
+          </div>
+          <p class="text-xs font-semibold"><span class="badge badge-secondary badge-sm">New</span> <span class="opacity-70">replaces circle-ellipsis</span></p>
+          <ul class="flex flex-wrap gap-1">
+            <li class="badge badge-ghost badge-sm font-mono">medical</li>
+            <li class="badge badge-ghost badge-sm font-mono">social</li>
+            <li class="badge badge-ghost badge-sm font-mono">multimedia</li>
+            <li class="badge badge-ghost badge-sm font-mono">emoji</li>
+            <li class="badge badge-ghost badge-sm font-mono">gaming</li>
+            <li class="badge badge-ghost badge-sm font-mono">shapes</li>
+          </ul>
+        </li>
+    </ul>
+
+    <!--
+      The decision record. This started as a temporary review surface and is kept
+      deliberately: it is the only place that says WHY each of the seventeen moved,
+      and the residual list is what stops the next reader reporting the three
+      remaining near-misses as defects. A swap is cheap to make and expensive to
+      re-argue from an empty page.
+    -->
+    <section class="rounded-box border-primary bg-base-100 flex flex-col gap-4 border-2 border-dashed p-4 sm:p-6">
+      <div>
+        <h2 class="text-2xl font-bold">The set is settled</h2>
+        <p class="mt-1 text-sm opacity-70">
+          Judged throughout on <strong>shape alone</strong>, at the two sizes shown: the large mark, and the
+          <strong>18px the app actually draws</strong> beside it, which is where a collision bites and where
+          the old <code>coins</code> failed outright. 17 swaps, no icon added or removed,
+          the 13 seeded untouched.
+        </p>
+      </div>
+
+      <h3 class="text-lg font-semibold">Residuals, knowingly accepted</h3>
+      <p class="text-sm opacity-70">
+        The finished set was read whole one last time. These are what is left - all mild, all kept on
+        purpose. The record exists so the next person does not report them as defects.
+      </p>
+      <ul class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <li class="rounded-box border-base-300 flex items-start gap-4 border p-4">
+          <div class="flex gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="panda" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="baby" class="size-7" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">panda &middot; baby</p>
+            <p class="mt-1 text-sm opacity-70">Both a round face. panda adds ears and eye patches, baby a tuft. It arrived with the panda pick, which was itself the fix for squirrel against rabbit - the clearest example on this page of a swap moving a collision rather than removing it.</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-start gap-4 border p-4">
+          <div class="flex gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="sailboat" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="tent" class="size-7" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">sailboat &middot; tent</p>
+            <p class="mt-1 text-sm opacity-70">Both resolve to a triangle at 18px; the sail sits over a hull line, the tent over a centre pole.</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-start gap-4 border p-4">
+          <div class="flex gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="percent" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="pill" class="size-7" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">percent &middot; pill</p>
+            <p class="mt-1 text-sm opacity-70">A bold diagonal body, and pencil is a third member. percent keeps apart on its two rings, which is also what makes it the most legible mark in the money block.</p>
+          </div>
+        </li>
+      </ul>
+
+      <h3 class="mt-2 text-lg font-semibold">Every swap, and everything held</h3>
+      <ul class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="circle-ellipsis" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="heart" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="heart" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">circle-ellipsis &rarr; <strong>heart</strong></p>
+            <p class="mt-1 text-sm opacity-70">your call, not a similarity finding</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="laptop" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="pencil" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="pencil" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">laptop &rarr; <strong>pencil</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with book; bot was the first pick and collided with seeded tv</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="circle-parking" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="square-parking" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="square-parking" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">circle-parking &rarr; <strong>square-parking</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with seeded circle-question-mark</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="shopping-bag" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="tag" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="tag" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">shopping-bag &rarr; <strong>tag</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with seeded shopping-basket</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="cake-slice" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="ice-cream-cone" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="ice-cream-cone" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">cake-slice &rarr; <strong>ice-cream-cone</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with pizza</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="banknote" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="shopping-cart" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="shopping-cart" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">banknote &rarr; <strong>shopping-cart</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with credit-card</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="luggage" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="tree-palm" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="tree-palm" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">luggage &rarr; <strong>tree-palm</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with briefcase</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="glasses" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="eye" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="eye" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">glasses &rarr; <strong>eye</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with bike</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="hand-heart" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="rabbit" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="rabbit" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">hand-heart &rarr; <strong>rabbit</strong></p>
+            <p class="mt-1 text-sm opacity-70">made room for heart - three heart silhouettes otherwise</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="droplets" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="bird" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="bird" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">droplets &rarr; <strong>bird</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with flame</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="flame" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="waves-horizontal" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="waves-horizontal" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">flame &rarr; <strong>waves-horizontal</strong></p>
+            <p class="mt-1 text-sm opacity-70">the other half of the same pair; the canonical name, not the deprecated waves alias of it this first shipped as</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="newspaper" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="fish" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="fish" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">newspaper &rarr; <strong>fish</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with receipt</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="train-front" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="panda" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="panda" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">train-front &rarr; <strong>panda</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with bus; squirrel was the first pick and collided with rabbit</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="hotel" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="key-round" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="key-round" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">hotel &rarr; <strong>key-round</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with seeded landmark</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="sparkles" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="sailboat" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="sailboat" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">sparkles &rarr; <strong>sailboat</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with the app's own Sparkle AI mark - see the interface scan</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="wallet" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="scale" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="scale" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">wallet &rarr; <strong>scale</strong></p>
+            <p class="mt-1 text-sm opacity-70">collided with credit-card, the shape banknote was already dropped for</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border p-3">
+          <div class="flex items-center gap-2"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="coins" class="size-7" aria-hidden="true"></i></span><span class="opacity-40">&rarr;</span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="percent" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="percent" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">coins &rarr; <strong>percent</strong></p>
+            <p class="mt-1 text-sm opacity-70">not a collision - illegible at 18px, its meaning living in a glyph inside a glyph</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="package" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="package" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">package</p>
+            <p class="mt-1 text-sm opacity-70">kept - distinct enough from gift</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="beer" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="beer" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">beer</p>
+            <p class="mt-1 text-sm opacity-70">kept - distinct enough from coffee and trash-2</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="gem" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="gem" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">gem</p>
+            <p class="mt-1 text-sm opacity-70">kept against tag; crown went to the buffer</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="shopping-cart" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="shopping-cart" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">shopping-cart</p>
+            <p class="mt-1 text-sm opacity-70">kept against bike</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="ice-cream-cone" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="ice-cream-cone" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">ice-cream-cone</p>
+            <p class="mt-1 text-sm opacity-70">kept against tent</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="dumbbell" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="dumbbell" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">dumbbell</p>
+            <p class="mt-1 text-sm opacity-70">kept against bike</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="pencil" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="pencil" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">pencil</p>
+            <p class="mt-1 text-sm opacity-70">kept against pill, and kept as an exact duplicate of the interface Edit action</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="bird" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="bird" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">bird</p>
+            <p class="mt-1 text-sm opacity-70">kept against fish - the five-animal cluster is accepted</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-center gap-4 border border-dotted p-3">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="trash-2" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="trash-2" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">trash-2</p>
+            <p class="mt-1 text-sm opacity-70">kept as an exact duplicate of the interface Delete action</p>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <!--
+      The interface scan, also kept. It is regenerated by scan-app-icons.js from
+      frontend/src, so it answers a question no amount of reading ICON_NAMES can:
+      which of these marks the product already uses for something else. Rerun it
+      before adding an icon to either side.
+    -->
+    <section class="rounded-box border-secondary bg-base-100 flex flex-col gap-4 border-2 border-dashed p-4 sm:p-6">
+      <div>
+        <h2 class="text-2xl font-bold">What the app's own interface already uses</h2>
+        <p class="mt-1 text-sm opacity-70">
+          Scanned out of <code>frontend/src</code>: every <code>lucide-react</code> import that is
+          <strong>not</strong> the <code>CATEGORY_ICON</code> map - so nav, controls, empty states and dialogs.
+          <strong>17 icons.</strong> The question this answers is whether one mark carries two
+          meanings: the app's furniture on one screen, a category a user picked on another.
+        </p>
+      </div>
+
+      <h3 class="text-lg font-semibold">Exact duplicates &mdash; the same lucide name in both</h3>
+      <ul class="flex flex-col gap-3">
+        <li class="rounded-box border-base-300 flex flex-wrap items-center gap-4 border p-4">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="pencil" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="pencil" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div class="min-w-0 flex-1">
+            <p class="font-mono text-sm font-semibold">pencil</p>
+            <p class="mt-1 text-sm opacity-70">Interface use: <code>app/(app)/transactions/TransactionRowMenu.tsx</code></p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex flex-wrap items-center gap-4 border p-4">
+          <div class="flex items-center gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="trash-2" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="trash-2" class="size-4.5" aria-hidden="true"></i></span></div>
+          <div class="min-w-0 flex-1">
+            <p class="font-mono text-sm font-semibold">trash-2</p>
+            <p class="mt-1 text-sm opacity-70">Interface use: <code>app/(app)/DeleteTransactionDialog.tsx</code>, <code>app/(app)/EditTransactionModal.tsx</code>, <code>app/(app)/transactions/TransactionRowMenu.tsx</code>, <code>components/ui/Button.stories.tsx</code></p>
+          </div>
+        </li>
+      </ul>
+
+      <h3 class="mt-2 text-lg font-semibold">Near-identical &mdash; different name, same mark to an eye</h3>
+      <ul class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <li class="rounded-box border-base-300 flex items-start gap-4 border p-4">
+          <div class="flex gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="sparkles" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="sparkle" class="size-7" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">sparkles <span class="opacity-50">(set)</span> &middot; sparkle <span class="opacity-50">(interface)</span></p>
+            <p class="mt-1 text-sm opacity-70">the AI mark, in the sidebar nav and the dashboard insight teaser</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-start gap-4 border p-4">
+          <div class="flex gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="receipt" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="receipt-text" class="size-7" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">receipt <span class="opacity-50">(set)</span> &middot; receipt-text <span class="opacity-50">(interface)</span></p>
+            <p class="mt-1 text-sm opacity-70">the dashboard's recent-transactions card</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-start gap-4 border p-4">
+          <div class="flex gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="trending-up" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="chart-no-axes-column-increasing" class="size-7" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">trending-up <span class="opacity-50">(set)</span> &middot; chart-no-axes-column-increasing <span class="opacity-50">(interface)</span></p>
+            <p class="mt-1 text-sm opacity-70">the dashboard's spending-trend card</p>
+          </div>
+        </li>
+        <li class="rounded-box border-base-300 flex items-start gap-4 border p-4">
+          <div class="flex gap-1"><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="circle-question-mark" class="size-7" aria-hidden="true"></i></span><span class="bg-primary text-primary-content rounded-field flex size-11 shrink-0 items-center justify-center"><i data-lucide="file-question" class="size-7" aria-hidden="true"></i></span></div>
+          <div>
+            <p class="font-mono text-xs">circle-question-mark <span class="opacity-50">(set)</span> &middot; file-question <span class="opacity-50">(interface)</span></p>
+            <p class="mt-1 text-sm opacity-70">the transaction-detail not-found page</p>
+          </div>
+        </li>
+      </ul>
+
+      <h3 class="mt-2 text-lg font-semibold">Every interface icon, for the record</h3>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th>Mark</th><th>Name</th><th>In the category set</th><th>Where it is used</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="align-left" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">align-left</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/transactions/TransactionsEmpty.tsx</code><br><code>components/ui/Sidebar.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="chart-no-axes-column-increasing" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">chart-no-axes-column-increasing</td>
+              <td><span class="badge badge-secondary badge-sm">near</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/dashboard/TrendCard.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="check" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">check</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/setup/categories/CategoryChip.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="chevron-down" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">chevron-down</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/dashboard/MonthPill.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="chevron-left" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">chevron-left</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/DateField.tsx</code><br><code>app/(app)/transactions/[id]/TransactionDetailScreen.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="chevron-right" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">chevron-right</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/DateField.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="ellipsis-vertical" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">ellipsis-vertical</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/transactions/TransactionRowMenu.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="file-question" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">file-question</td>
+              <td><span class="badge badge-secondary badge-sm">near</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/transactions/[id]/not-found.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="layout-grid" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">layout-grid</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>components/ui/Sidebar.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="menu" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">menu</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/layout.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="pencil" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">pencil</td>
+              <td><span class="badge badge-primary badge-sm">exact</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/transactions/TransactionRowMenu.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="receipt-text" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">receipt-text</td>
+              <td><span class="badge badge-secondary badge-sm">near</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/dashboard/RecentTransactionsCard.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="search" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">search</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/transactions/SearchPill.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="sliders-horizontal" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">sliders-horizontal</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>components/ui/Sidebar.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="sparkle" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">sparkle</td>
+              <td><span class="badge badge-secondary badge-sm">near</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/dashboard/InsightTeaserCard.tsx</code><br><code>components/ui/Sidebar.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="trash-2" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">trash-2</td>
+              <td><span class="badge badge-primary badge-sm">exact</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/DeleteTransactionDialog.tsx</code><br><code>app/(app)/EditTransactionModal.tsx</code><br><code>app/(app)/transactions/TransactionRowMenu.tsx</code><br><code>components/ui/Button.stories.tsx</code></td>
+            </tr>
+            <tr>
+              <td><span class="bg-primary text-primary-content rounded-field flex size-6 shrink-0 items-center justify-center"><i data-lucide="x" class="size-4.5" aria-hidden="true"></i></span></td>
+              <td class="font-mono text-xs whitespace-nowrap">x</td>
+              <td><span class="opacity-40">&mdash;</span></td>
+              <td class="text-xs opacity-70"><code>app/(app)/Modal.tsx</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="text-xs opacity-60">
+        <p>
+            Generated from <code>backend/src/database/central/template-tokens.ts</code> and
+            <code>template-seed.ts</code>, with the approved swaps applied on top; category tags from
+            <code>lucide.dev/api/categories</code>; interface icons scanned from <code>frontend/src</code>.
+            Icons drawn by lucide 1.29.0, the version <code>frontend/package.json</code> installs.
+        </p>
+    </footer>
+  </div>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

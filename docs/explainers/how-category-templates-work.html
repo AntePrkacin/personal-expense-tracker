@@ -80,7 +80,7 @@
                 <text x="103" y="75" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">an admin edits it</text>
                 <text x="103" y="95" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">the same for everybody</text>
                 <text x="103" y="122" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">12 categories</text>
-                <text x="103" y="138" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">17 colours &middot; 13 icons</text>
+                <text x="103" y="138" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">17 colours &middot; 64 icons</text>
 
                 <!-- arrow -->
                 <line x1="205" y1="90" x2="270" y2="90" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.5" />
@@ -532,8 +532,8 @@
             library of about sixteen hundred glyphs. Fetching one by name at the moment it is
             needed would mean shipping all sixteen hundred to every visitor, because the app cannot
             know in advance which one a database row will ask for. So the app keeps a
-            hand-written list of the thirteen it actually offers, pairing each name with its
-            drawing instructions, and ships exactly those thirteen. Same shape of answer as the
+            hand-written list of the sixty-four it actually offers, pairing each name with its
+            drawing instructions, and ships exactly those sixty-four. Same shape of answer as the
             colours, same underlying cause: <strong>the app has to know the full set of
             possibilities before it runs.</strong>
         </p>
@@ -641,7 +641,7 @@
                 <p class="font-semibold">1. Before anybody signs up</p>
                 <p class="mt-1 text-sm opacity-75">
                     The shared database is created empty and immediately filled with its starting
-                    contents: seventeen colours with their picker labels, thirteen icons, twelve
+                    contents: seventeen colours with their picker labels, sixty-four icons, twelve
                     categories. This happens in the program rather than by hand, once, and it
                     checks first whether anything is already there, so that a restart cannot
                     resurrect a category an administrator deliberately deleted.
@@ -831,7 +831,7 @@
         <div class="overflow-x-auto">
             <table class="table table-sm" id="file-table">
                 <tbody>
-                    <tr data-path="backend/src/database/central/template-tokens.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The seventeen colour roles and thirteen icon names, plus the measured brightness table</td></tr>
+                    <tr data-path="backend/src/database/central/template-tokens.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The seventeen colour roles and sixty-four icon names, plus the measured brightness table</td></tr>
                     <tr data-path="backend/src/database/central/template-seed.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The starting contents: picker labels, the twelve categories, what is switched off</td></tr>
                     <tr data-path="backend/src/database/central/schema.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The three shared tables themselves</td></tr>
                     <tr data-path="backend/src/database/user/starter-categories.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The copy into your own database, and the "Uncategorized" fallback</td></tr>

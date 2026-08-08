@@ -1,24 +1,75 @@
 import {
+  Baby,
+  Beer,
+  Bike,
+  Bird,
+  Book,
+  Briefcase,
+  Bus,
+  Camera,
   Car,
   CircleQuestionMark,
+  Coffee,
+  CreditCard,
+  Dumbbell,
+  Eye,
+  Film,
+  Fish,
+  Fuel,
+  Gamepad2,
+  Gem,
   Gift,
   GraduationCap,
+  Heart,
   HeartPulse,
+  House,
+  IceCreamCone,
+  KeyRound,
   Landmark,
+  Music,
+  Package,
+  Palette,
+  Panda,
   PawPrint,
+  Pencil,
+  Percent,
+  PiggyBank,
+  Pill,
+  Pizza,
   Plane,
+  Rabbit,
+  Receipt,
+  Sailboat,
+  Scale,
   Scissors,
+  Shield,
+  Shirt,
   ShoppingBasket,
+  ShoppingCart,
+  Smartphone,
+  Sofa,
+  SquareParking,
+  Stethoscope,
+  Tag,
+  Tent,
+  Ticket,
+  Trash2,
+  TreePalm,
+  TrendingUp,
   Tv,
+  Users,
   Utensils,
+  WavesHorizontal,
+  Wifi,
+  Wrench,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
 
 import type { components } from '@/types/api';
 
-// The seventeen daisyUI semantic colour tokens and the thirteen lucide icons a
-// category can carry, mapped onto what actually paints them (PET-64).
+// The seventeen daisyUI semantic colour tokens and the sixty-four lucide icons a
+// category can carry, mapped onto what actually paints them (PET-64, PET-65).
 //
 // Four things about this file are load-bearing:
 //
@@ -185,14 +236,36 @@ export const CATEGORY_FILL: Record<CategoryColour, string> = {
  * The lucide component for a stored icon name.
  *
  * **The map exists because `lucide-react` imports by name at build time.**
- * `icons[name]` off the library's own barrel would work and would also pull
- * every glyph it ships into the bundle; a static map imports exactly thirteen.
+ * `icons[name]` off the library's own barrel would work and would also pull all
+ * ~2000 glyphs it ships into the bundle; a static map imports exactly
+ * sixty-four.
  *
  * `Record<IconName, LucideIcon>` is the exhaustiveness proof the contract's enum
- * buys: a fourteenth name added to `ICON_NAMES` backend-side and synced breaks
+ * buys: a sixty-fifth name added to `ICON_NAMES` backend-side and synced breaks
  * this build rather than rendering a hole where a glyph belongs.
+ *
+ * **PET-65 grew this from thirteen to sixty-four, and the cost is linear.** The
+ * import is per icon, so the set is roughly 25-40 KB raw before gzip. That is
+ * the price of the guarantee above: the alternative that stays flat is the
+ * barrel lookup, which gives up the exhaustiveness proof and the tree shaking in
+ * one move.
  */
 export const CATEGORY_ICON: Record<IconName, LucideIcon> = {
+  // Order follows ICON_NAMES: the thirteen a seeded category carries, then the
+  // fifty-one PET-65 offers to a user's own categories, grouped by domain.
+  // Not `CircleHelp`, which is a deprecated alias of `circle-question-mark` in
+  // lucide 1.29.0.
+  //
+  // **`Pencil` and `Trash2` are imported here AND used as the app's own chrome** -
+  // the transaction row menu's Edit and Delete actions. That overlap was found by
+  // scanning every non-category lucide import in `frontend/src` and was accepted
+  // knowingly, so a user can pick a mark that means an action elsewhere. Do not
+  // "fix" it without reading the interface-scan section of
+  // `docs/explainers/category-icon-set-preview.html`, which lists all seventeen.
+  //
+  // Several names read oddly against their domain block because seventeen of the
+  // fifty-one were replaced on glyph shape alone - `panda` for `train-front`,
+  // which collided with `bus`. `template-tokens.ts` is the authority for why.
   'shopping-basket': ShoppingBasket,
   utensils: Utensils,
   car: Car,
@@ -205,8 +278,58 @@ export const CATEGORY_ICON: Record<IconName, LucideIcon> = {
   gift: Gift,
   'paw-print': PawPrint,
   landmark: Landmark,
-  // Not `CircleHelp`, which is a deprecated alias of it in lucide 1.29.0.
   'circle-question-mark': CircleQuestionMark,
+  coffee: Coffee,
+  beer: Beer,
+  pizza: Pizza,
+  'ice-cream-cone': IceCreamCone,
+  fuel: Fuel,
+  bus: Bus,
+  panda: Panda,
+  bike: Bike,
+  'square-parking': SquareParking,
+  house: House,
+  bird: Bird,
+  'waves-horizontal': WavesHorizontal,
+  wifi: Wifi,
+  smartphone: Smartphone,
+  'trash-2': Trash2,
+  wrench: Wrench,
+  sofa: Sofa,
+  pill: Pill,
+  stethoscope: Stethoscope,
+  dumbbell: Dumbbell,
+  eye: Eye,
+  tag: Tag,
+  shirt: Shirt,
+  package: Package,
+  gem: Gem,
+  scale: Scale,
+  'credit-card': CreditCard,
+  'piggy-bank': PiggyBank,
+  'shopping-cart': ShoppingCart,
+  percent: Percent,
+  receipt: Receipt,
+  'trending-up': TrendingUp,
+  shield: Shield,
+  'gamepad-2': Gamepad2,
+  music: Music,
+  film: Film,
+  ticket: Ticket,
+  book: Book,
+  camera: Camera,
+  palette: Palette,
+  briefcase: Briefcase,
+  pencil: Pencil,
+  fish: Fish,
+  baby: Baby,
+  users: Users,
+  rabbit: Rabbit,
+  sailboat: Sailboat,
+  'tree-palm': TreePalm,
+  'key-round': KeyRound,
+  tent: Tent,
+  heart: Heart,
 };
 
 // Everything below is the fallback path: what to paint when a category could not
