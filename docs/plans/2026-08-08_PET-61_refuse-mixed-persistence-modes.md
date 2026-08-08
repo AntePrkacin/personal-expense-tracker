@@ -67,7 +67,7 @@ missed exactly as reliably as the original bug was.
 
 ## Tasks
 
-- [ ] Add the guard to `backend/src/database/turso-client.factory.ts`
+- [x] Add the guard to `backend/src/database/turso-client.factory.ts`
   - A module-level constant for the `-info` suffix, commented with what was observed and when, so
     the next reader knows it is an empirical fact about the engine rather than a documented API.
   - One helper per direction, called at the top of `openCloudDatabase` and `openLocalDatabase`
@@ -75,7 +75,7 @@ missed exactly as reliably as the original bug was.
   - Each message names the offending path and both remedies: delete the file and let it
     re-bootstrap, or point `DATABASE_DIR` somewhere else.
 
-- [ ] Cover both directions in a new `backend/src/database/turso-client.factory.spec.ts`
+- [x] Cover both directions in a new `backend/src/database/turso-client.factory.spec.ts`
   - Cloud rejection uses a genuinely plain file created by `@tursodatabase/database`, per the AC.
     It needs no network: the guard throws before `connectSync` is reached.
   - Local rejection creates the `-info` sibling directly, since minting a real replica would need
@@ -83,23 +83,31 @@ missed exactly as reliably as the original bug was.
   - Both allowed cases are asserted too - a fresh directory in cloud mode, and a plain file in
     local mode - or the guard could pass by rejecting everything.
 
-- [ ] Update `backend/src/database/CLAUDE.md` from hazard to guard
+- [x] Update `backend/src/database/CLAUDE.md` from hazard to guard
   - Rewrite the "One `DATABASE_DIR` must not serve both modes" paragraph: it currently says the
     failure is silent "in one direction", which the probe disproves.
 
-- [ ] Update `docs/guides/seeding-dummy-data.md` from hazard to guard
+- [x] Update `docs/guides/seeding-dummy-data.md` from hazard to guard
   - Keep the repair procedure, since a directory already mixed before this ticket still needs it.
 
-- [ ] Rewrite the `docs/TODO.md` entry
+- [x] Rewrite the `docs/TODO.md` entry
   - It is the register of *deferred* work and this is no longer deferred, so the entry is deleted
     rather than edited. What survives of it - that the two modes share filenames by design and why
     option 2 was not taken - belongs in `backend/src/database/CLAUDE.md` with the guard.
 
-- [ ] Verify a deliberately mixed directory now fails loudly, per the Definition of Done
+- [x] Verify a deliberately mixed directory now fails loudly, per the Definition of Done
   - Both directions, against real files, not only the spec's fixtures.
 
-- [ ] Run the gates: `npm run lint` and `npm run build` in `backend/`, `npm run test`,
+- [x] Run the gates: `npm run lint` and `npm run build` in `backend/`, `npm run test`,
       `npm run test:e2e`, and `npm run docs:check` from the root
+
+## Amendments made during implementation
+
+- **The `docs/TODO.md` entry was rewritten in place, not deleted.** The file already has a
+  precedent for a resolved hazard: "No operation documents a 500" stays as an entry marked
+  "Resolved with PET-14" rather than disappearing, so a reader scanning the register can still
+  find what used to be true and when it stopped. This entry follows the same shape, marked
+  "Resolved with PET-61", rather than the plan's original call to delete it outright.
 
 ## Not in scope
 

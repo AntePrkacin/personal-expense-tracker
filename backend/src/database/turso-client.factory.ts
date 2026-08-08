@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { connect as connectLocal } from '@tursodatabase/database';
@@ -22,7 +23,7 @@ import type { DatabaseHandle } from './database.types';
 const logger = new Logger('TursoClientFactory');
 
 export interface CloudConnectionOptions {
-  /** Local file backing the synced copy. Turso writes siblings (-wal, -info). */
+  /** Local file backing the synced copy. See SYNC_SIBLING for its siblings. */
   path: string;
   /** Remote database URL or bare hostname, as returned by the Platform API. */
   url: string;
@@ -48,10 +49,79 @@ export function toSyncUrl(urlOrHostname: string): string {
     : `https://${urlOrHostname}`;
 }
 
+/**
+ * Suffix of a sibling file only `@tursodatabase/sync` ever writes, which is
+ * what makes it the tell for which engine owns a path.
+ *
+ * Observed against `@tursodatabase/sync` 0.7.2 on 2026-08-08: a replica carries
+ * `-changes`, `-info` and `-log` beside the main file, all three written by
+ * `connect()` rather than by the first push, so this holds for a replica that
+ * has never synced. A plain `@tursodatabase/database` file carries only `-wal`,
+ * which is why `-wal` cannot be the tell - both engines write one. This is an
+ * observation about the engine rather than a documented API, so re-run the
+ * check when either package is upgraded.
+ */
+const SYNC_SIBLING = '-info';
+
+/**
+ * One `DATABASE_DIR` must not serve both persistence modes. Both use the same
+ * paths (`app.db`, `users/<db-name>.db`), so nothing but this stops a directory
+ * from being opened by the other engine, and the result is data loss that
+ * reports itself nowhere.
+ *
+ * These refuse rather than warn, deliberately: the whole failure mode is that
+ * every local check looks healthy, so a logged warning would be missed exactly
+ * as reliably as the original bug was. They run before either client is
+ * constructed, so no write is ever accepted against a connection that cannot
+ * keep it.
+ *
+ * A plain `Error` rather than an `HttpException` because neither caller is a
+ * request: the central database fails the Nest boot, and a user database fails
+ * that one request as a generic 500.
+ */
+function assertNotPlainFile(path: string): void {
+  if (!existsSync(path) || existsSync(`${path}${SYNC_SIBLING}`)) return;
+
+  // Adoption destroys the file rather than merely failing to push it: the
+  // bootstrap overwrites it with the cloud's contents, so rows written while it
+  // was plain are unreadable locally as well as absent remotely. That is only
+  // the quiet variant - with a live WAL the engine throws `Corrupt database`
+  // instead, and which one you get turns on whether the plain engine happened
+  // to checkpoint, which no caller can see.
+  throw new Error(
+    `Refusing to open ${path} as a Turso sync replica: it is a plain local ` +
+      `database file, with no ${path}${SYNC_SIBLING} beside it. Adopting it ` +
+      `would discard everything in it, locally and in the cloud. Either ` +
+      `delete ${path} and its siblings and let the replica re-bootstrap from ` +
+      `Turso Cloud, which is the source of truth, or point DATABASE_DIR at a ` +
+      `directory that cloud mode has to itself.`,
+  );
+}
+
+function assertNotSyncReplica(path: string): void {
+  if (!existsSync(`${path}${SYNC_SIBLING}`)) return;
+
+  // The mirror image of assertNotPlainFile, and not the direction PET-60 hit,
+  // but every bit as destructive: the plain engine opens a replica and writes
+  // to it without complaint, and the write is outside the sync engine's change
+  // log, so the next `connectSync` open discards it locally and never pushes
+  // it.
+  throw new Error(
+    `Refusing to open ${path} as a plain local database file: it is a Turso ` +
+      `sync replica, with ${path}${SYNC_SIBLING} beside it. Writing to it ` +
+      `behind the sync engine would discard the write at the next sync. ` +
+      `Either delete ${path} and its siblings, losing whatever has not been ` +
+      `pushed, or point DATABASE_DIR at a directory that local mode has to ` +
+      `itself.`,
+  );
+}
+
 /** Opens a synced copy of a Turso Cloud database. */
 export async function openCloudDatabase(
   options: CloudConnectionOptions,
 ): Promise<DatabaseHandle> {
+  assertNotPlainFile(options.path);
+
   const client = await connectSync({
     path: options.path,
     url: toSyncUrl(options.url),
@@ -113,6 +183,8 @@ export async function openCloudDatabase(
 export async function openLocalDatabase(
   options: LocalConnectionOptions,
 ): Promise<DatabaseHandle> {
+  assertNotSyncReplica(options.path);
+
   const client = await connectLocal(options.path);
   const db = localDrizzle({ client });
   await enableForeignKeys(db);

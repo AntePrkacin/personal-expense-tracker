@@ -1893,18 +1893,17 @@ than discovered.
   non-actionable fact everywhere and widened every generated response union. The document
   description says it once instead, and `test/openapi.e2e-spec.ts` pins that no operation
   declares a 500. Keep new endpoints consistent with that.
-- **Nothing stops one `DATABASE_DIR` from serving both persistence modes, and the failure is
-  silent.** Both modes use the same paths, `app.db` and `users/<db-name>.db`, but cloud mode
-  opens them as sync replicas and local mode as plain files. Rows written while the file was a
-  plain local file are not in the sync engine's change log when it later adopts that file, so
-  `push()` never sends them, while every later write pushes normally - the replica syncs, those
-  rows do not. PET-60 hit it: a local seed run put `dummy@spendifico.eu` in the central replica,
-  a later cloud run pushed everything except that row, and the deployed backend could not find
-  the account, answering the usual empty 202 and mailing nothing. Diagnosing it took comparing
-  the local replica against Turso row by row, because every local check looked healthy. The
-  repair is to delete the central replica and let it re-bootstrap; `docs/guides/seeding-dummy-data.md`
-  and `backend/src/database/CLAUDE.md` both carry that now. A guard would be better than a
-  warning - refusing to open a plain local `app.db` as a replica, most likely by checking for the
-  engine's `-info` sibling before `connectSync`, or by giving the two modes different filenames -
-  but it belongs in `UserDatabaseService`/`turso-client.factory.ts` rather than in the seed script
-  that happened to expose it, so it is recorded here rather than fixed on a tooling ticket.
+- **Nothing stopped one `DATABASE_DIR` from serving both persistence modes, and the failure was
+  silent.** Resolved with PET-61: `turso-client.factory.ts` now refuses in both directions before
+  either client is constructed, checking for the sync engine's `-info` sibling rather than giving
+  the two modes different filenames, which would have stranded whatever was already on the Fly
+  volume. PET-60 hit the hazard before the guard existed - a local seed run put
+  `dummy@spendifico.eu` in the central replica, a later cloud run pushed everything except that
+  row, and the deployed backend could not find the account, answering the usual empty 202 and
+  mailing nothing - and diagnosing it took comparing the local replica against Turso row by row,
+  because every local check looked healthy. PET-61's own probe against the installed sync engine
+  found the hazard was worse than PET-60's write-up: adoption can overwrite the plain file's rows
+  rather than merely leave them unpushed, and the reverse direction (local mode writing to a real
+  replica) is just as destructive, not merely undocumented. `backend/src/database/CLAUDE.md` and
+  `docs/guides/seeding-dummy-data.md` describe the guard now; the repair for a directory mixed
+  before PET-61 - delete the central replica and let it re-bootstrap - still applies.
