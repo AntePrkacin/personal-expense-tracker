@@ -9,9 +9,9 @@ import {
   categoryIcon,
   categoryTileClass,
   type CategoryColour,
+  type IconName,
 } from '@/components/ui/categoryColour';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import type { CreateCategoryResult } from '@/lib/createCategory';
 import { amountCaret, formatAmountInput } from '@/lib/format';
 import type { Palette } from '@/lib/palette';
@@ -19,6 +19,7 @@ import type { components } from '@/types/api';
 
 import { Modal, type ModalHandle } from '../../Modal';
 import { ColourSelect } from './ColourSelect';
+import { IconSelect } from './IconSelect';
 import {
   hasChosenMarks,
   invalidFields,
@@ -202,20 +203,17 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
    * has to.** A `<select>` hands back `string`, so the token had to be recovered by finding the row
    * that matched - a real runtime check, but a check for something that could not be wrong. The
    * custom control never puts the value through the DOM at all: it calls this with the row's own
-   * `token`, already typed as the contract's union. Compare `chooseIcon` below, which still does the
-   * old dance because the Icon field is still a native select.
+   * `token`, already typed as the contract's union. `chooseIcon` below is now the same shape, since
+   * both fields are controls of our own.
    */
   function chooseColour(token: CategoryColour) {
     setValues((current) => ({ ...current, color: token }));
     setFailure(null);
   }
 
-  /** The icon half, still looking up because a native `<select>` hands back a bare string. */
-  function chooseIcon(name: string) {
-    const chosen = palette?.icons.find((icon) => icon.name === name);
-    if (chosen === undefined) return;
-
-    setValues((current) => ({ ...current, icon: chosen.name }));
+  /** The icon half, and identical now that `IconSelect` hands back the contract's own union too. */
+  function chooseIcon(name: IconName) {
+    setValues((current) => ({ ...current, icon: name }));
     setFailure(null);
   }
 
@@ -262,10 +260,6 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
     router.refresh();
     modalRef.current?.close();
   }
-
-  // Only the icons need reshaping now: `ui/Select` takes `{ value, label }` pairs, while
-  // `ColourSelect` takes the palette's own rows and so needs no mapping at all.
-  const iconOptions = (palette?.icons ?? []).map(({ name, label }) => ({ value: name, label }));
 
   /**
    * The glyph the preview draws, looked up the same way every other tile in the app looks one up.
@@ -326,14 +320,16 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
           **"Color", not "Colour".** Figma governs content, which `frontend/CLAUDE.md` states as the
           division of authority; the comments around it use the repo's own spelling. */}
       <div className="flex w-full gap-3">
-        {/* **A control of our own rather than `ui/Select`, and only for this field.** A native
-            `<option>` cannot hold a swatch and its tick is drawn by the operating system, so the
-            designed list is unreachable from a native control - see `ColourSelect` for the full
-            argument and for why the Icon field beside it deliberately stays native. The two triggers
-            share `select`'s own class string, so they are the same box when closed.
+        {/* **Neither field is a native select any more, so this modal imports `ui/Select` nowhere.** A
+            native `<option>` cannot hold a swatch or a glyph and its tick is drawn by the operating
+            system, so both designed lists are unreachable from a native control. The two are not the
+            same shape, though, and the difference is deliberate: `ColourSelect` is a named list because
+            sixteen colours read as words, and `IconSelect` is a searchable grid because 64 glyphs are
+            looked for by shape. All three triggers - these two and the budget's sibling in frame 09 -
+            wear `select`'s own class string, so the row is one box per field when closed.
 
-            It takes no `required`: there is no form validation to satisfy, since a `<button>` submits
-            nothing, and `hasChosenMarks` is what actually guards an empty colour. */}
+            Neither takes `required`: a `<button>` submits nothing, so there is no native validation to
+            satisfy, and `hasChosenMarks` is what actually guards an empty colour or icon. */}
         <div className="flex-1">
           <ColourSelect
             id={COLOUR_ID}
@@ -344,15 +340,17 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
             disabled={palette === null}
           />
         </div>
+        {/* A grid rather than `ColourSelect`'s list, because 64 glyphs are looked for by *shape* and a
+            one-per-row list of names makes that eleven screens of scrolling. Its search box is what
+            makes the set navigable at all; see `IconSelect` for both arguments. */}
         <div className="flex-1">
-          <Select
+          <IconSelect
             id={ICON_ID}
             label="Icon"
-            options={iconOptions}
+            options={palette?.icons ?? []}
             value={values.icon}
-            onChange={(event) => chooseIcon(event.currentTarget.value)}
+            onChange={chooseIcon}
             disabled={palette === null}
-            required
           />
         </div>
       </div>

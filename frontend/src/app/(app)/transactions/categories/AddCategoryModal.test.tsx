@@ -62,7 +62,6 @@ function open(props: Partial<React.ComponentProps<typeof AddCategoryModal>> = {}
 
 const name = () => screen.getByLabelText('Name');
 const budget = () => screen.getByLabelText('Monthly budget (optional)');
-const icon = () => screen.getByLabelText('Icon') as HTMLSelectElement;
 const submit = () => screen.getByRole('button', { name: 'Add category' });
 
 /**
@@ -74,8 +73,21 @@ const submit = () => screen.getByRole('button', { name: 'Add category' });
  */
 const note = () => screen.queryByLabelText('Note (optional)');
 
-const values = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.value);
-const labels = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.text);
+/**
+ * The Icon field, which is `IconSelect`: a trigger, a search box and a grid of glyph buttons.
+ *
+ * Each cell's accessible name is its label, carried by an `sr-only` span because the grid draws glyphs
+ * only - so `iconCell('Television')` is how a cell is reached, exactly as a reader would.
+ *
+ * Two panels are in the DOM at once now, so neither can be found by a bare `[popover]`: each is keyed
+ * off its own field id, which is the contract `ColourSelect` and `IconSelect` both derive as
+ * `${id}-picker`.
+ */
+const iconTrigger = () => screen.getByRole('button', { name: /^Icon/ });
+const iconPanel = () => document.querySelector('#add-category-icon-picker') as HTMLElement;
+const iconSearch = () => within(iconPanel()).getByRole('textbox', { name: 'Search icons' });
+const iconCells = () => within(iconPanel()).getAllByRole('button');
+const iconCell = (label: string) => within(iconPanel()).getByRole('button', { name: label });
 
 /**
  * The Color field, which is `ColourSelect` rather than a `<select>` - so it has a `<button>` trigger
@@ -90,7 +102,7 @@ const labels = (select: HTMLSelectElement) => Array.from(select.options).map((o)
  * is assertable here is the wiring, and open-versus-closed is a browser check.
  */
 const colourTrigger = () => screen.getByRole('button', { name: /^Color/ });
-const colourPanel = () => document.querySelector('[popover]') as HTMLElement;
+const colourPanel = () => document.querySelector('#add-category-color-picker') as HTMLElement;
 const colourRows = () => within(colourPanel()).getAllByRole('button');
 const colourRow = (label: string) => within(colourPanel()).getByRole('button', { name: label });
 
@@ -164,8 +176,9 @@ describe('AC2: the colour and icon pickers', () => {
   it('offers every palette icon, by label, in the server’s order', () => {
     open();
 
-    expect(values(icon())).toEqual(['shopping-basket', 'tv', 'car']);
-    expect(labels(icon())).toEqual(['Basket', 'Television', 'Car']);
+    // The cells' names come from their `sr-only` spans, since the grid draws no captions. Six-across
+    // is a layout fact and therefore a browser check, not one jsdom can see.
+    expect(iconCells().map((cell) => cell.textContent)).toEqual(['Basket', 'Television', 'Car']);
   });
 
   // The swatch is `CATEGORY_DOT`'s, imported rather than retyped for the reason
@@ -229,6 +242,85 @@ describe('AC2: the colour and icon pickers', () => {
     expect(colourTrigger()).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('filters the icon grid by the admin’s label', async () => {
+    const u = user();
+    open();
+
+    await u.type(iconSearch(), 'tel');
+
+    expect(iconCells().map((cell) => cell.textContent)).toEqual(['Television']);
+  });
+
+  // **The reason a search exists at all**: the label and the lucide name are two vocabularies for one
+  // glyph, and somebody typing has no idea which one they hold. "tv" is the *name* of "Television";
+  // matching the label alone would have found nothing.
+  it('filters by the lucide name too, not just the label', async () => {
+    const u = user();
+    open();
+
+    await u.type(iconSearch(), 'tv');
+
+    expect(iconCells().map((cell) => cell.textContent)).toEqual(['Television']);
+  });
+
+  it('ignores case and stray spaces, so a real typist is not punished', async () => {
+    const u = user();
+    open();
+
+    await u.type(iconSearch(), '  CAR ');
+
+    expect(iconCells().map((cell) => cell.textContent)).toEqual(['Car']);
+  });
+
+  // An invented state - no frame draws it - so the copy owes a designer, like everything under A29.
+  it('says so when a search matches nothing, rather than drawing an empty grid', async () => {
+    const u = user();
+    open();
+
+    await u.type(iconSearch(), 'zzzz');
+
+    expect(within(iconPanel()).getByText('No icons match that.')).toBeInTheDocument();
+    expect(within(iconPanel()).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  // **Enter must not reach the form.** `(app)/Modal.tsx` wraps the body in a real `<form>` precisely so
+  // Enter submits it, which is right everywhere else and would create the category from two letters of
+  // a search here.
+  it('does not submit the form when Enter is pressed in the search box', async () => {
+    const u = user();
+    open();
+
+    await u.type(name(), 'Subscriptions');
+    await u.type(iconSearch(), 'car{Enter}');
+
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('clears the search when the panel closes, so reopening is never pre-filtered', async () => {
+    const u = user();
+    open();
+
+    await u.type(iconSearch(), 'car');
+    expect(iconCells()).toHaveLength(1);
+
+    fireEvent(iconPanel(), Object.assign(new Event('toggle'), { newState: 'closed' }));
+
+    expect(iconSearch()).toHaveValue('');
+    expect(iconCells()).toHaveLength(3);
+  });
+
+  it('marks the chosen glyph with aria-current and moves it when another is picked', async () => {
+    const u = user();
+    open();
+
+    expect(iconCell('Basket')).toHaveAttribute('aria-current', 'true');
+
+    await u.click(iconCell('Car'));
+
+    expect(iconCell('Car')).toHaveAttribute('aria-current', 'true');
+    expect(iconCell('Basket')).not.toHaveAttribute('aria-current');
+  });
+
   it('closes the panel through the platform rather than a handler', () => {
     open();
 
@@ -245,7 +337,7 @@ describe('AC2: the colour and icon pickers', () => {
     open();
 
     expect(colourTrigger()).toHaveTextContent('Emerald');
-    expect(icon()).toHaveValue('shopping-basket');
+    expect(iconTrigger()).toHaveTextContent('Basket');
   });
 
   it('previews the chosen colour through the same helper every tile in the app uses', async () => {
@@ -268,7 +360,7 @@ describe('AC2: the colour and icon pickers', () => {
     const before = previewGlyph()?.getAttribute('class');
     expect(before).toBeTruthy();
 
-    await u.selectOptions(icon(), 'car');
+    await u.click(iconCell('Car'));
 
     expect(previewGlyph()?.getAttribute('class')).not.toBe(before);
   });
@@ -381,7 +473,7 @@ describe('AC4: a successful save', () => {
     await u.type(name(), 'Subscriptions');
     await u.type(budget(), '250.00');
     await u.click(colourRow('Indigo'));
-    await u.selectOptions(icon(), 'tv');
+    await u.click(iconCell('Television'));
     await u.click(submit());
 
     await waitFor(() =>
@@ -508,7 +600,7 @@ describe('when the palette could not be read', () => {
     open({ palette: null });
 
     expect(colourTrigger()).toBeDisabled();
-    expect(icon()).toBeDisabled();
+    expect(iconTrigger()).toBeDisabled();
     expect(
       screen.getByText("We couldn't load the colours and icons. Please close this and try again."),
     ).toBeInTheDocument();

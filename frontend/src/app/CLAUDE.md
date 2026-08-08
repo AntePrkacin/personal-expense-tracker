@@ -1332,8 +1332,21 @@ because those promise a keyboard contract this does not implement; `aria-current
 instead, which is the third time this app has declined a roles-plus-keyboard promise. And the trigger
 wears `select`'s own class string, byte-identical to `(app)/DateField.tsx`'s, so the two fields are one
 box when closed and differ only when opened. The costs - no arrow keys, no native mobile picker, no
-anchoring in Firefox, and a panel Figma never drew - are all in `docs/TODO.md`. Icon stays native
-because 64 options want a grid, which is its own ticket.
+anchoring in Firefox, and a panel Figma never drew - are all in `docs/TODO.md`.
+
+**The Icon field is `IconSelect`, and the sentence that used to end the paragraph above - that Icon
+stays native because 64 options want a grid - was answered in the same PR rather than deferred.** It is
+the same trigger and the same platform popover, holding a **search box over a six-across scrolling
+grid**; the shapes differ because sixteen colours read as words and 64 glyphs are looked for by shape.
+So this modal imports `ui/Select` nowhere, and the two fields differ from each other only in what the
+panel contains. Three things in it are load-bearing. **Enter in the search box is intercepted**, because
+`(app)/Modal.tsx` wraps the body in a real form so Enter submits it - correct for every other field, and
+it would create the category from two letters of a search here. **The search matches the lucide name as
+well as the label**, because "Television" is `tv` and nobody typing knows which vocabulary they hold.
+And the cells are `w-full aspect-square p-0` rather than `btn-square`, which a browser walk forced: six
+fixed cells fit the panel until the vertical scrollbar takes 15px, and `overflow-y: auto` makes
+`overflow-x` compute to `auto`, so the panel grew a second scrollbar along the bottom. The search box
+itself and its empty state are invented, and `docs/TODO.md` records that they owe a designer.
 
 **The Note field exists in the markup and is not drawn, behind a `SHOWS_NOTE` flag.** Frame 19 draws
 it and CED-4 specifies it; A42 is why it is hidden, because a note surfaces on no screen once saved,

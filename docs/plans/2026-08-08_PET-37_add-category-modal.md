@@ -89,6 +89,14 @@ select-styled trigger, with `categoryDotClass()` supplying the swatch it already
 the paragraph below true of that half. The costs - no arrow keys, no native mobile picker, no anchoring
 in Firefox, and an invented panel - are in `docs/TODO.md`.
 
+**And then the Icon field became a grid too, so the paragraph below is now history in full rather than
+in half.** It reasoned that a grid was the right shape for 64 glyphs but its own ticket; the grid was
+built in this PR instead. `IconSelect` is the same trigger and popover as `ColourSelect`, holding a
+search box over a six-across scrolling grid - the search being what makes 64 navigable, matching the
+lucide name as well as the admin's label. `ui/Select` is imported nowhere in this modal now. AC1's "two
+selects side by side" is satisfied in substance rather than in mechanism: two select-shaped controls,
+side by side, neither of them a `<select>`.
+
 **The picker stays two native selects, and PET-65's 8x8 grid remark is deliberately not adopted
 here.** That plan observes 64 grids as 8x8 and notes PET-37's picker has no design behind it, which
 is a fair reading of the frame. But AC1 asks in as many words for "the two selects side by side", so

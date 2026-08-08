@@ -2060,7 +2060,37 @@ has no counterpart in the file at all.** AC2 asks that the chosen colour "previe
 and nothing in frame 19 does that, so both the element and its placement are ours. It is
 `aria-hidden`, since every fact in it is already announced by the three fields above it.
 
-### The Color picker is a control of our own, and it owes four things
+### The Icon picker is a searchable grid, and its search box is invented
+
+PET-37's Icon field is `IconSelect`: the same trigger and platform popover as `ColourSelect`, holding a
+**search box over a six-across scrolling grid** of every glyph the palette offers. A grid rather than a
+list because 64 glyphs are looked for by *shape*, and a one-per-row list of names makes that eleven
+screens of scrolling - which is what PET-65's plan meant when it observed that 64 grids evenly and noted
+this picker had no design behind it.
+
+**The search box has no counterpart anywhere in the design, and it is the part that needs signing off.**
+Nor does the empty-search state, whose copy ("No icons match that.") is ours like everything else under
+A29. `Screens/19 Add category`'s `IconPickerOpen` story is where both get reviewed, along with the grid
+width, the cell size and the filled-primary chosen cell.
+
+**It matches on the label *and* the lucide name**, deliberately: "Television" is `tv`, "Bank" is
+`landmark`, "Bolt" is `zap`, and somebody typing has no idea which vocabulary they hold. Anything that
+narrows this to one of the two makes glyphs unfindable.
+
+**Two things about it that a reviewer should not simplify.** Enter in the search box is intercepted,
+because `(app)/Modal.tsx` wraps the body in a real `<form>` so that Enter submits it - right for every
+other field, and it would create the category from two letters of a search here. And the cells are
+`w-full aspect-square p-0` rather than `btn-square`: a browser walk found that six fixed-width cells fit
+`w-72` until the vertical scrollbar appears and takes 15px, at which point the grid overflowed sideways
+and, because `overflow-y: auto` makes `overflow-x: visible` compute to `auto`, the panel grew a second
+scrollbar along the bottom.
+
+**What it does not have is two-dimensional keyboard navigation.** A real grid pattern wants arrows in
+four directions, plus Home/End and `role="grid"`/`role="gridcell"`; Tab reaches every cell instead, and
+the search box is what makes that bearable - type two letters and the cell you want is one Tab away.
+That is the same refusal `ColourSelect` records below, and it is the bigger of the two to fix.
+
+### The Color picker is a control of our own, and it owes three things
 
 PET-37's Color field is `ColourSelect`, not `ui/Select`: a `<button>` trigger plus a `[popover]` list
 drawing a swatch, a name and a tick on the chosen row. A native `<option>` cannot hold a swatch and
@@ -2086,15 +2116,16 @@ instead. Worth a look on a real phone before anyone calls this done.
 `@supports not (position-area: bottom)` fallback centres the panel over a dimmed backdrop. Degraded
 rather than broken, and identical to the transactions row menu, which already carries this entry.
 
-**The Icon field is still a native `<select>`, so the two controls behave differently when opened.**
-The triggers share `select`'s own class string and are the same box when closed, which is the whole
-mitigation. The reason for the split is that 64 icons want a grid rather than a list - PET-65's plan
-says exactly that, observing 64 grids as 8x8 - and a grid is its own ticket with its own design. Until
-it lands, Color opens a list and Icon opens the platform's dropdown.
-
 **Nothing in Figma draws either list open** (A16, A40), so the panel's width, the swatch size, the row
 height, the tick and its position are all ours. `Screens/19 Add category`'s `ColourPickerOpen` story is
 where a designer reviews them.
+
+**The asymmetry this entry used to carry is closed**, and the note is kept rather than deleted because
+the *reasoning* still holds. It said the Icon field stayed a native `<select>` and that the two controls
+would therefore behave differently when opened, with a grid left to a later ticket. That grid is
+`IconSelect`, built in the same PR - so both fields are now controls of ours, both wear `select`'s class
+string when closed, and they differ from each other only in shape: a named list for sixteen colours, a
+searchable grid for 64 glyphs. `ui/Select` is no longer imported by this modal at all.
 
 ### The Add category modal captures no note, and the field is hidden rather than removed
 

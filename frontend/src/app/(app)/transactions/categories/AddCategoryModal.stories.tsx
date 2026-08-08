@@ -37,13 +37,16 @@ export default meta;
 type Story = StoryObj<typeof AddCategoryModal>;
 
 /**
- * The palette as seeded: 16 colours and the first eight icons, in admin order.
+ * The palette as seeded: all 16 colours, and 30 of the 64 icons, in admin order with the real labels.
  *
- * **The colours are the real set and the icons deliberately are not.** The colour list is what a
- * reviewer has to see whole, because the labels are the words a person picks from and the palette
- * preview artifacts sign the hues off; the icon list is 64 as of PET-65, and pasting all of them here
- * would make this file mostly fixture without showing anything the eighth entry does not. Nothing in
- * the app asserts either length - see `lib/palette.ts`.
+ * **The colours are the whole set because a reviewer has to see every hue** - the labels are the words
+ * a person picks from, and the palette preview artifacts sign the colours off as a set.
+ *
+ * **The icons are 30 of 64, which is a deliberate middle.** Eight was too few once the grid arrived: at
+ * six across it filled one row and proved nothing about scrolling or about the search. All 64 would
+ * make this file mostly fixture. Thirty gives five rows, so the grid scrolls under its search box and
+ * the shape is reviewable, and the real 64 are verified in the running app instead. Nothing in the
+ * frontend asserts either length - see `lib/palette.ts`.
  */
 const PALETTE: Palette = {
   colors: [
@@ -73,6 +76,28 @@ const PALETTE: Palette = {
     { name: 'tv', label: 'Television' },
     { name: 'graduation-cap', label: 'Graduation cap' },
     { name: 'plane', label: 'Plane' },
+    { name: 'scissors', label: 'Scissors' },
+    { name: 'gift', label: 'Gift' },
+    { name: 'paw-print', label: 'Paw' },
+    { name: 'landmark', label: 'Bank' },
+    { name: 'circle-question-mark', label: 'Question mark' },
+    { name: 'coffee', label: 'Coffee' },
+    { name: 'beer', label: 'Beer' },
+    { name: 'pizza', label: 'Pizza' },
+    { name: 'ice-cream-cone', label: 'Ice cream' },
+    { name: 'fuel', label: 'Fuel pump' },
+    { name: 'bus', label: 'Bus' },
+    { name: 'bike', label: 'Bicycle' },
+    { name: 'house', label: 'House' },
+    { name: 'wifi', label: 'Wi-Fi' },
+    { name: 'smartphone', label: 'Phone' },
+    { name: 'sofa', label: 'Sofa' },
+    { name: 'pill', label: 'Pill' },
+    { name: 'dumbbell', label: 'Dumbbell' },
+    { name: 'shirt', label: 'Shirt' },
+    { name: 'credit-card', label: 'Credit card' },
+    { name: 'music', label: 'Music note' },
+    { name: 'camera', label: 'Camera' },
   ],
 };
 
@@ -199,7 +224,47 @@ export const ColourPickerOpen: Story = {
         const timer = setTimeout(() => {
           // Optionally called, because the story smoke suite renders this under jsdom, which
           // implements no popover at all - `jest.setup.ts` deliberately fakes none.
-          host.current?.querySelector<HTMLElement>('[popover]')?.showPopover?.();
+          host.current?.querySelector<HTMLElement>('#add-category-color-picker')?.showPopover?.();
+        }, 0);
+
+        return () => clearTimeout(timer);
+      }, []);
+
+      return (
+        <div ref={host}>
+          <AddCategoryModal palette={PALETTE} create={accept} onClose={() => {}} />
+        </div>
+      );
+    }
+
+    return <Demo />;
+  },
+};
+
+/**
+ * The Icon picker open, which is the most invented thing in this modal.
+ *
+ * Nothing in Figma draws it: not the grid, not the six-across width, not the cell size, and **not the
+ * search box**, which exists because 64 glyphs cannot be scanned as a list of names. So all of it wants
+ * a designer's eye, and this is where.
+ *
+ * What to look at: six across, the chosen glyph as a filled primary cell, the search box staying put
+ * while the grid scrolls under it, and the cells being large enough to aim at. Try typing `tv` - it
+ * matches "Television" by its **lucide name** rather than its label, which is the whole reason the
+ * search looks at both.
+ *
+ * **The one thing to try that is not visual**: press Enter in the search box. It must not create the
+ * category. `(app)/Modal.tsx` wraps the body in a real form so Enter submits it, and this field is the
+ * one place that has to refuse.
+ */
+export const IconPickerOpen: Story = {
+  render: () => {
+    function Demo() {
+      const host = useRef<HTMLDivElement>(null);
+
+      useEffect(() => {
+        const timer = setTimeout(() => {
+          host.current?.querySelector<HTMLElement>('#add-category-icon-picker')?.showPopover?.();
         }, 0);
 
         return () => clearTimeout(timer);
