@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import type { CategoryOption } from '@/lib/categories';
-import { amountCaret, formatAmountInput } from '@/lib/format';
+import { reformatAmountInput } from '@/lib/amountField';
 import type { Transaction } from '@/lib/transactions';
 import type { UpdateTransactionResult } from '@/lib/updateTransaction';
 import type { components } from '@/types/api';
@@ -177,27 +177,14 @@ export function EditTransactionModal({
   /**
    * The amount field, reformatted under the caret on every keystroke.
    *
-   * Identical to `AddTransactionModal`'s, and copied rather than lifted for the reason that file
-   * gives about its own source: it depends on `formatAmountInput` being idempotent and on
-   * `amountCaret` computing the *semantic* position, and both of those are pinned in
-   * `lib/format.test.ts`. The prefilled value is one the field could have produced, which
-   * `transactionForm.test.ts` asserts directly - so the first keystroke here behaves exactly as
-   * the tenth does in the Add modal.
-   *
-   * jsdom cannot observe the outcome either way, so the suite asserts `setSelectionRange` was
-   * called with the computed offset and the visible behaviour is a Storybook check.
+   * **This paragraph used to defend copying the body from `AddTransactionModal` rather than lifting
+   * it, and the fourth copy is what ended that.** `lib/amountField.ts` owns the seven lines and the
+   * reasoning now. The one thing that is this file's rather than that one's still holds: the
+   * prefilled value is one the field could have produced, which `transactionForm.test.ts` asserts
+   * directly, so the first keystroke here behaves exactly as the tenth does in the Add modal.
    */
   function onAmountChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const element = event.currentTarget;
-    const raw = element.value;
-    const caret = element.selectionStart ?? raw.length;
-    const formatted = formatAmountInput(raw);
-
-    element.value = formatted;
-    const at = amountCaret(raw, caret, formatted);
-    element.setSelectionRange(at, at);
-
-    set('amount', formatted);
+    set('amount', reformatAmountInput(event.currentTarget));
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {

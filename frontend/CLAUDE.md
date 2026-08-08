@@ -360,6 +360,16 @@ and touches neither `Intl` nor UTC, because a calendar date is a day rather than
 must never follow a locale. That file records the two directions the mistake runs in;
 `lib/calendar.ts` builds the picker's month grid on top of it.
 
+**`lib/amountField.ts` is a third module in that family, and the line it draws is "does this touch
+the DOM".** `reformatAmountInput(element)` is the currency field's keystroke handler: it writes the
+formatted value onto the input, restores the caret to the position `amountCaret` computes, and
+returns what the caller should store. It sits outside `lib/format.ts` because everything in that
+file is strings in and strings out, which is exactly what lets its suite pin idempotence with no
+document in sight. It arrived late and by the worst route - four byte-identical copies across
+`app/setup/BudgetForm.tsx`, both transaction modals and the Add category modal, one past the rule of
+three - so read it before changing the call order rather than reasoning from any one call site;
+`frontend/src/app/CLAUDE.md` records what those copies cost.
+
 All seven parts hard-code `en-US` and its separators, "Today" and "Yesterday" included. When the currency chosen during onboarding
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
 that. The one thing that must **not** follow it is `lib/date.ts`, for the reason above.
