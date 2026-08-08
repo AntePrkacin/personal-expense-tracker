@@ -1222,6 +1222,61 @@ strings join what A29 owes a designer. It shows `error.digest` and never `error.
 production redacts the message to a generic string and the digest is the half that ties the screen
 to a server log line.
 
+**PET-36 built `/transactions/categories`, and every paragraph above saying the two tabs are inert
+is history now.** Read them as dated: "Categories" opened frame 13, that frame had no `page.tsx`,
+and `lib/routes.test.ts` keeps an empty `PENDING` list - so a link would have 404ed or forced an
+exemption into the one check that catches a renamed route. The route exists, so both labels are
+real `next/link`s and the reasoning has expired rather than been overturned.
+
+**It is a nested route rather than a top-level `/categories`, and the sidebar is the whole reason.**
+`SidebarNav.matchItem()` maps a pathname to one of the four sidebar items by prefix with a
+trailing-slash boundary and returns `undefined` for a miss, which the caller turns into
+`FALLBACK_ITEM`, `'dashboard'`. A sibling path would therefore have lit **Dashboard** while the tab
+bar on that very page said Transactions, and frame 13 draws Transactions lit. Nested, it needs no
+change to that file at all - the same free ride `/transactions/[id]` already takes. It is also a
+static segment beside a dynamic one, which Next resolves first, so no transaction id can shadow it.
+
+**The tab bar is a `<nav>` of links and deliberately not a tablist, which corrects what this file
+predicted.** The old paragraph said making the tabs real was "two `next/link`s plus `aria-current`,
+or a full tablist if the Categories view ends up client-side" - the second half is wrong for a
+reason that has nothing to do with where the view renders. The ARIA tab pattern describes one
+container swapping panels in place, with `aria-controls` pointing at a `role="tabpanel"` in the
+same document; these two navigate to separate routes and replace the whole page. So `role="tab"`
+would promise a relationship that does not exist, and both `pages.test.tsx` and
+`TransactionTabs.test.tsx` pin its absence. The daisyUI classes still apply, because **`.tab` lists
+`[aria-current=page]` beside `.tab-active` in its own active-state selector** - the attribute that
+correctly marks a link to the current page is also what draws the underline, so nothing sets
+`tab-active` by hand and there is no second source of truth to drift. The inactive tab's dimmed
+label is the plugin's own `:not()` rule rather than the `text-base-content/50` the hand-rolled
+version wrote out.
+
+**`TAB_HREFS` in `TransactionTabs.tsx` is the third route declaration in this app, and it had to
+be.** `SIDEBAR_HREFS` declares the four the sidebar renders and `lib/routes.ts` declares the six
+access screens, and that file says outright the two sets must not restate each other.
+`/transactions/categories` is neither: an app route that is not a sidebar destination. It is
+declared once beside the component that links to it, built from `SIDEBAR_HREFS.transactions` so the
+nesting cannot drift, and `TransactionTabs.test.tsx` asserts with `fs` that both hrefs have a
+`page.tsx` - the same check `SidebarNav.test.tsx` and `lib/routes.test.ts` run for their own sets,
+and one this route would otherwise escape entirely.
+
+**Two controls on that screen ship inert and say so, which is PET-33's precedent rather than the
+month pill's.** The card kebab is PET-39's - its AC1 describes the same menu - and the header's
+"Add category" is PET-37's, so both render as real `<button aria-disabled>` rather than as enabled
+controls that do nothing or as inert `div`s announcing nothing. **`aria-disabled` rather than
+`disabled`** throughout, including the two banner actions: `disabled` removes a control from the
+tab order, so the screen's most prominent action would be unreachable by keyboard and unannounced.
+That also means `ui/Button` was **not** widened to carry the state - it offers `disabled` only, and
+a local `<button>` wearing the same `btn btn-primary` literal is what PET-37 replaces with a
+provider-backed trigger.
+
+**The uncapped card is the state frame 13 does not draw, and it is the common case.** A cap is
+optional and the preselected `Uncategorized` fallback ships without one, so `status: "uncapped"` is
+what the one category every account has reports. `CategoryCard` therefore has two shapes, and the
+guard tests `monthlyCap` as well as `status` because the contract types every derived field as
+nullable independently - a card built on `status` alone can still print "of null". Same answer
+PET-34 gave for the same gap on the detail page: draw none of the budget furniture rather than
+explain its absence.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

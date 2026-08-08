@@ -1,0 +1,271 @@
+import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+
+import type { Allocation, Category } from '@/lib/categories';
+
+import { CategoriesScreen } from './CategoriesScreen';
+
+// The import above is type-only on purpose. Importing any *value* from Storybook breaks the
+// story smoke tests with an opaque ESM error, because @storybook/nextjs-vite will not load under
+// Jest and only the erased type import keeps this module loadable there. Same note as the other
+// screen stories.
+//
+// **The screen takes its whole state as props**, which is the payoff of `page.tsx` owning the
+// read: this module imports nothing server-only, so there is no `next/headers` in the browser
+// bundle and no request scope to fake.
+//
+// **The sidebar is deliberately absent.** These stories are the content column, so diff them
+// against node `36:469` (frame 13's right-hand column) rather than against the whole 1440px
+// frame. `Components/Sidebar` is where the left column is reviewed.
+//
+// **`nextjs: { appDirectory: true }` is mandatory here**, and no gate will tell you. The tab bar
+// is two `next/link`s as of PET-36, and `next/link` throws `invariant expected app router to be
+// mounted` outside a router - but `build-storybook` bundles stories without running them and
+// `screens.stories.test.tsx` renders this module with `next/navigation` mocked, so both gates
+// stay green and only opening the story finds it.
+//
+// **No provider wrapper, unlike the sibling tab's stories.** Every control on this screen is
+// inert - the header's "Add category", each card's kebab, "Set limit" and "Allocate" all belong
+// to PET-37, PET-38 and PET-39 - so nothing here reaches `useAddTransaction` or any other
+// context. When those tickets land, this file gains the provider the same way
+// `TransactionsScreen.stories.tsx` did.
+
+const meta: Meta<typeof CategoriesScreen> = {
+  title: 'Screens/13 Categories',
+  component: CategoriesScreen,
+  tags: ['autodocs'],
+  parameters: { layout: 'fullscreen', nextjs: { appDirectory: true } },
+};
+
+export default meta;
+
+type Story = StoryObj<typeof CategoriesScreen>;
+
+function category(overrides: Partial<Category> = {}): Category {
+  return {
+    id: '0198c2a1-0000-7000-8000-0000000000a1',
+    name: 'Groceries',
+    color: 'success',
+    icon: 'shopping-basket',
+    note: null,
+    isFallback: false,
+    monthlyCap: 500,
+    spent: 397,
+    transactionCount: 24,
+    percentUsed: 79.4,
+    remaining: 103,
+    over: null,
+    status: 'near',
+    ...overrides,
+  };
+}
+
+/**
+ * The frame's eight categories, with every figure recomputed.
+ *
+ * A25 and A44 say to compute rather than to copy: the mock's caps sum to $2,970 against a stated
+ * allocation of $1,800, so reproducing its numbers would ship a card that contradicts itself.
+ * The names, the caps and the spends are the frame's; the percentages, remainders and statuses
+ * are what the backend would derive from them.
+ */
+const CATEGORIES: Category[] = [
+  category(),
+  category({
+    id: '0198c2a1-0000-7000-8000-0000000000a2',
+    name: 'Dining out',
+    color: 'error',
+    icon: 'utensils',
+    monthlyCap: 300,
+    spent: 312,
+    transactionCount: 18,
+    percentUsed: 104,
+    remaining: null,
+    over: 12,
+    status: 'over',
+  }),
+  category({
+    id: '0198c2a1-0000-7000-8000-0000000000a3',
+    name: 'Transport',
+    color: 'info',
+    icon: 'car',
+    monthlyCap: 350,
+    spent: 223,
+    transactionCount: 12,
+    percentUsed: 63.7,
+    remaining: 127,
+    over: null,
+    status: 'on_track',
+  }),
+  category({
+    id: '0198c2a1-0000-7000-8000-0000000000a4',
+    name: 'Shopping',
+    color: 'warning',
+    // `gift` rather than a shopping bag: the icon allowlist is thirteen names until PET-65
+    // widens it to sixty-four, and `shopping-bag` is one of the fifty-one still to come.
+    icon: 'gift',
+    monthlyCap: 250,
+    spent: 174,
+    transactionCount: 8,
+    percentUsed: 69.6,
+    remaining: 76,
+    over: null,
+    status: 'on_track',
+  }),
+  category({
+    id: '0198c2a1-0000-7000-8000-0000000000a5',
+    name: 'Housing',
+    color: 'accent',
+    icon: 'landmark',
+    monthlyCap: 1100,
+    spent: 1100,
+    transactionCount: 1,
+    percentUsed: 100,
+    remaining: 0,
+    over: null,
+    status: 'full',
+  }),
+  category({
+    id: '0198c2a1-0000-7000-8000-0000000000a6',
+    name: 'Health',
+    color: 'secondary',
+    icon: 'heart-pulse',
+    monthlyCap: 150,
+    spent: 88,
+    transactionCount: 5,
+    percentUsed: 58.7,
+    remaining: 62,
+    over: null,
+    status: 'on_track',
+  }),
+  category({
+    id: '0198c2a1-0000-7000-8000-0000000000a7',
+    name: 'Entertainment',
+    color: 'primary',
+    icon: 'tv',
+    monthlyCap: 120,
+    spent: 63,
+    transactionCount: 9,
+    percentUsed: 52.5,
+    remaining: 57,
+    over: null,
+    status: 'on_track',
+  }),
+  category({
+    id: '0198c2a1-0000-7000-8000-0000000000a8',
+    name: 'Uncategorized',
+    color: 'neutral',
+    icon: 'circle-question-mark',
+    isFallback: true,
+    monthlyCap: null,
+    spent: 148,
+    transactionCount: 6,
+    percentUsed: null,
+    remaining: null,
+    over: null,
+    status: 'uncapped',
+  }),
+];
+
+/** Caps summing to 2,770 against a 2,000 budget would be negative, so this set is trimmed. */
+const ALLOCATION: Allocation = { monthlyBudget: 3000, allocated: 2770, unallocated: 230 };
+
+function Frame(props: React.ComponentProps<typeof CategoriesScreen>) {
+  return (
+    // `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the gutter
+    // the `(app)` shell owns, since neither wraps a story.
+    <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+      <CategoriesScreen {...props} />
+    </div>
+  );
+}
+
+/**
+ * The frame as drawn (node 36:423), plus the state it does not draw.
+ *
+ * What to check against Figma: the two-column grid at 1440 with a 20px gutter, the tile, name
+ * and kebab across each card's top, "spent of cap" beside the status chip, the bar, and the
+ * footer pairing the remaining figure with the transaction count. The Categories tab is the
+ * current one and carries the category count; the other tab keeps a real transaction count.
+ *
+ * **Three deliberate departures from the frame, all recorded in the ticket.** The summary card
+ * reports spending rather than allocation (AC4, amended 2026-08-08). The on-track bars are green
+ * rather than violet, so the bar follows its chip. And the last card is `Uncategorized`, which
+ * is uncapped - a state frame 13 draws nowhere and which every real account has.
+ *
+ * Housing is the "$0 over" boundary (CTG-6, A28) and reads "1 transaction", singular, where the
+ * mock's typo reads "1 transactions".
+ */
+export const Default: Story = {
+  render: () => <Frame categories={CATEGORIES} allocation={ALLOCATION} transactionCount={128} />,
+};
+
+/**
+ * Every category uncapped, which is what a brand-new account actually looks like.
+ *
+ * Onboarding does not require a cap and the preselected fallback has none, so this is the shape
+ * a person sees before they have budgeted anything - and no frame draws it. Each card keeps its
+ * footprint and shows spend and count with no bar and no chip, over a banner offering to set a
+ * limit. It owes A29 a designer's answer, which is what this story is for.
+ */
+export const AllUncapped: Story = {
+  render: () => (
+    <Frame
+      categories={CATEGORIES.map((entry) => ({
+        ...entry,
+        monthlyCap: null,
+        percentUsed: null,
+        remaining: null,
+        over: null,
+        status: 'uncapped' as const,
+      }))}
+      allocation={{ monthlyBudget: 3000, allocated: 0, unallocated: 3000 }}
+      transactionCount={128}
+    />
+  ),
+};
+
+/**
+ * Spending past the monthly budget, with the caps over-allocated too.
+ *
+ * Two things to check, and both are guards rather than decoration. The summary chip flips to
+ * "Over budget" - the two-tone split `dashboard/BudgetCard.tsx` uses, rather than the 80% band
+ * neither design's threshold justified. And the unassigned banner **disappears**: `unallocated`
+ * is returned unclamped and goes negative when caps exceed the budget (A43), so a truthy guard
+ * would announce that money is unassigned at the exact moment the opposite is true.
+ */
+export const OverBudget: Story = {
+  render: () => (
+    <Frame
+      categories={CATEGORIES.map((entry) =>
+        entry.status === 'uncapped'
+          ? entry
+          : {
+              ...entry,
+              spent: entry.monthlyCap! * 1.2,
+              percentUsed: 120,
+              remaining: null,
+              over: entry.monthlyCap! * 0.2,
+              status: 'over' as const,
+            },
+      )}
+      allocation={{ monthlyBudget: 2000, allocated: 2770, unallocated: -770 }}
+      transactionCount={128}
+    />
+  ),
+};
+
+/**
+ * One category, which is the smallest a real account can be.
+ *
+ * The grid cannot be empty: `Uncategorized` is a system category `DELETE /api/categories/:id`
+ * refuses to remove, so this is the floor rather than an empty state. Worth opening to check the
+ * single card does not stretch to two columns.
+ */
+export const SingleCategory: Story = {
+  render: () => (
+    <Frame
+      categories={[CATEGORIES[CATEGORIES.length - 1]]}
+      allocation={{ monthlyBudget: 2000, allocated: 0, unallocated: 2000 }}
+      transactionCount={6}
+    />
+  ),
+};

@@ -1947,6 +1947,80 @@ category." - while the budget card falls back to the days-left count it already 
 other state. A designer reading this list should know that two of the five designed strings are
 reachable in fewer situations than frame 05 implies.
 
+### The uncapped category card has no frame, and it is the common case rather than the edge
+
+Frame 13 (node 36:423) draws eight capped categories and nothing else, but a monthly cap is
+optional throughout the contract and the preselected `Uncategorized` fallback ships without one -
+`CategoryResponseDto` documents `status: "uncapped"` with a null cap, percent, remaining and over,
+and says to expect it most of the time. So the one category every account has is the one the
+design never drew. PET-36 answers it the way PET-34 answered the same gap on the transaction
+detail page: draw none of the budget furniture rather than explain its absence.
+
+**What is owed.** Three strings and one layout, all invented here: the card's "{spent} in {n}
+transactions" line, the banner reading "No limit set for this category", and its "Set limit"
+action, plus the decision that an uncapped card keeps the same footprint as a capped one so the
+grid does not go ragged. `Screens/13 Categories`' `AllUncapped` story is the whole state in one
+place, which is what to put in front of a designer. Joins the A29 group with A15's no-results
+copy, A38's verify-failure copy and the donut's two fallback strings: real until somebody looks
+at it, not a placeholder.
+
+The summary card's own banner - "{amount} of your budget isn't assigned to a category." with an
+"Allocate" action - is a fourth invented string on the same screen, and it arrived for a different
+reason: the ticket's AC4 was amended away from frame 13's "Budget allocation" summary toward a
+spending summary, so the unassigned figure needed somewhere else to live. Same sign-off owed.
+
+### The Categories tab pays one extra request for the other tab's badge
+
+Frame 13 draws both tab counts on the Categories tab - "All transactions 128" beside
+"Categories 8" - so the route that renders no transactions still has to say how many there are.
+`/transactions` gets its half free, because it already reads the categories to join names and
+colours onto the table's rows and the count is `categories.length` over data in hand.
+`/transactions/categories` has no such luck and calls `readTransactionCount()`, which is one
+unfiltered current-period list read whose only surviving field is `total`.
+
+**What is owed.** Nothing urgent, and it is smaller than the redundant-request item above it: this
+is one request per page load rather than one per debounced keystroke, and the endpoint is the
+account's own list. The honest fix is a count the API can answer without building a page of rows,
+which PET-28's plan considered and dropped because no frame drew two numbers - frame 13 does draw
+two numbers, so the reason has expired. Logged so the next person costing this screen does not
+have to rediscover why a screen with no transactions on it reads the transactions endpoint.
+
+### `text-error` is 2.86:1 in the light theme, and PET-36 is where it became measurable
+
+Frame 13 draws the over-budget figure in red and CTG-4 says so in as many words, so
+`CategoryCard`'s footer takes `text-error` when a category is at or past its cap. PET-36's browser
+walk measured it: composited over `bg-base-100` it is **2.864:1 in light** and **5.53:1 in dark**,
+against WCAG AA's 4.5:1 for normal-size text. The bars themselves are fine - success, warning and
+error measure 1.96, 1.76 and 2.86 against the card in light and 8.08, 8.98 and 5.53 in dark, which
+clears the 1.5:1 floor PET-22 set for a bar after `base-300` failed it at 1.16.
+
+**This is not PET-36's defect and PET-36 must not fix it locally.** `text-error` is daisyUI's
+stock light `error` token, and it is already what `ui/Button`'s `textDanger` variant and every
+field error message in this app paint - so the same 2.86:1 applies to the delete actions on frames
+08, 11 and 21 and to every inline validation message. Darkening it means re-theming a semantic
+colour, which `frontend/CLAUDE.md` forbids outright, and doing it in one component would leave the
+app with two different reds.
+
+**What is owed.** A decision that belongs to a designer and applies app-wide: accept 2.86:1 in
+light, or change what "danger text" is made of. Worth noting the affected text is never
+colour-alone - the figure reads "$12 over" and the chip beside it reads "Over", so WCAG 1.4.1 is
+satisfied and it is 1.4.3 that is not. The measurement harness is in PET-36's plan; re-measure
+rather than reuse these numbers if the theme ever changes, for the reason
+`frontend/CLAUDE.md`'s category-palette guard gives.
+
+**The same walk found a second stock pairing just under the line, and it is broader.**
+`text-primary-content` on `bg-primary` measures **4.13:1 in dark** and 6.75:1 in light, against
+the same 4.5:1 for normal-size text. PET-36's `CardBanner` is where it was measured, but that is
+not where it lives: `btn-primary` sets `--btn-color: var(--color-primary)` and
+`--btn-fg: var(--color-primary-content)`, so **every primary button in the app already paints
+this pair** - "Get started", "Continue", "Finish setup", "Add transaction" at all four of its
+trigger sites, and "Add category". A banner is simply the first place it was put under a
+contrast meter.
+
+Same owner and the same shape of answer as the `text-error` item above: accept it, or change what
+the theme's primary pair is made of, which is a re-theme and therefore out of any single ticket's
+reach. Both numbers are dark-and-light specific, so a theme change invalidates both.
+
 ---
 
 ## Scaling, when it is actually needed

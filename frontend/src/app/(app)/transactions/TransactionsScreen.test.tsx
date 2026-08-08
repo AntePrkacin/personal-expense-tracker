@@ -89,7 +89,7 @@ afterEach(() => {
 
 describe('the empty state (frame 07)', () => {
   it('renders the centred card with its heading, copy and button (AC1)', () => {
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />);
 
     expect(screen.getByRole('heading', { name: EMPTY_COPY.heading })).toBeInTheDocument();
     expect(screen.getByText(EMPTY_COPY.body)).toBeInTheDocument();
@@ -99,20 +99,22 @@ describe('the empty state (frame 07)', () => {
   it('keeps the search field and the header button, and drops the filter bar (AC2)', () => {
     // The visible difference from frame 06, and the reason this conditional is built here
     // rather than left to whoever adds the bar.
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} filterBar={FILTER_BAR} />);
+    renderScreen(
+      <TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} filterBar={FILTER_BAR} />,
+    );
 
     expect(searchField()).toBeInTheDocument();
     expect(screen.queryByTestId('filter-bar')).not.toBeInTheDocument();
   });
 
   it('shows a badge of 0 (AC3)', () => {
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />);
 
     expectBadge('0');
   });
 
   it('renders the empty card instead of the table, even when handed one', () => {
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} table={TABLE} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} table={TABLE} />);
 
     expect(screen.queryByTestId('table')).not.toBeInTheDocument();
   });
@@ -122,7 +124,14 @@ describe('the no-results state (AC5)', () => {
   it('keeps the search field and the filter bar visible', () => {
     // A15's whole instruction, and the half of it this ticket keeps: the controls stay, because
     // they are the only way out of this state.
-    renderScreen(<TransactionsScreen filters={{}} view={NO_RESULTS} filterBar={FILTER_BAR} />);
+    renderScreen(
+      <TransactionsScreen
+        categoryCount={8}
+        filters={{}}
+        view={NO_RESULTS}
+        filterBar={FILTER_BAR}
+      />,
+    );
 
     expect(screen.getByTestId('filter-bar')).toBeInTheDocument();
     expect(searchField()).toBeInTheDocument();
@@ -131,7 +140,7 @@ describe('the no-results state (AC5)', () => {
   it('uses its own copy rather than claiming the account is empty', () => {
     // The half that amends A15 and AC5. Telling somebody with a full history to "log your
     // first expense" is wrong copy, not merely undesigned copy.
-    renderScreen(<TransactionsScreen filters={{}} view={NO_RESULTS} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={NO_RESULTS} />);
 
     expect(screen.getByRole('heading', { name: NO_RESULTS_COPY.heading })).toBeInTheDocument();
     expect(screen.getByText(NO_RESULTS_COPY.body)).toBeInTheDocument();
@@ -139,7 +148,7 @@ describe('the no-results state (AC5)', () => {
   });
 
   it('still offers Add transaction, since logging one is a way forward', () => {
-    renderScreen(<TransactionsScreen filters={{}} view={NO_RESULTS} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={NO_RESULTS} />);
 
     expect(screen.getAllByRole('button', { name: 'Add transaction' })).toHaveLength(2);
   });
@@ -148,7 +157,13 @@ describe('the no-results state (AC5)', () => {
 describe('the populated state', () => {
   it("renders PET-29's table and no empty card", () => {
     renderScreen(
-      <TransactionsScreen filters={{}} view={POPULATED} filterBar={FILTER_BAR} table={TABLE} />,
+      <TransactionsScreen
+        categoryCount={8}
+        filters={{}}
+        view={POPULATED}
+        filterBar={FILTER_BAR}
+        table={TABLE}
+      />,
     );
 
     expect(screen.getByTestId('table')).toBeInTheDocument();
@@ -158,13 +173,15 @@ describe('the populated state', () => {
 
   it('shows the real post-filter total on the badge', () => {
     // 128 against one row on purpose: the badge reads `total`, never `transactions.length`.
-    renderScreen(<TransactionsScreen filters={{}} view={POPULATED} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={POPULATED} />);
 
     expectBadge('128');
   });
 
   it('renders the filter bar', () => {
-    renderScreen(<TransactionsScreen filters={{}} view={POPULATED} filterBar={FILTER_BAR} />);
+    renderScreen(
+      <TransactionsScreen categoryCount={8} filters={{}} view={POPULATED} filterBar={FILTER_BAR} />,
+    );
 
     expect(screen.getByTestId('filter-bar')).toBeInTheDocument();
   });
@@ -177,7 +194,9 @@ describe('the populated state', () => {
     //
     // `transition-opacity` is the region's marker in both states - see FilterNavigation.test
     // for why the busy state itself is a browser check rather than a jsdom one.
-    renderScreen(<TransactionsScreen filters={{}} view={POPULATED} table={TABLE} />);
+    renderScreen(
+      <TransactionsScreen categoryCount={8} filters={{}} view={POPULATED} table={TABLE} />,
+    );
 
     expect(screen.getByTestId('table').parentElement).toHaveClass('transition-opacity');
   });
@@ -185,33 +204,54 @@ describe('the populated state', () => {
 
 describe('the chrome every state shares', () => {
   it('keeps the header overline and title', () => {
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />);
 
     expect(screen.getByRole('heading', { level: 1, name: 'Transactions' })).toBeInTheDocument();
     expect(screen.getByText('October 2025')).toBeInTheDocument();
   });
 
   it('shows both tabs', () => {
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />);
 
     expect(screen.getByText('All transactions')).toBeInTheDocument();
     expect(screen.getByText('Categories')).toBeInTheDocument();
   });
 
-  it('leaves both tabs inert', () => {
-    // "Categories" is frame 13, which is PET-36's route and does not exist - a link here would
-    // 404 or force a hole into routes.test.ts. PET-29 made the search field and the three
-    // selects real and deliberately left these two alone, which is AC2's amendment.
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+  it('makes both tabs real links and marks this one current (PET-36)', () => {
+    // **The inversion of what this suite asserted for four tickets.** Both tabs were inert
+    // because "Categories" opens frame 13, which had no route behind it; PET-36 built it, so
+    // the reason is gone and the assertion is turned over rather than deleted.
+    //
+    // Still no `role="tab"`, and that part is not an oversight: these navigate to two routes
+    // rather than swapping a panel in place, so the bar is a `<nav>` of links. Asserting the
+    // absence keeps a future "let's use the real tablist" from landing without the tabpanel
+    // relationship that role promises.
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />);
 
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+
+    const active = screen.getByRole('link', { name: /All transactions/ });
+    const other = screen.getByRole('link', { name: /Categories/ });
+
+    expect(active).toHaveAttribute('href', '/transactions');
+    expect(active).toHaveAttribute('aria-current', 'page');
+
+    expect(other).toHaveAttribute('href', '/transactions/categories');
+    expect(other).not.toHaveAttribute('aria-current');
+  });
+
+  it('shows the category count on the other tab (PET-36)', () => {
+    // The badge the Categories tab carries while this route is the one being rendered. 8
+    // against a view holding one transaction, so this cannot be reading the wrong number.
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={POPULATED} />);
+
+    expect(screen.getByText('Categories').parentElement).toContainElement(screen.getByText('8'));
   });
 
   it('makes the search field a real text box', () => {
     // The opposite of what this suite asserted for three tickets. It was an inert <div>
     // because there was no list to filter; there is one now.
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />);
 
     expect(searchField()).toBeInTheDocument();
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
@@ -221,13 +261,15 @@ describe('the chrome every state shares', () => {
     // This screen renders whatever it is handed; the three real comboboxes belong to
     // `TransactionFilterBar`, which this suite stubs. If one ever appears here, the header
     // has grown a control the design does not draw.
-    renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+    renderScreen(<TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />);
 
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('shows the term the URL is filtered by', () => {
-    renderScreen(<TransactionsScreen filters={{ search: 'Uber' }} view={NO_RESULTS} />);
+    renderScreen(
+      <TransactionsScreen categoryCount={8} filters={{ search: 'Uber' }} view={NO_RESULTS} />,
+    );
 
     expect(searchField()).toHaveValue('Uber');
   });
@@ -237,14 +279,18 @@ describe('the chrome every state shares', () => {
     // and caret intact only because its position in the tree is identical in all three
     // states. Under `<main>` it would sit inside the branch that swaps, and React would
     // remount it after every debounce.
-    const { container } = renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+    const { container } = renderScreen(
+      <TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />,
+    );
 
     expect(container.querySelector('main')).not.toContainElement(searchField());
     expect(container.querySelector('header')).toContainElement(searchField());
   });
 
   it('puts the empty card inside main, below the tabs', () => {
-    const { container } = renderScreen(<TransactionsScreen filters={{}} view={EMPTY} />);
+    const { container } = renderScreen(
+      <TransactionsScreen categoryCount={8} filters={{}} view={EMPTY} />,
+    );
     const main = container.querySelector('main');
 
     expect(main).toContainElement(screen.getByRole('heading', { name: EMPTY_COPY.heading }));

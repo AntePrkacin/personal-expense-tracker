@@ -71,7 +71,7 @@ function Frame({ view }: { view: TransactionsView }) {
       {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
           gutter the `(app)` shell owns, since neither wraps a story. */}
       <div className="bg-base-200 flex h-screen flex-col px-4 sm:px-6 lg:px-10">
-        <TransactionsScreen view={view} filters={{}} />
+        <TransactionsScreen view={view} filters={{}} categoryCount={8} />
       </div>
     </AddTransactionProvider>
   );

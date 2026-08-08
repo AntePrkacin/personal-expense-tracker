@@ -269,28 +269,29 @@ describe('the inert header controls', () => {
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 
-  it('does not expose either tab as an operable control', async () => {
-    // "Categories" opens frame 13, which is PET-36's route and has no page.tsx behind
-    // it - and routes.test.ts asserts with `fs` that every declared route does. So a
-    // link here would 404 or force a hole into that check.
+  it('exposes both tabs as links, without claiming to be a tablist', async () => {
+    // **The inversion of a four-ticket-old assertion, and worth reading as such.** Both tabs
+    // were inert because "Categories" opened frame 13, which had no `page.tsx` behind it while
+    // `routes.test.ts` asserts with `fs` that every declared route does. PET-36 built that
+    // route, so the constraint is gone.
     //
-    // **This still holds by decision rather than by absence of features.** PET-29 made every
-    // other control on the page real and deliberately left these two, so the assertion is
-    // now the record of that choice rather than a description of an unbuilt screen.
-    //
-    // **The page-wide `queryByRole('link')` that used to sit here is gone, and deliberately
-    // not replaced by a count.** It covered two claims at once - the tabs are not links, and a
-    // row is not clickable - and PET-34 made the second one false. Worse, it would still
-    // *pass*: this file mocks the list to `transactions: []`, so there are no rows to link
-    // and the assertion would quietly go vacuous while its comment still claimed to be
-    // pinning something. So each tab is now checked directly, which is the claim that
-    // survives.
+    // The half that survives is `role="tab"`. These two navigate between routes rather than
+    // swapping a panel in place, so the bar is a `<nav>` of links and the ARIA tab pattern -
+    // which promises an `aria-controls` relationship to a `tabpanel` in the same document -
+    // would be a lie. Pinning the absence is what stops a future "use the real tablist"
+    // landing without the panel it implies.
     await renderScreen(TransactionsPage);
 
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(screen.getByText('Categories').tagName).toBe('SPAN');
-    expect(screen.getByText('Categories').closest('a')).toBeNull();
-    expect(screen.getByText('All transactions').closest('a')).toBeNull();
+
+    expect(screen.getByRole('link', { name: /All transactions/ })).toHaveAttribute(
+      'href',
+      '/transactions',
+    );
+    expect(screen.getByRole('link', { name: /Categories/ })).toHaveAttribute(
+      'href',
+      '/transactions/categories',
+    );
   });
 
   it('exposes exactly the three filter selects the design draws', async () => {

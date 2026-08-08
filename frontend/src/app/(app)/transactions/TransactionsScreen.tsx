@@ -40,6 +40,16 @@ type TransactionsScreenProps = {
    */
   filters: TransactionFilters;
   /**
+   * How many live categories the account has, for the other tab's badge (PET-36).
+   *
+   * A prop rather than a read, and free at the call site: `page.tsx` already fetches the
+   * categories to join names and colours onto the table's rows, so this is `categories.length`
+   * over data it is holding anyway. Required rather than defaulted, for the same reason
+   * `filters` is - `npm run build` never typechecks `*.test.tsx`, so a default would let a call
+   * site quietly render the bar with a zero it never meant.
+   */
+  categoryCount: number;
+  /**
    * TRN-3's three selects: "All categories", "This month" and the right-aligned "Newest
    * first". Rendered in the populated and no-results states and **never** in the empty one.
    */
@@ -48,7 +58,13 @@ type TransactionsScreenProps = {
   table?: React.ReactNode;
 };
 
-export function TransactionsScreen({ view, filters, filterBar, table }: TransactionsScreenProps) {
+export function TransactionsScreen({
+  view,
+  filters,
+  categoryCount,
+  filterBar,
+  table,
+}: TransactionsScreenProps) {
   // A15's amendment in one line: the no-results state keeps every control, the empty one drops
   // the filter bar. Reading it off the state name rather than off "is a filter active" is what
   // `lib/transactions.ts` documents at length - the two disagree for an account whose rows are
@@ -89,7 +105,11 @@ export function TransactionsScreen({ view, filters, filterBar, table }: Transact
           here would double it and put this page's content on a different grid from the other
           three. */}
       <main className="flex flex-1 flex-col gap-5 pb-10">
-        <TransactionTabs total={view.total} />
+        <TransactionTabs
+          active="transactions"
+          transactionCount={view.total}
+          categoryCount={categoryCount}
+        />
 
         {showFilterBar ? filterBar : null}
 

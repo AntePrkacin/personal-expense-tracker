@@ -476,6 +476,14 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `/transactions/[id]`, the app's first dynamic route. Read the sentence above as history - though
   "a row click" stays literally true of the other four cells, because the link is on the merchant
   alone for the accessible-name reason `frontend/src/app/CLAUDE.md` records.
+  **PET-36 made both tabs real, so the "stays inert" list above is down to the Dashboard's month
+  select alone.** `/transactions/categories` exists, both labels are `next/link`s carrying
+  `aria-current`, and the badge on each tab now reads a real count - so the sentence naming "both
+  transactions tabs" is history. What that ticket adds to _this_ list is smaller and of the same
+  kind: its card kebab and its "Add category" header button are drawn and not yet operable,
+  belonging to PET-39 and PET-37, and unlike every inert control before them they announce
+  `aria-disabled` rather than staying silent. The Categories screen is otherwise complete - it
+  reads its own data and renders every state the contract can hand it, the uncapped card included.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session

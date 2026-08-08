@@ -55,7 +55,10 @@ delete regenerates the set and the screen is a pure read plus a Regenerate butto
 thing that has to decide when a first run happens. PET-59 adds a ninth: the Add transaction modal
 can scan a photo or PDF of a receipt and fill Merchant, Amount, Category, Date and Note from it,
 on `gemini-3.6-flash` via `POST /api/transactions/scan`, with nothing about the image ever
-stored. What is still missing is what the one
+stored. The tenth is PET-36's:
+`/transactions/categories` is a real route behind a tab bar that finally navigates, drawing a card
+per category with its cap, its month's spend and its status, over a summary of the period's
+spending against the monthly budget. What is still missing is what the one
 remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
 
 ## Repository map

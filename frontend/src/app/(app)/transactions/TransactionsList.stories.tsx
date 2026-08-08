@@ -112,6 +112,7 @@ function Frame({ filters }: { filters: TransactionFilters }) {
             <TransactionsScreen
               view={view}
               filters={filters}
+              categoryCount={CATEGORIES.length}
               filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
               table={
                 <TransactionsTable
