@@ -22,14 +22,16 @@ import {
   type CategoryFormValues,
 } from './categoryForm';
 
-// 19 Add category (node 102:878): the five fields, their validation, and the one request this
-// feature makes.
+// 19 Add category (node 102:878): the fields, their validation, and the one request this feature
+// makes.
 //
 // The box, the scrim and every close affordance belong to `(app)/Modal.tsx`; what is here is the
-// form. Field order is CED-4's and AC1 asserts it: Name, Monthly budget, then Color beside Icon,
-// then Note.
+// form. Field order is CED-4's and AC1 asserts it: Name, Monthly budget, then Color beside Icon -
+// **four of the frame's five**, because the Note is hidden behind `SHOWS_NOTE`; see that flag for
+// why, and note it is a subtraction from the frame rather than an omission from this file.
 //
-// **Two deliberate departures from the frame, both recorded on the ticket and in the plan.** The
+// **Three deliberate departures from the frame, all recorded on the ticket and in the plan**, the
+// hidden Note above being the largest. The other two: the
 // budget label carries "(optional)", because the cap really is optional (see `isCapValid`) and A12
 // makes the absence of that word the only marker of a required field - so a bare label would make
 // the one optional money field in the app read as required. And focus opens on **Name**, not on the
@@ -358,30 +360,46 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
           and the colour and icon are the two selects' own labelled values. Announcing it again would
           repeat all three and add a glyph with no text of its own. That is the same argument the
           dashboard donut's ring makes, where the legend carries the real text. */}
-      <p aria-hidden="true" className="flex items-center gap-3">
-        <span
-          className={`rounded-field flex size-9 shrink-0 items-center justify-center ${categoryTileClass(values.color)}`}
-        >
-          {/* `createElement` rather than `<PreviewIcon />`: `react-hooks/static-components` reads a
+      {/* **`text-xs` beside `label` is not redundant, and dropping it makes this the one oversized
+          label in the modal.** Every other label is a `.label` inside daisyUI's `.fieldset`, and the
+          12px comes from **`.fieldset`** (`font-size: .75rem`), not from `.label` - verified in
+          `node_modules/daisyui/components/fieldset.css` rather than assumed, which is the rule
+          `frontend/CLAUDE.md` sets for any question about what a daisyUI class does. This row is not
+          a field and has no fieldset, so it has to say the size itself. `gap-1.5` is that same file's
+          `gap: .375rem`, so the label sits off its content exactly as the real labels do.
+
+          The `aria-hidden` above moved onto this wrapper so it covers the word too: by the argument
+          just made, announcing "Preview" and then nothing would be worse than silence. */}
+      <div aria-hidden="true" className="flex flex-col gap-1.5">
+        <span className="label text-xs">Preview</span>
+
+        <p className="flex items-center gap-3">
+          <span
+            className={`rounded-field flex size-9 shrink-0 items-center justify-center ${categoryTileClass(values.color)}`}
+          >
+            {/* `createElement` rather than `<PreviewIcon />`: `react-hooks/static-components` reads a
               capitalised local in JSX as a component created during render, which this is not - it
               is a lookup into `CATEGORY_ICON`, a static map the module already holds. `CategoryCard`
               carries the full account of the rule, and this repo allows no eslint-disable comments. */}
-          {PreviewIcon === null
-            ? null
-            : createElement(PreviewIcon, { className: 'size-4.5', 'aria-hidden': 'true' })}
-        </span>
-        {/* **`/60`, not `/50`, and the difference is which token this is.** `base-content/50` is the
+            {PreviewIcon === null
+              ? null
+              : createElement(PreviewIcon, { className: 'size-4.5', 'aria-hidden': 'true' })}
+          </span>
+          {/* **`/60`, not `/50`, and the difference is which token this is.** `base-content/50` is the
             *category colour* in `COLOUR_TOKENS`, measured for a fill at the 3:1 non-text bar; this is
             muted **text**, which AA holds to 4.5:1, and 3.401:1 in light does not clear it. Every
             muted caption in this app is `/60` or `/70` already - `CategoryCard`, `BudgetCard`,
             `TrendCard`, `TransactionRow` and six more - so matching them is both the accessible
             choice and the consistent one. */}
-        <span
-          className={previewName === '' ? 'text-base-content/60 text-sm' : 'text-sm font-semibold'}
-        >
-          {previewName === '' ? UNNAMED_PREVIEW : previewName}
-        </span>
-      </p>
+          <span
+            className={
+              previewName === '' ? 'text-base-content/60 text-sm' : 'text-sm font-semibold'
+            }
+          >
+            {previewName === '' ? UNNAMED_PREVIEW : previewName}
+          </span>
+        </p>
+      </div>
 
       {/* The Note field, drawn by frame 19 and specified by CED-4, and **deliberately not rendered
           today** - see `SHOWS_NOTE`. No `required`, and it can carry no error. */}

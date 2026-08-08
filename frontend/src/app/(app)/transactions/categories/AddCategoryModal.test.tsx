@@ -78,8 +78,16 @@ const note = () => screen.queryByLabelText('Note (optional)');
 const values = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.value);
 const labels = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.text);
 
-/** The `aria-hidden` preview row, found by the tile inside it rather than by any text. */
-const previewTile = () => document.querySelector('[aria-hidden="true"] > span') as HTMLElement;
+/**
+ * The `aria-hidden` preview, found structurally because none of it is in the accessibility tree.
+ *
+ * **Anchored on the `<p>` rather than on the wrapper's first `span`**, which is what it used to be:
+ * adding the "Preview" label made that first span the *label*, so the old selector silently returned
+ * the wrong element. Going through the row keeps the tile addressable however many captions the block
+ * grows.
+ */
+const previewRow = () => document.querySelector('[aria-hidden="true"] > p') as HTMLElement;
+const previewTile = () => previewRow().firstElementChild as HTMLElement;
 const previewGlyph = () => previewTile().querySelector('svg');
 
 describe('AC1: the modal and its fields', () => {
@@ -191,12 +199,22 @@ describe('AC2: the colour and icon selects', () => {
     expect(screen.queryByText('New category')).not.toBeInTheDocument();
   });
 
+  it('captions the preview so the tile is not an unlabelled ornament', () => {
+    open();
+
+    expect(screen.getByText('Preview')).toBeInTheDocument();
+  });
+
   // Every fact in the preview is already announced by the three fields above it, so repeating it
   // would add a glyph with no text and three duplicated values. Same argument as the donut's ring.
-  it('keeps the preview out of the accessibility tree', () => {
+  //
+  // **The caption is inside the hidden block, not beside it**, which is the half worth pinning: a
+  // "Preview" that stayed in the tree would announce a heading-like word and then nothing at all.
+  it('keeps the whole preview, caption included, out of the accessibility tree', () => {
     open();
 
     expect(previewTile().closest('[aria-hidden="true"]')).toBeInTheDocument();
+    expect(screen.getByText('Preview').closest('[aria-hidden="true"]')).toBeInTheDocument();
   });
 });
 
