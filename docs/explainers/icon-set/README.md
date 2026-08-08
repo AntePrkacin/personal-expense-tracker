@@ -39,10 +39,19 @@ references them.
 
 Two consequences worth knowing before trusting them. The category map serves the **current**
 lucide rather than the pinned 1.29.0, so a tag can be newer than the glyph beside it. And lucide
-leaves **258 of its 2011 icons untagged entirely** - `waves` is one, which is why the page renders
+leaves **258 of its 2011 icons untagged entirely**, which is why the page renders
 "no lucide category" rather than an empty row, and why `check-icon-page.js` asserts that label
 exists rather than asserting every card has a tag. Refresh the name list after a `lucide-react`
 bump; refresh the category map only if a tag looks wrong.
+
+**An untagged name in the set is worth a second look, because lucide keys this metadata on
+canonical names only.** `waves` was the one untagged name of the sixty-four, and it was untagged
+because it is a deprecated alias of `waves-horizontal` - which is what the set carries now. That
+makes the map a cheap alias detector as well as decoration: it needs no `node_modules`, and it
+answers the question `lucide-1.29.0-names.txt` cannot, since a name list holds aliases and
+canonical names alike. It is a hint rather than a proof in either direction - 258 genuine icons
+are untagged too - so confirm against `frontend/node_modules/lucide-react/dist/esm/icons/<name>.mjs`,
+where an alias is a bare `export { default } from './<canonical>.mjs'`.
 
 ## Judging a change
 

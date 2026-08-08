@@ -752,7 +752,7 @@ describe('openapi.json', () => {
       'square-parking',
       'house',
       'bird',
-      'waves',
+      'waves-horizontal',
       'wifi',
       'smartphone',
       'trash-2',

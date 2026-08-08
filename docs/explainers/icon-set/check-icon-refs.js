@@ -35,12 +35,23 @@ if (wronglyValid.length) {
   process.exit(1);
 }
 
+// A capture holding `${` is a template-literal placeholder, not a literal, so
+// this script has nothing to say about it. Skipping it is not tidiness: without
+// it the scan matches its own reporting line below - the `icon: '${value}'`
+// inside the template that formats a stale name - captures `${value}` verbatim,
+// finds it absent from ICON_NAMES, and files the script itself as the finding.
+// That pinned the exit code at 1 no matter what the repo contained, so a real
+// stale literal was indistinguishable from the standing baseline and this guard
+// could never pass. Found in the review of PET-65.
+const interpolated = (v) => v.includes('${');
+
 const bad = [];
 for (const rel of files) {
   const src = fs.readFileSync(path.join(REPO, rel), 'utf8');
   for (const m of src.matchAll(/\bicon"?\s*[:=]\s*'([^']*)'|\bicon"?\s*[:=]\s*"([^"]*)"/g)) {
     const value = m[1] ?? m[2];
     if (!value || value === 'null') continue;
+    if (interpolated(value)) continue;
     if (INTENTIONALLY_INVALID.includes(value)) continue;
     if (!NAMES.has(value)) {
       const line = src.slice(0, m.index).split('\n').length;

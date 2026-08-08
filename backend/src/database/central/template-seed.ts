@@ -132,7 +132,7 @@ const ICON_SEED: readonly IconSeed[] = [
   // Home and bills
   { name: 'house', label: 'House' },
   { name: 'bird', label: 'Bird' },
-  { name: 'waves', label: 'Waves' },
+  { name: 'waves-horizontal', label: 'Waves' },
   { name: 'wifi', label: 'Wi-Fi' },
   { name: 'smartphone', label: 'Phone' },
   { name: 'trash-2', label: 'Bin' },

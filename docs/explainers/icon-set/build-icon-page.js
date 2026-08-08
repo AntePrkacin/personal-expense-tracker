@@ -52,11 +52,20 @@ const SEEDED_BY_ICON = new Map(
 SEEDED_BY_ICON.set('circle-question-mark', 'Uncategorized (fallback)');
 
 // ---------------------------------------------------------------------------
-// APPROVED - thirteen, across three rounds. NOT in the source yet: one edit
-// lands them together, because ICON_NAMES is a published OpenAPI enum and each
-// change also needs the ICON_SEED label, the frontend CATEGORY_ICON map, and
-// npm run api:sync. None of the 13 seeded icons is touched - every drop is a
-// palette icon, and a swap in place keeps every other row's sort_order.
+// APPROVED - seventeen, across three rounds, and ALL SEVENTEEN ARE IN THE
+// SOURCE. They landed together in one edit, because ICON_NAMES is a published
+// OpenAPI enum and each change also needs the ICON_SEED label, the frontend
+// CATEGORY_ICON map, and npm run api:sync. None of the 13 seeded icons is
+// touched - every drop is a palette icon, and a swap in place keeps every other
+// row's sort_order.
+//
+// So SWAP below is now INERT: every `from` is already gone from ICON_NAMES, no
+// SWAP.get() hits, and PROPOSED is byte-for-byte SOURCE_NAMES. The list stays as
+// the decision record the page renders - each row's fourth field is why the drop
+// happened - and it is what marks a card "New". Read it as history: applying it
+// again is not a thing that can happen, and there is nothing here left to apply.
+// PENDING is empty for the same reason, which makes the "Being replaced" branch
+// in card() dead code kept beside its live counterpart.
 // ---------------------------------------------------------------------------
 const APPROVED = [
   ['circle-ellipsis', 'heart', 'Heart', 'your call, not a similarity finding'],
@@ -69,7 +78,7 @@ const APPROVED = [
   ['glasses', 'eye', 'Eye', 'collided with bike'],
   ['hand-heart', 'rabbit', 'Rabbit', 'made room for heart - three heart silhouettes otherwise'],
   ['droplets', 'bird', 'Bird', 'collided with flame'],
-  ['flame', 'waves', 'Waves', 'the other half of the same pair'],
+  ['flame', 'waves-horizontal', 'Waves', 'the other half of the same pair; the canonical name, not the deprecated waves alias of it this first shipped as'],
   ['newspaper', 'fish', 'Fish', 'collided with receipt'],
   ['train-front', 'panda', 'Panda', 'collided with bus; squirrel was the first pick and collided with rabbit'],
   ['hotel', 'key-round', 'Key', 'collided with seeded landmark'],
@@ -94,9 +103,12 @@ const HELD = [
 ];
 
 // ---------------------------------------------------------------------------
-// STILL TO PICK. Four slots. Every candidate is real in lucide 1.29.0 and is
-// checked against the WHOLE set, not only against the icon it replaces - which
-// is what round 1 failed to do and had to be corrected for twice.
+// NOTHING LEFT TO PICK. This held the four open slots while they were open;
+// OPEN_PICKS_DONE below is the same four, resolved, and the picks are in
+// APPROVED. Empty, so the "Being replaced" branch in card() renders on nothing.
+// Refill it to run another round: every candidate must be real in lucide 1.29.0
+// and checked against the WHOLE set, not only against the icon it replaces -
+// which is what round 1 failed to do and had to be corrected for twice.
 // ---------------------------------------------------------------------------
 const PENDING = [];
 
@@ -194,7 +206,13 @@ if (PROPOSED.length !== 64 || unknown.length) {
 if (new Set(PROPOSED).size !== PROPOSED.length) throw new Error('a swap introduced a duplicate');
 
 // An icon can be real and still carry no category: lucide leaves 258 of the
-// installed 2011 untagged, and `waves` is one of them. Shown, not asserted away.
+// installed 2011 untagged. Shown, not asserted away - the card says "no lucide
+// category" rather than drawing an empty tag row, and check-icon-page.js asserts
+// that label instead of asserting every card has a tag. No name in the set is
+// untagged today. The one that was, `waves`, was untagged because lucide keys
+// this metadata on canonical names only and `waves` is a deprecated alias of
+// `waves-horizontal` - so an untagged name here is worth a second look before it
+// is worth a card.
 const catsOf = (n) => lucideCats[n] ?? [];
 
 const seededCount = PROPOSED.filter((n) => SEEDED_BY_ICON.has(n)).length;

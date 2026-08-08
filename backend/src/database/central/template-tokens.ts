@@ -135,6 +135,18 @@ export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
  * `circle-question-mark`, not `circle-help`: the latter is a deprecated alias of
  * it in the installed lucide 1.29.0. All sixty-four are verified to exist there.
  *
+ * **Every name here must be lucide's canonical one, not one of its deprecated
+ * aliases**, and the review of PET-65 found one that was not: `waves` is nothing
+ * but a re-export of `waves-horizontal`, exactly the `circle-help` shape one line
+ * above, and it shipped because an alias imports and renders identically to the
+ * icon it points at. Nothing fails until lucide drops the alias at a major - by
+ * which time the name is in the published OpenAPI enum, in `icon_templates` and in
+ * whatever categories users picked with it, so a rename becomes a contract change
+ * plus a data migration. The cheap tell, if this needs checking again: lucide keys
+ * its category metadata on canonical names only, so an alias comes back untagged.
+ * `waves` was the one untagged name of the sixty-four, and after the swap there
+ * are none.
+ *
  * **The first thirteen are PET-64's and are load-bearing; the rest are PET-65's
  * and are a palette.** The opening block is exactly what the twelve seeded
  * categories carry, plus `circle-question-mark` for the `Uncategorized`
@@ -159,12 +171,13 @@ export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
  * did not survive it.** They record the spending domain each icon was originally
  * picked for, and after the visual pass several no longer describe their
  * contents: `panda` sits under Transport (it replaced `train-front`, which
- * collided with `bus`), `sailboat` under Personal care, `bird` and `waves` under
- * Home and bills, `fish` under Work and study. That is a real inconsistency, kept
- * deliberately rather than tidied, because the alternative is reordering - which
- * is the one thing the paragraph above forbids. Read the blocks as provenance,
- * not as taxonomy; `docs/explainers/category-icon-set-preview.html` is the
- * authority for what the set actually looks like and why each swap happened.
+ * collided with `bus`), `sailboat` under Personal care, `bird` and
+ * `waves-horizontal` under Home and bills, `fish` under Work and study. That is a
+ * real inconsistency, kept deliberately rather than tidied, because the
+ * alternative is reordering - which is the one thing the paragraph above forbids.
+ * Read the blocks as provenance, not as taxonomy;
+ * `docs/explainers/category-icon-set-preview.html` is the authority for what the
+ * set actually looks like and why each swap happened.
  *
  * **Two names are deliberately shared with the app's own interface**, which the
  * same review found and accepted: `pencil` is also the transaction row menu's
@@ -205,7 +218,7 @@ export const ICON_NAMES = [
   // Home and bills
   'house',
   'bird',
-  'waves',
+  'waves-horizontal',
   'wifi',
   'smartphone',
   'trash-2',
