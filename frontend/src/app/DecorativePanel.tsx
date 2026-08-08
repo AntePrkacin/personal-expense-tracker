@@ -50,7 +50,9 @@ const SAMPLE_BUDGET = {
  * `colour` is typed `CategoryColour` so a typo is a build error, and the fill comes
  * from CATEGORY_DOT rather than being written inline, which documents that these
  * two dots are category colours rather than arbitrary ones. Figma binds them to
- * Category/1 Coral and Category/6 Blue.
+ * Category/1 Coral and Category/6 Blue, which PET-64 re-expressed as the daisyUI
+ * tokens the app actually paints: `error` and `info`, the same two Healthcare and
+ * Transportation carry.
  */
 const SAMPLE_CHIPS: readonly {
   label: string;
@@ -59,9 +61,9 @@ const SAMPLE_CHIPS: readonly {
   position: string;
 }[] = [
   // left 210, top 220
-  { label: 'Dining', amount: '$298', colour: 'coral', position: 'top-55 left-52.5' },
+  { label: 'Dining', amount: '$298', colour: 'error', position: 'top-55 left-52.5' },
   // left 60, top 520
-  { label: 'Transport', amount: '$223', colour: 'blue', position: 'top-130 left-15' },
+  { label: 'Transport', amount: '$223', colour: 'info', position: 'top-130 left-15' },
 ];
 
 function SampleBudgetCard() {

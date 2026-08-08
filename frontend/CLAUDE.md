@@ -94,6 +94,48 @@ deliberately: a controller and automatic prefers-dark must not coexist, or a bro
 dark mode makes the control switch dark to dark. A visible toggle is deferred and trades away
 the automatic behaviour when it lands.
 
+### Changing or adding a theme: the category palette is the guard
+
+**A theme is not a private decision of `globals.css`. It repaints seventeen category colours at
+once, and two committed artifacts are what say whether the result is usable.** Read this before
+registering a third daisyUI theme, before swapping either of the two that ship, and before any
+change that moves what a `--color-*` resolves to.
+
+- `docs/explainers/category-color-palette-preview.html` draws all **seventeen** allowlist tokens
+  as the four marks the app really paints them as, with the measured light and dark contrast
+  beside each.
+- `docs/explainers/category-colors-icons-description-preview.html` draws the **thirteen** seeded
+  categories, which is what a real account actually shows.
+
+Both are stock HTML pinned to the installed daisyUI, Tailwind and lucide, so opening one in a
+browser is the whole procedure. **Open both under the new theme and satisfy three conditions
+before the theme lands.** First, every one of the seventeen tokens has to stay **distinguishable
+from every other**, because a picker offering two colours that paint the same is a picker with
+sixteen entries and a lie in it - three pairs are already deliberately close (`categoryColour.ts`
+names them with their measured ΔE), so a theme that collapses a fourth pair is spending margin
+that was already spent. Second, every colour has to stay **visible against `bg-base-100`** as an
+8px dot, not merely as a 36px tile: that is the mark a theme change breaks first, and the whole
+reason both files draw the small marks at all. Third, every tile's glyph has to stay legible on
+its own background, which is what the `-content` pairing buys and what a re-themed palette can
+silently take away.
+
+**None of that is checked by anything.** No build, no lint, no Jest run and no CI job reads a
+colour, `COLOUR_CONTRAST` is documentation with a type on it rather than a runtime assertion, and
+the frontend's exhaustiveness proofs catch a missing _key_ while saying nothing about the value.
+So a theme that makes six categories look identical ships entirely green. That is the failure this
+guard exists for, and it is the same failure `backend/CLAUDE.md` records for `warning-content`:
+the claim "a semantic token is theme-aware and therefore safe" is false, was written down anyway,
+and was caught by measuring rather than by reasoning.
+
+**Re-measure rather than reuse the numbers.** Both files carry figures from headless Chromium
+against the installed daisyUI, and a new theme invalidates every one of them - `COLOUR_CONTRAST`
+in `backend/src/database/central/template-tokens.ts` is where the table lives and where a
+re-measurement belongs. Compositing matters: a token carrying an alpha means nothing until it is
+painted over the card and the pixel is read, so a check that stops at `getComputedStyle` has not
+checked `base-content/50`. And if a theme genuinely cannot carry seventeen distinguishable
+colours, the answer is to change the palette in `COLOUR_SEED` and re-run both files, not to ship
+the theme and let the categories collide.
+
 ## Where daisyUI and Tailwind fight
 
 **Every entry below is a class that is present in the markup and paints nothing**, and not one
@@ -185,7 +227,12 @@ classes the one exception, as the visible half of an aria attribute the same tes
 
 **`lucide-react` is the icon library, and there are no hand-traced glyphs left.** Every mark in
 the app was a hand-drawn inline `<svg>` with its Figma node id in the comment until PET-33
-introduced the dependency and migrated all thirteen. It is named here rather than in
+introduced the dependency and migrated all thirteen. **PET-64 added the one case where a glyph
+is chosen at runtime rather than imported at a call site**: a category carries an icon _name_,
+and `ui/categoryColour.ts`'s `CATEGORY_ICON` is the static map that turns thirteen of them into
+components. Reach for that map rather than `lucide-react`'s own barrel - `icons[name]` works and
+pulls every glyph the library ships into the bundle - and note the map is keyed by the
+contract's published enum, so it is an exhaustiveness proof rather than a lookup table. It is named here rather than in
 `frontend/src/components/CLAUDE.md` because routes draw glyphs too - `(app)/layout.tsx`'s
 hamburger and `(app)/DateField.tsx`'s month arrows are not components. Import the icon, size it
 with a Tailwind `size-*` class, and pass `aria-hidden="true"` **explicitly**: lucide renders a
@@ -450,7 +497,17 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   transaction row carries only a `categoryId` and the table joins the name and the tile colour
   onto it. A screen wanting a cap or a spend widens the right one or adds a third; do not open
   either up, since the point of the narrowing is that a cap and a month's spend never reach a
-  browser bundle drawing neither. Note that module deliberately **never redirects** - its
+  browser bundle drawing neither. PET-64 added `icon` to the **wide** one only, for that exact
+  reason: the table's tile draws the category's own glyph now, and the `<select>` draws neither
+  tile nor glyph.
+  **PET-64 also added the app's first unauthenticated read**, `lib/categoryTemplates.ts`, and it
+  is the one that goes through none of the above. Onboarding step 2 runs before an account
+  exists, so there is no cookie for `authorizedGet` to lift and no 401 to classify; it calls the
+  `@Public()` `GET /api/templates/categories` directly. Its failure policy is a **third** one:
+  it degrades to an empty list rather than throwing, because the chips are a selection on a step
+  whose Continue is unconditional (A4), so an unreachable backend costs the user their starter
+  categories rather than the whole onboarding flow. Do not copy that policy to a read that _is_
+  the content of its screen - `lib/transactions.ts` is right to throw. Note that module deliberately **never redirects** - its
   route-handler caller would be handed an HTML login page with a 200 on it - so a Server
   Component using it applies the 401 policy at the call site, which
   `app/(app)/transactions/page.tsx` is the worked example of.

@@ -6,11 +6,46 @@ import { CategoryDonut } from './CategoryDonut';
 // to 99 - so the apportionment is exercised by the default fixture rather than only by a
 // contrived one.
 const FIVE_CATEGORIES = [
-  { id: 'c1', name: 'Groceries', color: '#57B368', spent: 397, percent: 32.4 },
-  { id: 'c2', name: 'Dining out', color: '#EF6F6C', spent: 298, percent: 24.3 },
-  { id: 'c3', name: 'Transport', color: '#3F8EE6', spent: 223, percent: 18.2 },
-  { id: 'c4', name: 'Shopping', color: '#CE6FB8', spent: 174, percent: 14.2 },
-  { id: 'c5', name: 'Other', color: '#E7C24A', spent: 148, percent: 10.9 },
+  {
+    id: 'c1',
+    name: 'Groceries',
+    color: 'success' as const,
+    icon: 'shopping-basket' as const,
+    spent: 397,
+    percent: 32.4,
+  },
+  {
+    id: 'c2',
+    name: 'Dining out',
+    color: 'error' as const,
+    icon: 'utensils' as const,
+    spent: 298,
+    percent: 24.3,
+  },
+  {
+    id: 'c3',
+    name: 'Transport',
+    color: 'info' as const,
+    icon: 'car' as const,
+    spent: 223,
+    percent: 18.2,
+  },
+  {
+    id: 'c4',
+    name: 'Shopping',
+    color: 'secondary' as const,
+    icon: 'shopping-basket' as const,
+    spent: 174,
+    percent: 14.2,
+  },
+  {
+    id: 'c5',
+    name: 'Other',
+    color: 'warning-content' as const,
+    icon: 'shopping-basket' as const,
+    spent: 148,
+    percent: 10.9,
+  },
 ];
 
 const TOTAL = 1240;
@@ -52,21 +87,43 @@ describe('the ring (AC1)', () => {
     );
 
     expect(fills).toEqual([
-      'var(--color-success)', // Groceries, green
-      'var(--color-error)', // Dining out, coral
-      'var(--color-info)', // Transport, blue
-      'var(--color-secondary)', // Shopping, pink
-      'var(--color-warning)', // Other, yellow
+      'var(--color-success)', // Groceries
+      'var(--color-error)', // Dining out
+      'var(--color-info)', // Transport
+      'var(--color-secondary)', // Shopping
+      'var(--color-warning-content)', // Other
     ]);
   });
 
-  it('falls back to grey for a colour outside the eight rather than dropping the slice', () => {
+  it('falls back to grey for a colour it cannot resolve rather than dropping the slice', () => {
     // Dropping it would make the ring not close, which is the one thing this card must not do.
+    //
+    // **The unresolvable case narrowed at PET-64 and this fixture had to move with it.** It
+    // used to be the `Uncategorized` fallback, whose `#98A0AE` was deliberately outside the
+    // eight-colour palette; that category carries `warning-content` now and resolves like any
+    // other. What is left is a stored value the contract's enum does not contain - a row
+    // predating the change, or a contract and a frontend that drifted - so the fixture is a
+    // hex, which is exactly what such a row would hold. `as never` because the prop is the
+    // contract's union and this deliberately violates it.
     const { container } = render(
       <CategoryDonut
         categories={[
-          { id: 'c1', name: 'Groceries', color: '#57B368', spent: 60, percent: 60 },
-          { id: 'c2', name: 'Uncategorized', color: '#98A0AE', spent: 40, percent: 40 },
+          {
+            id: 'c1',
+            name: 'Groceries',
+            color: 'success' as const,
+            icon: 'shopping-basket' as const,
+            spent: 60,
+            percent: 60,
+          },
+          {
+            id: 'c2',
+            name: 'Stale',
+            color: '#98A0AE' as never,
+            icon: null,
+            spent: 40,
+            percent: 40,
+          },
         ]}
         spent={100}
       />,
@@ -87,7 +144,14 @@ describe('the ring (AC1)', () => {
     const { container } = render(
       <CategoryDonut
         categories={[
-          { id: 'c1', name: 'Uncategorized', color: '#98A0AE', spent: 40, percent: 100 },
+          {
+            id: 'c1',
+            name: 'Stale',
+            color: '#98A0AE' as never,
+            icon: null,
+            spent: 40,
+            percent: 100,
+          },
         ]}
         spent={40}
       />,
@@ -99,13 +163,31 @@ describe('the ring (AC1)', () => {
   });
 
   it('separates the arcs with a seam, so two same-coloured slices cannot merge', () => {
-    // `orange` and `yellow` both resolve to `var(--color-warning)` by design, so adjacent slices
-    // can share a fill. Without a stroke the ring would show one arc where the legend lists two.
+    // **Reachable for a different reason since PET-64, and still reachable.** It used to be
+    // that `orange` and `yellow` both resolved to `var(--color-warning)`, so the eight colour
+    // words collapsed onto six hues. Every token is its own colour now, but two categories
+    // can still carry the *same* token - nothing stops a user picking one twice, and three
+    // seeded pairs are deliberately close enough to read as one anyway. Without a stroke the
+    // ring shows one arc where the legend lists two.
     const { container } = render(
       <CategoryDonut
         categories={[
-          { id: 'c1', name: 'A', color: '#F29A3D', spent: 60, percent: 60 },
-          { id: 'c2', name: 'B', color: '#E7C24A', spent: 40, percent: 40 },
+          {
+            id: 'c1',
+            name: 'A',
+            color: 'warning' as const,
+            icon: 'shopping-basket' as const,
+            spent: 60,
+            percent: 60,
+          },
+          {
+            id: 'c2',
+            name: 'B',
+            color: 'warning' as const,
+            icon: 'shopping-basket' as const,
+            spent: 40,
+            percent: 40,
+          },
         ]}
         spent={100}
       />,
@@ -157,10 +239,38 @@ describe('the legend (AC3, AC4)', () => {
     render(
       <CategoryDonut
         categories={[
-          { id: 'a', name: 'A', color: '#57B368', spent: 306, percent: 30.6 },
-          { id: 'b', name: 'B', color: '#EF6F6C', spent: 306, percent: 30.6 },
-          { id: 'c', name: 'C', color: '#3F8EE6', spent: 196, percent: 19.6 },
-          { id: 'd', name: 'D', color: '#CE6FB8', spent: 192, percent: 19.2 },
+          {
+            id: 'a',
+            name: 'A',
+            color: 'success' as const,
+            icon: 'shopping-basket' as const,
+            spent: 306,
+            percent: 30.6,
+          },
+          {
+            id: 'b',
+            name: 'B',
+            color: 'error' as const,
+            icon: 'shopping-basket' as const,
+            spent: 306,
+            percent: 30.6,
+          },
+          {
+            id: 'c',
+            name: 'C',
+            color: 'info' as const,
+            icon: 'shopping-basket' as const,
+            spent: 196,
+            percent: 19.6,
+          },
+          {
+            id: 'd',
+            name: 'D',
+            color: 'secondary' as const,
+            icon: 'shopping-basket' as const,
+            spent: 192,
+            percent: 19.2,
+          },
         ]}
         spent={1000}
       />,
@@ -172,7 +282,16 @@ describe('the legend (AC3, AC4)', () => {
   it('gives a single category the whole circle', () => {
     render(
       <CategoryDonut
-        categories={[{ id: 'c1', name: 'Groceries', color: '#57B368', spent: 40, percent: 100 }]}
+        categories={[
+          {
+            id: 'c1',
+            name: 'Groceries',
+            color: 'success' as const,
+            icon: 'shopping-basket' as const,
+            spent: 40,
+            percent: 100,
+          },
+        ]}
         spent={40}
       />,
     );

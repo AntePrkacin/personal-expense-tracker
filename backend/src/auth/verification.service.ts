@@ -11,6 +11,7 @@ import type { UserDatabase } from '../database/database.types';
 import { UserDatabaseService } from '../database/user-database.service';
 import { categories, profile } from '../database/user/schema';
 import { seedStarterCategories } from '../database/user/starter-categories';
+import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
 import { LoginTokenService } from './login-token.service';
 import { SessionService } from './session.service';
@@ -57,6 +58,7 @@ export class VerificationService {
     private readonly users: UsersService,
     private readonly userDatabases: UserDatabaseService,
     private readonly sessions: SessionService,
+    private readonly templates: TemplatesService,
   ) {}
 
   /**
@@ -199,6 +201,15 @@ export class VerificationService {
    * always writes at least that row, so an empty table unambiguously means the
    * seed has not run, where it used to also be what picking no chips left
    * behind (A4).
+   *
+   * **The payload holds template ids, so the copy comes out of central here.**
+   * Registration already rejected an unknown id, but a template can be
+   * tombstoned between then and the click, so `resolve()` simply returns fewer
+   * rows and the account is seeded with what still exists. That is the right
+   * failure: refusing to verify a live login link over a category the user can
+   * no longer be given would strand the account, and the alternative - seeding
+   * a name from a row that is gone - is not available, because the name is not
+   * in the payload.
    */
   private async seedCategories(
     userDb: UserDatabase,
@@ -213,6 +224,15 @@ export class VerificationService {
       return;
     }
 
-    await seedStarterCategories(userDb, payload.categories);
+    const picked = await this.templates.resolve(payload.categories);
+
+    if (picked.length !== payload.categories.length) {
+      this.logger.warn(
+        `Seeding ${picked.length} of ${payload.categories.length} picked ` +
+          `categories: the rest are no longer live category templates.`,
+      );
+    }
+
+    await seedStarterCategories(userDb, picked);
   }
 }

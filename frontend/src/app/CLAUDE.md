@@ -373,6 +373,36 @@ identical selections serialize to identical strings whatever order the chips wer
 explicitly stored empty array is preserved, because deselecting everything is a valid choice
 (A4) and a default applied on read would silently undo it.
 
+**It holds `category_templates` ids as of PET-64, and there is now something behind the
+translation layer that sentence said had nothing behind it.** The offered list is admin-managed
+data in central, so a name is no longer a stable key anything can validate against and
+`RegisterDto.categories` takes ids. Two consequences, and the second is a real loss rather than
+a rewording. `readCategories` **cannot filter a canonical list any more**, because there is no
+canonical list in a React-free module that fetches nothing - duplicating the fetched one here
+would be a second authority that goes stale. So it dedupes and caps and nothing else, membership
+becomes the server's to reject (a 400 from `AuthService`), and the stored order is the click
+order rather than the designed one.
+
+**"Membership becomes the server's to reject" was not a sufficient answer, and the review of
+PET-64 is where that came out.** The server does reject it, and the rejection is unrecoverable:
+`RegisterForm` renders a 400 as its generic failure line, a rejected submit leaves the draft
+untouched, so every retry sends the same dead id - and the one control that could clear it is a
+chip step 2 no longer draws. The user cannot leave onboarding without emptying sessionStorage by
+hand. Three ordinary ways in: an admin disables a template between two visits, a tab sits open
+across a deploy, or the value came from that tab's devtools console. So the filter is restored
+in **`CategoryPicker`**, the one place holding both the stored pick and the offered list, as a
+mount effect guarded on "would this change anything" - an effect rather than a render-phase
+adjustment because it writes to sessionStorage and notifies a store, which is a side effect that
+does not belong in render. Two things about it not to undo. `toggle`'s own rebuild is **not** a
+substitute, because it fires only if the user touches a chip and the broken case is the user who
+clicks straight through. And it **never reconciles against an empty list**: `readCategoryTemplates`
+degrades to `[]` rather than throwing, so an empty list is a failed read as much as it is an
+empty palette, and treating it as authoritative would delete a correct selection over a
+momentary outage - the worse of the two failures, on the likelier of the two causes. Nothing depends on that order: the seed writes categories in
+the template's own `sort_order` backend-side. The cap is a literal matching `RegisterDto`'s own,
+which is the half of the old guarantee that survives - it is what keeps a devtools-written draft
+inside `@ArrayMaxSize`.
+
 **`patchDraft` takes either a patch or an updater, and step 2 is why.** A plain
 `patchDraft({ budget })` replaces one field with a keystroke's own value and cannot go stale, but
 the chips compute `categories` _from_ the current selection, so a value read during render is
@@ -399,6 +429,35 @@ restating it - the rule `docs/agents/api-contract.md` sets for every caller. An 
 this screen does not offer. Nothing fetches and no request shape changes, so this needs no
 `api:sync`. The colours cannot come from the same place, because the backend publishes names
 only: they are `CategoryColour` keys, so no hex value enters the frontend.
+
+**That file is deleted, and the compile guard with it (PET-64).** Read the paragraph above as
+history: it describes a mechanism that no longer exists, and it is worth keeping because the
+guarantee it names is the one that was consciously traded away. The chips are admin-managed rows
+in central now, so `RegisterDto.categories` publishes no enum, there is no literal union to read
+out of the contract, and `AssertNever<Exclude<...>>` has nothing to assert. What replaces the
+proof is weaker and sound: the ids the screen offers come from the same endpoint registration
+validates them against, so the two cannot disagree by construction.
+
+**Step 2 fetches, and the split that forces is the one this file already prescribed.**
+`lib/categoryTemplates.ts` calls the `@Public()` `GET /api/templates/categories` -
+unauthenticated, because no account exists at step 2 - and `page.tsx` is async, awaits it, and
+hands the result to a synchronous `SetupCategoriesScreen` as a required prop, which threads it
+to `CategoryPicker` as a prop too. That is the shape `/transactions` set and this file calls
+"the one the other three should copy", and here it is a **requirement rather than a preference**:
+Storybook cannot render an async Server Component, and the story harness builds each story from
+`render` or `meta.component` while never applying the meta's decorators - so a screen that
+fetched for itself could not have a story at all. `SetupCategoriesScreen.stories.tsx` and
+`.test.tsx` hand in stand-in data, and every count in that suite is derived from it rather than
+written out: "ten chips" and "the other nine" were facts about a constant the screen no longer
+owns.
+
+**An empty chip list is a real state, not a hypothetical one.** `readCategoryTemplates` degrades
+to `[]` rather than throwing, because Continue is unconditional (A4) and an account seeded with
+just the fallback is something the flow already handles - replacing all of onboarding with an
+error page, on the one screen with no session to recover from, is the worse trade. So an
+unreachable backend renders the card, the copy and both exits with nothing to pick.
+`Screens/03 Setup`'s `NoTemplates` story is that state, and the copy it owes A29 is in
+`docs/TODO.md`.
 
 **Step 3's two name fields are a `grid`, not a flex row, and the 214px in the frame is a
 consequence rather than a measurement.** Frame 22 draws them at 214px each with a 12px gutter
@@ -1328,6 +1387,17 @@ categories tied at $100 named `Bills` and `arcade` put `Bills` in PET-21's "Top 
 `arcade` at the top of this legend, on one screen. Any accented name does it too. The nicer human
 ordering is real, and it is the backend's to choose for both surfaces rather than this card's to
 have an opinion about.
+
+**PET-64 gave this card the real per-category glyph, and it is the site that ticket's own blast
+radius missed.** The plan swept `main` and reported "two `<ShoppingBag />` placeholder sites, not
+one" - `TransactionRow` and `[id]/CategoryContextCard`. There were **three**: this card draws the
+identical `size-9 rounded-field` tile and drew the identical placeholder in it. Leaving it would
+have made the dashboard the one screen where a reader still cannot tell Personal care from Gifts,
+which is the whole reason the icon shipped alongside the palette rather than after it. The fix
+widened `DashboardCategoryDto` with `icon` - **for this tile alone**, since the donut's slices are
+bare colour and need none - so the join below still costs no request. The lesson generalises past
+this card: a plan's inventory is a starting point, and `grep -rn ShoppingBag src/` is a second
+later.
 
 **PET-24 filled the fourth slot, `RecentTransactionsCard`, and its one finding worth arguing is
 that the join it draws costs no request.** A row in `recentTransactions` is a

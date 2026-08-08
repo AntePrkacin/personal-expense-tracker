@@ -1,4 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  COLOUR_TOKENS,
+  ICON_NAMES,
+} from '../../database/central/template-tokens';
 
 /**
  * Where a category's spend sits against its cap this period.
@@ -24,10 +28,20 @@ export class CategoryResponseDto {
   @ApiProperty({ example: 'Groceries' })
   name!: string;
 
-  @ApiProperty({ example: '#57B368', description: 'Hex, `#RRGGBB`.' })
+  @ApiProperty({
+    enum: COLOUR_TOKENS,
+    example: 'success',
+    description:
+      'A daisyUI semantic colour token, not a hex - several of these have no single hex value, being themed per light and dark.',
+  })
   color!: string;
 
-  @ApiProperty({ nullable: true, type: String })
+  /**
+   * Nullable because the column is, not because a new category may omit one:
+   * `CreateCategoryDto.icon` is required as of PET-64 and `UpdateCategoryDto`
+   * cannot clear it, so only a row predating that can be null.
+   */
+  @ApiProperty({ enum: ICON_NAMES, nullable: true, type: String })
   icon!: string | null;
 
   @ApiProperty({ nullable: true, type: String })

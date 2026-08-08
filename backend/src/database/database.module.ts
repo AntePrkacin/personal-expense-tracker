@@ -15,6 +15,7 @@ import {
   CENTRAL_DB_FILE,
   CENTRAL_MIGRATIONS_DIR,
 } from './database.constants';
+import { seedTemplates } from './central/template-seed';
 import type { CentralDatabase, DatabaseHandle } from './database.types';
 import { openCloudDatabase, openLocalDatabase } from './turso-client.factory';
 import { TursoPlatformService } from './turso-platform.service';
@@ -24,10 +25,15 @@ import { UserDatabaseService } from './user-database.service';
 const CENTRAL_DB_HANDLE = 'CENTRAL_DB_HANDLE';
 
 /**
- * Opens the central database and brings its schema up to date.
+ * Opens the central database, brings its schema up to date and fills the
+ * template tables if they are empty.
  *
  * Nest resolves async factories before the server starts listening, so the
- * central database is migrated before any consumer can query it.
+ * central database is migrated and seeded before any consumer can query it.
+ * The seed has to be here rather than in a migration because root `CLAUDE.md`
+ * forbids hand-editing anything under `drizzle/**` and drizzle-kit generates
+ * structure only; `template-seed.ts` carries the rest of that reasoning,
+ * including why the guard is "any row exists".
  */
 async function openCentralDatabase(
   config: ConfigService,
@@ -48,6 +54,7 @@ async function openCentralDatabase(
     await syncMigrate(handle.db as never, {
       migrationsFolder: CENTRAL_MIGRATIONS_DIR,
     });
+    await seedTemplates(handle.db);
     return handle;
   }
 
@@ -55,6 +62,7 @@ async function openCentralDatabase(
   await localMigrate(handle.db as never, {
     migrationsFolder: CENTRAL_MIGRATIONS_DIR,
   });
+  await seedTemplates(handle.db);
   return handle;
 }
 

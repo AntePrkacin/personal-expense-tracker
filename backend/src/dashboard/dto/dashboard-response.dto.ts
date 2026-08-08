@@ -1,4 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  COLOUR_TOKENS,
+  ICON_NAMES,
+} from '../../database/central/template-tokens';
 import { InsightSummaryDto } from '../../insights/dto/insight-set-response.dto';
 import { TransactionResponseDto } from '../../transactions/dto/transaction-response.dto';
 
@@ -25,8 +29,30 @@ export class DashboardCategoryDto {
   @ApiProperty({ example: 'Groceries' })
   name!: string;
 
-  @ApiProperty({ example: '#57B368', description: 'Hex, `#RRGGBB`.' })
+  // The donut's slice fill comes off this, through a `Record` keyed by the
+  // union this enum generates - so it publishes the enum for the same reason
+  // CreateCategoryDto.color does. A bare `string` here degrades that record to
+  // `Record<string, string>`, which accepts any subset of keys, and the slices
+  // render grey with every gate green.
+  @ApiProperty({
+    enum: COLOUR_TOKENS,
+    example: 'success',
+    description: 'A daisyUI semantic colour token, not a hex.',
+  })
   color!: string;
+
+  /**
+   * **Here for the recent-transactions card, not for the donut.**
+   *
+   * The donut's slices are bare colour and need none. `RecentTransactionsCard`
+   * draws the same `size-9` tile the transactions table does, and joins it off
+   * this array rather than making a second request - see `backend/CLAUDE.md`'s
+   * note on why that join is free. Without this field that tile is the one
+   * place left drawing a placeholder mark for every category, which is exactly
+   * what the close colour pairs cannot survive.
+   */
+  @ApiProperty({ enum: ICON_NAMES, nullable: true, type: String })
+  icon!: string | null;
 
   @ApiProperty({
     description:
@@ -49,7 +75,11 @@ export class TopCategoryDto {
   @ApiProperty({ example: 'Groceries' })
   name!: string;
 
-  @ApiProperty({ example: '#57B368', description: 'Hex, `#RRGGBB`.' })
+  @ApiProperty({
+    enum: COLOUR_TOKENS,
+    example: 'success',
+    description: 'A daisyUI semantic colour token, not a hex.',
+  })
   color!: string;
 
   @ApiProperty({

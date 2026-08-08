@@ -73,6 +73,30 @@ registration and set NULL by verification, and it holds `monthlyBudget` in **maj
 with the DTO defaults already applied. None of them is a licence to put more profile data in
 central.
 
+**A fourth exception arrived with PET-64, and it is the first that is not about a credential
+outliving the database it belongs to.** `colour_templates`, `icon_templates` and
+`category_templates` hold what onboarding _offers_ and what a category picker _offers_: which
+default categories exist, and which colours and icons a user may choose from. That is not user
+data at all - it belongs to nobody, it is the same for everybody, and a **super admin** edits
+it, which is the whole reason it cannot stay a TypeScript constant. The rule above about
+constraining closed sets in TypeScript rather than in SQLite holds for a set that only changes
+with a deploy; an admin-editable set is not that, it is data, and central is the only database
+that can hold it. A user's own database keeps holding only that user's own categories:
+provisioning **copies** name, colour, icon and description out of a template into a
+`categories` row, and nothing reads across afterwards, so an admin editing a template does not
+reach back into anybody's account. Read this as sanctioning **template** data specifically, not
+as a second door for profile data.
+
+Two things about those tables are load-bearing. They reference a **code-side allowlist**
+(`central/template-tokens.ts`), never a free-form colour or icon name, because Tailwind cannot
+build a class from runtime data and `lucide-react` imports by name at build time - that
+constraint is what keeps `@IsIn` publishing a real OpenAPI enum, and therefore keeps the
+frontend's class and icon maps exhaustiveness proofs. And the seed runs **programmatically at
+boot**, in `openCentralDatabase` right after `migrate()`, guarded on "any `category_templates`
+row exists": root `CLAUDE.md` forbids hand-editing generated migration SQL, and the guard is
+not only idempotence - it is what stops a restart re-creating a template an admin deliberately
+deleted.
+
 **Tokens.** Creating databases and minting their tokens are control-plane operations that
 no data-plane token can perform, so `TURSO_ORG_TOKEN` is used in exactly one place
 (`TursoPlatformService`) at provisioning time. It does not have to be an organization-wide
@@ -102,6 +126,31 @@ surfaces as a broken request for that one user rather than a failed deploy. So a
 must be nullable or carry a default - a bare `NOT NULL` add fails against any database that
 already has rows - and a migration that cannot be made safe that way needs to be split into
 an additive step now and a tightening step once the data is known to be backfilled.
+
+**A migration that changes what a value _means_ is not a drizzle migration at all, and PET-64
+is the worked example.** That ticket changed `categories.color` from a hex to a daisyUI token
+and changed nothing about the column, so `drizzle-kit generate` reports no changes and there is
+no `migration.sql` to hang a rewrite off - and root `CLAUDE.md` forbids hand-writing one into
+`drizzle/**`. The same constraint produced the same answer twice: the central template seed runs
+programmatically in `openCentralDatabase` after `migrate()`, and
+`user/legacy-colour-backfill.ts` runs in `UserDatabaseService.openUserDb` after the user-scope
+`migrate()`. Three properties make that safe to do to live data unattended, and a fourth
+migration of this shape should copy all three. It is **guarded on the data itself** ("does any
+row still hold a hex"), so there is no marker row and no ledger to keep in step and the data is
+its own record of having run. It is **one statement**, so it cannot half-apply. And its mapping
+is **not a judgement call** - it composes the two frontend maps that ticket deleted, so a
+migrated account renders in exactly the colours it rendered in the day before.
+
+**PET-64 shipped without it, and the shape of that failure is the reason this paragraph
+exists.** A category row is written once, at verification, and nothing rewrites it, so every
+account provisioned before the change kept its hexes permanently; the frontend's maps are keyed
+on the contract's enum, which a hex is not, so all of them fell through to a grey tile with no
+glyph on every screen. Two builds, a lint run, 329 unit tests and 292 e2e tests were green
+throughout, because every suite in the repo constructs its own fixtures and they were all
+updated in the same commit. **No test in either app can see this class of defect**; it was found
+by opening the app. `test/legacy-colour-backfill.e2e-spec.ts` now writes the old hexes into a
+real database and reads back what the app would really load, which is the only shape of test
+that could have.
 
 **Conventions worth knowing before writing a table.** Primary keys are UUIDv7 text
 (`src/common/ids.ts`). Money is integer minor units in `*_cents` columns; the API speaks

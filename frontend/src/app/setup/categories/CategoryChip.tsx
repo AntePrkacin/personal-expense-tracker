@@ -1,6 +1,6 @@
 import { Check } from 'lucide-react';
 
-import { CATEGORY_DOT, type CategoryColour } from '@/components/ui/categoryColour';
+import { categoryDotClass } from '@/components/ui/categoryColour';
 
 // One starter category chip on screen 03 (node 43:720), which toggles.
 //
@@ -49,10 +49,18 @@ export const CHIP_STATE: Record<'on' | 'off', string> = {
 const CHIP_BASE = 'btn gap-2 font-normal';
 
 type CategoryChipProps = {
-  /** The category's name, which is also what a registration submits. */
+  /** The category template's name. A registration submits its **id**, not this. */
   label: string;
-  /** Keyed by colour word, the way the category form offers them. */
-  colour: CategoryColour;
+  /**
+   * A daisyUI semantic colour token, as the template carries it.
+   *
+   * A plain `string` rather than `CategoryColour`, and looked up through
+   * `categoryDotClass` rather than indexed: the value is admin data arriving over
+   * the wire, so the contract's union describes what the API *should* send rather
+   * than what this component can prove it received. The lookup's neutral fallback
+   * is what a drifted value renders as, instead of an undefined class.
+   */
+  colour: string;
   selected: boolean;
   onToggle: () => void;
 };
@@ -68,19 +76,21 @@ export function CategoryChip({ label, colour, selected, onToggle }: CategoryChip
       className={`${CHIP_BASE} ${CHIP_STATE[state]}`}
     >
       {/* Hidden because the dot cannot identify a category even to a reader who can
-          see it, so the name always sits beside it. Two of the ten chips repeat a
-          colour *word* - Subscriptions reuses Transport's blue, Other reuses Bills'
-          orange - and under daisyUI the rendered hues collapse further, because
-          `CATEGORY_TILE` maps orange and yellow both onto `warning`: Shopping, Bills
-          and Other are one colour on screen, and Transport and Subscriptions another.
-          Five of the ten chips are in a tie.
+          see it, so the name always sits beside it. Every seeded chip has its own
+          token now - the two duplicated colour *words* are gone with the eight-colour
+          palette - but three pairs are deliberately close enough to read as one hue,
+          and `categoryColour.ts` names all three with their measured ΔE. So the
+          reason this is hidden is unchanged, only its arithmetic.
 
           daisyUI's `status` is the dot: it is exactly this - a small round shape
-          whose only job is a colour. **`CATEGORY_DOT`, not `CATEGORY_TILE`**: that
+          whose only job is a colour. **`categoryDotClass`, not the tile**: a tile
           class carries a `text-*-content` half, and `.status` draws its drop shadow
           from `currentColor`, so a tile value turns the shadow into an opaque
           coloured smudge. `categoryColour.ts` records the whole of it. */}
-      <span aria-hidden="true" className={`status status-lg shrink-0 ${CATEGORY_DOT[colour]}`} />
+      <span
+        aria-hidden="true"
+        className={`status status-lg shrink-0 ${categoryDotClass(colour)}`}
+      />
       {label}
       {/* `currentColor` by default, which is the call the hand-traced tick already made:
           Figma strokes it one shade lighter than the label, and the theme publishes one

@@ -3,7 +3,8 @@ import { apportionPercents, sortedCategories } from './donut';
 const category = (name: string, spent: number, percent = 0) => ({
   id: `id-${name}`,
   name,
-  color: '#57B368',
+  color: 'success' as const,
+  icon: 'shopping-basket' as const,
   spent,
   percent,
 });

@@ -312,6 +312,7 @@ Add category (19):
 - **CED-4.** Fields, top to bottom: "Name" (text, "Subscriptions"), "Monthly budget" ("$" prefix, numeric, shown focused with value "250.00"), then "Color" and "Icon" as two selects side by side ("Violet", "Repeat"), then "Note (optional)" (text, "Streaming, apps & memberships").
 - **CED-5.** Buttons: "Cancel" (closes without saving) and primary "Add category" (creates the category, closes the modal, and refreshes the card grid, the "Categories" tab badge, the allocation summary, and the Settings categories line).
 - **CED-6.** Neither option list is drawn open. Treat "Color" as the eight Category color tokens from Foundations and confirm the "Icon" set with the designer (assumption A40). "Note (optional)" is captured but appears on no screen (assumption A42).
+  > **Amended by PET-64 (2026-08-07).** Both option lists are answered - see A40 - and come from `GET /api/templates/palette` rather than from a frontend constant. A42 also stopped being quite true: `note` still appears on no screen, but it is no longer empty on a fresh account, because each seeded category is given its template's description as its note. Nothing renders it yet, so do not read a blank Categories screen as a failed seed.
 
 Edit category (21):
 
@@ -518,6 +519,8 @@ Two typefaces. **Plus Jakarta Sans** carries the brand and headings: Wordmark 19
 
 The eight Category colors are the closed list the "Color" select on 19 and 21 should offer (assumption A40).
 
+> **Amended by PET-64 (2026-08-07).** The Category row above, and this sentence, describe the retired token layer; PET-57 replaced the hand-rolled palette with stock daisyUI, and PET-64 made the consequence explicit in the data model. `categories.color` stores a **daisyUI semantic token** - one of seventeen - rather than a hex, because `primary` is valued differently per light and dark, so several categories have no single hex value at all and a stored one would paint the wrong half the time. The closed list the "Color" select offers is served by `GET /api/templates/palette` with a human label per token, and an admin controls which are enabled - so it can be a strict subset of the seventeen the API accepts. This **settles A40's colour half**; see the icon note on A40 itself.
+
 **Spacing.** A 4px base scale, used for padding, gaps and layout. Eleven steps, each named for
 its value:
 
@@ -551,6 +554,7 @@ Numbered so teachers can review each one. Where the design is ambiguous, the ass
 - **A5.** Monthly budget (02, 17) is required, numeric, greater than zero, with thousands formatting. Exact bounds aren't designed.
 - **A6.** The Currency select shows only "USD - $"; the option list is unknown. Ship with USD until specified.
 - **A7.** The onboarding chip set (03: includes Bills and Subscriptions) conflicts with the app's category set (13: eight categories including Health and Other, no Bills or Subscriptions). Each screen follows its own mock until the designer resolves it.
+  > **Resolved by PET-64 (2026-08-07), by replacing both lists rather than choosing between them.** The starter categories are twelve admin-managed rows in `central.category_templates`, seeded as Groceries, Dining out, Transportation, Utilities, Healthcare, Entertainment, Education, Travel, Personal care, Gifts, Family & pets and Loans & debt - plus `Uncategorized`, which is seeded for everybody and offered to nobody. Bills, Subscriptions, Housing, Shopping and Other are all gone, so the seam this assumption describes has no names left on it. Onboarding and every later screen now read the same set, and it is editable without a deploy.
 - **A8.** The Dashboard month select (04/05) shows only "October". It renders the current period and stays non-functional until month navigation is designed.
 - **A9.** "This month" (06) and all "days left" math (04, 14) use the "Month starts on" preference (17) as the period start.
 - **A10.** Clicking a transactions row opens Transaction detail (08), inferred from 08's "All transactions" breadcrumb.
@@ -587,6 +591,7 @@ Assumptions A31 to A44 cover the access screens (22, 23, 24) and the category ed
 - **A38.** Nothing is designed for opening the link itself: no success landing, expired-link, already-used-link, or wrong-device screen. Handle these with plain messages and a way to request a new link.
 - **A39.** No logout control exists on any frame, including Settings, even though the build now has sessions. Changing the email on 17 also has no re-verification step designed. Both need a designer answer before shipping.
 - **A40.** The "Color" and "Icon" selects (19, 21) are never shown open. Color is assumed to be the eight Category tokens from Foundations (see 5.1); the icon set is unknown beyond the single example "Repeat".
+  > **Settled by PET-64 (2026-08-07).** Both halves now have an answer, and neither needed the designer. Color is the seventeen daisyUI semantic tokens, offered through `GET /api/templates/palette` (see the amendment under 5.1). The icon set is **thirteen lucide names** - `shopping-basket`, `utensils`, `car`, `zap`, `heart-pulse`, `tv`, `graduation-cap`, `plane`, `scissors`, `gift`, `paw-print`, `landmark`, `circle-question-mark` - served by the same endpoint with a label each. It is a closed code-side allowlist rather than free text for a reason that is not taste: `lucide-react` imports by name at build time, so a runtime string cannot become a component without a static map, and the same allowlist is what lets the API publish a real enum. "Repeat" is not among them; nothing in the app draws a recurring-transaction mark yet.
 - **A41.** Deleting a category moves its transactions to "Other" (20, designed copy). "Other" must therefore always exist and cannot be deleted, and no frame shows what deleting "Other" would do.
 - **A42.** Category "Note (optional)" (19, 21) is captured but appears on no other screen. Store it and confirm where it is meant to surface.
 - **A43.** Nothing prevents category caps from exceeding the monthly budget. CTG-2 only ever shows an unallocated chip, and no over-allocation state is designed.

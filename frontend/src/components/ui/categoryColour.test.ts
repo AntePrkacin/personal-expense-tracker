@@ -1,70 +1,115 @@
 import {
-  CATEGORY_COLOUR_BY_HEX,
   CATEGORY_DOT,
   CATEGORY_DOT_NEUTRAL,
   CATEGORY_FILL,
   CATEGORY_FILL_NEUTRAL,
+  CATEGORY_ICON,
   CATEGORY_TILE,
   CATEGORY_TILE_NEUTRAL,
   categoryDotClass,
   categoryFillVar,
+  categoryIcon,
   categoryTileClass,
   type CategoryColour,
+  type IconName,
 } from './categoryColour';
 
-// The first test beside this file, and it is here for the lookup rather than for the map:
-// `CATEGORY_TILE` is daisyUI classes, which nothing compiles against in a test run, so what
-// is worth pinning is that a hex a category is *stored* under resolves to the tile its
-// colour word owns - a wrong digit there is invisible, the tile just renders the fallback
-// grey, which is a real colour in this design and so looks like a category with no colour
-// rather than a bug.
+// **What is worth pinning here changed shape at PET-64, and it is worth saying how.**
+// This suite used to exist for a *lookup*: `color` was a hex, the maps were keyed by
+// colour words, and a wrong digit in the bridge between them was invisible - the tile
+// just rendered the fallback grey, which is a real colour in this design and so read
+// as a category with no colour rather than as a bug.
+//
+// That bridge is gone. `color` stores the daisyUI token verbatim, so a lookup is an
+// identity check, and the type system covers the exhaustiveness: `Record<CategoryColour,
+// string>` is keyed by the contract's own union, so a missing key is a build error.
+// What is left for a test is what a type cannot say - that the three maps agree with
+// each other, that the tile's pairing inverts correctly for a `-content` token, and
+// that the deliberate close pairs are still there.
 
-describe('CATEGORY_COLOUR_BY_HEX', () => {
-  it('covers all eight colours exactly once', () => {
-    expect(Object.keys(CATEGORY_COLOUR_BY_HEX)).toHaveLength(8);
-    expect(new Set(Object.values(CATEGORY_COLOUR_BY_HEX)).size).toBe(8);
+const COLOURS = Object.keys(CATEGORY_TILE) as CategoryColour[];
+
+describe('CATEGORY_TILE', () => {
+  it('covers all seventeen daisyUI semantic tokens', () => {
+    // Sixteen semantic tokens plus `base-content/50`. The `base-100/200/300`
+    // *surfaces* are still deliberately absent - a category painted in one is a
+    // category painted in nothing, and `base-300` measures 1.16:1 against the
+    // card - but `base-content/50` is the ink on those surfaces at half
+    // strength, 3.401:1 and 4.769:1, and it is the only entry in the whole set
+    // that is muted and clears 3:1 in both themes. `COLOUR_CONTRAST` in the
+    // backend's `template-tokens.ts` carries the measured table.
+    expect(COLOURS).toHaveLength(17);
+    expect(COLOURS).toContain('base-content/50');
   });
 
-  it('is keyed uppercase, because the API accepts either case', () => {
-    // CreateCategoryDto matches /^#[0-9A-Fa-f]{6}$/, so a lowercase hex is a legal stored
-    // value and the lookup normalises rather than trusting the seed's casing.
-    for (const hex of Object.keys(CATEGORY_COLOUR_BY_HEX)) {
-      expect(hex).toBe(hex.toUpperCase());
+  it('pairs every background with a content colour', () => {
+    // The pairing is the point: a glyph drawn on the tile with currentColor has to
+    // pick up a legible colour, not assume white.
+    for (const colour of COLOURS) {
+      const classes = CATEGORY_TILE[colour].split(' ');
+
+      expect(classes).toHaveLength(2);
+      expect(classes[0]).toBe(`bg-${colour}`);
+      expect(classes[1].startsWith('text-')).toBe(true);
     }
+  });
+
+  it('inverts the pairing for a -content token, which looks like a mistake', () => {
+    // `accent-content` maps to `bg-accent-content text-accent`. The glyph has to be
+    // legible against the tile, and a `-content` token's partner is the base colour
+    // it was derived from - so this is the correct direction, not a transposition.
+    expect(CATEGORY_TILE['accent-content']).toBe('bg-accent-content text-accent');
+    expect(CATEGORY_TILE.accent).toBe('bg-accent text-accent-content');
+  });
+
+  it('gives every token its own tile, with no collisions', () => {
+    // The old eight-colour map deliberately collided orange and yellow onto
+    // `warning`. Nothing collides now - the keys *are* the tokens - so a duplicate
+    // value here would mean a copy-paste slip rather than a design decision.
+    expect(new Set(Object.values(CATEGORY_TILE)).size).toBe(COLOURS.length);
   });
 });
 
-describe('CATEGORY_TILE', () => {
-  it('pairs every background with its content colour', () => {
-    // The pairing is the point of PET-57's conversion: a glyph drawn on the tile with
-    // currentColor has to pick up the content colour, not assume white.
-    for (const colour of Object.keys(CATEGORY_TILE) as CategoryColour[]) {
-      const classes = CATEGORY_TILE[colour].split(' ');
-
-      expect(classes.some((c) => c.startsWith('bg-'))).toBe(true);
-      expect(classes.some((c) => c.startsWith('text-') && c.endsWith('-content'))).toBe(true);
-    }
+describe('the three deliberately close colour pairs', () => {
+  // Measured in OKLab against a ~0.10 floor, and kept rather than re-picked: see
+  // the note in categoryColour.ts for why breaking Education / Travel would cost
+  // more than it buys. Pinned here so the map cannot silently be "fixed" into
+  // something the sign-off artifact never showed - and so that anybody reading a
+  // rendered screen and finding two categories the same colour finds this first.
+  it.each([
+    ['Personal care / Gifts', 0.029, 'accent-content', 'success-content'],
+    ['Education / Travel', 0.037, 'primary-content', 'secondary-content'],
+    ['Groceries / Utilities', 0.06, 'success', 'accent'],
+  ])('keeps %s, ΔE %s', (_label, _delta, first, second) => {
+    // They are genuinely different tokens - the point is that they render close,
+    // not that they render identically, which is what a reused token would do.
+    expect(CATEGORY_TILE[first as CategoryColour]).not.toBe(
+      CATEGORY_TILE[second as CategoryColour],
+    );
+    expect(COLOURS).toContain(first);
+    expect(COLOURS).toContain(second);
   });
 
-  it('lets orange and yellow collide on warning, deliberately', () => {
-    // PET-57 accepted the collision because category colours are decoration, not
-    // semantics. Pinned so it cannot be "fixed" by inventing a ninth theme colour.
-    expect(CATEGORY_TILE.orange).toBe(CATEGORY_TILE.yellow);
+  it('leans on the per-category icon as the identity channel', () => {
+    // The close pairs are only safe because each category draws its own glyph, so
+    // the icon map landing in the same ticket as the palette is a requirement
+    // rather than a coincidence.
+    expect(Object.keys(CATEGORY_ICON).length).toBeGreaterThan(0);
   });
 });
 
 describe('CATEGORY_DOT', () => {
   it('is every tile without its content colour', () => {
-    // The two maps are written out separately, because this file's first rule is that a class
-    // is never assembled at runtime. This is what stops them drifting: a dot is exactly the
-    // background half of its tile, so adding a ninth colour to one and not the other fails
-    // here rather than rendering a transparent dot somewhere.
-    for (const colour of Object.keys(CATEGORY_TILE) as CategoryColour[]) {
+    // The two maps are written out separately, because this file's first rule is that
+    // a class is never assembled at runtime. This is what stops them drifting: a dot is
+    // exactly the background half of its tile, so a seventeenth colour added to one and
+    // not the other fails here rather than rendering a transparent dot somewhere.
+    for (const colour of COLOURS) {
       expect(CATEGORY_TILE[colour].split(' ')[0]).toBe(CATEGORY_DOT[colour]);
     }
   });
 
-  it('covers the same eight colours as the tile', () => {
+  it('covers the same tokens as the tile', () => {
     expect(Object.keys(CATEGORY_DOT)).toEqual(Object.keys(CATEGORY_TILE));
   });
 
@@ -73,31 +118,31 @@ describe('CATEGORY_DOT', () => {
     // translucent black for that purpose. A `text-*-content` class overrides it with a fully
     // opaque colour and the shadow becomes an opaque smudge under every dot - which is why the
     // chips and the Welcome panel take this map and not the tile.
-    for (const colour of Object.keys(CATEGORY_DOT) as CategoryColour[]) {
+    for (const colour of COLOURS) {
       expect(CATEGORY_DOT[colour]).not.toMatch(/text-/);
     }
   });
 });
 
 describe('categoryTileClass', () => {
-  it.each(Object.entries(CATEGORY_COLOUR_BY_HEX))('maps %s to its tile', (hex, colour) => {
-    expect(categoryTileClass(hex)).toBe(CATEGORY_TILE[colour as CategoryColour]);
+  it.each(COLOURS)('maps %s to its tile', (colour) => {
+    expect(categoryTileClass(colour)).toBe(CATEGORY_TILE[colour]);
   });
 
-  it('accepts a lowercase hex', () => {
-    expect(categoryTileClass('#57b368')).toBe(CATEGORY_TILE.green);
-  });
-
-  it("gives the fallback category's own grey to #98A0AE", () => {
-    // The one hex outside the palette that a real account actually holds: FALLBACK_CATEGORY
-    // in the backend's starter-categories.ts. So this is the designed answer for
-    // "Uncategorized" rather than a fallback being hit by accident.
-    expect(categoryTileClass('#98A0AE')).toBe(CATEGORY_TILE_NEUTRAL);
+  it('resolves the fallback category’s own colour like any other', () => {
+    // **This reverses what the suite used to assert.** `Uncategorized` carried
+    // `#98A0AE`, deliberately outside the palette, and this test pinned that it
+    // rendered the neutral grey. It carries `warning-content` now, a real theme
+    // token, so it resolves through the map and the neutral is for unresolvable
+    // categories only.
+    expect(categoryTileClass('warning-content')).toBe(CATEGORY_TILE['warning-content']);
+    expect(categoryTileClass('warning-content')).not.toBe(CATEGORY_TILE_NEUTRAL);
   });
 
   it.each([
-    ['an unknown but well-formed hex', '#123456'],
-    ['something that is not a hex', 'green'],
+    ['a hex, which is no longer a colour this API stores', '#57B368'],
+    ['a colour word from the retired palette', 'teal'],
+    ['a token that is not semantic', 'base-100'],
     ['an empty string', ''],
     ['a category that could not be resolved', undefined],
     ['a colour the API left null', null],
@@ -109,7 +154,7 @@ describe('categoryTileClass', () => {
     // The failure this rules out is the one Tailwind makes silent: a tile with no background
     // class is transparent, builds cleanly and looks like a rendering glitch.
     expect(CATEGORY_TILE_NEUTRAL).not.toBe('');
-    expect(categoryTileClass('#000000')).not.toBe('');
+    expect(categoryTileClass('success')).not.toBe('');
   });
 
   it('never returns a bare index into Object.prototype', () => {
@@ -122,23 +167,13 @@ describe('categoryTileClass', () => {
 });
 
 describe('categoryDotClass', () => {
-  // The half of the pair PET-34 and PET-23 both needed. The two existing CATEGORY_DOT call
-  // sites index it by colour word; a screen rendering an API category has a hex, and the
-  // hex-keyed path used to return the tile - whose text-*-content half is what must not reach
-  // a `status`.
-
-  it.each(Object.entries(CATEGORY_COLOUR_BY_HEX))('maps %s to its dot', (hex, colour) => {
-    expect(categoryDotClass(hex)).toBe(CATEGORY_DOT[colour as CategoryColour]);
-  });
-
-  it('accepts a lowercase hex', () => {
-    expect(categoryDotClass('#57b368')).toBe(CATEGORY_DOT.green);
+  it.each(COLOURS)('maps %s to its dot', (colour) => {
+    expect(categoryDotClass(colour)).toBe(CATEGORY_DOT[colour]);
   });
 
   it.each([
-    ['an unknown but well-formed hex', '#123456'],
-    ["the fallback category's own grey", '#98A0AE'],
-    ['something that is not a hex', 'green'],
+    ['a hex', '#57B368'],
+    ['a retired colour word', 'teal'],
     ['an empty string', ''],
     ['a category that could not be resolved', undefined],
     ['a colour the API left null', null],
@@ -148,18 +183,16 @@ describe('categoryDotClass', () => {
 
   it('never hands a status dot a content colour to smudge itself with', () => {
     // The whole reason this function exists rather than the tile one being reused. Every
-    // return value has to be background-only, the neutral fallback included - a text-*-content
-    // half turns daisyUI's currentColor drop shadow into an opaque smudge under every dot.
-    for (const hex of [...Object.keys(CATEGORY_COLOUR_BY_HEX), '#123456', null]) {
-      expect(categoryDotClass(hex)).not.toMatch(/text-/);
+    // return value has to be background-only, the neutral fallback included.
+    for (const colour of [...COLOURS, 'nonsense', null]) {
+      expect(categoryDotClass(colour)).not.toMatch(/text-/);
     }
     expect(CATEGORY_DOT_NEUTRAL).not.toMatch(/text-/);
   });
 
-  it('agrees with categoryTileClass about which colour a hex is', () => {
-    // Two lookups over one map; this is what stops them drifting.
-    for (const hex of Object.keys(CATEGORY_COLOUR_BY_HEX)) {
-      expect(categoryTileClass(hex).split(' ')[0]).toBe(categoryDotClass(hex));
+  it('agrees with categoryTileClass about which colour a token is', () => {
+    for (const colour of COLOURS) {
+      expect(categoryTileClass(colour).split(' ')[0]).toBe(categoryDotClass(colour));
     }
   });
 
@@ -170,47 +203,53 @@ describe('categoryDotClass', () => {
 });
 
 describe('CATEGORY_FILL', () => {
-  it('covers the same eight colours as the dot', () => {
+  it('covers the same tokens as the dot', () => {
     expect(Object.keys(CATEGORY_FILL)).toEqual(Object.keys(CATEGORY_DOT));
   });
 
-  it('pairs every dot class with the CSS variable naming the same colour', () => {
+  it('pairs every dot class with the CSS value naming the same colour', () => {
     // The pin that stops the three maps drifting. `bg-error` and `var(--color-error)` are the
-    // same colour reached two ways, and a ninth colour added to one map and not the others fails
-    // here rather than painting an unfilled slice in the donut.
-    for (const colour of Object.keys(CATEGORY_DOT) as CategoryColour[]) {
+    // same colour reached two ways, and an eighteenth colour added to one map and not the
+    // others fails here rather than painting an unfilled slice in the donut.
+    //
+    // **The expectation is derived from the dot rather than listed**, which is what lets it
+    // cover the alpha token without an exemption: Tailwind's `/50` modifier compiles to a
+    // `color-mix` against `transparent`, so that is what an SVG `fill` has to say to be the
+    // same colour. Special-casing it by name would have made the one entry that is not a plain
+    // `var()` the one entry nothing checks.
+    for (const colour of COLOURS) {
       const token = CATEGORY_DOT[colour].replace(/^bg-/, '');
-      expect(CATEGORY_FILL[colour]).toBe(`var(--color-${token})`);
+      const [name, alpha] = token.split('/');
+
+      expect(CATEGORY_FILL[colour]).toBe(
+        alpha
+          ? `color-mix(in oklab, var(--color-${name}) ${alpha}%, transparent)`
+          : `var(--color-${name})`,
+      );
     }
   });
 
   it('is a CSS value everywhere, never a Tailwind class', () => {
     // The whole reason this map exists. `fill="bg-error"` is not invalid CSS so much as
-    // meaningless: the slice simply never paints, with no error anywhere.
-    for (const colour of Object.keys(CATEGORY_FILL) as CategoryColour[]) {
-      expect(CATEGORY_FILL[colour]).toMatch(/^var\(--color-[a-z-]+\)$/);
+    // meaningless: the slice simply never paints, with no error anywhere. A `color-mix()` is
+    // as valid a `fill` as a `var()`; a class string is not.
+    for (const colour of COLOURS) {
+      expect(CATEGORY_FILL[colour]).toMatch(
+        /^(var\(--color-[a-z-]+\)|color-mix\(in oklab, var\(--color-[a-z-]+\) \d+%, transparent\))$/,
+      );
       expect(CATEGORY_FILL[colour]).not.toMatch(/^bg-/);
     }
-  });
-
-  it('lets orange and yellow collide, exactly as the other two maps do', () => {
-    expect(CATEGORY_FILL.orange).toBe(CATEGORY_FILL.yellow);
   });
 });
 
 describe('categoryFillVar', () => {
-  it.each(Object.entries(CATEGORY_COLOUR_BY_HEX))('maps %s to its fill', (hex, colour) => {
-    expect(categoryFillVar(hex)).toBe(CATEGORY_FILL[colour as CategoryColour]);
-  });
-
-  it('accepts a lowercase hex', () => {
-    expect(categoryFillVar('#57b368')).toBe(CATEGORY_FILL.green);
+  it.each(COLOURS)('maps %s to its fill', (colour) => {
+    expect(categoryFillVar(colour)).toBe(CATEGORY_FILL[colour]);
   });
 
   it.each([
-    ['the fallback category own grey', '#98A0AE'],
-    ['an unknown but well-formed hex', '#123456'],
-    ['something that is not a hex', 'green'],
+    ['a hex', '#57B368'],
+    ['a retired colour word', 'teal'],
     ['an empty string', ''],
     ['a category that could not be resolved', undefined],
     ['a colour the API left null', null],
@@ -221,12 +260,65 @@ describe('categoryFillVar', () => {
   it('never returns an empty string, which would be an unpainted slice', () => {
     // The donut's version of the transparent-tile failure: a slice with no fill still occupies
     // its arc, so the ring would have a hole in it that nothing reports.
-    expect(categoryFillVar('#000000')).not.toBe('');
+    expect(categoryFillVar('success')).not.toBe('');
     expect(CATEGORY_FILL_NEUTRAL).not.toBe('');
   });
 
   it('never returns a bare index into Object.prototype', () => {
     expect(categoryFillVar('constructor')).toBe(CATEGORY_FILL_NEUTRAL);
     expect(categoryFillVar('toString')).toBe(CATEGORY_FILL_NEUTRAL);
+  });
+});
+
+describe('CATEGORY_ICON', () => {
+  const ICONS = Object.keys(CATEGORY_ICON) as IconName[];
+
+  it('covers all thirteen lucide names the contract publishes', () => {
+    expect(ICONS).toHaveLength(13);
+  });
+
+  it('resolves every name to a component rather than to undefined', () => {
+    // The failure this rules out is the one an index signature makes silent: a map
+    // missing a key hands the caller `undefined`, which React renders as nothing at
+    // all rather than throwing.
+    for (const name of ICONS) {
+      expect(CATEGORY_ICON[name]).toBeDefined();
+    }
+  });
+
+  it('gives each category its own glyph, with no reuse', () => {
+    // The close colour pairs lean on this: two categories that render nearly the
+    // same colour are told apart by the icon, so a reused glyph would collapse the
+    // one channel that separates them.
+    expect(new Set(Object.values(CATEGORY_ICON)).size).toBe(ICONS.length);
+  });
+
+  it('uses circle-question-mark rather than the deprecated circle-help', () => {
+    expect(ICONS).toContain('circle-question-mark');
+    expect(ICONS).not.toContain('circle-help');
+  });
+});
+
+describe('categoryIcon', () => {
+  it.each(Object.keys(CATEGORY_ICON) as IconName[])('maps %s to its component', (name) => {
+    expect(categoryIcon(name)).toBe(CATEGORY_ICON[name]);
+  });
+
+  it.each([
+    ['an icon name from before the allowlist', 'cup'],
+    ['another one', 'box'],
+    ['an empty string', ''],
+    ['an icon the API left null', null],
+    ['an absent icon', undefined],
+  ])('returns null for %s', (_label, value) => {
+    // Null rather than a stand-in glyph: the caller already draws a tile, and an
+    // empty tile reads as a category with no icon where a wrong glyph would read
+    // as a category that is something else.
+    expect(categoryIcon(value)).toBeNull();
+  });
+
+  it('never returns a bare index into Object.prototype', () => {
+    expect(categoryIcon('constructor')).toBeNull();
+    expect(categoryIcon('toString')).toBeNull();
   });
 });

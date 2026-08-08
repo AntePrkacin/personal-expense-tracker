@@ -5,7 +5,6 @@ import {
   ArrayUnique,
   IsArray,
   IsEmail,
-  IsIn,
   IsInt,
   IsISO4217CurrencyCode,
   IsNotEmpty,
@@ -13,12 +12,29 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { normalizeEmail } from '../../common/normalize-email';
-import { STARTER_CATEGORY_NAMES } from '../../database/user/starter-categories';
+
+/**
+ * A hard ceiling on the picked-category array, and **not** the length of the
+ * offered list.
+ *
+ * This field used to read `@ArrayMaxSize(STARTER_CATEGORY_NAMES.length)`, whose
+ * bound came from the constant PET-64 deleted. The offered list is a table now,
+ * so there is no compile-time length to derive one from - and a count query
+ * here is the wrong fix twice over: it would put a database read in front of
+ * validation on the one route anybody can post to unauthenticated, whose timing
+ * properties `backend/CLAUDE.md` is most careful about.
+ *
+ * So it is a literal, well above any plausible template count. It exists to
+ * bound the array, not to describe the list; an id past the end of the real
+ * list is rejected by the membership check in `AuthService` either way.
+ */
+const MAX_PICKED_CATEGORIES = 100;
 
 /**
  * Everything screens 02, 03 and 22 collected, submitted in one request when
@@ -93,16 +109,37 @@ export class RegisterDto {
   monthStartDay?: number;
 
   /**
-   * The starter chips picked on screen 03, by name.
+   * The starter chips picked on screen 03, **by `category_templates.id`**.
+   *
+   * Ids rather than names since PET-64. The offered list is admin-managed data
+   * in central now, so `@IsIn` has nothing to close over: a name is no longer a
+   * stable key, and the enum a name-based check used to publish would have been
+   * a snapshot of a table taken at build time. What replaces it is a shape check
+   * here plus a **membership check against central** in `AuthService`, ahead of
+   * the floated token issue and mail send so the empty-202 timing property
+   * holds. An unknown id is a 400, consistent with "a malformed address is a
+   * fact about the input, not about the account" - it names no account and
+   * leaks nothing.
    *
    * Required but allowed to be empty: A4 records that no minimum is enforced,
    * and a user who deselects everything is making a valid choice. Required
    * rather than optional so a frontend that stops sending the field fails
    * loudly instead of silently seeding nothing.
+   *
+   * `@IsUUID()` before the lookup is what keeps junk out of an `IN (...)`
+   * against central, and `@ArrayUnique` stops one template being seeded twice.
+   * Unversioned, like every other id check in this app: primary keys here are
+   * **v7** (`src/common/ids.ts`), so pinning a version would reject all of them.
    */
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    description:
+      'Ids from `GET /api/templates/categories`. May be empty. Unknown ids are a 400.',
+  })
   @IsArray()
-  @ArrayMaxSize(STARTER_CATEGORY_NAMES.length)
+  @ArrayMaxSize(MAX_PICKED_CATEGORIES)
   @ArrayUnique()
-  @IsIn(STARTER_CATEGORY_NAMES, { each: true })
+  @IsUUID(undefined, { each: true })
   categories!: string[];
 }

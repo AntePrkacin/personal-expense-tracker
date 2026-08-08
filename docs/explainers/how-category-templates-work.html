@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How category templates, colours and icons actually work</title>
+
+    <!--
+      Third file in this folder, and the only one that explains rather than shows. Its two
+      siblings are reference artifacts you check a change against; this one is the walk-through
+      for somebody who wants to understand the machine.
+
+      Same pins as the siblings, and here the pinning is not merely tidiness: this page uses real
+      daisyUI theme tokens in its diagrams, so flipping the toggle demonstrates the exact
+      mechanism the prose describes. If the pins drifted, the demonstration would be of something
+      other than the app.
+    -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+    <script src="https://unpkg.com/lucide@1.29.0"></script>
+</head>
+
+<body class="bg-base-200 text-base-content min-h-screen p-4 sm:p-8">
+  <div class="mx-auto flex max-w-4xl flex-col gap-8">
+
+    <header class="flex flex-wrap items-start justify-between gap-4">
+        <div class="max-w-xl">
+            <p class="text-xs font-semibold tracking-widest uppercase opacity-60">Explainer</p>
+            <h1 class="mt-1 text-4xl font-bold">How categories, colours and icons actually work</h1>
+            <p class="mt-3 opacity-70">
+                From the bird's view down to the ant's. No prior knowledge assumed, nothing
+                simplified into being wrong.
+            </p>
+        </div>
+        <label class="flex shrink-0 cursor-pointer items-center gap-2">
+            <i data-lucide="sun" class="size-5" aria-hidden="true"></i>
+            <span class="sr-only">Dark theme</span>
+            <input type="checkbox" value="dark" class="toggle theme-controller" />
+            <i data-lucide="moon" class="size-5" aria-hidden="true"></i>
+        </label>
+    </header>
+
+    <div class="border-base-300 bg-base-100 rounded-box flex items-start gap-3 border p-4">
+        <i data-lucide="lightbulb" class="size-5 shrink-0 opacity-60" aria-hidden="true"></i>
+        <p class="text-sm">
+            <strong>Flip that switch at any point while reading.</strong> Every coloured thing on
+            this page is painted by the same mechanism the app uses, so the page is not
+            illustrating the idea, it is doing it. When you reach the section on themes, come back
+            up here and watch what changes and what does not.
+        </p>
+    </div>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <div>
+            <p class="text-xs font-semibold tracking-widest uppercase opacity-60">Altitude 1 of 6 &middot; the bird</p>
+            <h2 class="mt-1 text-2xl font-bold">The whole thing in five sentences</h2>
+        </div>
+
+        <p>
+            Somewhere there is a shared list of the categories the app offers a new user, and each
+            entry on it names a colour and an icon. When you finish signing up, the app does not
+            point your account at that shared list. It <strong>copies</strong> the entries you
+            picked into a private database that belongs to you alone. From then on your categories
+            are yours: renaming one changes nothing for anybody else, and an administrator editing
+            the shared list changes nothing for you. The only things that ever travel from that
+            shared list into your account are four short pieces of text per category, and two of
+            them are the interesting ones, because <strong>the colour is stored as a word rather
+            than as a colour</strong>.
+        </p>
+
+        <div class="border-base-300 bg-base-100 rounded-box border p-5">
+            <svg viewBox="0 0 700 210" class="w-full" role="img" aria-labelledby="d1title">
+                <title id="d1title">The shared admin list is copied once into your private database, and the screen reads only from yours</title>
+
+                <!-- shared -->
+                <rect x="8" y="30" width="190" height="120" rx="10" style="fill: var(--color-base-200); stroke: var(--color-base-300)" stroke-width="2" />
+                <text x="103" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">THE SHARED LIST</text>
+                <text x="103" y="55" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">one central database</text>
+                <text x="103" y="75" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">an admin edits it</text>
+                <text x="103" y="95" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">the same for everybody</text>
+                <text x="103" y="122" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">12 categories</text>
+                <text x="103" y="138" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">17 colours &middot; 13 icons</text>
+
+                <!-- arrow -->
+                <line x1="205" y1="90" x2="270" y2="90" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.5" />
+                <polygon points="270,90 260,85 260,95" style="fill: var(--color-base-content)" opacity="0.5" />
+                <text x="238" y="80" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor">COPY</text>
+                <text x="238" y="108" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">once, at sign-up</text>
+
+                <!-- yours -->
+                <rect x="278" y="30" width="190" height="120" rx="10" style="fill: var(--color-base-200); stroke: var(--color-base-300)" stroke-width="2" />
+                <text x="373" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">YOUR DATABASE</text>
+                <text x="373" y="55" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">yours alone</text>
+                <text x="373" y="75" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">you edit it</text>
+                <text x="373" y="95" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.75">nobody else can see it</text>
+                <text x="373" y="122" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">your categories,</text>
+                <text x="373" y="138" text-anchor="middle" font-size="11" font-weight="600" fill="currentColor">your transactions</text>
+
+                <!-- arrow -->
+                <line x1="475" y1="90" x2="540" y2="90" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.5" />
+                <polygon points="540,90 530,85 530,95" style="fill: var(--color-base-content)" opacity="0.5" />
+                <text x="508" y="80" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor">READ</text>
+                <text x="508" y="108" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">every page load</text>
+
+                <!-- screen -->
+                <rect x="548" y="30" width="144" height="120" rx="10" style="fill: var(--color-base-100); stroke: var(--color-base-300)" stroke-width="2" />
+                <text x="620" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">THE SCREEN</text>
+                <rect x="566" y="48" width="26" height="26" rx="6" style="fill: var(--color-success)" />
+                <rect x="600" y="56" width="70" height="10" rx="5" style="fill: var(--color-base-content)" opacity="0.25" />
+                <rect x="566" y="82" width="26" height="26" rx="6" style="fill: var(--color-secondary)" />
+                <rect x="600" y="90" width="70" height="10" rx="5" style="fill: var(--color-base-content)" opacity="0.25" />
+                <rect x="566" y="116" width="26" height="26" rx="6" style="fill: var(--color-info)" />
+                <rect x="600" y="124" width="70" height="10" rx="5" style="fill: var(--color-base-content)" opacity="0.25" />
+
+                <text x="350" y="186" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.75">
+                    The arrow runs one way and fires once. There is no live link between the two databases.
+                </text>
+            </svg>
+        </div>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <div>
+            <p class="text-xs font-semibold tracking-widest uppercase opacity-60">Altitude 2 of 6</p>
+            <h2 class="mt-1 text-2xl font-bold">Why a database, when a list in the code worked fine</h2>
+        </div>
+
+        <p>
+            Until recently that list of categories was written into the program itself, the way a
+            printed menu is part of the sign above the counter. Changing "Dining out" to "Eating
+            out" meant a developer editing a file, a review, and a release. That is an
+            absurd amount of ceremony for changing a word, and it means the only people who can
+            adjust what the app offers are the people who can rebuild it.
+        </p>
+
+        <p>
+            Moving the list into a database changes who holds the pen. A database row is just data,
+            and data can be edited by an administrator through a screen, taking effect immediately,
+            with no release. That is the entire motivation. Everything else in this document is a
+            consequence of that one decision, and most of the interesting parts are consequences
+            nobody would guess.
+        </p>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">What became editable</p>
+                <ul class="mt-2 flex list-disc flex-col gap-1 pl-5 text-sm opacity-75">
+                    <li>Which categories a new user is offered</li>
+                    <li>What each is called and described as</li>
+                    <li>Which colour and icon each one carries</li>
+                    <li>The order they appear in</li>
+                    <li>Whether a colour or icon is offered at all</li>
+                </ul>
+            </div>
+            <div class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">What stayed a release</p>
+                <ul class="mt-2 flex list-disc flex-col gap-1 pl-5 text-sm opacity-75">
+                    <li>Inventing an eighteenth colour</li>
+                    <li>Adding a fourteenth icon</li>
+                    <li>Changing what a colour word means</li>
+                </ul>
+                <p class="mt-2 text-sm opacity-75">
+                    That split looks arbitrary right now. Two sections from here it will look
+                    inevitable.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <div>
+            <p class="text-xs font-semibold tracking-widest uppercase opacity-60">Altitude 3 of 6</p>
+            <h2 class="mt-1 text-2xl font-bold">The menu and the plate</h2>
+        </div>
+
+        <p>
+            The single most important thing to hold onto is that your account
+            <strong>copies</strong> from the shared list rather than <strong>referring</strong> to
+            it. A restaurant menu says "risotto". You order it, and a plate of risotto arrives. The
+            plate is now yours. If the kitchen renames the dish that afternoon, nothing happens to
+            your plate. If you push the peas to one side, the menu is unaffected. The plate and the
+            menu stopped being connected the moment the food was served.
+        </p>
+
+        <p>
+            Software very often does the opposite, storing a pointer back to the original so that
+            everything stays in step. That would have been the wrong choice here, and it is worth
+            seeing why concretely.
+        </p>
+
+        <div class="border-base-300 bg-base-100 rounded-box overflow-x-auto border">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>If something happens</th><th>Copying (what the app does)</th><th>Referring (the alternative)</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>You rename your "Groceries" to "Food"</td>
+                        <td>Your row changes. Nobody else is affected.</td>
+                        <td>You would be editing everybody's category, or be forbidden from editing at all.</td>
+                    </tr>
+                    <tr>
+                        <td>An admin renames the template to "Food shopping"</td>
+                        <td>Nothing happens to you. Only future sign-ups see it.</td>
+                        <td>Your category silently renames itself overnight.</td>
+                    </tr>
+                    <tr>
+                        <td>An admin deletes a template</td>
+                        <td>Nothing happens to you. Your category still exists.</td>
+                        <td>Your category vanishes, and so does the meaning of every transaction in it.</td>
+                    </tr>
+                    <tr>
+                        <td>You delete a category you no longer use</td>
+                        <td>Your row is removed and its transactions move to "Uncategorized".</td>
+                        <td>You would be deleting an entry from a shared catalogue.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="text-sm opacity-75">
+            The copy carries four things: the name, the colour word, the icon name, and the
+            description, which becomes the note on your own category. That is all. Notice there is
+            no leftover thread tying the two together, which is exactly the property that makes
+            the privacy claim simple: an administrator editing templates has no route into
+            anybody's account, not because they are forbidden, but because there is nothing to
+            travel along.
+        </p>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <div>
+            <p class="text-xs font-semibold tracking-widest uppercase opacity-60">Altitude 4 of 6 &middot; the important one</p>
+            <h2 class="mt-1 text-2xl font-bold">A colour is stored as a word, not as a colour</h2>
+        </div>
+
+        <p>
+            Here is the part that surprises people. Your "Groceries" category does not store green.
+            It stores the word <code class="font-mono">success</code>. There is no green anywhere in
+            either database. There is no green anywhere in the app's stored data at all.
+        </p>
+
+        <p>
+            <code class="font-mono">success</code> is not a colour, it is a <strong>role</strong>.
+            It means roughly "the positive one". Alongside it are sixteen other role names:
+            <code class="font-mono">primary</code> is "the main one",
+            <code class="font-mono">warning</code> is "the cautionary one",
+            <code class="font-mono">accent</code> is "the decorative one", and so on. Think of a
+            theatre programme listing the parts rather than the actors: Hamlet, Ophelia, the
+            gravedigger. The programme does not tell you who is playing them tonight.
+        </p>
+
+        <p>
+            The <strong>theme</strong> is the casting. It is a single table that says, for tonight's
+            performance, which actual colour plays each role. The app ships two of them, a light
+            theme and a dark theme, and your operating system picks which is on. For some roles the
+            two performances genuinely have different actors. <code class="font-mono">primary</code>
+            is one of them, and it is the reason a stored colour could never have worked:
+        </p>
+
+        <div class="border-base-300 bg-base-100 rounded-box border p-5">
+            <svg viewBox="0 0 700 250" class="w-full" role="img" aria-labelledby="d2title">
+                <title id="d2title">One stored word passes through the active theme and becomes a different colour in each</title>
+
+                <rect x="20" y="96" width="150" height="52" rx="8" style="fill: var(--color-base-200); stroke: var(--color-base-300)" stroke-width="2" />
+                <text x="95" y="118" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">your database says</text>
+                <text x="95" y="138" text-anchor="middle" font-size="15" font-weight="700" font-family="monospace" fill="currentColor">primary</text>
+
+                <line x1="176" y1="122" x2="240" y2="122" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.5" />
+                <polygon points="240,122 230,117 230,127" style="fill: var(--color-base-content)" opacity="0.5" />
+
+                <rect x="248" y="86" width="150" height="72" rx="8" style="fill: var(--color-base-200); stroke: var(--color-base-300)" stroke-width="2" />
+                <text x="323" y="110" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">the active theme</text>
+                <text x="323" y="128" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">looks the role up</text>
+                <text x="323" y="147" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">in the browser, at paint time</text>
+
+                <line x1="404" y1="112" x2="466" y2="72" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.5" />
+                <polygon points="468,70 456,71 462,80" style="fill: var(--color-base-content)" opacity="0.5" />
+                <line x1="404" y1="132" x2="466" y2="172" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.5" />
+                <polygon points="468,174 462,164 456,173" style="fill: var(--color-base-content)" opacity="0.5" />
+
+                <rect x="476" y="34" width="204" height="62" rx="8" style="fill: #ffffff; stroke: var(--color-base-300)" stroke-width="2" />
+                <text x="496" y="54" font-size="11" font-weight="700" fill="#111111">LIGHT THEME</text>
+                <rect x="496" y="62" width="26" height="26" rx="6" fill="#422ad5" />
+                <text x="532" y="80" font-size="12" font-family="monospace" fill="#111111">#422ad5</text>
+
+                <rect x="476" y="148" width="204" height="62" rx="8" style="fill: #1d232a; stroke: var(--color-base-300)" stroke-width="2" />
+                <text x="496" y="168" font-size="11" font-weight="700" fill="#f8f8f8">DARK THEME</text>
+                <rect x="496" y="176" width="26" height="26" rx="6" fill="#605dff" />
+                <text x="532" y="194" font-size="12" font-family="monospace" fill="#f8f8f8">#605dff</text>
+
+                <text x="350" y="236" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.75">
+                    These four swatches are deliberately fixed, so they stay comparable when you flip the page's own theme.
+                </text>
+            </svg>
+        </div>
+
+        <div class="border-base-300 bg-base-100 rounded-box border p-5">
+            <p class="font-semibold">Most roles keep the same colour. It is the paper that changes.</p>
+            <p class="mt-2 text-sm opacity-80">
+                This is the part almost everybody gets wrong first, including the first draft of
+                this page. You would expect a dark theme to darken everything. It does not. Measured
+                against the app's own installed theme:
+            </p>
+            <div class="mt-3 overflow-x-auto">
+                <table class="table table-sm">
+                    <thead><tr><th>Role</th><th>Light</th><th>Dark</th><th></th></tr></thead>
+                    <tbody>
+                        <tr><td class="font-mono text-xs">primary</td><td class="font-mono text-xs">#422ad5</td><td class="font-mono text-xs">#605dff</td><td class="text-sm opacity-70">different</td></tr>
+                        <tr><td class="font-mono text-xs">success</td><td class="font-mono text-xs">#00d390</td><td class="font-mono text-xs">#00d390</td><td class="text-sm opacity-70">identical</td></tr>
+                        <tr><td class="font-mono text-xs">secondary</td><td class="font-mono text-xs">#f43098</td><td class="font-mono text-xs">#f43098</td><td class="text-sm opacity-70">identical</td></tr>
+                        <tr><td class="font-mono text-xs">warning</td><td class="font-mono text-xs">#fcb700</td><td class="font-mono text-xs">#fcb700</td><td class="text-sm opacity-70">identical</td></tr>
+                        <tr><td class="font-mono text-xs">base-100 <span class="opacity-60">(the card behind everything)</span></td><td class="font-mono text-xs">#ffffff</td><td class="font-mono text-xs">#1d232a</td><td class="text-sm opacity-70">different</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="mt-3 text-sm opacity-80">
+                So switching to dark mostly does not repaint the categories at all. It repaints the
+                <em>surface they sit on</em>, from white to near-black. The green never moved; the
+                paper under it did.
+            </p>
+            <p class="mt-2 text-sm opacity-80">
+                That single fact explains the numbers in the palette file next door <span class="file-ref" data-path="docs/explainers/category-color-palette-preview.html" data-name></span>, which otherwise
+                look bizarre. The green scores 1.959 against the light card and 8.084 against the
+                dark one, a fourfold difference, for a colour that is byte-for-byte the same in
+                both. A mid-bright green on white is nearly invisible; the identical green on
+                near-black is vivid. Contrast is a relationship between two colours, so changing
+                either end changes the answer, and a theme mostly changes the end nobody was
+                looking at.
+            </p>
+            <p class="mt-2 text-sm opacity-80">
+                It is also why a colour cannot be judged from a swatch on its own, and why both
+                reference files draw every colour <em>on the app's real card</em> rather than on a
+                white page.
+            </p>
+        </div>
+
+        <div class="border-base-300 bg-base-100 rounded-box border-l-4 border p-4" style="border-left-color: var(--color-warning)">
+            <p class="font-semibold">Why storing the colour itself would have been broken</p>
+            <p class="mt-2 text-sm opacity-80">
+                Not merely roundabout. Actually incorrect. The role
+                <code class="font-mono">primary</code> is a deep indigo in the light theme and a
+                brighter violet in the dark one. Those are two different colours. If your
+                "Entertainment" category stored one of them, it would be wrong every time you were
+                in the other theme, and there is no third colour that could be right in both. The
+                word is the only thing that can be stored that stays true in every theme, because
+                the word is the question and the theme is the answer.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <h3 class="text-xl font-bold">So how does flipping the theme actually reach the pixel?</h3>
+
+        <p>
+            This is worth following precisely, because it explains why the theme switch is instant
+            and why the database is never consulted when it happens.
+        </p>
+
+        <p>
+            The word travels out of your database, through the server, into the web page, and lands
+            in the page as a label attached to a box: this box is a
+            <code class="font-mono">success</code> box. It is still a word. No colour has been
+            decided yet.
+        </p>
+
+        <p>
+            Separately, the browser holds the theme, which is a short list of role-to-colour pairs
+            attached to the page as a whole. When the browser paints the box, it reads the label,
+            looks the role up in whichever list is currently active, and uses what it finds. When
+            the theme changes, that list is swapped, the browser repaints, and every box wearing a
+            role label lands on a new colour in the same instant.
+        </p>
+
+        <div class="border-base-300 bg-base-100 rounded-box border p-5">
+            <svg viewBox="0 0 700 250" class="w-full" role="img" aria-labelledby="d3title">
+                <title id="d3title">The word travels once from the database to the page, and the theme is applied afterwards in the browser</title>
+
+                <text x="20" y="24" font-size="11" font-weight="700" fill="currentColor" opacity="0.7">HAPPENS ONCE, WHEN THE PAGE LOADS</text>
+                <rect x="16" y="34" width="500" height="66" rx="10" style="fill: none; stroke: var(--color-base-300)" stroke-width="2" stroke-dasharray="5 4" />
+
+                <rect x="30" y="50" width="112" height="36" rx="7" style="fill: var(--color-base-200)" />
+                <text x="86" y="66" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">your database</text>
+                <text x="86" y="80" text-anchor="middle" font-size="11" font-family="monospace" font-weight="700" fill="currentColor">success</text>
+
+                <line x1="148" y1="68" x2="180" y2="68" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.45" />
+                <polygon points="180,68 171,64 171,72" style="fill: var(--color-base-content)" opacity="0.45" />
+
+                <rect x="186" y="50" width="112" height="36" rx="7" style="fill: var(--color-base-200)" />
+                <text x="242" y="66" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">the server</text>
+                <text x="242" y="80" text-anchor="middle" font-size="11" font-family="monospace" font-weight="700" fill="currentColor">success</text>
+
+                <line x1="304" y1="68" x2="336" y2="68" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.45" />
+                <polygon points="336,68 327,64 327,72" style="fill: var(--color-base-content)" opacity="0.45" />
+
+                <rect x="342" y="50" width="160" height="36" rx="7" style="fill: var(--color-base-200)" />
+                <text x="422" y="66" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">the page, as a label</text>
+                <text x="422" y="80" text-anchor="middle" font-size="11" font-family="monospace" font-weight="700" fill="currentColor">bg-success</text>
+
+                <text x="20" y="140" font-size="11" font-weight="700" fill="currentColor" opacity="0.7">HAPPENS EVERY TIME THE THEME CHANGES, IN THE BROWSER ALONE</text>
+                <rect x="16" y="150" width="668" height="72" rx="10" style="fill: none; stroke: var(--color-base-300)" stroke-width="2" stroke-dasharray="5 4" />
+
+                <rect x="30" y="166" width="160" height="40" rx="7" style="fill: var(--color-base-200)" />
+                <text x="110" y="182" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">the theme in force</text>
+                <text x="110" y="197" text-anchor="middle" font-size="10" font-family="monospace" fill="currentColor">light | dark</text>
+
+                <line x1="196" y1="186" x2="228" y2="186" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.45" />
+                <polygon points="228,186 219,182 219,190" style="fill: var(--color-base-content)" opacity="0.45" />
+
+                <rect x="234" y="166" width="200" height="40" rx="7" style="fill: var(--color-base-200)" />
+                <text x="334" y="182" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">looks up the role</text>
+                <text x="334" y="197" text-anchor="middle" font-size="10" font-family="monospace" fill="currentColor">success &rarr; a real colour</text>
+
+                <line x1="440" y1="186" x2="472" y2="186" style="stroke: var(--color-base-content)" stroke-width="2" opacity="0.45" />
+                <polygon points="472,186 463,182 463,190" style="fill: var(--color-base-content)" opacity="0.45" />
+
+                <rect x="478" y="160" width="196" height="52" rx="7" style="fill: var(--color-base-200)" />
+                <rect x="496" y="172" width="28" height="28" rx="7" style="fill: var(--color-success)" />
+                <text x="596" y="184" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">painted</text>
+                <text x="596" y="198" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">this swatch is live</text>
+            </svg>
+        </div>
+
+        <p>
+            Two consequences fall out of that split, and both are worth stating plainly.
+            <strong>Nothing is re-fetched when you change theme.</strong> No request goes to the
+            server, no database is opened, nothing is recalculated. The colour was never sent in
+            the first place, only the role name was, so there is nothing to send again.
+            <strong>And no part of the app has to be told about a new theme.</strong> The category
+            code does not know how many themes exist. It says "success" and stops.
+        </p>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <div>
+            <p class="text-xs font-semibold tracking-widest uppercase opacity-60">Altitude 5 of 6</p>
+            <h2 class="mt-1 text-2xl font-bold">Why the admin gets seventeen colours and not a colour picker</h2>
+        </div>
+
+        <p>
+            This is the constraint the whole design bends around, and it comes from an unglamorous
+            place: the app's styling is assembled <em>before</em> the app runs, by a tool that reads
+            the program's text and works out which visual instructions could possibly be needed. It
+            then produces exactly those and nothing else, which is why the app is small and fast.
+        </p>
+
+        <p>
+            That tool runs at build time. The database does not exist yet. So a colour that is only
+            named in a database row is a colour that tool never saw, and the instruction for
+            painting it is never produced. The failure is quiet in the worst way: nothing errors,
+            no warning appears, the box simply comes out transparent.
+        </p>
+
+        <div class="border-base-300 bg-base-100 rounded-box border p-5">
+            <svg viewBox="0 0 700 190" class="w-full" role="img" aria-labelledby="d4title">
+                <title id="d4title">The styling tool runs before the database exists, so only colours written into the code can be painted</title>
+
+                <line x1="350" y1="20" x2="350" y2="170" style="stroke: var(--color-base-300)" stroke-width="2" stroke-dasharray="6 5" />
+                <text x="175" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor" opacity="0.7">BUILD TIME</text>
+                <text x="525" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor" opacity="0.7">RUN TIME</text>
+
+                <rect x="24" y="38" width="290" height="60" rx="8" style="fill: var(--color-base-200)" />
+                <text x="169" y="60" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">the tool reads the program's text</text>
+                <text x="169" y="78" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">and makes paint for every colour it can see</text>
+
+                <rect x="24" y="110" width="290" height="56" rx="8" style="fill: var(--color-base-200)" />
+                <text x="169" y="132" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">the database is not running</text>
+                <text x="169" y="150" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">and cannot be asked anything</text>
+
+                <rect x="386" y="38" width="290" height="60" rx="8" style="fill: var(--color-base-200)" />
+                <text x="531" y="60" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">a row says its colour is</text>
+                <text x="531" y="80" text-anchor="middle" font-size="12" font-family="monospace" font-weight="700" fill="currentColor">success</text>
+
+                <rect x="386" y="110" width="140" height="56" rx="8" style="fill: var(--color-success)" opacity="0.18" />
+                <text x="456" y="132" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor">on the list</text>
+                <text x="456" y="150" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">paint exists, it works</text>
+
+                <rect x="536" y="110" width="140" height="56" rx="8" style="fill: none; stroke: var(--color-base-300)" stroke-width="2" stroke-dasharray="4 4" />
+                <text x="606" y="132" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor">not on the list</text>
+                <text x="606" y="150" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.8">no paint, no error</text>
+            </svg>
+        </div>
+
+        <p>
+            The fix is to decide the whole set of possible colours in advance and write all
+            seventeen out longhand in the program, so the tool sees every one. The database then
+            never invents a colour, it only <strong>chooses</strong> from that set. An
+            administrator gets to say which of the seventeen a category uses, what each is called
+            in the picker ("Emerald", "Pine", "Slate"), what order they appear in and whether one
+            is offered at all. Adding an eighteenth is a release, because a genuinely new colour
+            has to be seen by that tool, and the only way to be seen by it is to be in the code.
+            <span class="file-ref" data-path="backend/src/database/central/template-tokens.ts" data-name></span>
+        </p>
+
+        <p class="text-sm opacity-75">
+            Seventeen rather than thirteen because the list is not the category list. Twelve
+            starter categories plus the "Uncategorized" fallback account for thirteen; the
+            remaining four exist so that the first category you invent for yourself is not forced
+            to duplicate a colour already in use. One of the seventeen,
+            <code class="font-mono">error-content</code>, is deliberately switched off in the
+            picker: it is very nearly the same brightness as the dark background, so a category
+            wearing it would be invisible half the time. It stays on the permitted list so that a
+            category which somehow already has it still draws, and off the offered list so nobody
+            new can choose it. The sibling file
+            <code class="font-mono">category-color-palette-preview.html</code> shows all seventeen
+            side by side with their measurements.
+            <span class="file-ref" data-path="docs/explainers/category-color-palette-preview.html"></span>
+        </p>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <h3 class="text-xl font-bold">The icons work the same way, for a different reason</h3>
+
+        <p>
+            An icon in this app is not a picture file. It is a short set of drawing instructions,
+            an SVG: move here, curve there, close the shape. That matters for two reasons. It stays
+            perfectly sharp at any size, and, crucially,
+            <strong>it can be told to draw itself in whatever colour its surroundings are
+            using</strong>.
+        </p>
+
+        <p>
+            Your category stores the icon as a name, exactly as it stores the colour as a word:
+            <code class="font-mono">shopping-basket</code>. The drawing instructions live in a
+            library of about sixteen hundred glyphs. Fetching one by name at the moment it is
+            needed would mean shipping all sixteen hundred to every visitor, because the app cannot
+            know in advance which one a database row will ask for. So the app keeps a
+            hand-written list of the thirteen it actually offers, pairing each name with its
+            drawing instructions, and ships exactly those thirteen. Same shape of answer as the
+            colours, same underlying cause: <strong>the app has to know the full set of
+            possibilities before it runs.</strong>
+        </p>
+
+        <div class="border-base-300 bg-base-100 rounded-box border p-5">
+            <p class="mb-3 text-sm font-semibold">The tile, assembled</p>
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <span class="border-base-300 rounded-field flex size-9 items-center justify-center border border-dashed text-xs opacity-40">?</span>
+                    <span class="text-sm opacity-70">an empty tile</span>
+                </div>
+                <span class="text-xl opacity-40">+</span>
+                <div class="flex items-center gap-3">
+                    <span class="bg-success rounded-field size-9 shrink-0"></span>
+                    <span class="text-sm opacity-70">the word <code class="font-mono">success</code> paints the back</span>
+                </div>
+                <span class="text-xl opacity-40">+</span>
+                <div class="flex items-center gap-3">
+                    <span class="rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="shopping-basket" class="size-4.5" aria-hidden="true"></i></span>
+                    <span class="text-sm opacity-70">the name <code class="font-mono">shopping-basket</code> draws the glyph</span>
+                </div>
+                <span class="text-xl opacity-40">=</span>
+                <span class="bg-success text-success-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="shopping-basket" class="size-4.5" aria-hidden="true"></i></span>
+            </div>
+        </div>
+
+        <p>
+            The last step is the neat one. The glyph is not given a colour of its own. It is told to
+            draw itself in "whatever the current text colour is", and each of the seventeen roles
+            comes paired with a partner role meant for whatever sits on top of it. So a
+            <code class="font-mono">success</code> tile sets its text colour to
+            <code class="font-mono">success-content</code>, and the basket picks that up
+            automatically. The result is a glyph that is legible on every one of the seventeen
+            backgrounds without anybody choosing seventeen glyph colours, and that follows the
+            theme along with everything else, because both halves of the pair are roles rather than
+            colours.
+        </p>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <h3 class="text-xl font-bold">The same colour, painted four different ways</h3>
+
+        <p>
+            One category's colour shows up in four places in the app, and although they look like
+            variations on one thing, the app genuinely needs three different recipes for them. This
+            is the sort of detail that seems pedantic until it causes a bug, which it has.
+        </p>
+
+        <div class="border-base-300 bg-base-100 rounded-box overflow-x-auto border">
+            <table class="table table-sm">
+                <thead>
+                    <tr><th>Mark</th><th>Where</th><th>Recipe</th><th>Why it differs</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="bg-success text-success-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="shopping-basket" class="size-4.5" aria-hidden="true"></i></span></td>
+                        <td class="text-sm">the transactions list</td>
+                        <td class="text-sm">background <strong>and</strong> its partner for the glyph</td>
+                        <td class="text-sm opacity-70">something is drawn on top, so the top needs a colour too</td>
+                    </tr>
+                    <tr>
+                        <td><span class="bg-success size-2 shrink-0 rounded-full block"></span></td>
+                        <td class="text-sm">the little dot beside a category name</td>
+                        <td class="text-sm">background only</td>
+                        <td class="text-sm opacity-70">nothing on top, so the partner colour is pointless here</td>
+                    </tr>
+                    <tr>
+                        <td><span class="status status-lg bg-success"></span></td>
+                        <td class="text-sm">the sign-up chips</td>
+                        <td class="text-sm">background only, and it <em>must</em> be</td>
+                        <td class="text-sm opacity-70">this dot draws a soft shadow from the text colour, so giving it one turns the shadow into a smudge</td>
+                    </tr>
+                    <tr>
+                        <td><svg viewBox="0 0 20 20" class="size-5 shrink-0"><circle cx="10" cy="10" r="10" style="fill: var(--color-success)" /></svg></td>
+                        <td class="text-sm">the dashboard donut</td>
+                        <td class="text-sm">the colour as a value, not as a label</td>
+                        <td class="text-sm opacity-70">drawings take a colour directly and reject a label, silently painting nothing</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="text-sm opacity-75">
+            All four are live above, so they all move together when you flip the theme. That is the
+            point of the whole arrangement: four different recipes, one stored word, and no chance
+            of one of them ending up a different green from the others.
+        </p>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <div>
+            <p class="text-xs font-semibold tracking-widest uppercase opacity-60">Altitude 6 of 6 &middot; the ant</p>
+            <h2 class="mt-1 text-2xl font-bold">One category's entire life, step by step</h2>
+        </div>
+
+        <p>
+            Everything above, now as a single trace, with the real file names in case you ever want
+            to go and look.
+        </p>
+
+        <ol class="flex flex-col gap-3">
+            <li class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">1. Before anybody signs up</p>
+                <p class="mt-1 text-sm opacity-75">
+                    The shared database is created empty and immediately filled with its starting
+                    contents: seventeen colours with their picker labels, thirteen icons, twelve
+                    categories. This happens in the program rather than by hand, once, and it
+                    checks first whether anything is already there, so that a restart cannot
+                    resurrect a category an administrator deliberately deleted.
+                    <span class="font-mono text-xs">backend/src/database/central/template-seed.ts</span>
+                    <span class="file-ref" data-path="backend/src/database/central/template-seed.ts"></span>
+                </p>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">2. You reach step two of sign-up</p>
+                <p class="mt-1 text-sm opacity-75">
+                    The page asks the shared database for the category list. This is the one request
+                    in the app that needs no account, because you do not have one yet. If it fails,
+                    you get an empty list rather than an error page, on the reasoning that losing
+                    your starter categories is a far smaller harm than being unable to sign up.
+                    <span class="font-mono text-xs">GET /api/templates/categories</span>
+                    <span class="file-ref" data-path="backend/src/templates" data-name></span>
+                </p>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">3. You tick some chips and submit</p>
+                <p class="mt-1 text-sm opacity-75">
+                    What is sent is the identifiers of the templates you ticked, not their names.
+                    Nothing is created yet: your choices sit in your browser and a pending record,
+                    and an email goes out. Nothing about you is trusted until you prove the address
+                    is yours.
+                </p>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">4. You click the link in the email</p>
+                <p class="mt-1 text-sm opacity-75">
+                    This is the moment the account becomes real. A database is created for you
+                    alone, and each template you picked is <strong>copied</strong> into it: name,
+                    colour word, icon name, and the description, which becomes your note. A
+                    thirteenth category, "Uncategorized", is added for everybody. That one is
+                    deliberately not a template, because its name is a rule of the system rather
+                    than something an admin may rename.
+                    <span class="font-mono text-xs">backend/src/database/user/starter-categories.ts</span>
+                    <span class="file-ref" data-path="backend/src/database/user/starter-categories.ts"></span>
+                </p>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">5. You open the transactions page</p>
+                <p class="mt-1 text-sm opacity-75">
+                    Your categories are read from your own database. A row comes back saying, in
+                    effect, "Groceries, <code class="font-mono">success</code>,
+                    <code class="font-mono">shopping-basket</code>". Still no colour, still no
+                    picture.
+                </p>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">6. The page turns those two words into a tile</p>
+                <p class="mt-1 text-sm opacity-75">
+                    Two hand-written lists do the translation: one turns
+                    <code class="font-mono">success</code> into the pair of labels that paint a
+                    background and its glyph colour, the other turns
+                    <code class="font-mono">shopping-basket</code> into the actual drawing
+                    instructions. Neither can be skipped, and both are checked by the compiler
+                    against the list the server publishes, so a colour the server can send but the
+                    page cannot paint stops the build.
+                    <span class="font-mono text-xs">frontend/src/components/ui/categoryColour.ts</span>
+                    <span class="file-ref" data-path="frontend/src/components/ui/categoryColour.ts"></span>
+                </p>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">7. Your browser paints it</p>
+                <p class="mt-1 text-sm opacity-75">
+                    The role labels are resolved against whichever theme is active, and the tile
+                    appears. The glyph, told only to use "the current text colour", comes out in the
+                    partner colour and is legible.
+                </p>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box border p-4">
+                <p class="font-semibold">8. Night falls and your operating system switches to dark</p>
+                <p class="mt-1 text-sm opacity-75">
+                    The theme in force changes. Every role resolves to its dark-theme colour and the
+                    page repaints. No request is made, nothing is re-read, no database is touched,
+                    and not one line of category code runs. The word in your database is unchanged
+                    and was always the only thing stored.
+                </p>
+            </li>
+        </ol>
+    </section>
+
+    <!-- ==================================================================== -->
+    <section class="flex flex-col gap-4">
+        <h2 class="text-2xl font-bold">What keeps it honest, and two times it did not</h2>
+
+        <p>
+            Two things about this design are load-bearing and easy to lose, and both have already
+            been broken once, which is the best possible argument for writing them down.
+        </p>
+
+        <div class="border-base-300 bg-base-100 rounded-box border-l-4 border p-4" style="border-left-color: var(--color-error)">
+            <p class="font-semibold">The accounts that were created before the change</p>
+            <p class="mt-2 text-sm opacity-80">
+                Category rows are written once, at sign-up, and nothing rewrites them. When colours
+                stopped being colours and became words, every account created earlier still held
+                actual colour values, which the new translation list did not recognise. Every
+                category on every screen for those users fell back to a plain grey tile with no
+                glyph. Two builds, a lint run and six hundred tests were green throughout, because
+                every test builds its own fresh data. It was found by opening the app. The repair
+                is a one-off conversion that runs the first time each account is touched, decides
+                what to do by looking at the data itself rather than at a marker, and cannot half
+                apply.
+            </p>
+        </div>
+
+        <div class="border-base-300 bg-base-100 rounded-box border-l-4 border p-4" style="border-left-color: var(--color-warning)">
+            <p class="font-semibold">"It is a theme colour, so it must be visible"</p>
+            <p class="mt-2 text-sm opacity-80">
+                The "Uncategorized" category was briefly given a role whose colour, in the dark
+                theme, is almost exactly as bright as the background it sits on. The reasoning
+                written down at the time was that a theme-aware colour is safe by definition. It is
+                not. Roles come in pairs at opposite ends of the brightness range, which is exactly
+                what makes each one readable <em>on its partner</em> and exactly what makes many of
+                them invisible <em>on the page</em>. The sibling palette file <span class="file-ref" data-path="docs/explainers/category-color-palette-preview.html"></span> exists so this is
+                settled by looking rather than by reasoning, and the guard is written up in the
+                frontend's own notes under <em>Changing or adding a theme</em>.
+            </p>
+        </div>
+
+        <p class="text-sm opacity-75">
+            The moral of both is the same and worth carrying past this app. Everything described
+            here is checked by a machine except the one thing that matters most to a person: whether
+            the result is actually legible. No build, test or automated check in this project reads
+            a colour. That job belongs to a human with these three files open.
+        </p>
+    </section>
+
+    <!-- ==================================================================== -->
+    <!--
+      THE LINKS IN THIS SECTION ARE BUILT AT LOAD TIME, NOT WRITTEN OUT.
+
+      Every row carries a repo-relative `data-path` and nothing else. The script at the bottom of
+      this file works out where the repository is from this page's own address and builds the three
+      links from that. Three reasons it is done that way rather than by pasting absolute paths in:
+
+        1. A hard-coded path is somebody's machine. This file is committed to a public-facing
+           repo, so a path under one developer's home directory is both broken for everyone else
+           and a name in the repo that root CLAUDE.md asks us to keep out of it.
+        2. This branch is being worked on in a git worktree, so the repository is currently at a
+           different path from where it will be once merged. Written-out links would break on
+           merge, silently and later.
+        3. A clone anywhere works with no edit.
+
+      THREE LINKS, BECAUSE THERE IS NO SINGLE ANSWER.
+
+        external-link   file://<abs>              Every browser understands it, which is what makes
+                                                  it the universal one. What it then does is the
+                                                  operating system's choice: a folder lists, an
+                                                  .html file renders, and a .ts file usually shows
+                                                  as plain text in a browser tab rather than
+                                                  opening an editor. No cross-editor URL scheme
+                                                  would do better, because nobody ever
+                                                  standardised one - which is the whole reason the
+                                                  other two have to name a product.
+        code-xml        vscode://file<abs>        VS Code, at the right place in the tree. Cursor
+                                                  and VSCodium generally answer this scheme too.
+        coffee          idea://open?file=<abs>    IntelliJ IDEA and the rest of the JetBrains
+                                                  family, registered by JetBrains Toolbox. Note
+                                                  the path is a query parameter here rather than
+                                                  part of the path, so it is percent-encoded,
+                                                  which the other two must not be.
+
+      The first click on either editor scheme usually raises a browser confirmation. That is the
+      browser doing its job with a custom protocol. Firefox may need
+      network.protocol-handler.expose.vscode, and .idea, set to true.
+
+      THE HOVER TEXT IS THE NATIVE title ATTRIBUTE, NOT daisyUI's tooltip.
+      This table sits in an overflow-x-auto box, and a box that scrolls on one axis cannot leave
+      the other axis visible - the CSS spec turns the second into auto as well - so a CSS tooltip
+      drawn above a row is clipped by the very container that makes the table usable on a narrow
+      screen. The native attribute is painted by the browser outside the page and cannot be
+      clipped by anything. The cost is a short delay before it appears, which is the trade.
+      An aria-label is set alongside it, because a title alone is not reliably announced.
+    -->
+    <section class="border-base-300 bg-base-100 rounded-box flex flex-col gap-3 border p-5">
+        <h2 class="text-xl font-bold">If you want to go and look</h2>
+        <p id="link-note" class="text-sm opacity-70">
+            Three ways into each file, and hovering any icon says which is which.
+            <span class="whitespace-nowrap"><i data-lucide="external-link" class="inline size-4 align-text-bottom"></i> hands it to your system</span>,
+            <span class="whitespace-nowrap"><i data-lucide="code-xml" class="inline size-4 align-text-bottom"></i> opens it in VS Code</span>,
+            <span class="whitespace-nowrap"><i data-lucide="coffee" class="inline size-4 align-text-bottom"></i> opens it in IntelliJ IDEA</span>.
+            A source file behind the first one will usually just display in a browser tab, since no
+            URL scheme means "open this in whichever editor I use".
+        </p>
+        <div class="overflow-x-auto">
+            <table class="table table-sm" id="file-table">
+                <tbody>
+                    <tr data-path="backend/src/database/central/template-tokens.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The seventeen colour roles and thirteen icon names, plus the measured brightness table</td></tr>
+                    <tr data-path="backend/src/database/central/template-seed.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The starting contents: picker labels, the twelve categories, what is switched off</td></tr>
+                    <tr data-path="backend/src/database/central/schema.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The three shared tables themselves</td></tr>
+                    <tr data-path="backend/src/database/user/starter-categories.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The copy into your own database, and the "Uncategorized" fallback</td></tr>
+                    <tr data-path="backend/src/templates"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The two requests that serve all of this to the app</td></tr>
+                    <tr data-path="frontend/src/components/ui/categoryColour.ts"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The four translation lists: word to paint, and name to drawing</td></tr>
+                    <tr data-path="docs/explainers/category-color-palette-preview.html"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">All seventeen colours, measured, side by side</td></tr>
+                    <tr data-path="docs/explainers/category-colors-icons-description-preview.html"><td class="font-mono text-xs"></td><td class="w-px"></td><td class="text-sm">The thirteen categories as an account really shows them</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+  </div>
+
+  <script>
+    // Builds the three links for every file reference on this page, from the page's own address.
+    // See the long comment above the table for why the paths are not written out, and why the
+    // hover text is the native title attribute rather than a CSS tooltip.
+    (function buildFileLinks() {
+      const table = document.getElementById('file-table');
+      const note = document.getElementById('link-note');
+      const rows = [...table.querySelectorAll('tr[data-path]')];
+      const refs = [...document.querySelectorAll('span.file-ref[data-path]')];
+
+      // The path text is the useful half when the links cannot be built, so it is written first
+      // and unconditionally.
+      for (const row of rows) row.cells[0].textContent = row.dataset.path;
+
+      const giveUp = (message) => {
+        note.textContent = message;
+        // An inline "(ref. file )" with no icons in it would be litter in the middle of a
+        // sentence, so the inline references remove themselves entirely rather than degrade.
+        for (const ref of refs) ref.remove();
+      };
+
+      // Opened over http(s), from a docs server or a preview, the pathname is a URL route rather
+      // than a filesystem path, so links built from it would point at nothing.
+      if (location.protocol !== 'file:') {
+        giveUp(
+          'Open this page directly from disk to get per-file links. Served over ' +
+            location.protocol.replace(':', '') +
+            ', there is no filesystem path to build them from.',
+        );
+        return;
+      }
+
+      // This page is at <repo root>/docs/explainers/<file>, so stripping that suffix is the root.
+      // decodeURIComponent because a path with a space or a "+" arrives percent-encoded, and this
+      // branch is checked out in a directory called feat+PET-64-… which is exactly that case.
+      const here = decodeURIComponent(location.pathname);
+      const root = here.replace(/\/docs\/explainers\/[^/]*$/, '');
+
+      if (root === here) {
+        giveUp('Per-file links need this page to sit at docs/explainers/ inside the repository.');
+        return;
+      }
+
+      // One place defining what the three schemes are, so the table and the inline references
+      // cannot drift apart. The href function takes the absolute path; only the JetBrains one encodes it,
+      // because there the path is a query parameter rather than part of the path.
+      const TARGETS = [
+        { icon: 'external-link', label: 'Open with your system', href: (abs) => 'file://' + abs },
+        { icon: 'code-xml', label: 'Open in VS Code', href: (abs) => 'vscode://file' + abs },
+        { icon: 'coffee', label: 'Open in IntelliJ IDEA', href: (abs) => 'idea://open?file=' + encodeURIComponent(abs) },
+      ];
+
+      // The size argument is the daisyUI button size. The table gets btn-sm, a 32px target; inline
+      // references in running prose get btn-xs, 24px, which is the smallest WCAG 2.5.8 accepts
+      // and as large as a line of body text can carry without the text reflowing around it.
+      const linkGroup = (path, size) => {
+        const abs = root + '/' + path;
+        const group = document.createElement('span');
+        group.className = 'inline-flex items-center gap-1 align-middle';
+
+        for (const target of TARGETS) {
+          const a = document.createElement('a');
+          a.href = target.href(abs);
+          a.className = 'btn btn-ghost btn-square ' + size;
+          // Both, deliberately: the title is the hover text, and a title alone is not reliably
+          // announced by a screen reader. The path is in the hover text because two references
+          // in one paragraph are otherwise indistinguishable.
+          a.title = target.label + ': ' + path;
+          a.setAttribute('aria-label', target.label + ': ' + path);
+
+          const i = document.createElement('i');
+          i.setAttribute('data-lucide', target.icon);
+          i.setAttribute('aria-hidden', 'true');
+          i.className = size === 'btn-xs' ? 'size-3.5' : 'size-4';
+          a.appendChild(i);
+          group.appendChild(a);
+        }
+        return group;
+      };
+
+      for (const row of rows) row.cells[1].appendChild(linkGroup(row.dataset.path, 'btn-sm'));
+
+      // Inline references read "(ref. file <icons>)" where the sentence already names the file,
+      // and "(ref. <name> <icons>)" where it does not, which is what data-name marks.
+      for (const ref of refs) {
+        const path = ref.dataset.path;
+        const named = ref.hasAttribute('data-name');
+        ref.className = 'whitespace-nowrap';
+        ref.appendChild(document.createTextNode('(ref. '));
+        if (named) {
+          const code = document.createElement('code');
+          code.className = 'font-mono text-xs';
+          // The last segment is enough to identify a file, and long paths in the middle of a
+          // sentence are noise. A directory has no extension on its last segment, and its bare
+          // name is usually ambiguous - "templates" says far less than "backend/src/templates" -
+          // so those keep the whole path.
+          const last = path.split('/').pop();
+          code.textContent = last.includes('.') ? last : path;
+          ref.append(code, document.createTextNode(' '));
+        } else {
+          ref.appendChild(document.createTextNode('file '));
+        }
+        ref.appendChild(linkGroup(path, 'btn-xs'));
+        // The buttons carry their own padding, which is what makes them comfortable to click and
+        // also what leaves a visible gap before the bracket. Pulling the bracket back closes the
+        // gap without taking anything off the hit target.
+        const close = document.createElement('span');
+        close.className = '-ml-1';
+        close.textContent = ')';
+        ref.appendChild(close);
+      }
+    })();
+
+    lucide.createIcons();
+  </script>
+</body>
+</html>

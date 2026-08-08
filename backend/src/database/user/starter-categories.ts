@@ -1,96 +1,91 @@
 import { newId } from '../../common/ids';
+import type { ResolvedCategoryTemplate } from '../../templates/templates.service';
 import type { UserDatabase } from '../database.types';
 import { categories } from './schema';
 
 /**
- * The ten starter chips offered during onboarding, in the order frame 03 shows
- * them (CAT-2). The order is part of the contract: the frontend renders them as
- * given rather than sorting.
- *
- * Colors are the real ones, read per chip from the design's own variable
- * bindings (Figma frame 03, node 43:705) rather than eyeballed from a render,
- * then checked against one. The comment on each line is the variable it came
- * from, so a change in Figma is traceable to a change here.
- *
- * Note the palette has only **eight** colors for ten chips, so two repeat:
- * Subscriptions reuses Transport's blue and Other reuses Bills' orange. That is
- * what the design does, not an error here - do not "fix" it by inventing two
- * more colors. It does mean color alone cannot identify a category, which
- * constrains any later legend or chart that tries to use it as a key.
- *
- * A7 records a known conflict in the designs - this set contains Bills and
- * Subscriptions, which never appear again, while later screens show Health and
- * Other. Each screen follows its own mock until the designer resolves it, so
- * all ten are offered here. The two duplicated colors sit exactly on that seam.
- */
-export const STARTER_CATEGORIES = [
-  { name: 'Groceries', color: '#57B368' }, // Category/4 Green
-  { name: 'Dining out', color: '#EF6F6C' }, // Category/1 Coral
-  { name: 'Transport', color: '#3F8EE6' }, // Category/6 Blue
-  { name: 'Shopping', color: '#E7C24A' }, // Category/3 Yellow
-  { name: 'Housing', color: '#34B9AE' }, // Category/5 Teal
-  { name: 'Health', color: '#CE6FB8' }, // Category/8 Pink
-  { name: 'Entertainment', color: '#8A79F1' }, // Category/7 Violet
-  { name: 'Bills', color: '#F29A3D' }, // Category/2 Orange
-  { name: 'Subscriptions', color: '#3F8EE6' }, // Category/6 Blue, reused
-  { name: 'Other', color: '#F29A3D' }, // Category/2 Orange, reused
-] as const;
-
-export type StarterCategoryName = (typeof STARTER_CATEGORIES)[number]['name'];
-
-/**
- * Just the names, which is what a registration submits and what `@IsIn`
- * validates against. Derived rather than repeated, so the two cannot drift.
- */
-export const STARTER_CATEGORY_NAMES: StarterCategoryName[] =
-  STARTER_CATEGORIES.map((category) => category.name);
-
-/**
  * The fallback category, seeded for everybody and offered to nobody.
  *
- * Deliberately **not** in `STARTER_CATEGORIES`: that constant is the onboarding
- * chip list, and this row must never appear there. It is also deliberately not
- * the "Other" chip, which stays an ordinary category anyone can rename or
- * delete - one row cannot be both a user's free choice and a system invariant,
- * and A7 already records that "Other" sits on a contested seam in the designs.
+ * **Deliberately not a `category_templates` row**, which is the same decision it
+ * has always carried, restated against the new mechanism: that table is the
+ * onboarding chip list, and this must never appear there. It is also deliberately
+ * not one of the offered categories renamed - one row cannot be both a user's
+ * free choice and a system invariant, and its name is what the API answers 409
+ * for. A code constant is exactly right for a value that is not the admin's to
+ * edit.
  *
- * Its color is not from the eight-color category palette. `#98A0AE` is the
- * design system's `--color-text-tertiary`, a neutral that reads as muted next to
- * the saturated category colors and stays visible on both the white card and the
- * canvas. Do not "fix" it to a palette color.
+ * Its colour is `base-content/50` and its icon `circle-question-mark`, from the
+ * same allowlist every other category draws from. **That reverses what this file
+ * used to say**: the old `#98A0AE` was the retired token layer's
+ * `--color-text-tertiary`, and this file's note that it was "not from the
+ * eight-color category palette" and must not be "fixed" to one stopped being
+ * true when the palette became the daisyUI tokens.
+ *
+ * **It also reverses what PET-64 first shipped, which was `warning-content`, and
+ * that correction is the point of this paragraph.** The claim written here and
+ * in `backend/CLAUDE.md` was that it "reads as muted in both themes" and was
+ * "visible against the card in both themes". Nobody measured it. It is
+ * **1.713:1 against the dark card** - below the 1.16:1-rejected `base-300` in
+ * spirit and nowhere near the 3:1 non-text bar this repo enforces by name
+ * elsewhere.
+ *
+ * That matters more for this row than for any other, and PET-23 had already
+ * worked out why: the backend's orphan fold routes spend whose category was
+ * tombstoned onto this one, so it can hold the **largest donut slice on the
+ * screen**, and its slice and its legend dot are bare colour with no glyph to
+ * carry them. PET-23 measured `base-content/50` at 3.401:1 and 4.769:1 for
+ * exactly this row and exactly this reason; PET-64 took it away without noticing
+ * it was a measurement rather than a default, and this puts it back.
+ *
+ * `COLOUR_CONTRAST` in `central/template-tokens.ts` is why it is not simply
+ * another semantic token: only `primary` and `secondary` clear 3:1 in both
+ * themes, and both are saturated brand colours already carried by templates.
+ * There is no muted semantic token that works, which is what the seventeenth
+ * entry in the allowlist exists for.
+ *
+ * It has no template to take a description from, so its `note` is written here.
  */
 export const FALLBACK_CATEGORY = {
   name: 'Uncategorized',
-  color: '#98A0AE',
+  color: 'base-content/50',
+  icon: 'circle-question-mark',
+  note: "Any transaction that doesn't have its own category.",
 } as const;
 
 /**
  * Creates the fallback category plus whichever starter categories the user
- * picked during onboarding, in the canonical order above rather than the order
- * they were submitted in.
+ * picked during onboarding.
  *
  * Called from verification, not from registration: the user database does not
  * exist until the email owner clicks their link.
+ *
+ * **The templates are resolved by the caller, in central, and copied here.**
+ * That copy is the whole design: a category row belongs to one person from the
+ * moment it is written, so an admin later editing a template does not - and must
+ * not - reach back into it. Only new provisions pick up new wording.
+ *
+ * **The template's `description` becomes the user's `note`.** No new user-scope
+ * column, which is what keeps this whole change free of a user-scope migration:
+ * `note` already exists, is nullable, is editable through both category DTOs and
+ * is returned by `CategoryResponseDto`, so a second free-text column would need
+ * a stated difference and has none. The visible consequence is that `note` is no
+ * longer empty on a fresh account - and that it surfaces on no screen yet
+ * (CED-4, A42), so do not read a blank screen as a failed seed.
  *
  * **The fallback is inserted whether or not anything was picked.** Selecting no
  * chips is a valid choice (A4 enforces no minimum) and used to leave the table
  * empty; it no longer can, because every database needs the reassignment target
  * that deleting a category depends on. Note what that means for the caller's
  * skip condition: after provisioning, `categories` is never empty.
+ *
+ * @param picked the resolved templates, already ordered and already checked for
+ * existence by `TemplatesService.resolve`. Order is `sort_order`, so a seeded
+ * account's categories are in the canonical order rather than the click order.
  */
 export async function seedStarterCategories(
   userDb: UserDatabase,
-  names: readonly string[],
+  picked: readonly ResolvedCategoryTemplate[],
 ): Promise<void> {
-  const selected = new Set(names);
-  const picked = STARTER_CATEGORIES.filter((category) =>
-    selected.has(category.name),
-  ).map((category) => ({
-    id: newId(),
-    name: category.name,
-    color: category.color,
-  }));
-
   // One INSERT, so the whole seed stays atomic and the caller's "any row exists"
   // skip condition keeps meaning "a previous attempt finished".
   await userDb.insert(categories).values([
@@ -98,8 +93,16 @@ export async function seedStarterCategories(
       id: newId(),
       name: FALLBACK_CATEGORY.name,
       color: FALLBACK_CATEGORY.color,
+      icon: FALLBACK_CATEGORY.icon,
+      note: FALLBACK_CATEGORY.note,
       isFallback: true,
     },
-    ...picked,
+    ...picked.map((template) => ({
+      id: newId(),
+      name: template.name,
+      color: template.color,
+      icon: template.icon,
+      note: template.description,
+    })),
   ]);
 }

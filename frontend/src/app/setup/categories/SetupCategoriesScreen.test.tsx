@@ -1,10 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+import type { CategoryTemplate } from '@/lib/categoryTemplates';
 
 import { SETUP_DRAFT_KEY } from '../draft';
 import { SetupDraftProvider } from '../SetupDraftProvider';
 import { STEP_DOT, STEP_WIDTH } from '../SetupShell';
-import { STARTER_CATEGORY_NAMES } from '../starterCategories';
 import { CHIP_STATE } from './CategoryChip';
 import { SetupCategoriesScreen } from './SetupCategoriesScreen';
 
@@ -18,6 +19,14 @@ import { SetupCategoriesScreen } from './SetupCategoriesScreen';
 // next/jest maps every .css import to an empty object, so nothing here can assert a
 // rendered colour or size; class names are the only appearance signal, and nothing
 // proves they generate CSS since PET-57 retired the compile guard.
+//
+// **The chips are stand-in data as of PET-64, and every count is derived from it.**
+// They used to be `STARTER_CATEGORY_NAMES`, imported, and this file said "the ten
+// chips" and "the other nine" in several places. The offered list is admin-managed
+// data the page fetches now, so a hard-coded count here would pin a number this
+// screen no longer owns - it would fail on a seed change that broke nothing, and pass
+// on a chip being dropped from a list of a different length. Counting `TEMPLATES`
+// keeps the assertions about the *screen*.
 
 /** U+2014, which Figma types and the repo normalises away. */
 const EM_DASH = '—';
@@ -25,11 +34,57 @@ const EM_DASH = '—';
 const SUPPORTING_COPY =
   "Choose what you'd like to track. Tap to toggle - you can always add or edit categories later.";
 
+/**
+ * The stand-in chips, shaped exactly as `GET /api/templates/categories` answers.
+ *
+ * Five rather than the seeded twelve: the suite asserts the screen's behaviour per
+ * chip and across chips, and neither needs the whole list. Two of them share nothing
+ * with the seed on purpose - `Alpha` and `Omega` - so a test that accidentally
+ * depended on the real seed's names would fail here rather than pass by luck.
+ */
+const TEMPLATES: CategoryTemplate[] = [
+  {
+    id: 'id-groceries',
+    name: 'Groceries',
+    color: 'success',
+    icon: 'shopping-basket',
+    description: 'Food and household essentials.',
+  },
+  {
+    id: 'id-dining',
+    name: 'Dining out',
+    color: 'secondary',
+    icon: 'utensils',
+    description: 'Restaurants and takeout.',
+  },
+  {
+    id: 'id-transport',
+    name: 'Transportation',
+    color: 'info',
+    icon: 'car',
+    description: 'Gas, transit, parking.',
+  },
+  {
+    id: 'id-alpha',
+    name: 'Alpha',
+    color: 'accent',
+    icon: 'zap',
+    description: 'A category no seed writes.',
+  },
+  {
+    id: 'id-omega',
+    name: 'Omega',
+    color: 'warning',
+    icon: 'landmark',
+    description: 'Another one.',
+  },
+];
+
 /** The screen inside the provider its steps always render within. */
-function renderScreen() {
+function renderScreen(categories: CategoryTemplate[] = TEMPLATES) {
   return render(
     <SetupDraftProvider>
-      <SetupCategoriesScreen />
+      <SetupCategoriesScreen categories={categories} />
     </SetupDraftProvider>,
   );
 }
@@ -80,16 +135,31 @@ describe('AC1: the card as designed', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
-  it('offers the ten chips in the designed order', () => {
-    // The order is CAT-2's and the backend's both. Read off the accessible names, so
-    // this fails if a chip's label stops matching the name a registration submits.
+  it('offers every chip it was handed, in the order it was handed them', () => {
+    // The order is the admin's `sort_order`, which the API returns and this screen
+    // renders as given rather than sorting - CAT-2's rule with a new authority
+    // behind it. Read off the accessible names, so this fails if a chip's label
+    // stops matching the template it came from.
     renderScreen();
 
     const names = chips()
       .filter((button) => button.getAttribute('aria-pressed') !== null)
       .map((button) => button.textContent);
 
-    expect(names).toEqual([...STARTER_CATEGORY_NAMES]);
+    expect(names).toEqual(TEMPLATES.map((template) => template.name));
+  });
+
+  it('renders the card with no chips when the templates could not be read', () => {
+    // `readCategoryTemplates` degrades to an empty list rather than throwing, so
+    // this is what an unreachable backend looks like: the copy, both exits, and
+    // nothing to pick. Continue is unconditional (A4), so the flow still completes.
+    renderScreen([]);
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Pick your categories' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(2);
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 
   it('starts with nothing selected', () => {
@@ -99,8 +169,8 @@ describe('AC1: the card as designed', () => {
     // submit something step 2 never showed.
     renderScreen();
 
-    for (const name of STARTER_CATEGORY_NAMES) {
-      expect(chip(name)).toHaveAttribute('aria-pressed', 'false');
+    for (const template of TEMPLATES) {
+      expect(chip(template.name)).toHaveAttribute('aria-pressed', 'false');
     }
   });
 
@@ -135,7 +205,8 @@ describe('AC2: a chip toggles both ways', () => {
 
     await user.click(chip('Groceries'));
     expect(chip('Groceries')).toHaveAttribute('aria-pressed', 'true');
-    expect(storedCategories()).toEqual(['Groceries']);
+    // Ids, not names: `RegisterDto.categories` takes `category_templates.id`.
+    expect(storedCategories()).toEqual(['id-groceries']);
 
     await user.click(chip('Groceries'));
     expect(chip('Groceries')).toHaveAttribute('aria-pressed', 'false');
@@ -151,36 +222,38 @@ describe('AC2: a chip toggles both ways', () => {
     const { container } = renderScreen();
 
     expect(container.querySelectorAll('svg')).toHaveLength(0);
-    expect(chip('Bills').className).toContain(CHIP_STATE.off);
+    expect(chip('Alpha').className).toContain(CHIP_STATE.off);
 
-    await user.click(chip('Bills'));
+    await user.click(chip('Alpha'));
 
     expect(container.querySelectorAll('svg')).toHaveLength(1);
-    expect(chip('Bills').className).toContain(CHIP_STATE.on);
+    expect(chip('Alpha').className).toContain(CHIP_STATE.on);
   });
 
-  it('leaves the other nine chips alone', async () => {
+  it('leaves every other chip alone', async () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(chip('Housing'));
+    await user.click(chip('Omega'));
 
     const pressed = chips().filter((button) => button.getAttribute('aria-pressed') === 'true');
     expect(pressed).toHaveLength(1);
-    expect(pressed[0]).toHaveAccessibleName('Housing');
+    expect(pressed[0]).toHaveAccessibleName('Omega');
   });
 
-  it('stores the selection in the designed order, not the click order', async () => {
-    // What makes two equal selections equal strings, and what keeps the array inside
-    // RegisterDto's @IsIn and @ArrayUnique whatever route the user took to it.
+  it('stores the selection in the offered order, not the click order', async () => {
+    // What makes two equal selections equal strings, and what keeps the array
+    // inside `RegisterDto`'s `@ArrayUnique` whatever route the user took to it.
+    // The order used to be a constant's; it is the fetched list's now, which is
+    // the same property with a different authority behind it.
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(chip('Other'));
+    await user.click(chip('Omega'));
     await user.click(chip('Groceries'));
-    await user.click(chip('Health'));
+    await user.click(chip('Transportation'));
 
-    expect(storedCategories()).toEqual(['Groceries', 'Health', 'Other']);
+    expect(storedCategories()).toEqual(['id-groceries', 'id-transport', 'id-omega']);
   });
 
   it('keeps both selections when two chips are toggled in one tick', async () => {
@@ -191,16 +264,16 @@ describe('AC2: a chip toggles both ways', () => {
     renderScreen();
 
     const groceries = chip('Groceries');
-    const bills = chip('Bills');
+    const alpha = chip('Alpha');
 
     await Promise.resolve().then(() => {
       groceries.click();
-      bills.click();
+      alpha.click();
     });
 
     expect(chip('Groceries')).toHaveAttribute('aria-pressed', 'true');
-    expect(chip('Bills')).toHaveAttribute('aria-pressed', 'true');
-    expect(storedCategories()).toEqual(['Groceries', 'Bills']);
+    expect(chip('Alpha')).toHaveAttribute('aria-pressed', 'true');
+    expect(storedCategories()).toEqual(['id-groceries', 'id-alpha']);
   });
 
   it('toggles from the keyboard as well as the pointer', async () => {
@@ -209,10 +282,10 @@ describe('AC2: a chip toggles both ways', () => {
     const user = userEvent.setup();
     renderScreen();
 
-    chip('Transport').focus();
+    chip('Transportation').focus();
     await user.keyboard('{Enter}');
 
-    expect(chip('Transport')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('Transportation')).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
@@ -231,11 +304,11 @@ describe('AC3: Continue carries the selection to Register', () => {
     renderScreen();
 
     await user.click(chip('Dining out'));
-    await user.click(chip('Subscriptions'));
+    await user.click(chip('Alpha'));
 
     // Written on toggle rather than on Continue, which is why "carried forward"
     // needs no submit handler and no state of the picker's own.
-    expect(storedCategories()).toEqual(['Dining out', 'Subscriptions']);
+    expect(storedCategories()).toEqual(['id-dining', 'id-alpha']);
   });
 
   it('still continues with nothing selected', () => {
@@ -264,25 +337,25 @@ describe('AC4: Back keeps both steps values', () => {
     const { unmount } = renderScreen();
 
     await user.click(chip('Groceries'));
-    await user.click(chip('Bills'));
+    await user.click(chip('Alpha'));
     unmount();
 
     renderScreen();
 
     expect(chip('Groceries')).toHaveAttribute('aria-pressed', 'true');
-    expect(chip('Bills')).toHaveAttribute('aria-pressed', 'true');
-    expect(chip('Health')).toHaveAttribute('aria-pressed', 'false');
+    expect(chip('Alpha')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('Omega')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('reads a selection that was already in storage before the first render', () => {
     sessionStorage.setItem(
       SETUP_DRAFT_KEY,
-      JSON.stringify({ currency: 'USD', budget: '2,000', categories: ['Transport'] }),
+      JSON.stringify({ currency: 'USD', budget: '2,000', categories: ['id-transport'] }),
     );
 
     renderScreen();
 
-    expect(chip('Transport')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('Transportation')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('leaves step 1s currency and budget untouched', async () => {
@@ -297,12 +370,12 @@ describe('AC4: Back keeps both steps values', () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(chip('Shopping'));
+    await user.click(chip('Alpha'));
 
     expect(storedDraft()).toEqual({
       currency: 'USD',
       budget: '1,500.25',
-      categories: ['Shopping'],
+      categories: ['id-alpha'],
       firstName: '',
       lastName: '',
       email: '',
@@ -318,6 +391,77 @@ describe('AC4: Back keeps both steps values', () => {
   });
 });
 
+describe('a stored pick that is no longer offered', () => {
+  // The membership filter `parseDraft` lost at PET-64, restored where the two
+  // halves actually meet. That module used to drop a value the picker could not
+  // have produced; with an admin-managed list it is React-free and fetches
+  // nothing, so it only dedupes and caps now.
+  //
+  // Left unreconciled, a dead id rides the draft to step 3, `AuthService`
+  // answers 400 and `RegisterForm` renders its generic failure line - and the
+  // draft is untouched by a rejected submit, so every retry sends the same dead
+  // id and the one control that could clear it is a chip the screen no longer
+  // draws. The user cannot leave onboarding without emptying sessionStorage.
+
+  const withStored = (categories: string[]) =>
+    sessionStorage.setItem(
+      SETUP_DRAFT_KEY,
+      JSON.stringify({ currency: 'USD', budget: '2,000', categories }),
+    );
+
+  it('drops the dead id and keeps the live ones', async () => {
+    withStored(['id-groceries', 'id-retired', 'id-omega']);
+
+    renderScreen();
+
+    await waitFor(() => expect(storedCategories()).toEqual(['id-groceries', 'id-omega']));
+  });
+
+  it('rewrites the survivors in the offered order', async () => {
+    // Same rebuild `toggle` does, so a reconciled draft and a toggled one are
+    // canonical in the same way rather than in two subtly different ways.
+    withStored(['id-omega', 'id-retired', 'id-groceries']);
+
+    renderScreen();
+
+    await waitFor(() => expect(storedCategories()).toEqual(['id-groceries', 'id-omega']));
+  });
+
+  it('leaves the rest of the draft alone', async () => {
+    withStored(['id-retired']);
+
+    renderScreen();
+
+    await waitFor(() => expect(storedCategories()).toEqual([]));
+    expect(storedDraft()).toMatchObject({ currency: 'USD', budget: '2,000' });
+  });
+
+  it('writes nothing at all when every stored id is still offered', async () => {
+    // The ordinary visit. The effect is guarded on "would this change
+    // anything", so it must not cost a sessionStorage write per render - and
+    // must not fight the provider's own no-write-on-mount rule.
+    renderScreen();
+
+    await waitFor(() => expect(chips().length).toBeGreaterThan(0));
+    expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
+  });
+
+  it('never reconciles against an empty list, which is the degraded read', async () => {
+    // **The exception that matters most.** `readCategoryTemplates` degrades to
+    // `[]` rather than throwing, so "no chips" means "the backend could not be
+    // read" as much as it means "an admin disabled everything" - deliberately
+    // indistinguishable, because Continue is unconditional (A4). Reconciling
+    // here would read a momentary outage as proof that every chip the user
+    // picked is gone and silently delete a correct selection.
+    withStored(['id-groceries', 'id-omega']);
+
+    renderScreen([]);
+
+    await waitFor(() => expect(screen.getByRole('heading')).toBeInTheDocument());
+    expect(storedCategories()).toEqual(['id-groceries', 'id-omega']);
+  });
+});
+
 describe('AC5: nothing reaches a server', () => {
   it('sends no request when chips are toggled', async () => {
     // A32: the account does not exist until step 3 posts one body, so there is
@@ -330,7 +474,7 @@ describe('AC5: nothing reaches a server', () => {
     const { container } = renderScreen();
 
     await user.click(chip('Groceries'));
-    await user.click(chip('Bills'));
+    await user.click(chip('Alpha'));
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(container.querySelector('form')).toBeNull();
@@ -346,18 +490,20 @@ describe('AC5: nothing reaches a server', () => {
 });
 
 describe('the exits', () => {
-  it('makes both exits links, with ten chips as the only buttons', () => {
+  it('makes both exits links, with the chips as the only buttons', () => {
     // The inverted mirror of step 1's one-link-one-button assertion. Continue here
     // *is* a link, because A4 leaves nothing to validate - so a regression to a form
     // with a submit button would be somebody inventing a validation seam the design
-    // does not have. Ten buttons is what catches a chip being dropped or duplicated.
+    // does not have. One button per offered chip is what catches a chip being
+    // dropped or duplicated; the number used to be the literal ten, which is a fact
+    // about a constant this screen no longer owns.
     renderScreen();
 
     const links = screen.getAllByRole('link');
     expect(links).toHaveLength(2);
     expect(links.map((link) => link.textContent)).toEqual(['Back', 'Continue']);
 
-    expect(chips()).toHaveLength(10);
+    expect(chips()).toHaveLength(TEMPLATES.length);
     for (const button of chips()) {
       expect(button).toHaveAttribute('aria-pressed');
     }

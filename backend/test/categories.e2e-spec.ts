@@ -5,6 +5,7 @@ import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { categoryTemplateIds } from './category-templates';
 import { LoginTokenService } from './../src/auth/login-token.service';
 import type { CategoriesResponseDto } from './../src/categories/dto/categories-response.dto';
 import type { CategoryResponseDto } from './../src/categories/dto/category-response.dto';
@@ -96,11 +97,22 @@ describe('Category endpoints (e2e)', () => {
   /** A fresh capped category, so band tests do not interfere with each other. */
   const cappedCategory = async (monthlyCap: number, name: string) =>
     categoryBody(
-      await create({ name, color: '#57B368', monthlyCap }).expect(201),
+      await create({
+        name,
+        // A daisyUI token, not a hex, and an icon because PET-64 made it
+        // required - a name from `ICON_NAMES`, so `cup` and `box` are gone.
+        color: 'success',
+        icon: 'shopping-basket',
+        monthlyCap,
+      }).expect(201),
     );
 
   const named = (response: request.Response, name: string) =>
     listBody(response).categories.find((row) => row.name === name)!;
+
+  // Resolved in beforeAll: RegisterDto.categories takes category template
+  // ids, and those are minted by the boot seed into this run's own database.
+  let pickedCategoryIds: string[] = [];
 
   const provision = async () => {
     const email = nextEmail();
@@ -112,7 +124,7 @@ describe('Category endpoints (e2e)', () => {
         email,
         currency: 'eur',
         monthlyBudget: 2000,
-        categories: ['Transport', 'Groceries'],
+        categories: pickedCategoryIds,
       })
       .expect(202);
     await mailer.waitFor(email.toLowerCase(), 1);
@@ -147,6 +159,11 @@ describe('Category endpoints (e2e)', () => {
     app.setGlobalPrefix('api');
     await app.init();
 
+    pickedCategoryIds = await categoryTemplateIds(app, [
+      'Transportation',
+      'Groceries',
+    ]);
+
     centralDb = app.get<CentralDatabase>(APP_DB);
     loginTokens = app.get(LoginTokenService);
     userDatabases = app.get(UserDatabaseService);
@@ -171,7 +188,7 @@ describe('Category endpoints (e2e)', () => {
       const response = await list().expect(200);
       const names = listBody(response).categories.map((row) => row.name);
 
-      expect(names).toEqual(['Groceries', 'Transport', 'Uncategorized']);
+      expect(names).toEqual(['Groceries', 'Transportation', 'Uncategorized']);
     });
 
     it('marks exactly one category as the fallback', async () => {
@@ -205,7 +222,7 @@ describe('Category endpoints (e2e)', () => {
     it('keeps a category with no transactions at zero rather than dropping it', async () => {
       // The date predicates live in the JOIN condition for exactly this reason:
       // in the WHERE clause they would filter out the category row itself.
-      const transport = named(await list().expect(200), 'Transport');
+      const transport = named(await list().expect(200), 'Transportation');
 
       expect(transport).toMatchObject({ spent: 0, transactionCount: 0 });
     });
@@ -307,7 +324,12 @@ describe('Category endpoints (e2e)', () => {
       await request(app.getHttpServer())
         .post('/api/categories')
         .set('Authorization', `Bearer ${fresh.token}`)
-        .send({ name: 'Huge', color: '#57B368', monthlyCap: 2500 })
+        .send({
+          name: 'Huge',
+          color: 'success',
+          icon: 'shopping-basket',
+          monthlyCap: 2500,
+        })
         .expect(201);
 
       const response = await request(app.getHttpServer())
@@ -328,18 +350,18 @@ describe('Category endpoints (e2e)', () => {
       const created = categoryBody(
         await create({
           name: 'Coffee',
-          color: '#EF6F6C',
+          color: 'error',
           monthlyCap: 40.55,
-          icon: 'cup',
+          icon: 'utensils',
           note: 'Too much',
         }).expect(201),
       );
 
       expect(created).toMatchObject({
         name: 'Coffee',
-        color: '#EF6F6C',
+        color: 'error',
         monthlyCap: 40.55,
-        icon: 'cup',
+        icon: 'utensils',
         note: 'Too much',
         isFallback: false,
         spent: 0,
@@ -358,7 +380,11 @@ describe('Category endpoints (e2e)', () => {
     it('creates an uncapped category when the cap is omitted', async () => {
       // AC3 as amended: users are not forced to budget per category.
       const created = categoryBody(
-        await create({ name: 'No limit', color: '#34B9AE' }).expect(201),
+        await create({
+          name: 'No limit',
+          color: 'accent',
+          icon: 'zap',
+        }).expect(201),
       );
 
       expect(created).toMatchObject({
@@ -369,20 +395,49 @@ describe('Category endpoints (e2e)', () => {
     });
 
     it('rejects a cap of zero, which is not the same as no cap', async () => {
-      await create({ name: 'Zero', color: '#34B9AE', monthlyCap: 0 }).expect(
-        400,
-      );
+      await create({
+        name: 'Zero',
+        color: 'accent',
+        icon: 'zap',
+        monthlyCap: 0,
+      }).expect(400);
     });
 
     it('rejects a negative cap', async () => {
-      await create({ name: 'Neg', color: '#34B9AE', monthlyCap: -5 }).expect(
+      await create({
+        name: 'Neg',
+        color: 'accent',
+        icon: 'zap',
+        monthlyCap: -5,
+      }).expect(400);
+    });
+
+    it('rejects a missing name, and a hex where a colour token belongs', async () => {
+      await create({ color: 'accent', icon: 'zap' }).expect(400);
+
+      // **`#RRGGBB` is the malformed example now, and that is a reversal**: it
+      // was the only accepted format until PET-64, and the negative case used
+      // to be the word `teal` - which is a plausible token shape rather than a
+      // rejected one, so keeping it would have stopped proving anything.
+      await create({
+        name: 'Bad colour',
+        color: '#34B9AE',
+        icon: 'zap',
+      }).expect(400);
+    });
+
+    it('rejects an icon that is not a lucide name', async () => {
+      // `cup` and `box` were the fixtures here before the allowlist, and
+      // neither is a lucide name - so both were values the API accepted and no
+      // frontend could ever render.
+      await create({ name: 'Bad icon', color: 'accent', icon: 'cup' }).expect(
         400,
       );
     });
 
-    it('rejects a missing name and a malformed color', async () => {
-      await create({ color: '#34B9AE' }).expect(400);
-      await create({ name: 'Bad colour', color: 'teal' }).expect(400);
+    it('rejects a category with no icon at all', async () => {
+      // Required as of PET-64. Narrowing is free now and expensive later.
+      await create({ name: 'Iconless', color: 'accent' }).expect(400);
     });
 
     it('refuses to mint a second fallback', async () => {
@@ -390,7 +445,8 @@ describe('Category endpoints (e2e)', () => {
       // long before the partial unique index would have to.
       await create({
         name: 'Impostor',
-        color: '#34B9AE',
+        color: 'accent',
+        icon: 'zap',
         isFallback: true,
       }).expect(400);
     });
@@ -438,23 +494,26 @@ describe('Category endpoints (e2e)', () => {
       const updated = categoryBody(
         await patch(fallback.id, {
           monthlyCap: 50,
-          color: '#8A79F1',
-          icon: 'box',
+          color: 'primary',
+          icon: 'gift',
         }).expect(200),
       );
 
       expect(updated).toMatchObject({
         name: 'Uncategorized',
         monthlyCap: 50,
-        color: '#8A79F1',
-        icon: 'box',
+        color: 'primary',
+        icon: 'gift',
         isFallback: true,
       });
 
-      // Put it back, so later tests see the seeded shape.
-      await patch(fallback.id, { monthlyCap: null, color: '#98A0AE' }).expect(
-        200,
-      );
+      // Put it back, so later tests see the seeded shape - which is
+      // FALLBACK_CATEGORY's own token and glyph, not a hex any more.
+      await patch(fallback.id, {
+        monthlyCap: null,
+        color: 'warning-content',
+        icon: 'circle-question-mark',
+      }).expect(200);
     });
 
     it('404s on another account’s category id', async () => {
@@ -569,7 +628,7 @@ describe('Category endpoints (e2e)', () => {
       // The second account still has exactly what provisioning gave it.
       expect(listBody(response).categories.map((row) => row.name)).toEqual([
         'Groceries',
-        'Transport',
+        'Transportation',
         'Uncategorized',
       ]);
       expect(mine.length).toBeGreaterThan(3);

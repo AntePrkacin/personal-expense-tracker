@@ -15,8 +15,13 @@ jest.mock('next/navigation', () => ({ useRouter: () => ({ replace, push: jest.fn
 const GROCERIES = '0198c2a1-0000-7000-8000-0000000000a1';
 
 const CATEGORIES: CategoryLabel[] = [
-  { id: GROCERIES, name: 'Groceries', color: '#57B368' },
-  { id: '0198c2a1-0000-7000-8000-0000000000a2', name: 'Transport', color: '#3F8EE6' },
+  { id: GROCERIES, name: 'Groceries', color: 'success' as const, icon: 'shopping-basket' as const },
+  {
+    id: '0198c2a1-0000-7000-8000-0000000000a2',
+    name: 'Transport',
+    color: 'info' as const,
+    icon: 'car' as const,
+  },
 ];
 
 /** The provider is real: it owns the router call, and the bar throws outside it by design. */

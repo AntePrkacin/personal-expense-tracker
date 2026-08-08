@@ -15,7 +15,7 @@ import { todayIn } from '../common/month-window';
 import { newId } from '../common/ids';
 import { UserDatabaseService } from '../database/user-database.service';
 import { categories, profile, transactions } from '../database/user/schema';
-import { STARTER_CATEGORY_NAMES } from '../database/user/starter-categories';
+import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
 
 /**
@@ -132,17 +132,60 @@ function dateMonthsAgo(
 }
 
 /**
- * What registration would have collected. Major units, like a real onboarding
- * payload: `VerificationService` runs it through `toCents`.
+ * What registration would have collected, bar the categories. Major units, like
+ * a real onboarding payload: `VerificationService` runs it through `toCents`.
  */
-const ONBOARDING_PAYLOAD = {
+const ONBOARDING_PROFILE = {
   firstName: 'Showcase',
   lastName: 'User',
   currency: 'USD',
   monthlyBudget: BUDGET_CENTS / 100,
   monthStartDay: 1,
-  categories: STARTER_CATEGORY_NAMES,
 };
+
+/**
+ * The name of the category the subscription story is attached to.
+ *
+ * It was "Subscriptions", which PET-64's template list does not contain -
+ * "streaming subscriptions" is part of what Entertainment's own description
+ * covers. Named as a constant and looked up **strictly** below, because the old
+ * lookup fell back to `pickableCategories[0]` and so degraded silently: a demo
+ * whose recurring-merchant story sat on an arbitrary category, with nothing
+ * failing.
+ */
+const SUBSCRIPTION_CATEGORY = 'Entertainment';
+
+/** The category the four fixed EU merchant names belong to, same rule. */
+const GROCERIES_CATEGORY = 'Groceries';
+
+/**
+ * Every category template there is, as the onboarding payload's `categories`.
+ *
+ * **Ids, not names, since PET-64**, and read out of central rather than out of
+ * a constant - which is the whole point of this script provisioning through the
+ * real services. A hard-coded list here would drift from the templates the
+ * moment an admin edited one, and registration would answer 400 on ids that no
+ * longer exist.
+ */
+async function onboardingPayload(
+  app: INestApplicationContext,
+): Promise<typeof ONBOARDING_PROFILE & { categories: string[] }> {
+  const { categories: templates } = await app
+    .get(TemplatesService)
+    .categories();
+
+  if (templates.length === 0) {
+    throw new Error(
+      'No category templates in central. The boot seed should have written ' +
+        'them; check that DATABASE_DIR points where you think it does.',
+    );
+  }
+
+  return {
+    ...ONBOARDING_PROFILE,
+    categories: templates.map((template) => template.id),
+  };
+}
 
 /**
  * The showcase user, provisioned for whichever mode this run is targeting.
@@ -175,9 +218,11 @@ async function ensureShowcaseUser(
   const verificationService = app.get(VerificationService);
   const loginTokenService = app.get(LoginTokenService);
 
+  const payload = await onboardingPayload(app);
+
   let user = await usersService.findByEmail(SHOWCASE_EMAIL);
   if (!user) {
-    await usersService.createPending(SHOWCASE_EMAIL, ONBOARDING_PAYLOAD);
+    await usersService.createPending(SHOWCASE_EMAIL, payload);
     user = await usersService.findByEmail(SHOWCASE_EMAIL);
   }
 
@@ -194,7 +239,7 @@ async function ensureShowcaseUser(
     SEED_MODE === 'cloud' && verifiable.dbUrl === null;
 
   if (verifiable.onboardingPayload || missingCloudDatabase) {
-    await usersService.stashOnboardingPayload(user.id, ONBOARDING_PAYLOAD);
+    await usersService.stashOnboardingPayload(user.id, payload);
     const rawToken = await loginTokenService.issue(user.id);
     await verificationService.verify(rawToken);
   }
@@ -203,14 +248,44 @@ async function ensureShowcaseUser(
 }
 
 /**
+ * One seeded category by name, or a failure that says which one is missing.
+ *
+ * The seed attaches two of its stories to named categories, and both of those
+ * names come from the template list this account was provisioned from - so a
+ * miss means the templates changed under the script, which is a thing to fix
+ * rather than to work around at runtime.
+ */
+function requireCategoryId(
+  seeded: readonly { id: string; name: string }[],
+  name: string,
+): string {
+  const found = seeded.find((category) => category.name === name);
+
+  if (!found) {
+    throw new Error(
+      `The showcase seed needs a "${name}" category and this account has none. ` +
+        `It has: ${seeded.map((c) => c.name).join(', ')}. Either a category ` +
+        `template was renamed or removed, or this account's categories were ` +
+        `edited through the API.`,
+    );
+  }
+
+  return found.id;
+}
+
+/**
  * A merchant pool where every category is guaranteed at least two merchants of
  * its own.
  *
  * The guarantee is why the faker names are dealt round-robin rather than each
- * picking a category at random: with 22 names over 11 categories, random
+ * picking a category at random: with 26 names over 13 categories, random
  * assignment leaves several categories with none at all, and every transaction
  * in such a category then has to fall back to some arbitrary merchant - so a
  * whole category's worth of spending shows up under one name.
+ *
+ * Thirteen is the twelve category templates plus the fallback, and 26 is
+ * `categoryIds.length * 2` rather than a written-down number - the arithmetic
+ * is stated so the shape is legible, not so it can be pinned.
  *
  * @returns merchant name to the ids of the categories it is valid for.
  */
@@ -326,19 +401,25 @@ async function seed(app: INestApplicationContext): Promise<void> {
       .where(eq(categories.id, category.id));
   }
 
-  const groceries = allCategories.find((c) => c.name === 'Groceries');
+  // **Both lookups throw rather than falling back**, which reverses what this
+  // file used to do. They each used `?? pickableCategories[0]`, on the reasoning
+  // that a re-run against an account whose categories were edited through the
+  // API should not die - and the cost of that was a miss degrading *silently*
+  // into a demo whose grocery merchants or subscription story sat on an
+  // arbitrary category, with every run reporting success. PET-64 made that
+  // reachable rather than theoretical, by dropping "Subscriptions" from the
+  // template list entirely. A seed that cannot tell its own story should say so.
+  const groceriesId = requireCategoryId(allCategories, GROCERIES_CATEGORY);
   const merchantPool = buildMerchantPool(
     allCategories.map((c) => c.id),
-    (groceries ?? pickableCategories[0]).id,
+    groceriesId,
   );
   const merchantNames = [...merchantPool.keys()];
 
-  // Falls back to any pickable category rather than throwing: the starter set
-  // is the seed's own choice, but nothing stops a re-run against an account
-  // whose categories were edited through the API.
-  const subscriptionsCategory =
-    allCategories.find((c) => c.name === 'Subscriptions') ??
-    pickableCategories[0];
+  const subscriptionsCategoryId = requireCategoryId(
+    allCategories,
+    SUBSCRIPTION_CATEGORY,
+  );
 
   // Today in the app's own zone, not the machine's, so a run just either side
   // of local midnight agrees with every month-scoped figure the dashboard
@@ -391,7 +472,7 @@ async function seed(app: INestApplicationContext): Promise<void> {
       rows.push({
         id: newId(),
         merchant: subscription.merchant,
-        categoryId: subscriptionsCategory.id,
+        categoryId: subscriptionsCategoryId,
         amountCents: subscription.amountCents,
         date: dateMonthsAgo(today, monthsAgo, subscription.dayOfMonth),
       });

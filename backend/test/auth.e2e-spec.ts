@@ -14,6 +14,7 @@ import { loginLinks, users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
 import { MAILER } from './../src/mail/mailer';
+import { categoryTemplateIds } from './category-templates';
 import { MemoryMailer } from './memory-mailer';
 
 /**
@@ -40,12 +41,16 @@ describe('AuthController (e2e)', () => {
   let emailCounter = 0;
   const nextEmail = () => `Person${++emailCounter}@Example.COM`;
 
+  // Resolved in beforeAll: RegisterDto.categories takes category template ids,
+  // and those are minted by the boot seed into this run's own temp database.
+  let pickedCategoryIds: string[] = [];
+
   const registration = (email: string) => ({
     firstName: 'Marko',
     lastName: 'Kovac',
     email,
     monthlyBudget: 2000.5,
-    categories: ['Groceries', 'Transport'],
+    categories: pickedCategoryIds,
   });
 
   // `object`, not `unknown`: supertest's own `.send()` takes `string | object`,
@@ -77,6 +82,10 @@ describe('AuthController (e2e)', () => {
 
     centralDb = app.get<CentralDatabase>(APP_DB);
     loginTokens = app.get(LoginTokenService);
+    pickedCategoryIds = await categoryTemplateIds(app, [
+      'Groceries',
+      'Transportation',
+    ]);
   });
 
   afterAll(async () => {
@@ -119,7 +128,9 @@ describe('AuthController (e2e)', () => {
         // the profile boundary, in verification.
         monthlyBudget: 2000.5,
         monthStartDay: 15,
-        categories: ['Groceries', 'Transport'],
+        // Template ids, stashed verbatim. Verification reads the names back
+        // out of central rather than trusting a name stashed here.
+        categories: pickedCategoryIds,
       });
 
       // The cloud pointer waits for verification, and in local mode no file is
@@ -190,7 +201,10 @@ describe('AuthController (e2e)', () => {
       );
     });
 
-    it('rejects a category outside the starter set', async () => {
+    it('rejects a category id that is not a uuid at all', async () => {
+      // The shape check, which is all the DTO can do now that the offered list
+      // is a table: `@IsIn` has nothing to close over, so this is what keeps
+      // junk out of the membership query behind it.
       const response = await post('register', {
         ...registration(nextEmail()),
         categories: ['Yachts'],
@@ -199,6 +213,20 @@ describe('AuthController (e2e)', () => {
       expect(errorBody(response).message).toEqual(
         expect.arrayContaining([expect.stringContaining('categories')]),
       );
+    });
+
+    it('rejects a well-formed id that is no category template', async () => {
+      // The membership check in AuthService, which is the half the DTO cannot
+      // do. It runs ahead of the floated token issue and mail send, so this is
+      // a 400 rather than a 202 followed by an account nobody asked for.
+      const email = nextEmail();
+      const response = await post('register', {
+        ...registration(email),
+        categories: [newId()],
+      }).expect(400);
+
+      expect(errorBody(response).message).toMatch(/category template/i);
+      expect(await liveUsers(email.toLowerCase())).toHaveLength(0);
     });
 
     it('accepts an empty category selection (A4 enforces no minimum)', async () => {

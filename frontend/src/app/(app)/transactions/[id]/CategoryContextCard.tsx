@@ -1,7 +1,6 @@
-import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 
-import { categoryTileClass } from '@/components/ui/categoryColour';
+import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
 import { formatCurrency, formatIsoDayMonth, formatNegative } from '@/lib/format';
 import type { CategoryContext, TransactionDetail } from '@/lib/transactionDetail';
 
@@ -40,6 +39,13 @@ export function CategoryContextCard({
 }: CategoryContextCardProps) {
   const chip = chipFor(category);
   const tileClass = categoryTileClass(category.color);
+
+  // **The real per-category glyph as of PET-64, where this drew `<ShoppingBag />` for
+  // everything.** Every sibling in this list is in the same category by construction -
+  // that is what "Recent in {category}" means - so one lookup serves the whole list
+  // rather than one per row. `null` when the stored icon resolves to nothing, which
+  // leaves the tile empty rather than drawing a mark that says something else.
+  const Icon = categoryIcon(category.icon);
 
   return (
     <section className="card bg-base-100 text-base-content shadow-sm">
@@ -111,7 +117,10 @@ export function CategoryContextCard({
                   aria-hidden="true"
                   className={`rounded-field flex size-9 shrink-0 items-center justify-center ${tileClass}`}
                 >
-                  <ShoppingBag className="size-4.5" aria-hidden="true" />
+                  {/* No colour stated: `ui/categoryColour.ts` pairs each background with
+                      its content partner, and lucide strokes `currentColor`, so the mark
+                      follows the tile in both themes. */}
+                  {Icon === null ? null : <Icon className="size-4.5" aria-hidden="true" />}
                 </span>
 
                 <div className="flex min-w-0 flex-col">

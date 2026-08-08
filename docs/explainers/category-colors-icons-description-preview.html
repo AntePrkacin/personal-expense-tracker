@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Category colors, icons and descriptions preview</title>
+
+    <!--
+      Pinned to exactly what frontend/package.json installs, so the colours here are the colours
+      the app paints. An earlier version pinned daisyUI 4.12.10 and the Tailwind v3 Play CDN,
+      where the four *-content tokens all resolve to pure black: three tiles rendered identically
+      and none of them matched the app.
+
+      daisyui.css already carries the light and dark themes, which is the pair globals.css
+      registers, so themes.css (all 35) is deliberately not loaded.
+    -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+    <script src="https://unpkg.com/lucide@1.29.0"></script>
+</head>
+
+<!--
+  THE SURFACES AND THE MARKS BELOW ARE THE APP'S, NOT THIS FILE'S INVENTION.
+
+  Surfaces, read from the code:
+    body            bg-base-200        app/layout.tsx
+    card / table    bg-base-100        (app)/transactions/TransactionsTable.tsx, whose wrapper is
+                                       `rounded-box border-base-300 bg-base-100 overflow-x-auto border`
+
+  Marks, read from the same files, at their real sizes:
+    TILE   size-9 rounded-field, glyph size-4.5   (app)/transactions/TransactionRow.tsx
+    DOT    size-2 rounded-full                    the same row's category cell
+    CHIP   status status-lg                       setup/categories/CategoryChip.tsx
+
+  The DOT and the CHIP carry no glyph, which is the whole reason they are drawn here: a colour
+  that reads fine as a 36px tile behind an icon can be invisible as an 8px dot. Judge the palette
+  on all three, not on the tile alone.
+
+  The two glyphless marks are drawn background-only here, and only the CHIP is background-only in
+  the app. That difference is a fact about class strings rather than about pixels, and it is worth
+  stating so nobody reads this file as the row's markup:
+
+    CHIP  really is CATEGORY_DOT. daisyUI's `status` draws a drop shadow from currentColor, so a
+          class pair carrying a text-*-content half turns that shadow into an opaque coloured
+          smudge - which is the whole reason CATEGORY_DOT exists beside CATEGORY_TILE.
+    DOT   is CATEGORY_TILE in the app: TransactionRow hands its category cell the same tile pair
+          the icon tile gets, because that span is a plain `rounded-full` with no content and
+          nothing reading currentColor, so the text-*-content half is genuinely inert there.
+
+  Both paint the identical background, which is why one column serves for both. Reach for
+  CATEGORY_DOT rather than copying this file whenever the mark is a daisyUI component.
+-->
+<body class="bg-base-200 text-base-content min-h-screen p-4 sm:p-8">
+  <div class="mx-auto flex max-w-5xl flex-col gap-6">
+
+    <header class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold">Category final preview</h1>
+            <p class="mt-1 text-sm opacity-70">13 categories, on the app's own surfaces and at the app's own sizes.</p>
+        </div>
+        <!--
+          daisyUI's theme-controller: the checkbox switches the theme in CSS, so this page needs no
+          theme JavaScript. The app itself has no controller, selecting light/dark from the OS;
+          this one exists only so both can be compared side by side here.
+        -->
+        <label class="flex cursor-pointer items-center gap-2">
+            <i data-lucide="sun" class="size-5" aria-hidden="true"></i>
+            <span class="sr-only">Dark theme</span>
+            <input type="checkbox" value="dark" class="toggle theme-controller" />
+            <i data-lucide="moon" class="size-5" aria-hidden="true"></i>
+        </label>
+    </header>
+
+    <!--
+      Deliberately NOT daisyUI's `alert`. That component's canonical syntax carries
+      role="alert", which is an assertive live region: correct for a message that appears in
+      response to something, wrong for a static caption that is present on load and would be
+      announced over whatever the reader was doing. A plain bordered box says the same thing
+      and claims nothing.
+    -->
+    <div class="border-base-300 bg-base-100 rounded-box flex items-start gap-3 border p-4 text-sm">
+        <i data-lucide="info" class="size-5 shrink-0 opacity-60" aria-hidden="true"></i>
+        <p>
+            <strong>Tile</strong> is the transactions row (36px, with its glyph).
+            <strong>Dot</strong> is the same row's category cell (8px, no glyph).
+            <strong>Chip</strong> is the onboarding selector (12px, no glyph).
+            Toggle the theme: several tokens read well as a tile and disappear as a dot.
+        </p>
+    </div>
+
+    <!-- The wrapper is copied verbatim from TransactionsTable.tsx, so this is the app's card. -->
+    <div class="rounded-box border-base-300 bg-base-100 overflow-x-auto border">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Tile</th>
+            <th>Dot</th>
+            <th>Chip</th>
+            <th>Category</th>
+            <th>Token</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <tr>
+            <td><span class="bg-success text-success-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="shopping-basket" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-success size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-success" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Groceries</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">success</td>
+            <td class="text-sm opacity-70">Food, beverages, and household essentials bought to consume at home.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-secondary text-secondary-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="utensils" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-secondary size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-secondary" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Dining out</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">secondary</td>
+            <td class="text-sm opacity-70">Restaurants, coffee shops, takeout, delivery, and fast food.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-info text-info-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="car" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-info size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-info" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Transportation</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">info</td>
+            <td class="text-sm opacity-70">Gas, public transit, rideshares, parking, and vehicle maintenance.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-accent text-accent-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="zap" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-accent size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-accent" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Utilities</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">accent</td>
+            <td class="text-sm opacity-70">Essential home services like electricity, water, internet, and phone plans.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-error text-error-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="heart-pulse" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-error size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-error" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Healthcare</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">error</td>
+            <td class="text-sm opacity-70">Doctor visits, pharmacy, dental, therapy, and medical bills.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-primary text-primary-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="tv" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-primary size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-primary" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Entertainment</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">primary</td>
+            <td class="text-sm opacity-70">Movies, concerts, gaming, hobbies, and streaming subscriptions.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-primary-content text-primary rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="graduation-cap" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-primary-content size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-primary-content" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Education</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">primary-content</td>
+            <td class="text-sm opacity-70">Tuition, courses, books, and school supplies.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-secondary-content text-secondary rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="plane" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-secondary-content size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-secondary-content" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Travel</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">secondary-content</td>
+            <td class="text-sm opacity-70">Flights, hotels, rental cars, and vacation expenses.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-accent-content text-accent rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="scissors" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-accent-content size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-accent-content" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Personal care</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">accent-content</td>
+            <td class="text-sm opacity-70">Haircuts, gym memberships, cosmetics, and hygiene products.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-success-content text-success rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="gift" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-success-content size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-success-content" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Gifts</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">success-content</td>
+            <td class="text-sm opacity-70">Presents for birthdays and holidays, as well as charity and donations.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-info-content text-info rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="paw-print" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-info-content size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-info-content" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Family &amp; pets</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">info-content</td>
+            <td class="text-sm opacity-70">Childcare, baby supplies, pet care, vet bills, and family activities.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-warning text-warning-content rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="landmark" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-warning size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-warning" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Loans &amp; debt</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">warning</td>
+            <td class="text-sm opacity-70">Mortgage payments, car loans, credit card payments, and student loans.</td>
+          </tr>
+
+          <tr>
+            <td><span class="bg-base-content/50 text-base-100 rounded-field flex size-9 shrink-0 items-center justify-center"><i data-lucide="circle-question-mark" class="size-4.5" aria-hidden="true"></i></span></td>
+            <td><span class="bg-base-content/50 size-2 shrink-0 rounded-full block" aria-hidden="true"></span></td>
+            <td><span class="status status-lg bg-base-content/50" aria-hidden="true"></span></td>
+            <td class="font-semibold whitespace-nowrap">Uncategorized</td>
+            <td class="font-mono text-xs whitespace-nowrap opacity-70">base-content/50</td>
+            <td class="text-sm opacity-70">Any transaction that doesn't have its own category.</td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-sm opacity-70">
+        Category names are sentence case throughout: first letter capital, everything else lower.
+        <code class="font-mono">circle-question-mark</code> rather than
+        <code class="font-mono">circle-help</code>, which is a deprecated alias in the installed
+        lucide 1.29.0.
+    </p>
+
+  </div>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

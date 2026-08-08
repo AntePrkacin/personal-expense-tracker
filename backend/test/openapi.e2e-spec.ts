@@ -83,6 +83,8 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/insights`,
       `/${API_PREFIX}/insights/generate`,
       `/${API_PREFIX}/profile`,
+      `/${API_PREFIX}/templates/categories`,
+      `/${API_PREFIX}/templates/palette`,
       `/${API_PREFIX}/transactions`,
       `/${API_PREFIX}/transactions/{id}`,
     ]);
@@ -685,6 +687,157 @@ describe('openapi.json', () => {
       });
     },
   );
+
+  describe('the category colour and icon enums', () => {
+    // **The single most load-bearing thing in this file, as of PET-64.**
+    // `frontend/src/components/ui/categoryColour.ts` keys three `Record`s by
+    // the union these enums generate, and that record is its own exhaustiveness
+    // proof only while the union is literal. Widen either field to a bare
+    // `string` - by dropping the explicit `enum:`, or by skipping `api:sync` -
+    // and `Record<CategoryColour, string>` degrades to `Record<string, string>`,
+    // which accepts any subset of keys. The build stays green and every tile
+    // renders grey.
+
+    const COLOUR_TOKENS = [
+      'primary',
+      'primary-content',
+      'secondary',
+      'secondary-content',
+      'accent',
+      'accent-content',
+      'neutral',
+      'neutral-content',
+      'info',
+      'info-content',
+      'success',
+      'success-content',
+      'warning',
+      'warning-content',
+      'error',
+      'error-content',
+      // The seventeenth, and the only one that is not a plain semantic token.
+      // It is here because the other sixteen cannot supply a muted colour that
+      // is visible in both themes - `COLOUR_CONTRAST` in template-tokens.ts
+      // carries the measured table - and the `Uncategorized` fallback needs one.
+      'base-content/50',
+    ];
+
+    const ICON_NAMES = [
+      'shopping-basket',
+      'utensils',
+      'car',
+      'zap',
+      'heart-pulse',
+      'tv',
+      'graduation-cap',
+      'plane',
+      'scissors',
+      'gift',
+      'paw-print',
+      'landmark',
+      'circle-question-mark',
+    ];
+
+    // Written out here rather than imported from template-tokens.ts on purpose.
+    // Importing would make this assert the constant against itself, which is
+    // the failure `SIDEBAR_HREFS`' own note describes: the point is that the
+    // *published contract* carries these seventeen and these thirteen, so a
+    // deliberate change has to be made in two places and an accidental one
+    // fails here.
+
+    it.each([
+      'CreateCategoryDto',
+      'UpdateCategoryDto',
+      'CategoryResponseDto',
+      'TopCategoryDto',
+      'DashboardCategoryDto',
+    ])('publishes %s.color as the token enum, with no pattern', (name) => {
+      const color = schema(name).properties!.color;
+
+      expect(color.enum).toEqual(COLOUR_TOKENS);
+      // The hex regex is gone, and its absence is the assertion: a leftover
+      // `pattern` beside the enum would reject every value the enum allows.
+      expect(color.pattern).toBeUndefined();
+    });
+
+    it.each(['CreateCategoryDto', 'UpdateCategoryDto', 'CategoryResponseDto'])(
+      'publishes %s.icon as the lucide enum',
+      (name) => {
+        expect(schema(name).properties!.icon.enum).toEqual(ICON_NAMES);
+      },
+    );
+
+    it('requires an icon on create and does not let a patch clear one', () => {
+      // Narrowed together: `cup` and `box` were accepted before this and
+      // neither is a lucide name, so both were values no frontend could draw.
+      expect(schema('CreateCategoryDto').required).toContain('icon');
+      expect(schema('UpdateCategoryDto').properties!.icon.nullable).toBeFalsy();
+    });
+  });
+
+  describe('the template endpoints', () => {
+    const categories = () => spec.paths[`/${API_PREFIX}/templates/categories`];
+    const palette = () => spec.paths[`/${API_PREFIX}/templates/palette`];
+
+    it('declares a read on each and nothing else', () => {
+      expect(Object.keys(categories()).sort()).toEqual(['get']);
+      expect(Object.keys(palette()).sort()).toEqual(['get']);
+    });
+
+    it('leaves the categories read unsecured and guards the palette', () => {
+      // The fifth `@Public()` route, and the only one that is not part of
+      // getting a credential: onboarding step 2 draws its chips before an
+      // account exists. `security` is absent rather than empty on a public
+      // route, which is how the other four read too.
+      expect(categories().get.security).toBeUndefined();
+      expect(palette().get.security).toEqual([{ bearer: [] }]);
+    });
+
+    it('documents a 401 on the guarded one only', () => {
+      expect(Object.keys(categories().get.responses).sort()).toEqual(['200']);
+      expect(Object.keys(palette().get.responses).sort()).toEqual([
+        '200',
+        '401',
+      ]);
+    });
+
+    it('returns composed shapes, never a bare {}', () => {
+      expect(
+        categories().get.responses['200'].content?.['application/json'].schema
+          ?.$ref,
+      ).toBe('#/components/schemas/CategoryTemplatesResponseDto');
+      expect(
+        palette().get.responses['200'].content?.['application/json'].schema
+          ?.$ref,
+      ).toBe('#/components/schemas/PaletteResponseDto');
+    });
+
+    it('gives a category template an id, a name, both tokens and a description', () => {
+      expect(
+        Object.keys(schema('CategoryTemplateDto').properties!).sort(),
+      ).toEqual(['color', 'description', 'icon', 'id', 'name']);
+      // The name is the one field with no enum, because it is the one field an
+      // admin authors freely.
+      expect(
+        schema('CategoryTemplateDto').properties!.name.enum,
+      ).toBeUndefined();
+    });
+
+    it('publishes RegisterDto.categories as uuids rather than a name enum', () => {
+      // It carried a real `enum` of the ten starter names until PET-64, which
+      // is what `app/setup/starterCategories.ts` read its union out of. The
+      // offered list is admin data now, so there is no union to publish and the
+      // frontend fetches the list instead.
+      const categories = schema('RegisterDto').properties!.categories as {
+        type?: string;
+        items?: Record<string, unknown>;
+      };
+
+      expect(categories.type).toBe('array');
+      expect(categories.items).toMatchObject({ format: 'uuid' });
+      expect(categories.items?.enum).toBeUndefined();
+    });
+  });
 
   it('describes message as either a string or an array of them', () => {
     // The one field the plugin cannot derive, so the only one that breaks by

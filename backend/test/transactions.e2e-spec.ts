@@ -5,6 +5,7 @@ import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { categoryTemplateIds } from './category-templates';
 import { LoginTokenService } from './../src/auth/login-token.service';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
 import { newId } from './../src/common/ids';
@@ -98,6 +99,10 @@ describe('Transaction writes (e2e)', () => {
   };
 
   /** Registers, verifies with a directly issued token, and returns the session. */
+  // Resolved in beforeAll: RegisterDto.categories takes category template
+  // ids, and those are minted by the boot seed into this run's own database.
+  let pickedCategoryIds: string[] = [];
+
   const provision = async () => {
     const email = nextEmail();
     await request(app.getHttpServer())
@@ -108,7 +113,7 @@ describe('Transaction writes (e2e)', () => {
         email,
         currency: 'eur',
         monthlyBudget: 2000.5,
-        categories: ['Transport', 'Groceries'],
+        categories: pickedCategoryIds,
       })
       .expect(202);
     await mailer.waitFor(email.toLowerCase(), 1);
@@ -143,6 +148,11 @@ describe('Transaction writes (e2e)', () => {
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
     await app.init();
+
+    pickedCategoryIds = await categoryTemplateIds(app, [
+      'Transportation',
+      'Groceries',
+    ]);
 
     centralDb = app.get<CentralDatabase>(APP_DB);
     loginTokens = app.get(LoginTokenService);

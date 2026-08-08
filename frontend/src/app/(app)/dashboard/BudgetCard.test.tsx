@@ -13,7 +13,7 @@ const ON_TRACK = {
   topCategory: {
     id: '0198c2a1-0000-7000-8000-0000000000a1',
     name: 'Groceries',
-    color: 'green',
+    color: 'success' as const,
     spent: 397,
   },
   isEmpty: false,

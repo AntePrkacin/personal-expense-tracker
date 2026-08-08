@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, seconds } from '@nestjs/throttler';
 import { normalizeEmail } from '../common/normalize-email';
 import { MailModule } from '../mail/mail.module';
+import { TemplatesModule } from '../templates/templates.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -88,6 +89,10 @@ export function trackByEmail(req: Record<string, unknown>): string {
   imports: [
     MailModule,
     UsersModule,
+    // Both halves of the access flow read it: register resolves the picked
+    // template ids against central before stashing them, and verification reads
+    // the same rows back to seed the account's categories.
+    TemplatesModule,
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

@@ -13,7 +13,9 @@ import { CategoryChip, CHIP_STATE } from './CategoryChip';
 // proves they generate CSS since PET-57 retired the compile guard - review holds it.
 
 function renderChip(selected: boolean, onToggle = jest.fn()) {
-  render(<CategoryChip label="Groceries" colour="green" selected={selected} onToggle={onToggle} />);
+  render(
+    <CategoryChip label="Groceries" colour="success" selected={selected} onToggle={onToggle} />,
+  );
   return { chip: screen.getByRole('button', { name: 'Groceries' }), onToggle };
 }
 
@@ -54,12 +56,12 @@ describe('CategoryChip', () => {
 
   it('shows the checkmark only when selected', () => {
     const { container } = render(
-      <CategoryChip label="Groceries" colour="green" selected={false} onToggle={jest.fn()} />,
+      <CategoryChip label="Groceries" colour="success" selected={false} onToggle={jest.fn()} />,
     );
     expect(container.querySelector('svg')).toBeNull();
 
     const withCheck = render(
-      <CategoryChip label="Bills" colour="orange" selected onToggle={jest.fn()} />,
+      <CategoryChip label="Bills" colour="warning" selected onToggle={jest.fn()} />,
     );
     expect(withCheck.container.querySelector('svg')).not.toBeNull();
   });
@@ -73,7 +75,7 @@ describe('CategoryChip', () => {
 
   it('fills the dot from the shared category palette, background only', () => {
     const { container } = render(
-      <CategoryChip label="Housing" colour="teal" selected={false} onToggle={jest.fn()} />,
+      <CategoryChip label="Housing" colour="accent" selected={false} onToggle={jest.fn()} />,
     );
 
     // `CATEGORY_DOT`, not `CATEGORY_TILE`, and the negative is the half worth having: daisyUI's
@@ -83,17 +85,18 @@ describe('CategoryChip', () => {
     // the two maps agree on the background.
     const dot = container.querySelector('span[aria-hidden="true"]')!;
 
-    expect(dot.className).toContain(CATEGORY_DOT.teal);
+    expect(dot.className).toContain(CATEGORY_DOT.accent);
     expect(dot.className).not.toContain('text-accent-content');
   });
 
   it('hides the dot and the checkmark from assistive technology', () => {
     // Neither carries information: aria-pressed already reports the state, and the dot cannot
-    // even identify the category to a reader who can see it - two of the ten chips share a
-    // colour word, and `ui/categoryColour.ts` maps orange and yellow both onto `warning` on top
-    // of that, so five of the ten are in a rendered tie.
+    // reliably identify the category to a reader who can see it - `ui/categoryColour.ts` names
+    // three seeded pairs that are deliberately close enough in OKLab to read as one hue, so the
+    // name always sits beside the dot. (It used to be a sharper version of the same fact: two
+    // chips shared a colour *word* and the eight-colour map collapsed five of ten into a tie.)
     const { container } = render(
-      <CategoryChip label="Bills" colour="orange" selected onToggle={jest.fn()} />,
+      <CategoryChip label="Bills" colour="warning" selected onToggle={jest.fn()} />,
     );
 
     expect(container.querySelector('span[aria-hidden="true"]')).not.toBeNull();

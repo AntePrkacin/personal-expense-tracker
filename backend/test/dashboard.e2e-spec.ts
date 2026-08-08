@@ -5,6 +5,7 @@ import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { categoryTemplateIds } from './category-templates';
 import { LoginTokenService } from './../src/auth/login-token.service';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
 import { monthWindow, todayIn } from './../src/common/month-window';
@@ -56,6 +57,10 @@ describe('Dashboard (e2e)', () => {
   const nextEmail = () => `Reader${++emailCounter}@Example.COM`;
 
   /** Registers, verifies with a directly issued token, and returns the session. */
+  // Resolved in beforeAll: RegisterDto.categories takes category template
+  // ids, and those are minted by the boot seed into this run's own database.
+  let pickedCategoryIds: string[] = [];
+
   const provision = async (monthlyBudget = 2000.5) => {
     const email = nextEmail();
     await request(app.getHttpServer())
@@ -66,7 +71,7 @@ describe('Dashboard (e2e)', () => {
         email,
         currency: 'eur',
         monthlyBudget,
-        categories: ['Transport', 'Groceries'],
+        categories: pickedCategoryIds,
       })
       .expect(202);
     await mailer.waitFor(email.toLowerCase(), 1);
@@ -116,6 +121,11 @@ describe('Dashboard (e2e)', () => {
     app.setGlobalPrefix('api');
     await app.init();
 
+    pickedCategoryIds = await categoryTemplateIds(app, [
+      'Transportation',
+      'Groceries',
+    ]);
+
     centralDb = app.get<CentralDatabase>(APP_DB);
     loginTokens = app.get(LoginTokenService);
     userDatabases = app.get(UserDatabaseService);
@@ -153,7 +163,7 @@ describe('Dashboard (e2e)', () => {
         .from(categories)
         .orderBy(asc(categories.name));
       groceriesId = seeded.find((row) => row.name === 'Groceries')!.id;
-      transportId = seeded.find((row) => row.name === 'Transport')!.id;
+      transportId = seeded.find((row) => row.name === 'Transportation')!.id;
 
       // Four rows: two in Groceries, one in Transport, spread across the
       // period so the weekly buckets have more than one nonzero entry.
@@ -252,10 +262,12 @@ describe('Dashboard (e2e)', () => {
         .from(categories)
         .orderBy(asc(categories.name));
       const groceriesId = seeded.find((row) => row.name === 'Groceries')!.id;
-      const transportId = seeded.find((row) => row.name === 'Transport')!.id;
+      const transportId = seeded.find(
+        (row) => row.name === 'Transportation',
+      )!.id;
 
       // Equal spend in two categories: the winner must be the alphabetically
-      // first ('Groceries' < 'Transport'), decided by the service rather than
+      // first ('Groceries' < 'Transportation'), decided by the service rather than
       // by whatever order the category query happens to return its rows in.
       await seed(account.token, {
         merchant: 'Konzum',
@@ -327,7 +339,9 @@ describe('Dashboard (e2e)', () => {
       const userDb = await userDatabases.getUserDb(userId);
       const seeded = await userDb.select().from(categories);
       const groceriesId = seeded.find((row) => row.name === 'Groceries')!.id;
-      const transportId = seeded.find((row) => row.name === 'Transport')!.id;
+      const transportId = seeded.find(
+        (row) => row.name === 'Transportation',
+      )!.id;
 
       await seed(bearer, {
         merchant: 'Konzum',
@@ -366,7 +380,7 @@ describe('Dashboard (e2e)', () => {
       expect(uncategorized).toBeDefined();
       expect(uncategorized!.spent).toBe(40);
       expect(body.categories.map((category) => category.name)).not.toContain(
-        'Transport',
+        'Transportation',
       );
     });
 

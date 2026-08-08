@@ -210,6 +210,16 @@ Both questions stopped being theoretical when PET-10 shipped Setup step 2: all t
 now on screen, so the two repeated colours are visible side by side and Bills and Subscriptions
 are offered to every new account. Neither is a blocker, and neither should be answered in code.
 
+**PET-64 answered both, and the two paragraphs above are dated to before it.** The chip list is
+admin-managed data in central rather than a ten-name constant, and the twelve seeded templates
+retire Bills, Subscriptions, Housing and Shopping outright - so A7's seam is gone with the names
+that sat on it. The palette is the seventeen daisyUI semantic tokens, so no two categories are
+forced onto one colour; three seeded pairs are still deliberately close in OKLab, which is a
+legibility call rather than a shortage, and `frontend/src/components/ui/categoryColour.ts` names
+all three with their measured ΔE. What still holds unchanged is the constraint the first bullet
+draws: **colour does not identify a category on its own**, so the per-category icon is the
+identity channel and every mark that carries colour is `aria-hidden` beside real text.
+
 ### The transaction detail fields no form captures (A20)
 
 The transaction detail mock (DET-8) shows **time, payment method, status and account**
@@ -1108,24 +1118,47 @@ the design level before the engineering starts. Note the backend already tombsto
 hard-deleting, so the capability is closer than the copy suggests - which makes this a question
 for the designer rather than a limitation to route around.
 
-### A category colour outside the eight renders grey, and nothing can produce one yet
+### The category colour question, answered: the API stores a token, not a hex (PET-64)
 
-`CategoryResponseDto.color` is a hex string and `CreateCategoryDto` validates it with
-`/^#[0-9A-Fa-f]{6}$/` - any well-formed hex, not one of the palette's eight. The frontend's only
-colour vocabulary is Tailwind class names, and a class cannot be built from a hex at runtime
-without Tailwind's scanner failing to find it, so `components/ui/categoryColour.ts` maps the eight
-known hexes and falls back to `bg-text-tertiary` for anything else.
+This entry used to be an open question. It is a decision record now, kept rather than deleted
+because the reasoning is what stops it being reopened.
 
-That fallback is **correct rather than lossy today**, and for a reason worth writing down: the only
-colour outside the eight that a real account holds is `FALLBACK_CATEGORY.color`, `#98A0AE`, which
-*is* `--color-text-tertiary`. So "Uncategorized" gets the grey the design gives it, and nothing
-else can reach the branch - no screen can create a category yet.
+**The question.** `CategoryResponseDto.color` was a hex string validated with
+`/^#[0-9A-Fa-f]{6}$/` - any well-formed hex, not one of the palette's eight. A Tailwind class
+cannot be built from a hex at runtime without the scanner failing to find it, so
+`components/ui/categoryColour.ts` mapped the eight known hexes and fell back to grey for anything
+else. That fallback was correct rather than lossy only because no screen could create a category:
+the day category writes shipped, whoever built them had to choose between a picker restricted to
+the palette and a rendering path that did not go through a class map.
 
-The day category writes ship (PET-37 and friends), that stops being true, and whoever builds them
-has to choose: a colour picker restricted to the eight, which is what frame 19's "Color" select
-implies and what `ui/Select.tsx` already records it cannot render; or a rendering path that does
-not go through a class map, which means an inline `style` and a deliberate exception to the
-literal-class rule. Note the second also affects the 8px category dot, not only the tile.
+**The answer is the first, and the reason it is not a close call is that hex was never merely
+indirect - it was incoherent.** `primary` is the one token daisyUI values differently per theme,
+so Entertainment (`#422ad5` light, `#605dff` dark) and Education (`#e0e7ff`, `#edf1fe`) have no
+single hex value at all: a stored one would record one and paint the other half the time. So
+`categories.color` stores the daisyUI **token** verbatim, `CreateCategoryDto` validates it with
+`@IsIn(COLOUR_TOKENS)`, and the seventeen tokens are the palette.
+
+Three things fell out of it that are worth knowing before touching that file:
+
+- **The picker's list and the API's list are deliberately different things.**
+  `GET /api/templates/palette` serves what an admin currently has **enabled**, which can be a
+  strict subset of what the API accepts - `error-content` ships disabled, because it measures
+  1.01:1 against the dark card. A category carrying a since-disabled colour still saves and still
+  renders. Validation checks the allowlist; `enabled` is presentation.
+- **The inline-`style` alternative is closed off, not merely unchosen.** The class map is now
+  keyed by the contract's own union, so `Record<CategoryColour, string>` is an exhaustiveness
+  proof: an eighteenth token backend-side breaks the frontend build until the map covers it.
+  That guarantee is what an inline `style` would have traded away, and it applies to the 8px dot
+  and the donut's SVG `fill` as well as the tile.
+- **`FALLBACK_CATEGORY` stopped being the exception.** Its `#98A0AE` was the retired token
+  layer's `--color-text-tertiary`; it carries `base-content/50` now and resolves like any other
+  category. The neutral grey in `categoryColour.ts` is left for one case only - a `categoryId`
+  that matched nothing in the account's list, which is the same colour by a different route.
+  PET-64 first put it on `warning-content` and the review of that branch reversed it: nobody had
+  measured the token, and it is 1.713:1 against the dark card, which silently undid the fix
+  PET-23 had made for this exact row. `COLOUR_CONTRAST` in `template-tokens.ts` is the measured
+  table that now exists so the same mistake cannot be made from plausibility again - of the
+  sixteen semantic tokens, only `primary` and `secondary` clear 3:1 in both themes.
 
 ### An unknown category id in the URL shows no-results with the select reading "All categories"
 
@@ -1194,25 +1227,38 @@ copy that reads correctly rather than to anything misleading, which is why the d
 accepted rather than fixed. Closing it properly means either publishing the value in the API or
 giving the frontend its own environment variable, and neither is worth it for a display string.
 
-### The starter category list exists in two files, linked only by a generated type
+### The starter category list is one source now, and what that cost (PET-64)
 
-The names are single-sourced and the colours are not. `backend/src/database/user/starter-categories.ts`
-owns both; `frontend/src/app/setup/starterCategories.ts` reads the **names** out of
-`frontend/src/types/api.d.ts`, because `@IsIn` on the DTO publishes an OpenAPI `enum` and
-`openapi-typescript` turns it into a literal union, so `npm run build` fails if the two lists
-disagree about a name. Nothing does that for a colour: the API publishes names only, so the
-frontend's ten `CategoryColour` keys are a hand-kept mirror of the backend's ten hex values, and
-a colour changed on one side is a silent divergence. `starterCategories.test.ts` pins the
-frontend's order and its two repeated colours, which catches an accidental edit but cannot see
-the other file.
+Also a decision record rather than an open item. The gap was that the names were single-sourced
+and the **colours** were not: `backend/src/database/user/starter-categories.ts` owned both, while
+`app/setup/starterCategories.ts` (deleted by PET-64) read the names out of the generated contract and
+kept its own hand-written mirror of the ten hexes beside them. A colour changed on one side was a
+silent divergence.
 
-**The preferred fix is a public endpoint serving the starter list**, which would delete the
-frontend copy outright. It needs its own ticket, and one constraint has to be in it: during
-onboarding there is no account and no per-user database, so such an endpoint cannot read *the
-user's* categories - it serves the constant, and it has to be `@Public()` like the other four
-pre-session routes. The per-user read that lists a real account's categories is a different
-endpoint and belongs with the category CRUD that "The rest of the data model" above still
-records as missing.
+**The fix this entry asked for is the one that shipped**: a `@Public()` endpoint serving the
+starter list, `GET /api/templates/categories`, which deleted the frontend copy outright. The
+constraint it named held exactly as written - there is no account and no per-user database during
+onboarding, so the endpoint serves template data rather than the caller's own categories, and the
+per-user read is still a different endpoint.
+
+What it did not anticipate is that the answer went further than deleting a duplicate. The list is
+not a constant behind an endpoint; it is **admin-managed rows** in central's `category_templates`,
+which is the first step toward a super-admin panel. Two consequences worth carrying:
+
+- **A compile-time guarantee was traded away, deliberately.** `@IsIn(STARTER_CATEGORY_NAMES)`
+  published an OpenAPI enum, so the frontend could carry `AssertNever<Exclude<...>>` and fail
+  `npm run build` if the backend ever accepted a name the screen did not offer. Names are
+  admin-authored now, so there is no enum and no proof. What replaces it is weaker but sound: the
+  ids come from the same endpoint registration validates them against, so the two cannot disagree
+  by construction. The colour and icon **kept** their enums, because those reference a code-side
+  allowlist - see the colour entry above.
+- **Onboarding became network-dependent.** Step 2 rendered from a constant and could not fail; it
+  can now, before the user has an account, on a screen A29 designs no error state for.
+  `readCategoryTemplates` degrades to an empty list rather than throwing, because Continue is
+  unconditional (A4) and an account seeded with just the fallback is a state the flow already
+  handles - but the copy for "we could not load your options" is still ours to invent, and it
+  joins what A29 owes a designer. `Screens/03 Setup`'s `NoTemplates` story is what to put in front
+  of them.
 
 ### Step 2 starts with nothing selected, where frame 03 shows seven
 
@@ -1227,6 +1273,16 @@ one line in `EMPTY_DRAFT` and **not** in the screen: `parseDraft` preserves an e
 empty array, so a default in the draft still lets a user deselect everything, while a default
 applied in the picker would be re-imposed on every return from step 1 and would leave step 3
 submitting something step 2 never showed.
+
+**PET-64 changed both halves of the arithmetic and moved where the answer would live.** A first
+visit renders **twelve** chips rather than ten, and four of the mock's seven selected names -
+Transport, Shopping, Housing and Bills - are not among them, so a diff against frame 03 now
+shows differences of two kinds. And `EMPTY_DRAFT` can no longer carry a default at all: the
+draft holds `category_templates` ids, which are minted per environment, so a constant here
+would name rows that exist nowhere. If the answer is the mock, the default belongs on the
+templates themselves - a `default_selected` column an admin controls, read by the same endpoint
+step 2 already calls - which is a cheaper change than this entry's original one, not a dearer
+one.
 
 ### The category chip's border is 1.5px in both states
 
@@ -1358,6 +1414,48 @@ record it.
   straight to `fetch`; `openapi-fetch` is the upgrade worth considering, because it delegates to
   global `fetch` and passes `RequestInit` through untouched. Recorded here because the old
   README was its only home outside a frozen plan file.
+
+---
+
+### Income is not a category, and adding one would be the worst way to support it
+
+This app has no concept of money coming in, and that is recorded rather than overlooked:
+`docs/project-management/01-brief-personal-expense-tracker.md` says "every amount is an expense;
+nothing records money coming in", and ADD-4 with A13 says "amounts are entered as positive numbers
+and rendered as negative expenses everywhere else. There is no income concept."
+`transactions.amount_cents` is a plain magnitude with no sign, and `formatNegative` applies the
+minus at render time. So "expense" is not a property of a row here, it is an assumption baked into
+the type.
+
+The question that keeps arising is whether a salary could just be a category, either a new
+`Income` one or folded into an existing one. **It cannot, and the category answer is worse than
+doing nothing, because it fails silently.** A positive amount in an `Income` category is
+indistinguishable from spending to every aggregate in the app: `DashboardService`'s `spent` sums
+the transaction list, so payday inflates it; the donut renders Income as the largest slice of
+"spending by category"; `averagePerDay` becomes meaningless; a weekly bar spikes; `BudgetCard` can
+read over budget *because* the user got paid; `topCategory` is always Income. A `monthlyCap` on
+income is nonsense, and the status bands invert with it, so `over` would mean "earned more than
+expected" and render in the danger colour. `RuleBasedInsightGenerator` would warn about the
+over-cap and project income as spend. Nothing there throws; the numbers are simply wrong on every
+screen.
+
+**The axis income differs on is the transaction, not the category.** Supporting it means a sign or
+a `type` on `transactions` - additively, so it satisfies this file's own rule about a user-scope
+migration running unattended one user at a time - and then every aggregate in `CategoriesService`,
+`TransactionsService`, `DashboardService` and `RuleBasedInsightGenerator` filtering or signing on
+it. That is a large ticket and it does not exist.
+
+**The tempting middle option is an `isIncome` flag on the category, and it should be rejected.**
+Aggregates would exclude flagged categories, which is cheap, but it makes a row's meaning depend on
+its category, so recategorising a transaction silently flips its sign. The case that settles it is
+**refunds**: a supermarket refund should reduce Groceries rather than count as income, and no
+category-level flag can express that while a transaction-level sign can.
+
+**PET-64 makes this cheaper later rather than harder.** Once category templates live in central,
+income categories are a `kind` column (`expense` | `income`) on `category_templates` plus a filter
+in the picker: admin-managed rows, no new mechanism, no user-data migration. So the template work
+is worth doing before this rather than after, and this entry exists so the next person costing
+income starts from the transaction model instead of from the category list.
 
 ## Operational
 

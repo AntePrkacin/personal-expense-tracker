@@ -67,8 +67,16 @@ export const categories = sqliteTable(
 
     name: text('name').notNull(),
 
-    // Hex, `#RRGGBB`. Purely presentational, so it is not constrained here: the
-    // categories feature validates the format at its DTO.
+    // A daisyUI semantic colour token, verbatim as the class suffix -
+    // `success`, `primary-content`, and so on. **Not a hex**, which is what this
+    // said until PET-64: a hex is incoherent rather than merely indirect,
+    // because `primary` is valued differently per theme and a stored value
+    // would record one and paint the other half the time.
+    //
+    // Not constrained here, and the closed set is not this file's. Central's
+    // `database/central/template-tokens.ts` owns `COLOUR_TOKENS`, the categories
+    // DTOs validate against it with `@IsIn`, and that is what publishes the
+    // OpenAPI enum the frontend's class map is keyed on.
     color: text('color').notNull(),
 
     // Optional per-category spending cap, in minor units like every other money
@@ -77,8 +85,17 @@ export const categories = sqliteTable(
     // uncapped category reports `status: "uncapped"` with no percentage.
     monthlyCapCents: integer('monthly_cap_cents'),
 
-    // Optional icon name from the frontend's own set; the backend never resolves
-    // it to an asset.
+    // A lucide icon name in lucide's own kebab-case, from `ICON_NAMES` in
+    // `database/central/template-tokens.ts` - **not** "the frontend's own set",
+    // which is what this said until PET-64 moved the allowlist here. The
+    // backend still never resolves it to an asset.
+    //
+    // Nullable, though nothing writes a null any more: `CreateCategoryDto`
+    // requires an icon and no PATCH can clear one, so only a row predating
+    // PET-64 has one - and `user/legacy-colour-backfill.ts` fills those in on
+    // the next open. The column stays nullable anyway, because tightening it to
+    // NOT NULL is a schema migration that would have to run against live data
+    // the backfill has not necessarily reached yet, and the two must not race.
     icon: text('icon'),
 
     note: text('note'),

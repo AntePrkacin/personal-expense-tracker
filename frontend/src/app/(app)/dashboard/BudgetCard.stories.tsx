@@ -31,7 +31,7 @@ export const OnTrack: Story = {
     topCategory: {
       id: '0198c2a1-0000-7000-8000-0000000000a1',
       name: 'Groceries',
-      color: 'green',
+      color: 'success',
       spent: 397,
     },
     isEmpty: false,
@@ -54,7 +54,7 @@ export const OverBudget: Story = {
     topCategory: {
       id: '0198c2a1-0000-7000-8000-0000000000a1',
       name: 'Dining out',
-      color: 'coral',
+      color: 'error',
       spent: 512,
     },
     isEmpty: false,

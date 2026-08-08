@@ -64,12 +64,19 @@ export type CategoryOption = Pick<components['schemas']['CategoryResponseDto'], 
  * and a row carries only a `categoryId`, so the name and the colour have to be joined onto
  * it from here.
  *
+ * **`icon` joined the projection at PET-64, and `CategoryOption` deliberately did not.** The
+ * table's tile drew `<ShoppingBag />` for every category - Figma's placeholder mark - and now
+ * draws the category's own glyph, which is the identity channel the deliberately close colour
+ * pairs in `ui/categoryColour.ts` lean on. The modal's `<select>` draws no tile and no glyph,
+ * so widening the narrow projection too would put a field into a bundle with nothing to do
+ * with it, which is exactly the trade this file exists to keep making.
+ *
  * Still `Pick` off the contract rather than a fresh shape, for the reason above it: a rename
  * upstream is a typecheck away from being visible.
  */
 export type CategoryLabel = Pick<
   components['schemas']['CategoryResponseDto'],
-  'id' | 'name' | 'color'
+  'id' | 'name' | 'color' | 'icon'
 >;
 
 /**
@@ -135,6 +142,11 @@ export async function readCategoryLabels(): Promise<CategoryLabelsResult> {
 
   return {
     ok: true,
-    data: result.data.categories.map(({ id, name, color }) => ({ id, name, color })),
+    data: result.data.categories.map(({ id, name, color, icon }) => ({
+      id,
+      name,
+      color,
+      icon,
+    })),
   };
 }

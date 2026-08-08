@@ -35,10 +35,18 @@ describe('UserDatabaseService', () => {
   let centralRows: unknown[];
   let closes: jest.Mock[];
 
+  // `db` is no longer an empty object, because `openUserDb` now runs PET-64's
+  // hex-to-token backfill after migrating. Its guard is a `select`, so the stub
+  // answers one: an empty result means "no row still holds a hex", which is the
+  // state every database in this suite is in and the arm that returns without
+  // writing anything.
   const newHandle = (): DatabaseHandle => {
     const close = jest.fn().mockResolvedValue(undefined);
     closes.push(close);
-    return { db: {} as DatabaseHandle['db'], close };
+    const db = {
+      select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
+    } as unknown as DatabaseHandle['db'];
+    return { db, close };
   };
 
   const build = () => new UserDatabaseService(centralDb, config, platform);

@@ -10,7 +10,7 @@ import { CategoryContextCard } from './CategoryContextCard';
 const CAPPED: CategoryContext = {
   id: '0198c2a1-0000-7000-8000-0000000000a1',
   name: 'Groceries',
-  color: '#57B368',
+  color: 'success',
   icon: null,
   note: null,
   isFallback: false,
@@ -26,7 +26,7 @@ const CAPPED: CategoryContext = {
 const UNCAPPED: CategoryContext = {
   ...CAPPED,
   name: 'Uncategorized',
-  color: '#98A0AE',
+  color: 'warning-content',
   isFallback: true,
   monthlyCap: null,
   percentUsed: null,

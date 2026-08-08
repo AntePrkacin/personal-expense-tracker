@@ -21,8 +21,13 @@ import { TransactionDetailScreen } from './TransactionDetailScreen';
 const CATEGORY: CategoryContext = {
   id: '0198c2a1-0000-7000-8000-0000000000a1',
   name: 'Groceries',
-  color: '#57B368',
-  icon: null,
+  color: 'success',
+  // A real lucide name rather than `null`, which is what this story drew before
+  // PET-64 made the sibling tiles render the category's own glyph. `null` is
+  // reachable only for a row predating that change - `CreateCategoryDto.icon` is
+  // required and no PATCH can clear one - so a sign-off story showing an empty
+  // tile would be diffing the design against a state no new account can be in.
+  icon: 'shopping-basket',
   note: null,
   isFallback: false,
   monthlyCap: 500,
@@ -180,7 +185,7 @@ export const Uncapped: Story = {
         category: {
           ...CATEGORY,
           name: 'Uncategorized',
-          color: '#98A0AE',
+          color: 'warning-content',
           isFallback: true,
           monthlyCap: null,
           percentUsed: null,

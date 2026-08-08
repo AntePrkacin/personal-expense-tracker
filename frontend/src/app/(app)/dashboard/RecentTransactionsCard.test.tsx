@@ -6,9 +6,30 @@ import { RecentTransactionsCard } from './RecentTransactionsCard';
 // data: they exist to prove relative formatting for recent days, with a short date beyond
 // that. The fixed system time below is what makes both reachable in a suite.
 const CATEGORIES = [
-  { id: 'cat-groceries', name: 'Groceries', color: '#57B368', spent: 24, percent: 40 },
-  { id: 'cat-transport', name: 'Transport', color: '#3F8EE6', spent: 18.5, percent: 31 },
-  { id: 'cat-entertainment', name: 'Entertainment', color: '#8A79F1', spent: 15.99, percent: 27 },
+  {
+    id: 'cat-groceries',
+    name: 'Groceries',
+    color: 'success' as const,
+    icon: 'shopping-basket' as const,
+    spent: 24,
+    percent: 40,
+  },
+  {
+    id: 'cat-transport',
+    name: 'Transport',
+    color: 'info' as const,
+    icon: 'car' as const,
+    spent: 18.5,
+    percent: 31,
+  },
+  {
+    id: 'cat-entertainment',
+    name: 'Entertainment',
+    color: 'primary' as const,
+    icon: 'tv' as const,
+    spent: 15.99,
+    percent: 27,
+  },
 ];
 
 const THREE_ROWS = [
@@ -151,6 +172,52 @@ describe('the tile and the amount (AC4)', () => {
         expect.stringContaining('bg-info'),
         expect.stringContaining('bg-primary'),
       ]);
+    });
+  });
+
+  it('draws the category’s own glyph, not one placeholder for all of them', () => {
+    // **This card was the third `<ShoppingBag />` site, and PET-64's own blast radius
+    // listed only two.** Every tile drew the same mark, which is precisely what the
+    // deliberately close colour pairs cannot survive - `ui/categoryColour.ts` names three
+    // that read as one hue, so the glyph is the channel that separates them.
+    //
+    // jsdom renders lucide's `<svg>` faithfully enough to compare, since the difference is
+    // markup rather than layout: each icon is a distinct set of child elements.
+    withToday(() => {
+      const { container } = render(
+        <RecentTransactionsCard
+          recentTransactions={THREE_ROWS}
+          categories={CATEGORIES}
+          isEmpty={false}
+        />,
+      );
+
+      const glyphs = Array.from(
+        container.querySelectorAll('[aria-hidden="true"].rounded-field svg'),
+      );
+      expect(glyphs).toHaveLength(3);
+
+      const shapes = glyphs.map((svg) => svg.innerHTML);
+      expect(new Set(shapes).size).toBe(3);
+    });
+  });
+
+  it('leaves the tile empty rather than guessing when the icon does not resolve', () => {
+    // Only reachable for a row predating PET-64 - `CreateCategoryDto.icon` is required and
+    // no PATCH can clear one. An empty tile reads as a category with no icon; a stand-in
+    // would read as a category that is something else.
+    withToday(() => {
+      const { container } = render(
+        <RecentTransactionsCard
+          recentTransactions={[THREE_ROWS[0]!]}
+          categories={[{ ...CATEGORIES[0]!, icon: null }]}
+          isEmpty={false}
+        />,
+      );
+
+      const tile = container.querySelector('[aria-hidden="true"].rounded-field');
+      expect(tile).not.toBeNull();
+      expect(tile?.querySelector('svg')).toBeNull();
     });
   });
 

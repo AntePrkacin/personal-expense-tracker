@@ -169,24 +169,42 @@ describe('parseDraft, the picked categories', () => {
   it.each([
     ['a field that was never written', '{}', []],
     ['an explicit empty selection', '{"categories":[]}', []],
-    ['a value that is not an array', '{"categories":"Groceries"}', []],
-    ['an object where an array belongs', '{"categories":{"0":"Groceries"}}', []],
-    ['names that are not on the list', '{"categories":["Rent","Groceries"]}', ['Groceries']],
-    ['non-strings mixed in', '{"categories":[5,null,"Bills"]}', ['Bills']],
-    ['a duplicated name', '{"categories":["Bills","Bills"]}', ['Bills']],
+    ['a value that is not an array', '{"categories":"id-a"}', []],
+    ['an object where an array belongs', '{"categories":{"0":"id-a"}}', []],
+    ['non-strings mixed in', '{"categories":[5,null,"id-a"]}', ['id-a']],
+    ['a duplicated id', '{"categories":["id-a","id-a"]}', ['id-a']],
     [
-      'click order rather than designed order',
-      '{"categories":["Other","Groceries","Health"]}',
-      ['Groceries', 'Health', 'Other'],
+      'the stored order, which is now the click order',
+      '{"categories":["id-c","id-a","id-b"]}',
+      ['id-c', 'id-a', 'id-b'],
     ],
   ])('reads %s', (_label, raw, expected) => {
-    // Total and canonicalising, for the reason the budget is: sessionStorage is
-    // writable from that tab's devtools console, and RegisterDto carries @IsIn,
-    // @ArrayUnique and @ArrayMaxSize - so an unknown name, a duplicate or a
-    // non-string is a guaranteed 400 on a screen with no error state designed for
-    // it. Every one of these has to degrade to something the picker could have
-    // produced instead.
+    // Total, for the reason the budget is: sessionStorage is writable from that
+    // tab's devtools console, and `RegisterDto` carries `@ArrayUnique`,
+    // `@ArrayMaxSize` and `@IsUUID` - so a duplicate, a non-string or two hundred
+    // entries is a guaranteed 400 on a screen with no error state designed for it.
     expect(parseDraft(raw).categories).toEqual(expected);
+  });
+
+  it('no longer drops an id that is not on the offered list', () => {
+    // **A guarantee this module lost at PET-64, asserted rather than left to be
+    // discovered.** It used to filter the canonical name list, so "everything this
+    // module hands out is something the picker could have produced" held completely.
+    // The offered set is fetched by the page now and duplicating it into this
+    // React-free module would be a second authority that goes stale - so membership
+    // is the server's to reject, and `AuthService` answers 400 for an unknown id.
+    expect(parseDraft('{"categories":["id-nonexistent"]}').categories).toEqual(['id-nonexistent']);
+  });
+
+  it('caps a selection that could never have come from the picker', () => {
+    // The half of the old guarantee that survives, and it matters because the cap
+    // is what keeps the array inside `RegisterDto`'s own `@ArrayMaxSize` - a draft
+    // hand-written in devtools is otherwise a guaranteed 400 with no error state.
+    const stored = JSON.stringify({
+      categories: Array.from({ length: 500 }, (_, i) => `id-${i}`),
+    });
+
+    expect(parseDraft(stored).categories).toHaveLength(100);
   });
 
   it.each([

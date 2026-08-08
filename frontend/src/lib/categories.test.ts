@@ -19,8 +19,11 @@ const TOKEN = 'zx8Kq3vLm2Np7Rt4Ws9Yb6Cd1Ef5Gh0Jk8Ln3Pq2Rs';
 const GROCERIES = {
   id: '0198c2a1-0000-7000-8000-0000000000a1',
   name: 'Groceries',
-  color: '#57b368',
-  icon: null,
+  color: 'success',
+  // A real lucide name rather than null: `CreateCategoryDto.icon` is required as of
+  // PET-64 and no PATCH can clear one, so only a row predating that is null - and the
+  // table's tile draws this now, where it drew one placeholder mark for everything.
+  icon: 'shopping-basket',
   note: null,
   isFallback: false,
   monthlyCap: 600,
@@ -36,7 +39,7 @@ const UNCATEGORIZED = {
   ...GROCERIES,
   id: '0198c2a1-0000-7000-8000-0000000000ff',
   name: 'Uncategorized',
-  color: '#98a0ae',
+  color: 'warning-content',
   isFallback: true,
   monthlyCap: null,
   spent: 0,
@@ -185,25 +188,47 @@ describe('the narrowing', () => {
 });
 
 describe('readCategoryLabels, the table’s projection', () => {
-  it('keeps the colour, which is the only reason it exists', async () => {
+  it('keeps the colour and the icon, which is the only reason it exists', async () => {
     respondWith(200, { categories: [GROCERIES], allocation: ALLOCATION });
 
     await expect(readCategoryLabels()).resolves.toEqual({
       ok: true,
-      data: [{ id: GROCERIES.id, name: 'Groceries', color: '#57b368' }],
+      data: [
+        {
+          id: GROCERIES.id,
+          name: 'Groceries',
+          color: 'success',
+          icon: GROCERIES.icon,
+        },
+      ],
     });
   });
 
   it('still drops everything the table does not draw', async () => {
-    // Widened by three fields, not opened up: the month stats and the cap belong to the
-    // Categories screen, and a row shows neither.
+    // Widened by four fields now, not opened up: PET-64 added `icon`, because the
+    // table's tile draws the category's own glyph rather than Figma's placeholder
+    // mark. The month stats and the cap still belong to the Categories screen, and a
+    // row shows neither - which is the line this test exists to hold.
     respondWith(200, { categories: [GROCERIES], allocation: ALLOCATION });
 
     const result = await readCategoryLabels();
     const label = (result as { ok: true; data: unknown[] }).data[0]!;
 
-    expect(Object.keys(label as object).sort()).toEqual(['color', 'id', 'name']);
+    expect(Object.keys(label as object).sort()).toEqual(['color', 'icon', 'id', 'name']);
     expect(JSON.stringify(result)).not.toContain('monthlyBudget');
+  });
+
+  it('keeps the icon out of the select’s projection', async () => {
+    // The narrowing is the point of the file: the modal's `<select>` draws no tile
+    // and no glyph, so widening `CategoryOption` too would put a field into a bundle
+    // with nothing to do with it. The two projections share one request and differ
+    // only in which fields survive, so this is what stops them collapsing into one.
+    respondWith(200, { categories: [GROCERIES], allocation: ALLOCATION });
+
+    const result = await readCategoryOptions();
+    const option = (result as { ok: true; data: unknown[] }).data[0]!;
+
+    expect(Object.keys(option as object).sort()).toEqual(['id', 'name']);
   });
 
   it('preserves the backend’s order', async () => {

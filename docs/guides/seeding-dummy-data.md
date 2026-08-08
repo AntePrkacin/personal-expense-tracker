@@ -62,16 +62,30 @@ To avoid the situation entirely, give each mode its own directory.
 Use this when you are running the backend in local mode - a fresh clone with no `.env`, or one
 whose `.env` has no `TURSO_*` values.
 
-1. **Run the seed script**:
+**Stop your dev server first.** This applies in local mode exactly as it does in cloud mode: the
+seed script boots a Nest application of its own, so it opens the same `app.db` the running backend
+already holds, and the database engine takes an **exclusive** file lock. Running it against a live
+server fails immediately with:
+
+```
+Error: failed to open database databases/app.db: Locking error:
+Failed locking file 'databases/app.db'. File is locked by another process
+```
+
+Nothing is written when that happens, so the repair is only to stop the server and run it again.
+
+1. **Stop the running dev server**: `Ctrl+C` in the terminal running `mise run dev`, which releases
+   the lock on `app.db`.
+2. **Run the seed script**:
    ```bash
    mise run seed:showcase
    ```
    It takes a few seconds and finishes with `Seeded dummy@spendifico.eu with N transactions...`.
-2. **Start your dev servers**:
+3. **Start your dev servers**:
    ```bash
    mise run dev
    ```
-3. **Log in**:
+4. **Log in**:
    Go to `http://localhost:4200` and enter `dummy@spendifico.eu`. Without MailPace credentials the
    backend prints the login link to its terminal. Click it.
 
@@ -86,8 +100,10 @@ This needs `backend/.env` with `TURSO_ORG`, `TURSO_ORG_TOKEN`, `TURSO_CENTRAL_DB
 `TURSO_CENTRAL_DB_TOKEN`. The script checks for them before it writes anything and stops with a
 readable message if they are missing, rather than quietly falling back to local files.
 
-**Stop your dev server first.** Turso's `@tursodatabase/sync` engine locks the local replica file,
-so the seed cannot run while the backend is up in cloud mode.
+**Stop your dev server first**, the same as in local mode above. The lock is not a property of the
+sync engine, which is what this line used to claim: both drivers take an exclusive file lock, so
+the seed cannot run while the backend is up in **either** mode. Cloud mode locks the local replica
+rather than a plain file, which changes what is locked and nothing about the outcome.
 
 1. **Ensure `backend/.env` is present** and filled in - see `docs/guides/configuration.md`.
 2. **Stop the running dev server**: `Ctrl+C` in the terminal running `mise run dev`, which releases
@@ -113,9 +129,10 @@ so the seed cannot run while the backend is up in cloud mode.
 
 - **A profile** with a $5,000 monthly budget and `monthStartDay` 1, rewritten on every run so the
   caps below always add up against the budget actually stored.
-- **Eleven categories** - the ten starter chips plus `Uncategorized` - each with a monthly cap, the
-  caps summing to exactly the $5,000 budget.
-- **26 merchants**: 22 generated names dealt round-robin over the categories so every category has
+- **Thirteen categories** - every category template plus `Uncategorized` - each with a monthly
+  cap, the caps summing to exactly the $5,000 budget. The templates are read out of central at
+  run time rather than hard-coded, so this count follows whatever an admin has enabled.
+- **30 merchants**: 26 generated names dealt round-robin over the categories so every category has
   at least two of its own, plus `dm`, `Müller`, `Konzum` and `Lidl` mapped exclusively to
   Groceries. About 20% of merchants are valid for two categories, the rest for one.
 - **Five subscriptions** - Netflix, Spotify, HBO Max, Strava and iCloud, about $46/mo combined -

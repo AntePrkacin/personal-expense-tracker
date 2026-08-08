@@ -22,9 +22,30 @@ const THREE_DAYS_AGO = addDays(TODAY, -3) ?? TODAY;
 
 /** Node 21:4's own three categories for the rows below. */
 const CATEGORIES = [
-  { id: 'c1', name: 'Groceries', color: '#57B368', spent: 397, percent: 32.4 },
-  { id: 'c3', name: 'Transport', color: '#3F8EE6', spent: 223, percent: 18.2 },
-  { id: 'c4', name: 'Shopping', color: '#CE6FB8', spent: 174, percent: 14.2 },
+  {
+    id: 'c1',
+    name: 'Groceries',
+    color: 'success' as const,
+    icon: 'shopping-basket' as const,
+    spent: 397,
+    percent: 32.4,
+  },
+  {
+    id: 'c3',
+    name: 'Transport',
+    color: 'info' as const,
+    icon: 'car' as const,
+    spent: 223,
+    percent: 18.2,
+  },
+  {
+    id: 'c4',
+    name: 'Shopping',
+    color: 'secondary' as const,
+    icon: 'shopping-basket' as const,
+    spent: 174,
+    percent: 14.2,
+  },
 ];
 
 /** DSH-7's own mock: "Whole Foods, Groceries · Today, -$24.00" and the two rows beneath it. */

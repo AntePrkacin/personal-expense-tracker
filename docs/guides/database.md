@@ -21,11 +21,17 @@ always safe: the next start rebuilds it.
 ```bash
 cd backend && npm run start:dev
 
+# `categories` takes category template ids, not names. Ask the public endpoint for
+# them - it needs no session, because onboarding step 2 runs before an account exists.
+curl -s http://localhost:3000/api/templates/categories | jq -r '.categories[] | "\(.id)  \(.name)"'
+
 curl -i -X POST http://localhost:3000/api/auth/register \
   -H 'content-type: application/json' \
-  -d '{"firstName":"Marko","lastName":"Kovac","email":"marko@email.com","monthlyBudget":2000,"categories":["Groceries"]}'
+  -d '{"firstName":"Marko","lastName":"Kovac","email":"marko@email.com","monthlyBudget":2000,"categories":["<a-template-id>"]}'
 # 202 with an empty body, backend/databases/app.db now holds the row and the
-# issued link, and the terminal running the backend prints the login link
+# issued link, and the terminal running the backend prints the login link.
+# An id that is not a live template is a 400, so a stale copy-paste fails loudly.
+# `"categories": []` is also valid - A4 enforces no minimum.
 ```
 
 Note what is _not_ created: no file for this user yet. Registration writes only the central

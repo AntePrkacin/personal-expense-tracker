@@ -13,6 +13,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { isUuid } from '../common/ids';
 import { users } from './central/schema';
+import { backfillLegacyColours } from './user/legacy-colour-backfill';
 import {
   APP_DB,
   SYNC_ONLY_SIBLINGS,
@@ -212,6 +213,15 @@ export class UserDatabaseService {
     await (this.isCloudMode ? syncMigrate : localMigrate)(handle.db as never, {
       migrationsFolder: USER_MIGRATIONS_DIR,
     });
+
+    // PET-64's data migration, which could not be one of the above: it changes
+    // what a column's *values* mean and nothing about its structure, so
+    // `drizzle-kit generate` has nothing to emit and root `CLAUDE.md` forbids
+    // hand-writing the SQL. Runs here for the same reason `seedTemplates` runs
+    // straight after the central `migrate()` - it is the point before any
+    // consumer can read - and is guarded on the data itself, so it is a single
+    // cheap predicate on every open after the first.
+    await backfillLegacyColours(handle.db);
 
     return handle;
   }

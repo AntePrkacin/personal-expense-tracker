@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { ShoppingBasket } from 'lucide-react';
 
 import { CATEGORY_TILE_NEUTRAL } from '../../../components/ui/categoryColour';
 import { formatIsoDayMonth, formatNegative } from '../../../lib/format';
@@ -41,6 +42,11 @@ const TILE = { background: 'bg-success', content: 'text-success-content' } as co
 const GROCERIES: RowCategory = {
   name: 'Groceries',
   tileClass: `${TILE.background} ${TILE.content}`,
+  // Resolved by `TransactionsTable`, so the row takes a component rather than a
+  // name. It drew `<ShoppingBag />` for every category until PET-64 - Figma's
+  // placeholder - which is what the deliberately close colour pairs could not
+  // survive: without a per-category glyph, two of them are one tile.
+  Icon: ShoppingBasket,
 };
 
 /**

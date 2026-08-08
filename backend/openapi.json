@@ -23,6 +23,67 @@
         ]
       }
     },
+    "/api/templates/categories": {
+      "get": {
+        "description": "Public, because onboarding step 2 runs before an account exists. Send the `id`s of the picked entries as `RegisterDto.categories`; each picked template becomes one of the account’s categories at verification, carrying this `name`, `color`, `icon` and `description` (as the category’s `note`). The order is the one to render.",
+        "operationId": "TemplatesController_categories",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryTemplatesResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "The starter categories onboarding offers.",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/palette": {
+      "get": {
+        "description": "What the create and edit category picker offers, with the label to show for each. This is what an admin currently has **enabled**, which can be a strict subset of what `POST /api/categories` accepts - a category already carrying a since-disabled colour keeps working.",
+        "operationId": "TemplatesController_palette",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaletteResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The colours and icons a category may be given.",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
     "/api/auth/register": {
       "post": {
         "description": "An address that already exists is sent a link instead of being duplicated. If that account was never verified, these onboarding values overwrite the stashed ones.",
@@ -1080,67 +1141,184 @@
           "message"
         ]
       },
-      "RegisterDto": {
+      "CategoryTemplateDto": {
         "type": "object",
         "properties": {
-          "currency": {
+          "id": {
             "type": "string",
-            "pattern": "^[A-Za-z]{3}$",
-            "description": "ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.",
-            "example": "EUR"
+            "format": "uuid",
+            "description": "What `RegisterDto.categories` takes. Not a category id - the account does not exist yet."
           },
-          "monthlyBudget": {
-            "type": "number",
-            "description": "Major units (e.g. 2000.50). Stored as integer cents. The cap is not a\nproduct judgment: it keeps the cents conversion far inside JS safe-integer\nrange while staying generous for zero-decimal currencies, whose budgets\ncarry many digits.",
-            "maximum": 1000000000,
-            "minimum": 0,
-            "exclusiveMinimum": true
-          },
-          "monthStartDay": {
-            "type": "integer",
-            "description": "Capped at 28 so the day exists in every month.",
-            "minimum": 1,
-            "maximum": 28
-          },
-          "firstName": {
+          "name": {
             "type": "string",
-            "maxLength": 100
+            "example": "Dining out",
+            "description": "Sentence case: first letter capital, everything else lower. Admin-authored, so this is a plain string rather than an enum."
           },
-          "lastName": {
+          "color": {
             "type": "string",
-            "maxLength": 100
+            "enum": [
+              "primary",
+              "primary-content",
+              "secondary",
+              "secondary-content",
+              "accent",
+              "accent-content",
+              "neutral",
+              "neutral-content",
+              "info",
+              "info-content",
+              "success",
+              "success-content",
+              "warning",
+              "warning-content",
+              "error",
+              "error-content",
+              "base-content/50"
+            ],
+            "example": "secondary",
+            "description": "A daisyUI semantic colour token, which is what `categories.color` stores. Not a hex: `primary` is valued differently per theme, so several of these have no single hex value."
           },
-          "email": {
+          "icon": {
             "type": "string",
-            "format": "email"
+            "enum": [
+              "shopping-basket",
+              "utensils",
+              "car",
+              "zap",
+              "heart-pulse",
+              "tv",
+              "graduation-cap",
+              "plane",
+              "scissors",
+              "gift",
+              "paw-print",
+              "landmark",
+              "circle-question-mark"
+            ],
+            "example": "utensils",
+            "description": "A lucide icon name, in lucide’s own kebab-case."
           },
+          "description": {
+            "type": "string",
+            "example": "Restaurants, coffee shops, takeout, delivery, and fast food.",
+            "description": "Copied into the user’s own `note` when the category is seeded, after which it is theirs. Editing the template later does not reach back into existing accounts."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "icon",
+          "description"
+        ]
+      },
+      "CategoryTemplatesResponseDto": {
+        "type": "object",
+        "properties": {
           "categories": {
+            "description": "The enabled category templates, in the order onboarding draws its chips. The order is part of the contract: render them as given rather than sorting.",
             "type": "array",
-            "description": "The starter chips picked on screen 03, by name.\n\nRequired but allowed to be empty: A4 records that no minimum is enforced,\nand a user who deselects everything is making a valid choice. Required\nrather than optional so a frontend that stops sending the field fails\nloudly instead of silently seeding nothing.",
-            "uniqueItems": true,
             "items": {
-              "type": "string",
-              "enum": [
-                "Groceries",
-                "Dining out",
-                "Transport",
-                "Shopping",
-                "Housing",
-                "Health",
-                "Entertainment",
-                "Bills",
-                "Subscriptions",
-                "Other"
-              ]
+              "$ref": "#/components/schemas/CategoryTemplateDto"
             }
           }
         },
         "required": [
-          "monthlyBudget",
-          "firstName",
-          "lastName",
-          "email",
           "categories"
+        ]
+      },
+      "PaletteColourDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "enum": [
+              "primary",
+              "primary-content",
+              "secondary",
+              "secondary-content",
+              "accent",
+              "accent-content",
+              "neutral",
+              "neutral-content",
+              "info",
+              "info-content",
+              "success",
+              "success-content",
+              "warning",
+              "warning-content",
+              "error",
+              "error-content",
+              "base-content/50"
+            ],
+            "example": "accent-content",
+            "description": "What to send as a category’s `color`."
+          },
+          "label": {
+            "type": "string",
+            "example": "Pine",
+            "description": "What to show beside it."
+          }
+        },
+        "required": [
+          "token",
+          "label"
+        ]
+      },
+      "PaletteIconDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "shopping-basket",
+              "utensils",
+              "car",
+              "zap",
+              "heart-pulse",
+              "tv",
+              "graduation-cap",
+              "plane",
+              "scissors",
+              "gift",
+              "paw-print",
+              "landmark",
+              "circle-question-mark"
+            ],
+            "example": "paw-print",
+            "description": "What to send as a category’s `icon`."
+          },
+          "label": {
+            "type": "string",
+            "example": "Paw"
+          }
+        },
+        "required": [
+          "name",
+          "label"
+        ]
+      },
+      "PaletteResponseDto": {
+        "type": "object",
+        "properties": {
+          "colors": {
+            "description": "In admin order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaletteColourDto"
+            }
+          },
+          "icons": {
+            "description": "In admin order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaletteIconDto"
+            }
+          }
+        },
+        "required": [
+          "colors",
+          "icons"
         ]
       },
       "ErrorResponseDto": {
@@ -1179,6 +1357,58 @@
           "error",
           "timestamp",
           "path"
+        ]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$",
+            "description": "ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.",
+            "example": "EUR"
+          },
+          "monthlyBudget": {
+            "type": "number",
+            "description": "Major units (e.g. 2000.50). Stored as integer cents. The cap is not a\nproduct judgment: it keeps the cents conversion far inside JS safe-integer\nrange while staying generous for zero-decimal currencies, whose budgets\ncarry many digits.",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "monthStartDay": {
+            "type": "integer",
+            "description": "Capped at 28 so the day exists in every month.",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "categories": {
+            "description": "Ids from `GET /api/templates/categories`. May be empty. Unknown ids are a 400.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "firstName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "monthlyBudget",
+          "categories",
+          "firstName",
+          "lastName",
+          "email"
         ]
       },
       "RequestLoginLinkDto": {
@@ -1393,12 +1623,47 @@
           },
           "color": {
             "type": "string",
-            "example": "#57B368",
-            "description": "Hex, `#RRGGBB`."
+            "enum": [
+              "primary",
+              "primary-content",
+              "secondary",
+              "secondary-content",
+              "accent",
+              "accent-content",
+              "neutral",
+              "neutral-content",
+              "info",
+              "info-content",
+              "success",
+              "success-content",
+              "warning",
+              "warning-content",
+              "error",
+              "error-content",
+              "base-content/50"
+            ],
+            "example": "success",
+            "description": "A daisyUI semantic colour token, not a hex - several of these have no single hex value, being themed per light and dark."
           },
           "icon": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "Nullable because the column is, not because a new category may omit one:\n`CreateCategoryDto.icon` is required as of PET-64 and `UpdateCategoryDto`\ncannot clear it, so only a row predating that can be null.",
+            "enum": [
+              "shopping-basket",
+              "utensils",
+              "car",
+              "zap",
+              "heart-pulse",
+              "tv",
+              "graduation-cap",
+              "plane",
+              "scissors",
+              "gift",
+              "paw-print",
+              "landmark",
+              "circle-question-mark"
+            ]
           },
           "note": {
             "type": "string",
@@ -1609,9 +1874,27 @@
         "properties": {
           "color": {
             "type": "string",
-            "description": "Hex, `#RRGGBB`. The eight category colors come from Figma frame 03.",
-            "pattern": "^#[0-9A-Fa-f]{6}$",
-            "example": "#57B368"
+            "description": "A daisyUI semantic colour token, not a hex.\n\n**Hex was not merely indirect here, it was incoherent.** `primary` is the\none token daisyUI values differently per theme, so Entertainment\n(`#422ad5` light, `#605dff` dark) and Education (`#e0e7ff`, `#edf1fe`) have\nno single hex value at all - a stored one would record one and paint the\nother half the time. The token is the stable identity; the theme resolves\nthe hue.\n\n`GET /api/templates/palette` is what a picker offers, and it can be a\nstrict subset of this list: `enabled` is presentation and this is\nvalidation, so a category carrying a since-disabled colour still saves.",
+            "enum": [
+              "primary",
+              "primary-content",
+              "secondary",
+              "secondary-content",
+              "accent",
+              "accent-content",
+              "neutral",
+              "neutral-content",
+              "info",
+              "info-content",
+              "success",
+              "success-content",
+              "warning",
+              "warning-content",
+              "error",
+              "error-content",
+              "base-content/50"
+            ],
+            "example": "success"
           },
           "monthlyCap": {
             "type": "number",
@@ -1620,13 +1903,28 @@
             "minimum": 0,
             "exclusiveMinimum": true
           },
-          "name": {
-            "type": "string",
-            "maxLength": 60
-          },
           "icon": {
             "type": "string",
-            "description": "A name from the frontend's own icon set. Never resolved to an asset here.",
+            "description": "A lucide icon name, and **required** as of PET-64.\n\nIt was `@IsString() @MaxLength(60)` and optional, which accepted `cup` and\n`box` - neither of which is a lucide name, so neither could ever render.\nNarrowing it to the allowlist is what makes `Record<IconName, LucideIcon>`\non the frontend an exhaustiveness proof, and requiring it is free now and\nexpensive later.\n\nThe column stays **nullable**, deliberately: tightening `categories.icon`\nto NOT NULL would be the one user-scope migration in this whole change, and\n`backend/src/database/CLAUDE.md` is explicit that such a migration runs\nunattended against live data one user at a time. The DTO is what enforces\nthe invariant going forward.",
+            "enum": [
+              "shopping-basket",
+              "utensils",
+              "car",
+              "zap",
+              "heart-pulse",
+              "tv",
+              "graduation-cap",
+              "plane",
+              "scissors",
+              "gift",
+              "paw-print",
+              "landmark",
+              "circle-question-mark"
+            ],
+            "example": "shopping-basket"
+          },
+          "name": {
+            "type": "string",
             "maxLength": 60
           },
           "note": {
@@ -1637,6 +1935,7 @@
         },
         "required": [
           "color",
+          "icon",
           "name"
         ]
       },
@@ -1645,8 +1944,27 @@
         "properties": {
           "color": {
             "type": "string",
-            "pattern": "^#[0-9A-Fa-f]{6}$",
-            "example": "#57B368"
+            "description": "A daisyUI semantic colour token. See `CreateCategoryDto.color`.",
+            "enum": [
+              "primary",
+              "primary-content",
+              "secondary",
+              "secondary-content",
+              "accent",
+              "accent-content",
+              "neutral",
+              "neutral-content",
+              "info",
+              "info-content",
+              "success",
+              "success-content",
+              "warning",
+              "warning-content",
+              "error",
+              "error-content",
+              "base-content/50"
+            ],
+            "example": "success"
           },
           "monthlyCap": {
             "type": "number",
@@ -1658,8 +1976,23 @@
           },
           "icon": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 60
+            "description": "A lucide icon name. Not clearable - see the class comment.",
+            "enum": [
+              "shopping-basket",
+              "utensils",
+              "car",
+              "zap",
+              "heart-pulse",
+              "tv",
+              "graduation-cap",
+              "plane",
+              "scissors",
+              "gift",
+              "paw-print",
+              "landmark",
+              "circle-question-mark"
+            ],
+            "example": "shopping-basket"
           },
           "note": {
             "type": "string",
@@ -1685,8 +2018,27 @@
           },
           "color": {
             "type": "string",
-            "example": "#57B368",
-            "description": "Hex, `#RRGGBB`."
+            "enum": [
+              "primary",
+              "primary-content",
+              "secondary",
+              "secondary-content",
+              "accent",
+              "accent-content",
+              "neutral",
+              "neutral-content",
+              "info",
+              "info-content",
+              "success",
+              "success-content",
+              "warning",
+              "warning-content",
+              "error",
+              "error-content",
+              "base-content/50"
+            ],
+            "example": "success",
+            "description": "A daisyUI semantic colour token, not a hex."
           },
           "spent": {
             "type": "number",
@@ -1735,8 +2087,47 @@
           },
           "color": {
             "type": "string",
-            "example": "#57B368",
-            "description": "Hex, `#RRGGBB`."
+            "enum": [
+              "primary",
+              "primary-content",
+              "secondary",
+              "secondary-content",
+              "accent",
+              "accent-content",
+              "neutral",
+              "neutral-content",
+              "info",
+              "info-content",
+              "success",
+              "success-content",
+              "warning",
+              "warning-content",
+              "error",
+              "error-content",
+              "base-content/50"
+            ],
+            "example": "success",
+            "description": "A daisyUI semantic colour token, not a hex."
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true,
+            "description": "**Here for the recent-transactions card, not for the donut.**\n\nThe donut's slices are bare colour and need none. `RecentTransactionsCard`\ndraws the same `size-9` tile the transactions table does, and joins it off\nthis array rather than making a second request - see `backend/CLAUDE.md`'s\nnote on why that join is free. Without this field that tile is the one\nplace left drawing a placeholder mark for every category, which is exactly\nwhat the close colour pairs cannot survive.",
+            "enum": [
+              "shopping-basket",
+              "utensils",
+              "car",
+              "zap",
+              "heart-pulse",
+              "tv",
+              "graduation-cap",
+              "plane",
+              "scissors",
+              "gift",
+              "paw-print",
+              "landmark",
+              "circle-question-mark"
+            ]
           },
           "spent": {
             "type": "number",
@@ -1751,6 +2142,7 @@
           "id",
           "name",
           "color",
+          "icon",
           "spent",
           "percent"
         ]
