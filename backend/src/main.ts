@@ -30,7 +30,7 @@ async function bootstrap() {
     app.set('trust proxy', trustedProxyHops);
   }
 
-  // Serve every route under /api (e.g. GET /api/hello).
+  // Serve every route under /api (e.g. GET /api/health).
   app.setGlobalPrefix(API_PREFIX);
 
   // Interactive docs at /api/docs, from the same document `npm run api:spec`

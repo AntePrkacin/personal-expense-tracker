@@ -140,9 +140,9 @@ you are actually debugging one of them.
 ## Verify it works
 
 ```bash
-curl http://localhost:3000/api/hello
+curl http://localhost:3000/api/health
 
-# {"message":"Welcome friend, hello from the NestJS API 👋"}
+# {"status":"ok"}
 ```
 
 Note the `/api` part. `http://localhost:3000/` on its own returns **404**, and that is

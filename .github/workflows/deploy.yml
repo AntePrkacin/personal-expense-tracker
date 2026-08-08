@@ -89,18 +89,18 @@ jobs:
           echo "::error::the machine did not reach the started state in time"
           exit 1
 
-      # Prove the deployed process actually serves. /api/hello is the one public,
-      # DB-free route. The fly.dev hostname is used rather than the custom domain
-      # so the check never depends on external DNS.
+      # Prove the deployed process actually serves. /api/health is the liveness
+      # check, public and DB-free. The fly.dev hostname is used rather than the
+      # custom domain so the check never depends on external DNS.
       - name: Assert the API answers 200
         run: |
           for i in $(seq 1 30); do
-            code="$(curl -sS -o /dev/null -w '%{http_code}' https://spendifico-api.fly.dev/api/hello || true)"
+            code="$(curl -sS -o /dev/null -w '%{http_code}' https://spendifico-api.fly.dev/api/health || true)"
             if [ "$code" = "200" ]; then
               echo "healthy after ${i} attempt(s)"
               exit 0
             fi
             sleep 2
           done
-          echo "::error::/api/hello did not return 200 within the timeout"
+          echo "::error::/api/health did not return 200 within the timeout"
           exit 1

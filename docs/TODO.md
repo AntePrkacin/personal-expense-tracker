@@ -1716,15 +1716,16 @@ of the API, and it is genuinely useful to the frontend - but it should be a deci
 something discovered. Gating it would mean serving the document behind a route that the guard does
 cover, or not serving it in production at all.
 
-### `/api/hello` stands in for a real health check
+### `/api/health` still proves liveness only, not readiness
 
-`.github/workflows/deploy.yml`'s post-deploy assertion curls `/api/hello` because it was already
-the one public, DB-free route - not because anyone designed it as a health check. It only proves
-the process answers HTTP; it says nothing about DB reachability, migration state or which commit
-is actually running, so a deploy can go green while the database connection is broken. A real
-`/api/status` endpoint (DB ping plus the deployed commit SHA or version, still unauthenticated so
-the assertion needs no token) should replace it in both `deploy.yml`'s assertion step and
-`docs/guides/deployment.md`'s verification section.
+PET-66 replaced `/api/hello`, which had become the deploy health check by coincidence rather
+than design, with a purpose-built `GET /api/health`. `.github/workflows/deploy.yml`'s post-deploy
+assertion and `backend/fly.toml`'s own check now curl something honestly named. It still proves
+only that the process answers HTTP, deliberately: no DB ping, no migration state, no deployed
+commit SHA or version - `fly.toml`'s own comment on the check already rules out touching the
+database, because that would flap the machine on a transient Turso blip. A separate readiness or
+status endpoint carrying that information, if ever wanted, needs its own ticket and a different
+liveness/readiness split than the one used here.
 
 ### A reclaimed insight run can still overlap the run that replaced it
 

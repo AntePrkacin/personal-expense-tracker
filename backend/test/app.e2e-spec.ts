@@ -15,16 +15,16 @@ describe('AppController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     // Mirror the global prefix configured in main.ts so e2e routes match
-    // production (GET /api/hello).
+    // production (GET /api/health).
     app.setGlobalPrefix(API_PREFIX);
     await app.init();
   });
 
-  it('/api/hello (GET)', () => {
+  it('/api/health (GET)', () => {
     return request(app.getHttpServer())
-      .get('/api/hello')
+      .get('/api/health')
       .expect(200)
-      .expect({ message: 'Welcome friend, hello from the NestJS API 👋' });
+      .expect({ status: 'ok' });
   });
 
   afterEach(async () => {

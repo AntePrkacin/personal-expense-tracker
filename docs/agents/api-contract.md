@@ -11,7 +11,7 @@ mistakes in this pipeline still produce a spec; they just describe your response
 ## The prefix, and how the frontend reaches the backend
 
 **The `/api` prefix lives in one place.** `backend/src/main.ts` sets a global `api`
-prefix, so a controller mapped to `hello` is served at `GET /api/hello`. Note the
+prefix, so a controller mapped to `health` is served at `GET /api/health`. Note the
 consequence: `GET http://localhost:3000/` returns 404, which is normal, not a broken
 server. The e2e test re-applies the same prefix manually to match production, so if you
 change the prefix you must change it in both places.

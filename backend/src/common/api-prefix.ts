@@ -1,5 +1,5 @@
 /**
- * The global route prefix, so `hello` is served at `GET /api/hello`.
+ * The global route prefix, so `health` is served at `GET /api/health`.
  *
  * Three places call `setGlobalPrefix` with it and all three have to agree:
  * `main.ts` for production, `src/openapi.ts` because the document's paths are

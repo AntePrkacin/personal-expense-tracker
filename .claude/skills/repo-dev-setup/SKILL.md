@@ -239,14 +239,15 @@ Only after the user confirms both servers are running in their own terminals.
 **Backend** - you can check this yourself:
 
 ```bash
-curl http://localhost:3000/api/hello
+curl http://localhost:3000/api/health
 ```
 
 Expect a JSON body. A 404 on `/` is also correct and not a fault: the global `api` prefix
-puts the route at `/api/hello`.
+puts the route at `/api/health`.
 
-**Frontend** - ask the user to open `http://localhost:4200` and confirm the greeting from
-the backend renders, with no errors in the browser console. You cannot see their browser.
+**Frontend** - ask the user to open `http://localhost:4200` and confirm the Welcome screen
+renders (logo, "Take control of your money." heading, "Get started" and "I already have an
+account" links), with no errors in the browser console. You cannot see their browser.
 
 **Hooks** - a silent miss here is the most common setup failure:
 
@@ -278,7 +279,7 @@ anything that depends on the user rather than on you:
 ✅ backend deps installed, .env created
 ✅ frontend deps installed, .env.local created
 ✅ backend tests passing (unit + e2e), frontend tests passing
-✅ user started both servers; curl to /api/hello returned 200
+✅ user started both servers; curl to /api/health returned 200
 ⚠️ node resolved to a Claude Code bundled runtime - user must install Node themselves
    before any of this works in their own terminal (Step 2)
 ```

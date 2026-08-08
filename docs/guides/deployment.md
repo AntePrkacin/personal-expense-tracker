@@ -406,7 +406,7 @@ Two GitHub Actions workflows (PET-55):
   is a full replica-flush plus a cold start plus brief downtime, and a merge can add a new env var
   with no safe default. Press the button after setting any new config. It runs
   `fly deploy --remote-only --ha=false`, then asserts exactly one started machine and a 200 from
-  `/api/hello` before going green - because `fly deploy` does not start a stopped machine and can
+  `/api/health` before going green - because `fly deploy` does not start a stopped machine and can
   otherwise report success while the API 503s.
 - **`.github/workflows/deploy-verify.yml`** runs on any PR that touches `backend/Dockerfile`,
   `backend/.dockerignore` or `backend/fly.toml`: `fly config validate --strict` plus a
@@ -430,7 +430,7 @@ new config the merge introduced.
 3. **Click "Run workflow"**, confirm the branch dropdown reads **`main`** - the job refuses to run
    from anything else, see `deploy.yml` - and click the green **Run workflow** button.
 4. **Watch the run.** `Deploy` runs `flyctl deploy --remote-only --ha=false`, then two assertion
-   steps check exactly one `started` machine and a 200 from `/api/hello`. A red run means one of
+   steps check exactly one `started` machine and a 200 from `/api/health`. A red run means one of
    those failed, not necessarily the deploy itself - check `fly machine list` and `fly logs`
    directly if the cause is not obvious from the step output.
 

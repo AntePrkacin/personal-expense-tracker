@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.0",
   "paths": {
-    "/api/hello": {
+    "/api/health": {
       "get": {
-        "operationId": "AppController_getHello",
+        "operationId": "AppController_getHealth",
         "parameters": [],
         "responses": {
           "200": {
@@ -11,13 +11,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HelloResponseDto"
+                  "$ref": "#/components/schemas/HealthResponseDto"
                 }
               }
             }
           }
         },
-        "summary": "A greeting, and the proof that the two apps can talk.",
+        "summary": "Liveness check: constant 200, no auth, no database.",
         "tags": [
           "meta"
         ]
@@ -1130,15 +1130,15 @@
       }
     },
     "schemas": {
-      "HelloResponseDto": {
+      "HealthResponseDto": {
         "type": "object",
         "properties": {
-          "message": {
+          "status": {
             "type": "string"
           }
         },
         "required": [
-          "message"
+          "status"
         ]
       },
       "CategoryTemplateDto": {

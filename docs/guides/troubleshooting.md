@@ -6,7 +6,7 @@ Symptom first. If something here sends you to another guide, the fix lives there
 
 | Symptom                                                   | Cause                                                                                                                                                |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `http://localhost:3000/` returns 404                      | Correct. A global `api` prefix means the route is `/api/hello`. The prefix is set once in `backend/src/main.ts`                                      |
+| `http://localhost:3000/` returns 404                      | Correct. A global `api` prefix means the route is `/api/health`. The prefix is set once in `backend/src/main.ts`                                     |
 | A screen renders but shows no real data                   | Expected for now. Nothing in `frontend/src` fetches the backend yet, so every screen is placeholder data until the session cookie lands              |
 | `node: command not found`, but it worked via the AI agent | Claude Code can ship its own bundled Node, which your terminal does not see. Install Node yourself, see [Prerequisites](installation.md#prerequisites)              |
 | Servers die as soon as the AI assistant finishes          | Expected. Processes an assistant starts belong to its session. Start `npm run start:dev` and `npm run dev` in your own terminals and leave them open |

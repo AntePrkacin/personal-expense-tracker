@@ -6,7 +6,7 @@ import { ApiProperty } from '@nestjs/swagger';
  * `AllExceptionsFilter` builds this and types what it builds as this class, so
  * a field added to one is a compile error in the other. That link is the only
  * thing keeping the filter and the published spec honest - see the class
- * comment on `HelloResponseDto` for why this has to be a class in a `.dto.ts`
+ * comment on `HealthResponseDto` for why this has to be a class in a `.dto.ts`
  * file rather than the interface it used to be.
  */
 export class ErrorResponseDto {

@@ -79,7 +79,7 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/categories`,
       `/${API_PREFIX}/categories/{id}`,
       `/${API_PREFIX}/dashboard`,
-      `/${API_PREFIX}/hello`,
+      `/${API_PREFIX}/health`,
       `/${API_PREFIX}/insights`,
       `/${API_PREFIX}/insights/generate`,
       `/${API_PREFIX}/profile`,
@@ -90,27 +90,28 @@ describe('openapi.json', () => {
     ]);
   });
 
-  it('gives GET /api/hello a real response schema', () => {
-    const ok = spec.paths[`/${API_PREFIX}/hello`].get.responses['200'];
+  it('gives GET /api/health a real response schema', () => {
+    const ok = spec.paths[`/${API_PREFIX}/health`].get.responses['200'];
 
     expect(ok.content?.['application/json'].schema?.$ref).toBe(
-      '#/components/schemas/HelloResponseDto',
+      '#/components/schemas/HealthResponseDto',
     );
     // The plugin silently produces `{}` here when a response type is an
     // interface, or lives outside a .dto.ts file. Both look fine until read.
-    expect(schema('HelloResponseDto').properties?.message).toEqual({
+    expect(schema('HealthResponseDto').properties?.status).toEqual({
       type: 'string',
     });
-    expect(schema('HelloResponseDto').required).toEqual(['message']);
+    expect(schema('HealthResponseDto').required).toEqual(['status']);
   });
 
-  it('documents no 500 anywhere, on hello least of all', () => {
+  it('documents no 500 anywhere, on health least of all', () => {
     // The resolved policy: every operation can answer 500 through the global
     // filter, so the document says it once in its description instead of
-    // widening every generated response union with the same dead fact. Hello was
-    // the arbitrary outlier that made the inconsistency visible.
+    // widening every generated response union with the same dead fact. Hello
+    // (this route's predecessor) was the arbitrary outlier that made the
+    // inconsistency visible.
     expect(
-      Object.keys(spec.paths[`/${API_PREFIX}/hello`].get.responses),
+      Object.keys(spec.paths[`/${API_PREFIX}/health`].get.responses),
     ).toEqual(['200']);
     const declared = Object.values(spec.paths)
       .flatMap((path) => Object.values(path))

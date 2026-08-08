@@ -14,11 +14,9 @@ describe('AppController', () => {
     appController = app.get<AppController>(AppController);
   });
 
-  describe('hello', () => {
-    it('should return a hello message', () => {
-      expect(appController.getHello()).toEqual({
-        message: 'Welcome friend, hello from the NestJS API 👋',
-      });
+  describe('health', () => {
+    it('should return a constant ok status', () => {
+      expect(appController.getHealth()).toEqual({ status: 'ok' });
     });
   });
 });
