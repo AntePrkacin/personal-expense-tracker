@@ -15,6 +15,7 @@ import { isUuid } from '../common/ids';
 import { users } from './central/schema';
 import {
   APP_DB,
+  SYNC_ONLY_SIBLINGS,
   USER_DB_SUBDIR,
   USER_MIGRATIONS_DIR,
   userDbName,
@@ -162,10 +163,12 @@ export class UserDatabaseService {
       await this.platform.deleteUserDatabase(userDbName(userId));
     }
 
-    // Remove the local file and the engine's siblings (-wal, -info, ...).
+    // Remove the local file and every sibling either engine leaves beside it:
+    // '-wal'/'-shm' from the plain engine (harmless to attempt in cloud mode,
+    // where they are not written), SYNC_ONLY_SIBLINGS from the sync one.
     const path = this.userDbPath(userId);
     await Promise.all(
-      ['', '-wal', '-shm', '-info', '-changes'].map((suffix) =>
+      ['', '-wal', '-shm', ...SYNC_ONLY_SIBLINGS].map((suffix) =>
         rm(`${path}${suffix}`, { force: true }),
       ),
     );

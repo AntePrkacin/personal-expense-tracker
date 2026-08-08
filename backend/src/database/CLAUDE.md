@@ -154,6 +154,15 @@ so there is nothing to migrate. See `turso-client.factory.spec.ts` for the cover
 `docs/guides/seeding-dummy-data.md` for the repair procedure a directory already mixed before this
 ticket still needs.
 
+**The guard's empirical assumption is pinned, not just documented.** `package.json` pins
+`@tursodatabase/sync` to the exact version the `-info` sibling was observed against rather than a
+`^` range, so an `npm install` cannot silently change which sibling a replica leaves behind.
+`openCloudDatabase` also re-asserts the sibling is there on every successful `connect()`, so a
+version bump that does change it - which still has to be a deliberate edit to `package.json` -
+fails loudly at the next open rather than quietly disabling the guard. `deleteUserDb` removes all
+three sync-only siblings (`-changes`, `-info`, `-log`), not only the one the guard checks for, so a
+cloud-mode account deletion leaves nothing behind either.
+
 **Three callers now share that pattern, and a fourth should copy it rather than invent
 something.** `test/setup-e2e.ts` under `NODE_ENV=test`, `src/openapi.env.ts` under
 `OPENAPI_EMIT`, and `src/scripts/seed-showcase.env.ts` under `SEED_LOCAL`. Each is a

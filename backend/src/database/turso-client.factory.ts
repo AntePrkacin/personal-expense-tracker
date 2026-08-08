@@ -5,7 +5,10 @@ import { connect as connectLocal } from '@tursodatabase/database';
 import { connect as connectSync } from '@tursodatabase/sync';
 import { drizzle as localDrizzle } from 'drizzle-orm/tursodatabase/database';
 import { drizzle as syncDrizzle } from 'drizzle-orm/tursodatabase-sync';
-import { SYNC_CLIENT_NAME } from './database.constants';
+import {
+  SYNC_CLIENT_NAME,
+  SYNC_DISCRIMINATOR_SIBLING,
+} from './database.constants';
 import type { DatabaseHandle } from './database.types';
 
 /**
@@ -23,7 +26,11 @@ import type { DatabaseHandle } from './database.types';
 const logger = new Logger('TursoClientFactory');
 
 export interface CloudConnectionOptions {
-  /** Local file backing the synced copy. See SYNC_SIBLING for its siblings. */
+  /**
+   * Local file backing the synced copy. See `SYNC_ONLY_SIBLINGS` in
+   * `database.constants.ts` for the full set of siblings a replica carries
+   * beside it; `SYNC_DISCRIMINATOR_SIBLING` below is only one of those.
+   */
   path: string;
   /** Remote database URL or bare hostname, as returned by the Platform API. */
   url: string;
@@ -51,17 +58,21 @@ export function toSyncUrl(urlOrHostname: string): string {
 
 /**
  * Suffix of a sibling file only `@tursodatabase/sync` ever writes, which is
- * what makes it the tell for which engine owns a path.
+ * what makes it the tell for which engine owns a path. Sourced from
+ * `database.constants.ts` so `deleteUserDb`'s cleanup list can share it
+ * rather than risk drifting from what this guard actually checks.
  *
  * Observed against `@tursodatabase/sync` 0.7.2 on 2026-08-08: a replica carries
  * `-changes`, `-info` and `-log` beside the main file, all three written by
  * `connect()` rather than by the first push, so this holds for a replica that
  * has never synced. A plain `@tursodatabase/database` file carries only `-wal`,
  * which is why `-wal` cannot be the tell - both engines write one. This is an
- * observation about the engine rather than a documented API, so re-run the
- * check when either package is upgraded.
+ * observation about the engine rather than a documented API, so `package.json`
+ * pins that version exactly rather than a `^` range, and `openCloudDatabase`
+ * asserts the observation still holds on every successful connect - re-run the
+ * check by hand if that pin is ever deliberately moved.
  */
-const SYNC_SIBLING = '-info';
+const SYNC_SIBLING = SYNC_DISCRIMINATOR_SIBLING;
 
 /**
  * One `DATABASE_DIR` must not serve both persistence modes. Both use the same
@@ -128,6 +139,22 @@ export async function openCloudDatabase(
     authToken: options.authToken,
     clientName: SYNC_CLIENT_NAME,
   });
+
+  // The whole guard rests on `connect()` leaving SYNC_SIBLING behind, which is
+  // an observed engine behaviour rather than a documented one - see the
+  // constant's own comment. Checking it here, once, on every successful
+  // connect turns a silent assumption failure (the guard quietly stops
+  // telling replicas from plain files) into a loud one at the one place that
+  // can still see both sides of it.
+  if (!existsSync(`${options.path}${SYNC_SIBLING}`)) {
+    throw new Error(
+      `@tursodatabase/sync connected to ${options.path} without leaving a ` +
+        `${SYNC_SIBLING} sibling beside it. The mixed-persistence guard in ` +
+        `this file depends on that sibling to tell a sync replica from a ` +
+        `plain local file, so it can no longer do its job - do not deploy ` +
+        `until this is investigated.`,
+    );
+  }
 
   const db = syncDrizzle({ client });
   await enableForeignKeys(db);
