@@ -9,6 +9,20 @@ import { CategoryCard } from './CategoryCard';
 // The figures are the frame's own, so a reviewer can hold this file beside node 36:423:
 // Groceries is `near`, Dining out is `over`, Housing is `full` and the rest are `on_track`.
 // `Uncategorized` supplies the uncapped shape, which the frame does not draw at all.
+//
+// **The kebab's context is mocked rather than wrapped in the real provider**, which is the
+// opposite of what `transactions/TransactionRow.test.tsx` does, and the reason is what each suite
+// is about. That one renders a row inside both real providers because the row is the thing the
+// providers exist to serve. This file is about what the *card* draws in five states, and every one
+// of its seventeen renders would otherwise have to be wrapped to reach an opener no assertion
+// here touches. The menu's own wiring - the popover pairing, Edit's disabled state, the payload
+// Delete sends, and the fallback row's missing Delete - is `CategoryCardMenu.test.tsx`'s.
+//
+// A relative specifier, because `jest.mock('@/...')` fails with "Cannot find module" from
+// anywhere in this repo.
+jest.mock('./DeleteCategoryProvider', () => ({
+  useDeleteCategory: () => ({ open: jest.fn() }),
+}));
 
 function category(overrides: Partial<Category> = {}): Category {
   return {
@@ -241,22 +255,38 @@ describe('an uncapped category (AC7)', () => {
 });
 
 describe('the kebab (AC6)', () => {
-  it('is present, named per card, and announces that it is not operable', () => {
-    // **PET-36's half of a control PET-39 owns.** The menu itself - Edit, a danger-coloured
-    // Delete, light dismiss - is that ticket's AC1. Shipping an enabled button that does
-    // nothing is the failure every inert control on the sibling tab was built to avoid, so
-    // this follows PET-33's precedent for its own disabled "Edit" and says so out loud.
+  // **Inverted by PET-39, which built the menu this card was drawing a placeholder for.** These
+  // cases used to assert `aria-disabled="true"` and that nothing opened; both are now false by
+  // design. What the card still owns is that the control is present, named per card and drawn on
+  // both shapes. Everything behind it is `CategoryCardMenu.test.tsx`'s.
+
+  it('is present and named per card', () => {
+    render(<CategoryCard category={category()} />);
+
+    expect(screen.getByRole('button', { name: 'Actions for Groceries' })).toBeInTheDocument();
+  });
+
+  it('no longer announces itself as unavailable', () => {
     render(<CategoryCard category={category()} />);
 
     const kebab = screen.getByRole('button', { name: 'Actions for Groceries' });
 
-    expect(kebab).toHaveAttribute('aria-disabled', 'true');
-    expect(kebab).not.toBeDisabled();
+    expect(kebab).not.toHaveAttribute('aria-disabled');
+    expect(kebab).toBeEnabled();
   });
 
-  it('opens nothing', () => {
+  it('opens a menu offering Edit and Delete', () => {
     render(<CategoryCard category={category()} />);
 
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
+  it('is drawn on the uncapped shape too', () => {
+    // Both shapes render `CategoryCardHeader`, so this is cheap insurance against a future edit
+    // moving the kebab into the capped branch alone.
+    render(<CategoryCard category={UNCAPPED} />);
+
+    expect(screen.getByRole('button', { name: 'Actions for Uncategorized' })).toBeInTheDocument();
   });
 });

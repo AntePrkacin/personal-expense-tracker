@@ -6,6 +6,7 @@ import { PageHeader } from '../../PageHeader';
 import { TransactionTabs } from '../TransactionTabs';
 import { AddCategoryButton } from './AddCategoryButton';
 import { CategoryCard } from './CategoryCard';
+import { DeleteCategoryProvider } from './DeleteCategoryProvider';
 import { SpendingSummaryCard } from './SpendingSummaryCard';
 
 // 13 Categories (Figma node 36:423), the second tab of the Transactions page.
@@ -67,8 +68,25 @@ export function CategoriesScreen({
   // the two are computed over different windows only if `monthStartDay` changes mid-request.
   const spent = categories.reduce((total, category) => total + category.spent, 0);
 
+  // **The name the delete confirmation says transactions move to, resolved once for the screen.**
+  // This is PET-39's amendment to the ticket, which asks for the literal "Other": that role was
+  // deliberately split when the backend was built, so "Other" is an ordinary chip anyone can
+  // rename or delete and the row deletions reassign to is the `isFallback` one. Reading it off the
+  // response means no string in the frontend claims to know the backend's name for that row.
+  //
+  // The `??` is a last resort for a response carrying no fallback row at all, which the partial
+  // unique index plus provisioning make unreachable - it is here so the copy degrades to a true
+  // sentence rather than to `undefined`, not because the case is expected.
+  const fallbackName = categories.find((category) => category.isFallback)?.name ?? 'Uncategorized';
+
   return (
-    <>
+    // **The delete confirmation is mounted once here, and this is neither of the two provider
+    // shapes the app already has.** `DeleteCategoryProvider.tsx` carries the argument in full; the
+    // short version is that a dialog owned by each card sits inside the card being deleted, where
+    // the success path's `router.refresh()` can unmount it out from under its own `close()`, and a
+    // dialog on `(app)/layout.tsx` would serve one screen from all four routes. It wraps the header
+    // as well as `<main>` so PET-38's edit modal can open it from either.
+    <DeleteCategoryProvider fallbackName={fallbackName}>
       <PageHeader
         overline={monthOverline(new Date())}
         title="Transactions"
@@ -134,6 +152,6 @@ export function CategoriesScreen({
           ))}
         </ul>
       </main>
-    </>
+    </DeleteCategoryProvider>
   );
 }

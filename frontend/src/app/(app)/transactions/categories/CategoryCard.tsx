@@ -1,4 +1,3 @@
-import { EllipsisVertical } from 'lucide-react';
 import { createElement } from 'react';
 
 import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
@@ -7,12 +6,16 @@ import type { Category } from '@/lib/categories';
 
 import { BannerCardBody, CardBanner } from './CardBanner';
 import { barClassFor, barPercent, chipFor, isCapped } from './categoryCardStatus';
+import { CategoryCardMenu } from './CategoryCardMenu';
 
 // One category card on frame 13 (nodes 37:471 and its seven siblings, CTG-3, CTG-4).
 //
-// A Server Component: nothing on it is interactive yet, so it costs the client bundle nothing.
-// The kebab is a `<button>` and still needs no `'use client'`, because it opens nothing - see
-// below.
+// **A Server Component, and it stayed one when the kebab became live.** That sentence used to
+// read "nothing on it is interactive yet"; PET-39 made the kebab open a real menu and the card
+// still costs the client bundle nothing, because the menu is a platform popover with no open
+// state to hold. `CategoryCardMenu.tsx` carries the `'use client'`, and only because its Delete
+// calls into a context - the same boundary `TransactionRow` and `TransactionRowMenu` settled on
+// one screen over, one level smaller than that ticket predicted.
 //
 // **Two shapes, and the second one has no Figma frame behind it.** Frame 13 draws eight capped
 // categories and stops there, but a cap is optional throughout the contract and the preselected
@@ -72,40 +75,6 @@ function footerFigure(category: Category): { label: string; className: string } 
   return { label: `${formatWhole(category.remaining ?? 0)} left`, className: 'font-medium' };
 }
 
-/**
- * The kebab, present and announcing that it does nothing.
- *
- * **This is PET-36's half of a control PET-39 owns.** That ticket's AC1 describes the menu this
- * opens - "Edit" and a danger-coloured "Delete", light-dismissed - and building it here would
- * take the substance out of it. The alternatives were both worse: an enabled button that does
- * nothing is the exact failure every inert control on the transactions screen was built to
- * avoid, and omitting the kebab makes the card a different design from the frame.
- *
- * So it follows PET-33's precedent for its own disabled "Edit" item - a real control that says
- * `aria-disabled` - rather than the month pill's, which is an inert `div` announcing nothing.
- * The difference matters: a reader who reaches this hears a button that is not available yet,
- * instead of silently finding nothing where the design draws a control.
- *
- * `disabled` is deliberately **not** used in place of `aria-disabled`. A `disabled` button is
- * removed from the tab order entirely, so the one affordance on the card would be unreachable
- * by keyboard and unannounceable; `aria-disabled` keeps it focusable and states its condition,
- * which is what the ARIA practices recommend for a control that will become live.
- */
-function CategoryCardMenuButton({ categoryName }: { categoryName: string }) {
-  return (
-    <button
-      type="button"
-      aria-disabled="true"
-      className="btn btn-ghost btn-square btn-sm shrink-0"
-      // A named control rather than a bare glyph: the icon is aria-hidden, so without this the
-      // button announces as "button" on eight identical cards.
-      aria-label={`Actions for ${categoryName}`}
-    >
-      <EllipsisVertical className="size-4" aria-hidden="true" />
-    </button>
-  );
-}
-
 /** The tile and the name, identical in both shapes. */
 function CategoryCardHeader({ category }: { category: Category }) {
   // The category's own glyph as of PET-64, where three sites drew a shared `ShoppingBag`
@@ -138,7 +107,15 @@ function CategoryCardHeader({ category }: { category: Category }) {
         <h2 className="truncate text-sm font-semibold">{category.name}</h2>
       </div>
 
-      <CategoryCardMenuButton categoryName={category.name} />
+      {/* **PET-39 made this live, and the whole of the change is that `aria-disabled` is gone.**
+          It shipped as a real `<button aria-disabled>` because the menu was that ticket's AC1;
+          `CategoryCardMenu` is that menu, and it keeps this element's class string and its
+          `aria-label` byte-identical so the two suites that name the control did not have to
+          change their query. The card **stays a Server Component**: the menu is a popover, so
+          there is no open state to hold, and its `'use client'` is there only because Delete
+          calls into a context - exactly the boundary `TransactionRow` and `TransactionRowMenu`
+          settled on next door. */}
+      <CategoryCardMenu category={category} />
     </div>
   );
 }

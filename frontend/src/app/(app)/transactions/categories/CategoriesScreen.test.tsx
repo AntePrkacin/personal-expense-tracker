@@ -184,13 +184,39 @@ describe('the screen chrome (AC1)', () => {
   });
 });
 
+/**
+ * The grid, told apart from the card menus.
+ *
+ * **PET-39 is why this is not `getByRole('list')` any more, and the reason is jsdom rather than
+ * the markup.** Every card now carries a `CategoryCardMenu`, whose panel is a `<ul popover>`. In a
+ * browser a closed popover is `display: none` and so is not in the accessibility tree at all, which
+ * means there is exactly one list on this screen; jsdom implements none of the Popover API and
+ * `jest.setup.ts` deliberately polyfills none of it, so here the menus are permanently "open" and
+ * every one of them is a list.
+ *
+ * Filtering on `popover` rather than adding an `aria-label` to the grid: naming the list would be
+ * changing what the screen announces to work around a test-environment artifact, and the artifact
+ * is one this repo has chosen to live with rather than fake.
+ */
+const grid = () => screen.getAllByRole('list').find((list) => !list.hasAttribute('popover'))!;
+
+/**
+ * The grid's own cards, not the menu items nested inside them.
+ *
+ * `within(grid()).getAllByRole('listitem')` descends the whole subtree, so it also returns the
+ * `<li>`s of every card's menu - three per card rather than one. Same jsdom artifact as above,
+ * caught one layer down.
+ */
+const gridItems = () =>
+  within(grid())
+    .getAllByRole('listitem')
+    .filter((item) => item.parentElement === grid());
+
 describe('the card grid (AC1)', () => {
   it('renders one card per category, as a list', () => {
     renderScreen();
 
-    const grid = screen.getByRole('list');
-
-    expect(within(grid).getAllByRole('listitem')).toHaveLength(CATEGORIES.length);
+    expect(gridItems()).toHaveLength(CATEGORIES.length);
     expect(screen.getByRole('heading', { level: 2, name: 'Groceries' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Dining out' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Transport' })).toBeInTheDocument();
@@ -201,7 +227,7 @@ describe('the card grid (AC1)', () => {
     // so a create or delete landing in a later ticket cannot move one without the other.
     renderScreen({ categories: [category()] });
 
-    expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(1);
+    expect(gridItems()).toHaveLength(1);
     expect(screen.getByText('Categories').parentElement).toContainElement(screen.getByText('1'));
   });
 });
