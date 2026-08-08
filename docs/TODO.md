@@ -2060,6 +2060,37 @@ has no counterpart in the file at all.** AC2 asks that the chosen colour "previe
 and nothing in frame 19 does that, so both the element and its placement are ours. It is
 `aria-hidden`, since every fact in it is already announced by the three fields above it.
 
+### The Add category modal captures no note, and the field is hidden rather than removed
+
+`AddCategoryModal` has a `SHOWS_NOTE` flag, set to **false**, so the Note field frame 19 draws and
+CED-4 specifies is not rendered. The reason is A42, which the contract restates in
+`CreateCategoryDto`: a category's note **surfaces on no screen once saved**. Asking somebody to write
+a note that nothing ever shows back is asking them to write into a void, so the field waits for a
+category detail page to show it on, the way `/transactions/[id]` shows a transaction's.
+
+**Nothing was removed to achieve that, which is the whole point of the flag.** `categoryForm.ts`
+still carries `note` in `CategoryFormValues`, still trims it and still omits it from the body when
+blank, and `categoryForm.test.ts` still pins all three - so the conversion keeps its coverage and only
+its input stopped being a control. `CreateCategoryDto.note` and the `categories.note` column are
+untouched, so **no migration is owed in either direction**.
+
+**Re-enabling it is one word plus four assertions.** Flip `SHOWS_NOTE` to true, and
+`AddCategoryModal.test.tsx` will fail on exactly the cases that need their expectations back: the
+field-order case, the "renders no Note field" case, the A12 one-optional-label case, and AC4's body.
+That is deliberate - the suite is what tells the next person the full cost rather than leaving them to
+find it.
+
+**A flag rather than commented-out JSX**, because a commented block is not typechecked: renaming
+`CategoryFormValues.note` or changing `ui/Input`'s props would leave it broken with the build green,
+and whoever restored it months later would inherit the breakage. This way the markup compiles on
+every build.
+
+What is owed is the product decision this defers: whether a category ever gets a detail page, and if
+not, whether the note should be dropped from the DTO and the column altogether rather than left as a
+field nothing writes. Note the onboarding seed **does** write notes - each picked template copies its
+`description` into the category's `note` - so the column is not dead data today even though the modal
+no longer adds to it.
+
 ### The Add category picker offers no grey-out, and PET-65 is what changed the reasoning
 
 The modal lets two categories carry the same colour and the same icon, silently, matching a backend

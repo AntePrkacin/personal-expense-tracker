@@ -64,8 +64,16 @@ const name = () => screen.getByLabelText('Name');
 const budget = () => screen.getByLabelText('Monthly budget (optional)');
 const colour = () => screen.getByLabelText('Color') as HTMLSelectElement;
 const icon = () => screen.getByLabelText('Icon') as HTMLSelectElement;
-const note = () => screen.getByLabelText('Note (optional)');
 const submit = () => screen.getByRole('button', { name: 'Add category' });
+
+/**
+ * The Note field, which is **not rendered** while `SHOWS_NOTE` is false.
+ *
+ * A `query` rather than a `get`, so it answers `null` instead of throwing - which is what lets the
+ * hidden case be asserted rather than merely not exercised. Flip `SHOWS_NOTE` and this suite tells
+ * you exactly which four cases need their expectations back.
+ */
+const note = () => screen.queryByLabelText('Note (optional)');
 
 const values = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.value);
 const labels = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.text);
@@ -74,27 +82,31 @@ const labels = (select: HTMLSelectElement) => Array.from(select.options).map((o)
 const previewTile = () => document.querySelector('[aria-hidden="true"] > span') as HTMLElement;
 const previewGlyph = () => previewTile().querySelector('svg');
 
-describe('AC1: the modal and its five fields', () => {
+describe('AC1: the modal and its fields', () => {
   it('opens as a dialog titled "Add category"', () => {
     open();
 
     expect(screen.getByRole('dialog', { name: 'Add category' })).toBeInTheDocument();
   });
 
-  it('draws the five fields in CED-4’s order', () => {
+  // **Four of CED-4's five, and the fifth is hidden on purpose.** `SHOWS_NOTE` is false because a
+  // note surfaces on no screen once saved (A42), so the field waits for a category detail page. The
+  // regex still names Note, so this asserts its *absence* from the order rather than merely not
+  // looking for it - flip the flag and this case fails until 'Note (optional)' goes back on the end.
+  it('draws four of CED-4’s five fields in order, the Note being hidden', () => {
     open();
 
     const drawn = screen
       .getAllByText(/^(Name|Monthly budget \(optional\)|Color|Icon|Note \(optional\))$/)
       .map((node) => node.textContent);
 
-    expect(drawn).toEqual([
-      'Name',
-      'Monthly budget (optional)',
-      'Color',
-      'Icon',
-      'Note (optional)',
-    ]);
+    expect(drawn).toEqual(['Name', 'Monthly budget (optional)', 'Color', 'Icon']);
+  });
+
+  it('renders no Note field at all while SHOWS_NOTE is false', () => {
+    open();
+
+    expect(note()).not.toBeInTheDocument();
   });
 
   // The deviation from the frame, pinned so it is a decision rather than a drift. Node 102:878 rings
@@ -106,14 +118,14 @@ describe('AC1: the modal and its five fields', () => {
     expect(name()).toHaveFocus();
   });
 
-  // A12: required fields are marked only by the absence of "(optional)", so exactly two labels carry
-  // it - and the budget being one of them is the whole optional-cap decision made visible.
-  it('marks the budget and the note optional, and nothing else', () => {
+  // A12: required fields are marked only by the absence of "(optional)". With the Note hidden the
+  // budget is the **only** label carrying the word, which makes it carry the whole optional-cap
+  // decision on its own - and makes it the one label a reviewer must not "tidy" away.
+  it('marks the budget optional, and nothing else', () => {
     open();
 
     expect(screen.getAllByText(/\(optional\)$/).map((n) => n.textContent)).toEqual([
       'Monthly budget (optional)',
-      'Note (optional)',
     ]);
   });
 });
@@ -253,7 +265,12 @@ describe('AC3: validation', () => {
 });
 
 describe('AC4: a successful save', () => {
-  it('sends exactly what the form describes', async () => {
+  // **No `note` key, and its absence is the point.** With the field hidden there is nothing to type
+  // into, so every category is created without one - which is a state `CreateCategoryDto` already
+  // documents, since `note` is optional there. `categoryForm.test.ts` keeps pinning the note's
+  // trimming and omission directly on `toCreateCategoryBody`, so hiding the field cost that coverage
+  // nothing: the conversion is still tested, only its input is no longer a control.
+  it('sends exactly what the form describes, which now carries no note', async () => {
     const u = user();
     open();
 
@@ -261,7 +278,6 @@ describe('AC4: a successful save', () => {
     await u.type(budget(), '250.00');
     await u.selectOptions(colour(), 'primary');
     await u.selectOptions(icon(), 'tv');
-    await u.type(note(), 'Streaming, apps & memberships');
     await u.click(submit());
 
     await waitFor(() =>
@@ -270,7 +286,6 @@ describe('AC4: a successful save', () => {
         color: 'primary',
         icon: 'tv',
         monthlyCap: 250,
-        note: 'Streaming, apps & memberships',
       }),
     );
   });

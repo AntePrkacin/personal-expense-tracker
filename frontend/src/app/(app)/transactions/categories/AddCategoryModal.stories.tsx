@@ -83,7 +83,7 @@ const accept = async () => ({ ok: true }) as const;
  * The modal as frame 19 draws it (node 102:878).
  *
  * What to diff against Figma is the structure, not the pixels: the box centred over the dimmed page,
- * the five fields in CED-4's order, the `$` prefix and larger value on the budget field, **Color and
+ * four of CED-4's five fields in order, the `$` prefix and larger value on the budget field, **Color and
  * Icon sharing a row**, and the footer's secondary-then-primary pair. Its width, radius, shadow and
  * focus ring are the theme's as of PET-57.
  *
@@ -92,6 +92,13 @@ const accept = async () => ({ ok: true }) as const;
  * marker; focus opens on **Name** rather than on the budget field the frame rings, since that frame
  * draws every field already filled and is a mid-fill snapshot; and the tile-plus-name row under the
  * two selects is AC2's "previews on the category", which the file draws no element for.
+ *
+ * **A fourth departure is a subtraction: the Note field is not drawn.** The frame draws it and CED-4
+ * specifies it, and it is hidden behind `SHOWS_NOTE` because a note surfaces on no screen once saved
+ * (A42) - so the field waits for a category detail page to show it on. The markup and every
+ * conversion behind it stay live; see the flag's own note in `AddCategoryModal.tsx`. This story is
+ * where to check that its absence leaves the budget field as the only "(optional)" label and does not
+ * strand the footer.
  *
  * **The frame's own two example values are unbuildable and are not reproduced.** It shows "Violet"
  * and "Repeat": there is no `violet` token, and `repeat` is a real lucide name but not one of the 64

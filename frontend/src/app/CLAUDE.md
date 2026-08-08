@@ -1318,6 +1318,18 @@ for no limit"), because the field looks required and nothing else on screen says
 A29 still owe the treatment a sign-off, which `Screens/19 Add category`'s `WithMessages` story exists
 to collect.
 
+**The Note field exists in the markup and is not drawn, behind a `SHOWS_NOTE` flag.** Frame 19 draws
+it and CED-4 specifies it; A42 is why it is hidden, because a note surfaces on no screen once saved,
+and a field whose value nothing ever shows back is a request to write into a void. It waits for a
+category detail page. **Read the flag's own comment before touching it** - the two things not to undo
+are that it is a flag rather than commented-out JSX, so the markup stays typechecked and cannot rot
+while hidden, and that nothing behind the field was removed: `categoryForm.ts` still trims and omits
+`note`, its suite still pins that, and `CreateCategoryDto.note` and the `categories.note` column are
+untouched. Flipping it to true fails exactly four cases in `AddCategoryModal.test.tsx`, which is the
+cost of re-enabling, stated by the suite rather than left to be discovered. One consequence worth
+knowing: with the Note gone, **the budget is the only label carrying "(optional)"**, so it now carries
+A12's whole signal on its own.
+
 **`color` and `icon` are literal unions on the wire, and a `<select>` hands back a `string`.** The
 form models the gap rather than casting across it: `CategoryFormValues` types both as
 `Token | ''`, and `hasChosenMarks` narrows to the shape `toCreateCategoryBody` will accept. The

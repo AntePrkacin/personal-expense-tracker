@@ -71,6 +71,33 @@ const NOTE_ID = 'add-category-note';
 /** What the preview names a category nobody has typed a name for yet. */
 const UNNAMED_PREVIEW = 'New category';
 
+/**
+ * Whether the Note field is drawn. **It is not, and that is a product decision rather than an
+ * unfinished one.**
+ *
+ * Frame 19 draws the field and CED-4 specifies it, so this is a deliberate departure from both. The
+ * reason is A42, which the contract restates: a category's note **surfaces on no screen once saved**.
+ * Asking for a note that nothing ever shows back is asking the user to write into a void - so the
+ * field waits for a category detail page to show it on, the way `/transactions/[id]` shows a
+ * transaction's.
+ *
+ * **A flag rather than commented-out JSX, and the difference is rot.** A commented block is not
+ * typechecked, so renaming `CategoryFormValues.note` or changing `ui/Input`'s props would leave it
+ * broken with the build green, and whoever uncomments it months later inherits the breakage. This way
+ * the markup below compiles on every build, `NOTE_ID` stays used, and re-enabling the field is
+ * flipping this one word.
+ *
+ * **Nothing behind the field was removed, and nothing needs adding back.** `categoryForm.ts` still
+ * carries `note` in `CategoryFormValues`, still trims it and still omits it from the body when blank,
+ * and its suite still pins all of that - so with the field hidden every category is simply created
+ * without a note, which is a state the API already documents. `CreateCategoryDto.note` and the
+ * `categories.note` column are untouched, so no migration is owed in either direction.
+ *
+ * Typed `boolean` rather than left to infer `false`, so the ternary below reads as a branch rather
+ * than as unreachable code.
+ */
+const SHOWS_NOTE: boolean = false;
+
 type AddCategoryModalProps = {
   /**
    * The colours and icons to offer, or `null` if the read failed.
@@ -356,15 +383,16 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
         </span>
       </p>
 
-      {/* The one field marked optional besides the budget, and no `required`. It can carry no error,
-          and it surfaces on no screen once saved (CED-4, A42) - which is the contract's own note,
-          not an omission here. */}
-      <Input
-        id={NOTE_ID}
-        label="Note (optional)"
-        value={values.note}
-        onChange={(event) => setText('note', event.currentTarget.value)}
-      />
+      {/* The Note field, drawn by frame 19 and specified by CED-4, and **deliberately not rendered
+          today** - see `SHOWS_NOTE`. No `required`, and it can carry no error. */}
+      {SHOWS_NOTE ? (
+        <Input
+          id={NOTE_ID}
+          label="Note (optional)"
+          value={values.note}
+          onChange={(event) => setText('note', event.currentTarget.value)}
+        />
+      ) : null}
 
       {/* Two form-level lines rather than one, because they answer different questions and can both
           be true: the picker had nothing to offer, and the save was rejected.

@@ -122,6 +122,23 @@ interactions and two error messages the design does not draw.
 piece of information in it is already in the three fields above. The frame draws no such element, so
 this is the cheapest thing that makes the criterion true rather than a reading of the design.
 
+**The Note field is captured in code and not drawn, added after the plan was approved.** Frame 19
+draws it and CED-4 specifies it, and it is hidden behind a `SHOWS_NOTE` flag in `AddCategoryModal`
+because A42 - restated by `CreateCategoryDto` - says a note **surfaces on no screen once saved**.
+A field whose value nothing ever shows back asks the user to write into a void, so it waits for a
+category detail page of the kind `/transactions/[id]` already is for a transaction.
+
+Three things about how it is hidden. It is **a flag rather than commented-out JSX**, so the markup
+stays typechecked and cannot rot while hidden - a commented block would survive a rename of
+`CategoryFormValues.note` with the build green and break for whoever restored it. **Nothing behind
+the field was removed**: `categoryForm.ts` still trims and omits `note`, its suite still pins that,
+and `CreateCategoryDto.note` and the `categories.note` column are untouched, so no migration is owed
+in either direction. And **re-enabling it costs one word plus four assertions**, which
+`AddCategoryModal.test.tsx` fails on deliberately rather than leaving the cost to be discovered.
+
+One knock-on: with the Note gone, the budget is the **only** label carrying "(optional)", so it now
+carries A12's whole signal by itself. `docs/TODO.md` records the product question this defers.
+
 ## Deviations from the frame
 
 Both are visible and both belong in the PR body.
@@ -147,7 +164,8 @@ Both are visible and both belong in the PR body.
 - [x] Add `transactions/categories/categoryForm.ts` and its jsdom-free suite - `CategoryFormValues`,
       `isNameValid`, `isCapValid` (where `''` is valid), `invalidFields` returning both failures at
       once, and `toCreateCategoryBody` omitting `monthlyCap` and `note` entirely when blank
-- [x] Build `AddCategoryModal` - the five fields in the frame's order, the two selects side by side,
+- [x] Build `AddCategoryModal` - four of the five fields in the frame's order (see the Note decision
+      below), the two selects side by side,
       the preview tile, a local `MESSAGES` per A29, and the palette-unavailable state
 - [x] Build `AddCategoryButton` - a client component owning its own open state
 - [x] Wire `transactions/categories/page.tsx` and `CategoriesScreen`, and invert PET-36's two
@@ -172,7 +190,8 @@ Then the real browser walk, which is the only place Escape and the focus trap ar
 jsdom implements neither and `jest.setup.ts` deliberately does not fake them:
 
 1. Sign in and go to `/transactions/categories`. Click "Add category": the modal opens over the
-   dimmed page with the five fields in the frame's order, the two selects side by side, and focus on
+   dimmed page with four of the frame's five fields in order (no Note), the two selects side by side,
+   and focus on
    Name (AC1).
 2. The Colour select lists 16 labels in server order and Icon lists 64, and changing either updates
    the preview tile (AC2). **Delete the local central database first if it was seeded before PET-65**,
