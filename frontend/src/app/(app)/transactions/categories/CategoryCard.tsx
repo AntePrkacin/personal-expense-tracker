@@ -172,10 +172,11 @@ export function CategoryCard({ category }: { category: Category }) {
         </BannerCardBody>
 
         {/* The action is the one the summary card's banner offers, and inert for the same
-            reason - PET-38's Edit category modal is what sets a cap. Its accessible name names
-            the category, because eight cards each drawing "Set limit" would otherwise announce
-            as eight identical buttons. */}
-        <CardBanner action="Set limit" actionLabel={`Set a monthly limit for ${category.name}`}>
+            reason - PET-38's Edit category modal is what sets a cap. It passes the category as
+            *context* rather than a whole replacement label, so the accessible name comes out as
+            "Set limit for Groceries": distinct across eight cards, and still containing the
+            visible words a speech-input user can actually say. */}
+        <CardBanner action="Set limit" actionContext={category.name}>
           No limit set for this category
         </CardBanner>
       </section>

@@ -1243,12 +1243,21 @@ reason that has nothing to do with where the view renders. The ARIA tab pattern 
 container swapping panels in place, with `aria-controls` pointing at a `role="tabpanel"` in the
 same document; these two navigate to separate routes and replace the whole page. So `role="tab"`
 would promise a relationship that does not exist, and both `pages.test.tsx` and
-`TransactionTabs.test.tsx` pin its absence. The daisyUI classes still apply, because **`.tab` lists
-`[aria-current=page]` beside `.tab-active` in its own active-state selector** - the attribute that
-correctly marks a link to the current page is also what draws the underline, so nothing sets
-`tab-active` by hand and there is no second source of truth to drift. The inactive tab's dimmed
-label is the plugin's own `:not()` rule rather than the `text-base-content/50` the hand-rolled
-version wrote out.
+`TransactionTabs.test.tsx` pin its absence.
+
+**The bar uses no daisyUI `tab` or `tabs` class at all, and this paragraph said otherwise until a
+review caught it.** It described a version built on stock `tabs tabs-border`, where
+`[aria-current=page]` drew the underline through the plugin's own active-state selector and the
+inactive label was dimmed by its `:not()` rule. That version was replaced before merge, because
+`tabs-border` draws a **3px `currentColor`** underline **inset by the tab's inline padding**
+where the design draws a **2px accent** rule spanning the **full tab** - and neither is reachable
+from outside, since `--tab-border-color` and `--tab-p` are both set at a specificity of (0,3,0)
+against a utility's (0,1,0). So `TransactionTabs.tsx` is plain utilities: `LABEL_CLASS` writes the
+`text-base-content/50` dimming out by hand, and the underline is an `aria-hidden` span carrying
+`bg-primary absolute inset-x-0 -bottom-px h-0.5`. **Neither is a plugin-supplied duplicate and
+deleting either leaves the bar with no visible current-page indicator**, which every test would
+survive - the suites assert `aria-current`, not the paint. That is what the browser walk is for,
+and it measures the rule's height, span, position and colour in both themes.
 
 **`TAB_HREFS` in `TransactionTabs.tsx` is the third route declaration in this app, and it had to
 be.** `SIDEBAR_HREFS` declares the four the sidebar renders and `lib/routes.ts` declares the six

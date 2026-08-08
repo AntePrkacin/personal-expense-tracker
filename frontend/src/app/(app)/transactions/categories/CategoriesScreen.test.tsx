@@ -65,6 +65,15 @@ const ALLOCATION: Allocation = { monthlyBudget: 2000, allocated: 1150, unallocat
 /** 397 + 312 + 223, which is what the screen has to sum for itself. */
 const SPENT_TOTAL = '$932';
 
+/**
+ * The summary card, scoped so a query cannot stray into a category card.
+ *
+ * "On track" is also a category chip, so a page-wide `getByText` matches twice and says nothing
+ * about which element it found.
+ */
+const summaryCard = () =>
+  screen.getByRole('heading', { name: /spending$/ }).closest('section') as HTMLElement;
+
 function renderScreen(props: Partial<React.ComponentProps<typeof CategoriesScreen>> = {}) {
   return render(
     <CategoriesScreen
@@ -213,6 +222,23 @@ describe('the spending summary (AC4)', () => {
     expect(screen.queryByText('On track')).not.toBeInTheDocument();
   });
 
+  it('never hands the bar a max of zero, however small the budget', () => {
+    // **`monthlyBudget` is only `@IsPositive()`, so $0.40 is a real budget** and rounds to zero.
+    // `<progress max="0">` is invalid: the spec says fall back to max=1, so the bar rendered
+    // empty - and announced 0% - beside a chip reading "Over budget" for an account that had
+    // overspent everything it had. The overspent case must fill the bar, not empty it.
+    renderScreen({
+      allocation: { monthlyBudget: 0.4, allocated: 0, unallocated: 0.4 },
+      categories: [category({ spent: 30, monthlyCap: 50, percentUsed: 60, remaining: 20 })],
+    });
+
+    const bar = within(summaryCard()).getByRole('progressbar');
+
+    expect(bar).toHaveAttribute('max', '1');
+    expect(bar).toHaveValue(1);
+    expect(within(summaryCard()).getByText('Over budget')).toBeInTheDocument();
+  });
+
   it('gives the summary bar a real accessible name', () => {
     renderScreen();
 
@@ -228,11 +254,6 @@ describe('the spending summary (AC4)', () => {
     // the bar has no accessible property that carries which colour it took. The defect this
     // pins shipped once - the bar stayed `progress-primary` while the chip went green - and
     // nothing but a colour check could have seen it.
-    // Scoped to the summary card rather than taken off the page: "On track" is also a category
-    // chip, so a page-wide query matches twice and says nothing about which element it found.
-    const summaryCard = () =>
-      screen.getByRole('heading', { name: /spending$/ }).closest('section') as HTMLElement;
-
     const { unmount } = renderScreen();
 
     expect(within(summaryCard()).getByRole('progressbar')).toHaveClass('progress-success');

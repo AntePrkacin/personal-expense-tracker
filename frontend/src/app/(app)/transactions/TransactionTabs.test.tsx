@@ -54,9 +54,11 @@ describe('TransactionTabs', () => {
   it.each(CASES)('marks %s current when it is the active tab', (key, _href, label) => {
     render(<TransactionTabs active={key} {...COUNTS} />);
 
-    // aria-current is the machine-readable half, and on this component it is also what draws
-    // the underline: daisyUI's `.tab` lists `[aria-current=page]` as an active-state selector,
-    // so nothing sets `tab-active` by hand and there is no second source of truth to drift.
+    // aria-current is the machine-readable half and the **only** half this suite can see. The
+    // visible half - a 2px `bg-primary` rule spanning the tab, and the inactive label's
+    // `base-content/50` - is hand-written in `TransactionTabs.tsx` and is not plugin-supplied,
+    // so deleting either leaves the bar with no current-page indicator and this assertion still
+    // passing. The browser walk measures the rule's height, span, position and colour.
     expect(screen.getByRole('link', { name: new RegExp(label) })).toHaveAttribute(
       'aria-current',
       'page',
@@ -80,9 +82,10 @@ describe('TransactionTabs', () => {
 
   it('is a navigation rather than a tablist', () => {
     // These navigate between two routes instead of swapping a panel in place, so `role="tab"`
-    // would promise an `aria-controls` relationship to a `tabpanel` that does not exist. The
-    // daisyUI classes still apply - they are styling, and the plugin keys its active state off
-    // `aria-current` rather than off the role.
+    // would promise an `aria-controls` relationship to a `tabpanel` that does not exist. Note
+    // the bar carries no daisyUI `tab`/`tabs` class either - `tabs-border`'s underline is 3px,
+    // `currentColor` and inset by the tab's padding, which is a different design from the one
+    // this screen draws, and neither value is reachable from a utility.
     render(<TransactionTabs active="categories" {...COUNTS} />);
 
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
@@ -99,6 +102,51 @@ describe('TransactionTabs', () => {
       screen.getByText('128'),
     );
     expect(screen.getByText('Categories').parentElement).toContainElement(screen.getByText('8'));
+  });
+
+  it('keeps the list route the caller asks for, filters and all', () => {
+    // **The regression this replaced was silent and cost the user their whole view.** The active
+    // tab is how a filtering user says "back to the list"; pointing it at the bare route emptied
+    // the search box and reset the period on the one click that means "stay here".
+    render(
+      <TransactionTabs
+        active="transactions"
+        {...COUNTS}
+        transactionsHref="/transactions?search=Uber&period=all"
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: /All transactions/ })).toHaveAttribute(
+      'href',
+      '/transactions?search=Uber&period=all',
+    );
+  });
+
+  it('leaves the Categories tab bare even when the list carries filters', () => {
+    // The other direction, and deliberately not symmetric: that screen has no filter bar, so a
+    // forwarded search term would sit in the URL of a page that cannot show it.
+    render(
+      <TransactionTabs
+        active="transactions"
+        {...COUNTS}
+        transactionsHref="/transactions?search=Uber"
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: /Categories/ })).toHaveAttribute(
+      'href',
+      '/transactions/categories',
+    );
+  });
+
+  it('falls back to the bare list route when no href is given', () => {
+    // What `/transactions/categories` renders: it holds no filters, so there is nothing to keep.
+    render(<TransactionTabs active="categories" {...COUNTS} />);
+
+    expect(screen.getByRole('link', { name: /All transactions/ })).toHaveAttribute(
+      'href',
+      '/transactions',
+    );
   });
 
   it('prints a zero count rather than hiding the badge', () => {

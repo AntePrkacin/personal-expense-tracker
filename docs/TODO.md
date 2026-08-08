@@ -1969,6 +1969,23 @@ The summary card's own banner - "{amount} of your budget isn't assigned to a cat
 reason: the ticket's AC4 was amended away from frame 13's "Budget allocation" summary toward a
 spending summary, so the unassigned figure needed somewhere else to live. Same sign-off owed.
 
+### `BudgetCard` hands `<progress>` a `max` that can be zero
+
+PET-36's review found this on its own summary card and fixed it there:
+`RegisterDto.monthlyBudget` is only `@IsPositive()`, so `0.40` is an accepted budget and
+`Math.round` takes it to zero. A `<progress max="0">` is invalid, and the failure is silent
+rather than loud - the HTML spec says to fall back to `max=1`, so the bar renders **empty**, and
+announces 0%, beside a chip reading "Over budget" for an account that has overspent everything it
+has. `categories/SpendingSummaryCard.tsx` now floors the max at 1 and clamps the value against
+that same floor, so the overspent case fills the bar.
+
+**`dashboard/BudgetCard.tsx` has the identical shape and was left alone**, deliberately:
+`value={Math.min(spent, monthlyBudget)} max={monthlyBudget}` on an unrounded pair, reachable the
+same way. It is PET-21's file and PET-36 had no business editing it, so the fix travels with
+whoever next touches that card. Note the dashboard version is marginally worse, since it does not
+round first: a budget of `0.4` reaches `max={0.4}`, which is valid HTML, so it fails only at
+exactly `0`.
+
 ### The Categories tab pays one extra request for the other tab's badge
 
 Frame 13 draws both tab counts on the Categories tab - "All transactions 128" beside

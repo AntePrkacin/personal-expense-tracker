@@ -208,14 +208,25 @@ describe('an uncapped category (AC7)', () => {
   it('offers to set a limit, announcing that the control is not live yet', () => {
     render(<CategoryCard category={UNCAPPED} />);
 
-    const setLimit = screen.getByRole('button', {
-      name: 'Set a monthly limit for Uncategorized',
-    });
+    const setLimit = screen.getByRole('button', { name: 'Set limit for Uncategorized' });
 
     expect(setLimit).toHaveAttribute('aria-disabled', 'true');
     // Not `disabled`: that removes it from the tab order, so the control would be unreachable
     // by keyboard and announce nothing. PET-38 is what makes it live.
     expect(setLimit).not.toBeDisabled();
+  });
+
+  it('keeps the visible label inside the accessible name (WCAG 2.5.3)', () => {
+    // **The name must *contain* "Set limit", not merely identify the control.** It read "Set a
+    // monthly limit for Uncategorized", which is distinct across eight cards and unusable by
+    // speech input: a user saying "click Set limit" - the only words on screen - matched
+    // nothing, on the one affordance an uncapped card has.
+    render(<CategoryCard category={UNCAPPED} />);
+
+    const name = screen.getByRole('button', { name: /Set limit/ }).getAttribute('aria-label');
+
+    expect(name).toContain('Set limit');
+    expect(name).toContain('Uncategorized');
   });
 
   it('falls back to a capped-looking status with no cap without drawing furniture', () => {

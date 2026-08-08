@@ -119,6 +119,21 @@ type TransactionTabsProps = {
   transactionCount: number;
   /** How many live categories the account has. Never 0: the Uncategorized fallback cannot be deleted. */
   categoryCount: number;
+  /**
+   * Where the "All transactions" tab points, when the caller has filters worth keeping.
+   *
+   * **Defaulting this to the bare route was a real regression, and the inert `<span>` this
+   * component replaced could not have had it.** `/transactions` holds its search, period,
+   * category and sort in the query string, and the active tab is the ordinary way a user says
+   * "back to the list" - so a self-link to `/transactions` emptied the search box and reset the
+   * table to the current period, newest-first, with no way back but retyping all four.
+   *
+   * So the list passes `filterHref(filters)` and keeps them. The Categories route passes
+   * nothing and gets the bare path, which is correct rather than a shortcut: that screen has no
+   * filter bar, so there is nothing to preserve, and carrying a stale query across would restore
+   * a filter the user left two navigations ago.
+   */
+  transactionsHref?: string;
 };
 
 /**
@@ -137,17 +152,27 @@ type TransactionTabsProps = {
  * which is the same two pieces of information in the same order that a sighted reader gets, and
  * any label spelling out "128 transactions" would say it twice.
  *
- * **A tab switch drops the list's filters**, deliberately. `/transactions` keeps its search,
- * period, category and sort in the query string and PET-34's detail page carries them there and
- * back, because that is a drill-down the user returns from. This is not: the Categories tab has
- * no filter bar and nothing to apply them to, so forwarding them would put a search term in the
- * URL of a screen that cannot show it, and carrying them back would restore a filter the user
- * left two navigations ago.
+ * **Switching *to* Categories drops the list's filters, and going back to the list keeps them.**
+ * Those are two different journeys and the first version treated them as one. Forwarding a
+ * search term to the Categories tab would put it in the URL of a screen that cannot show it, so
+ * that link stays bare; but the "All transactions" tab is also the control a filtering user
+ * clicks to return to their own view, and pointing it at the bare route silently emptied every
+ * filter they had set. `transactionsHref` is what the list passes to keep them.
  */
-export function TransactionTabs({ active, transactionCount, categoryCount }: TransactionTabsProps) {
+export function TransactionTabs({
+  active,
+  transactionCount,
+  categoryCount,
+  transactionsHref,
+}: TransactionTabsProps) {
   const counts: Record<TransactionTab, number> = {
     transactions: transactionCount,
     categories: categoryCount,
+  };
+
+  const hrefs: Record<TransactionTab, string> = {
+    transactions: transactionsHref ?? TAB_HREFS.transactions,
+    categories: TAB_HREFS.categories,
   };
 
   return (
@@ -162,7 +187,7 @@ export function TransactionTabs({ active, transactionCount, categoryCount }: Tra
         return (
           <Link
             key={tab}
-            href={TAB_HREFS[tab]}
+            href={hrefs[tab]}
             aria-current={tab === active ? 'page' : undefined}
             // `relative` is what the underline below is positioned against. The focus ring names
             // `outline-solid` as well as its width, which is not redundant: a daisyUI `:focus`

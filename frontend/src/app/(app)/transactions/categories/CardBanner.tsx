@@ -36,16 +36,24 @@ type CardBannerProps = {
   /** The action's visible label, e.g. "Allocate". Omit for a banner that only states a fact. */
   action?: string;
   /**
-   * The action's accessible name, when the visible label is not distinct enough on its own.
+   * What this particular action acts on, when the visible label is not distinct on its own.
    *
    * Eight category cards each drawing "Set limit" would announce as eight identical buttons, so
-   * the card passes "Set a monthly limit for Groceries". The summary card's "Allocate" is unique
-   * on the screen and passes nothing.
+   * the card passes its category name and the accessible name becomes "Set limit for Groceries".
+   * The summary card's "Allocate" is unique on the screen and passes nothing.
+   *
+   * **A context to append rather than a replacement label, and that is WCAG 2.5.3 rather than a
+   * preference.** The first version took the whole accessible name and the card passed "Set a
+   * monthly limit for Groceries" - which does not contain the visible string "Set limit", so a
+   * speech-input user saying "click Set limit", the only words on screen, matched nothing and
+   * could not activate the one control on the card. Composing the name here instead of trusting
+   * each call site makes the visible label a prefix by construction, so the violation is not
+   * reachable.
    */
-  actionLabel?: string;
+  actionContext?: string;
 };
 
-export function CardBanner({ children, action, actionLabel }: CardBannerProps) {
+export function CardBanner({ children, action, actionContext }: CardBannerProps) {
   return (
     <footer className="bg-primary text-primary-content mt-[calc(var(--radius-box)*-1)] flex flex-wrap items-center justify-between gap-4 rounded-b-[var(--radius-box)] px-6 pt-[calc(var(--radius-box)+0.625rem)] pb-2.5 text-sm">
       <span className="font-medium">{children}</span>
@@ -58,8 +66,18 @@ export function CardBanner({ children, action, actionLabel }: CardBannerProps) {
         <button
           type="button"
           aria-disabled="true"
-          aria-label={actionLabel}
-          className="inline-flex shrink-0 cursor-pointer items-center gap-2 font-semibold"
+          // Composed so the visible label is always a prefix of the accessible name (WCAG 2.5.3).
+          aria-label={actionContext === undefined ? undefined : `${action} for ${actionContext}`}
+          // **`aria-disabled:` variants, because `aria-disabled` alone tells a sighted mouse
+          // user nothing.** The screen's other two inert controls wear daisyUI's `btn`, which
+          // greys them and sets `pointer-events: none` from its own
+          // `.btn:is([aria-disabled=true])` rule. This one is bare text on the accent strip, so
+          // it got none of that and previously carried an unconditional `cursor-pointer` - it
+          // looked and hovered exactly like a live button and did nothing on click, which is the
+          // failure this file's comment above claims `aria-disabled` avoids. Written as
+          // `aria-disabled:` variants rather than flat classes so PET-38 gets the live styling
+          // back by deleting the attribute, with nothing here left to remember.
+          className="inline-flex shrink-0 cursor-pointer items-center gap-2 font-semibold aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
         >
           {action}
           <ArrowRight className="size-3.5" aria-hidden="true" />

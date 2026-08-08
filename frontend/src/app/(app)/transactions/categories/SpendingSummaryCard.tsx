@@ -63,6 +63,18 @@ export function SpendingSummaryCard({ spent, allocation }: SpendingSummaryCardPr
 
   const tone = spentWhole > budgetWhole ? CHIP.overBudget : CHIP.onTrack;
 
+  // **`max` is floored at 1, because a rounded budget can legitimately be 0 and `max="0"` is
+  // invalid HTML.** `RegisterDto.monthlyBudget` is only `@IsPositive()`, so `0.40` is an
+  // accepted budget and `Math.round` takes it to zero. A `<progress max="0">` is not an error a
+  // browser reports - the spec says to fall back to `max=1` - so the bar silently rendered
+  // **empty** beside a chip reading "Over budget", and announced 0% to a screen reader, for an
+  // account that had overspent its whole budget. Flooring the max and clamping the value
+  // against that same floor makes the overspent case draw a full bar, which is what the chip
+  // says. `dashboard/BudgetCard.tsx` has the identical shape and the identical bug; it is
+  // PET-21's file and out of this ticket's scope, so `docs/TODO.md` carries it.
+  const barMax = Math.max(1, budgetWhole);
+  const barValue = Math.min(spentWhole, barMax);
+
   // **Guarded on `> 0` rather than on truthiness, and the difference is a real state.**
   // `unallocated` is `monthlyBudget - allocated` returned **unclamped**, and the contract says
   // outright it can be negative: nothing stops caps summing past the budget (A43), and no
@@ -113,8 +125,8 @@ export function SpendingSummaryCard({ spent, allocation }: SpendingSummaryCardPr
             reports the reader's own budget. */}
           <progress
             className={tone.bar}
-            value={Math.min(spentWhole, budgetWhole)}
-            max={budgetWhole}
+            value={barValue}
+            max={barMax}
             aria-label="Monthly budget spent"
           />
         </div>

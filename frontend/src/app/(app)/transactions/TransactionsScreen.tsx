@@ -3,6 +3,7 @@ import { monthOverline } from '@/lib/format';
 
 import { AddTransactionButton } from '../AddTransactionButton';
 import { PageHeader } from '../PageHeader';
+import { filterHref } from './filters';
 import { FilterNavigationProvider, PendingRegion } from './FilterNavigation';
 import { TransactionsEmpty } from './TransactionsEmpty';
 import { TransactionSearch } from './TransactionSearch';
@@ -105,10 +106,16 @@ export function TransactionsScreen({
           here would double it and put this page's content on a different grid from the other
           three. */}
       <main className="flex flex-1 flex-col gap-5 pb-10">
+        {/* `filterHref(filters)` rather than the bare route: this tab is the control a
+            filtering user clicks to get back to their own view, so pointing it at
+            `/transactions` would empty the search box and reset the period on the one click
+            that means "stay here". The Categories tab keeps the bare path - see
+            `TransactionTabs` for why the two directions differ. */}
         <TransactionTabs
           active="transactions"
           transactionCount={view.total}
           categoryCount={categoryCount}
+          transactionsHref={filterHref(filters)}
         />
 
         {showFilterBar ? filterBar : null}
