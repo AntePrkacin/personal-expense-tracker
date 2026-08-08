@@ -62,7 +62,12 @@ spending against the monthly budget. The eleventh is PET-37's, and it is the fir
 outside transactions: that tab's "Add category" opens a modal that really creates one, with its
 colour and icon offered from the admin-managed template tables rather than from a list the frontend
 keeps, and a monthly budget that may be left blank because an uncapped category is a first-class
-choice. What is still missing is what the one
+choice. The eleventh is PET-39's, and it makes that tab's card kebab real: each one opens a menu
+whose "Delete" removes the category behind a confirmation, and the transactions filed under it move
+to the `Uncategorized` fallback rather than disappearing - which is why the dialog names that row
+rather than the "Other" the ticket asked for. It does **not** clear the tab: that menu's "Edit",
+every uncapped card's "Set limit" and the summary card's "Allocate" all still announce themselves
+as unavailable, and all three are PET-38's. What is still missing is what the one
 remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
 
 ## Repository map

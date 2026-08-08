@@ -499,6 +499,15 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   Categories tab the second screen in the app with a working write. Note it needed no provider,
   unlike every "Add transaction" trigger: `frontend/src/app/CLAUDE.md` records why one button on one
   route does not want one, and it is the paragraph to read before copying the transaction shape.
+  **PET-39 made the kebab real, and the Categories tab now has no inert control on it at all** - so
+  the sentence above naming it "the last" is history, and the Dashboard's month select is once again
+  the only drawn-but-dead affordance in the whole shell. It opens frame 18's menu, whose Delete opens
+  frame 20 and really deletes. One thing inside it stays inert and says so: **"Edit" renders
+  `menu-disabled` with `aria-disabled`**, because PET-38's Edit category modal does not exist -
+  exactly the state PET-33's menu shipped in while PET-32 was unbuilt, and a different claim from the
+  drawn-but-dead controls before it, since this one announces its condition. The **fallback card
+  offers no Delete at all** (AC6), which until PET-38 lands leaves that one card with a menu holding
+  nothing operable.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session
@@ -590,4 +599,13 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   here - a uniqueness rule would arrive as a fourth arm. Its other half worth copying is that it
   **does not read the created row**: a 2xx means the category exists, so the modal returns `{ ok: true }`
   and lets `router.refresh()` bring the new card back through the same list read every other card
-  comes from, rather than trusting a second source of truth. Every **profile** write is still unbuilt.
+  comes from, rather than trusting a second source of truth.
+  **PET-39 added the sixth, `lib/deleteCategory.ts`, so "every category write is unbuilt" is now true
+  of editing alone.** It publishes **four** reasons, one more than either existing delete, and the
+  extra arm is the whole reason it is not `lib/deleteTransaction.ts` with the noun changed: 409 is
+  `fallback`, which the endpoint answers for deleting `Uncategorized`. That arm is **unreachable
+  through the UI**, since the card menu omits Delete on the fallback row, and it is classified anyway
+  because a hidden control is not an enforcement and "please try again" would be advice that loops
+  forever - the same argument the `missing` arm already carries next door. Everything else about it is
+  the transaction delete's and unchanged: an id and nothing else, a result rather than a throw, and no
+  `redirect()`. Every **profile** write is still unbuilt.

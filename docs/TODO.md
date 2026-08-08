@@ -403,6 +403,21 @@ pulling in a positioning library for one engine and one control. Both cost more 
 degradation, and the fallback is a coherent design rather than a broken one. Worth revisiting
 when Firefox ships anchor positioning, at which point the fix is deleting nothing.
 
+**Firefox has shipped it, so the condition this entry set for itself is met.** PET-39's browser
+walk measured Firefox **153** directly rather than reading a support table:
+`CSS.supports('position-area', 'bottom')`, `CSS.supports('anchor-name', '--a')` and
+`'showPopover' in HTMLElement.prototype` are all **true**. So daisyUI's
+`@supports not (position-area: bottom)` branch no longer matches there, both this menu and the
+category card menu anchor normally, and "the fix is deleting nothing" turned out to be literally
+right: nothing was ever written for it and nothing has to be removed.
+
+What is owed is only the deletion of this entry, and it is left standing for one release rather
+than removed on the spot, because the measurement was taken on one machine's Firefox and the
+degradation is still real for anyone on an older build. Delete it once the supported-version floor
+is clearly past 153. **Do not read this as the two costs being gone**: jsdom still implements none
+of the Popover API, so the "under Jest the menu is permanently open" half of every popover suite is
+unchanged and is a separate note.
+
 ### The icon set is lucide's now, and three marks are near-misses the designer has not seen
 
 PET-33 added `lucide-react` and migrated all thirteen hand-traced glyphs onto it, so there is one
@@ -1111,6 +1126,14 @@ here to restore onto. So the count of routes to the surviving case stays at thre
 menu is still the one that reaches it. **The fix has not become cheaper and has not become
 likelier** - what changed is only that the app's newest delete entry point does not need it,
 which is worth knowing before somebody reads the absence as the gap having been closed.
+
+**PET-39 adds a fourth route, and it is the same case on a different noun.** Deleting a category
+destroys the card kebab that opened the confirmation, so `Modal`'s `isConnected` guard finds
+nothing and focus lands on `<body>`. `CategoryCardMenu` carries the same pre-focus fix the row
+menu got above, so the Cancel path is correct there from the start and only the successful delete
+reaches the gap. Nothing about the fix changes; what changes is that the surviving case is now
+reachable from two features rather than one, which is the first time it has been worth counting
+that way. PET-38's edit modal will add a fifth by the two-dialog route PET-32 already documents.
 
 ### A delete cannot be cancelled once it is sent, and Cancel no longer implies otherwise
 
@@ -2196,6 +2219,60 @@ own.
 Note this joins, and does not replace, the extra-request item the same route already carries for the
 other tab's badge: that tab now makes three reads, two of which are for something other than its own
 cards.
+
+### The category delete confirmation's six strings are ours, and two of them are load-bearing
+
+PET-39's dialog owes A29 the same sign-off every invented state in this app owes, and the list is
+longer than the transaction confirmation's because the endpoint answers one more status. Four
+failure lines - `That category is already gone. Close this to see the current list.`, `That category
+cannot be deleted: it is where deleting any other category moves its transactions.`, `Your session
+has expired. Log in again to delete this.` and `We couldn't delete this category. Please try again.`
+- plus **two body shapes**, one for a category with transactions in the period and one for a category
+with none. `Shell/Delete category`'s stories render all six, which is the quickest thing to put in
+front of a designer.
+
+**Two of them must not be softened into "try again" during that review.** `missing` describes a
+category the server no longer has, so a retry answers 404 forever; `fallback` describes a request the
+backend refuses by design, so a retry is refused forever. Those two are the whole reason
+`DeleteCategoryResult` has four arms rather than two, and collapsing either into the generic line
+would give advice that cannot work.
+
+**The body copy is also where two amendments to the ticket are visible**, and a copy review should
+be told they are deliberate rather than drift: it says `Uncategorized` where CED-9 says "Other", and
+it scopes the count to "this month" where CED-9 states it as a total. Both are recorded on the issue
+with their reasoning.
+
+### `Screens/13 Categories` can reach two real Server Actions in the browser, and PET-39 widened it
+
+Storybook's Vite build has no notion of `'use server'`, so it bundles `lib/createCategory.ts` and
+`lib/deleteCategory.ts` as ordinary modules. `AddCategoryButton` imports the create action directly
+and `CategoriesScreen` constructs `DeleteCategoryProvider` with its default `remove`, so neither is
+injectable from that story - pressing Save or Delete there calls into `authorizedGet`'s neighbours
+and reaches `cookies()` from `next/headers`, which `.storybook/main.ts` aliases to the framework's
+browser-safe mock rather than to anything that works.
+
+**The seam already exists on the provider and not on the screen**, which is the asymmetry to fix
+rather than the bundling. `DeleteCategoryProvider` takes an injectable `remove` for exactly this
+reason - the gap a code review found on `DeleteTransactionProvider`, whose own screen story does
+inject one - but `CategoriesScreen` owns the provider, so a story cannot reach it without a prop
+threaded purely for Storybook. `AddCategoryButton` has the same shape and predates this ticket, so
+this is one item covering both rather than a regression PET-39 introduced. The cheap fix is an
+optional action prop on the screen; the question worth answering first is whether that prop earns
+its place or whether both stories should stop offering the press at all.
+
+### Neither delete dialog's stories are in a Jest story smoke harness
+
+`(app)/shell.stories.test.tsx` lists its story modules by hand, and `DeleteTransactionDialog.stories`
+has never been among them - the harness mocks no `next/navigation`, and both dialogs call
+`useRouter`, which throws outside a mounted router. `DeleteCategoryDialog.stories` follows that
+precedent rather than breaking it.
+
+The consequence is that these are the two story modules with **no** gate behind them at all:
+`build-storybook` bundles a story without running it, and the harness that would run it does not
+know they exist. Opening them is the only check, which is why every plan's verification names them
+explicitly. The fix is three lines - a `jest.mock('next/navigation', ...)` at the top of the harness
+and both modules in its `MODULES` list - and it belongs with the "each section carries a copy of the
+same harness" item this file already owes, not on its own.
 
 ---
 

@@ -1395,6 +1395,58 @@ not of the form**: a field wired to anything that hands back a bare `string` - a
 URL parameter, a devtools-written value - is back to needing a real membership check before it may be
 typed as a token, and a cast would be asserting what nothing checked.
 
+**PET-39 made the card kebab real, so the Categories tab has no inert control left on it.** Every
+paragraph above calling it "still PET-39's" and "still `aria-disabled`" is history now, and the whole
+of the change to `CategoryCard.tsx` is that one attribute going away: `CategoryCardMenu.tsx` is the
+menu behind it, the card **stays a Server Component**, and the `'use client'` lands on the menu alone
+because its Delete calls into a context. The same boundary `TransactionRow` and `TransactionRowMenu`
+settled on, arrived at the same way - the popover means there is no open state to hold.
+
+**The menu is the platform popover, which is now the fourth time this app makes that argument and the
+third on this one screen**, after `TransactionRowMenu`, `ColourSelect` and `IconSelect`. Nothing new
+is decided by it: light dismiss and Escape are the platform's, no z-index is picked, no listener is
+attached to `document`, and the two costs are the inherited ones - jsdom implements none of the
+Popover API so under Jest the menu is permanently open and the suites assert wiring, and Firefox
+falls back to a centred popover behind a dimmed backdrop. It publishes **no `role="menu"` and no
+`aria-haspopup`**, the fourth refusal of a keyboard contract this repo has not implemented.
+
+**Its confirmation is mounted once by `CategoriesScreen`, and that is deliberately neither of the two
+provider shapes already here.** Read `DeleteCategoryProvider.tsx` before copying either of them onto
+a third feature, because the reasoning is what distinguishes them rather than the file layout. A
+dialog owned by each card - `AddCategoryButton`'s shape, and the obvious one - sits **inside the card
+being deleted**, so the success path's `router.refresh()` can unmount the dialog out from under its
+own `close()`; that is this file's own rule about a platform guarantee firing during an event React
+unmounts inside, reached from a new direction. A dialog on `(app)/layout.tsx` -
+`DeleteTransactionProvider`'s shape - would put a category dialog on all four routes to serve one
+screen, where that provider's own criterion is three entry points across three segments and
+`AddTransactionProvider`'s is five triggers across three routes. Screen-scoped is the shape that fits
+N triggers on one route, and PET-38's "Delete category" enters through the same seam.
+
+**Three amendments to PET-39 are visible in the copy, and two of them are worth not "correcting"
+back.** The dialog says **`Uncategorized`, not "Other"**, because that role was deliberately split
+when the backend was built - "Other" is an ordinary chip anyone can rename or delete, and the row
+deletions reassign to is the `isFallback` one; `CategoriesScreen` resolves the name off its own list
+response so no string here claims to know the backend's name for that row. It says the count is
+**this month's**, because `transactionCount` is the current period's while the delete moves every
+transaction the category ever held, so the ticket's sentence understates on any account with history.
+And **Delete is omitted on the fallback card** rather than offered and refused, which is AC6; the
+409 is still classified in `lib/deleteCategory.ts`, because a hidden control is not an enforcement.
+The consequence to know before PET-38 lands is that the fallback card's menu is a single disabled
+"Edit", i.e. a menu with nothing operable in it.
+
+**`lib/deleteCategory.ts` publishes four reasons, which is one more than either existing delete**, and
+the extra arm is the 409. That is the only interesting thing about it; everything else - the id and
+nothing else, the result rather than a throw, the deliberate absence of a `redirect()` - is
+`lib/deleteTransaction.ts`'s and unchanged.
+
+**It takes no `navigates` option, unlike the transaction confirmation, and that is the same call
+PET-33 made about `onDeleted`.** Every entry point this dialog has is on a route that survives the
+delete, so there is no caller for the parameter; `/transactions/[id]` is what made that option
+necessary next door. The one option it _does_ carry ahead of its caller is `onDeleted`, and that is a
+deliberate departure worth naming: PET-38's edit modal opens this confirmation over itself and has to
+come down with a successful delete, which is a caller one ticket away with a concrete job rather than
+the forecast `TransactionsTable`'s unreachable `pending` prop was.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads
