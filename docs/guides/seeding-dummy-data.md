@@ -38,25 +38,24 @@ transaction rather than appended to. Seeding cloud after seeding local is safe t
 provisioned in local mode has no `db_url`, and the script re-provisions it rather than assuming a
 cleared onboarding payload means it is ready.
 
-**Do not point both modes at the same `DATABASE_DIR`, and understand what happens if you do,
-because it fails silently and it bit this project.** The two modes use the same file paths -
-`app.db` and `users/<db-name>.db` - but cloud mode opens them as sync replicas and local mode as
-plain SQLite files.
+**Do not point both modes at the same `DATABASE_DIR` even so - the backend now refuses rather than
+corrupting it, but a refusal still stops your seed run cold.** The two modes use the same file
+paths - `app.db` and `users/<db-name>.db` - but cloud mode opens them as sync replicas and local
+mode as plain SQLite files, and this project was bitten once by the two silently sharing one
+directory: PET-60's local seed put a user in the central replica that a later cloud run never
+pushed, and the deployed backend could not find the account at all.
 
-Rows written to `app.db` while it was a **plain local file** are invisible to the sync engine that
-later adopts it: they are not in its change log, so `push()` has nothing to send for them, and they
-stay local forever. Every write made after cloud mode took over pushes normally, which is what
-makes this so hard to spot - the replica syncs, just not those rows.
+`backend/src/database/turso-client.factory.ts` now guards both directions (PET-61): opening a
+plain local file in cloud mode, or a sync replica in local mode, fails loudly and names the path
+rather than silently adopting or writing to it. If a seed run stops with a `Refusing to open`
+error, it means this `DATABASE_DIR` has genuinely been used for the other mode already - the guard
+is reporting a real mix, not a false positive. See `backend/src/database/CLAUDE.md` for what the
+error names as the fix.
 
-The symptom is a local central directory that has a user the cloud does not, so the seed reports
-success, the app works locally, and the **deployed** backend cannot find the account at all.
-Logging in against production then returns the usual empty 202 and sends no email, because
-`login-link` only mails an address that exists in the directory it can see.
-
-If a `DATABASE_DIR` has been used for both, the repair is to delete the central replica
-(`app.db` and its `-changes`, `-info`, `-log`, `-wal` siblings) and let it re-bootstrap from the
-cloud, which is the source of truth, then seed again. To avoid it entirely, give each mode its own
-directory.
+If a `DATABASE_DIR` was mixed before the guard existed, or you want to force a clean slate anyway,
+the repair is to delete the central replica (`app.db` and its `-changes`, `-info`, `-log`, `-wal`
+siblings) and let it re-bootstrap from the cloud, which is the source of truth, then seed again.
+To avoid the situation entirely, give each mode its own directory.
 
 ## 1. Seeding the local environment
 

@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { migrate as localMigrate } from 'drizzle-orm/tursodatabase/migrator';
 import { migrate as syncMigrate } from 'drizzle-orm/tursodatabase-sync/migrator';
+import { rm } from 'node:fs/promises';
 import type { CentralDatabase, DatabaseHandle } from './database.types';
 import { openCloudDatabase, openLocalDatabase } from './turso-client.factory';
 import type { TursoPlatformService } from './turso-platform.service';
@@ -21,6 +22,7 @@ const openLocalMock = jest.mocked(openLocalDatabase);
 const openCloudMock = jest.mocked(openCloudDatabase);
 const localMigrateMock = jest.mocked(localMigrate);
 const syncMigrateMock = jest.mocked(syncMigrate);
+const rmMock = jest.mocked(rm);
 
 describe('UserDatabaseService', () => {
   let env: Record<string, string>;
@@ -182,6 +184,21 @@ describe('UserDatabaseService', () => {
 
       expect(deleteUserDatabase).toHaveBeenCalledWith(
         `spendifico-user-${USER_ID}`,
+      );
+    });
+
+    it('removes every sibling either engine can have left behind, including the sync-only ones', async () => {
+      await build().deleteUserDb(USER_ID);
+
+      const removedSuffixes = rmMock.mock.calls
+        .map(([path]) => String(path).slice(USER_DB_PATH.length))
+        .sort();
+
+      // '-wal'/'-shm' from the plain engine, '-changes'/'-info'/'-log' from
+      // @tursodatabase/sync - deleteUserDb does not know which mode wrote the
+      // file, so it sweeps both sets rather than branch on isCloudMode.
+      expect(removedSuffixes).toEqual(
+        ['', '-changes', '-info', '-log', '-shm', '-wal'].sort(),
       );
     });
   });

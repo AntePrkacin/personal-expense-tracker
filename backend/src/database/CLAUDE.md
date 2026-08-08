@@ -129,15 +129,39 @@ that hole with `ignoreEnvFile: process.env.NODE_ENV === 'test'` (Jest sets `NODE
 itself). Remove either half and a developer with a filled-in `.env` runs the suite against
 production infrastructure.
 
-**One `DATABASE_DIR` must not serve both modes, and the failure is silent in one direction.**
-Both modes use the same paths - `app.db` and `users/<db-name>.db` - but cloud mode opens them as
-sync replicas and local mode as plain files. Rows written while the file was a plain local file are
-not in the sync engine's change log when it later adopts that file, so `push()` never sends them
-while every later write pushes normally. The replica syncs; those rows simply do not. PET-60 hit
-exactly this: a local seed run put `dummy@spendifico.eu` in the central replica, a later cloud run
-pushed everything except that row, and the deployed backend could not find the account - answering
-the usual empty 202 and mailing nothing. Deleting the central replica and letting it re-bootstrap
-from the cloud is the repair; separate directories are the prevention.
+**One `DATABASE_DIR` must not serve both modes, and `turso-client.factory.ts` now refuses rather
+than only risking it.** Both modes use the same paths - `app.db` and `users/<db-name>.db` - but
+cloud mode opens them as sync replicas and local mode as plain files, and nothing about the paths
+themselves says which. PET-60 hit the hazard before the guard existed: a local seed run put
+`dummy@spendifico.eu` in the central replica, a later cloud run pushed everything except that row,
+and the deployed backend could not find the account - answering the usual empty 202 and mailing
+nothing. Deleting the central replica and letting it re-bootstrap from the cloud, the source of
+truth, was the repair.
+
+**PET-61 closes it with one `existsSync` per open, in both directions.** A sync replica carries an
+`-info` sibling from the moment `connect()` returns, and a plain file never does, so that sibling
+is the tell: `openCloudDatabase` refuses a path that exists without one, and `openLocalDatabase`
+refuses a path that has one. Confirmed empirically against the installed `@tursodatabase/sync`
+before writing the guard, adoption is worse than "the rows never push" - the bootstrap overwrites
+the file with the cloud's contents, so a row written while it was plain becomes unreadable locally
+too, not merely absent remotely - and the hazard is symmetric: the plain engine opens a real
+replica and writes to it without complaint, and the next `connectSync` open silently discards that
+write. Both directions now fail loudly instead, naming the path and both remedies - delete the file
+and its siblings and let the replica re-bootstrap, or point `DATABASE_DIR` elsewhere. A fresh
+directory has neither file and is unaffected, which is why first boot, CI, the e2e suite and the
+OpenAPI emitter all still work untouched; an existing deployment's replicas already carry `-info`,
+so there is nothing to migrate. See `turso-client.factory.spec.ts` for the covering test and
+`docs/guides/seeding-dummy-data.md` for the repair procedure a directory already mixed before this
+ticket still needs.
+
+**The guard's empirical assumption is pinned, not just documented.** `package.json` pins
+`@tursodatabase/sync` to the exact version the `-info` sibling was observed against rather than a
+`^` range, so an `npm install` cannot silently change which sibling a replica leaves behind.
+`openCloudDatabase` also re-asserts the sibling is there on every successful `connect()`, so a
+version bump that does change it - which still has to be a deliberate edit to `package.json` -
+fails loudly at the next open rather than quietly disabling the guard. `deleteUserDb` removes all
+three sync-only siblings (`-changes`, `-info`, `-log`), not only the one the guard checks for, so a
+cloud-mode account deletion leaves nothing behind either.
 
 **Three callers now share that pattern, and a fourth should copy it rather than invent
 something.** `test/setup-e2e.ts` under `NODE_ENV=test`, `src/openapi.env.ts` under
