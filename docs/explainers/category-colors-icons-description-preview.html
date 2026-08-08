@@ -29,16 +29,26 @@
 
   Marks, read from the same files, at their real sizes:
     TILE   size-9 rounded-field, glyph size-4.5   (app)/transactions/TransactionRow.tsx
-    DOT    size-2 rounded-full, background only   the same row's category cell
-    CHIP   status status-lg, background only      setup/categories/CategoryChip.tsx
+    DOT    size-2 rounded-full                    the same row's category cell
+    CHIP   status status-lg                       setup/categories/CategoryChip.tsx
 
   The DOT and the CHIP carry no glyph, which is the whole reason they are drawn here: a colour
   that reads fine as a 36px tile behind an icon can be invisible as an 8px dot. Judge the palette
   on all three, not on the tile alone.
 
-  CATEGORY_DOT in ui/categoryColour.ts is background-only on purpose and that is reproduced here:
-  daisyUI's `status` draws a drop shadow from currentColor, so adding a text-*-content half turns
-  that shadow into an opaque coloured smudge.
+  The two glyphless marks are drawn background-only here, and only the CHIP is background-only in
+  the app. That difference is a fact about class strings rather than about pixels, and it is worth
+  stating so nobody reads this file as the row's markup:
+
+    CHIP  really is CATEGORY_DOT. daisyUI's `status` draws a drop shadow from currentColor, so a
+          class pair carrying a text-*-content half turns that shadow into an opaque coloured
+          smudge - which is the whole reason CATEGORY_DOT exists beside CATEGORY_TILE.
+    DOT   is CATEGORY_TILE in the app: TransactionRow hands its category cell the same tile pair
+          the icon tile gets, because that span is a plain `rounded-full` with no content and
+          nothing reading currentColor, so the text-*-content half is genuinely inert there.
+
+  Both paint the identical background, which is why one column serves for both. Reach for
+  CATEGORY_DOT rather than copying this file whenever the mark is a daisyUI component.
 -->
 <body class="bg-base-200 text-base-content min-h-screen p-4 sm:p-8">
   <div class="mx-auto flex max-w-5xl flex-col gap-6">
