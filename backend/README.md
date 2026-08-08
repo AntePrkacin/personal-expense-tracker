@@ -8,7 +8,7 @@ frontend's types are generated from.
 cd backend
 npm install
 cp .env.example .env      # optional: every variable has a working local default
-npm run start:dev         # http://localhost:3000/api/hello
+npm run start:dev         # http://localhost:3000/api/health
 ```
 
 Swagger UI over the same document the frontend types come from:
@@ -21,7 +21,7 @@ Swagger UI over the same document the frontend types come from:
 src/
   main.ts             Bootstrap: global 'api' prefix, CORS, Swagger UI, port, shutdown hooks
   app.module.ts       Root module: config, database, auth, transactions, global pipe/filter/guard
-  app.controller.ts   GET /api/hello
+  app.controller.ts   GET /api/health
   openapi.ts          Writes openapi.json. Run it via `npm run api:spec`, never ts-node
   auth/               Passwordless flow: register, login-link, verify, session, SessionGuard
   transactions/       POST /api/transactions, PATCH and DELETE /api/transactions/:id

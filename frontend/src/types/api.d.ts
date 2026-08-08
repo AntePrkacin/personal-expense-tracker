@@ -4,15 +4,15 @@
  */
 
 export interface paths {
-    "/api/hello": {
+    "/api/health": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** A greeting, and the proof that the two apps can talk. */
-        get: operations["AppController_getHello"];
+        /** Liveness check: constant 200, no auth, no database. */
+        get: operations["AppController_getHealth"];
         put?: never;
         post?: never;
         delete?: never;
@@ -329,8 +329,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        HelloResponseDto: {
-            message: string;
+        HealthResponseDto: {
+            status: string;
         };
         CategoryTemplateDto: {
             /**
@@ -795,7 +795,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    AppController_getHello: {
+    AppController_getHealth: {
         parameters: {
             query?: never;
             header?: never;
@@ -809,7 +809,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HelloResponseDto"];
+                    "application/json": components["schemas"]["HealthResponseDto"];
                 };
             };
         };

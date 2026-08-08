@@ -70,12 +70,12 @@ With [mise](docs/guides/installation.md#optional-mise) installed, `mise run inst
 `mise run dev` do both of the above from the repo root.
 
 ```bash
-curl http://localhost:3000/api/hello
-# {"message":"Welcome friend, hello from the NestJS API 👋"}
+curl http://localhost:3000/api/health
+# {"status":"ok"}
 ```
 
 `http://localhost:3000/` returning 404 is correct: a global `api` prefix means the route is
-`/api/hello`.
+`/api/health`.
 
 ## Documentation
 

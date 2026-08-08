@@ -116,7 +116,7 @@ all central knows.
 It arrived per-route, back when one endpoint was guarded and marking four public ones to
 protect it would have been absurd; the transaction endpoints tipped the balance and PET-27
 made the flip. Exactly **five** routes carry `@Public()` (`src/auth/public.decorator.ts`):
-hello, register, login-link, verify and PET-64's `GET /api/templates/categories` - the first
+health, register, login-link, verify and PET-64's `GET /api/templates/categories` - the first
 public route that is not part of getting a credential, and public because onboarding step 2
 draws its chips before an account exists. See `## Templates`. **Note the failure direction reversed**, which is
 the real reason to prefer this: a forgotten `@Public()` 401s a public route loudly on the

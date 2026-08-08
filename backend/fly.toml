@@ -205,7 +205,7 @@ swap_size_mb = 512
   # DB-touching check would flap the machine on a transient Turso blip. Boot
   # ordering covers the rest, since an unreachable database means the process
   # never listens at all.
-  path = "/api/hello"
+  path = "/api/health"
 
 [[mounts]]
   source = "spendifico_data"
