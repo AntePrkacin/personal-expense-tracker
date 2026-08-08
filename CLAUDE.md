@@ -58,7 +58,11 @@ on `gemini-3.6-flash` via `POST /api/transactions/scan`, with nothing about the 
 stored. The tenth is PET-36's:
 `/transactions/categories` is a real route behind a tab bar that finally navigates, drawing a card
 per category with its cap, its month's spend and its status, over a summary of the period's
-spending against the monthly budget. What is still missing is what the one
+spending against the monthly budget. The tenth is PET-37's, and it is the first write anywhere
+outside transactions: that tab's "Add category" opens a modal that really creates one, with its
+colour and icon offered from the admin-managed template tables rather than from a list the frontend
+keeps, and a monthly budget that may be left blank because an uncapped category is a first-class
+choice. What is still missing is what the one
 remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
 
 ## Repository map

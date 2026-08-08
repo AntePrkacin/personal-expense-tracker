@@ -6,6 +6,8 @@ import * as EditTransactionModal from './(app)/EditTransactionModal.stories';
 import * as DashboardScreen from './(app)/dashboard/DashboardScreen.stories';
 import * as DashboardScreenEmpty from './(app)/dashboard/DashboardScreenEmpty.stories';
 import * as TransactionDetailScreen from './(app)/transactions/[id]/TransactionDetailScreen.stories';
+import * as AddCategoryModal from './(app)/transactions/categories/AddCategoryModal.stories';
+import * as CategoriesScreen from './(app)/transactions/categories/CategoriesScreen.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
@@ -29,8 +31,13 @@ import * as WelcomeScreen from './WelcomeScreen.stories';
 //
 // `replace` joins `push` as of PET-29: frame 06's search field and its three filter selects
 // all write the query string with it.
+//
+// `refresh` joins both as of PET-37. No story calls it - frame 19's `WithMessages` submits a form
+// that fails validation, so it returns before the request - but every modal in this section reads it
+// out of `useRouter()` on render, and a stub that omits a method the component destructures is a
+// trap waiting for the first story that does reach the happy path.
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), refresh: jest.fn() }),
 }));
 
 // Smoke-tests the Screens section's stories, the same job
@@ -99,6 +106,17 @@ const MODULES: [name: string, module: StoryModule][] = [
   // `CategoryDonut` takes no `isEmpty` prop at all, so building this frame inline in
   // `DashboardScreen.stories.tsx` would mean one file constructing the grid two different ways.
   ['DashboardScreenEmpty', DashboardScreenEmpty as StoryModule],
+  // Frame 13, PET-36's own, and **it was missing from this list rather than deliberately absent**.
+  // PET-37 registered it while adding the module below, because the omission is exactly what this
+  // suite exists to catch: `storybook build` bundles a story without running one, so an unregistered
+  // module's runtime throw ships through a green CI. Its header's "Add category" is live in the story,
+  // with no provider, which is what `AddCategoryButton` owning its own state buys.
+  ['CategoriesScreen', CategoriesScreen as StoryModule],
+  // Frame 19, PET-37's own, and the third modal here. Filed under Screens for the reason frames 09
+  // and 11 are, while `Shell/Modal` holds the empty box all three share. Its `WithMessages` story is
+  // the A29 artifact: it puts both validation lines in front of a designer at once, which an
+  // untouched form cannot do, because a blank budget is valid and only the name is wrong.
+  ['AddCategoryModal', AddCategoryModal as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

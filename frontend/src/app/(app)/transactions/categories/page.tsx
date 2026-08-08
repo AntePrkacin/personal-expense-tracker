@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { readCategoriesView } from '@/lib/categories';
+import { readPalette } from '@/lib/palette';
 import { ACCESS_ROUTES } from '@/lib/routes';
 import { readTransactionCount } from '@/lib/transactions';
 
@@ -25,13 +26,23 @@ import { CategoriesScreen } from './CategoriesScreen';
 // is one request rather than `readTransactionsView`'s one-or-two. `Promise.all` because neither
 // depends on the other.
 //
+// **PET-37 made it three, and the third is for a modal that may never open.** `readPalette()` is the
+// colours and icons the Add category picker offers, and reading it here rather than on demand is the
+// trade that ticket's plan records: this route already awaits two reads in parallel so a third adds
+// no latency, and it costs a route handler, a hook and three loading states less than
+// `AddTransactionProvider`'s fetch-on-open shape - which earns its complexity by serving five
+// triggers across three routes, where this serves one button on one route. What it does cost is a
+// request on every view of this tab whether or not anybody opens the modal; `docs/TODO.md` records
+// that as the known price.
+//
 // No `export const dynamic`: the cookie read behind both opts this route out of static
 // rendering on its own, as it does everywhere else in the app.
 
 export default async function CategoriesPage() {
-  const [categories, transactionCount] = await Promise.all([
+  const [categories, transactionCount, palette] = await Promise.all([
     readCategoriesView(),
     readTransactionCount(),
+    readPalette(),
   ]);
 
   // The failure policy lives here rather than in `lib/categories.ts`, for the reason that
@@ -55,11 +66,22 @@ export default async function CategoriesPage() {
     throw new Error('Could not load your categories: the backend did not answer.');
   }
 
+  // **The palette gets a softer policy than the categories above, deliberately, and it must not get
+  // the same one.** A failure here is not the content of the screen - it is the option lists inside a
+  // modal nobody has opened - so throwing would trade a fully renderable grid for an error page, and
+  // redirecting would be worse. `null` is what the modal already models: disabled selects and one
+  // line saying why.
+  //
+  // **Above all it does not redirect on its own 401**, and that is the half worth stating. Only the
+  // categories read decides whether the session is alive. Two guarded reads on one page are fine;
+  // two *opinions* about the session are what produced the `/dashboard` to `/login` loop PET-52 had
+  // to unpick, and this read arriving with a second one would be exactly that shape again.
   return (
     <CategoriesScreen
       categories={categories.data.categories}
       allocation={categories.data.allocation}
       transactionCount={transactionCount}
+      palette={palette.ok ? palette.data : null}
     />
   );
 }

@@ -1,8 +1,10 @@
 import { monthOverline } from '@/lib/format';
 import type { Allocation, Category } from '@/lib/categories';
+import type { Palette } from '@/lib/palette';
 
 import { PageHeader } from '../../PageHeader';
 import { TransactionTabs } from '../TransactionTabs';
+import { AddCategoryButton } from './AddCategoryButton';
 import { CategoryCard } from './CategoryCard';
 import { SpendingSummaryCard } from './SpendingSummaryCard';
 
@@ -25,31 +27,11 @@ import { SpendingSummaryCard } from './SpendingSummaryCard';
 // unreachable, which is a different thing from undesigned - so nothing is invented for it and
 // `docs/TODO.md` gains no entry.
 
-/**
- * The header's primary action, present and announcing that it does nothing.
- *
- * CTG-1 swaps "Add transaction" for "Add category" on this tab, and PET-37 builds the modal it
- * opens. Shipping it inert is the same call PET-33 made for its disabled "Edit" item and the
- * same one the card kebab makes beside it: a control the design draws, announcing that it is
- * not available, rather than an enabled button that silently does nothing.
- *
- * **A local `<button>` rather than `ui/Button`**, and the reason is `aria-disabled`. That
- * component offers `disabled`, which removes the control from the tab order entirely - so the
- * screen's most prominent action would be unreachable by keyboard and would announce nothing at
- * all. Widening a shared primitive for a state that exists for exactly one ticket is the trade
- * `frontend/src/components/CLAUDE.md` sets the bar against, and PET-37 replaces this function
- * with a provider-backed trigger shaped like `AddTransactionButton` rather than extending it.
- *
- * The class string is `ui/Button`'s `primary` variant written out, which is the one cost of
- * keeping it local. It is a complete literal, so Tailwind's scanner finds it.
- */
-function AddCategoryButton() {
-  return (
-    <button type="button" aria-disabled="true" className="btn btn-primary">
-      Add category
-    </button>
-  );
-}
+// **The inert `AddCategoryButton` that used to live here is gone, and PET-37 is the ticket its note
+// named.** It was a local `<button aria-disabled>` rather than a `ui/Button`, because that primitive
+// offers only `disabled`, which drops a control out of the tab order. What replaced it is
+// `./AddCategoryButton.tsx`, a real trigger owning the modal - not the "provider-backed" one that
+// note predicted, for the reason that file records: one trigger on one route does not want a context.
 
 type CategoriesScreenProps = {
   /** Live categories, in the backend's own order. Never empty - see above. */
@@ -57,12 +39,21 @@ type CategoriesScreenProps = {
   allocation: Allocation;
   /** The other tab's badge. See `readTransactionCount` for why this route has to ask for it. */
   transactionCount: number;
+  /**
+   * The Add category modal's colour and icon lists, or `null` if that read failed.
+   *
+   * **Threaded through this screen rather than read by the trigger**, which keeps this component
+   * synchronous and Storybook able to render it - the whole reason `page.tsx` and this file are
+   * separate. A story hands a fixture, or `null` to draw the degraded modal.
+   */
+  palette: Palette | null;
 };
 
 export function CategoriesScreen({
   categories,
   allocation,
   transactionCount,
+  palette,
 }: CategoriesScreenProps) {
   // **Summed here rather than read from a field, and the sum is sound rather than approximate.**
   // `GET /api/categories` publishes no period total of its own, but every transaction in the
@@ -85,7 +76,7 @@ export function CategoriesScreen({
         // `TransactionsScreen` keeps its field in the header specifically so React reconciles
         // it across filter changes; that reasoning is about a screen with a filter bar, and
         // this one has neither.
-        action={<AddCategoryButton />}
+        action={<AddCategoryButton palette={palette} />}
       />
 
       {/* gap-5 is the designed 20px between the tabs and what follows, matching the sibling

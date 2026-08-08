@@ -2038,6 +2038,67 @@ Same owner and the same shape of answer as the `text-error` item above: accept i
 the theme's primary pair is made of, which is a re-theme and therefore out of any single ticket's
 reach. Both numbers are dark-and-light specific, so a theme change invalidates both.
 
+### The Add category modal deviates from frame 19 twice, and both owe a designer
+
+PET-37 built the modal at node 102:878 and departed from it in two visible ways, neither of which
+a gate can catch because both are correct-looking.
+
+**The budget field reads "Monthly budget (optional)" where the frame draws it bare.** Forced rather
+than chosen: `CreateCategoryDto` makes `monthlyCap` optional, and A12 is this app's rule that a
+required field is marked only by the absence of "(optional)" - so a bare label would make the one
+optional money field in the app read as required. The alternative is a designed marker for optional
+fields, which would be an app-wide change and is a designer's call rather than this ticket's.
+
+**Focus opens on Name, not on the budget field the frame rings.** That frame draws a name, a budget
+and a note all already typed, so the ring is a mid-fill snapshot rather than an on-open state, and
+honouring it literally would land focus past an empty required field. `AddTransactionModal` honours
+its own frame's focused field only because there it happens to be the first one. Worth confirming,
+because it is the one deviation a designer would notice immediately and disagree with cheaply.
+
+A third item is not a deviation but an invention: **the tile-and-name preview under the two selects
+has no counterpart in the file at all.** AC2 asks that the chosen colour "previews on the category"
+and nothing in frame 19 does that, so both the element and its placement are ours. It is
+`aria-hidden`, since every fact in it is already announced by the three fields above it.
+
+### The Add category picker offers no grey-out, and PET-65 is what changed the reasoning
+
+The modal lets two categories carry the same colour and the same icon, silently, matching a backend
+with no unique index on `name`, `color` or `icon`. When PET-37 was planned that was close to forced:
+against the 13 icons PET-64 seeded, a full onboarding pick consumed **all** of them, so greying out
+what was in use would have rendered every option of a required field disabled.
+
+**PET-65 removed that argument by taking the set to 64, and the decision was kept anyway** - as
+scope rather than as impossibility, which is a weaker reason and is recorded as such. What is owed
+is a product answer: whether the picker should mark colours and icons already in use, and if so
+whether it disables them or merely annotates them. The data is already in hand on that screen, so it
+is a modal-side change with no backend part.
+
+**The colour half stays awkward whatever is decided.** 17 tokens exist, 16 are offered, and Tailwind
+cannot build a class from runtime data - so a seventeenth colour is a deploy rather than admin data,
+and colour collisions past the thirteenth category remain forced where icon collisions no longer
+are. Raising that ceiling is its own ticket and starts in `ui/categoryColour.ts`, not in the palette
+tables.
+
+### The Categories tab reads the palette on every view, for a modal that usually does not open
+
+`transactions/categories/page.tsx` reads `GET /api/templates/palette` as a third parallel read
+alongside the categories and the transaction count, so the Add category modal can take it as a prop.
+The alternative - `AddTransactionProvider`'s route handler plus a hook plus a fetch on open - was
+declined deliberately: that shape earns its three loading states by serving five triggers across
+three routes, and this is one button on one route which was already awaiting two reads.
+
+**The cost is one request per view of the tab whether or not anybody opens the modal**, and it is
+paid in parallel so it adds no latency to the page. It is also the most cacheable read in the app:
+the response is admin-managed template data, identical for every user, and changes only when an
+admin edits it. Nothing caches it today, because `authorizedGet` sends `cache: 'no-store'` for every
+caller and giving one read a different policy is a change to a shared helper. Worth revisiting
+together with the redundant-request item the transactions screen already owes, rather than on its
+own.
+
+Note this joins, and does not replace, the extra-request item the same route already carries for the
+other tab's badge: that tab now makes three reads, two of which are for something other than its own
+cards.
+
 ---
 
 ## Scaling, when it is actually needed

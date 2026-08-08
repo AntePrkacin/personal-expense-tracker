@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 
 import type { Allocation, Category } from '../../../../lib/categories';
+import type { Palette } from '../../../../lib/palette';
 
 import { CategoriesScreen } from './CategoriesScreen';
 
@@ -62,6 +63,26 @@ const CATEGORIES: Category[] = [
 
 const ALLOCATION: Allocation = { monthlyBudget: 2000, allocated: 1150, unallocated: 850 };
 
+/**
+ * Two colours and two icons, which is all this screen needs.
+ *
+ * **Deliberately not the 16 and 64 a real palette carries**, for the reason `lib/palette.ts` states:
+ * nothing in the frontend writes either number down, so a fixture that reproduced them would be
+ * asserting a fact no code depends on and would have needed editing when PET-65 took the icons from
+ * 13 to 64. The screen never renders these at all - they exist so the trigger has something to hand
+ * the modal - and `AddCategoryModal.test.tsx` is where the lists are actually exercised.
+ */
+const PALETTE: Palette = {
+  colors: [
+    { token: 'success', label: 'Emerald' },
+    { token: 'primary', label: 'Indigo' },
+  ],
+  icons: [
+    { name: 'shopping-basket', label: 'Basket' },
+    { name: 'tv', label: 'Television' },
+  ],
+};
+
 /** 397 + 312 + 223, which is what the screen has to sum for itself. */
 const SPENT_TOTAL = '$932';
 
@@ -80,6 +101,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof CategoriesScree
       categories={CATEGORIES}
       allocation={ALLOCATION}
       transactionCount={128}
+      palette={PALETTE}
       {...props}
     />,
   );
@@ -103,15 +125,28 @@ describe('the screen chrome (AC1)', () => {
     expect(screen.getByText('October 2025')).toBeInTheDocument();
   });
 
-  it('swaps the header action to "Add category" and announces it is not live yet', () => {
+  // **This assertion is the inverse of the one PET-36 shipped**, which pinned `aria-disabled="true"`
+  // on a control announcing it was not available yet. PET-37 is the ticket that note named, so the
+  // criterion flips rather than the test being deleted: the button is now a live trigger, and the
+  // absence of `aria-disabled` is the part worth pinning, because that attribute silently surviving
+  // would leave the screen's most prominent action announced as unavailable while working.
+  it('swaps the header action to a live "Add category" trigger', () => {
     renderScreen();
 
     const add = screen.getByRole('button', { name: 'Add category' });
 
-    expect(add).toHaveAttribute('aria-disabled', 'true');
-    // Not `disabled`, which would drop the screen's most prominent action out of the tab order
-    // entirely. PET-37 builds the modal behind it.
     expect(add).not.toBeDisabled();
+    expect(add).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('draws no dialog until the trigger is used, so the closed modal contributes no text', () => {
+    // `(app)/pages.test.tsx` depends on this beyond this file: a closed <dialog> is invisible to
+    // getByRole but its labels are still found by queryAllByLabelText, so a modal mounted
+    // unconditionally would make every label query on this screen ambiguous.
+    renderScreen();
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add category', { selector: 'h2' })).not.toBeInTheDocument();
   });
 
   it('shows no search field, unlike the sibling tab', () => {

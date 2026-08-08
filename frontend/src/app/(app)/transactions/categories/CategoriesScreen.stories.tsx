@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { Allocation, Category } from '@/lib/categories';
+import type { Palette } from '@/lib/palette';
 
 import { CategoriesScreen } from './CategoriesScreen';
 
@@ -28,6 +29,12 @@ import { CategoriesScreen } from './CategoriesScreen';
 // to PET-37, PET-38 and PET-39 - so nothing here reaches `useAddTransaction` or any other
 // context. When those tickets land, this file gains the provider the same way
 // `TransactionsScreen.stories.tsx` did.
+//
+// **PET-37 landed and this file still needs no provider, which is the half of that prediction that
+// turned out differently.** The header's "Add category" is live here: it opens the real modal, in the
+// story, with no wrapper - because the trigger owns its own state rather than reaching for a context.
+// See `AddCategoryButton.tsx` for why one button on one route does not want one. What stays inert is
+// each card's kebab, "Set limit" and "Allocate", which are PET-38's and PET-39's.
 
 const meta: Meta<typeof CategoriesScreen> = {
   title: 'Screens/13 Categories',
@@ -168,12 +175,37 @@ const CATEGORIES: Category[] = [
 /** Caps summing to 2,770 against a 2,000 budget would be negative, so this set is trimmed. */
 const ALLOCATION: Allocation = { monthlyBudget: 3000, allocated: 2770, unallocated: 230 };
 
-function Frame(props: React.ComponentProps<typeof CategoriesScreen>) {
+/**
+ * A small palette, so the header's trigger has something to hand the modal.
+ *
+ * Two of each rather than the real 16 and 64, for `lib/palette.ts`'s reason: no count is promised
+ * anywhere, and the modal is where the lists are actually reviewed - `Shell/Add category` is the
+ * story that draws them. A story wanting the degraded picker passes `palette={null}`.
+ */
+const PALETTE: Palette = {
+  colors: [
+    { token: 'success', label: 'Emerald' },
+    { token: 'primary', label: 'Indigo' },
+  ],
+  icons: [
+    { name: 'shopping-basket', label: 'Basket' },
+    { name: 'tv', label: 'Television' },
+  ],
+};
+
+// `palette` is defaulted here rather than repeated in every story's `render`, since none of the four
+// is about the picker and all four would otherwise carry the same noise.
+function Frame({
+  palette = PALETTE,
+  ...props
+}: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette'> & {
+  palette?: Palette | null;
+}) {
   return (
     // `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the gutter
     // the `(app)` shell owns, since neither wraps a story.
     <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-      <CategoriesScreen {...props} />
+      <CategoriesScreen {...props} palette={palette} />
     </div>
   );
 }

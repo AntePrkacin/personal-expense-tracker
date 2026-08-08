@@ -484,6 +484,11 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   belonging to PET-39 and PET-37, and unlike every inert control before them they announce
   `aria-disabled` rather than staying silent. The Categories screen is otherwise complete - it
   reads its own data and renders every state the contract can hand it, the uncapped card included.
+  **PET-37 made "Add category" real, so the card kebab is the last inert control on that screen**
+  and PET-39 owns it. The header button opens frame 19 and really creates, which also makes the
+  Categories tab the second screen in the app with a working write. Note it needed no provider,
+  unlike every "Add transaction" trigger: `frontend/src/app/CLAUDE.md` records why one button on one
+  route does not want one, and it is the paragraph to read before copying the transaction shape.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session
@@ -527,6 +532,15 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   route-handler caller would be handed an HTML login page with a 200 on it - so a Server
   Component using it applies the 401 policy at the call site, which
   `app/(app)/transactions/page.tsx` is the worked example of.
+  **PET-37 added `lib/palette.ts` and it is the sibling of that module rather than a copy of it.**
+  Both read `/api/templates/*`, and there the resemblance stops: `GET /api/templates/palette` is
+  guarded, so this one goes through `authorizedGet` and classifies its failures, which is exactly the
+  split `TemplatesController` argues for by name. Its policy is a **fourth**: the caller degrades to
+  `null` and draws a disabled picker with a line saying why, because the palette is the contents of a
+  modal rather than the contents of a screen - so neither `lib/transactions.ts`'s throw nor
+  `lib/categoryTemplates.ts`'s empty list is right for it. Critically it also **does not decide
+  whether the session is alive**: `transactions/categories/page.tsx` reads it beside the categories
+  and lets only the categories redirect on a 401, for the reason that file records.
 - **Every write except creating, editing and deleting a transaction.** PET-31 is the app's first authenticated write:
   `lib/createTransaction.ts` is a Server Action over `authorizedPost` in `lib/session.ts`, the
   write half of `authorizedGet` and the second thing to reuse rather than re-derive. Two of its
@@ -554,4 +568,16 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   reported as `ok`**. The single-run guard answers it when another tab, or a transaction the user
   just saved, already started a run - so the thing the button was pressed for is already happening,
   and the caller's next move is identical either way. A failure taxonomy is for failures the caller
-  would do something different about. Every **category and profile** write is still unbuilt.
+  would do something different about.
+  **PET-37 added the fifth, `lib/createCategory.ts`, and it is the first write outside
+  transactions - so "every category write is unbuilt" is now only true of editing and deleting one.**
+  Its arithmetic is the endpoint's rather than a
+  simplification: **three** reasons, because `POST /api/categories` documents 400 and 401 and nothing
+  else. There is no `categoryMissing`, because the body references nothing by id; no 409, because
+  unlike `PATCH` and `DELETE` nothing about creating a category collides with the `Uncategorized`
+  invariants; and **a duplicate name is not a conflict either**, since `categories` carries no unique
+  index on `name`, `color` or `icon`. Read that as a fact about the backend rather than an oversight
+  here - a uniqueness rule would arrive as a fourth arm. Its other half worth copying is that it
+  **does not read the created row**: a 2xx means the category exists, so the modal returns `{ ok: true }`
+  and lets `router.refresh()` bring the new card back through the same list read every other card
+  comes from, rather than trusting a second source of truth. Every **profile** write is still unbuilt.

@@ -1286,6 +1286,46 @@ nullable independently - a card built on `status` alone can still print "of null
 PET-34 gave for the same gap on the detail page: draw none of the budget furniture rather than
 explain its absence.
 
+**PET-37 made "Add category" real, and the paragraph above is now history in one respect: the
+provider it predicted does not exist.** `AddCategoryButton` owns its own open state and renders the
+modal itself. `AddTransactionProvider`'s one-instance-per-shell rule is not a style to copy - it
+exists because ADD-1 lists five triggers across three routes and two of them sit on one page, which
+would mount two `<dialog>` elements with two focus traps and two copies of every field id, the ids
+`ui/FieldShell` requires as literal props precisely because `useId` would force `'use client'` onto
+the field layer. One trigger on one route has none of that, and a context with a single consumer
+expresses no choice. PET-38's Edit modal does not change it either: a per-card kebab is a different
+trigger carrying different state, not a second way into this one. The card kebab is still PET-39's
+and still `aria-disabled`.
+
+**The palette is a prop threaded from `page.tsx`, not a fetch on open, and the two shapes are not
+interchangeable.** `transactions/categories/page.tsx` reads `GET /api/templates/palette` as a third
+entry in the `Promise.all` it already had, and `CategoriesScreen` passes it through. That costs one
+request per view of the tab for a modal that usually does not open - `docs/TODO.md` records the
+price - and it buys away a route handler, a hook, and the null-versus-failed-versus-loading triple
+`AddTransactionModal` has to model. The read is server-side, so the token never leaves the server and
+Storybook can render the whole screen from a literal. **Do not give the palette read the categories
+read's failure policy**: a failed palette is `null` and a degraded modal, never a throw and never a
+redirect, because only the categories read decides whether the session is alive - two opinions about
+that on one page is the shape the `/dashboard` to `/login` loop came out of.
+
+**The budget field is optional and its label is the only thing that says so**, which is the one place
+this app's UI states a rule instead of enforcing it silently. `CreateCategoryDto` accepts an absent
+`monthlyCap` and rejects `0`, so `categoryForm.ts`'s `isCapValid` returns **true for `''`** - and the
+whole decision lives in that one line, deliberately, so it is testable without a DOM. Two
+consequences worth carrying: an untouched form produces **one** message rather than two, because only
+the name is wrong; and the budget's message has to name blank as a valid choice ("or leave it blank
+for no limit"), because the field looks required and nothing else on screen says otherwise. A19 and
+A29 still owe the treatment a sign-off, which `Screens/19 Add category`'s `WithMessages` story exists
+to collect.
+
+**`color` and `icon` are literal unions on the wire, and a `<select>` hands back a `string`.** The
+form models the gap rather than casting across it: `CategoryFormValues` types both as
+`Token | ''`, and `hasChosenMarks` narrows to the shape `toCreateCategoryBody` will accept. The
+change handlers look the chosen value up in the palette and store the row's own typed token, so
+nothing anywhere asserts membership it has not checked. The empty string is not a placeholder the
+user can select - both selects are preselected - it is "the palette did not arrive", which is exactly
+the state the submit guard refuses on.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

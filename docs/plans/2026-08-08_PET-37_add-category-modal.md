@@ -138,27 +138,28 @@ Both are visible and both belong in the PR body.
 
 - [ ] Amend the PET-37 Jira description: AC2's colour count, AC3's blank budget, A40's answered icon
       question, and AC5's unbuildable Settings clause
-- [ ] Add `frontend/src/lib/palette.ts` - `readPalette()` over `authorizedGet`, types read off the
+- [x] Add `frontend/src/lib/palette.ts` - `readPalette()` over `authorizedGet`, types read off the
       contract, failure policy left to the caller. A new module rather than an addition to
       `lib/categoryTemplates.ts`, mirroring the backend controller's own public-versus-authed split
-- [ ] Add `frontend/src/lib/createCategory.ts` - a `'use server'` action shaped like
+- [x] Add `frontend/src/lib/createCategory.ts` - a `'use server'` action shaped like
       `lib/createTransaction.ts`, with **three** failure arms rather than four: the endpoint
       documents 400 and 401 only, with no 404 and no 409
-- [ ] Add `transactions/categories/categoryForm.ts` and its jsdom-free suite - `CategoryFormValues`,
+- [x] Add `transactions/categories/categoryForm.ts` and its jsdom-free suite - `CategoryFormValues`,
       `isNameValid`, `isCapValid` (where `''` is valid), `invalidFields` returning both failures at
       once, and `toCreateCategoryBody` omitting `monthlyCap` and `note` entirely when blank
-- [ ] Build `AddCategoryModal` - the five fields in the frame's order, the two selects side by side,
+- [x] Build `AddCategoryModal` - the five fields in the frame's order, the two selects side by side,
       the preview tile, a local `MESSAGES` per A29, and the palette-unavailable state
-- [ ] Build `AddCategoryButton` - a client component owning its own open state
-- [ ] Wire `transactions/categories/page.tsx` and `CategoriesScreen`, and invert PET-36's two
+- [x] Build `AddCategoryButton` - a client component owning its own open state
+- [x] Wire `transactions/categories/page.tsx` and `CategoriesScreen`, and invert PET-36's two
       now-false assertions in `CategoriesScreen.test.tsx` and `CategoriesScreen.stories.tsx`
-- [ ] Tests and stories for the modal: one case per acceptance criterion, plus a `WithMessages` story
-      under `Shell` for the A29 sign-off
-- [ ] Record what this leaves owed in `docs/TODO.md`: the palette read on every Categories page view
+- [x] Tests and stories for the modal: one case per acceptance criterion, plus a `WithMessages` story
+      under `Screens/19 Add category` for the A29 sign-off - not `Shell`, which is where the empty
+      `Modal` box is reviewed
+- [x] Record what this leaves owed in `docs/TODO.md`: the palette read on every Categories page view
       whether or not the modal opens, the two deviations from the frame, grey-out-when-in-use declined
       as scope now that PET-65 makes it buildable, and the colour ceiling of 16 that PET-65 did not
       move
-- [ ] Update `frontend/src/app/CLAUDE.md` with the decisions above
+- [x] Update `frontend/src/app/CLAUDE.md` with the decisions above
 - [ ] Verify
 
 ## Verification
@@ -176,8 +177,10 @@ jsdom implements neither and `jest.setup.ts` deliberately does not fake them:
 2. The Colour select lists 16 labels in server order and Icon lists 64, and changing either updates
    the preview tile (AC2). **Delete the local central database first if it was seeded before PET-65**,
    or the palette answers the old 13 and this step reads as a bug in the modal.
-3. Submit empty: two inline messages, the modal stays open, nothing is created. Submit with `0` and
-   with a negative: the budget message (AC3).
+3. Submit empty: **one** inline message, on Name, and nothing is created. **Not two, and the
+   difference is the optional cap** - a blank budget is valid, so an untouched form is wrong about
+   its name alone. Type `0` into the budget and submit to see both at once; a negative gives the
+   same budget message (AC3).
 4. Save with a name and a blank budget: the card appears uncapped, drawing "No limit set for this
    category" with its "Set limit" banner (AC4, and the optional-cap decision).
 5. The Categories tab badge ticks up and the allocation summary moves (AC5, the two buildable
