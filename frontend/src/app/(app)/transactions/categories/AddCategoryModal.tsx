@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/categoryColour';
 import { Input } from '@/components/ui/Input';
 import type { CreateCategoryResult } from '@/lib/createCategory';
-import { amountCaret, formatAmountInput } from '@/lib/format';
+import { reformatAmountInput } from '@/lib/amountField';
 import type { Palette } from '@/lib/palette';
 import type { components } from '@/types/api';
 
@@ -59,6 +59,20 @@ import {
  * limit at all, because the field looks required and nothing else on screen says it is not. So it
  * names blank as a valid choice, and that is the only place in the UI where the optional cap is
  * spelled out.
+ *
+ * **`paletteUnavailable` names a reload rather than reopening the modal, and the first version named
+ * the one recovery that cannot work.** It read "Please close this and try again", which is what a
+ * reader of the modal alone would write - but the palette is a prop resolved once by
+ * `transactions/categories/page.tsx` and threaded down, so reopening re-renders the identical failed
+ * value and the identical message. Only a reload or a navigation re-runs the read. A message telling
+ * the user to do the one thing guaranteed not to help reads as a broken feature rather than as a
+ * transient failure.
+ *
+ * **`paletteEmpty` is the second of the two palette states, and it is not a failure.** A read that
+ * succeeds with an empty list means every colour or every icon is disabled admin-side, which
+ * `readPalette` documents as a real configuration rather than an error - so it says what is true
+ * rather than blaming a request that worked. It deliberately promises nothing the user can do: the
+ * lists are not theirs to change, and there is no admin surface to send them to yet.
  */
 const MESSAGES = {
   name: 'Enter a name.',
@@ -66,7 +80,8 @@ const MESSAGES = {
   invalid: "We couldn't add this category. Please check the values and try again.",
   unauthenticated: 'Your session has expired. Log in again to save this.',
   failed: "We couldn't add this category. Please try again.",
-  paletteUnavailable: "We couldn't load the colours and icons. Please close this and try again.",
+  paletteUnavailable: "We couldn't load the colours and icons. Reload the page to try again.",
+  paletteEmpty: "There are no colours or icons to choose from, so a category can't be added yet.",
 } as const;
 
 /** Field ids, which `ui/FieldShell` requires rather than generating; see its note on useId. */
@@ -112,7 +127,8 @@ type AddCategoryModalProps = {
    *
    * `null` rather than an empty palette: an empty list would mean an admin has disabled everything,
    * which is a coherent (if useless) configuration, and this is "we could not ask". Both disable the
-   * selects, but only one of them is a message worth showing - and the caller reads this off a
+   * selects, and **both are a message worth showing** - see `offersMarks` below for why the first
+   * version of this sentence said only one was, and what that cost. The caller reads this off a
    * server-side read that has already resolved, so unlike `AddTransactionModal`'s categories there
    * is no third "not yet" state to model.
    */
@@ -153,6 +169,35 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
     note: '',
   }));
 
+  /**
+   * Whether the palette gave this form something to submit with.
+   *
+   * **Not `palette !== null`, and the difference is a form that looks fine and cannot save.** A read
+   * that succeeds with `colors: []` or `icons: []` is a state `readPalette` documents as real -
+   * `GET /api/templates/palette` returns `enabled` rows only, so an admin disabling a whole list
+   * produces it - and it arrives as a non-null palette. Keyed on null, every guard below let it
+   * through: the selects rendered enabled over empty panels, no line said why, and `hasChosenMarks`
+   * then refused every submit in silence, because `values.color` and `values.icon` fall back to `''`
+   * exactly as they do with no palette at all. The primary action of the modal was dead with no
+   * feedback anywhere.
+   *
+   * **Either list empty disables both fields**, rather than only the one that is empty. The form
+   * cannot be submitted while a required mark is missing, so leaving the other picker live would
+   * invite the user to fill in a form that has no way to save - the same argument
+   * `AddTransactionModal` makes for guarding on its categories read before its field checks.
+   */
+  const offersMarks = palette !== null && palette.colors.length > 0 && palette.icons.length > 0;
+
+  /**
+   * Which of the two palette lines to show, if either. `null` is the healthy case.
+   *
+   * The failed read and the empty configuration are different facts and get different words; see
+   * `MESSAGES` for both. They cannot both be true, which is why this is one line rather than the
+   * pair of `FormError`s the submit failure sits beside.
+   */
+  const paletteMessage =
+    palette === null ? MESSAGES.paletteUnavailable : offersMarks ? null : MESSAGES.paletteEmpty;
+
   const [errors, setErrors] = useState<Partial<Record<CategoryFormField, string>>>({});
   /** The post-network failure line, already resolved to its copy. `null` means none showing. */
   const [failure, setFailure] = useState<string | null>(null);
@@ -172,28 +217,13 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
   /**
    * The budget field, reformatted under the caret on every keystroke.
    *
-   * Lifted from `AddTransactionModal`, including why it works: the handler writes the formatted
-   * value and the caret onto `event.currentTarget` directly, which is already the node, so
-   * `ui/Input` needs no `ref` prop. It depends on `formatAmountInput` being idempotent -
-   * `lib/format.test.ts` pins that property for exactly this reason - and on `amountCaret` computing
-   * the *semantic* position, because React restores the raw offset and that is wrong precisely when
-   * a separator is inserted to the left of the caret.
-   *
-   * jsdom cannot observe the outcome either way, so the suite asserts `setSelectionRange` was called
-   * and the visible behaviour is a Storybook check. `docs/TODO.md` already records that gap against
-   * the budget field it was lifted from.
+   * **This was the fourth verbatim copy of that handler, and it is the one that got it lifted.**
+   * `lib/amountField.ts` owns the body and the three things about it that are load-bearing; this
+   * field is otherwise the same currency input `app/setup/BudgetForm.tsx` and both transaction
+   * modals draw, differing only in which piece of state it writes to.
    */
   function onCapChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const element = event.currentTarget;
-    const raw = element.value;
-    const caret = element.selectionStart ?? raw.length;
-    const formatted = formatAmountInput(raw);
-
-    element.value = formatted;
-    const at = amountCaret(raw, caret, formatted);
-    element.setSelectionRange(at, at);
-
-    setText('monthlyCap', formatted);
+    setText('monthlyCap', reformatAmountInput(event.currentTarget));
   }
 
   /**
@@ -227,7 +257,8 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
     // why, and adding "Enter a name." on top would blame the user for a failed network read. It is
     // also the narrowing that lets `toCreateCategoryBody` be called at all, since that function
     // takes only values whose colour and icon are real. Both marks are preselected whenever the
-    // palette landed, so this is false exactly when `palette` is null.
+    // palette offered any, so this is false exactly when `offersMarks` is - which covers the failed
+    // read and the empty configuration alike, and both of those already have their line on screen.
     if (!hasChosenMarks(values)) return;
 
     // Every field at once rather than the first failure, so a form with no name and a zero budget
@@ -242,7 +273,27 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
     setFailure(null);
     setPending(true);
 
-    const result = await create(toCreateCategoryBody(values));
+    // **The `catch` is not defensive, and without it a failed submit freezes the modal.** `create`
+    // is a Server Action called from the client, so a transport that never completes - the user
+    // going offline mid-submit, the server answering the action's POST with something that is not an
+    // action result, a deploy restarting under it - **rejects** rather than resolving to a
+    // `CreateCategoryResult`. A rejection escaping this handler skips both lines below, so `pending`
+    // stays true, the submit button stays disabled for good (which also kills Enter), and nothing
+    // says why. Every other failure here keeps what was typed and lets the user try again; that one
+    // left Cancel as the only exit, which discards the whole form.
+    //
+    // `failed` rather than a reason of its own: `lib/createCategory.ts` publishes exactly three, and
+    // this is the same fact as the 5xx arm - the request did not complete, and trying again is the
+    // honest advice.
+    let result: CreateCategoryResult;
+
+    try {
+      result = await create(toCreateCategoryBody(values));
+    } catch {
+      setPending(false);
+      setFailure(MESSAGES.failed);
+      return;
+    }
 
     if (!result.ok) {
       setPending(false);
@@ -337,7 +388,7 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
             options={palette?.colors ?? []}
             value={values.color}
             onChange={chooseColour}
-            disabled={palette === null}
+            disabled={!offersMarks}
           />
         </div>
         {/* A grid rather than `ColourSelect`'s list, because 64 glyphs are looked for by *shape* and a
@@ -350,7 +401,7 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
             options={palette?.icons ?? []}
             value={values.icon}
             onChange={chooseIcon}
-            disabled={palette === null}
+            disabled={!offersMarks}
           />
         </div>
       </div>
@@ -424,7 +475,7 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
           renders nothing when its message is absent - so neither needs a conditional here and a
           closed modal still contributes no text to the page, which `(app)/pages.test.tsx` depends
           on. */}
-      <FormError message={palette === null ? MESSAGES.paletteUnavailable : null} />
+      <FormError message={paletteMessage} />
       <FormError message={failure} />
     </Modal>
   );

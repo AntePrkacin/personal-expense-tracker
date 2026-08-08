@@ -289,9 +289,29 @@ export const IconPickerOpen: Story = {
  * than to a colour and glyph the user did not choose, and the submit does nothing - deliberately
  * without adding "Enter a name." on top, which would blame the user for a failed network read.
  *
- * Reachable when the backend is down, or when an admin has somehow left nothing enabled. Note the
- * modal is still fully closable, which is the half worth checking here.
+ * Reachable when the backend is down. Note the modal is still fully closable, which is the half worth
+ * checking here. Its copy names a **reload** rather than reopening this modal, because the palette is
+ * a prop resolved once by the route - see `MESSAGES`.
  */
 export const PaletteUnavailable: Story = {
   render: () => <AddCategoryModal palette={null} create={accept} onClose={() => {}} />,
+};
+
+/**
+ * The palette read having **succeeded** with nothing in it, which is a different state and used to be
+ * an invisible one.
+ *
+ * `GET /api/templates/palette` returns `enabled` rows only, so an admin disabling a whole list answers
+ * 200 with an empty one. That arrives as a non-null palette, so every guard keyed on `null` let it
+ * through: both pickers opened onto empty panels, nothing explained why, and the submit button did
+ * nothing at all, forever, in silence. Both fields are disabled here and the line says what is true
+ * rather than blaming a request that worked.
+ *
+ * The third message this modal owes A29, and the one to put in front of a designer beside
+ * `PaletteUnavailable` - the two states read almost the same on screen and mean opposite things.
+ */
+export const PaletteEmpty: Story = {
+  render: () => (
+    <AddCategoryModal palette={{ colors: [], icons: [] }} create={accept} onClose={() => {}} />
+  ),
 };

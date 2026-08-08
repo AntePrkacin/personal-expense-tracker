@@ -69,7 +69,7 @@ const submit = () => screen.getByRole('button', { name: 'Add category' });
  *
  * A `query` rather than a `get`, so it answers `null` instead of throwing - which is what lets the
  * hidden case be asserted rather than merely not exercised. Flip `SHOWS_NOTE` and this suite tells
- * you exactly which four cases need their expectations back.
+ * you exactly which three cases need their expectations back.
  */
 const note = () => screen.queryByLabelText('Note (optional)');
 
@@ -561,6 +561,34 @@ describe('when the save is rejected', () => {
     expect(refresh).not.toHaveBeenCalled();
     expect(submit()).not.toBeDisabled();
   });
+
+  /**
+   * The action **rejecting** rather than answering, which is a different path from every case above.
+   *
+   * `createCategory` is a Server Action invoked from the client, so a transport that never completes
+   * - offline mid-submit, a non-action answer to the POST, a deploy restarting underneath it -
+   * rejects the promise instead of resolving to a `CreateCategoryResult`. Unguarded, that skipped
+   * both `setPending(false)` and `setFailure`, leaving the submit button disabled for good with no
+   * message: the modal looked frozen and Cancel was the only exit, which discards the form.
+   */
+  it('recovers from the action rejecting rather than freezing the form', async () => {
+    const u = user();
+    create.mockRejectedValue(new Error('the request never completed'));
+    open();
+
+    await u.type(name(), 'Subscriptions');
+    await u.click(submit());
+
+    expect(
+      await screen.findByText("We couldn't add this category. Please try again."),
+    ).toBeInTheDocument();
+    // The two halves that made it a freeze rather than a failure: the button comes back, and what
+    // was typed is still there to submit again.
+    expect(submit()).not.toBeDisabled();
+    expect(name()).toHaveValue('Subscriptions');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
 });
 
 describe('AC7: closing without creating', () => {
@@ -602,7 +630,7 @@ describe('when the palette could not be read', () => {
     expect(colourTrigger()).toBeDisabled();
     expect(iconTrigger()).toBeDisabled();
     expect(
-      screen.getByText("We couldn't load the colours and icons. Please close this and try again."),
+      screen.getByText("We couldn't load the colours and icons. Reload the page to try again."),
     ).toBeInTheDocument();
   });
 
@@ -625,5 +653,63 @@ describe('when the palette could not be read', () => {
     await u.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The other palette state, and the one that shipped unhandled.
+ *
+ * `GET /api/templates/palette` returns `enabled` rows only, so an admin disabling a whole list
+ * answers 200 with an empty one - a **non-null** palette carrying nothing to pick. Every guard was
+ * keyed on `null`, so the selects rendered enabled over empty panels, no line explained anything,
+ * and the submit guard then refused in silence. Each case below is one half of that.
+ */
+describe('when the palette arrived with nothing in it', () => {
+  const EMPTY: Palette = { colors: [], icons: [] };
+
+  it('disables both selects and says why, without blaming a request that worked', () => {
+    open({ palette: EMPTY });
+
+    expect(colourTrigger()).toBeDisabled();
+    expect(iconTrigger()).toBeDisabled();
+    expect(
+      screen.getByText(
+        "There are no colours or icons to choose from, so a category can't be added yet.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("We couldn't load the colours and icons. Reload the page to try again."),
+    ).not.toBeInTheDocument();
+  });
+
+  // Half a palette is the same dead form as none of it: the missing mark is required either way, so
+  // leaving the other picker live would invite a form that cannot save.
+  it('disables both when only one of the two lists is empty', () => {
+    open({ palette: { colors: PALETTE.colors, icons: [] } });
+
+    expect(colourTrigger()).toBeDisabled();
+    expect(iconTrigger()).toBeDisabled();
+    expect(
+      screen.getByText(
+        "There are no colours or icons to choose from, so a category can't be added yet.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // The silent no-op this state used to be: a filled-in name, a click, and nothing at all happening.
+  // The submit still refuses - there is no colour to send - but the line above is on screen saying so.
+  it('refuses to submit rather than doing nothing without saying so', async () => {
+    const u = user();
+    open({ palette: EMPTY });
+
+    await u.type(name(), 'Subscriptions');
+    await u.click(submit());
+
+    expect(create).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        "There are no colours or icons to choose from, so a category can't be added yet.",
+      ),
+    ).toBeInTheDocument();
   });
 });
