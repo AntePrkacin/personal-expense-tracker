@@ -83,9 +83,6 @@ current content and re-enables the button, which is the behaviour A26 asks for.
 - [ ] Confirm the dashboard teaser reflects a newer set after a regenerate. It reads
       `DashboardResponseDto.insight`, which composes `InsightsService.latestReadySummary`, so
       this needs asserting rather than implementing.
-- [ ] Update `frontend/src/app/CLAUDE.md`: two places attribute the generating skeleton to
-      PET-44 (line 1458 and `InsightTeaserCard.tsx:32`), when PET-44 is the empty state and
-      INS-5 belongs here. Correct both while in the file.
 - [ ] Run frontend lint, build and tests; `npm run docs:check` from the repo root.
 
 ## Out of scope
@@ -96,5 +93,9 @@ current content and re-enables the button, which is the behaviour A26 asks for.
   already exist and are correct for this.
 - A designed failure state. A26 records that failure is not designed, and the contract makes
   it invisible; inventing an error banner here would contradict both.
+- **Correcting the two places that attribute the generating skeleton to PET-44**
+  (`frontend/src/app/CLAUDE.md:1458` and `InsightTeaserCard.tsx:32`), when INS-5 belongs to
+  this ticket. Raised at the 2026-08-08 review and deliberately left alone, so do not
+  "helpfully" fix it in passing here.
 - The overlapping-reclaimed-run hazard in `docs/TODO.md`, where a run past the stale cutoff
   can collide with its replacement on the one cached connection. Unchanged by this branch.
