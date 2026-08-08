@@ -136,7 +136,7 @@ Both are visible and both belong in the PR body.
 
 ## Tasks
 
-- [ ] Amend the PET-37 Jira description: AC2's colour count, AC3's blank budget, A40's answered icon
+- [x] Amend the PET-37 Jira description: AC2's colour count, AC3's blank budget, A40's answered icon
       question, and AC5's unbuildable Settings clause
 - [x] Add `frontend/src/lib/palette.ts` - `readPalette()` over `authorizedGet`, types read off the
       contract, failure policy left to the caller. A new module rather than an addition to
@@ -160,7 +160,7 @@ Both are visible and both belong in the PR body.
       as scope now that PET-65 makes it buildable, and the colour ceiling of 16 that PET-65 did not
       move
 - [x] Update `frontend/src/app/CLAUDE.md` with the decisions above
-- [ ] Verify
+- [x] Verify
 
 ## Verification
 
