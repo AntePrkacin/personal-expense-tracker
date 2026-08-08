@@ -86,9 +86,11 @@ their markup.
   it. That guarantee is the whole payoff of the allowlist, and it is why skipping `api:sync` is
   catastrophic rather than untidy - the union degrades to `string`, `Record<string, string>`
   accepts any subset of keys, and every tile renders grey with the build green.
-  **The fourth map is `CATEGORY_ICON`**, `Record<IconName, LucideIcon>` over the thirteen lucide
+  **The fourth map is `CATEGORY_ICON`**, `Record<IconName, LucideIcon>` over the sixty-four lucide
   names the contract publishes, with a `categoryIcon()` lookup returning `null` rather than a
-  stand-in glyph. It exists for the same reason the class maps do - `lucide-react` imports by
+  stand-in glyph. It was thirteen until PET-65, which is worth knowing because the number is the
+  only thing that changed: thirteen was every glyph a seeded category carries and nothing else, so
+  the first category a user invented had to reuse one. It exists for the same reason the class maps do - `lucide-react` imports by
   name at build time, so a runtime string cannot become a component - and it landed in the same
   ticket as the palette rather than after it, deliberately: **three seeded colour pairs are close
   enough in OKLab to read as one hue** (Personal care / Gifts at ΔE 0.029, Education / Travel at

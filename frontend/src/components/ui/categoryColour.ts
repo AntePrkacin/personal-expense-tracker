@@ -1,24 +1,75 @@
 import {
+  Baby,
+  Banknote,
+  Beer,
+  Bike,
+  Book,
+  Briefcase,
+  Bus,
+  CakeSlice,
+  Camera,
   Car,
+  CircleEllipsis,
+  CircleParking,
   CircleQuestionMark,
+  Coffee,
+  Coins,
+  CreditCard,
+  Droplets,
+  Dumbbell,
+  Film,
+  Flame,
+  Fuel,
+  Gamepad2,
+  Gem,
   Gift,
+  Glasses,
   GraduationCap,
+  HandHeart,
   HeartPulse,
+  Hotel,
+  House,
   Landmark,
+  Laptop,
+  Luggage,
+  Music,
+  Newspaper,
+  Package,
+  Palette,
   PawPrint,
+  PiggyBank,
+  Pill,
+  Pizza,
   Plane,
+  Receipt,
   Scissors,
+  Shield,
+  Shirt,
+  ShoppingBag,
   ShoppingBasket,
+  Smartphone,
+  Sofa,
+  Sparkles,
+  Stethoscope,
+  Tent,
+  Ticket,
+  TrainFront,
+  Trash2,
+  TrendingUp,
   Tv,
+  Users,
   Utensils,
+  Wallet,
+  Wifi,
+  Wrench,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
 
 import type { components } from '@/types/api';
 
-// The seventeen daisyUI semantic colour tokens and the thirteen lucide icons a
-// category can carry, mapped onto what actually paints them (PET-64).
+// The seventeen daisyUI semantic colour tokens and the sixty-four lucide icons a
+// category can carry, mapped onto what actually paints them (PET-64, PET-65).
 //
 // Four things about this file are load-bearing:
 //
@@ -185,14 +236,25 @@ export const CATEGORY_FILL: Record<CategoryColour, string> = {
  * The lucide component for a stored icon name.
  *
  * **The map exists because `lucide-react` imports by name at build time.**
- * `icons[name]` off the library's own barrel would work and would also pull
- * every glyph it ships into the bundle; a static map imports exactly thirteen.
+ * `icons[name]` off the library's own barrel would work and would also pull all
+ * ~2000 glyphs it ships into the bundle; a static map imports exactly
+ * sixty-four.
  *
  * `Record<IconName, LucideIcon>` is the exhaustiveness proof the contract's enum
- * buys: a fourteenth name added to `ICON_NAMES` backend-side and synced breaks
+ * buys: a sixty-fifth name added to `ICON_NAMES` backend-side and synced breaks
  * this build rather than rendering a hole where a glyph belongs.
+ *
+ * **PET-65 grew this from thirteen to sixty-four, and the cost is linear.** The
+ * import is per icon, so the set is roughly 25-40 KB raw before gzip. That is
+ * the price of the guarantee above: the alternative that stays flat is the
+ * barrel lookup, which gives up the exhaustiveness proof and the tree shaking in
+ * one move.
  */
 export const CATEGORY_ICON: Record<IconName, LucideIcon> = {
+  // Order follows ICON_NAMES: the thirteen a seeded category carries, then the
+  // fifty-one PET-65 offers to a user's own categories, grouped by domain.
+  // Not `CircleHelp`, which is a deprecated alias of `circle-question-mark` in
+  // lucide 1.29.0.
   'shopping-basket': ShoppingBasket,
   utensils: Utensils,
   car: Car,
@@ -205,8 +267,58 @@ export const CATEGORY_ICON: Record<IconName, LucideIcon> = {
   gift: Gift,
   'paw-print': PawPrint,
   landmark: Landmark,
-  // Not `CircleHelp`, which is a deprecated alias of it in lucide 1.29.0.
   'circle-question-mark': CircleQuestionMark,
+  coffee: Coffee,
+  beer: Beer,
+  pizza: Pizza,
+  'cake-slice': CakeSlice,
+  fuel: Fuel,
+  bus: Bus,
+  'train-front': TrainFront,
+  bike: Bike,
+  'circle-parking': CircleParking,
+  house: House,
+  droplets: Droplets,
+  flame: Flame,
+  wifi: Wifi,
+  smartphone: Smartphone,
+  'trash-2': Trash2,
+  wrench: Wrench,
+  sofa: Sofa,
+  pill: Pill,
+  stethoscope: Stethoscope,
+  dumbbell: Dumbbell,
+  glasses: Glasses,
+  'shopping-bag': ShoppingBag,
+  shirt: Shirt,
+  package: Package,
+  gem: Gem,
+  wallet: Wallet,
+  'credit-card': CreditCard,
+  'piggy-bank': PiggyBank,
+  banknote: Banknote,
+  coins: Coins,
+  receipt: Receipt,
+  'trending-up': TrendingUp,
+  shield: Shield,
+  'gamepad-2': Gamepad2,
+  music: Music,
+  film: Film,
+  ticket: Ticket,
+  book: Book,
+  camera: Camera,
+  palette: Palette,
+  briefcase: Briefcase,
+  laptop: Laptop,
+  newspaper: Newspaper,
+  baby: Baby,
+  users: Users,
+  'hand-heart': HandHeart,
+  sparkles: Sparkles,
+  luggage: Luggage,
+  hotel: Hotel,
+  tent: Tent,
+  'circle-ellipsis': CircleEllipsis,
 };
 
 // Everything below is the fallback path: what to paint when a category could not

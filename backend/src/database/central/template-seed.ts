@@ -76,14 +76,27 @@ const COLOUR_SEED: readonly ColourSeed[] = [
 type IconSeed = { name: IconName; label: string };
 
 /**
- * The thirteen lucide marks, labelled for a picker rather than for a developer.
+ * The sixty-four lucide marks, labelled for a picker rather than for a developer.
  *
  * `circle-question-mark` is offered even though its only seeded user is the
  * `Uncategorized` fallback, which is not a template: the invariant is that
  * category's *name*, not its glyph, and a question mark is a perfectly ordinary
  * thing to want on a category of your own.
+ *
+ * **The labels are the word a person picks, not the lucide name.** `fuel` is
+ * "Fuel pump" and `trending-up` is "Upward trend", for the same reason
+ * `accent-content` is "Pine" in `COLOUR_SEED`: a developer's identifier is not a
+ * thing anybody chooses from a grid. They are the admin's to rename, which is
+ * why they are a column rather than a function of the name.
+ *
+ * **Thirteen of these are load-bearing and fifty-one are a palette.** The first
+ * block is what the seeded categories carry; PET-65 appended the rest so a user
+ * naming a category of their own is not forced to reuse a glyph that already
+ * means something else on their screen. `template-tokens.ts` carries the whole
+ * argument, including why they are appended rather than regrouped by domain.
  */
 const ICON_SEED: readonly IconSeed[] = [
+  // PET-64: carried by a seeded category.
   { name: 'shopping-basket', label: 'Basket' },
   { name: 'utensils', label: 'Utensils' },
   { name: 'car', label: 'Car' },
@@ -97,6 +110,71 @@ const ICON_SEED: readonly IconSeed[] = [
   { name: 'paw-print', label: 'Paw' },
   { name: 'landmark', label: 'Bank' },
   { name: 'circle-question-mark', label: 'Question mark' },
+
+  // PET-65: offered, carried by nothing until a user picks it.
+  // Food and drink
+  { name: 'coffee', label: 'Coffee' },
+  { name: 'beer', label: 'Beer' },
+  { name: 'pizza', label: 'Pizza' },
+  { name: 'cake-slice', label: 'Cake' },
+  // Transport
+  { name: 'fuel', label: 'Fuel pump' },
+  { name: 'bus', label: 'Bus' },
+  { name: 'train-front', label: 'Train' },
+  { name: 'bike', label: 'Bicycle' },
+  { name: 'circle-parking', label: 'Parking' },
+  // Home and bills
+  { name: 'house', label: 'House' },
+  { name: 'droplets', label: 'Water' },
+  { name: 'flame', label: 'Flame' },
+  { name: 'wifi', label: 'Wi-Fi' },
+  { name: 'smartphone', label: 'Phone' },
+  { name: 'trash-2', label: 'Bin' },
+  { name: 'wrench', label: 'Wrench' },
+  { name: 'sofa', label: 'Sofa' },
+  // Health and fitness
+  { name: 'pill', label: 'Pill' },
+  { name: 'stethoscope', label: 'Stethoscope' },
+  { name: 'dumbbell', label: 'Dumbbell' },
+  { name: 'glasses', label: 'Glasses' },
+  // Shopping
+  { name: 'shopping-bag', label: 'Shopping bag' },
+  { name: 'shirt', label: 'Shirt' },
+  { name: 'package', label: 'Package' },
+  { name: 'gem', label: 'Gem' },
+  // Money
+  { name: 'wallet', label: 'Wallet' },
+  { name: 'credit-card', label: 'Credit card' },
+  { name: 'piggy-bank', label: 'Piggy bank' },
+  { name: 'banknote', label: 'Banknote' },
+  { name: 'coins', label: 'Coins' },
+  { name: 'receipt', label: 'Receipt' },
+  { name: 'trending-up', label: 'Upward trend' },
+  { name: 'shield', label: 'Shield' },
+  // Entertainment and hobbies
+  { name: 'gamepad-2', label: 'Game controller' },
+  { name: 'music', label: 'Music note' },
+  { name: 'film', label: 'Film' },
+  { name: 'ticket', label: 'Ticket' },
+  { name: 'book', label: 'Book' },
+  { name: 'camera', label: 'Camera' },
+  { name: 'palette', label: 'Palette' },
+  // Work and study
+  { name: 'briefcase', label: 'Briefcase' },
+  { name: 'laptop', label: 'Laptop' },
+  { name: 'newspaper', label: 'Newspaper' },
+  // Family and social
+  { name: 'baby', label: 'Baby' },
+  { name: 'users', label: 'People' },
+  { name: 'hand-heart', label: 'Helping hand' },
+  // Personal care
+  { name: 'sparkles', label: 'Sparkles' },
+  // Travel
+  { name: 'luggage', label: 'Luggage' },
+  { name: 'hotel', label: 'Hotel' },
+  { name: 'tent', label: 'Tent' },
+  // Other
+  { name: 'circle-ellipsis', label: 'Ellipsis' },
 ];
 
 /** One default category, in the order onboarding draws its chips. */

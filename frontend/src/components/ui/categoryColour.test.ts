@@ -273,8 +273,12 @@ describe('categoryFillVar', () => {
 describe('CATEGORY_ICON', () => {
   const ICONS = Object.keys(CATEGORY_ICON) as IconName[];
 
-  it('covers all thirteen lucide names the contract publishes', () => {
-    expect(ICONS).toHaveLength(13);
+  it('covers all sixty-four lucide names the contract publishes', () => {
+    // A literal rather than a length read off the contract, deliberately: the map is
+    // keyed by `IconName`, so a count derived from the same union would agree with
+    // itself no matter what either side lost. This number is the one thing here that
+    // a silent drop of an icon has to walk past.
+    expect(ICONS).toHaveLength(64);
   });
 
   it('resolves every name to a component rather than to undefined', () => {
@@ -286,10 +290,12 @@ describe('CATEGORY_ICON', () => {
     }
   });
 
-  it('gives each category its own glyph, with no reuse', () => {
+  it('maps every name to its own glyph, with no reuse', () => {
     // The close colour pairs lean on this: two categories that render nearly the
     // same colour are told apart by the icon, so a reused glyph would collapse the
-    // one channel that separates them.
+    // one channel that separates them. It also catches the likelier PET-65 mistake,
+    // which is two names in the allowlist resolving to the same component because a
+    // lucide alias was picked alongside what it aliases.
     expect(new Set(Object.values(CATEGORY_ICON)).size).toBe(ICONS.length);
   });
 

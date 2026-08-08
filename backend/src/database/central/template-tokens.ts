@@ -124,18 +124,33 @@ export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
 };
 
 /**
- * The thirteen lucide icon names this app imports, in lucide's own kebab-case.
+ * The sixty-four lucide icon names this app imports, in lucide's own kebab-case.
  *
  * **This is a cross-app contract, which is why it is published rather than kept
  * private.** The frontend's static `CATEGORY_ICON` map must import exactly these
- * thirteen components, and publishing the set as an OpenAPI enum is what makes
+ * sixty-four components, and publishing the set as an OpenAPI enum is what makes
  * `Record<IconName, LucideIcon>` an exhaustiveness proof rather than a map that
  * silently misses a key.
  *
  * `circle-question-mark`, not `circle-help`: the latter is a deprecated alias of
- * it in the installed lucide 1.29.0. All thirteen are verified to exist there.
+ * it in the installed lucide 1.29.0. All sixty-four are verified to exist there.
+ *
+ * **The first thirteen are PET-64's and are load-bearing; the rest are PET-65's
+ * and are a palette.** The opening block is exactly what the twelve seeded
+ * categories carry, plus `circle-question-mark` for the `Uncategorized`
+ * fallback, so removing one of those breaks a seeded category. Everything after
+ * it exists so a user naming a category of their own has something to pick that
+ * is not already spoken for - the same slack the colour list has had since
+ * PET-64, where seventeen tokens back thirteen categories.
+ *
+ * **New names are appended, never interleaved.** `icon_templates.sort_order` is
+ * assigned from this order at seed time, so inserting into the middle would make
+ * a database seeded before the change disagree with one seeded after about the
+ * order of every row past the insertion point, for no gain: an admin reorders
+ * the picker for themselves.
  */
 export const ICON_NAMES = [
+  // PET-64: the twelve seeded categories, then the fallback.
   'shopping-basket',
   'utensils',
   'car',
@@ -149,6 +164,72 @@ export const ICON_NAMES = [
   'paw-print',
   'landmark',
   'circle-question-mark',
+
+  // PET-65 onwards: offered to a user's own categories, grouped by the spending
+  // domain they serve rather than by anything about lucide.
+  // Food and drink
+  'coffee',
+  'beer',
+  'pizza',
+  'cake-slice',
+  // Transport
+  'fuel',
+  'bus',
+  'train-front',
+  'bike',
+  'circle-parking',
+  // Home and bills
+  'house',
+  'droplets',
+  'flame',
+  'wifi',
+  'smartphone',
+  'trash-2',
+  'wrench',
+  'sofa',
+  // Health and fitness
+  'pill',
+  'stethoscope',
+  'dumbbell',
+  'glasses',
+  // Shopping
+  'shopping-bag',
+  'shirt',
+  'package',
+  'gem',
+  // Money
+  'wallet',
+  'credit-card',
+  'piggy-bank',
+  'banknote',
+  'coins',
+  'receipt',
+  'trending-up',
+  'shield',
+  // Entertainment and hobbies
+  'gamepad-2',
+  'music',
+  'film',
+  'ticket',
+  'book',
+  'camera',
+  'palette',
+  // Work and study
+  'briefcase',
+  'laptop',
+  'newspaper',
+  // Family and social
+  'baby',
+  'users',
+  'hand-heart',
+  // Personal care
+  'sparkles',
+  // Travel
+  'luggage',
+  'hotel',
+  'tent',
+  // Other
+  'circle-ellipsis',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
