@@ -1348,6 +1348,17 @@ fixed cells fit the panel until the vertical scrollbar takes 15px, and `overflow
 `overflow-x` compute to `auto`, so the panel grew a second scrollbar along the bottom. The search box
 itself and its empty state are invented, and `docs/TODO.md` records that they owe a designer.
 
+**Both pickers centre their chosen row when the panel opens, through `categories/pickerScroll.ts`, and
+the one thing not to simplify is that it is not `scrollIntoView`.** That method scrolls _every_
+scrollable ancestor, and a panel is a DOM descendant of daisyUI's `modal-box`, which is itself
+`overflow-y: auto` - so centring a cell would also jog the modal behind the popover, which reads as the
+page lurching. The helper writes one `scrollTop` on one element and can move nothing else. It finds the
+row by `[aria-current]`, so the accessibility attribute doubles as the hook and there is no second
+source of truth about which row is chosen. Lifted to one module at two consumers rather than copied,
+which is `(app)/useCategoryOptions.ts`'s exception to the rule of three: a second hand-maintained copy
+of a geometric formula is how one of them quietly stops matching. jsdom runs no layout, so its suite
+pins the arithmetic against stubbed rects and the real behaviour is a browser check.
+
 **The Note field exists in the markup and is not drawn, behind a `SHOWS_NOTE` flag.** Frame 19 draws
 it and CED-4 specifies it; A42 is why it is hidden, because a note surfaces on no screen once saved,
 and a field whose value nothing ever shows back is a request to write into a void. It waits for a

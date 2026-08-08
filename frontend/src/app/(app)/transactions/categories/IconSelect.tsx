@@ -6,6 +6,8 @@ import { categoryIcon, type IconName } from '@/components/ui/categoryColour';
 import { FieldShell, fieldErrorId } from '@/components/ui/FieldShell';
 import type { PaletteIcon } from '@/lib/palette';
 
+import { centreChosenRow } from './pickerScroll';
+
 // The Icon field's picker: a search box over a six-across grid of every glyph the palette offers.
 //
 // **Why a grid rather than `ColourSelect`'s list.** Sixteen colours read fine as named rows; 64 glyphs
@@ -113,6 +115,7 @@ export function IconSelect({
   const [query, setQuery] = useState('');
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const panelId = `${id}-picker`;
   const anchor = `--${id}-anchor`;
@@ -179,6 +182,12 @@ export function IconSelect({
           // popover has already been shown by the time `toggle` fires, so this needs no deferral.
           if (isOpen) {
             searchRef.current?.focus();
+
+            // **Centred on open, so the chosen glyph is never off-screen behind eleven rows.** Focusing
+            // the search box first is deliberate: it sits above the grid rather than inside it, so it
+            // cannot move the grid's own scroll and the two do not fight. See `centreChosenRow` for why
+            // this is not `scrollIntoView`.
+            centreChosenRow(gridRef.current);
             return;
           }
 
@@ -209,7 +218,7 @@ export function IconSelect({
         {matches.length === 0 ? (
           <p className="text-base-content/60 px-1 py-2 text-sm">{NO_MATCHES}</p>
         ) : (
-          <div className={GRID}>
+          <div ref={gridRef} className={GRID}>
             {matches.map((icon) => {
               const Glyph = categoryIcon(icon.name);
               const isChosen = icon.name === value;

@@ -1,11 +1,13 @@
 'use client';
 
 import { Check } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { categoryDotClass, type CategoryColour } from '@/components/ui/categoryColour';
 import { FieldShell, fieldErrorId } from '@/components/ui/FieldShell';
 import type { PaletteColour } from '@/lib/palette';
+
+import { centreChosenRow } from './pickerScroll';
 
 // The Color field's picker: a swatch and a name per row, with a tick on the chosen one.
 //
@@ -103,6 +105,9 @@ export function ColourSelect({
    */
   const [open, setOpen] = useState(false);
 
+  /** The panel, which is its own scroll container here - unlike `IconSelect`, whose grid is. */
+  const panelRef = useRef<HTMLUListElement>(null);
+
   const panelId = `${id}-picker`;
 
   // A dashed-ident derived from the field id, so two colour pickers on one page cannot anchor to each
@@ -142,11 +147,21 @@ export function ColourSelect({
       </button>
 
       <ul
+        ref={panelRef}
         popover="auto"
         id={panelId}
         className={PANEL}
         style={{ positionAnchor: anchor } as React.CSSProperties}
-        onToggle={(event) => setOpen(event.newState === 'open')}
+        onToggle={(event) => {
+          const isOpen = event.newState === 'open';
+          setOpen(isOpen);
+
+          // **Centred on open, so the chosen colour is never off-screen.** Sixteen rows do not fit
+          // `max-h-64`, so opening on "Slate" - the sixteenth - used to show the top of the list with
+          // nothing selected in view. The scroll container is this element rather than a child, which
+          // is the one structural difference from `IconSelect`.
+          if (isOpen) centreChosenRow(panelRef.current);
+        }}
       >
         {options.map((colour) => {
           const isChosen = colour.token === value;
