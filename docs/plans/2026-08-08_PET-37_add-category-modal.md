@@ -79,6 +79,16 @@ production needs nothing because these tables have never been deployed. And **th
 untouched**: 17 tokens, 16 offered, because Tailwind cannot build a class from runtime data, so
 colour collisions past the thirteenth category remain possible where icon collisions no longer are.
 
+**The Color field became a control of our own after this plan was approved, and the paragraph below is
+now half history.** The request was the list in the reference image: a swatch left of each name and the
+tick on the right of the chosen row. Neither half is reachable from a native `<option>` - it cannot
+hold markup, and the tick is drawn by the operating system - so `ColourSelect` is a `<button>` trigger
+plus a `[popover]` list, built on `TransactionRowMenu`'s platform-popover argument and `DateField`'s
+select-styled trigger, with `categoryDotClass()` supplying the swatch it already had for legend dots.
+**The Icon field is still `ui/Select`**, because 64 options want a grid rather than a list, which keeps
+the paragraph below true of that half. The costs - no arrow keys, no native mobile picker, no anchoring
+in Firefox, and an invented panel - are in `docs/TODO.md`.
+
 **The picker stays two native selects, and PET-65's 8x8 grid remark is deliberately not adopted
 here.** That plan observes 64 grids as 8x8 and notes PET-37's picker has no design behind it, which
 is a fair reading of the frame. But AC1 asks in as many words for "the two selects side by side", so

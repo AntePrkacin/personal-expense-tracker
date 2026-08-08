@@ -1318,6 +1318,23 @@ for no limit"), because the field looks required and nothing else on screen says
 A29 still owe the treatment a sign-off, which `Screens/19 Add category`'s `WithMessages` story exists
 to collect.
 
+**The Color field is `ColourSelect`, a control of our own, and the Icon field beside it is still
+`ui/Select`.** That asymmetry is deliberate and the reason is worth knowing before anyone "fixes" it. A
+native `<option>` cannot contain markup in any browser that matters and its tick is drawn by the
+operating system, so a swatch-and-tick list is unreachable from a native control; Chromium's
+`appearance: base-select` would give both, but daisyUI ships nothing for it, so opting in means
+hand-written CSS re-creating what daisyUI already provides, in one browser only. **Three rules carry
+over from elsewhere and must not be undone.** The popover is the platform's, exactly as in
+`(app)/transactions/TransactionRowMenu.tsx` - `popovertarget` opens it, `popovertargetaction="hide"`
+closes it, and the only React state is the one `aria-expanded` needs, fed by the popover's own `toggle`
+so it cannot disagree with a light dismiss. There is **no `role="listbox"` and no `role="option"`**,
+because those promise a keyboard contract this does not implement; `aria-current` names the chosen row
+instead, which is the third time this app has declined a roles-plus-keyboard promise. And the trigger
+wears `select`'s own class string, byte-identical to `(app)/DateField.tsx`'s, so the two fields are one
+box when closed and differ only when opened. The costs - no arrow keys, no native mobile picker, no
+anchoring in Firefox, and a panel Figma never drew - are all in `docs/TODO.md`. Icon stays native
+because 64 options want a grid, which is its own ticket.
+
 **The Note field exists in the markup and is not drawn, behind a `SHOWS_NOTE` flag.** Frame 19 draws
 it and CED-4 specifies it; A42 is why it is hidden, because a note surfaces on no screen once saved,
 and a field whose value nothing ever shows back is a request to write into a void. It waits for a

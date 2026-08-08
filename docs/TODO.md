@@ -2060,6 +2060,42 @@ has no counterpart in the file at all.** AC2 asks that the chosen colour "previe
 and nothing in frame 19 does that, so both the element and its placement are ours. It is
 `aria-hidden`, since every fact in it is already announced by the three fields above it.
 
+### The Color picker is a control of our own, and it owes four things
+
+PET-37's Color field is `ColourSelect`, not `ui/Select`: a `<button>` trigger plus a `[popover]` list
+drawing a swatch, a name and a tick on the chosen row. A native `<option>` cannot hold a swatch and
+its tick is drawn by the operating system, so the designed list is simply unreachable from a native
+control. Chromium's `appearance: base-select` would give both, but daisyUI 5.7.16 ships nothing for it,
+so opting in resets the control and its popup to UA base styling and the result exists only in
+Chromium - a control of our own is the smaller change and the portable one.
+
+**Four things it costs, none of them fixed here.**
+
+**Arrow keys do not work; Tab does.** No `role="listbox"` and no `role="option"`, because those roles
+promise a keyboard contract - arrows, Home/End, type-ahead, `aria-activedescendant` - that this does
+not implement. That is `TransactionRowMenu`'s refusal of `role="menu"` and `SetupShell`'s refusal of
+`aria-current="step"`, made a third time. What ships is a list of ordinary buttons with `aria-current`
+on the chosen one. Implementing the real listbox pattern is the fix, and it is a bigger piece of work
+than the picker itself.
+
+**The native mobile picker is gone for this one field.** `ui/Select`'s own note cites the platform
+picker on a phone as a reason it chose a native control; a popover list is what a touch user gets
+instead. Worth a look on a real phone before anyone calls this done.
+
+**Firefox does not anchor it.** No CSS anchor positioning there, so daisyUI's
+`@supports not (position-area: bottom)` fallback centres the panel over a dimmed backdrop. Degraded
+rather than broken, and identical to the transactions row menu, which already carries this entry.
+
+**The Icon field is still a native `<select>`, so the two controls behave differently when opened.**
+The triggers share `select`'s own class string and are the same box when closed, which is the whole
+mitigation. The reason for the split is that 64 icons want a grid rather than a list - PET-65's plan
+says exactly that, observing 64 grids as 8x8 - and a grid is its own ticket with its own design. Until
+it lands, Color opens a list and Icon opens the platform's dropdown.
+
+**Nothing in Figma draws either list open** (A16, A40), so the panel's width, the swatch size, the row
+height, the tick and its position are all ours. `Screens/19 Add category`'s `ColourPickerOpen` story is
+where a designer reviews them.
+
 ### The Add category modal captures no note, and the field is hidden rather than removed
 
 `AddCategoryModal` has a `SHOWS_NOTE` flag, set to **false**, so the Note field frame 19 draws and

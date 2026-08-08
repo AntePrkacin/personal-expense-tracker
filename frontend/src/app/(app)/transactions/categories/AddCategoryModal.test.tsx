@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 
-import { CATEGORY_TILE } from '../../../../components/ui/categoryColour';
+import { CATEGORY_DOT, CATEGORY_TILE } from '../../../../components/ui/categoryColour';
 import type { CreateCategoryResult } from '../../../../lib/createCategory';
 import type { Palette } from '../../../../lib/palette';
 
@@ -62,7 +62,6 @@ function open(props: Partial<React.ComponentProps<typeof AddCategoryModal>> = {}
 
 const name = () => screen.getByLabelText('Name');
 const budget = () => screen.getByLabelText('Monthly budget (optional)');
-const colour = () => screen.getByLabelText('Color') as HTMLSelectElement;
 const icon = () => screen.getByLabelText('Icon') as HTMLSelectElement;
 const submit = () => screen.getByRole('button', { name: 'Add category' });
 
@@ -77,6 +76,23 @@ const note = () => screen.queryByLabelText('Note (optional)');
 
 const values = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.value);
 const labels = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.text);
+
+/**
+ * The Color field, which is `ColourSelect` rather than a `<select>` - so it has a `<button>` trigger
+ * and a `[popover]` panel, and none of `getByLabelText`, `toHaveValue` or `selectOptions` applies.
+ *
+ * The trigger is found by a name *prefix*, because `aria-labelledby` names the label **and** the value
+ * span, so its accessible name is "Color Emerald" and moves with the selection.
+ *
+ * **The panel is queryable whether or not it is open**, which is jsdom rather than a bug in the
+ * markup: `jest.setup.ts` deliberately fakes no popover, so the attribute is inert and nothing hides
+ * the `<ul>`. `TransactionRowMenu.test.tsx` records the same thing and takes the same approach - what
+ * is assertable here is the wiring, and open-versus-closed is a browser check.
+ */
+const colourTrigger = () => screen.getByRole('button', { name: /^Color/ });
+const colourPanel = () => document.querySelector('[popover]') as HTMLElement;
+const colourRows = () => within(colourPanel()).getAllByRole('button');
+const colourRow = (label: string) => within(colourPanel()).getByRole('button', { name: label });
 
 /**
  * The `aria-hidden` preview, found structurally because none of it is in the accessibility tree.
@@ -138,12 +154,11 @@ describe('AC1: the modal and its fields', () => {
   });
 });
 
-describe('AC2: the colour and icon selects', () => {
+describe('AC2: the colour and icon pickers', () => {
   it('offers every palette colour, by the admin’s label, in the server’s order', () => {
     open();
 
-    expect(values(colour())).toEqual(['success', 'primary', 'info']);
-    expect(labels(colour())).toEqual(['Emerald', 'Indigo', 'Sky']);
+    expect(colourRows().map((row) => row.textContent)).toEqual(['Emerald', 'Indigo', 'Sky']);
   });
 
   it('offers every palette icon, by label, in the server’s order', () => {
@@ -153,12 +168,83 @@ describe('AC2: the colour and icon selects', () => {
     expect(labels(icon())).toEqual(['Basket', 'Television', 'Car']);
   });
 
+  // The swatch is `CATEGORY_DOT`'s, imported rather than retyped for the reason
+  // `TransactionRow.test.tsx` imports `CATEGORY_TILE_NEUTRAL`: a literal here would pass while the
+  // shared map changed underneath it.
+  it('draws each row’s swatch in that row’s own colour', () => {
+    open();
+
+    const swatches = colourRows().map((row) => row.firstElementChild);
+
+    expect(swatches[0]).toHaveClass(CATEGORY_DOT.success);
+    expect(swatches[1]).toHaveClass(CATEGORY_DOT.primary);
+    expect(swatches[2]).toHaveClass(CATEGORY_DOT.info);
+  });
+
+  it('repeats the chosen colour’s swatch on the closed trigger', () => {
+    open();
+
+    expect(colourTrigger().querySelector('span > span')).toHaveClass(CATEGORY_DOT.success);
+  });
+
+  // **The tick is last in the row, which is the whole of "move the check to the right".** Asserted as
+  // document order rather than as a class, because that is what decides where it lands: the row is a
+  // flex line, so the last child sits at the end of it.
+  it('ticks only the chosen row, and puts the tick after the label', () => {
+    open();
+
+    const chosen = colourRow('Emerald');
+
+    expect(chosen.lastElementChild?.tagName).toBe('svg');
+    expect(colourRow('Indigo').querySelector('svg')).toBeNull();
+  });
+
+  // `aria-current` is the announced half of `menu-active`, and the pair is why no `role="option"` is
+  // claimed: it names the chosen row without promising a listbox keyboard contract.
+  it('marks the chosen row with aria-current and moves it when another is picked', async () => {
+    const u = user();
+    open();
+
+    expect(colourRow('Emerald')).toHaveAttribute('aria-current', 'true');
+
+    await u.click(colourRow('Indigo'));
+
+    expect(colourRow('Indigo')).toHaveAttribute('aria-current', 'true');
+    expect(colourRow('Emerald')).not.toHaveAttribute('aria-current');
+  });
+
+  // The wiring that keeps `aria-expanded` honest, copied from `TransactionRowMenu.test.tsx`: light
+  // dismiss and Escape close the popover without the trigger ever being clicked, so the state has to
+  // come from the popover's own event rather than from a click handler. jsdom implements no popover,
+  // so the event is dispatched by hand - which is exactly the wiring this can see and no more.
+  it('reports the panel’s state from the popover’s own toggle event', () => {
+    open();
+
+    expect(colourTrigger()).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent(colourPanel(), Object.assign(new Event('toggle'), { newState: 'open' }));
+    expect(colourTrigger()).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent(colourPanel(), Object.assign(new Event('toggle'), { newState: 'closed' }));
+    expect(colourTrigger()).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('closes the panel through the platform rather than a handler', () => {
+    open();
+
+    // `popovertargetaction="hide"` on every row, so the single thing that dismisses the panel is the
+    // browser. A row that lost this would still pick a colour and leave the panel open.
+    for (const row of colourRows()) {
+      expect(row).toHaveAttribute('popovertargetaction', 'hide');
+    }
+  });
+
   // Preselected rather than opened on a placeholder, unlike the Add transaction modal's Category
   // field - the frame draws a value in each and the DTO requires both.
   it('preselects the first of each rather than a placeholder', () => {
     open();
 
-    expect(colour()).toHaveValue('success');
+    expect(colourTrigger()).toHaveTextContent('Emerald');
     expect(icon()).toHaveValue('shopping-basket');
   });
 
@@ -168,7 +254,7 @@ describe('AC2: the colour and icon selects', () => {
 
     expect(previewTile()).toHaveClass(CATEGORY_TILE.success);
 
-    await u.selectOptions(colour(), 'primary');
+    await u.click(colourRow('Indigo'));
 
     expect(previewTile()).toHaveClass(CATEGORY_TILE.primary);
   });
@@ -294,7 +380,7 @@ describe('AC4: a successful save', () => {
 
     await u.type(name(), 'Subscriptions');
     await u.type(budget(), '250.00');
-    await u.selectOptions(colour(), 'primary');
+    await u.click(colourRow('Indigo'));
     await u.selectOptions(icon(), 'tv');
     await u.click(submit());
 
@@ -421,7 +507,7 @@ describe('when the palette could not be read', () => {
   it('disables both selects and says why', () => {
     open({ palette: null });
 
-    expect(colour()).toBeDisabled();
+    expect(colourTrigger()).toBeDisabled();
     expect(icon()).toBeDisabled();
     expect(
       screen.getByText("We couldn't load the colours and icons. Please close this and try again."),

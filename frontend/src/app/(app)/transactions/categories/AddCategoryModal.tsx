@@ -5,7 +5,11 @@ import { createElement, useRef, useState } from 'react';
 
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
-import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
+import {
+  categoryIcon,
+  categoryTileClass,
+  type CategoryColour,
+} from '@/components/ui/categoryColour';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import type { CreateCategoryResult } from '@/lib/createCategory';
@@ -14,6 +18,7 @@ import type { Palette } from '@/lib/palette';
 import type { components } from '@/types/api';
 
 import { Modal, type ModalHandle } from '../../Modal';
+import { ColourSelect } from './ColourSelect';
 import {
   hasChosenMarks,
   invalidFields,
@@ -191,22 +196,21 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
   }
 
   /**
-   * Records a chosen colour by looking it up in the palette rather than casting the DOM's string.
+   * Records a chosen colour, with no lookup and no cast.
    *
-   * `chosen.token` is already the contract's union, so this narrows with a real runtime check where
-   * `event.currentTarget.value as CategoryColour` would only have silenced the compiler. A value
-   * that is in no palette row is ignored, which is unreachable through the select and is the honest
-   * answer if it ever is not.
+   * **It used to search the palette for the DOM's string, and `ColourSelect` is why it no longer
+   * has to.** A `<select>` hands back `string`, so the token had to be recovered by finding the row
+   * that matched - a real runtime check, but a check for something that could not be wrong. The
+   * custom control never puts the value through the DOM at all: it calls this with the row's own
+   * `token`, already typed as the contract's union. Compare `chooseIcon` below, which still does the
+   * old dance because the Icon field is still a native select.
    */
-  function chooseColour(token: string) {
-    const chosen = palette?.colors.find((colour) => colour.token === token);
-    if (chosen === undefined) return;
-
-    setValues((current) => ({ ...current, color: chosen.token }));
+  function chooseColour(token: CategoryColour) {
+    setValues((current) => ({ ...current, color: token }));
     setFailure(null);
   }
 
-  /** The icon half of `chooseColour`, same argument. */
+  /** The icon half, still looking up because a native `<select>` hands back a bare string. */
   function chooseIcon(name: string) {
     const chosen = palette?.icons.find((icon) => icon.name === name);
     if (chosen === undefined) return;
@@ -259,11 +263,8 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
     modalRef.current?.close();
   }
 
-  const colourOptions = (palette?.colors ?? []).map(({ token, label }) => ({
-    value: token,
-    label,
-  }));
-
+  // Only the icons need reshaping now: `ui/Select` takes `{ value, label }` pairs, while
+  // `ColourSelect` takes the palette's own rows and so needs no mapping at all.
   const iconOptions = (palette?.icons ?? []).map(({ name, label }) => ({ value: name, label }));
 
   /**
@@ -325,15 +326,22 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
           **"Color", not "Colour".** Figma governs content, which `frontend/CLAUDE.md` states as the
           division of authority; the comments around it use the repo's own spelling. */}
       <div className="flex w-full gap-3">
+        {/* **A control of our own rather than `ui/Select`, and only for this field.** A native
+            `<option>` cannot hold a swatch and its tick is drawn by the operating system, so the
+            designed list is unreachable from a native control - see `ColourSelect` for the full
+            argument and for why the Icon field beside it deliberately stays native. The two triggers
+            share `select`'s own class string, so they are the same box when closed.
+
+            It takes no `required`: there is no form validation to satisfy, since a `<button>` submits
+            nothing, and `hasChosenMarks` is what actually guards an empty colour. */}
         <div className="flex-1">
-          <Select
+          <ColourSelect
             id={COLOUR_ID}
             label="Color"
-            options={colourOptions}
+            options={palette?.colors ?? []}
             value={values.color}
-            onChange={(event) => chooseColour(event.currentTarget.value)}
+            onChange={chooseColour}
             disabled={palette === null}
-            required
           />
         </div>
         <div className="flex-1">

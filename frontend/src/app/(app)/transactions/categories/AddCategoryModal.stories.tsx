@@ -176,6 +176,47 @@ export const WithMessages: Story = {
 };
 
 /**
+ * The Color picker open, which **no frame draws at all** - A16 and A40 both record that Figma never
+ * shows a list expanded, so every part of this panel is ours and this story is where it gets reviewed.
+ *
+ * What to look at: the swatch left of each name, the tick on the **right** of the chosen row, the
+ * hover and the `menu-active` highlight, and that sixteen rows scroll inside `max-h-64` rather than
+ * pushing the modal. The swatches are `CATEGORY_DOT`'s, so they are the same colours the cards, the
+ * legend and the donut paint - a colour that looks wrong here looks wrong on the Dashboard too.
+ *
+ * **Worth checking in Firefox as well**, where the panel is not anchored: Firefox has no CSS anchor
+ * positioning, so daisyUI's `@supports` fallback centres it over a dimmed backdrop instead. Degraded
+ * rather than broken, and the same behaviour the transactions row menu already ships.
+ */
+export const ColourPickerOpen: Story = {
+  render: () => {
+    function Demo() {
+      const host = useRef<HTMLDivElement>(null);
+
+      useEffect(() => {
+        // Deferred a tick for `WithMessages`' reason: the modal's own effect calls `showModal()`, and
+        // opening a popover inside a dialog that is not in the top layer yet does nothing.
+        const timer = setTimeout(() => {
+          // Optionally called, because the story smoke suite renders this under jsdom, which
+          // implements no popover at all - `jest.setup.ts` deliberately fakes none.
+          host.current?.querySelector<HTMLElement>('[popover]')?.showPopover?.();
+        }, 0);
+
+        return () => clearTimeout(timer);
+      }, []);
+
+      return (
+        <div ref={host}>
+          <AddCategoryModal palette={PALETTE} create={accept} onClose={() => {}} />
+        </div>
+      );
+    }
+
+    return <Demo />;
+  },
+};
+
+/**
  * The palette read having failed, which no frame draws either.
  *
  * Both selects are disabled and a `role="alert"` line says why, because a control that is inert with
