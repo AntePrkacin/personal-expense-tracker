@@ -94,6 +94,12 @@ type IconSeed = { name: IconName; label: string };
  * naming a category of their own is not forced to reuse a glyph that already
  * means something else on their screen. `template-tokens.ts` carries the whole
  * argument, including why they are appended rather than regrouped by domain.
+ *
+ * **Seventeen of the palette were then replaced on glyph shape alone**, so a
+ * label here can look odd beside its block comment - `panda` under Transport is
+ * the clearest case. `template-tokens.ts` is the authority for why, and
+ * `docs/explainers/category-icon-set-preview.html` renders every mark at the
+ * 18px the app draws, which is the size the whole review was judged at.
  */
 const ICON_SEED: readonly IconSeed[] = [
   // PET-64: carried by a seeded category.
@@ -116,17 +122,17 @@ const ICON_SEED: readonly IconSeed[] = [
   { name: 'coffee', label: 'Coffee' },
   { name: 'beer', label: 'Beer' },
   { name: 'pizza', label: 'Pizza' },
-  { name: 'cake-slice', label: 'Cake' },
+  { name: 'ice-cream-cone', label: 'Ice cream' },
   // Transport
   { name: 'fuel', label: 'Fuel pump' },
   { name: 'bus', label: 'Bus' },
-  { name: 'train-front', label: 'Train' },
+  { name: 'panda', label: 'Panda' },
   { name: 'bike', label: 'Bicycle' },
-  { name: 'circle-parking', label: 'Parking' },
+  { name: 'square-parking', label: 'Parking' },
   // Home and bills
   { name: 'house', label: 'House' },
-  { name: 'droplets', label: 'Water' },
-  { name: 'flame', label: 'Flame' },
+  { name: 'bird', label: 'Bird' },
+  { name: 'waves', label: 'Waves' },
   { name: 'wifi', label: 'Wi-Fi' },
   { name: 'smartphone', label: 'Phone' },
   { name: 'trash-2', label: 'Bin' },
@@ -136,18 +142,18 @@ const ICON_SEED: readonly IconSeed[] = [
   { name: 'pill', label: 'Pill' },
   { name: 'stethoscope', label: 'Stethoscope' },
   { name: 'dumbbell', label: 'Dumbbell' },
-  { name: 'glasses', label: 'Glasses' },
+  { name: 'eye', label: 'Eye' },
   // Shopping
-  { name: 'shopping-bag', label: 'Shopping bag' },
+  { name: 'tag', label: 'Tag' },
   { name: 'shirt', label: 'Shirt' },
   { name: 'package', label: 'Package' },
   { name: 'gem', label: 'Gem' },
   // Money
-  { name: 'wallet', label: 'Wallet' },
+  { name: 'scale', label: 'Scales' },
   { name: 'credit-card', label: 'Credit card' },
   { name: 'piggy-bank', label: 'Piggy bank' },
-  { name: 'banknote', label: 'Banknote' },
-  { name: 'coins', label: 'Coins' },
+  { name: 'shopping-cart', label: 'Shopping cart' },
+  { name: 'percent', label: 'Percent' },
   { name: 'receipt', label: 'Receipt' },
   { name: 'trending-up', label: 'Upward trend' },
   { name: 'shield', label: 'Shield' },
@@ -161,20 +167,20 @@ const ICON_SEED: readonly IconSeed[] = [
   { name: 'palette', label: 'Palette' },
   // Work and study
   { name: 'briefcase', label: 'Briefcase' },
-  { name: 'laptop', label: 'Laptop' },
-  { name: 'newspaper', label: 'Newspaper' },
+  { name: 'pencil', label: 'Pencil' },
+  { name: 'fish', label: 'Fish' },
   // Family and social
   { name: 'baby', label: 'Baby' },
   { name: 'users', label: 'People' },
-  { name: 'hand-heart', label: 'Helping hand' },
+  { name: 'rabbit', label: 'Rabbit' },
   // Personal care
-  { name: 'sparkles', label: 'Sparkles' },
+  { name: 'sailboat', label: 'Sailboat' },
   // Travel
-  { name: 'luggage', label: 'Luggage' },
-  { name: 'hotel', label: 'Hotel' },
+  { name: 'tree-palm', label: 'Palm tree' },
+  { name: 'key-round', label: 'Key' },
   { name: 'tent', label: 'Tent' },
   // Other
-  { name: 'circle-ellipsis', label: 'Ellipsis' },
+  { name: 'heart', label: 'Heart' },
 ];
 
 /** One default category, in the order onboarding draws its chips. */

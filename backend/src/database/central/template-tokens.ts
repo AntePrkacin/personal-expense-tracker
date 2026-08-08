@@ -148,6 +148,30 @@ export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
  * a database seeded before the change disagree with one seeded after about the
  * order of every row past the insertion point, for no gain: an admin reorders
  * the picker for themselves.
+ *
+ * **Replacing a name in place is the one edit that is exempt from that**, and
+ * seventeen of the fifty-one below are replacements rather than originals. A swap
+ * keeps every other row's position, so the two databases still agree; only the
+ * swapped row's own `name` and `label` differ, and no user category references a
+ * template icon after provisioning copies it.
+ *
+ * **The seventeen were chosen on glyph shape alone, and the block comments below
+ * did not survive it.** They record the spending domain each icon was originally
+ * picked for, and after the visual pass several no longer describe their
+ * contents: `panda` sits under Transport (it replaced `train-front`, which
+ * collided with `bus`), `sailboat` under Personal care, `bird` and `waves` under
+ * Home and bills, `fish` under Work and study. That is a real inconsistency, kept
+ * deliberately rather than tidied, because the alternative is reordering - which
+ * is the one thing the paragraph above forbids. Read the blocks as provenance,
+ * not as taxonomy; `docs/explainers/category-icon-set-preview.html` is the
+ * authority for what the set actually looks like and why each swap happened.
+ *
+ * **Two names are deliberately shared with the app's own interface**, which the
+ * same review found and accepted: `pencil` is also the transaction row menu's
+ * Edit action and `trash-2` its Delete action. A user can therefore pick a mark
+ * that means something else elsewhere in the product. Do not "fix" that without
+ * reading the explainer's interface-scan section, which lists every one of the
+ * seventeen icons `frontend/src` draws outside the category map.
  */
 export const ICON_NAMES = [
   // PET-64: the twelve seeded categories, then the fallback.
@@ -171,17 +195,17 @@ export const ICON_NAMES = [
   'coffee',
   'beer',
   'pizza',
-  'cake-slice',
+  'ice-cream-cone',
   // Transport
   'fuel',
   'bus',
-  'train-front',
+  'panda',
   'bike',
-  'circle-parking',
+  'square-parking',
   // Home and bills
   'house',
-  'droplets',
-  'flame',
+  'bird',
+  'waves',
   'wifi',
   'smartphone',
   'trash-2',
@@ -191,18 +215,18 @@ export const ICON_NAMES = [
   'pill',
   'stethoscope',
   'dumbbell',
-  'glasses',
+  'eye',
   // Shopping
-  'shopping-bag',
+  'tag',
   'shirt',
   'package',
   'gem',
   // Money
-  'wallet',
+  'scale',
   'credit-card',
   'piggy-bank',
-  'banknote',
-  'coins',
+  'shopping-cart',
+  'percent',
   'receipt',
   'trending-up',
   'shield',
@@ -216,20 +240,20 @@ export const ICON_NAMES = [
   'palette',
   // Work and study
   'briefcase',
-  'laptop',
-  'newspaper',
+  'pencil',
+  'fish',
   // Family and social
   'baby',
   'users',
-  'hand-heart',
+  'rabbit',
   // Personal care
-  'sparkles',
+  'sailboat',
   // Travel
-  'luggage',
-  'hotel',
+  'tree-palm',
+  'key-round',
   'tent',
   // Other
-  'circle-ellipsis',
+  'heart',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
