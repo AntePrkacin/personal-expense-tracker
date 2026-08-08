@@ -45,7 +45,7 @@ and **PET-40 AC5**. PET-40 and PET-62 both stay Done as the record of what shipp
 a later decision, not a regression. PET-62 in particular exists only to fix the rule being
 deleted here, which is worth knowing before someone reads the deletion as lost work.
 
-### Three traps this plan exists to avoid
+### Four traps this plan exists to avoid
 
 **Deleting `projectionCard` must not delete the projection maths.** `summaryOf` (line 357)
 uses `projected` to pick between three headlines - "You're over budget this month",
@@ -58,6 +58,14 @@ theme-aware colours and there is no `indigo` among them. Backend `warning` must 
 places and compiles cleanly. Worse, per `frontend/CLAUDE.md:81` an interpolated
 `bg-${tone}` compiles to nothing with no build error, so the map has to hold complete class
 strings - the shape `transactions/[id]/categoryStatus.ts` already uses for `CHIP_CLASSES`.
+
+**`info` lives in two unrelated namespaces, and only one of them is being narrowed.** Besides
+`InsightTone`, `info` is one of the seventeen **category colour tokens** - it appears in
+`backend/src/database/central/template-tokens.ts:57`, `template-seed.ts:58` and `:233`,
+`legacy-colour-backfill.ts:52`, and the `COLOUR_TOKENS` list in
+`backend/test/openapi.e2e-spec.ts:711`, none of which have anything to do with insights. A
+sweep for `'info'` while narrowing the tone union would break the palette PET-64 and PET-65
+built, and it would compile. Touch only the insights DTO and the insights specs.
 
 **A zero-card ready set is the steady state, not an edge case.** `overCapCard` returns null
 when nothing is over its cap (line 175) and can only ever fire for a category that *has* a
@@ -88,6 +96,24 @@ and every user sees it alone in month one unless they have already overspent a c
 - [ ] Remove the specs for both deleted rules from
       `backend/src/insights/rule-based-insight.generator.spec.ts`, including the two PET-62
       added, and add one asserting neither card can ever appear in a generated set.
+- [ ] Fix `backend/src/insights/insights.service.spec.ts:56` and `:81`, whose fixtures use
+      `tone: 'info' as const` and stop compiling the moment the union narrows.
+- [ ] Fix `backend/test/insights.e2e-spec.ts`: the `tone: 'info'` fixture at line 163, and -
+      the important one - the two assertions at lines 405-406. Its own comment states the
+      invariant this branch destroys: "Spend in the current period always yields at least the
+      projection card." After the cut, spend guarantees no card at all. Decide explicitly
+      between seeding that account so a surviving rule fires (a category over its cap is the
+      only one reachable without a previous month) and relaxing the assertion to tolerate
+      zero cards. Do not simply delete the line: it is the only e2e coverage that a ready set
+      carries cards.
+- [ ] Check `backend/test/dashboard.e2e-spec.ts`, which also references insights, for any
+      assertion on tones or card counts.
+- [ ] Reword the two comments in `backend/src/scripts/seed-showcase.ts` that justify
+      themselves by the deleted rule: the `SUBSCRIPTIONS` docblock at lines 80-89 ("exactly
+      the property the insight rule looks for") and `SUBSCRIPTION_CATEGORY` at 146-156 (the
+      "recurring-merchant story"). **The seed data itself stays** - a realistic account has
+      subscriptions in it, and the fixed-day, fixed-amount shape still keeps the transaction
+      list from stacking five identical rows on one date. Only the stated reason changes.
 - [ ] Build the summary banner: dark surface with on-dark text tokens, the `✦ SUMMARY`
       overline, and the headline and body read from the set rather than hardcoded.
 - [ ] Build the insight card, with a `Record<InsightTone, string>` of complete daisyUI class
@@ -119,3 +145,9 @@ and every user sees it alone in month one unless they have already overspent a c
 - Any change to the insights storage, the read's state derivation, or the single-run guard.
 - Turning the empty-account check into a count, per the checklist note above.
 - The `info` tone is retired rather than repurposed: nothing is redesigned to use it.
+- **PET-60's acceptance criterion that all four insight rules fire believably on a freshly
+  seeded showcase account.** It becomes unsatisfiable here, because only two rules will
+  exist. PET-60 stays Done as the record of what shipped, and no ticket is raised for it;
+  this line exists so a later reader does not diagnose the seed as broken. The showcase
+  account will still exercise both surviving rules, since it has capped categories and more
+  than one month of history.
