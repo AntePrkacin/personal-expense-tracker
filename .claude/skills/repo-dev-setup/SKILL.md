@@ -245,8 +245,9 @@ curl http://localhost:3000/api/health
 Expect a JSON body. A 404 on `/` is also correct and not a fault: the global `api` prefix
 puts the route at `/api/health`.
 
-**Frontend** - ask the user to open `http://localhost:4200` and confirm the greeting from
-the backend renders, with no errors in the browser console. You cannot see their browser.
+**Frontend** - ask the user to open `http://localhost:4200` and confirm the Welcome screen
+renders (logo, "Take control of your money." heading, "Get started" and "I already have an
+account" links), with no errors in the browser console. You cannot see their browser.
 
 **Hooks** - a silent miss here is the most common setup failure:
 
