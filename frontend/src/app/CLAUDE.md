@@ -287,6 +287,14 @@ assertion pass with the restore deleted, which an earlier version of the test di
 therefore asserts that `setSelectionRange` was called with the computed offset, and the visible
 behaviour is a Storybook or manual check. docs/TODO.md records the gap.
 
+**That handler is no longer written by hand here, or in any of the other three forms that copied
+it.** It was seven identical lines in `app/setup/BudgetForm.tsx`, `(app)/AddTransactionModal.tsx`,
+`(app)/EditTransactionModal.tsx` and `(app)/transactions/categories/AddCategoryModal.tsx` - one
+past the rule of three, with a fix to the call order owing four edits and three chances to be
+missed. `lib/amountField.ts`'s `reformatAmountInput` is the owner now, and `frontend/CLAUDE.md`
+carries what belongs to that module; every call site is one line, and every paragraph above still
+describes what it does.
+
 **The step indicator is `aria-hidden`.** The card's own overline states "STEP 1 OF 3" in text,
 so three unlabelled shapes carry nothing a reader is missing - unhidden they announce as three
 empty generics. Same call `ui/Input` makes on its `$` prefix. `SetupShell.tsx` records the two
@@ -1366,7 +1374,7 @@ category detail page. **Read the flag's own comment before touching it** - the t
 are that it is a flag rather than commented-out JSX, so the markup stays typechecked and cannot rot
 while hidden, and that nothing behind the field was removed: `categoryForm.ts` still trims and omits
 `note`, its suite still pins that, and `CreateCategoryDto.note` and the `categories.note` column are
-untouched. Flipping it to true fails exactly four cases in `AddCategoryModal.test.tsx`, which is the
+untouched. Flipping it to true fails exactly three cases in `AddCategoryModal.test.tsx`, which is the
 cost of re-enabling, stated by the suite rather than left to be discovered. One consequence worth
 knowing: with the Note gone, **the budget is the only label carrying "(optional)"**, so it now carries
 A12's whole signal on its own.
@@ -1374,10 +1382,18 @@ A12's whole signal on its own.
 **`color` and `icon` are literal unions on the wire, and a `<select>` hands back a `string`.** The
 form models the gap rather than casting across it: `CategoryFormValues` types both as
 `Token | ''`, and `hasChosenMarks` narrows to the shape `toCreateCategoryBody` will accept. The
-change handlers look the chosen value up in the palette and store the row's own typed token, so
-nothing anywhere asserts membership it has not checked. The empty string is not a placeholder the
-user can select - both selects are preselected - it is "the palette did not arrive", which is exactly
-the state the submit guard refuses on.
+empty string is not a placeholder the user can select - both selects are preselected - it is "the
+palette did not arrive", which is exactly the state the submit guard refuses on.
+
+**Neither field puts its value through the DOM at all, which is what closed that gap rather than
+guarding it.** This paragraph used to end on the change handlers looking the chosen value up in the
+palette to recover a typed token from a `string` - the honest answer while the fields were
+`ui/Select`s, and false the moment `ColourSelect` and `IconSelect` replaced them in the same PR. Both
+call `onChange` with the row's own `token` or `name`, already the contract's union, so `chooseColour`
+and `chooseIcon` do a `setValues` and nothing else. **Read that as a property of these two controls,
+not of the form**: a field wired to anything that hands back a bare `string` - a native `<select>`, a
+URL parameter, a devtools-written value - is back to needing a real membership check before it may be
+typed as a token, and a cast would be asserting what nothing checked.
 
 ## Not built here
 

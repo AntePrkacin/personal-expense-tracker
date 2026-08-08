@@ -4,7 +4,7 @@ import { Check } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { categoryDotClass, type CategoryColour } from '@/components/ui/categoryColour';
-import { FieldShell, fieldErrorId } from '@/components/ui/FieldShell';
+import { FieldShell } from '@/components/ui/FieldShell';
 import type { PaletteColour } from '@/lib/palette';
 
 import { centreChosenRow } from './pickerScroll';
@@ -18,10 +18,12 @@ import { centreChosenRow } from './pickerScroll';
 // base styling, which would mean hand-written CSS re-creating what daisyUI already provides, and the
 // result would exist only in Chromium. A control of our own is the smaller change.
 //
-// **`ui/Select` stays exactly as it is and the Icon field still uses it.** That is deliberate: this
-// list is 16 rows, and the icons are 64, which wants a grid rather than a list - PET-65's plan says as
-// much. The two triggers therefore share `select`'s own class string, so they are the same box with
-// the same chevron when closed, and only differ when opened. `docs/TODO.md` carries the asymmetry.
+// **`ui/Select` stays exactly as it is and this modal uses it nowhere.** The Icon field is
+// `IconSelect`, a sibling of this one, because 64 glyphs want a searchable grid where 16 named
+// colours want a list - so the two panels differ while the two triggers share `select`'s own class
+// string, and every field in the row is the same box with the same chevron when closed. (This
+// paragraph said Icon was still native until PET-37 built both halves in one change; the asymmetry
+// `docs/TODO.md` used to carry is closed.)
 //
 // **The popover is the platform's, which is `(app)/transactions/TransactionRowMenu.tsx`'s argument
 // rather than a new one.** `popovertarget` opens it, `popovertargetaction="hide"` closes it, and
@@ -39,11 +41,18 @@ import { centreChosenRow } from './pickerScroll';
 // Enter and Space pick, and `aria-current` names the chosen row without claiming a pattern. The lost
 // arrow keys and the lost native mobile picker are the two real costs, both in `docs/TODO.md`.
 
-/** The trigger's box, byte-identical to `(app)/DateField.tsx`'s so the two read as one control. */
-const TRIGGER: Record<'valid' | 'invalid', string> = {
-  valid: 'select w-full cursor-pointer text-left',
-  invalid: 'select select-error w-full cursor-pointer text-left',
-};
+/**
+ * The trigger's box, byte-identical to `(app)/DateField.tsx`'s valid arm so the two read as one
+ * control.
+ *
+ * **One literal rather than that file's `Record<'valid' | 'invalid'>`, because this field can carry
+ * no message.** `categoryForm.ts` says why in full: both marks are preselected from the palette, so
+ * no interaction can empty them and `invalidFields` deliberately never names them - the state that
+ * looks like it wants a field error, a failed palette read, is a form-level line the modal owns. An
+ * `error` prop here would have been a `select-error` variant nothing could ever reach, which is the
+ * shape `frontend/src/app/CLAUDE.md` records `TransactionsTable`'s `pending` prop shipping as once.
+ */
+const TRIGGER = 'select w-full cursor-pointer text-left';
 
 /**
  * The panel. `dropdown` is what CSS anchor positioning hangs off, `menu` owns the row padding and
@@ -64,7 +73,7 @@ const NO_COLOUR = 'Select…';
 const SWATCH = 'size-4 shrink-0 rounded-full';
 
 type ColourSelectProps = {
-  /** Wired to the label, the value span and the error line; see `ui/FieldShell` on why it is required. */
+  /** Wired to the label, the value span and the panel; see `ui/FieldShell` on why it is required. */
   id: string;
   /** The Figma "Label" property, which is "Color". */
   label: string;
@@ -81,19 +90,9 @@ type ColourSelectProps = {
    */
   onChange: (token: CategoryColour) => void;
   disabled?: boolean;
-  /** One line of validation copy, rendered beneath the control by `ui/FieldShell`. */
-  error?: string;
 };
 
-export function ColourSelect({
-  id,
-  label,
-  options,
-  value,
-  onChange,
-  disabled,
-  error,
-}: ColourSelectProps) {
+export function ColourSelect({ id, label, options, value, onChange, disabled }: ColourSelectProps) {
   /**
    * Whether the panel is showing, for `aria-expanded` and nothing else.
    *
@@ -117,7 +116,7 @@ export function ColourSelect({
   const selected = options.find((colour) => colour.token === value);
 
   return (
-    <FieldShell id={id} label={label} error={error}>
+    <FieldShell id={id} label={label}>
       {/* **`aria-labelledby` names the label *and* the value span inside**, which is `DateField`'s
           finding and the reason `ui/FieldShell` puts an id on its label at all: `htmlFor` names a
           form control, and HTML-AAM computes a **button's** name from its own subtree instead - so a
@@ -133,8 +132,7 @@ export function ColourSelect({
         disabled={disabled}
         aria-expanded={open}
         aria-labelledby={`${id}-label ${id}-value`}
-        aria-describedby={fieldErrorId(id, error)}
-        className={TRIGGER[error ? 'invalid' : 'valid']}
+        className={TRIGGER}
         style={{ anchorName: anchor } as React.CSSProperties}
       >
         <span className="flex items-center gap-2">

@@ -3,7 +3,7 @@
 import { createElement, useRef, useState } from 'react';
 
 import { categoryIcon, type IconName } from '@/components/ui/categoryColour';
-import { FieldShell, fieldErrorId } from '@/components/ui/FieldShell';
+import { FieldShell } from '@/components/ui/FieldShell';
 import type { PaletteIcon } from '@/lib/palette';
 
 import { centreChosenRow } from './pickerScroll';
@@ -31,11 +31,12 @@ import { centreChosenRow } from './pickerScroll';
 // **Two states no frame draws and this file invents**: an empty search, and the search box itself.
 // `docs/TODO.md` records both as owing a designer.
 
-/** The trigger's box, the same literal `ColourSelect` and `(app)/DateField.tsx` both use. */
-const TRIGGER: Record<'valid' | 'invalid', string> = {
-  valid: 'select w-full cursor-pointer text-left',
-  invalid: 'select select-error w-full cursor-pointer text-left',
-};
+/**
+ * The trigger's box, the same literal `ColourSelect` and `(app)/DateField.tsx` both use, and one
+ * literal rather than a per-state record for the reason `ColourSelect` gives: this field can carry
+ * no message, so an `invalid` variant would be unreachable.
+ */
+const TRIGGER = 'select w-full cursor-pointer text-left';
 
 /**
  * The panel, `dropdown-end` so it right-aligns under the trigger and grows leftwards - the Icon field
@@ -97,18 +98,9 @@ type IconSelectProps = {
   /** Called with the chosen lucide name, already the contract's union. See `ColourSelect`. */
   onChange: (name: IconName) => void;
   disabled?: boolean;
-  error?: string;
 };
 
-export function IconSelect({
-  id,
-  label,
-  options,
-  value,
-  onChange,
-  disabled,
-  error,
-}: IconSelectProps) {
+export function IconSelect({ id, label, options, value, onChange, disabled }: IconSelectProps) {
   const [open, setOpen] = useState(false);
 
   /** The search term. Reset when the panel closes, so reopening never shows a stale filter. */
@@ -139,7 +131,7 @@ export function IconSelect({
         );
 
   return (
-    <FieldShell id={id} label={label} error={error}>
+    <FieldShell id={id} label={label}>
       <button
         type="button"
         id={id}
@@ -147,8 +139,7 @@ export function IconSelect({
         disabled={disabled}
         aria-expanded={open}
         aria-labelledby={`${id}-label ${id}-value`}
-        aria-describedby={fieldErrorId(id, error)}
-        className={TRIGGER[error ? 'invalid' : 'valid']}
+        className={TRIGGER}
         style={{ anchorName: anchor } as React.CSSProperties}
       >
         <span className="flex items-center gap-2">
