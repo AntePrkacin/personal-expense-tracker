@@ -35,6 +35,13 @@ import { CategoriesScreen } from './CategoriesScreen';
 // request on every view of this tab whether or not anybody opens the modal; `docs/TODO.md` records
 // that as the known price.
 //
+// **"A third adds no latency" holds for a *fast* third, and `readPalette` carries a timeout so it
+// cannot stop holding.** `Promise.all` settles when the slowest entry does, so an endpoint that
+// hangs rather than refusing would keep this whole page - grid, summary and header - off the screen
+// for as long as the socket lived, for the sake of the one read whose failure the screen survives.
+// The bound lives in `lib/palette.ts` rather than here, because it is a fact about that read rather
+// than about this page, and the two reads beside it deliberately have none.
+//
 // No `export const dynamic`: the cookie read behind both opts this route out of static
 // rendering on its own, as it does everywhere else in the app.
 

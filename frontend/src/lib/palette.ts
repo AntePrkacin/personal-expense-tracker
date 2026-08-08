@@ -51,6 +51,9 @@ export type PaletteIcon = components['schemas']['PaletteIconDto'];
  */
 export type PaletteResult = AuthorizedResult<Palette>;
 
+/** How long the palette read may take before the caller is handed a failure instead. */
+const PALETTE_TIMEOUT_MS = 2_000;
+
 /**
  * Reads what a category may be painted and marked with.
  *
@@ -68,7 +71,21 @@ export type PaletteResult = AuthorizedResult<Palette>;
  * **No count is promised and none should be assumed.** As seeded it is 16 colours and 64 icons, and
  * the icon half was 13 until PET-65; nothing in the frontend writes either number down, which is
  * precisely what let that change land without touching this file.
+ *
+ * **It is the one read in the app with a timeout, and the reason is where it is awaited.**
+ * `transactions/categories/page.tsx` reads it inside the `Promise.all` its two real reads already
+ * share, so the page renders when the *slowest* of the three settles - and this is the only one of
+ * the three whose failure the screen survives. Without a bound, a backend that hangs rather than
+ * refusing holds back a card grid that was ready to draw, and holds it for as long as the socket
+ * takes to die; with one, a slow palette degrades to exactly what a refused palette already
+ * degrades to, which is `null` and a disabled picker saying why. The number is a ceiling rather
+ * than an expectation - this endpoint reads two small central tables and answers in milliseconds -
+ * so anything it fires on is already a failure by the time the user would notice.
+ *
+ * Do **not** copy the timeout to `readCategoriesView` or `readTransactionCount` beside it. Those
+ * two are the content of the screen, so giving up on one early would replace a slow screen with an
+ * error page rather than with a usable one.
  */
 export async function readPalette(): Promise<PaletteResult> {
-  return authorizedGet<Palette>('/api/templates/palette');
+  return authorizedGet<Palette>('/api/templates/palette', { timeoutMs: PALETTE_TIMEOUT_MS });
 }

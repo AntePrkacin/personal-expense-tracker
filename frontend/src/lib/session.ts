@@ -102,9 +102,22 @@ export type AuthorizedResult<T> = { ok: true; data: T } | { ok: false; reason: A
  * A missing cookie costs no round trip, which is the common case for every signed-out
  * visitor.
  *
+ * **`timeoutMs` is opt-in, and the default of no timeout is the right one for a read that is
+ * the content of its screen.** A read the page cannot render without has nothing better to do
+ * than wait: giving up early would only trade a slow screen for an error page. It exists for
+ * the opposite case - a read whose caller degrades to something usable - where a backend that
+ * hangs rather than refusing would otherwise hold a whole page that was ready to draw. An
+ * abort lands in the `catch` below and reports `unavailable`, which is the same answer that
+ * caller already handles for a refused read. `readPalette` is the one caller that passes it;
+ * see `lib/palette.ts` for why that read in particular must not be able to block a render.
+ *
  * @param path the backend path including its `/api` prefix and any query string
+ * @param options `timeoutMs` aborts the request after that many milliseconds
  */
-export async function authorizedGet<T>(path: string): Promise<AuthorizedResult<T>> {
+export async function authorizedGet<T>(
+  path: string,
+  options: { timeoutMs?: number } = {},
+): Promise<AuthorizedResult<T>> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
 
@@ -118,6 +131,7 @@ export async function authorizedGet<T>(path: string): Promise<AuthorizedResult<T
       // header here, server-side, where the browser cannot see it happen.
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
+      signal: options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs),
     });
 
     if (response.status === 401) {
