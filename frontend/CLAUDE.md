@@ -94,6 +94,48 @@ deliberately: a controller and automatic prefers-dark must not coexist, or a bro
 dark mode makes the control switch dark to dark. A visible toggle is deferred and trades away
 the automatic behaviour when it lands.
 
+### Changing or adding a theme: the category palette is the guard
+
+**A theme is not a private decision of `globals.css`. It repaints seventeen category colours at
+once, and two committed artifacts are what say whether the result is usable.** Read this before
+registering a third daisyUI theme, before swapping either of the two that ship, and before any
+change that moves what a `--color-*` resolves to.
+
+- `docs/explainers/category-color-palette-preview.html` draws all **seventeen** allowlist tokens
+  as the four marks the app really paints them as, with the measured light and dark contrast
+  beside each.
+- `docs/explainers/category-colors-icons-description-preview.html` draws the **thirteen** seeded
+  categories, which is what a real account actually shows.
+
+Both are stock HTML pinned to the installed daisyUI, Tailwind and lucide, so opening one in a
+browser is the whole procedure. **Open both under the new theme and satisfy three conditions
+before the theme lands.** First, every one of the seventeen tokens has to stay **distinguishable
+from every other**, because a picker offering two colours that paint the same is a picker with
+sixteen entries and a lie in it - three pairs are already deliberately close (`categoryColour.ts`
+names them with their measured ΔE), so a theme that collapses a fourth pair is spending margin
+that was already spent. Second, every colour has to stay **visible against `bg-base-100`** as an
+8px dot, not merely as a 36px tile: that is the mark a theme change breaks first, and the whole
+reason both files draw the small marks at all. Third, every tile's glyph has to stay legible on
+its own background, which is what the `-content` pairing buys and what a re-themed palette can
+silently take away.
+
+**None of that is checked by anything.** No build, no lint, no Jest run and no CI job reads a
+colour, `COLOUR_CONTRAST` is documentation with a type on it rather than a runtime assertion, and
+the frontend's exhaustiveness proofs catch a missing _key_ while saying nothing about the value.
+So a theme that makes six categories look identical ships entirely green. That is the failure this
+guard exists for, and it is the same failure `backend/CLAUDE.md` records for `warning-content`:
+the claim "a semantic token is theme-aware and therefore safe" is false, was written down anyway,
+and was caught by measuring rather than by reasoning.
+
+**Re-measure rather than reuse the numbers.** Both files carry figures from headless Chromium
+against the installed daisyUI, and a new theme invalidates every one of them - `COLOUR_CONTRAST`
+in `backend/src/database/central/template-tokens.ts` is where the table lives and where a
+re-measurement belongs. Compositing matters: a token carrying an alpha means nothing until it is
+painted over the card and the pixel is read, so a check that stops at `getComputedStyle` has not
+checked `base-content/50`. And if a theme genuinely cannot carry seventeen distinguishable
+colours, the answer is to change the palette in `COLOUR_SEED` and re-run both files, not to ship
+the theme and let the categories collide.
+
 ## Where daisyUI and Tailwind fight
 
 **Every entry below is a class that is present in the markup and paints nothing**, and not one

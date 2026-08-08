@@ -96,6 +96,12 @@ export type ColourToken = (typeof COLOUR_TOKENS)[number];
  *
  * Not exported to the API and not a runtime check - it is documentation with a
  * type on it, kept beside the list it describes so the two cannot drift.
+ *
+ * **Every number here is void the moment a theme changes**, which is why
+ * `docs/explainers/category-color-palette-preview.html` renders this table beside
+ * the marks it describes: a theme is what re-measurement is triggered by, and
+ * `frontend/CLAUDE.md`'s Changing or adding a theme is the authority for the
+ * check that has to pass before one lands.
  */
 export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
   primary: [8.321, 3.399],

@@ -150,6 +150,7 @@ read the file before you write the change, not after.
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
+| add or change a daisyUI theme, or re-map a `--color-*`              | `frontend/CLAUDE.md`, Changing or adding a theme |
 | open the Figma file, or implement a designed screen                 | `frontend/CLAUDE.md`, Figma against daisyUI |
 | write a daisyUI class, or wonder why one paints nothing             | `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight |
 | add or change a chart, or reach for a charting library              | `frontend/CLAUDE.md`, The chart library |
