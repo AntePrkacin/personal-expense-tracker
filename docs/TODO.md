@@ -471,6 +471,33 @@ reads together rather than only this one.
 
 ### The header period ignores the profile's month start day
 
+**Closed 2026-08-09 by PET-47, taking the proposed fix below exactly as written.** `periodOverline`
+and `periodLabel` in `lib/format.ts` name both months above a `monthStartDay` of 1 - "September /
+October 2025" - and the five period-scoped consumers moved onto them: the Dashboard's overline and
+month pill, the Transactions overline, the Categories tab's overline and its "{period} spending"
+heading, and the Insights overline. At the default of 1 the output is byte-identical to what those
+five drew before, which `format.test.ts` pins directly, because almost every account is on the
+default and this fix has to be invisible to all of them.
+
+Three things about the closure are worth having written down. **`monthOverline` and `monthLabel`
+survive and are not deprecated**: `(app)/DateField.tsx` draws a real calendar grid and its popover
+header names the month that grid is *of*, where a period label over six rows of real weeks would be
+nonsense - so the split is calendar-month versus budgeting-period rather than old versus new.
+**The month arithmetic is a deliberate second copy** of `backend/src/common/month-window.ts`'s rule,
+bounded to two branches and used for a *label* only; every figure on every screen is still scoped to
+the window the backend resolved. The alternative was a period-name field on four separate responses.
+And **the PET-30 symptom below is gone with it**: the transactions header and `period=current` now
+agree about which window the page is showing, so a transaction inside the calendar month but outside
+the period is no longer absent from a page whose overline names that month.
+
+What does **not** close here is the zone. `todayIsoDate()` is the frontend host's and the backend
+resolves against `APP_TIMEZONE`, so on the boundary day the label can name the neighbouring period
+until the two agree - the same gap the `TrendCard` and `formatRelativeDate` entries already track,
+inherited rather than introduced, since the old code read `new Date()` at those same call sites.
+The `en-US` paragraph at the end of this entry also still stands and is now PET-47's second
+deviation rather than its first: money follows the profile's currency and keeps en-US grouping, by
+product decision.
+
 `monthOverline()` and `monthLabel()` in `lib/format.ts` format the **calendar** month, and
 A9 says the profile's `monthStartDay` is what defines the period used by "This month" filters
 and "days left" math. The display is correct for the default of 1 and wrong for any other

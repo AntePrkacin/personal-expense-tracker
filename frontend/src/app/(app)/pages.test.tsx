@@ -486,6 +486,52 @@ describe("the profile's currency reaches the figures (PET-47)", () => {
   });
 });
 
+describe("the profile's month start day reaches the header (PET-47)", () => {
+  // The other half of the thread, and the closing of a `docs/TODO.md` entry open since PET-19.
+  // The clock is pinned to 8 October 2025 for the whole file, so at a start day of 15 today falls
+  // in the period that opened on 15 September - which is exactly the case the old header got
+  // wrong, naming "October" over figures drawn from 15 Sep to 15 Oct.
+  //
+  // Asserted at the page level for the same reason the currency tests above are: every screen
+  // suite passes `monthStartDay={1}` by hand, so a page that stopped reading the profile would
+  // leave all of them green.
+
+  function withMonthStartDay(monthStartDay: number) {
+    (requireProfile as jest.Mock).mockResolvedValue({
+      firstName: 'Marko',
+      lastName: 'Kovač',
+      email: 'marko@email.com',
+      currency: 'USD',
+      monthlyBudget: 2000,
+      monthStartDay,
+    });
+  }
+
+  it.each([
+    ['Dashboard', DashboardPage],
+    ['Transactions', TransactionsPage],
+    ['AI Insights', InsightsPage],
+  ])('%s names both months of the period when the start day is not the 1st', async (_n, Page) => {
+    withMonthStartDay(15);
+
+    await renderScreen(Page);
+
+    expect(screen.getByText('September / October 2025')).toBeInTheDocument();
+    expect(screen.queryByText('October 2025')).not.toBeInTheDocument();
+  });
+
+  it('still names one month at the default, so no untouched account sees a change', async () => {
+    // The regression that matters most: almost every account is on the default, and this fix must
+    // be invisible to all of them.
+    withMonthStartDay(1);
+
+    await renderScreen(DashboardPage);
+
+    expect(screen.getByText('October 2025')).toBeInTheDocument();
+    expect(screen.queryByText('September / October 2025')).not.toBeInTheDocument();
+  });
+});
+
 describe('the query string reaching the list read', () => {
   // The one seam nothing else covers: `filters.test.ts` proves the parser and
   // `lib/transactions.test.ts` proves the read, but only this file renders the page that

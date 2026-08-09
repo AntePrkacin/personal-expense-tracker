@@ -48,7 +48,7 @@ import { CategoriesScreen } from './CategoriesScreen';
 
 export default async function CategoriesPage() {
   // Free, for the reason `transactions/page.tsx` records: the shell's gate already read it.
-  const { currency } = await requireProfile();
+  const { currency, monthStartDay } = await requireProfile();
 
   const [categories, transactionCount, palette] = await Promise.all([
     readCategoriesView(),
@@ -89,6 +89,7 @@ export default async function CategoriesPage() {
   // to unpick, and this read arriving with a second one would be exactly that shape again.
   return (
     <CategoriesScreen
+      monthStartDay={monthStartDay}
       currency={currency}
       categories={categories.data.categories}
       allocation={categories.data.allocation}

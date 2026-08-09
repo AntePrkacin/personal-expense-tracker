@@ -169,6 +169,7 @@ export const Default: Story = {
           `(app)` shell's own gutter, since neither wraps a story. */}
         <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
           <DashboardScreen
+            monthStartDay={1}
             budgetCard={<BudgetCard currency="USD" {...BUDGET} isEmpty={false} />}
             trendCard={
               <TrendCard

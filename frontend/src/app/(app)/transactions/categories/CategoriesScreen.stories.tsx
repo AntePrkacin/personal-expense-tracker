@@ -233,10 +233,12 @@ function Frame({
   // forgot it would render a screen with no currency to format with, and the shared default is
   // what makes that unreachable.
   currency = 'USD',
+  monthStartDay = 1,
   ...props
-}: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette' | 'currency'> & {
+}: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette' | 'currency' | 'monthStartDay'> & {
   palette?: Palette | null;
   currency?: string;
+  monthStartDay?: number;
 }) {
   return (
     // `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the gutter
@@ -245,6 +247,7 @@ function Frame({
       <CategoriesScreen
         {...props}
         currency={currency}
+        monthStartDay={monthStartDay}
         palette={palette}
         remove={remove}
         update={update}

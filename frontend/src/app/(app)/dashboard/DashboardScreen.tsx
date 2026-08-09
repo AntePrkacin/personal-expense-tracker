@@ -1,4 +1,5 @@
-import { monthLabel, monthOverline } from '@/lib/format';
+import { periodLabel, periodOverline } from '@/lib/format';
+import { todayIsoDate } from '@/lib/date';
 
 import { AddTransactionButton } from '../AddTransactionButton';
 import { PageHeader } from '../PageHeader';
@@ -41,6 +42,14 @@ type DashboardScreenProps = {
   recentTransactionsCard: React.ReactNode;
   /** DSH-8. PET-25's `InsightTeaserCard`. */
   insightCard: React.ReactNode;
+  /**
+   * The profile's month start day, for the header's period label.
+   *
+   * Threaded from the page rather than read here, the same split the currency takes: a Server
+   * Component cannot reach `PreferencesProvider`. It labels the period and resolves no window -
+   * every figure below is scoped to the one the backend resolved. See `periodOverline`.
+   */
+  monthStartDay: number;
 };
 
 export function DashboardScreen({
@@ -49,19 +58,22 @@ export function DashboardScreen({
   donutCard,
   recentTransactionsCard,
   insightCard,
+  monthStartDay,
 }: DashboardScreenProps) {
   // The server clock. The layout's `cookies()` read is what keeps this segment dynamic, so
-  // this is evaluated per request rather than once at build time.
-  const now = new Date();
+  // this is evaluated per request rather than once at build time. It is the frontend host's zone
+  // rather than the backend's `APP_TIMEZONE`, which is the skew `periodOverline` documents and
+  // this screen has always had.
+  const today = todayIsoDate();
 
   return (
     <>
       <PageHeader
-        overline={monthOverline(now)}
+        overline={periodOverline(monthStartDay, today)}
         title="Dashboard"
         action={
           <>
-            <MonthPill label={monthLabel(now)} />
+            <MonthPill label={periodLabel(monthStartDay, today)} />
             {/* Opens modal 09, as of PET-31. The trigger is a thin client wrapper so this
                 screen can stay a Server Component: a Server Component cannot hand `ui/Button`
                 an onClick, and the modal itself lives once on the shell's layout. */}

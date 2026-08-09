@@ -7,6 +7,8 @@ import {
   initials,
   monthLabel,
   monthOverline,
+  periodLabel,
+  periodOverline,
   parseAmountInput,
   shortName,
 } from './format';
@@ -129,6 +131,81 @@ describe('monthLabel', () => {
   it('spells the month out rather than abbreviating it', () => {
     // 'short' would give "Sep", which is not what the frame draws.
     expect(monthLabel(new Date(2025, 8, 8))).toBe('September');
+  });
+});
+
+describe('periodOverline', () => {
+  // The budgeting period's own label, and the answer to the `docs/TODO.md` entry open since
+  // PET-19. `today` is passed explicitly throughout rather than faked with timers, which is
+  // exactly what the parameter exists for.
+
+  it('names one month at the default start day, matching the old behaviour', () => {
+    // At 1 the period *is* the calendar month, so this has to be byte-identical to what the four
+    // headers drew before PET-47 - otherwise the fix is a visible change for every account that
+    // never touched the setting, which is almost all of them.
+    expect(periodOverline(1, '2025-10-08')).toBe('October 2025');
+    expect(periodOverline(1, '2025-10-08')).toBe(monthOverline(new Date(2025, 9, 8)));
+  });
+
+  it('names both months above the default, with the year once', () => {
+    // 20 October at a start day of 15 is inside the period running 15 Oct - 15 Nov.
+    expect(periodOverline(15, '2025-10-20')).toBe('October / November 2025');
+  });
+
+  it('names the period the day belongs to, not the month it is in', () => {
+    // The whole defect: 10 October at a start day of 15 is in the period that opened on
+    // 15 September, so a header saying "October" names a window the figures below are not from.
+    expect(periodOverline(15, '2025-10-10')).toBe('September / October 2025');
+  });
+
+  it('puts the boundary day in the period it opens, matching the backend', () => {
+    // `>=`, the same comparison `src/common/month-window.ts` makes. The day before belongs to the
+    // previous period, and getting this backwards is a one-character error that is wrong for
+    // exactly one day a month.
+    expect(periodOverline(15, '2025-10-15')).toBe('October / November 2025');
+    expect(periodOverline(15, '2025-10-14')).toBe('September / October 2025');
+  });
+
+  it('carries both years across a year boundary', () => {
+    // The one case a single trailing year would be actively wrong about rather than merely terse:
+    // "December / January 2026" claims December 2026.
+    expect(periodOverline(15, '2025-12-20')).toBe('December 2025 / January 2026');
+    expect(periodOverline(15, '2026-01-10')).toBe('December 2025 / January 2026');
+  });
+
+  it('handles the last day a period may start on', () => {
+    // 28 is the backend's cap, chosen so every month has the day and there is no clamping case.
+    expect(periodOverline(28, '2025-02-28')).toBe('February / March 2025');
+    expect(periodOverline(28, '2025-02-27')).toBe('January / February 2025');
+  });
+
+  it('falls back to the calendar month for a start day the DTO cannot produce', () => {
+    // `@IsInt @Min(1) @Max(28)` makes these unreachable. A fallback rather than a throw because
+    // this is a page heading, and taking the screen out through the error boundary over a label
+    // is the worse of the two failures.
+    expect(periodOverline(0, '2025-10-20')).toBe('October 2025');
+    expect(periodOverline(31, '2025-10-20')).toBe('October 2025');
+  });
+});
+
+describe('periodLabel', () => {
+  it('names one month at the default start day', () => {
+    expect(periodLabel(1, '2025-10-08')).toBe('October');
+  });
+
+  it('names both months above it, and never a year', () => {
+    // The month pill and the Categories tab's "{period} spending" heading both draw this, and
+    // neither has room for a year - which is what makes it a second function rather than a slice
+    // off the overline.
+    expect(periodLabel(15, '2025-10-20')).toBe('October / November');
+    expect(periodLabel(15, '2025-12-20')).toBe('December / January');
+  });
+
+  it('agrees with periodOverline about which period today is in', () => {
+    // The two must never disagree: they appear on the same screen, one in the overline and one in
+    // the pill beneath it.
+    expect(periodLabel(15, '2025-10-14')).toBe('September / October');
+    expect(periodOverline(15, '2025-10-14')).toBe('September / October 2025');
   });
 });
 

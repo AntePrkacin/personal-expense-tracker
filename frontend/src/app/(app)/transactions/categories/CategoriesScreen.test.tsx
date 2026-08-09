@@ -84,6 +84,7 @@ const summaryCard = () =>
 function renderScreen(props: Partial<React.ComponentProps<typeof CategoriesScreen>> = {}) {
   return render(
     <CategoriesScreen
+      monthStartDay={1}
       currency="USD"
       categories={CATEGORIES}
       allocation={ALLOCATION}

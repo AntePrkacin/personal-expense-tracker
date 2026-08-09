@@ -40,11 +40,12 @@ export default async function DashboardPage() {
   // `GET /api/profile`. The two are deliberately not awaited together: `Promise.all` would start
   // the dashboard read before the gate had a chance to redirect a dead session.
   const summary = await readDashboard();
-  const { currency } = await requireProfile();
+  const { currency, monthStartDay } = await requireProfile();
   const isEmpty = summary.transactionCount === 0;
 
   return (
     <DashboardScreen
+      monthStartDay={monthStartDay}
       budgetCard={<BudgetCard {...summary} isEmpty={isEmpty} currency={currency} />}
       trendCard={
         <TrendCard

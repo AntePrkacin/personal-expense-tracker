@@ -1,5 +1,6 @@
 import type { TransactionFilters, TransactionsView } from '@/lib/transactions';
-import { monthOverline } from '@/lib/format';
+import { todayIsoDate } from '@/lib/date';
+import { periodOverline } from '@/lib/format';
 
 import { AddTransactionButton } from '../AddTransactionButton';
 import { PageHeader } from '../PageHeader';
@@ -51,6 +52,14 @@ type TransactionsScreenProps = {
    */
   categoryCount: number;
   /**
+   * The profile's month start day, for the header's period label.
+   *
+   * Threaded from the page rather than read here, the same split the currency takes: a Server
+   * Component cannot reach `PreferencesProvider`. It labels the period and resolves no window -
+   * every figure below is scoped to the one the backend resolved. See `periodOverline`.
+   */
+  monthStartDay: number;
+  /**
    * TRN-3's three selects: "All categories", "This month" and the right-aligned "Newest
    * first". Rendered in the populated and no-results states and **never** in the empty one.
    */
@@ -65,6 +74,7 @@ export function TransactionsScreen({
   categoryCount,
   filterBar,
   table,
+  monthStartDay,
 }: TransactionsScreenProps) {
   // A15's amendment in one line: the no-results state keeps every control, the empty one drops
   // the filter bar. Reading it off the state name rather than off "is a filter active" is what
@@ -79,7 +89,7 @@ export function TransactionsScreen({
     // also what lets `PendingRegion` below dim the table for a change the header started.
     <FilterNavigationProvider>
       <PageHeader
-        overline={monthOverline(new Date())}
+        overline={periodOverline(monthStartDay, todayIsoDate())}
         title="Transactions"
         action={
           <>

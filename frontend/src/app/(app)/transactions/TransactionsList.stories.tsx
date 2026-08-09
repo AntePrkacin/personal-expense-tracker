@@ -110,6 +110,7 @@ function Frame({ filters }: { filters: TransactionFilters }) {
               gutter the `(app)` shell owns, since neither wraps a story. */}
           <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
             <TransactionsScreen
+              monthStartDay={1}
               view={view}
               filters={filters}
               categoryCount={CATEGORIES.length}
