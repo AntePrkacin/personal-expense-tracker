@@ -24,6 +24,14 @@ import type { components } from '@/types/api';
 // already general. That is the whole reason this ticket builds the page-level form rather than a
 // card-level one.
 //
+// **PET-47 shipped and that prediction held with two corrections**, kept rather than edited away
+// because both are the kind that reads as obvious only afterwards. It is **one** case in
+// `invalidFields`, not three: `currency` and `monthStartDay` are picked from closed lists, so no
+// interaction can make either wrong and a message for them would be one nothing could reach. And
+// `sameSettingsValues` needed widening too, which the list above does not mention - it is what the
+// resync in `SettingsForm` compares by value, so a field it did not know about would let an edited
+// form look identical to the server's and be silently reverted.
+//
 // **Note this exports its own `invalidFields` and `isNameValid`**, which `categoryForm.ts` and
 // `(app)/transactionForm.ts` also export. Three modules, three different value types, no
 // relationship - the note that file already carries about the second one applies unchanged to the
@@ -33,9 +41,14 @@ import type { components } from '@/types/api';
 /**
  * What the form holds while it is being filled in.
  *
- * All three are plain strings, because all three are plain text inputs - there is no display-string
- * conversion here of the kind `CategoryFormValues.monthlyCap` needs, and PET-47's `monthlyBudget`
- * will be the first field on this page that does.
+ * Three plain strings until PET-47, whose three additions are all differently shaped - so read the
+ * sentence this replaces as dated rather than wrong. It said all three were plain strings because
+ * all three were plain text inputs, with no display-string conversion of the kind
+ * `CategoryFormValues.monthlyCap` needs, and predicted `monthlyBudget` would be the first field here
+ * that did. It is, and the other two are not strings-in-inputs at all: `monthStartDay` is a number
+ * and `currency` an ISO code, both picked from closed lists by controls that never round-trip a
+ * value through the DOM. That is what made `PreferencesCard`'s `onChange` generic over the field
+ * where `ProfileCard`'s takes a bare `string`.
  */
 export type SettingsFormValues = {
   firstName: string;

@@ -2388,3 +2388,45 @@ caret where the work is - chosen over a second live region because it is actiona
 merely audible. `FIELD_ID` in `settings/settingsForm.ts` is what makes that call possible: the ids
 `ui/Input` requires as literal props are declared once beside the field union, so the focus target
 and the markup cannot drift.
+
+**PET-47 built the Preferences card, so "only the Profile card is built" and "two dead cards"
+above are dated - and the distinction that paragraph draws is the one that survived.** Frame 17's
+third card, the Categories summary with its "Manage", is still not drawn and is still absent
+rather than inert, for exactly the reason given there. What changed is that the second card is
+real: `components/BudgetField.tsx` over `settings/MonthStartField.tsx`, both writing into the same
+`values` the Profile card does.
+
+**AC6 is a property of the form rather than a feature of the card, and that is why the card is a
+literal sibling and not a slot.** One `<form>` wraps both, both call the same `change`, and
+`toUpdateProfileBody` diffs the whole profile once - so a single "Save changes" sends a single
+PATCH carrying whatever moved on either card. Nothing implements that; it falls out of PET-46's
+page-level form, which is what that shape was chosen for.
+
+**`change` became generic over the field, which is the one prediction that did not hold exactly.**
+`ProfileCard`'s three values are all typed text, so `(field, value: string)` served it; two of the
+Preferences card's three are not - `monthStartDay` is a number and `currency` an ISO code from a
+closed list, neither of which round-trips through the DOM as text. A string-only signature would
+force a cast at exactly the point those controls exist to avoid one, so the handler is
+`<Field extends SettingsFormField>(field: Field, value: SettingsFormValues[Field])`.
+
+**Three of the six fields can never appear in `invalidFields`, and the suite asserts the absence.**
+`currency` and `monthStartDay` are picked from closed lists of valid values, so no interaction can
+put either in a state the DTO would refuse, and a message for them would be one nothing could
+reach - the shape `TransactionsTable`'s `pending` prop shipped as once. The budget can be wrong and
+has exactly one way to be, because `isPositiveAmount` folds blank, zero and unparseable junk onto
+one comparison, which is why BUD-6 and A5 specify one message rather than two.
+
+**The Save gate grew a third term, and without it the card shipped a dead end.** PET-46 enables
+"Save changes" on `edited && the diff is non-empty`. `toUpdateProfileBody` deliberately omits an
+unparseable budget - `parseAmountInput('')` is `NaN`, which `JSON.stringify` writes as a `null`
+`UpdateProfileDto` refuses - so **clearing the budget produced an edited form whose diff was empty**:
+a greyed-out button, no message, and nothing on screen saying why, recoverable only by guessing that
+a value was required. The gate is now `edited && (hasProblems || diff is non-empty)`, which routes
+that press into the validation that owns the inline message. The empty-body case the gate exists for
+is untouched, because a form with no problems and no diff is still clean. Two tests written for this
+card failed on it before it was found, which is the argument for writing the refusal cases first.
+
+**The month-start hint is invented copy and owes A29 a sign-off**, like every other undesigned state
+on this page. Neither authority draws a warning there, and this is the one setting on the card whose
+effect is retroactive: the backend derives month attribution from the transaction date at read time,
+so every figure in the app re-buckets the moment it saves. `docs/TODO.md` carries it.

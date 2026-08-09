@@ -134,8 +134,9 @@ const MODULES: [name: string, module: StoryModule][] = [
   // Frame 17, PET-46's own, and the last of the four routed views to reach this list. Three of its
   // five stories are states the frame draws nothing for - all three inline messages at once, the
   // 409, and the success confirmation - which makes this module the review surface A29 owes a
-  // sign-off on rather than only a diff against the design. The diff itself stops after the first
-  // card and the Save row, because the Preferences and Categories cards below them are PET-47's.
+  // sign-off on rather than only a diff against the design. The diff itself stops after the
+  // **second** card and the Save row as of PET-47, which built Preferences; the Categories summary
+  // below it is still that ticket's and still not drawn.
   ['SettingsScreen', SettingsScreen as StoryModule],
 ];
 

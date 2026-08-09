@@ -1279,6 +1279,16 @@ was lifted. The count is still two. The trigger to watch for is now a third *for
 amount without going through that module, and the prediction above is left standing rather than
 deleted because the reasoning for the lift is unchanged when it does arrive.
 
+**Closed 2026-08-09 by PET-47, on exactly the trigger written above.** The Settings Preferences card
+validates a monthly budget, is not a transaction, and cannot reach `app/setup/draft.ts` without
+pointing the signed-in shell at onboarding - the layering inversion `lib/resend.ts` was moved out of
+`app/check-email/` to remove. `frontend/src/lib/amount.ts` now holds `isPositiveAmount` and
+`isFilled`, and the instruction above to "take `isMerchantValid` and `isNameValid` with it" was
+followed. **Every existing export keeps its own name and delegates**: `isBudgetValid` reads
+correctly in a draft, `isMerchantValid` on a transaction, and renaming four predicates across five
+forms would have been churn in service of nothing - so what the lift buys is one copy of each rule
+to fix, and deliberately not one vocabulary. No call site changed.
+
 ### Screen 24's no-address arrival is new copy and a reworded AC
 
 `/check-email` shows the address the user submitted, and PET-12 carries it in a fifteen-minute
@@ -2535,6 +2545,67 @@ that assigns the remainder removes the banner during `router.refresh()`, and `Mo
 aims at an element no longer connected. Focus lands on `<body>`, so the next Tab starts from the top
 of the page. Walked in Chrome on PET-70. It joins the existing entry rather than opening a second
 one, and the fix is the same one: a fallback target when the captured element has gone.
+
+### Switching currency re-denominates silently, and nothing on screen says so
+
+PET-47 made the profile's currency live (`USD`, `EUR`, `GBP`). Amounts are stored as integer cents
+with no currency attached, so switching **re-labels rather than converts**: a 2,000 budget stays
+2,000 and becomes €2,000, and every historical transaction re-labels with it, so a $12.40 coffee
+logged last month renders as €12.40.
+
+**This is the product owner's explicit decision, twice over** - re-denominate rather than convert,
+and ship no warning copy for it. Recorded here rather than on screen because a decision nobody can
+see is the kind this repo has learned to write down. Converting instead would need an FX rate
+source, a backend endpoint, a pass over every transaction and category cap, and an answer to what
+happens to historical accuracy - and is arguably wrong anyway, since it would rewrite what the user
+actually spent.
+
+What would close it without any of that is one line under the picker. It belongs with the other
+copy A29 owes a designer.
+
+### The budget field's focus ring is per-segment, where the design system lights the whole pill
+
+`components/BudgetField.tsx` is daisyUI's `join`, so each `join-item` draws its own focus ring. The
+team's Claude Design version moves the ring onto the **container**, so the whole control lights up
+whichever half has the caret.
+
+Not reproduced, and the reason is a rule rather than effort: a container-wide ring means authoring a
+selector, which `frontend/CLAUDE.md` forbids outright for components. The shipped behaviour is also
+arguably the better signal, because it says *which* half is focused. Owed a designer's sign-off with
+the rest of A29's list; if they want the container ring, the honest options are a daisyUI feature
+request or an explicit carve-out from the no-authored-CSS rule, not a quiet exception.
+
+### A fifth picker with no arrow keys, and the count is now the argument
+
+`settings/MonthStartField.tsx` joins `ColourSelect`, `IconSelect`, `TransactionRowMenu` and
+`CategoryCardMenu` in declining `role="listbox"`/`role="option"`/`role="menu"`: those roles promise
+arrow keys, Home/End, type-ahead and `aria-activedescendant`, and none of the five implements them.
+Each is a list of ordinary buttons with `aria-current` naming the chosen row - Tab reaches every one,
+Enter and Space pick.
+
+**PET-47's own plan specified a real listbox here and the implementation deliberately did not**, so
+this entry is where that reversal lives. Building the contract for one control would have given a
+single picker in this app a keyboard model the other four lack, and the next person copying a picker
+would have copied the wrong one. `IconSelect` already ships **64** rows on this pattern, so 28 is not
+the case that breaks it.
+
+What changed with this ticket is the arithmetic: five controls is past the point where "we have not
+implemented it" is a smaller job than "we have implemented it inconsistently". When it is built it
+should be built once - a shared roving-focus hook adopted by all five in one change - rather than per
+control. The two costs stay as `ColourSelect` first recorded them: no arrow keys, and no native
+mobile wheel picker.
+
+### Three more invented states on Settings, and one of them is retroactive
+
+A29 designs no copy for any of these, and PET-47 added them:
+
+- **"Enter an amount greater than 0."** under the monthly budget - the same string
+  `app/setup/BudgetForm.tsx` shows for the same rule, copied rather than shared.
+- **"Every budget figure in the app is measured from this day."** under "Month starts on". This is
+  the one worth a designer's attention rather than a rubber stamp: changing that value is
+  **retroactive**, because the backend derives month attribution from each transaction's date at
+  read time, so every figure in the app re-buckets the moment it saves. The hint understates that.
+- **The currency picker's panel rows** - symbol, full name, code - which no frame draws at all.
 
 ---
 

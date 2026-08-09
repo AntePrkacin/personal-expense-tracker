@@ -30,9 +30,15 @@ import { SettingsScreen } from './SettingsScreen';
 // **The sidebar is deliberately absent.** These stories are the content column, so diff them
 // against node `40:676` (frame 17's right-hand column) rather than against the whole 1440px frame.
 //
-// **Only the Profile card is here.** The Preferences card and the Categories summary the frame
-// draws below it are PET-47's, so a diff against the frame is expected to stop after the first card
-// and the Save row.
+// **Two of the frame's three cards are here as of PET-47**, so read the sentence this replaces -
+// "Only the Profile card is here" - as dated. The Preferences card renders below Profile with its
+// real controls, and a diff against the frame is expected to stop after **it** and the Save row,
+// because the **Categories summary** with its "Manage" is still PET-47's and still not drawn.
+//
+// Two deliberate differences from the frame in that second card, both recorded where they are
+// decided: currency is the budget field's left segment rather than a row of its own
+// (`components/BudgetField.tsx`), and there is no "On track" status chip in the header, because
+// Settings fetches no dashboard data to put behind one (`settings/PreferencesCard.tsx`).
 
 /** Frame 17's own values, so `Default` is a literal diff target. */
 const PROFILE: Profile = {
