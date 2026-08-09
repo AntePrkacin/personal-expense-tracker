@@ -56,10 +56,28 @@ deterministic step.
 
 ## The date model, which is the crux
 
-The fixture stores no absolute dates. Each transaction carries `monthsAgo` (0-35) and `day` (1-28),
-which is exactly what `dateMonthsAgo()` already consumes internally. The seeder resolves them
-against `todayIn(APP_TIMEZONE)`, so the account is always "three years ending today" whenever it is
-run.
+The fixture stores no absolute dates. Each transaction carries the **calendar month** it belongs to
+(0-11), which **occurrence** of that month it is (0 is the most recent), and the `day` (1-28). The
+seeder turns that into `monthsAgo` against today and then into a date, so the account is always
+"three years ending today" whenever it is run.
+
+**Keying on the calendar month rather than on `monthsAgo` is what makes the rest of this plan
+possible**, and it is worth reading the arithmetic rather than trusting it:
+
+```
+monthsAgo = ((anchorMonth - month + 12) % 12) + 12 * occurrence
+```
+
+With `anchorMonth` set to today's month, this is a **bijection onto 0..35**. Checked by hand for
+`anchorMonth = 7` (August): `(Aug,0) -> 0`, `(Sep,0) -> 11`, `(Aug,2) -> 24`, `(Sep,2) -> 35`. Every
+one of the 36 slots maps to exactly one month of history, and no two collide.
+
+It requires `MONTHS % 12 === 0`, which 36 satisfies and 18 did not. Assert it rather than assuming
+it, because the failure is a silently lopsided account rather than an error.
+
+The payoff is that **the generator knows each slot's calendar month directly**, so anything
+calendar-shaped - which months go over budget, what each month's spending band is - is decided
+during generation with no clock involved and no work deferred to the seeder.
 
 **The pro-rata machinery disappears.** Today the current month is scaled by
 `elapsed = lastDay / MAX_DAY_OF_MONTH`, applied to both the transaction count and the target spend.
@@ -77,62 +95,72 @@ Two consequences worth stating, both deliberate:
   the generator never emits a day above it. No clamping case, same reason the profile constrains
   `monthStartDay` to 1-28.
 
-## Over-budget months are anchored to the calendar, not to an index
+## Every month has a band, and the year has a shape
 
-**December, June, July and August go over budget**, because that is when people really do: Christmas,
-and a summer of travel and eating out. Picking four `monthsAgo` values at random, which is what the
-code does today, produces an account whose bad months are in no pattern at all - and a demo where
-"why is this month red" has no answer.
+Two defects in the data, both measured rather than guessed, and both fixed by the same table.
 
-**This cannot be decided during generation.** The fixture stores `monthsAgo`, so which calendar
-month a slot lands on depends on when the seed runs; a fixture with December baked in would put the
-overspend on September if seeded three months later. The generator is pure and has no clock, which
-is the property the whole split rests on.
+**The bad months follow no pattern.** Four `monthsAgo` values are picked at random, so a demo where
+somebody asks "why is this month red" has no answer beyond "the dice".
 
-So the data is generated and the decision is deferred:
+**The good months never approach the budget.** The 13 under-budget months run **70.7% to 89.9%** of
+budget, mean **78.6%**. Months above 90%: zero. Above 95%: zero. So the account jumps from 89.9%
+straight to 105.7% with nothing in between, and reads as somebody who set their budget 20% too high
+rather than somebody who budgets.
 
-- The generator emits, for **every** month, an ordinary month **plus** an irregular pair marked
-  `irregular: true`, sized to clear the budget from that month's own ordinary total.
-- The seeder resolves each `monthsAgo` to a real calendar month and **keeps the irregular pair only
-  for the four target months**, dropping it everywhere else.
+Both go away if the year has a deliberate shape. Each calendar month gets a band, and three of them
+sit above 100%:
 
-The fixture stays a fixed artifact, every shock is correctly sized for the month it actually lands
-on, and the anchoring is exact whenever the seed runs.
+| Month | Band | Why |
+| --- | --- | --- |
+| Dec | 108-115% | Christmas |
+| Jul | 105-112% | holiday |
+| Aug | 105-112% | holiday |
+| May | 97-99% | the near-miss showcase - the month they *just* made it |
+| Jun | 92-97% | pre-holiday creep |
+| Nov | 90-96% | pre-Christmas |
+| Mar | 86-93% | |
+| Sep | 84-92% | |
+| Oct | 84-92% | |
+| Apr | 80-88% | |
+| Feb | 76-85% | post-Christmas recovery |
+| Jan | 74-83% | post-Christmas recovery |
 
-### What it costs
+**Three over-budget months, not four.** June was dropped from the earlier draft: four of twelve is a
+third of the year, and every over-budget month costs cap headroom (below). Nine of the 36 months end
+up over budget, against 4 of 17 today.
 
-Four of twelve calendar months is a third of the year - 12 over-budget months across 36 rather than
-the 4 of 17 today. Two consequences, both needing work in the same change:
+An over-budget month is still made over budget by **one major plus one minor irregular expense** on
+top of ordinary spending, not by inflating every category 15% - that is both how real months go over
+and what leaves one or two categories visibly over their caps for the over-cap insight to find.
 
-- **`ORDINARY_OVER_MIN_CENTS` cannot survive.** It exists because the generator knew which months
-  were over budget and drew their ordinary spend high; it no longer can. The shock must therefore
-  clear the budget from the *lowest* ordinary month, a $1,700 gap against a cheapest-pair capacity
-  of $850. `assertShocksCanClearBudget` fails on that immediately, which is the assert earning its
-  place. Widen the irregular ranges, narrow the ordinary range, or both.
-- **Cap headroom shrinks.** Mean monthly spend goes from 86% of budget to roughly 89-90% while caps
-  must still sum to $5,000. That is the same squeeze that already took over-budget months from six
-  to four, and it lands on top of the Gifts and Uncategorized problem the checker found.
+### The constraint that governs the tuning
 
-Three ways to pay for it, in preference order:
+This is arithmetic, not preference. Caps sum to exactly the budget, so **weighted category
+utilisation always equals total spend as a share of budget.** The bands above average **93.5%**,
+which leaves every category only 6.5% of headroom against ordinary variance.
 
-1. Keep all four months and make the overspend **gentler** - 103-112% rather than 105-125% - then
-   rebalance caps. Jun-Jul-Aug consecutive also gives the month-over-month rule something real to
-   say three times a year.
-2. Drop to three target months (December, July, August), for 25%.
-3. Stop allocating 100% of the budget to caps, leaving ~5% unallocated so every category has room.
-   Realistic, and it exercises the allocation summary's unallocated figure, but it is a visible
-   product change rather than a tuning one.
+That is tighter than the 9% which already produced the failure this branch fixed once - Dining out
+over its cap in twelve months of eighteen - and `showcase:check --trials=200` already reports Gifts
+over cap in **25.7%** of months and Uncategorized in **22.4%** at today's far gentler 86% mean.
 
-One thing this buys for free: seeding **during** a target month puts a large irregular expense
+So two things are required rather than optional, and the checker is the instrument for both:
+
+- **Shave the mid-table bands** by 2-3 points until the mean lands nearer 91%.
+- **Rebalance the caps non-uniformly.** Lumpy low-value categories need proportionally more headroom
+  than steady high-value ones. Target 4-11% of months over cap for every category, which is where
+  the other eleven already sit.
+
+One thing the shape buys for free: seeding **during** a target month puts a large irregular expense
 partway through the current month, so the Dashboard opens on "on pace to go over" rather than on a
-quiet month. That is a better demo state than anything the current seed can produce.
+quiet month. Better than anything the current seed can produce, and August is a target month.
 
 ## Decisions taken
 
 | Decision | Choice | Why |
 | --- | --- | --- |
 | Fixture committed? | **Yes** | Determinism is only worth having if it is shared. Becomes a fifth entry in root `CLAUDE.md`'s never-hand-edit list. |
-| Absolute or relative dates | **Relative** (`monthsAgo`, `day`) | An absolute date ages; the whole point is that the account is always current. |
+| Absolute or relative dates | **Relative** | An absolute date ages; the whole point is that the account is always current. |
+| Keyed on `monthsAgo` or on the calendar | **Calendar** (`month`, `occurrence`) | The only key that lets December always be December. Costs `MONTHS % 12 === 0`; buys the whole month-shape table with no seed-time work. |
 | Ids in the fixture | **No**, generated at seed time | Ids are opaque, and baking three-year-old UUIDv7s (which embed a timestamp) in is worse than useless. |
 | Categories by name or id | **Name** | Ids are per-account and created at provisioning. |
 | Regeneration reproducible? | **Yes**, `faker.seed(N)` with a fixed default | Makes a fixture diff mean "the model changed", not "the dice moved". Already possible: every randomness source goes through faker, with no `Math.random` anywhere. |
@@ -149,15 +177,15 @@ The complete description of the account, so the seeder is purely mechanical:
   "months": 36,
   "profile": { firstName, lastName, currency, monthlyBudgetCents, monthStartDay },
   "categories": [ { "name": "Groceries", "capCents": 70000 }, ... ],
-  "transactions": [ { "monthsAgo": 35, "day": 1, "merchant": "...", "category": "...", "amountCents": 145000 }, ... ]
+  "transactions": [ { "month": 11, "occurrence": 2, "day": 1, "merchant": "...", "category": "...", "amountCents": 145000 }, ... ]
 }
 ```
 
 No `generatedAt` field. A timestamp would change on every regeneration and destroy the
 byte-identical property the fixed faker seed exists to give.
 
-Transactions are sorted by `monthsAgo` descending, then `day`, then `merchant`, so a regeneration
-diff is local rather than scattered.
+Transactions are sorted by `occurrence` descending, then `month`, then `day`, then `merchant`, so a
+regeneration diff is local rather than scattered.
 
 ## Architecture
 
@@ -278,8 +306,8 @@ was an icon-only pass, which by this table would not have needed a rebuild.
 ### Other changes
 
 - **Scale roughly doubles**: ~2,200 transactions over 36 months, and over-budget months go from
-  4-of-17 to **8-of-35** to hold the same ~23% rate. A cloud seed pushes ~2,200 rows, not the
-  ~1,200 the guide currently states.
+  4-of-17 to **9-of-36** - three calendar months, three times each. A cloud seed pushes ~2,200 rows,
+  not the ~1,200 the guide currently states.
 
 ## Checklist
 
@@ -292,18 +320,27 @@ was an icon-only pass, which by this table would not have needed a rebuild.
       per line, sorted.
 - [x] Create `backend/src/scripts/showcase/generate.ts` holding the four helpers and the month
       loop, returning a `Fixture`. Delete the `elapsed` scaling: every month is generated in full.
-- [ ] Set `MONTHS` to 36.
-- [ ] Replace `OVER_BUDGET_MONTHS` and its random draw with the calendar set: the generator emits an
-      irregular pair for **every** month, marked `irregular: true` and sized against that month's own
-      ordinary total, and the seeder keeps it only for December, June, July and August. Delete
-      `ORDINARY_OVER_MIN_CENTS`, which cannot survive the generator not knowing which months are
-      over budget.
-- [ ] Widen the irregular ranges (or narrow the ordinary range) until
-      `assertShocksCanClearBudget` passes against the widest gap, which is now
-      `OVER_BUDGET_FLOOR_CENTS - ORDINARY_MIN_CENTS` rather than the elevated floor.
-- [ ] Rebalance the caps against `showcase:check --trials=200`, targeting 4-11% of months over cap
-      for every category. Gifts and Uncategorized are at 25.7% and 22.4% today, and the calendar
-      change makes the squeeze worse before it makes it better.
+- [ ] Set `MONTHS` to 36, add `OCCURRENCES = MONTHS / 12`, and assert the multiple. 18 would have
+      silently produced a lopsided year.
+- [ ] Add `MONTH_TARGETS`, twelve entries of `{ minPercent, maxPercent, overBudget }` holding the
+      band table above. Assert there are twelve and that exactly three are over budget.
+- [ ] Delete `OVER_BUDGET_MONTHS`, `ORDINARY_MIN_CENTS`, `ORDINARY_MAX_CENTS`,
+      `ORDINARY_OVER_MIN_CENTS` and `OVER_BUDGET_FLOOR_CENTS`. All five exist only to describe one
+      global range and a random draw, which `MONTH_TARGETS` replaces.
+- [ ] Rewrite the generator's loop as calendar month x occurrence rather than `monthsAgo`, drawing
+      each month's target from its own band and applying the irregular pair only where
+      `overBudget`.
+- [ ] Rewrite `assertShocksCanClearBudget` against the new bands: the gap a pair must close is now
+      `max(band) - ordinaryLevel` for the three over-budget months, roughly $1,250 against today's
+      $850 capacity. Widen the irregular ranges until it passes.
+- [ ] Shave the mid-table bands until `showcase:check --trials=200` puts the mean near 91% rather
+      than the 93.5% the table averages as written.
+- [ ] Rebalance the caps **non-uniformly** against the same command, targeting 4-11% of months over
+      cap for every category. Lumpy low-value categories need proportionally more headroom than
+      steady high-value ones; Gifts and Uncategorized are at 25.7% and 22.4% today and the band
+      change makes it worse before it makes it better.
+- [ ] Add `monthsAgoFor(month, occurrence, anchorMonth)` to `showcase/dates.ts`, with a spec proving
+      it is a bijection onto `0..MONTHS-1` for **every** anchor month 0-11, not just for today's.
 
 **Command A**
 
@@ -318,6 +355,8 @@ was an icon-only pass, which by this table would not have needed a rebuild.
 
 - [ ] Rewrite `seed-showcase.ts` to load the fixture, derive the onboarding payload from
       `fixture.profile`, and write `fixture.categories`' caps.
+- [ ] Resolve each transaction through `monthsAgoFor(month, occurrence, today.month)` before
+      `dateMonthsAgo`, replacing the `monthsAgo` the fixture no longer carries.
 - [x] Resolve dates with `dateMonthsAgo(today, monthsAgo, day)` and drop rows where
       `monthsAgo === 0 && day > today.day`.
 - [x] Add the three validations above.
@@ -343,8 +382,12 @@ was an icon-only pass, which by this table would not have needed a rebuild.
       `day: 9` is kept, one at `monthsAgo: 1, day: 28` is kept whatever the date, and a seeding day
       of the 30th keeps all 28.
 - [ ] Unit-test the committed fixture's own coherence: every `category` is a `CATEGORY_PLANS` key,
-      every `day` is 1-28, every `monthsAgo` is 0-35, caps sum to the budget. This is the drift
-      detector for a hand-edited artifact.
+      every `day` is 1-28, every `month` is 0-11, every `occurrence` is 0 to `OCCURRENCES-1`, all 36
+      slots are present exactly once, and caps sum to the budget. This is the drift detector for a
+      hand-edited artifact.
+- [ ] Unit-test the band shape from a generated fixture: December, July and August are the only
+      months over budget, and May lands between 97% and 99%. These are the two claims the whole
+      change exists to make true, and neither is visible to any other test.
 - [ ] Consider a CI check that regenerating from the committed seed reproduces the committed bytes,
       the same shape as the `api:sync` drift check. Recommended, but call it explicitly in the PR if
       it is left out rather than letting it be an oversight.
@@ -352,7 +395,8 @@ was an icon-only pass, which by this table would not have needed a rebuild.
 **Documentation**
 
 - [ ] Rewrite `docs/guides/seeding-dummy-data.md`'s procedure for three commands rather than two,
-      and update "18 months" and the ~1,200-row figure throughout.
+      update "18 months" and the ~1,200-row figure throughout, and carry the month-band table into
+      it - "which months are red and why" is the first thing anyone demoing will be asked.
 - [ ] Copy the **"When the fixture must be rebuilt"** section above into that guide, table and
       reasoning both. Someone hitting the seeder's refusal will look in the guide, not in a plan
       file, and the table is the whole answer to "do I need to regenerate?".
