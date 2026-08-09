@@ -67,29 +67,29 @@ running, captured before the machine is destroyed.
 
 ## Tasks
 
-- [ ] Add `scripts/reset-databases.sh` with a required `--local` / `--cloud` flag and `set -euo pipefail`
-- [ ] Implement `--local`: remove `backend/databases/` and nothing else, needing no credentials (AC1)
-- [ ] Implement the `--cloud` preflight: check `flyctl` auth, `TURSO_API_TOKEN`, `TURSO_ORG` and
+- [x] Add `scripts/reset-databases.sh` with a required `--local` / `--cloud` flag and `set -euo pipefail`
+- [x] Implement `--local`: remove `backend/databases/` and nothing else, needing no credentials (AC1)
+- [x] Implement the `--cloud` preflight: check `flyctl` auth, `TURSO_API_TOKEN`, `TURSO_ORG` and
       `TURSO_GROUP`; read app, volume and region out of `backend/fly.toml`; require a typed
       confirmation naming the app before anything is touched (AC2)
-- [ ] Capture the deployed image digest, then stop the Fly machine before any Turso call (AC3, AC8)
-- [ ] Enumerate `spendifico-user-*` from the Platform API and delete each, tolerating 404 (AC4)
-- [ ] Delete and recreate the central database with `use_tursodb: true`, asserting the response
+- [x] Capture the deployed image digest, then stop the Fly machine before any Turso call (AC3, AC8)
+- [x] Enumerate `spendifico-user-*` from the Platform API and delete each, tolerating 404 (AC4)
+- [x] Delete and recreate the central database with `use_tursodb: true`, asserting the response
       reports `engine: "tursodb"` and aborting if it does not (AC5)
-- [ ] Mint a full-access non-expiring token, verify it with a real query against the new database,
+- [x] Mint a full-access non-expiring token, verify it with a real query against the new database,
       and write it to the Fly secret (`--stage`) and every backend env file that carries the key;
       update `TURSO_CENTRAL_DB_URL` too if the hostname changed (AC6)
-- [ ] Destroy the machine, destroy the volume, create a fresh volume, and redeploy the pinned
+- [x] Destroy the machine, destroy the volume, create a fresh volume, and redeploy the pinned
       digest with `--ha=false` (AC7, AC8)
-- [ ] Verify the result: `/api/health` returns 200, the central template tables are re-seeded, and
+- [x] Verify the result: `/api/health` returns 200, the central template tables are re-seeded, and
       `users` is empty; exit non-zero if any check fails (AC9)
-- [ ] Make each step announce itself and re-runnable after a mid-way failure, so a partial run can
+- [x] Make each step announce itself and re-runnable after a mid-way failure, so a partial run can
       be resumed rather than restarted blind (AC10)
-- [ ] Register `reset` and `reset:cloud` in `mise.toml`, with the comment explaining why they are
+- [x] Register `reset` and `reset:cloud` in `mise.toml`, with the comment explaining why they are
       two tasks rather than one flag
-- [ ] Document the commands in `docs/guides/commands.md`, and the procedure, ordering constraint and
+- [x] Document the commands in `docs/guides/commands.md`, and the procedure, ordering constraint and
       `TURSO_API_TOKEN` in `docs/guides/database.md` (AC11)
-- [ ] Record in `docs/TODO.md` that the reset is destructive and has no dry-run
+- [x] Record in `docs/TODO.md` that the reset is destructive and has no dry-run
 
 ## Testing strategy
 
@@ -109,3 +109,44 @@ therefore split by what each half can prove.
   `tursodb`, `users` / `login_links` / `sessions` all zero, template tables re-seeded, health 200,
   and a fresh registration completing through the emailed link.
 - Confirm the redeployed image digest equals the one that was running before the reset.
+
+## Departures made during implementation
+
+Four, all hardening rather than scope changes, recorded rather than silently taken.
+
+- **No machine means abort, not a working-tree deploy.** The plan said the redeploy pins the
+  digest that was already running. It did not say what happens when there is no machine to read
+  one from, which is exactly the state a half-failed reset leaves behind. Falling back to
+  `flyctl deploy --remote-only` would make the resume path silently ship whatever is checked
+  out - the one thing AC8 exists to prevent - so it aborts instead and prints the
+  `RESET_IMAGE=...` invocation that resumes it.
+- **`flyctl secrets import --stage`, not `secrets set`.** `set` puts the freshly minted token in
+  a process argument list, visible to anything that can read `/proc`. `import` reads `NAME=VALUE`
+  from stdin, and `printf` is a shell builtin, so the token never becomes an argument.
+- **User databases are matched on group as well as name prefix.** The plan said enumerate
+  `spendifico-user-*`. Filtering on `TURSO_GROUP` too means a reset cannot reach into another
+  project that happens to share the organization.
+- **The central database name is derived, not configured.** It exists nowhere on its own -
+  `TURSO_CENTRAL_DB_URL` holds the hostname, which is `<name>-<org>.<region>.turso.io` - so the
+  script strips the org suffix rather than introducing a second home for the name. `CENTRAL_DB_NAME`
+  overrides it if that convention ever changes.
+
+## Verification status
+
+Everything except the live cloud run is verified:
+
+- `mise run reset` on a populated directory, on an absent one, and twice in a row.
+- No flag prints usage and exits 2.
+- `--cloud` with `TURSO_API_TOKEN` unset aborts in preflight with the instructions, before the
+  machine is stopped.
+- `--cloud` with the app's scoped `TURSO_ORG_TOKEN` aborts on the 403 from the list call, and the
+  Fly machine was confirmed still running afterwards - proving the guard fires before anything
+  destructive.
+- `shellcheck` clean, `bash -n` clean, `npm run docs:check` passes.
+- Every `flyctl` flag the script depends on (`machine destroy --force`, `volumes destroy --yes`,
+  `volumes create --yes`, `secrets import --stage`) confirmed present in the installed version,
+  and the `RESET_IMAGE` hint command confirmed to return the right digest.
+
+**Not yet run: `reset:cloud` end to end.** It needs a full-access `TURSO_API_TOKEN`, which the
+repo deliberately does not hold, and it destroys the environment it runs against. That is the one
+outstanding item before this leaves draft.
