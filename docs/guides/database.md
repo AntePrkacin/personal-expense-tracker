@@ -171,6 +171,16 @@ creation and getting it wrong is silent. And the freshly minted data-plane token
 with a real query, then written to both the Fly secret and every backend env file that
 already carries the key.
 
+**"Every backend env file" means exactly two: `backend/.env` and `backend/.env.local`,** and
+only where the key is already present - the reset never adds `TURSO_CENTRAL_DB_TOKEN` to a
+file that did not have it, because a file in local mode has to stay in local mode. Any other
+copy of that credential goes stale the moment a reset runs, silently: a second machine, a
+password manager entry, a CI secret, or a stash outside the repo. There is no mechanism that
+finds those, so rotate them by hand, and prefer keeping one copy over keeping a convenient
+one. This is not hypothetical - `backend/.env` used to point at
+`~/.config/spendifico/backend.env.cloud` as a second stash, and the pointer outlived the
+file.
+
 `reset:cloud` does **not** touch your local files, and `reset` does not touch anything
 remote. Run both if you want everything clean. Afterwards the central template tables are
 re-seeded from current code, which is also the only way a change to the colour, icon or

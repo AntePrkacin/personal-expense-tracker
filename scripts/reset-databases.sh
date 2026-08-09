@@ -50,6 +50,13 @@ DB_DIR="$BACKEND/databases"
 # Every env file that may carry the central pointer. Both are gitignored. The
 # app reads .env; .env.local is where cloud credentials are commonly stashed
 # while .env stays in local mode.
+#
+# This list is the WHOLE reach of the token rotation in step 8. Any other copy of
+# TURSO_CENTRAL_DB_TOKEN - a second machine, a CI secret, a password manager, a
+# stash outside the repo - goes stale on every reset and nothing here will find
+# it. Adding a path is cheap; discovering a stale copy is not, because the
+# symptom is a boot failure on a credential rather than anything resembling a
+# reset problem.
 ENV_FILES=("$BACKEND/.env" "$BACKEND/.env.local")
 
 TURSO_API="https://api.turso.tech/v1/organizations"
