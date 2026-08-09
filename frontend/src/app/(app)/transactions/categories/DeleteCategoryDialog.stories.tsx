@@ -177,9 +177,9 @@ export const AlreadyGone: Story = {
 /**
  * The 409, which the UI cannot reach and whose message still has to be right.
  *
- * `CategoryCardMenu` omits Delete on the `isFallback` card, so this arm is reachable only by a stale
- * tab or a devtools-driven call. It is classified and worded anyway, because a hidden control is not
- * an enforcement.
+ * `CategoryCard` renders no menu at all on the `isFallback` card as of PET-38, so this arm is
+ * reachable only by a stale tab or a devtools-driven call. It is classified and worded anyway,
+ * because a hidden control is not an enforcement.
  */
 export const CannotDeleteTheFallback: Story = {
   render: () => (

@@ -428,6 +428,41 @@ describe('the edit seam', () => {
   });
 });
 
+describe('the create seam', () => {
+  // **`remove`'s and `update`'s third sibling, and it shipped with no test until a code review asked
+  // for one.** That is the exact defect class this screen has now produced twice: a seam that exists,
+  // whose comment says it is threaded, and which nothing asserts actually is - so dropping
+  // `create={create}` from the `AddCategoryButton` call site would silently put `Screens/13
+  // Categories` back to firing a real Server Action in the browser, with the `docs/TODO.md` entry
+  // that used to warn about it now deleted.
+
+  it('threads its create prop through to the Add category modal', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const create = jest.fn().mockResolvedValue({ ok: true });
+    renderScreen({ categories: [category()], create });
+
+    // The header trigger and the modal's submit share the label "Add category", so once the modal
+    // is open every query for it has to say which. Scoped to the dialog, which is also how a reader
+    // tells them apart.
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+    const modal = within(screen.getByRole('dialog'));
+    await user.type(modal.getByLabelText('Name'), 'Subscriptions');
+    await user.click(modal.getByRole('button', { name: 'Add category' }));
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Subscriptions', color: 'success', icon: 'shopping-basket' }),
+    );
+  });
+
+  it('falls back to the real action when no prop is passed, rather than doing nothing', () => {
+    // The other half of the same guard, matching `remove`'s and `update`'s: a default of `undefined`
+    // would make the header button silently inert in the app while every story kept working.
+    renderScreen({ categories: [category()] });
+
+    expect(screen.getByRole('button', { name: 'Add category' })).toBeEnabled();
+  });
+});
+
 describe('the fallback card on a real grid', () => {
   it('draws no kebab and no banner, where every other card draws both', () => {
     // AC6 as amended: both actions behind a kebab are refused for `Uncategorized`, so nothing on

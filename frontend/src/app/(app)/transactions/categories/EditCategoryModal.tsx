@@ -110,6 +110,27 @@ const ICON_ID = 'edit-category-icon';
 const NOTE_ID = 'edit-category-note';
 
 /**
+ * What the preview names a category whose name field has been cleared.
+ *
+ * **Deliberately not `AddCategoryModal`'s "New category", and a code review is why this is written
+ * down.** That string shipped here as an inline literal beside a comment claiming the two previews
+ * "cannot drift" - so the drift was present at the moment the claim was made, and the constant next
+ * door was bypassed rather than reused.
+ *
+ * They differ because the two states differ. There, no category exists yet and "New category" is
+ * true of the thing being described. Here a real category exists and the user has emptied its Name
+ * field, so "New category" would be false about a row that is months old; "Unnamed" describes the
+ * field rather than the category's age. Sharing one string would make one of the two screens say
+ * something untrue, which is a worse outcome than two strings that each say something right.
+ *
+ * A named constant rather than a literal so the difference is a decision a reader can see, and so
+ * A29's sign-off has both strings in front of it. If the preview block is ever lifted into one
+ * shared component - `docs/TODO.md` carries that as the duplication this file has with frame 19's -
+ * this becomes a prop rather than a merge.
+ */
+const UNNAMED_PREVIEW = 'Unnamed category';
+
+/**
  * Whether the Note field is drawn. **It is not**, for the reason `AddCategoryModal`'s own
  * `SHOWS_NOTE` gives in full: A42 says a category's note surfaces on no screen once saved.
  *
@@ -316,6 +337,25 @@ export function EditCategoryModal({
     if (!result.ok) {
       setPending(false);
       setFailure(MESSAGES[result.reason]);
+
+      // **One failure arm still refreshes, and leaving it out made this modal's copy a lie.**
+      // `missing` means the server no longer has the category, so the grid behind this dialog is
+      // drawing a card that does not exist - which is exactly what that arm's message tells the user
+      // closing the dialog will fix. Without this, closing only unmounts the modal: no Server
+      // Component re-runs, the stale card stays in the grid and in the tab badge and the allocation
+      // summary, and reopening it answers 404 forever.
+      //
+      // `(app)/ConfirmDeleteDialog.tsx` carries the same rule as a `staleReasons` prop and states it
+      // in one line - a failed arm can still need a refresh. It is inlined here rather than
+      // generalised because this modal has exactly one such arm: `fallback` describes a category that
+      // is still very much there, and `invalid`, `unauthenticated` and `failed` all changed nothing
+      // on the server. A second one would be the signal to lift a list.
+      //
+      // The modal stays open on purpose. The user has edits in front of them, and the message is
+      // what explains why they cannot be saved; dismissing the form for them would discard the work
+      // *and* the explanation.
+      if (result.reason === 'missing') router.refresh();
+
       return;
     }
 
@@ -451,14 +491,18 @@ export function EditCategoryModal({
               : createElement(PreviewIcon, { className: 'size-4.5', 'aria-hidden': 'true' })}
           </span>
           {/* `/60` rather than `/50` for muted **text**, which AA holds to 4.5:1 - the reasoning is
-              `AddCategoryModal`'s and unchanged. Unreachable here in practice, since a stored
-              category always has a name, and kept so the two previews cannot drift. */}
+              `AddCategoryModal`'s and unchanged. **The claim that used to end this comment - that the
+              branch is kept "so the two previews cannot drift" - was false when it was written**, and
+              a code review caught it: this modal was already saying something different from the Add
+              modal's `UNNAMED_PREVIEW`, through an inline literal that bypassed the constant
+              entirely. See `UNNAMED_PREVIEW` above for why the two strings differ on purpose now, and
+              why each is a named constant rather than a literal. */}
           <span
             className={
               previewName === '' ? 'text-base-content/60 text-sm' : 'text-sm font-semibold'
             }
           >
-            {previewName === '' ? 'Unnamed category' : previewName}
+            {previewName === '' ? UNNAMED_PREVIEW : previewName}
           </span>
         </p>
       </div>

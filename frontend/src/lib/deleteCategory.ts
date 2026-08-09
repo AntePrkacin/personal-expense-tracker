@@ -37,7 +37,9 @@ import { authorizedDelete } from '@/lib/session';
  *   refuses it because that row is where deleting any *other* category sends its transactions, so
  *   the request is well-formed and the caller is entitled to make it - it just conflicts with an
  *   invariant of the resource, which is why the backend chose 409 over 403. **The UI cannot reach
- *   it**, since `CategoryCardMenu` omits Delete when `isFallback` is set. It is classified anyway,
+ *   it**, since `CategoryCard` renders no menu at all on the `isFallback` row - PET-39 hid Delete
+ *   inside `CategoryCardMenu` and PET-38 moved the decision up a level, because `PATCH` refuses to
+ *   rename that row too, so the whole kebab went rather than its last operable item. It is classified anyway,
  *   because a hidden control is not an enforcement - a stale tab whose card list predates a
  *   re-provisioning, or a devtools-driven call, both land here - and because the honest message
  *   for it is not "please try again", which would loop forever.

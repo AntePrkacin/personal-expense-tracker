@@ -345,6 +345,52 @@ describe('toUpdateCategoryBody', () => {
     });
   });
 
+  it('reports no change when a stored note carries surrounding whitespace', () => {
+    // **The defect a code review caught.** The field is hidden behind `SHOWS_NOTE`, so the user can
+    // neither see nor touch it - and comparing a trimmed value against an untrimmed stored one made
+    // it differ from itself, so a rename quietly carried a rewritten note along with it.
+    const stored = category({ note: '  weekly shop  ' });
+
+    expect(toUpdateCategoryBody(stored, toCategoryFormValues(stored))).toEqual({});
+  });
+
+  it('does not delete a stored note that is nothing but spaces', () => {
+    // The sharper half of the same bug: the trim made it `''`, which this function turns into
+    // `null`, so a save that never mentioned the note removed it.
+    const stored = category({ note: '   ' });
+
+    expect(toUpdateCategoryBody(stored, toCategoryFormValues(stored))).toEqual({});
+  });
+
+  it('still clears a real note when the field is emptied', () => {
+    // The control for the two above: trimming both sides must not cost the one thing the
+    // comparison is for.
+    const stored = category({ note: 'Weekly shop' });
+
+    expect(toUpdateCategoryBody(stored, { ...toCategoryFormValues(stored), note: '' })).toEqual({
+      note: null,
+    });
+  });
+
+  it('sends nothing at all for an untouched form whose stored note has whitespace', () => {
+    // The caller closes without a request when the body is empty, so this is what stopped Save on
+    // an untouched form from firing a PATCH the endpoint would have accepted.
+    const stored = category({ name: 'Groceries', monthlyCap: 500, note: ' a note ' });
+
+    expect(Object.keys(toUpdateCategoryBody(stored, toCategoryFormValues(stored)))).toEqual([]);
+  });
+
+  it('normalises a stored name’s whitespace, which is deliberate and not the note rule', () => {
+    // `toUpdateTransactionBody` makes the same call about `merchant`, for the reason that still
+    // holds: the alternative is never being able to trim it. It is safe here and not for `note`
+    // because the Name field is on screen with its value in it.
+    const stored = category({ name: '  Groceries  ' });
+
+    expect(toUpdateCategoryBody(stored, toCategoryFormValues(stored))).toEqual({
+      name: 'Groceries',
+    });
+  });
+
   it('reports no change for a blank note over a stored null', () => {
     // The comparison is against `original.note ?? ''`, which is what keeps the hidden Note field
     // from contributing a key to every patch.

@@ -38,8 +38,9 @@ import { createContext, useContext, useMemo, useRef, useState } from 'react';
  * What an item needs from the menu around it: which popover to close, and where focus belongs.
  *
  * A context rather than cloned children or a render prop, so an item is an ordinary element a
- * caller can wrap, map over or omit - which is what `CategoryCardMenu` does to drop Delete on the
- * fallback card.
+ * caller can wrap, map over or omit. `CategoryCardMenu` used to be that example, dropping Delete on
+ * the fallback card; PET-38 made the whole menu conditional one level up instead, so the capability
+ * is still real and this file no longer has a live consumer to point at.
  */
 type PopoverMenuContext = {
   menuId: string;

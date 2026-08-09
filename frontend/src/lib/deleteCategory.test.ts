@@ -116,9 +116,9 @@ describe('the four failures', () => {
 
   it('maps 409 to fallback, which is the arm the transaction delete does not have', async () => {
     // The backend answers 409 for deleting `Uncategorized`, because that row is where deleting
-    // any other category sends its transactions. `CategoryCardMenu` omits Delete on that card so
-    // the UI cannot reach it, and it is classified anyway: a hidden control is not an
-    // enforcement, and "please try again" would be wrong advice that loops forever.
+    // any other category sends its transactions. `CategoryCard` renders no menu at all on that card
+    // as of PET-38, so the UI cannot reach it, and it is classified anyway: a hidden control is not
+    // an enforcement, and "please try again" would be wrong advice that loops forever.
     respondWith(409);
 
     await expect(deleteCategory(ID)).resolves.toEqual({ ok: false, reason: 'fallback' });

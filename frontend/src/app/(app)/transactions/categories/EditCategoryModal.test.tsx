@@ -294,10 +294,53 @@ describe('the five failures', () => {
 
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
-    expect(refresh).not.toHaveBeenCalled();
     // Re-enabled, or a failed save would leave the modal frozen with Cancel as its only exit.
     expect(save()).toBeEnabled();
   });
+
+  // **This loop used to assert `refresh` was never called on any failure, and that assertion was
+  // the defect rather than a guard against one**: it pinned the behaviour a code review then found
+  // wrong, so the `missing` arm's copy promised a current list that nothing produced. The claim is
+  // now per-arm, in the two cases below, because the arms genuinely differ.
+
+  it('refreshes the route on the 404, because its copy promises the list will be current', async () => {
+    // **The one failure arm that still refreshes**, and leaving it out made the message a lie: the
+    // grid behind the dialog keeps drawing a card the server no longer has, so closing shows
+    // exactly what it showed before and reopening answers 404 forever.
+    update.mockResolvedValue({ ok: false, reason: 'missing' });
+    open();
+
+    await user().clear(name());
+    await user().type(name(), 'Streaming');
+    await user().click(save());
+
+    expect(
+      await screen.findByText(
+        'This category no longer exists. Close this to see the current list.',
+      ),
+    ).toBeInTheDocument();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    // Open, with the edits and the explanation still in front of the user.
+    expect(onClose).not.toHaveBeenCalled();
+    expect(name()).toHaveValue('Streaming');
+  });
+
+  it.each(['invalid', 'fallback', 'unauthenticated', 'failed'] as const)(
+    'does not refresh on %s, because nothing on the server changed',
+    async (reason) => {
+      // The control for the case above. `fallback` is the sharp one: that category is still very
+      // much there, so a refresh would redraw the identical grid for no reason.
+      update.mockResolvedValue({ ok: false, reason });
+      open();
+
+      await user().clear(name());
+      await user().type(name(), 'Streaming');
+      await user().click(save());
+
+      await waitFor(() => expect(update).toHaveBeenCalled());
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
 
   it('reports a rejected RPC rather than freezing the modal', async () => {
     // A Server Action called from the client **rejects** when the transport never completes. A

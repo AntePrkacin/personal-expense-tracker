@@ -259,11 +259,28 @@ export function toCategoryFormValues(category: Category): CategoryFormValues {
  * no value this DTO would accept for it anyway - and it narrows the type as a side effect, which is
  * the cheaper of the two ways to satisfy the compiler.
  *
- * **`note` is compared against `original.note ?? ''`**, so a blank field over a stored `null` is *no
- * change* and a blank field over a stored note sends `null`. Identical to the transaction rule, and
- * it matters here even though the Note field is not drawn: with `SHOWS_NOTE` false the value can
- * never diverge from the prefill, so this comparison is what keeps a hidden field from contributing a
- * key to every patch.
+ * **`note` is compared trimmed against the *trimmed* stored value, and that is a fix rather than a
+ * style.** A blank field over a stored `null` is no change, and a blank field over a stored note
+ * sends `null` to clear it - both inherited from the transaction rule. What is not inherited is the
+ * trim on the right-hand side, and leaving it off was a real defect: this file shipped comparing the
+ * trimmed field against the raw `original.note ?? ''`, which made a stored `"  weekly shop  "`
+ * differ from itself. Since `SHOWS_NOTE` is false the user cannot see or touch that field, so a
+ * rename would quietly carry `note: "weekly shop"` with it, and a stored note of nothing but spaces
+ * would be **deleted** by a save that never mentioned it. It also defeated the caller's
+ * nothing-changed short circuit, so Save on an untouched form fired a PATCH.
+ *
+ * That value is reachable through the API, a seed or another client - `UpdateCategoryDto` applies
+ * `@IsString() @MaxLength(500)` and no trim - even though this app's own `toCreateCategoryBody`
+ * trims on the way out. **A hidden field must contribute a key only when the user changed it**, and
+ * comparing like with like is what makes that true rather than nearly true.
+ *
+ * **`name` deliberately keeps the asymmetric comparison, and the difference is visibility.** A
+ * stored name carrying stray whitespace does normalise the first time anything else about the
+ * category is saved, which is a change the user did not type - and it is `toUpdateTransactionBody`'s
+ * documented call about `merchant`, made for the reason that still holds here: the alternative is
+ * never being able to trim it. The Name field is on screen with its value in it, so the user can see
+ * what is being sent. The Note field is not, which is the whole reason the two are treated
+ * differently. When `SHOWS_NOTE` flips, this asymmetry is the line to revisit.
  *
  * Keys are assigned rather than spread conditionally, for `toUpdateTransactionBody`'s reason: every
  * field is optional here, and five nested spreads would obscure the one thing this function is for.
@@ -286,8 +303,9 @@ export function toUpdateCategoryBody(
 
   if (values.icon !== '' && values.icon !== original.icon) body.icon = values.icon;
 
+  // Both sides trimmed, so a stored note the user never saw cannot differ from itself. See above.
   const note = values.note.trim();
-  if (note !== (original.note ?? '')) body.note = note === '' ? null : note;
+  if (note !== (original.note ?? '').trim()) body.note = note === '' ? null : note;
 
   return body;
 }

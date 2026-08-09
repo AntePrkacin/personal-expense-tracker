@@ -1553,6 +1553,32 @@ a banner reading "No limit set for this category", which is a request to type a 
 the budget. Frame 21 draws the budget field with a focus ring and settles neither case, being a
 mid-fill snapshot rather than an on-open state - the same reading `AddCategoryModal` gives frame 19.
 
+**Two of the paragraphs above were wrong when they were written, and a code review is what found
+them.** Both are worth keeping as corrections rather than quiet edits, because both were assertions
+a comment made about behaviour that did not exist.
+
+The first is the diff's `note`. That comparison trimmed the field and then measured it against the
+**untrimmed** stored value, so a category stored with `"  weekly shop  "` differed from itself -
+and since `SHOWS_NOTE` is false the user could neither see nor touch that field, so a rename carried
+a rewritten note along with it, a note of nothing but spaces was **deleted** by a save that never
+mentioned it, and Save on a wholly untouched form fired a PATCH instead of closing. The docblock
+claimed the opposite in as many words. Both sides are trimmed now. **`name` deliberately keeps the
+asymmetry**, which is `toUpdateTransactionBody`'s documented call about `merchant`: a stored name
+with stray whitespace normalises on the first save that touches anything, and that is acceptable
+precisely because the Name field is on screen with its value in it. Visibility is the whole
+difference between the two rules, so when `SHOWS_NOTE` flips, that is the line to revisit.
+
+The second is the `missing` arm. `EditTransactionModal`'s copy says "Close this **and refresh the
+list**"; this modal reworded it to "Close this to see the current list" - a promise of an automatic
+refresh - and did not add one, so the deleted category's card stayed in the grid, in the tab badge
+and in the allocation summary, and reopening it answered 404 forever. It calls `router.refresh()` on
+that one arm now, keeping the modal open so the edits and the explanation stay in front of the user.
+`(app)/ConfirmDeleteDialog.tsx` carries the same rule as a `staleReasons` prop; it is inlined here
+because this modal has exactly one such arm - `fallback` describes a category that is still there,
+and the other three changed nothing on the server - and a second would be the signal to lift a list.
+**The suite had pinned the wrong behaviour**: a blanket "never refreshes on any failure" assertion
+across all five arms, which is why no gate caught either defect. That claim is now per-arm.
+
 **All three of this screen's Server Actions are injectable now, and the third closes a gap
 `docs/TODO.md` had nominated this ticket for.** Storybook's Vite build has no notion of
 `'use server'`, so it bundles each action as an ordinary module and a press reaches `cookies()` from
