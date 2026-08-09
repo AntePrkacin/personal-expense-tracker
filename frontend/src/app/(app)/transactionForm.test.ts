@@ -8,9 +8,11 @@ import {
   isCategoryChosen,
   isDateValid,
   isMerchantValid,
+  mergeScannedFields,
   toCreateTransactionBody,
   toTransactionFormValues,
   toUpdateTransactionBody,
+  type ScannedTransactionFields,
   type TransactionFormValues,
 } from './transactionForm';
 
@@ -408,5 +410,98 @@ describe('toUpdateTransactionBody', () => {
     });
 
     expect(Object.keys(body).sort()).toEqual(['amount', 'categoryId', 'date', 'merchant', 'note']);
+  });
+});
+
+describe('mergeScannedFields', () => {
+  // A blank form, `date` included, exactly as `AddTransactionModal` initialises `values` -
+  // except here `date` stands in for todayIsoDate()'s output, since the plan's whole point is
+  // that a scan must still be free to overwrite it.
+  const BLANK: TransactionFormValues = {
+    amount: '',
+    categoryId: '',
+    date: '2025-10-08',
+    merchant: '',
+    note: '',
+  };
+
+  const SCANNED: ScannedTransactionFields = {
+    merchant: 'Whole Foods',
+    amount: '31.50',
+    date: '2025-10-06',
+    categoryId: '0198c2a1-0000-7000-8000-0000000000a1',
+    note: 'Weekly shop',
+  };
+
+  const NONE_TOUCHED: ReadonlySet<keyof TransactionFormValues> = new Set();
+
+  it('fills every field on an untouched form, the default date included', () => {
+    // This is the rule an emptiness test would get backwards: `date` already holds a value
+    // (todayIsoDate()'s), so a check for "is this field empty" would refuse to overwrite it -
+    // exactly the bug this function exists not to have.
+    const merged = mergeScannedFields(BLANK, NONE_TOUCHED, SCANNED);
+
+    expect(merged).toEqual({
+      merchant: 'Whole Foods',
+      amount: '31.50',
+      date: '2025-10-06',
+      categoryId: '0198c2a1-0000-7000-8000-0000000000a1',
+      note: 'Weekly shop',
+    });
+  });
+
+  it('does not overwrite a field the user has typed into, blank or not', () => {
+    const typedMerchant: TransactionFormValues = { ...BLANK, merchant: 'Costco' };
+    const touched: ReadonlySet<keyof TransactionFormValues> = new Set(['merchant']);
+
+    const merged = mergeScannedFields(typedMerchant, touched, SCANNED);
+
+    expect(merged.merchant).toBe('Costco');
+    // The three fields the user never touched still fill in.
+    expect(merged.amount).toBe('31.50');
+    expect(merged.categoryId).toBe(SCANNED.categoryId);
+  });
+
+  it('leaves the default date alone when the user has genuinely touched it', () => {
+    // A real edit, not merely "the field holds a value" - `date` starts holding
+    // todayIsoDate()'s output too, and this is what tells the two apart.
+    const touched: ReadonlySet<keyof TransactionFormValues> = new Set(['date']);
+
+    const merged = mergeScannedFields(BLANK, touched, SCANNED);
+
+    expect(merged.date).toBe(BLANK.date);
+  });
+
+  it('never overwrites anything with a field the scan could not fill', () => {
+    const partial: TransactionFormValues = { ...BLANK, note: 'Already typed' };
+    const partialScan: ScannedTransactionFields = { ...SCANNED, categoryId: null, note: null };
+
+    const merged = mergeScannedFields(partial, NONE_TOUCHED, partialScan);
+
+    // categoryId stays blank rather than becoming an empty string overwrite or null.
+    expect(merged.categoryId).toBe('');
+    // A typed note survives a scan that found nothing to say, same as any other touched field.
+    expect(merged.note).toBe('Already typed');
+  });
+
+  it('is safe to run twice: a second scan only fills what the first left blank', () => {
+    const firstPass = mergeScannedFields(BLANK, NONE_TOUCHED, {
+      ...SCANNED,
+      categoryId: null,
+    });
+    // The user reads the note field and never touches it; a second scan (a different photo)
+    // now supplies the category the first one missed.
+    const secondPass = mergeScannedFields(firstPass, NONE_TOUCHED, {
+      merchant: null,
+      amount: null,
+      date: null,
+      categoryId: '0198c2a1-0000-7000-8000-0000000000a2',
+      note: null,
+    });
+
+    expect(secondPass.categoryId).toBe('0198c2a1-0000-7000-8000-0000000000a2');
+    // Untouched by the second scan, so the first scan's values survive.
+    expect(secondPass.merchant).toBe('Whole Foods');
+    expect(secondPass.amount).toBe('31.50');
   });
 });

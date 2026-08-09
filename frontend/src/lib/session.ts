@@ -171,8 +171,18 @@ export async function authorizedGet<T>(path: string): Promise<AuthorizedResult<T
  * answers 200 with the updated row, and the edit modal closes and calls `router.refresh()`
  * just as the create does - so parsing it would have produced a value with no reader, and
  * the 2xx-is-success-on-the-status rule above would have had to be argued a second time.
+ *
+ * **PET-59's scan is the case this type's own reasoning anticipated and finally needed.**
+ * `POST /api/transactions/scan` inverts the create's situation exactly: the response body
+ * *is* the entire point of the call, so a helper that discards it the way this one does would
+ * hand the modal nothing to merge into the form. `authorizedPostFormData` below therefore
+ * returns `{ ok: true; data: T } | { ok: false; status?: number }` instead of reusing this
+ * type - a small, deliberate divergence rather than a shape this file failed to anticipate.
  */
 export type AuthorizedWriteResult = { ok: true } | { ok: false; status?: number };
+
+/** What `authorizedPostFormData` reports back. See its own doc and the note on `AuthorizedWriteResult` above for why this is not that type. */
+export type AuthorizedFormDataResult<T> = { ok: true; data: T } | { ok: false; status?: number };
 
 /**
  * POSTs a JSON body to a guarded endpoint with the session lifted into an `Authorization`
@@ -329,6 +339,56 @@ export async function authorizedPatch(path: string, body: unknown): Promise<Auth
   } catch {
     // Unreachable backend, DNS, or a dropped connection. No status, which is what "the
     // request never completed" looks like.
+    return { ok: false };
+  }
+}
+
+/**
+ * POSTs a `FormData` body to a guarded endpoint with the session lifted into an
+ * `Authorization` header.
+ *
+ * **The fifth verb, and the first over a body that is not JSON.** `POST
+ * /api/transactions/scan` takes `multipart/form-data`, so this sends `formData` as the
+ * fetch body directly with no `Content-Type` header set by hand - the platform's `fetch`
+ * derives the header itself, including the multipart boundary, which is not something this
+ * function could compute and set correctly on its own.
+ *
+ * **Returns the parsed body on success**, unlike every other verb here: see
+ * `AuthorizedWriteResult`'s own note on why the scan is the one write whose response is the
+ * entire point of the call, rather than a fact this function was missing.
+ *
+ * It takes a `path` and so must not become a Server Action, for the reason every other verb
+ * here already gives: `'use server'` would publish an endpoint accepting an arbitrary path.
+ * `lib/scanReceipt.ts` is the action that wraps it.
+ *
+ * @param path the backend path including its `/api` prefix
+ */
+export async function authorizedPostFormData<T>(
+  path: string,
+  formData: FormData,
+): Promise<AuthorizedFormDataResult<T>> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
+    return { ok: false, status: 401 };
+  }
+
+  try {
+    const response = await fetch(`${process.env.BACKEND_URL}${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return { ok: false, status: response.status };
+    }
+
+    return { ok: true, data: (await response.json()) as T };
+  } catch {
+    // Unreachable backend, DNS, a dropped connection, or a body that would not parse.
     return { ok: false };
   }
 }

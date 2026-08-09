@@ -227,6 +227,54 @@ export function toTransactionFormValues(transaction: Transaction): TransactionFo
 }
 
 /**
+ * What `scanReceipt` (PET-59) answers, once its numeric `amount` has already
+ * been normalized through `formatAmountInput` at the Server Action boundary
+ * - so this is the same display-string shape `TransactionFormValues` holds,
+ * never a raw number.
+ */
+export type ScannedTransactionFields = {
+  merchant: string | null;
+  amount: string | null;
+  date: string | null;
+  categoryId: string | null;
+  note: string | null;
+};
+
+/**
+ * Merges a scan's fields into the form, honouring which the user has already
+ * typed into.
+ *
+ * **Tracks touched fields, not empty ones, and that is the whole point.**
+ * `AddTransactionModal` initialises `date: todayIsoDate()`, so an emptiness
+ * test would never overwrite it - a scan carrying the receipt's real date
+ * would be silently refused in favour of today's. `touched` instead records
+ * which fields the user has actually written into (through the form's `set`
+ * function, never through this merge itself), so the pre-filled default date
+ * counts as untouched and a field the user typed into - blank or not - is
+ * left alone. This is also what makes a second scan safe on a partially
+ * typed form: only the gaps a first scan left get filled.
+ *
+ * A `null` field is a field the scan could not fill, so it never overwrites
+ * anything, touched or not - the caller's existing value (blank, or a
+ * previous scan's) survives.
+ */
+export function mergeScannedFields(
+  values: TransactionFormValues,
+  touched: ReadonlySet<keyof TransactionFormValues>,
+  scanned: ScannedTransactionFields,
+): TransactionFormValues {
+  const next = { ...values };
+
+  if (!touched.has('merchant') && scanned.merchant !== null) next.merchant = scanned.merchant;
+  if (!touched.has('amount') && scanned.amount !== null) next.amount = scanned.amount;
+  if (!touched.has('date') && scanned.date !== null) next.date = scanned.date;
+  if (!touched.has('categoryId') && scanned.categoryId !== null) next.categoryId = scanned.categoryId;
+  if (!touched.has('note') && scanned.note !== null) next.note = scanned.note;
+
+  return next;
+}
+
+/**
  * The request body for `PATCH /api/transactions/:id`: **only the fields that changed**.
  *
  * Read off the contract rather than declared, which is the rule

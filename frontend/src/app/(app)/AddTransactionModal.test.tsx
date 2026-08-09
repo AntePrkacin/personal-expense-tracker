@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 
 import type { CreateTransactionResult } from '../../lib/createTransaction';
+import type { ScanReceiptResult } from '../../lib/scanReceipt';
 
 import { AddTransactionModal } from './AddTransactionModal';
 
@@ -17,6 +18,7 @@ jest.mock('next/navigation', () => ({ useRouter: jest.fn() }));
 const refresh = jest.fn();
 const onClose = jest.fn();
 const create = jest.fn<Promise<CreateTransactionResult>, [unknown]>();
+const scan = jest.fn<Promise<ScanReceiptResult>, [FormData]>();
 
 const CATEGORIES = [
   { id: '0198c2a1-0000-7000-8000-0000000000a1', name: 'Groceries' },
@@ -30,6 +32,19 @@ beforeEach(() => {
   jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8, 12, 0));
   (useRouter as jest.Mock).mockReturnValue({ refresh });
   create.mockResolvedValue({ ok: true });
+  // Not exercised by most of this suite - only 'the scan controls' below opens a file picker
+  // at all - so the default just has to be a shape-valid, internally consistent response.
+  scan.mockResolvedValue({
+    ok: true,
+    data: {
+      merchant: null,
+      amount: null,
+      date: null,
+      categoryId: null,
+      note: null,
+      missing: ['merchant', 'amount', 'date', 'categoryId'],
+    },
+  });
 });
 
 afterEach(() => {
@@ -40,7 +55,13 @@ const user = () => userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
 function open(props: Partial<React.ComponentProps<typeof AddTransactionModal>> = {}) {
   return render(
-    <AddTransactionModal categories={CATEGORIES} create={create} onClose={onClose} {...props} />,
+    <AddTransactionModal
+      categories={CATEGORIES}
+      create={create}
+      scan={scan}
+      onClose={onClose}
+      {...props}
+    />,
   );
 }
 
