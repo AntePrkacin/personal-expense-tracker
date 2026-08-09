@@ -199,6 +199,28 @@ generated types.
 
 Swagger UI is served at `http://localhost:3000/api/docs` from the same document.
 
+**A request body that is a collection must be a wrapper object, and this is a hard trap rather
+than a style rule.** PET-70's `PATCH /api/categories` is the repo's first array-body request, and
+`ValidationPipe.toValidate` returns false when the reflected metatype is one of `String`,
+`Boolean`, `Number`, `Array`, `Object`, `Buffer` or `Date` - so `@Body() items: CategoryCapDto[]`
+arrives with the global pipe **skipped entirely**: no `whitelist`, no `forbidNonWhitelisted`, and
+not one decorator on the item class ever runs. It fails in the direction this file warns about
+throughout, silently and downstream: SQLite's INTEGER affinity stores a string where an integer
+column was expected, and the row then serialises as a shape its own response DTO says is
+impossible. A bare array cannot carry `@ApiProperty` either, so its schema would have to be
+hand-written with `@ApiBody`. Wrap it in a class with one array field, and give that field
+`@ValidateNested({ each: true })` **and** `@Type(() => Item)` - neither works without the other.
+
+Two smaller notes from the same endpoint. `@ArrayNotEmpty` and `@ArrayMaxSize` publish nothing on
+their own, so `minItems` and `maxItems` go in `@ApiProperty` explicitly, while `@ArrayUnique` does
+publish `uniqueItems: true` - which is weaker than uniqueness by one field, so state the real rule
+in prose. And a **bulk write's 404 names the whole payload rather than one resource**: the
+statement behind it is all-or-nothing, so the status means "nothing was written" and the client may
+retry the identical body once it has refreshed - the opposite of the ambiguous 404 this file
+discusses for `PATCH /api/transactions/{id}`. Its 200 carries the whole screen, and
+`authorizedPatch` discards write bodies by an existing decision, so consuming it is a choice rather
+than an obligation.
+
 ## Regenerating it
 
 From the repo root, `npm run api:sync` runs both halves in the right order. That is the

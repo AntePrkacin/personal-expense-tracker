@@ -521,6 +521,14 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   cannot be acted on. What that costs belongs on this list rather than only in the plan -
   **`Uncategorized` can be neither renamed nor capped from the UI**, though the API accepts a cap on
   it, and `docs/TODO.md` carries the reasoning.
+  **PET-70 made "Allocate" live, so the clause above about it is dated and the screen now has no
+  inert control at all.** The summary card's banner opens the Allocate budget modal, which sets every
+  category's cap in one write - so `CardBanner`'s optional `onAction` is gone with it, replaced by an
+  exclusive union in which an action with no handler does not typecheck. That deleted the
+  `aria-disabled` treatment and its two `aria-disabled:` variants, which had exactly one caller. The
+  `Uncategorized` sentence **survives unchanged and is the one to cite**: this modal excludes that row
+  too, so a limitation the fallback card already had is extended rather than resolved, and the API is
+  still the only way to cap it.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session

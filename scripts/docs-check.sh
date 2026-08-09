@@ -129,9 +129,11 @@ fi
 #                                         documented as core.hooksPath's value
 #   frontend/src/lib/CLAUDE.md            the promotion target currently named by
 #                                         the sizing trigger in conventions.md
+#   backend/src/categories/CLAUDE.md      the same, for backend/CLAUDE.md, which
+#                                         PET-70 took to roughly 950 lines
 absent_by_design() {
   case "$1" in
-  .husky/_ | frontend/src/lib/CLAUDE.md) return 0 ;;
+  .husky/_ | frontend/src/lib/CLAUDE.md | backend/src/categories/CLAUDE.md) return 0 ;;
   # Build output, present only after an install or a build, and never committed.
   *node_modules* | */dist/* | */dist | */.next/* | */.next) return 0 ;;
   *) return 1 ;;

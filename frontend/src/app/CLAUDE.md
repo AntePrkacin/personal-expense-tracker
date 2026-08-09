@@ -1547,6 +1547,44 @@ client wrapper, the same smallest-wrapper rule `SidebarNav` and `TrendChart` fol
 stays inert deliberately**: no frame draws where it goes, so it remains the screen's one control
 announcing its own unavailability, and `frontend/CLAUDE.md`'s gap list still carries it.
 
+**PET-70 built where it goes, so that last sentence is history and the symmetry is back.**
+`AllocateBanner.tsx` is `SetLimitBanner`'s second instance, which turns that file's smallest-wrapper
+argument from a one-off into a pattern - and because both callers now pass a handler,
+`CardBanner`'s optional `onAction` became an exclusive union and its inert branch was deleted rather
+than left as archaeology about a state nothing can reach. **The Categories tab is the first screen in
+this app with no inert control on it.** Four things about the modal behind it are decisions rather
+than shape.
+
+**It owns its open state and takes no provider**, which is `AddCategoryButton`'s criterion applied
+unchanged: one trigger on one route, where `EditCategoryProvider` exists because the edit modal has a
+kebab per card _and_ a "Set limit" per uncapped card. Being a large modal changes nothing about that.
+**The banner could not be hoisted into `CategoriesScreen`** either, which is why
+`SpendingSummaryCard` takes two props it never renders: the overlap effect needs the strip to be a
+sibling of `BannerCardBody` inside that file's own `<section>`, so moving the banner up means moving
+the card body with it, and a `banner` slot with one possible occupant is what that screen's own
+doctrine refuses.
+
+**All of the arithmetic is in `allocateForm.ts`, in integer cents, and the one figure worth knowing
+about is the reserve.** The modal excludes `Uncategorized` while `allocation.allocated` counts it, so
+the cap held by rows it does not draw is derived as `allocated - Σ visible caps` rather than read off
+the fallback - exact, because every figure on the wire is a safe integer over 100, and still correct
+if the row filter ever widens. Each field's ceiling is written as "the budget less everything that is
+not this row", never as "the remainder plus this row's own cap": the two are equal, and only the first
+keeps the displayed remainder's clamp-at-zero out of the arithmetic.
+
+**The snap fires on keystroke rather than on blur, and blur would be a correctness bug.** `Modal`
+wraps its children in a real `<form>` and Enter does not blur the focused input, so a blur-snap lets a
+value past the budget submit. On the snapping keystroke the handler writes the value and collapses the
+caret to the end explicitly, because the string the user was editing no longer exists - the one place
+in this app that overrides `lib/amountField.ts`'s caret restore rather than relying on it.
+
+**A ceiling of zero clears the field instead of writing `0.00`, and only a browser found it.** The
+design system's own version snaps to the ceiling literally, which plants a cap of zero - rejected by
+`isCapValid` and by `@IsPositive()` - so the app would invent an invalid value and then answer "Enter
+an amount greater than 0" as though the user had typed it. Blank is valid _and_ true: there is nothing
+left to give that category. A typed `0` still lands and is still caught on submit, which is the same
+answer every other amount field here gives.
+
 **Focus opens on the field the trigger implies**, which is the one thing the two entry points
 disagree about. The kebab's "Edit" is an unspecific invitation and focuses Name; "Set limit" sits on
 a banner reading "No limit set for this category", which is a request to type a number, so it focuses

@@ -65,10 +65,15 @@ keeps, and a monthly budget that may be left blank because an uncapped category 
 choice. The twelfth is PET-39's, and it makes that tab's card kebab real: each one opens a menu
 whose "Delete" removes the category behind a confirmation, and the transactions filed under it move
 to the `Uncategorized` fallback rather than disappearing - which is why the dialog names that row
-rather than the "Other" the ticket asked for. It does **not** clear the tab: that menu's "Edit",
-every uncapped card's "Set limit" and the summary card's "Allocate" all still announce themselves
-as unavailable, and all three are PET-38's. What is still missing is what the one
-remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
+rather than the "Other" the ticket asked for. The thirteenth is PET-70's, and it is the one that
+finally clears the tab: the summary card's "Allocate" opens a modal that sets every category's cap
+in one atomic write, so the Categories tab is the first screen in the app with no inert control on
+it. That write is the app's first **bulk** one and the contract's first array body - `PATCH
+/api/categories`, all-or-nothing, refusing the whole payload rather than half-applying it. The
+sentence this replaces said that menu's "Edit", every uncapped card's "Set limit" and that
+"Allocate" were all still unavailable and all three were PET-38's; PET-38 made two of them live and
+left this one, so the claim was stale by two before it was stale by three. What is still missing is
+what the one remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
 
 ## Repository map
 

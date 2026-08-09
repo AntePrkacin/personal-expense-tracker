@@ -684,6 +684,19 @@ to the update's `WHERE`. Atomic, no transaction, no overlap. It needs a decision
 semantics first, since a zero-row update then means either "no such transaction" or "the category
 just died" and the endpoint currently promises a 404 always means the transaction id.
 
+**PET-70 shipped the first instance of that shape, so this is a pattern to copy rather than an idea
+to evaluate.** `CategoriesService.setCaps` puts the condition in the statement's own `WHERE` - a
+`(select count(*) ...) = n` subquery alongside the id set and the tombstone filter, with
+`RETURNING id` reporting what landed - and it holds the property this entry wants: atomic, no
+transaction, no overlap. It also **made the error-semantics decision** this paragraph says is needed
+first, for its own case: all-or-nothing, a 404 naming the whole payload, and a message stating that
+nothing was written so the identical body is safe to retry. That maps onto the transaction fix
+directly, since the ambiguity here is the same shape - the difference is only that this endpoint has
+an existing 404 promise to keep, so the new condition needs its own status or its own wording rather
+than folding into that one. One trap worth carrying over: `setCaps` had to build its `CASE` arms and
+its `IN` list from one array, because a row matched by the `WHERE` with no arm falls through and is
+written NULL. Any conditional statement whose SET is per-row inherits that hazard.
+
 A repair pass for rows already orphaned belongs with it: one
 `UPDATE transactions SET category_id = <fallback> WHERE category_id NOT IN (SELECT id FROM
 categories WHERE deleted_at IS NULL)`, idempotent and almost always zero rows.
@@ -2040,6 +2053,11 @@ The summary card's own banner - "{amount} of your budget isn't assigned to a cat
 reason: the ticket's AC4 was amended away from frame 13's "Budget allocation" summary toward a
 spending summary, so the unassigned figure needed somewhere else to live. Same sign-off owed.
 
+**That banner's action now opens a modal whose every string is invented too**, which is a longer list
+than this entry anticipated when it called it a fourth string - see the Allocate modal's own entry
+below for the enumeration and for the three decisions inside it. The banner's own sentence is
+unchanged and still owes what this paragraph says it owes.
+
 ### `BudgetCard` hands `<progress>` a `max` that can be zero
 
 PET-36's review found this on its own summary card and fixed it there:
@@ -2307,19 +2325,66 @@ picking one to match the other is a design call rather than a refactor. Frame 10
 what to hold side by side. PET-38 touched that menu and deliberately left this alone for the same
 reason: making Edit live changed no glyph, and choosing a tone is still the designer's.
 
-### Neither delete dialog's stories are in a Jest story smoke harness
+### The Allocate modal's ceiling holds only inside one open dialog
 
-`(app)/shell.stories.test.tsx` lists its story modules by hand, and `DeleteTransactionDialog.stories`
-has never been among them - the harness mocks no `next/navigation`, and both dialogs call
-`useRouter`, which throws outside a mounted router. `DeleteCategoryDialog.stories` follows that
-precedent rather than breaking it.
+`AllocateBudgetModal` reads its budget, its caps and the reserve held by rows it does not draw
+**once, on open**, and never resyncs - deliberately, because a `router.refresh()` behind the open
+dialog would otherwise rewrite the fields under the user's hands mid-edit. So a monthly budget or a
+cap changed anywhere else while the modal sits open leaves every ceiling computed against stale
+figures, and the caps it then saves can sum above the current budget.
 
-The consequence is that these are the two story modules with **no** gate behind them at all:
-`build-storybook` bundles a story without running it, and the harness that would run it does not
-know they exist. Opening them is the only check, which is why every plan's verification names them
-explicitly. The fix is three lines - a `jest.mock('next/navigation', ...)` at the top of the harness
-and both modules in its `MODULES` list - and it belongs with the "each section carries a copy of the
-same harness" item this file already owes, not on its own.
+Nothing is wrong server-side when that happens: caps exceeding the budget is a state the API accepts
+by design (A43), `allocation.unallocated` simply goes negative, and the summary card behind the modal
+renders it. So there is no error to raise and no arm to add - which is exactly why this is recorded
+rather than fixed. The honest fix is the server-side ceiling PET-70 rejected on the grounds that it
+would make this endpoint disagree with `PATCH /api/categories/{id}`, which enforces none; the cheaper
+partial fix is re-reading on open through a route handler, the way `(app)/useCategoryOptions.ts`
+does, which shrinks the window to "while open" without closing it.
+
+### A cap change can leave the insight set stale, and no category write regenerates
+
+`RuleBasedInsightGenerator`'s over-cap rule reads category caps, so lowering a cap can make the
+latest `ready` set describe a category as within budget when it is now over - and **no** category
+write regenerates anything. `PATCH /api/categories/{id}` has never done so, and PET-70's bulk write
+deliberately did not start, because emitting from one and not the other would make the same user
+action behave differently depending on which modal performed it.
+
+The clean version is a single `CATEGORY_CHANGED` event emitted from `create`, `update`, `remove` and
+`setCaps`, with a listener in `InsightsModule` - `CategoriesModule` needs no new imports for it, since
+`EventEmitterModule` is global and `InsightsModule` already imports `CategoriesModule`, so a direct
+call would close the cycle the emitter exists to avoid. It wants building **with** the debounce or
+dirty flag the `LlmInsightGenerator` swap already owes, above: a rule-based run per cap change is
+cheap, and an LLM run per cap change is not.
+
+### The Allocate modal's copy is invented end to end, and three decisions inside it want a look
+
+There is no Figma frame for this modal at all, so every string in it joins the A29 group rather than
+being a diff against anything: the title and its subtitle, "Left to assign", the three ledger rows,
+"Your monthly budget is set in Settings.", the column headers, the `No limit` placeholder, the
+`{amount} spent · {amount} over this cap` caption, the footer hint, both snap messages and all five
+failure lines. `Screens/Allocate budget`'s six stories are the whole of the review surface.
+
+Three of those are decisions rather than wording, and each is where a designer could reasonably
+disagree. **The snap message mixes precision on purpose** - `formatCurrency` for the capped amount
+because it must match the field two centimetres away, which routinely carries cents, and
+`formatWhole` for the budget because it must match the summary card behind the modal; one formatter
+for both would contradict one of the two. **A ceiling of zero gets a different sentence entirely**,
+"Nothing left to assign. Free up budget from another category first.", because "Capped at $0.00"
+would be true and useless - and the field is cleared rather than set to zero, since a cap of zero is
+one the API rejects. **Sub-pixel segments are accepted rather than floored**: a $1 cap against a
+$3,200 budget is 0.03% of the bar and renders as nothing, and the obvious `min-w-px` was rejected
+because it pushes the widths past 100% and flex then shrinks the *large* segments to compensate, so
+the bar would stop being accurate everywhere to make one invisible segment visible.
+`Screens/Allocate budget`'s `TinySegments` is that case.
+
+### Saving the last of the budget destroys the control that opened the modal
+
+A third route to the focus-restore gap this file already carries for saving from an empty state and
+for deleting a row: the Allocate banner renders only while `allocation.unallocated > 0`, so a save
+that assigns the remainder removes the banner during `router.refresh()`, and `Modal`'s focus restore
+aims at an element no longer connected. Focus lands on `<body>`, so the next Tab starts from the top
+of the page. Walked in Chrome on PET-70. It joins the existing entry rather than opening a second
+one, and the fix is the same one: a fallback target when the captured element has gone.
 
 ---
 
