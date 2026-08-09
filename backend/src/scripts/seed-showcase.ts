@@ -5,8 +5,7 @@ import { SEED_MODE } from './seed-showcase.env';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { faker } from '@faker-js/faker';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import type { INestApplicationContext } from '@nestjs/common';
 import { AppModule } from '../app.module';
 import { LoginTokenService } from '../auth/login-token.service';
@@ -18,11 +17,20 @@ import { categories, profile, transactions } from '../database/user/schema';
 import { InsightsService } from '../insights/insights.service';
 import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
+import {
+  dateMonthsAgo,
+  hasHappened,
+  monthsAgoFor,
+  parseDate,
+} from './showcase/dates';
+import { MAX_DAY_OF_MONTH } from './showcase/plan';
+import { load } from './showcase/fixture';
+import type { Fixture } from './showcase/fixture';
 
 /**
- * Fills one account with 18 months of plausible spending, so a demo has
- * something to show. Run it through `mise run seed:showcase` (local files) or
- * `mise run seed:showcase:cloud` (Turso Cloud); `docs/guides/seeding-dummy-data.md`
+ * Fills one account with plausible spending, so a demo has something to show.
+ * Run it through `mise run seed` (local files) or
+ * `mise run seed:cloud` (Turso Cloud); `docs/guides/seeding-dummy-data.md`
  * is the procedure.
  *
  * It boots the real AppModule and goes through the real services rather than
@@ -30,6 +38,16 @@ import { UsersService } from '../users/users.service';
  * registration provisions one - central directory row, own database, migrations,
  * profile, starter categories and the fallback. A hand-built fixture would drift
  * from that the first time provisioning changed.
+ *
+ * **The data itself is no longer invented here.** PET-69 split generation out
+ * into `showcase/generate.ts` and its output into the committed
+ * `showcase/fixture.data.json`, both pure and knowing nothing about dates or
+ * databases. This file only resolves that fixture against today - each
+ * transaction's `(month, occurrence)` becomes a `monthsAgo` through
+ * `monthsAgoFor`, then a date through `dateMonthsAgo` - and writes the result,
+ * which is what makes a seeded account reproducible rather than merely
+ * well-shaped: two seeds on the same day produce byte-identical transactions,
+ * ids aside.
  *
  * Re-running is safe and idempotent: an existing user is reused, the profile is
  * re-asserted, and the transactions are replaced wholesale inside one
@@ -49,38 +67,8 @@ import { UsersService } from '../users/users.service';
 const SHOWCASE_EMAIL = 'dummy@spendifico.eu';
 
 /**
- * The monthly budget, in minor units - $5,000.
- *
- * Written to the profile on every run and used as the denominator for the caps,
- * so the two cannot disagree. Reading the stored budget instead would be worse:
- * a budget changed through `PATCH /api/profile` between runs would leave the
- * showcase telling a different story than the one this file describes.
- */
-const BUDGET_CENTS = 500_000;
-
-/** Whole months of history, the current (partial) one included. */
-const MONTHS = 18;
-
-/** How many of the 17 complete months are seeded over budget. */
-const OVER_BUDGET_MONTHS = 6;
-
-/** An over-budget month lands at about 115% of the budget. */
-const OVER_BUDGET_CENTS = 575_000;
-
-/**
- * Days a transaction can fall on, matching the profile's `monthStartDay` range.
- *
- * 28 so every month has the day, which is the same reason the profile column is
- * constrained to 1-28. It does mean the 29th to the 31st are never used.
- */
-const MAX_DAY_OF_MONTH = 28;
-
-/** Share of transactions assigned to the fallback category, as a percentage. */
-const UNCATEGORIZED_PERCENT = 5;
-
-/**
  * How long the seed waits for the insight run it starts, as attempts times an
- * interval - roughly 15 seconds.
+ * interval.
  *
  * Generously above the sub-second a rule-based run really takes, because the
  * cost of waiting too long is a slower script and the cost of giving up too
@@ -90,98 +78,30 @@ const INSIGHT_POLL_ATTEMPTS = 60;
 const INSIGHT_POLL_INTERVAL_MS = 250;
 
 /**
- * Fixed monthly charges, so the account has real subscriptions in it.
- *
- * No insight rule reads them any more - PET-42-43-44 deleted the
- * recurring-merchant detector, because month counting cannot separate a
- * subscription from a habit. **The data stays anyway**: a realistic account has
- * subscriptions in it, so a demo without any is a demo of something else. The
- * fixed day and fixed amount stay too, for a reason that outlived the rule -
- * they keep these off the random merchant pool, so the transaction list does not
- * show five identical-looking rows stacked on one date.
- */
-const SUBSCRIPTIONS = [
-  { merchant: 'Netflix', amountCents: 1399, dayOfMonth: 3 },
-  { merchant: 'Spotify', amountCents: 1099, dayOfMonth: 7 },
-  { merchant: 'HBO Max', amountCents: 999, dayOfMonth: 12 },
-  { merchant: 'Strava', amountCents: 799, dayOfMonth: 18 },
-  { merchant: 'iCloud', amountCents: 299, dayOfMonth: 24 },
-];
-
-/** `{ year, month (0-11), day }` out of a `YYYY-MM-DD` string. */
-function parseDate(date: string): { year: number; month: number; day: number } {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) {
-    throw new Error(`Expected a YYYY-MM-DD date, received "${date}".`);
-  }
-  return {
-    year: Number(match[1]),
-    month: Number(match[2]) - 1,
-    day: Number(match[3]),
-  };
-}
-
-/**
- * `YYYY-MM-DD`, `monthsAgo` calendar months before `from`.
- *
- * The year carry is done here rather than by handing a negative month to
- * `new Date(...)`, which would also work: no calendar date in this file is ever
- * round-tripped through a Date, because doing that shifts it across timezones.
- * Same reason `transactions.date` is text - see src/common/month-window.ts.
- */
-function dateMonthsAgo(
-  from: { year: number; month: number },
-  monthsAgo: number,
-  day: number,
-): string {
-  const total = from.year * 12 + from.month - monthsAgo;
-  const year = Math.floor(total / 12);
-  const month = total - year * 12;
-
-  const yyyy = String(year).padStart(4, '0');
-  const mm = String(month + 1).padStart(2, '0');
-  const dd = String(day).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-/**
- * What registration would have collected, bar the categories. Major units, like
- * a real onboarding payload: `VerificationService` runs it through `toCents`.
- */
-const ONBOARDING_PROFILE = {
-  firstName: 'Showcase',
-  lastName: 'User',
-  currency: 'USD',
-  monthlyBudget: BUDGET_CENTS / 100,
-  monthStartDay: 1,
-};
-
-/**
- * The name of the category the subscriptions above are filed under.
- *
- * It was "Subscriptions", which PET-64's template list does not contain -
- * "streaming subscriptions" is part of what Entertainment's own description
- * covers. Named as a constant and looked up **strictly** below, because the old
- * lookup fell back to `pickableCategories[0]` and so degraded silently: five
- * fixed monthly charges landing on an arbitrary category, with nothing failing.
- */
-const SUBSCRIPTION_CATEGORY = 'Entertainment';
-
-/** The category the four fixed EU merchant names belong to, same rule. */
-const GROCERIES_CATEGORY = 'Groceries';
-
-/**
- * Every category template there is, as the onboarding payload's `categories`.
+ * Every category template there is, as the onboarding payload's `categories`,
+ * with the profile the fixture asks for.
  *
  * **Ids, not names, since PET-64**, and read out of central rather than out of
  * a constant - which is the whole point of this script provisioning through the
  * real services. A hard-coded list here would drift from the templates the
  * moment an admin edited one, and registration would answer 400 on ids that no
  * longer exist.
+ *
+ * The profile half comes from the fixture rather than from a constant of its
+ * own, so the budget the caps were computed against and the budget written to
+ * the account cannot disagree.
  */
 async function onboardingPayload(
   app: INestApplicationContext,
-): Promise<typeof ONBOARDING_PROFILE & { categories: string[] }> {
+  fixture: Fixture,
+): Promise<{
+  firstName: string;
+  lastName: string;
+  currency: string;
+  monthlyBudget: number;
+  monthStartDay: number;
+  categories: string[];
+}> {
   const { categories: templates } = await app
     .get(TemplatesService)
     .categories();
@@ -194,7 +114,13 @@ async function onboardingPayload(
   }
 
   return {
-    ...ONBOARDING_PROFILE,
+    firstName: fixture.profile.firstName,
+    lastName: fixture.profile.lastName,
+    currency: fixture.profile.currency,
+    // Major units, like a real onboarding payload: `VerificationService` runs
+    // it through `toCents`.
+    monthlyBudget: fixture.profile.monthlyBudgetCents / 100,
+    monthStartDay: fixture.profile.monthStartDay,
     categories: templates.map((template) => template.id),
   };
 }
@@ -225,12 +151,13 @@ async function onboardingPayload(
  */
 async function ensureShowcaseUser(
   app: INestApplicationContext,
+  fixture: Fixture,
 ): Promise<string> {
   const usersService = app.get(UsersService);
   const verificationService = app.get(VerificationService);
   const loginTokenService = app.get(LoginTokenService);
 
-  const payload = await onboardingPayload(app);
+  const payload = await onboardingPayload(app, fixture);
 
   let user = await usersService.findByEmail(SHOWCASE_EMAIL);
   if (!user) {
@@ -260,287 +187,125 @@ async function ensureShowcaseUser(
 }
 
 /**
- * One seeded category by name, or a failure that says which one is missing.
+ * Fails when the account does not carry exactly the categories the fixture
+ * names.
  *
- * The seed attaches two of its stories to named categories, and both of those
- * names come from the template list this account was provisioned from - so a
- * miss means the templates changed under the script, which is a thing to fix
- * rather than to work around at runtime.
+ * Both directions matter and they fail for different reasons. A category the
+ * fixture names and the account lacks has transactions with nowhere to go. A
+ * category the account has and the fixture does not gets no cap, so the caps
+ * stop summing to the budget and the allocation summary reports an unallocated
+ * remainder the demo never meant to show.
+ *
+ * The usual cause is `category_templates` changing under a fixture generated
+ * before it; the other is this account having a category deleted through the
+ * API, which the tombstone filter on the read below turns into the same
+ * missing-category failure rather than a silently dead id. So the message says
+ * which category, which cause, and what actually fixes it - regenerating does
+ * not, since the fixture's categories come from a hand-written table.
  */
-function requireCategoryId(
-  seeded: readonly { id: string; name: string }[],
-  name: string,
-): string {
-  const found = seeded.find((category) => category.name === name);
+function assertCategoriesMatch(
+  fixture: Fixture,
+  seeded: readonly { name: string }[],
+): void {
+  const inFixture = new Set(fixture.categories.map((c) => c.name));
+  const inAccount = new Set(seeded.map((c) => c.name));
 
-  if (!found) {
-    throw new Error(
-      `The showcase seed needs a "${name}" category and this account has none. ` +
-        `It has: ${seeded.map((c) => c.name).join(', ')}. Either a category ` +
-        `template was renamed or removed, or this account's categories were ` +
-        `edited through the API.`,
-    );
+  const missing = [...inFixture].filter((name) => !inAccount.has(name));
+  const extra = [...inAccount].filter((name) => !inFixture.has(name));
+
+  if (missing.length === 0 && extra.length === 0) {
+    return;
   }
 
-  return found.id;
-}
+  const problems = [
+    missing.length > 0 &&
+      `the fixture expects ${missing.join(', ')}, which this account does not have`,
+    extra.length > 0 &&
+      `this account has ${extra.join(', ')}, which the fixture says nothing about`,
+  ].filter(Boolean);
 
-/**
- * A merchant pool where every category is guaranteed at least two merchants of
- * its own.
- *
- * The guarantee is why the faker names are dealt round-robin rather than each
- * picking a category at random: with 26 names over 13 categories, random
- * assignment leaves several categories with none at all, and every transaction
- * in such a category then has to fall back to some arbitrary merchant - so a
- * whole category's worth of spending shows up under one name.
- *
- * Thirteen is the twelve category templates plus the fallback, and 26 is
- * `categoryIds.length * 2` rather than a written-down number - the arithmetic
- * is stated so the shape is legible, not so it can be pinned.
- *
- * @returns merchant name to the ids of the categories it is valid for.
- */
-function buildMerchantPool(
-  categoryIds: readonly string[],
-  groceriesId: string,
-): Map<string, string[]> {
-  // Fixed EU names, so the data does not read as entirely synthetic. They map
-  // to Groceries exclusively.
-  const fixedMerchants = ['dm', 'Müller', 'Konzum', 'Lidl'];
-
-  // Deduplicated: faker.company.name() repeats, and the Map below would
-  // silently drop the earlier mapping if it did.
-  const names = new Set<string>(fixedMerchants);
-  const fakerMerchants: string[] = [];
-  while (fakerMerchants.length < categoryIds.length * 2) {
-    const name = faker.company.name();
-    if (names.has(name)) {
-      continue;
-    }
-    names.add(name);
-    fakerMerchants.push(name);
-  }
-
-  const pool = new Map<string, string[]>();
-  for (const merchant of fixedMerchants) {
-    pool.set(merchant, [groceriesId]);
-  }
-
-  const shuffled = faker.helpers.shuffle([...fakerMerchants]);
-  shuffled.forEach((merchant, index) => {
-    pool.set(merchant, [categoryIds[index % categoryIds.length]]);
-  });
-
-  // 20% of the whole pool carries a second category. Counted over every
-  // merchant, not just the faker ones, because the fixed four are part of the
-  // pool - and they are excluded from the draw itself, since mapping them
-  // anywhere but Groceries is what makes them recognisable.
-  const withTwo = Math.round((fixedMerchants.length + shuffled.length) * 0.2);
-  for (const merchant of shuffled.slice(0, withTwo)) {
-    const [primary] = pool.get(merchant)!;
-    const candidates = categoryIds.filter((id) => id !== primary);
-    pool.set(merchant, [primary, faker.helpers.arrayElement(candidates)]);
-  }
-
-  return pool;
-}
-
-/**
- * Splits `totalCents` across `count` transactions, each at least a cent.
- *
- * The running average keeps the amounts varied without letting them drift away
- * from the target: the last one absorbs whatever is left, so the month sums to
- * exactly what was asked for.
- */
-function splitAmounts(totalCents: number, count: number): number[] {
-  const amounts: number[] = [];
-  let generated = 0;
-
-  for (let i = 0; i < count; i++) {
-    if (i === count - 1) {
-      amounts.push(Math.max(1, totalCents - generated));
-      break;
-    }
-    const average = (totalCents - generated) / (count - i);
-    const amount = faker.number.int({
-      min: Math.max(1, Math.floor(average * 0.2)),
-      max: Math.max(1, Math.floor(average * 1.8)),
-    });
-    amounts.push(amount);
-    generated += amount;
-  }
-
-  return amounts;
+  throw new Error(
+    `The showcase fixture and the category templates disagree: ` +
+      `${problems.join('; ')}. A category template has been added, renamed or ` +
+      `removed since this data was generated - or this account had a category ` +
+      `deleted through the API. Regenerating alone will not fix it: the ` +
+      `fixture's categories come from CATEGORY_PLANS in ` +
+      `src/scripts/showcase/plan.ts, so add, rename or remove the row there ` +
+      `first (rebalancing spendPercent, countPercent and capCents until ` +
+      `assertPlanIsCoherent passes), then run \`mise run seed:fixture\`.`,
+  );
 }
 
 async function seed(app: INestApplicationContext): Promise<void> {
   const config = app.get(ConfigService);
   const userDatabaseService = app.get(UserDatabaseService);
 
-  const userId = await ensureShowcaseUser(app);
+  const fixture = load();
+
+  const userId = await ensureShowcaseUser(app, fixture);
   const userDb = await userDatabaseService.getUserDb(userId);
 
   // Re-asserted rather than assumed. On a re-run the account is already
   // verified, so nothing above touched the profile, and a budget or a month
   // start day changed through PATCH /api/profile in between would leave the
   // caps below distributing against a number the profile no longer holds.
-  // monthStartDay is pinned to 1 for the same reason the months below are
-  // calendar months: with any other value the two disagree.
   await userDb
     .update(profile)
-    .set({ monthlyBudgetCents: BUDGET_CENTS, monthStartDay: 1 })
+    .set({
+      monthlyBudgetCents: fixture.profile.monthlyBudgetCents,
+      monthStartDay: fixture.profile.monthStartDay,
+    })
     .where(eq(profile.id, userId));
 
-  const allCategories = await userDb.select().from(categories);
-  const fallbackCategory = allCategories.find((c) => c.isFallback);
-  if (!fallbackCategory) {
-    throw new Error(`User ${userId} has no fallback category.`);
-  }
-  const pickableCategories = allCategories.filter((c) => !c.isFallback);
+  // Tombstones filtered, like every other read in this codebase, and here it is
+  // load-bearing rather than conventional: a category deleted through the API
+  // is still a row, so an unfiltered read would satisfy the assert below and
+  // then bind that name to the dead id - filing every transaction for it under
+  // a category each of those reads discards.
+  const allCategories = await userDb
+    .select()
+    .from(categories)
+    .where(isNull(categories.deletedAt));
+  assertCategoriesMatch(fixture, allCategories);
 
-  // Caps sum to exactly the budget: an even split, with the last row absorbing
-  // the remainder. The fallback gets one too - it holds real spend here.
-  const evenCap = Math.floor(BUDGET_CENTS / allCategories.length);
-  let remainingCap = BUDGET_CENTS;
-  for (const [index, category] of allCategories.entries()) {
-    const isLast = index === allCategories.length - 1;
-    const cap = isLast ? remainingCap : evenCap;
-    remainingCap -= cap;
+  const idByName = new Map(allCategories.map((c) => [c.name, c.id]));
+
+  // Caps come out of the fixture now rather than an even split, which put every
+  // category at $384.62 - Groceries and Healthcare on the same allowance, and a
+  // mortgage on a quarter of what it costs. `assertPlanIsCoherent` has already
+  // checked they sum to the budget, so `unallocated` still lands on zero.
+  for (const category of fixture.categories) {
     await userDb
       .update(categories)
-      .set({ monthlyCapCents: cap })
-      .where(eq(categories.id, category.id));
+      .set({ monthlyCapCents: category.capCents })
+      .where(eq(categories.id, idByName.get(category.name)!));
   }
-
-  // **Both lookups throw rather than falling back**, which reverses what this
-  // file used to do. They each used `?? pickableCategories[0]`, on the reasoning
-  // that a re-run against an account whose categories were edited through the
-  // API should not die - and the cost of that was a miss degrading *silently*
-  // into a demo whose grocery merchants or subscription story sat on an
-  // arbitrary category, with every run reporting success. PET-64 made that
-  // reachable rather than theoretical, by dropping "Subscriptions" from the
-  // template list entirely. A seed that cannot tell its own story should say so.
-  const groceriesId = requireCategoryId(allCategories, GROCERIES_CATEGORY);
-  const merchantPool = buildMerchantPool(
-    allCategories.map((c) => c.id),
-    groceriesId,
-  );
-  const merchantNames = [...merchantPool.keys()];
-
-  const subscriptionsCategoryId = requireCategoryId(
-    allCategories,
-    SUBSCRIPTION_CATEGORY,
-  );
 
   // Today in the app's own zone, not the machine's, so a run just either side
   // of local midnight agrees with every month-scoped figure the dashboard
   // computes - all of which resolve their window against APP_TIMEZONE.
   const today = parseDate(todayIn(config.get<string>('APP_TIMEZONE')!));
 
-  // Drawn from the complete months only. The current month is partial by
-  // definition, so seeding it over budget would mean seeding spending that has
-  // not happened yet - which is the whole reason for the clamp further down.
-  const overBudgetMonths = new Set(
-    faker.helpers
-      .shuffle(Array.from({ length: MONTHS - 1 }, (_, i) => i + 1))
-      .slice(0, OVER_BUDGET_MONTHS),
-  );
-
-  const rows: (typeof transactions.$inferInsert)[] = [];
-
-  for (let monthsAgo = 0; monthsAgo < MONTHS; monthsAgo++) {
-    const isCurrentMonth = monthsAgo === 0;
-    const isOverBudget = overBudgetMonths.has(monthsAgo);
-
-    // Never past today. Without the clamp the current month is seeded across
-    // all 28 days, so on the 7th the dashboard reads a full month of spending,
-    // averagePerDay (which divides by days elapsed) is four times reality, and
-    // the trend chart draws buckets for weeks that have not happened.
-    const lastDay = isCurrentMonth
-      ? Math.min(today.day, MAX_DAY_OF_MONTH)
-      : MAX_DAY_OF_MONTH;
-
-    // And the volume is scaled to match, for the same reason: 70 transactions
-    // crammed into the first week is a full month's spending wearing a clamp.
-    const elapsed = lastDay / MAX_DAY_OF_MONTH;
-
-    const count = Math.max(
-      1,
-      Math.round(faker.number.int({ min: 60, max: 80 }) * elapsed),
-    );
-    const target = Math.round(
-      (isOverBudget
-        ? OVER_BUDGET_CENTS
-        : faker.number.int({ min: 300_000, max: 480_000 })) * elapsed,
-    );
-
-    // Subscriptions bill on their own day, so the current month gets only the
-    // ones whose day has already passed - the same clamp as everything else.
-    const dueSubscriptions = SUBSCRIPTIONS.filter(
-      (subscription) => subscription.dayOfMonth <= lastDay,
-    );
-    for (const subscription of dueSubscriptions) {
-      rows.push({
-        id: newId(),
-        merchant: subscription.merchant,
-        categoryId: subscriptionsCategoryId,
-        amountCents: subscription.amountCents,
-        date: dateMonthsAgo(today, monthsAgo, subscription.dayOfMonth),
-      });
-    }
-
-    // They come out of the month's budget rather than on top of it, so the
-    // totals still land where the over-budget months need them.
-    const subscriptionCents = dueSubscriptions.reduce(
-      (sum, subscription) => sum + subscription.amountCents,
-      0,
-    );
-    const variableTarget = Math.max(1, target - subscriptionCents);
-    const variableCount = Math.max(1, count - dueSubscriptions.length);
-
-    // Concentrated rather than smeared. An over-budget month spread evenly puts
-    // every category about 15% up and none of them over its cap, so the donut,
-    // the category cards and the over-cap insight have nothing to show - which
-    // is the point of seeding an over-budget month at all.
-    const hot = faker.helpers.arrayElements(
-      pickableCategories,
-      isOverBudget ? 2 : 1,
-    );
-    const hotPercent = isOverBudget ? 55 : 30;
-
-    for (const amountCents of splitAmounts(variableTarget, variableCount)) {
-      const roll = faker.number.int({ min: 1, max: 100 });
-      let categoryId: string;
-      if (roll <= UNCATEGORIZED_PERCENT) {
-        categoryId = fallbackCategory.id;
-      } else if (roll <= UNCATEGORIZED_PERCENT + hotPercent) {
-        categoryId = faker.helpers.arrayElement(hot).id;
-      } else {
-        categoryId = faker.helpers.arrayElement(pickableCategories).id;
-      }
-
-      // Never empty: buildMerchantPool guarantees every category at least two.
-      const valid = merchantNames.filter((name) =>
-        merchantPool.get(name)!.includes(categoryId),
-      );
-      if (valid.length === 0) {
-        throw new Error(`No merchant is mapped to category ${categoryId}.`);
-      }
-
-      rows.push({
-        id: newId(),
-        merchant: faker.helpers.arrayElement(valid),
-        categoryId,
-        amountCents,
-        date: dateMonthsAgo(
-          today,
-          monthsAgo,
-          faker.number.int({ min: 1, max: lastDay }),
-        ),
-      });
-    }
-  }
+  // The fixture carries no monthsAgo - only the calendar position
+  // (month, occurrence) `MONTH_TARGETS` was drawn against - so it is resolved
+  // here, against whichever month this run actually lands in.
+  const rows = fixture.transactions
+    .map((transaction) => ({
+      ...transaction,
+      monthsAgo: monthsAgoFor(
+        transaction.month,
+        transaction.occurrence,
+        today.month,
+      ),
+    }))
+    .filter((transaction) => hasHappened(transaction, today, MAX_DAY_OF_MONTH))
+    .map((transaction) => ({
+      id: newId(),
+      merchant: transaction.merchant,
+      categoryId: idByName.get(transaction.category)!,
+      amountCents: transaction.amountCents,
+      date: dateMonthsAgo(today, transaction.monthsAgo, transaction.day),
+    }));
 
   // One transaction, so a failure part-way through leaves the account with the
   // history it had rather than with whichever chunk landed before the error.
@@ -556,7 +321,7 @@ async function seed(app: INestApplicationContext): Promise<void> {
   });
 
   console.log(
-    `Seeded ${SHOWCASE_EMAIL} with ${rows.length} transactions across ${MONTHS} months (${SEED_MODE} mode).`,
+    `Seeded ${SHOWCASE_EMAIL} with ${rows.length} transactions across ${fixture.months} months (${SEED_MODE} mode).`,
   );
 
   await generateInsights(app, userId);
@@ -576,9 +341,9 @@ async function seed(app: INestApplicationContext): Promise<void> {
  * returns as soon as the placeholder `generating` row is committed and floats the
  * real work, while `bootstrap()`'s `finally` closes every replica underneath it.
  * The account would be left holding a bare `generating` row: a wedged skeleton
- * screen for the five minutes until the read's staleness cutoff reclaims it, and
- * no insights after that either. So this polls `getSet` until the state settles,
- * which is the only completion signal the service's public surface offers.
+ * screen until the read's staleness cutoff reclaims it, and no insights after
+ * that either. So this polls `getSet` until the state settles, which is the
+ * only completion signal the service's public surface offers.
  */
 async function generateInsights(
   app: INestApplicationContext,
@@ -589,14 +354,13 @@ async function generateInsights(
   try {
     await insights.generate(userId);
   } catch (error) {
-    // The same call the ceiling below makes, for the same reason, and it was
-    // missing here: `generate()` throws `ConflictException` when a `generating`
-    // row younger than the staleness cutoff exists, which is exactly what an
-    // interrupted previous `seed:showcase` leaves behind. Unguarded, re-running
-    // the seed inside that window let the exception escape all the way to
-    // `bootstrap`, printing "Seeding failed." and exiting 1 **after** every
-    // transaction had already been written - reporting a successful seed as a
-    // failure, which is the one thing the loop below is careful not to do.
+    // Guarded for the same reason the loop below warns rather than throws.
+    // `generate()` answers `ConflictException` when a `generating` row younger
+    // than the staleness cutoff exists, which is exactly what an interrupted
+    // previous run leaves behind. Unguarded, re-running the seed inside that
+    // window lets the exception escape to `bootstrap`, printing "Seeding
+    // failed." and exiting non-zero **after** every transaction has already
+    // been written - reporting a successful seed as a failure.
     console.warn(
       `Insight generation for ${SHOWCASE_EMAIL} could not be started: ` +
         `${error instanceof Error ? error.message : String(error)} ` +

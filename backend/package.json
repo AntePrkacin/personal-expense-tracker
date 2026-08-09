@@ -83,6 +83,7 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "moduleNameMapper": {
+      "^@faker-js/faker$": "<rootDir>/../test/esm-shims/faker.ts",
       "^@tursodatabase/database$": "<rootDir>/../test/esm-shims/tursodatabase-database.ts",
       "^@tursodatabase/sync$": "<rootDir>/../test/esm-shims/tursodatabase-sync.ts",
       "^uuid$": "<rootDir>/../test/esm-shims/uuid.ts"

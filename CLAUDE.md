@@ -101,8 +101,9 @@ behind a pointer.
 **Generated files**
 
 - **Never hand-edit a generated-but-committed artifact.** That is `backend/openapi.json`,
-  `frontend/src/types/api.d.ts`, `backend/drizzle/**`, `.agents/skills/**` and the
-  `.claude/skills/drizzle*` symlinks. Regenerate and commit the diff.
+  `frontend/src/types/api.d.ts`, `backend/drizzle/**`, `.agents/skills/**`, the
+  `.claude/skills/drizzle*` symlinks and `backend/src/scripts/showcase/fixture.data.json`.
+  Regenerate and commit the diff - `mise run seed:fixture` for the last of these.
 - **After changing anything a request or response body is made of, run `npm run api:sync` from
   the repo root** and commit both artifacts. Drift is a CI failure in two halves.
 

@@ -15,7 +15,7 @@
  *
  * Local is the default because the failure directions are not symmetric. A
  * local seed run by mistake writes a gitignored SQLite file; a cloud seed run
- * by mistake creates a real database and 1,200-odd rows in shared
+ * by mistake creates a real database and thousands of rows in shared
  * infrastructure. Reaching the cloud therefore has to be asked for by name.
  *
  * One thing `--local` inherits from `ignoreEnvFile` and cannot avoid: every

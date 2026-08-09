@@ -1,27 +1,47 @@
 # Seeding Dummy Data for Showcases
 
-This guide explains how to fill one account (`dummy@spendifico.eu`) with 18 months of realistic
+This guide explains how to fill one account (`dummy@spendifico.eu`) with 36 months of realistic
 transaction data, for demos, UI work and showcases.
 
-The script boots the real NestJS application context and goes through the real services, so the
-showcase user is provisioned exactly the way a registration provisions one: the central directory
-row, its own database, the migrations, the profile, the starter categories and the `Uncategorized`
-fallback.
+The data comes from three commands rather than one. A committed fixture
+(`backend/src/scripts/showcase/fixture.data.json`) describes the account completely - the profile,
+the category caps and every transaction, positioned by calendar month rather than by an absolute
+date - and the seed script only resolves that fixture against today and writes it. That split is
+what makes seeding **reproducible**: two people demoing the app on the same day see the same
+numbers, and a change to the spending model is a diff on a committed file rather than an invisible
+change to what a script happens to invent this time.
 
-## Which target, and why there are two commands
+The seed script boots the real NestJS application context and goes through the real services, so
+the showcase user is provisioned exactly the way a registration provisions one: the central
+directory row, its own database, the migrations, the profile, the starter categories and the
+`Uncategorized` fallback.
+
+## The three commands
+
+| | Command | What it does |
+| --- | --- | --- |
+| **A** | `mise run seed:fixture` | Regenerates `fixture.data.json` from the spending model. No Nest, no database - only needed after changing the model itself. |
+| **B** | `mise run seed` / `:cloud` | Reads the committed fixture, resolves its dates against today, provisions the account and writes it. This is the one most people want. |
+| **C** | `mise run seed:check` | Measures the fixture - or `--trials=200` fresh generations - and prints a report. No database, and it changes nothing. |
+
+Most of this guide is about **Command B**, the one that fills the account. Command A only matters
+if you are changing the spending model itself (see "When the fixture must be rebuilt" below);
+Command C is how the numbers in this guide, and any future change to them, were measured.
+
+## Which target, and why there are two seeding commands
 
 The backend runs in one of two modes, and the seed script has to be told which one you mean:
 
 ```bash
-mise run seed:showcase         # local SQLite files under backend/databases/
-mise run seed:showcase:cloud   # Turso Cloud, using backend/.env
+mise run seed         # local SQLite files under backend/databases/
+mise run seed:cloud   # Turso Cloud, using backend/.env
 ```
 
 Local is the default and cloud has to be typed out, because the two are not equally forgiving. A
 mistaken local run writes a gitignored SQLite file. A mistaken cloud run creates a real database
-in the shared Turso organization and pushes about 1,200 rows into it.
+in the shared Turso organization and pushes thousands of rows into it.
 
-`seed:showcase` ignores `backend/.env` entirely, the same way the e2e suite and the OpenAPI
+`seed` ignores `backend/.env` entirely, the same way the e2e suite and the OpenAPI
 emitter do. That is deliberate: having cloud credentials in `.env` must not turn a local seed into
 a cloud one. Two consequences worth knowing:
 
@@ -36,7 +56,9 @@ Re-running either command is safe. An existing showcase user is reused rather th
 profile is re-asserted, and the transactions are replaced wholesale inside one database
 transaction rather than appended to. Seeding cloud after seeding local is safe too: an account
 provisioned in local mode has no `db_url`, and the script re-provisions it rather than assuming a
-cleared onboarding payload means it is ready.
+cleared onboarding payload means it is ready. **Seeding twice on the same day produces
+byte-identical transactions, ids aside** - that is the property the fixture split exists to
+guarantee, and it is checked by hand before every release of this work rather than assumed.
 
 **Do not point both modes at the same `DATABASE_DIR` even so - the backend now refuses rather than
 corrupting it, but a refusal still stops your seed run cold.** The two modes use the same file
@@ -78,7 +100,7 @@ Nothing is written when that happens, so the repair is only to stop the server a
    the lock on `app.db`.
 2. **Run the seed script**:
    ```bash
-   mise run seed:showcase
+   mise run seed
    ```
    It takes a few seconds and finishes with `Seeded dummy@spendifico.eu with N transactions...`.
 3. **Start your dev servers**:
@@ -110,7 +132,7 @@ rather than a plain file, which changes what is locked and nothing about the out
    the lock on the replica.
 3. **Run the seed script**:
    ```bash
-   mise run seed:showcase:cloud
+   mise run seed:cloud
    ```
    It connects to Turso, creates the user in the central database, provisions a database for them
    through the Platform API, migrates it, and pushes the transactions.
@@ -129,30 +151,124 @@ rather than a plain file, which changes what is locked and nothing about the out
 
 - **A profile** with a $5,000 monthly budget and `monthStartDay` 1, rewritten on every run so the
   caps below always add up against the budget actually stored.
-- **Thirteen categories** - every category template plus `Uncategorized` - each with a monthly
-  cap, the caps summing to exactly the $5,000 budget. The templates are read out of central at
-  run time rather than hard-coded, so this count follows whatever an admin has enabled.
-- **30 merchants**: 26 generated names dealt round-robin over the categories so every category has
-  at least two of its own, plus `dm`, `Müller`, `Konzum` and `Lidl` mapped exclusively to
-  Groceries. About 20% of merchants are valid for two categories, the rest for one.
-- **Five subscriptions** - Netflix, Spotify, HBO Max, Strava and iCloud, about $46/mo combined -
-  each billing once a month, on its own day, at the same amount every month. They are deliberately
-  kept out of the random merchant pool: the insights generator recognises a subscription by that
-  behaviour rather than by name, and a second charge in some month would break it.
-- **Roughly 1,100-1,400 transactions** over 18 months - 60 to 80 per month, so the exact total
-  differs on every run. About 5% land on `Uncategorized`.
-- **Six over-budget months**, at about 115% of the budget, with the overspend concentrated in two
-  categories rather than spread evenly - otherwise no category ends up over its cap and the donut,
-  the category cards and the over-cap insight have nothing to show.
+- **Thirteen categories** - every category template plus `Uncategorized` - with **uneven** monthly
+  caps that still sum to exactly the $5,000 budget, from $1,500 for `Loans & debt` down to $100 for
+  `Education`. The templates are read out of central at run time rather than hard-coded, so this
+  count follows whatever an admin has enabled; the caps themselves come from the fixture, so a
+  template rename or removal is refused rather than silently seeded against a stale cap - see
+  "When the fixture must be rebuilt" below.
+- **Twelve fixed monthly bills**, about $1,900 combined and roughly 38% of the month: rent $1,450,
+  health insurance $145, electricity about $95, internet $55, mobile $40, gym $39, water $30, and
+  the five streaming subscriptions (Netflix, Spotify, HBO Max, Strava and iCloud, $46 together).
+  Each bills once a month on its own day. The three utility bills move month to month the way real
+  ones do; the rest are flat. All twelve are deliberately kept out of the random merchant pool, so
+  a bill cannot also draw a second charge at an unrelated amount under the same name - a `Fiberlink`
+  at $23.40 beside the real $55 one. The seed fails loudly if an edit puts one of these merchants
+  back into the pool.
+- **Merchants are hand-written per category** rather than generated, with weights that give each
+  category a few regulars and a long tail - the coffee shop turns up about 3 times a month and the
+  main supermarket about 2.5, while a good many names appear once or twice in the whole 36 months.
+- **55 to 72 transactions a month** over 36 months, so the exact total differs by seed. Roughly 3%
+  land on `Uncategorized`. `mise run seed:fixture` prints the total it wrote.
+- **Amounts drawn log-normally, per category**, so the spread looks like real spending rather than
+  like arithmetic: a median near $35, roughly 9% of transactions under $10 and roughly 3% over
+  $200, with each category's typical size set by its own share of spend against its share of the
+  count. Dining out lands near $31 a time, Groceries near $56, Travel near $225.
 
-Two things about dates. The six over-budget months are drawn from the **17 complete** months only,
-and the current month is seeded **pro-rata**: transactions stop at today and both the count and the
-target spend are scaled by how much of the month has elapsed. Seeding the current month as if it
-were finished is what would make the dashboard read a full month's spending on the 7th, with
-`averagePerDay` four times reality and trend buckets for weeks that have not happened yet.
+### Every month has a band, and the year has a shape
+
+Rather than picking a handful of months at random to run over budget, every calendar month is
+drawn from its own percentage-of-budget range, and the same twelve bands repeat for every one of
+the three years the fixture covers - so December is always over budget, not "over budget in
+whichever `monthsAgo` the dice landed on this time":
+
+| Month | Band | Why |
+| --- | --- | --- |
+| Dec | 108-115% | Christmas |
+| Jul | 105-112% | holiday |
+| Aug | 105-112% | holiday |
+| May | 97-99% | the near-miss - the month the account *just* made it |
+| Jun | 88-93% | pre-holiday creep |
+| Nov | 86-92% | pre-Christmas |
+| Mar | 82-89% | |
+| Sep | 80-88% | |
+| Oct | 80-88% | |
+| Apr | 76-84% | |
+| Feb | 72-81% | post-Christmas recovery |
+| Jan | 70-79% | post-Christmas recovery |
+
+Only December, July and August ever go over budget - **9 of the 36 months**, each pushed over by
+one major plus one minor irregular expense (a car repair, a dentist, a holiday booking) rather
+than by inflating every category 15%. That is both how real months go over and what leaves one or
+two categories visibly over their caps, which the donut, the category cards and the over-cap
+insight all need to have anything to show. May is a deliberate near-miss, landing at 97-99% of
+budget every time it recurs - the month somebody *just* made it.
+
+- **Travel, `Education` and `Gifts` do not happen every month.** They fire in roughly 45%, 50% and
+  60% of them, and a category that sits out has its share redistributed over the ones that did not.
+- **Every category's over-cap rate is measured, not assumed**, and the categories do not all land
+  in the same place: `Healthcare`, `Utilities`, `Entertainment`, `Education` and `Transportation`
+  sit in a 4-11%-of-months-over-cap range, mostly from being the occasional target of one of the
+  irregular expenses above. `Groceries`, `Dining out`, `Family & pets`, `Personal care`,
+  `Uncategorized`, `Travel` and `Gifts` run higher than that even after two rounds of rebalancing
+  the caps - a property of a $5,000 budget with a $1,450 rent payment in it, not an unturned
+  number. `Loans & debt` sits at essentially 0%: it is 30% of the whole budget and dominated by
+  that same near-fixed rent, so it has almost no room to go over on ordinary variance at all. Run
+  `mise run seed:check --trials=200` for the exact current figures - they are the tuning input
+  for any future change to the model, not a table to copy here and let go stale.
 
 Dates never fall after the 28th, matching the 1-28 range the profile's `monthStartDay` is
 constrained to.
 
-Between them, these make all four insight rules fire on a freshly seeded account: a category over
-its cap, a month-over-month move, an end-of-month projection, and the five subscriptions.
+Between them, these make both content rules fire on a freshly seeded account: a category over its
+cap, and a month-over-month move.
+
+The seed also gives the summary banner all three of its headline states across the history, since
+that is driven by the projected end-of-month pace rather than by a card.
+
+## When the fixture must be rebuilt
+
+Today the seed reads the live category templates out of central at run time, so an admin adding or
+renaming a category is picked up automatically on the next run. **A fixture cannot do that and stay
+deterministic**, which is the whole point of the change: the data has to be fixed in advance, so it
+cannot also follow a table that moves. Determinism costs exactly that adaptability, and the cost is
+accepted here deliberately rather than discovered later.
+
+What softens it is that the fixture keys on category **name** alone, so most template edits are
+invisible to it:
+
+| Change to a category template | Rebuild needed? |
+| --- | --- |
+| Category added | **Yes**, and the seeder refuses until you do - the caps would otherwise stop summing to the budget |
+| Category renamed | **Yes**, and it refuses - those transactions would have nowhere to go |
+| Category removed | **Yes**, and it refuses - same reason |
+| Colour changed | No |
+| Icon changed | No |
+| Description changed | No |
+| `enabled` flag toggled | **Yes, for an account that does not exist yet** - see below |
+
+The `enabled` row is the subtle one. `GET /api/templates/categories` serves only enabled
+templates, and that is the list the seed hands to onboarding - so a template disabled before the
+showcase account is first provisioned is never seeded as a category, and the seeder refuses. An
+account provisioned earlier already has the category and is unaffected, which is why re-running
+against an existing showcase user keeps working while a fresh one fails.
+
+Every one of these failures is loud and names the offending category. None of them can silently
+seed a subtly wrong account, which is the property that makes the trade-off acceptable at all.
+
+**Regenerating alone does not fix any of them**, and the error says so. The fixture's categories
+come from the hand-written `CATEGORY_PLANS` table in
+`backend/src/scripts/showcase/plan.ts`, so `mise run seed:fixture` reproduces exactly the same
+names and the next run refuses identically. Edit that table first - add, rename or remove the
+row, then rebalance `spendPercent`, `countPercent` and `capCents` until `assertPlanIsCoherent`
+passes - and regenerate after.
+
+To rebuild: run `mise run seed:fixture`, then `mise run seed:check --trials=200` against
+the result before committing - the fixture command has no opinion on whether the numbers it
+produced are good, only on producing them reproducibly. Commit the regenerated
+`backend/src/scripts/showcase/fixture.data.json` on its own, since it is a generated-but-committed
+artifact (see root `CLAUDE.md`'s never-hand-edit list) and a regeneration diff should read as
+exactly that rather than be buried in an unrelated change.
+
+For scale: `CATEGORY_SEED` has changed twice in this project's life. PET-64 created it, and PET-65
+was an icon-only pass, which by this table would not have needed a rebuild.

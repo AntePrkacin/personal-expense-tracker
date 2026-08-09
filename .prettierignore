@@ -13,6 +13,15 @@ package-lock.json
 backend/openapi.json
 frontend/src/types/api.d.ts
 
+# The committed showcase fixture. Written by `mise run seed:fixture`, never by
+# hand, and deliberately serialised one transaction per line rather than
+# pretty-printed - `JSON.stringify(x, null, 2)` turns ~2,200 transactions into
+# ~13,000 lines of nested indentation where a regeneration diff has to be read
+# bracket by bracket. Letting Prettier reformat it expands it right back to
+# that shape on the very next commit; confirmed by hand, it grew this file
+# from 2,257 lines to 18,020.
+backend/src/scripts/showcase/fixture.data.json
+
 # Build output and coverage reports.
 dist/
 .next/

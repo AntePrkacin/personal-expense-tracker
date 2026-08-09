@@ -74,8 +74,10 @@ Fly deploy (see [Deployment](deployment.md)).
 | `mise run api:sync`          | Regenerate the OpenAPI spec, then the frontend types from it         |
 | `mise run skills`            | Refresh Drizzle's committed agent skills after a drizzle-kit bump    |
 | `mise run deploy-backend`    | Dispatch the Fly deploy workflow on `main`, stream it, open the run  |
-| `mise run seed:showcase`     | Fill the showcase user with 18 months of data, in local SQLite files |
-| `mise run seed:showcase:cloud` | The same, against Turso Cloud - needs `backend/.env`               |
+| `mise run seed`               | Fill the showcase user with 36 months of data, in local SQLite files |
+| `mise run seed:cloud`         | The same, against Turso Cloud - needs `backend/.env`                 |
+| `mise run seed:fixture`       | Regenerate the committed showcase fixture from the spending model    |
+| `mise run seed:check`         | Measure the showcase spending model without seeding anything         |
 
 Every task also has per-package variants when you want just one: `install:repo`,
 `install:backend`, `install:frontend`, `dev:backend`, `dev:frontend`, `update:repo`,
