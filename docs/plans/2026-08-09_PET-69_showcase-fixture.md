@@ -7,6 +7,39 @@ writes it, and a checker that measures the result without a database. Also widen
 
 Tracked as [PET-69](https://decode.atlassian.net/browse/PET-69), under the Leftovers epic.
 
+## Status
+
+**Landed: the restructure, the checker and the unit tests.** `plan.ts`, `generate.ts`, `dates.ts`
+and `fixture.ts` exist, `generate()` is pure and reproducible from a seed, `seed-showcase.ts` is a
+resolver rather than a generator, `showcase:check` reports, and 50 specs cover the pure functions
+and the asserts.
+
+**Not landed: the fixture file itself.** There is no `fixture.json` and no command A, so the seeder
+still calls `generate()` in-process. It is already deterministic day-to-day because the seed is
+fixed, but the data is not yet a reviewable committed artifact, and the history is still 18 months
+rather than 36. That is the rest of this plan.
+
+**One thing came along that the slice did not plan to touch.** The date model had to, because it is
+forced: a pure generator cannot know what day it is, so it cannot scale the current month by
+`elapsed`, so the current month must be emitted whole and truncated by the seeder. That is the
+design this plan already called for; it simply could not be deferred past the extraction.
+
+## What the checker found at 200 trials
+
+Recorded here because it is the tuning input the model change needs, and because it is exactly the
+class of thing one seeded account cannot show. Across 200 generated accounts, most categories go
+over their cap in 4-11% of months, which is the intended "occasionally over". Two do not:
+
+| Category | Mean spend vs cap | Months over cap |
+| --- | --- | --- |
+| Gifts | 67.8% | **25.7%** |
+| Uncategorized | 87.6% | **22.4%** |
+
+Both average comfortably under cap and still cross it a quarter of the time, because their caps are
+small in absolute terms ($100 and $135) so ordinary variance clears them easily. A single seeded
+account showed this as 1 month in 6, which reads as noise. It is not noise, and the fix is a cap
+rebalance, deferred to the model change rather than done in the extraction.
+
 This is a follow-on from the realism work already on this branch (fixed monthly bills, log-normal
 amounts, category weights, uneven caps, a head-and-tail merchant pool). That work stays exactly as
 it is; this plan only changes **when** it runs and **where** its output lives.
@@ -202,12 +235,12 @@ was an icon-only pass, which by this table would not have needed a rebuild.
 
 **Restructure**
 
-- [ ] Create `backend/src/scripts/showcase/plan.ts` and move the constants, the three tables and
+- [x] Create `backend/src/scripts/showcase/plan.ts` and move the constants, the three tables and
       the three assert functions into it, unchanged.
-- [ ] Create `backend/src/scripts/showcase/fixture.ts` with the `Fixture` type, a `load()` that
+- [x] Create `backend/src/scripts/showcase/fixture.ts` with the `Fixture` type, a `load()` that
       reads `fixture.json` relative to `__dirname`, and a `save()` that writes it one transaction
       per line, sorted.
-- [ ] Create `backend/src/scripts/showcase/generate.ts` holding the four helpers and the month
+- [x] Create `backend/src/scripts/showcase/generate.ts` holding the four helpers and the month
       loop, returning a `Fixture`. Delete the `elapsed` scaling: every month is generated in full.
 - [ ] Set `MONTHS` to 36 and `OVER_BUDGET_MONTHS` to 8, still drawn from `monthsAgo` 1 to 35 so the
       truncated current month is never picked.
@@ -225,27 +258,27 @@ was an icon-only pass, which by this table would not have needed a rebuild.
 
 - [ ] Rewrite `seed-showcase.ts` to load the fixture, derive the onboarding payload from
       `fixture.profile`, and write `fixture.categories`' caps.
-- [ ] Resolve dates with `dateMonthsAgo(today, monthsAgo, day)` and drop rows where
+- [x] Resolve dates with `dateMonthsAgo(today, monthsAgo, day)` and drop rows where
       `monthsAgo === 0 && day > today.day`.
-- [ ] Add the three validations above.
-- [ ] Keep `generateInsights` exactly as PET-42-43-44 left it, and keep it last. The fixture rows
+- [x] Add the three validations above.
+- [x] Keep `generateInsights` exactly as PET-42-43-44 left it, and keep it last. The fixture rows
       still go straight to the `transactions` table rather than through `TransactionsService`, so
       they still emit no transaction-changed event and the set still has to be kicked by hand.
 - [ ] Confirm `mise run seed:showcase` and `:cloud` still work unchanged from the caller's side.
 
 **Command C, the checker**
 
-- [ ] Create `backend/src/scripts/showcase/check.ts` reporting the table above, taking a `Fixture`
+- [x] Create `backend/src/scripts/showcase/check.ts` reporting the table above, taking a `Fixture`
       so it can run against either the committed file or a fresh generation.
-- [ ] Create `backend/src/scripts/check-showcase-fixture.ts` as its entry point, accepting
+- [x] Create `backend/src/scripts/check-showcase-fixture.ts` as its entry point, accepting
       `--trials=N` to generate and aggregate rather than read the committed fixture.
-- [ ] Add the `showcase:check` task to `mise.toml`.
-- [ ] Run it at `--trials=200` and record the resulting numbers in the PR, since they are what any
+- [x] Add the `showcase:check` task to `mise.toml`.
+- [x] Run it at `--trials=200` and record the resulting numbers in the PR, since they are what any
       later assertion thresholds have to be chosen from.
 
 **Tests**
 
-- [ ] Unit-test the date resolution and the truncation, which is the only real logic left in
+- [x] Unit-test the date resolution and the truncation, which is the only real logic left in
       command B: a fixture row at `monthsAgo: 0, day: 28` seeded on the 9th is dropped, one at
       `day: 9` is kept, one at `monthsAgo: 1, day: 28` is kept whatever the date, and a seeding day
       of the 30th keeps all 28.

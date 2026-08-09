@@ -182,3 +182,13 @@ run = "npx ts-node src/scripts/seed-showcase.ts --local"
 description = "Seed the showcase user into Turso Cloud (needs backend/.env)"
 dir = "backend"
 run = "npx ts-node src/scripts/seed-showcase.ts --cloud"
+
+# Reports rather than asserts, and touches no database at all - the generator is
+# pure, so this is just arithmetic over its output. Run it with --trials=200
+# after changing the model: one account cannot tell you whether a category goes
+# over its cap 5% of the time or 60% of the time, and that difference is the
+# whole question.
+[tasks."showcase:check"]
+description = "Measure the showcase spending model without seeding anything"
+dir = "backend"
+run = "npx ts-node src/scripts/check-showcase-fixture.ts"
