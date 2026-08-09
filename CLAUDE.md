@@ -36,7 +36,7 @@ and update, the category endpoints with their month stats, and the dashboard sum
 has the design system, the app shell with its four routed views, all six access screens, and
 PET-52's verify handler at `/auth/verify` with the httpOnly `spendifico.session` cookie behind it.
 So a person can register, click the emailed link, and land signed in on a Dashboard that knows who
-they are - the sidebar footer reads a real `GET /api/profile`. Nine things beyond access work
+they are - the sidebar footer reads a real `GET /api/profile`. Thirteen things beyond access work
 now: `/transactions` reads and renders its own list state, the table under it draws the rows with
 their filters live in the URL, every "Add transaction" button opens a modal that really
 writes, and as of PET-33 each row's kebab opens a menu whose "Delete" really removes the

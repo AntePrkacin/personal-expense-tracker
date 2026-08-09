@@ -8,10 +8,12 @@ import {
   ceilingCents,
   invalidRows,
   isDirty,
+  MAX_CAP_ROWS,
   overCents,
   toAllocateBody,
   toAllocateDraft,
   toAllocateLedger,
+  toAllocateTotals,
   type AllocateDraft,
   type AllocateLedger,
 } from './allocateForm';
@@ -160,11 +162,54 @@ describe('overCents', () => {
   });
 });
 
-describe('assignedCents and unassignedCents', () => {
+describe('assignedCents', () => {
   it('counts the rows the modal does not draw', () => {
     // Without `reservedCents` this would read 50000 and the ledger would disagree
     // with the backend's own `allocated`.
     expect(assignedCents(draftOf('300', '200'), ledger(2000, 60))).toBe(56000);
+  });
+});
+
+describe('toAllocateTotals', () => {
+  it('reports the budget, the assignment and the remainder', () => {
+    expect(toAllocateTotals(draftOf('300', '200'), ledger(2000))).toEqual({
+      budgetWhole: 2000,
+      assignedWhole: 500,
+      unassignedWhole: 1500,
+    });
+  });
+
+  it('prints a column that adds up when the figures carry cents', () => {
+    // The defect a review of PET-70 found: rounding all three independently gave
+    // 2001 / 1000 / 1000, i.e. two rows summing to $2,000 under a stated $2,001,
+    // in a column drawn with a rule above the total. Both budget and cap are
+    // legal - `@IsNumber({ maxDecimalPlaces: 2 })` on each.
+    const totals = toAllocateTotals(draftOf('1,000.25'), ledger(2000.5));
+
+    expect(totals).toEqual({ budgetWhole: 2001, assignedWhole: 1000, unassignedWhole: 1001 });
+    expect(totals.assignedWhole + totals.unassignedWhole).toBe(totals.budgetWhole);
+  });
+
+  it('adds up on a whole budget with fractional caps too', () => {
+    // The half of that case reachable without a fractional budget, which is what
+    // makes it ordinary rather than exotic: caps summing to $1,000.50.
+    const totals = toAllocateTotals(draftOf('500.25', '500.25'), ledger(2000));
+
+    expect(totals.assignedWhole + totals.unassignedWhole).toBe(totals.budgetWhole);
+  });
+
+  it('never reports a negative remainder', () => {
+    // Only reachable through the stale ledger - a budget lowered elsewhere while
+    // this modal sat open - which is a valid server state by A43.
+    expect(toAllocateTotals(draftOf('9,000'), ledger(2000)).unassignedWhole).toBe(0);
+  });
+
+  it('counts the reserved cap against the remainder', () => {
+    expect(toAllocateTotals(draftOf('300'), ledger(2000, 60))).toEqual({
+      budgetWhole: 2000,
+      assignedWhole: 360,
+      unassignedWhole: 1640,
+    });
   });
 });
 
@@ -330,6 +375,24 @@ describe('toAllocateBody', () => {
       'id',
       'monthlyCap',
     ]);
+  });
+});
+
+describe('MAX_CAP_ROWS', () => {
+  it('matches the DTO bound the modal is refusing on behalf of', () => {
+    // Restated from `UpdateCategoryCapsDto`'s `MAX_CAPS_PER_REQUEST` because
+    // `maxItems` reaches no generated type. This case is the only thing standing
+    // between the two, so read it as the reminder to change both.
+    expect(MAX_CAP_ROWS).toBe(100);
+  });
+
+  it('is a bound the diff can exceed, which is why the modal checks it', () => {
+    const caps = Array.from({ length: MAX_CAP_ROWS + 1 }, () => '100');
+    const changed = Array.from({ length: MAX_CAP_ROWS + 1 }, () => '200');
+
+    expect(toAllocateBody(draftOf(...caps), draftOf(...changed)).categories).toHaveLength(
+      MAX_CAP_ROWS + 1,
+    );
   });
 });
 

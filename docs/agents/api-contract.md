@@ -221,6 +221,21 @@ discusses for `PATCH /api/transactions/{id}`. Its 200 carries the whole screen, 
 `authorizedPatch` discards write bodies by an existing decision, so consuming it is a choice rather
 than an obligation.
 
+**A published `maxItems` reaches no generated type, and a caller that has to respect one therefore
+restates it.** This is the narrowest exception to the rule at the top of this file, and a review of
+PET-70 is what forced it into writing. `openapi-typescript` emits `number[]`-shaped types and drops
+every JSON Schema constraint, so a client cannot read a bound off `types/api.d.ts` the way
+`app/setup/starterCategories.ts` once read an `enum` out of it. A client that ignores the bound is not
+neutral about it: a payload one row over `@ArrayMaxSize` comes back 400, indistinguishable from a
+malformed body, so the caller's copy tells the user to fix values that are all valid. Two literals
+exist for this and both name their DTO in a comment - `app/setup/draft.ts`'s
+`MAX_PICKED_CATEGORIES` against `RegisterDto`, and
+`app/(app)/transactions/categories/allocateForm.ts`'s `MAX_CAP_ROWS` against
+`UpdateCategoryCapsDto` - each with a case in its own suite asserting the number, so the pair has one
+place that fails when the backend's changes. Do not generalise this to a
+bound the caller can simply let the server enforce; it earns the duplication only where the resulting
+400 would produce advice that cannot work.
+
 ## Regenerating it
 
 From the repo root, `npm run api:sync` runs both halves in the right order. That is the

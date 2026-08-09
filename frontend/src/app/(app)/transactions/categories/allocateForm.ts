@@ -50,6 +50,25 @@ export type AllocateLedger = {
 
 type UpdateCategoryCapsBody = components['schemas']['UpdateCategoryCapsDto'];
 
+/**
+ * The most rows one request may carry, mirroring `UpdateCategoryCapsDto`'s own
+ * `MAX_CAPS_PER_REQUEST`.
+ *
+ * **A literal restating a backend bound, which this repo does in exactly one other place and for
+ * the same reason.** `app/setup/draft.ts`'s `MAX_PICKED_CATEGORIES` caps the stored draft against
+ * `RegisterDto`'s `@ArrayMaxSize` the same way, because the bound is published as OpenAPI
+ * `maxItems` and `openapi-typescript` drops every JSON Schema constraint - so there is nothing to
+ * read it out of, and `docs/agents/api-contract.md`'s "never restate a contract locally" rule has
+ * no alternative to offer. That file records the exception.
+ *
+ * **It is not a second enforcement, it is what makes the 400 sayable.** Without it a payload of
+ * 101 rows is a `@ArrayMaxSize` rejection classified as `invalid`, whose copy asks the user to
+ * check amounts that are all perfectly valid - advice that can never work, on a screen offering no
+ * way to submit a subset. The modal checks this before sending so the message can name the real
+ * limit instead.
+ */
+export const MAX_CAP_ROWS = 100;
+
 /** Major units to integer cents. `Math.round`, not `Math.trunc` - see the module note. */
 function centsOf(major: number): number {
   return Math.round(major * 100);
@@ -163,14 +182,42 @@ export function assignedCents(draft: AllocateDraft, ledger: AllocateLedger): num
   return draft.reduce((total, row) => total + (capCents(row.cap) ?? 0), ledger.reservedCents);
 }
 
+/** The three whole-dollar figures the summary island prints. See `toAllocateTotals`. */
+export type AllocateTotals = {
+  budgetWhole: number;
+  assignedWhole: number;
+  /** What "Left to assign" reads. **Never negative**, which is the whole of the design's rule. */
+  unassignedWhole: number;
+};
+
 /**
- * What "Left to assign" reads. **Never negative**, which is the whole of the design's rule.
+ * The ledger as displayed: **rounded once, with the remainder derived from the rounded pair.**
  *
- * The clamp is here and deliberately not inside `ceilingCents`, which computes its own sum from
- * scratch for exactly that reason.
+ * `dashboard/BudgetCard.tsx` and `SpendingSummaryCard.tsx` both state this rule and a review of
+ * PET-70 found this modal breaking it. The three figures sit in one column with a rule above the
+ * total, so a reader reads them as a sum - and rounding each independently lets that sum be wrong by
+ * a dollar. A budget of `$2,000.50` against caps of `$1,000.25` printed "Monthly budget $2,001 /
+ * Assigned $1,000 / Unassigned $1,000", which is $2,000 under a stated $2,001. Reachable with a
+ * whole budget too, since a cap may carry cents.
+ *
+ * So the two independent figures round and the third is their difference, which makes the column
+ * add up by construction rather than by luck. `unassignedWhole` keeps the clamp `unassignedCents`
+ * carried, for the same reason: the design's rule is that this figure never goes negative, and the
+ * stale-ledger case is the one that can otherwise make it.
+ *
+ * Deliberately **not** derived by rounding `budgetCents - assignedCents`: that is the version this
+ * replaces. The clamp is applied to the rounded difference and stays out of `ceilingCents`, which
+ * computes its own sum in cents from scratch for exactly that reason.
  */
-export function unassignedCents(draft: AllocateDraft, ledger: AllocateLedger): number {
-  return Math.max(0, ledger.budgetCents - assignedCents(draft, ledger));
+export function toAllocateTotals(draft: AllocateDraft, ledger: AllocateLedger): AllocateTotals {
+  const budgetWhole = Math.round(ledger.budgetCents / 100);
+  const assignedWhole = Math.round(assignedCents(draft, ledger) / 100);
+
+  return {
+    budgetWhole,
+    assignedWhole,
+    unassignedWhole: Math.max(0, budgetWhole - assignedWhole),
+  };
 }
 
 /**

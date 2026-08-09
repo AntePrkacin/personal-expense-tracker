@@ -129,8 +129,9 @@ fi
 #                                         documented as core.hooksPath's value
 #   frontend/src/lib/CLAUDE.md            the promotion target currently named by
 #                                         the sizing trigger in conventions.md
-#   backend/src/categories/CLAUDE.md      the same, for backend/CLAUDE.md, which
-#                                         PET-70 took to roughly 950 lines
+#   backend/src/categories/CLAUDE.md      the same, for backend/CLAUDE.md. Its size
+#                                         is docs/agents/conventions.md's fact to
+#                                         state, not a second copy's to go stale
 absent_by_design() {
   case "$1" in
   .husky/_ | frontend/src/lib/CLAUDE.md | backend/src/categories/CLAUDE.md) return 0 ;;

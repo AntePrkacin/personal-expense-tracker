@@ -50,6 +50,17 @@ import { CategoriesScreen } from './CategoriesScreen';
 // no banner**: both of its actions are refused by the API, so nothing on it is drawn that cannot be
 // acted on. `Default` and `SingleCategory` are the two stories to check that in.
 //
+// **PET-70 made "Allocate" live, so the paragraph above is dated in the one respect that matters
+// here: this screen has no inert control on it at all, and nothing on it announces `aria-disabled`.**
+// The summary card's banner opens the Allocate budget modal, which sets every category's cap in one
+// write - so `CardBanner`'s optional `onAction` became an exclusive union and the `aria-disabled`
+// treatment was deleted along with its two Tailwind variants. **A review of PET-70 caught this file
+// still carrying the old inventory**, which matters more than a stale comment usually would: there is
+// no Figma frame for the modal, so these stories are the whole review surface for the screen, and the
+// next reader auditing it for unavailable controls would have been sent to the summary card to look at
+// one that no longer exists. `Default` and `AllUncapped` are where the live banner is; `OverBudget` is
+// where it correctly disappears.
+//
 // **Every story therefore passes all three actions, and a code review plus `docs/TODO.md` are why.**
 // Storybook's Vite build has no notion of `'use server'`, so it bundles `lib/deleteCategory.ts`,
 // `lib/updateCategory.ts` and `lib/createCategory.ts` as ordinary modules, and pressing Delete in the

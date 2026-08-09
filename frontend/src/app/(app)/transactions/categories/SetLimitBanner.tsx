@@ -11,8 +11,16 @@ import { useEditCategory } from './EditCategoryProvider';
 // the smallest wrapper" rule `SidebarNav`, `TrendChart` and `AddCategoryButton` all follow. A Server
 // Component cannot pass a function, so `CardBanner`'s `onAction` has to arrive from a client module;
 // putting the directive here rather than on `CategoryCard` is what keeps the card - its tile, its
-// glyph, its figures - server-rendered. `CardBanner` itself stays directive-free and is used from
-// both sides: server-rendered and inert under `SpendingSummaryCard`, client-rendered and live here.
+// glyph, its figures - server-rendered. `CardBanner` itself stays directive-free, so it renders on
+// whichever side its caller is on.
+//
+// **The sentence this replaces said `CardBanner` was "used from both sides: server-rendered and inert
+// under `SpendingSummaryCard`, client-rendered and live here", and PET-70 falsified both halves.**
+// That card's "Allocate" is live now, behind `AllocateBanner` - a second client wrapper of exactly
+// this shape - so both of the component's callers carry a directive and there is no inert branch left
+// to render: its `onAction` became an exclusive union and the `aria-disabled` treatment was deleted.
+// Kept as a correction rather than edited away, because a reader auditing this screen for inert
+// controls would otherwise still be told where to find one.
 //
 // **It reads the context rather than taking a callback**, which is the opposite of
 // `EditCategoryModal`'s `onDelete` and is right for the opposite reason. That prop keeps a modal

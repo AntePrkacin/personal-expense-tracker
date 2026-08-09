@@ -124,7 +124,7 @@ simply vanishes from it reads as a topic nobody wrote down.
 
 **`backend/CLAUDE.md` is well past the trigger again and the next candidate is
 `backend/src/categories/CLAUDE.md`**, named here in advance the way the persistence one was.
-PET-70 took the file to roughly 950 lines while adding to `## Category endpoints`, which is now the
+PET-70 took the file past 1,000 lines while adding to `## Category endpoints`, which is now the
 longest section in it and the one carrying the most reasoning nobody needs unless they are in that
 folder: the fallback row's whole history, the five status bands, the two no-transaction shapes and
 the bulk write's five traps. It has not been promoted yet because PET-70 had no business making the

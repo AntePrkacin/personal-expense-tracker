@@ -2341,6 +2341,15 @@ would make this endpoint disagree with `PATCH /api/categories/{id}`, which enfor
 partial fix is re-reading on open through a route handler, the way `(app)/useCategoryOptions.ts`
 does, which shrinks the window to "while open" without closing it.
 
+A review of PET-70 narrowed one consequence of the same never-resync decision, and it is worth
+separating from the ceiling above because it was a defect rather than a limitation. A **deleted**
+category is the one stale figure the server refuses outright, and the modal's answer to that 404 used
+to leave Save enabled - so the retry its own copy invites re-sent the dead id and could only fail
+identically, forever. Save is disabled once the server says the list is out of date, and the re-read
+happens on close rather than in front of the open dialog. What is still recorded here is everything
+the server accepts: a budget or another cap changed elsewhere raises no error, so there is nothing
+for the modal to notice.
+
 ### A cap change can leave the insight set stale, and no category write regenerates
 
 `RuleBasedInsightGenerator`'s over-cap rule reads category caps, so lowering a cap can make the
@@ -2362,7 +2371,10 @@ There is no Figma frame for this modal at all, so every string in it joins the A
 being a diff against anything: the title and its subtitle, "Left to assign", the three ledger rows,
 "Your monthly budget is set in Settings.", the column headers, the `No limit` placeholder, the
 `{amount} spent · {amount} over this cap` caption, the footer hint, both snap messages and all five
-failure lines. `Screens/Allocate budget`'s six stories are the whole of the review surface.
+failure lines. A review of PET-70 added two more: the line the list draws when the account has no
+allocatable category at all, and the one refusing a payload past the endpoint's hundred-row bound.
+`Screens/Allocate budget`'s seven stories are the whole of the review surface, `NothingToAllocate`
+being the one that review added.
 
 Three of those are decisions rather than wording, and each is where a designer could reasonably
 disagree. **The snap message mixes precision on purpose** - `formatCurrency` for the capped amount

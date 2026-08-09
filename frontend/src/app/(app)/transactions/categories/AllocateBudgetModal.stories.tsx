@@ -19,9 +19,11 @@ import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixtur
 // **There is no Figma frame for this modal**, so unlike every other module in this section these
 // stories are not a diff against a design - they are the *only* place it can be reviewed at all,
 // which puts them in `Screens/Verify link failed`'s and `ErrorScreen`'s position rather than frame
-// 19's. Four of the six exist for a designer to answer something specific: `NearlyFullyAllocated`
+// 19's. Five of the seven exist for a designer to answer something specific: `NearlyFullyAllocated`
 // for the snap, `WithReservedFallbackCap` for a segment the UI cannot itself create, `TinySegments`
-// for a proportion too small to draw, and `ManyCategories` for the internal scroll.
+// for a proportion too small to draw, `ManyCategories` for the internal scroll, and
+// `NothingToAllocate` for the account with no allocatable category at all - which was **missing**
+// until a review of PET-70 found that state reachable and undrawn.
 //
 // The modal takes everything as props, so these need no provider and no fetch. `save` is a stub, and
 // it must stay one: Storybook's Vite build has no notion of `'use server'`, so the real action would
@@ -196,6 +198,28 @@ export const ManyCategories: Story = {
         }),
       )}
       allocation={allocation({ allocated: 2460, unallocated: 740 })}
+      save={accept}
+      onClose={close}
+    />
+  ),
+};
+
+/**
+ * Nothing to allocate to, which is a real account rather than a hypothetical one.
+ *
+ * `Uncategorized` is not a row here and `DELETE /api/categories/:id` refuses to remove it, so an
+ * account that has deleted every other category reaches this: the summary card reports the whole
+ * budget unassigned, draws the Allocate banner, and the modal behind it has no fields. **A review of
+ * PET-70 found it shipping as a column header over an empty box beside a Save that could never
+ * enable**, with nothing on screen saying why - so the island is one sentence now and the footer hint
+ * is suppressed, since it is advice about fields that are not there. Its copy is invented like the
+ * rest and joins what A29 owes.
+ */
+export const NothingToAllocate: Story = {
+  render: () => (
+    <AllocateBudgetModal
+      categories={[FALLBACK_CATEGORY]}
+      allocation={allocation({ allocated: 0, unallocated: 3200 })}
       save={accept}
       onClose={close}
     />

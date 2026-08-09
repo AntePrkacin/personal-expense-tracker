@@ -5,8 +5,13 @@ import { useRouter } from 'next/navigation';
 import type { Allocation, Category } from '@/lib/categories';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
-import { ALLOCATE_HINT, AllocateBudgetModal, cappedMessage } from './AllocateBudgetModal';
-import type { toAllocateBody } from './allocateForm';
+import {
+  ALLOCATE_EMPTY,
+  ALLOCATE_HINT,
+  AllocateBudgetModal,
+  cappedMessage,
+} from './AllocateBudgetModal';
+import { MAX_CAP_ROWS, type toAllocateBody } from './allocateForm';
 import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixture';
 
 // The Allocate budget modal. The arithmetic is `allocateForm.test.ts`'s, driven with no DOM at all;
@@ -64,6 +69,17 @@ const renderModal = (overrides: Partial<Parameters<typeof AllocateBudgetModal>[0
 
 const capField = (name: string) => screen.getByLabelText(`Monthly cap for ${name}`);
 const saveButton = () => screen.getByRole('button', { name: 'Save caps' });
+const cancelButton = () => screen.getByRole('button', { name: 'Cancel' });
+
+/**
+ * The snap region's text, which is not the same question as whether the region exists.
+ *
+ * It is mounted from the first render and stays mounted empty, deliberately: a live region created
+ * in the same commit as its content is generally not announced at all. So every assertion about the
+ * message has to read its text rather than its presence, and `queryByRole('status')` can no longer
+ * say anything about whether a snap happened.
+ */
+const snapMessage = () => screen.getByRole('status').textContent;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -106,9 +122,50 @@ describe('AC1-AC4: the modal opens on the current allocation', () => {
   it('captions a row whose spend is over its own cap', () => {
     renderModal();
 
-    // Dining out is $312 against $300.
-    expect(screen.getByText('$312 spent · $12 over this cap')).toBeInTheDocument();
+    // Dining out is $312 against $300. The overage carries cents where the spend does not - see
+    // the sub-dollar case below for why.
+    expect(screen.getByText('$312 spent · $12.00 over this cap')).toBeInTheDocument();
     expect(screen.getByText('$397 spent')).toBeInTheDocument();
+  });
+
+  it('states a sub-dollar overage exactly rather than rounding it to nothing', () => {
+    // A review of PET-70 found this: `formatWhole` on a *residual* rendered "$0 over this cap" in
+    // `text-error`, a red warning asserting the row is not over. The reverse case rounded a
+    // 50-cent overage up to "$1", double the real figure.
+    renderModal({
+      categories: [category({ name: 'Groceries', monthlyCap: 100, spent: 100.01 })],
+    });
+
+    expect(screen.getByText('$100 spent · $0.01 over this cap')).toBeInTheDocument();
+  });
+
+  it('mounts the snap region empty rather than creating it with its message', () => {
+    // **The one assertion here that is about assistive technology rather than about text.** A polite
+    // live region inserted in the same commit as its content is generally not announced: the region
+    // has to exist first and then mutate. So it ships mounted and empty, and this pins that - which
+    // `queryByRole('status')` returning null cannot distinguish from the defect.
+    renderModal();
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(snapMessage()).toBe('');
+  });
+});
+
+describe('nothing to allocate to', () => {
+  it('explains itself rather than drawing an empty list under a column header', () => {
+    // Reachable: `Uncategorized` cannot be deleted and is not a row, so an account that deleted
+    // every other category has its whole budget unassigned - the banner draws - over a modal with no
+    // fields. Found by a review; no story covered it.
+    renderModal({
+      categories: [FALLBACK_CATEGORY],
+      allocation: { monthlyBudget: 2000, allocated: 0, unallocated: 2000 },
+    });
+
+    expect(screen.getByText(ALLOCATE_EMPTY)).toBeInTheDocument();
+    expect(screen.queryByText('Monthly cap')).not.toBeInTheDocument();
+    // The hint is advice about fields that are not there.
+    expect(screen.queryByText(ALLOCATE_HINT)).not.toBeInTheDocument();
+    expect(saveButton()).toBeDisabled();
   });
 });
 
@@ -141,7 +198,7 @@ describe('AC5-AC7: the caps can never sum above the monthly budget', () => {
     await user().type(capField('Groceries'), '4000');
 
     expect(capField('Groceries')).toHaveValue('1,350.00');
-    expect(screen.getByRole('status')).toHaveTextContent(cappedMessage(135000, 200000));
+    expect(snapMessage()).toBe(cappedMessage(135000, 200000));
   });
 
   it('never lets the remainder go negative or turn red', async () => {
@@ -191,7 +248,7 @@ describe('AC5-AC7: the caps can never sum above the monthly budget', () => {
     await user().type(capField('Subscriptions'), '5');
 
     expect(capField('Subscriptions')).toHaveValue('');
-    expect(screen.getByRole('status')).toHaveTextContent('Nothing left to assign');
+    expect(snapMessage()).toContain('Nothing left to assign');
     // And the form is still saveable rather than poisoned by a zero nobody typed.
     expect(screen.queryByText(/greater than 0/)).not.toBeInTheDocument();
   });
@@ -218,13 +275,15 @@ describe('the capped message', () => {
     renderModal();
     await snap();
 
-    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(snapMessage()).not.toBe('');
 
     act(() => {
       jest.advanceTimersByTime(SNAP_MS);
     });
 
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    // The region stays mounted and empties. Removal from a live region announces nothing, which is
+    // what keeps the revert silent.
+    expect(snapMessage()).toBe('');
     expect(screen.getByText(ALLOCATE_HINT)).toBeInTheDocument();
   });
 
@@ -245,7 +304,7 @@ describe('the capped message', () => {
     });
 
     // Still there: the identity change restarted the timer rather than inheriting 400ms.
-    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(snapMessage()).not.toBe('');
   });
 
   it('quotes the capped amount to the cent and the budget whole', async () => {
@@ -258,8 +317,37 @@ describe('the capped message', () => {
     await user().clear(capField('Groceries'));
     await user().type(capField('Groceries'), '4000');
 
-    expect(screen.getByRole('status')).toHaveTextContent('$1,350.50');
-    expect(screen.getByRole('status')).toHaveTextContent('$2,001');
+    expect(snapMessage()).toContain('$1,350.50');
+    expect(snapMessage()).toContain('$2,001');
+  });
+});
+
+describe('the ledger column adds up', () => {
+  it('derives the remainder from the rounded pair rather than rounding it too', () => {
+    // The defect a review of PET-70 found. Rounding all three figures independently printed
+    // "Monthly budget $2,001 / Assigned $1,000 / Unassigned $1,000" - two rows summing to $2,000
+    // under a stated $2,001, in a column drawn with a rule above the total. Both figures are legal.
+    renderModal({
+      categories: [category({ name: 'Groceries', monthlyCap: 1000.25, spent: 0 })],
+      allocation: { monthlyBudget: 2000.5, allocated: 1000.25, unallocated: 1000.25 },
+    });
+
+    const figures = ['Monthly budget', 'Assigned to categories', 'Unassigned'].map(
+      (label) => screen.getByText(label).nextElementSibling?.textContent,
+    );
+
+    expect(figures).toEqual(['$2,001', '$1,000', '$1,001']);
+  });
+
+  it('shows the headline the same figure as the Unassigned row', () => {
+    renderModal({
+      categories: [category({ name: 'Groceries', monthlyCap: 1000.25, spent: 0 })],
+      allocation: { monthlyBudget: 2000.5, allocated: 1000.25, unallocated: 1000.25 },
+    });
+
+    // Two nodes, one figure: the headline and the column cannot disagree because both read
+    // `toAllocateTotals`.
+    expect(screen.getAllByText('$1,001')).toHaveLength(2);
   });
 });
 
@@ -379,27 +467,110 @@ describe('the four failures', () => {
   };
 
   it.each([
-    ['invalid', /check the amounts/i, false],
-    ['missing', /no longer exists/i, true],
-    ['unauthenticated', /session has expired/i, false],
-    ['failed', /try again/i, false],
-  ] as const)(
-    'reports %s and refreshes only when the screen is stale',
-    async (reason, copy, refreshes) => {
-      renderModal();
-      save.mockResolvedValue({ ok: false, reason });
+    ['invalid', /check the amounts/i],
+    ['missing', /no longer exists/i],
+    ['unauthenticated', /session has expired/i],
+    ['failed', /try again/i],
+  ] as const)('reports %s without refreshing behind itself', async (reason, copy) => {
+    renderModal();
+    save.mockResolvedValue({ ok: false, reason });
 
-      await submitChange();
+    await submitChange();
 
-      // `findBy`, not `getBy`: the handler awaits the action, so the state this asserts on lands a
-      // microtask after `click` resolves. The sibling modal suites use `waitFor` for the same reason.
-      expect(await screen.findByRole('alert')).toHaveTextContent(copy);
-      // The modal stays open on every arm: the user has a screen of edits in front of them and this
-      // line is what explains why they could not be saved.
-      expect(onClose).not.toHaveBeenCalled();
-      expect(refresh).toHaveBeenCalledTimes(refreshes ? 1 : 0);
-    },
-  );
+    // `findBy`, not `getBy`: the handler awaits the action, so the state this asserts on lands a
+    // microtask after `click` resolves. The sibling modal suites use `waitFor` for the same reason.
+    expect(await screen.findByRole('alert')).toHaveTextContent(copy);
+    // The modal stays open on every arm: the user has a screen of edits in front of them and this
+    // line is what explains why they could not be saved.
+    expect(onClose).not.toHaveBeenCalled();
+    // **No arm refreshes while the dialog is open, `missing` included.** A review of PET-70 found the
+    // refresh it used to fire here able to unmount this dialog through the banner's own
+    // `unallocated > 0` gate - taking the message it had just set and every unsaved cap with it.
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('disables Save after a stale-list failure, so the same payload cannot 404 twice', async () => {
+    // The draft is read once on open and never resynced, so the retry the copy invites re-sends the
+    // dead id and can only fail identically. A review found that looping with no way out but the
+    // Close that discards every edit.
+    renderModal();
+    save.mockResolvedValue({ ok: false, reason: 'missing' });
+
+    await submitChange();
+    await screen.findByRole('alert');
+
+    expect(saveButton()).toBeDisabled();
+
+    // And no keystroke re-enables it: nothing the user types makes a deleted category exist.
+    await user().type(capField('Groceries'), '5');
+
+    expect(saveButton()).toBeDisabled();
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-reads the list on the way out after a stale-list failure', async () => {
+    // What the copy promises - "close this to see the current list" - delivered at the close rather
+    // than in front of the open dialog.
+    renderModal();
+    save.mockResolvedValue({ ok: false, reason: 'missing' });
+
+    await submitChange();
+    await screen.findByRole('alert');
+    await user().click(cancelButton());
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not re-read on the way out after any other failure', async () => {
+    renderModal();
+    save.mockResolvedValue({ ok: false, reason: 'failed' });
+
+    await submitChange();
+    await screen.findByRole('alert');
+    await user().click(cancelButton());
+
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('refuses a payload past the endpoint’s own row limit rather than sending it', async () => {
+    // `@ArrayMaxSize(100)` answers 400, which classifies as `invalid` - whose copy asks the user to
+    // check amounts that are every one of them valid. The message names the real limit instead.
+    renderModal({
+      categories: Array.from({ length: MAX_CAP_ROWS + 1 }, (_, index) =>
+        category({
+          id: `0198c2a1-0000-7000-8000-${index.toString().padStart(12, '0')}`,
+          name: `Category ${index}`,
+          monthlyCap: 1,
+          spent: 0,
+        }),
+      ),
+      allocation: { monthlyBudget: 1_000_000, allocated: MAX_CAP_ROWS + 1, unallocated: 999_899 },
+    });
+
+    for (const field of screen.getAllByLabelText(/^Monthly cap for /)) {
+      await user().clear(field);
+      await user().type(field, '2');
+    }
+    await user().click(saveButton());
+
+    expect(screen.getByRole('alert')).toHaveTextContent(`Only ${MAX_CAP_ROWS} limits`);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('freezes the cap fields while a save is in flight', async () => {
+    // The body is serialised at press time and the success path closes the dialog, so a keystroke
+    // during the round trip was silently discarded - the modal closed on a limit never sent.
+    renderModal();
+    save.mockReturnValue(new Promise(() => {}));
+
+    await submitChange();
+
+    expect(capField('Groceries')).toBeDisabled();
+    expect(capField('Transport')).toBeDisabled();
+    // Cancel deliberately stays live: no fetch in this app carries a timeout.
+    expect(cancelButton()).toBeEnabled();
+  });
 
   it('recovers from a Server Action that never resolves at all', async () => {
     // Not defensive: a transport that never completes **rejects** rather than resolving, and a

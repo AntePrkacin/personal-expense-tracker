@@ -1091,7 +1091,7 @@ comes up; `AddTransactionProvider` wires the real `lib/scanReceipt.ts` action, m
 `create`'s wiring line for line. The two file inputs sit in their own tinted panel above Amount -
 `pointer-fine:hidden` on the camera one, so a desktop never sees a control that opens the
 identical file picker under a second label - and both carry `btn-outline btn-primary`: peers, not
-a primary and a secondary, so no `btn` style modifier has to vary by viewport (a paired *style*
+a primary and a secondary, so no `btn` style modifier has to vary by viewport (a paired _style_
 modifier, unlike a paired colour one, is resolved by daisyUI's emission order rather than by the
 attribute - see `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight). The loading overlay is
 `absolute inset-0` over a `relative` wrapper around the scan panel and every field, not over the
@@ -1125,7 +1125,7 @@ above that stands unchanged and is the whole reason `date` is overwritable at al
 **Two mechanical consequences worth not undoing.** The ref is **replaced, never mutated**:
 `setValues` takes a functional updater that React runs later, so widening the set in place would
 hand the deferred merge a set already claiming every field it was about to fill, and it would fill
-nothing. And the caller needs the filled list *before* the merge runs, which no updater can hand
+nothing. And the caller needs the filled list _before_ the merge runs, which no updater can hand
 back, so `scannedFieldsToFill` is exported beside `mergeScannedFields` and the merge is written in
 terms of it - one authority, two entry points. The list is needed twice: to widen the lock, and to
 clear those fields' validation messages, because the merge is the one write to `values` that does
@@ -1584,6 +1584,64 @@ design system's own version snaps to the ceiling literally, which plants a cap o
 an amount greater than 0" as though the user had typed it. Blank is valid _and_ true: there is nothing
 left to give that category. A typed `0` still lands and is still caught on submit, which is the same
 answer every other amount field here gives.
+
+**A code review of PET-70 changed seven things about that modal, and they group into four
+corrections.** Every one is a rule this app had already written down for some other screen and this
+modal broke in a new place, which is the reason they are worth keeping as corrections rather than
+edited away.
+
+**Money is rounded once and the remainder derived, in the ledger as much as on the cards.**
+`dashboard/BudgetCard.tsx` and `SpendingSummaryCard.tsx` both carry that rule and both say why; the
+summary island rounded its three figures independently, so a budget of `$2,000.50` against a cap of
+`$1,000.25` printed "Monthly budget $2,001 / Assigned $1,000 / Unassigned $1,000" - two rows summing
+to $2,000 in a column drawn with a rule above the total, and reachable on a whole budget too, since a
+cap may carry cents. `allocateForm.ts`'s `toAllocateTotals` owns all three now and the headline reads
+the same figure as the row, so the two cannot disagree. **The row caption is the same rule from the
+other end**: `formatWhole` is right for an aggregate and wrong for a **residual**, so a cap exceeded
+by one cent printed "$0 over this cap" in `text-error` - a red warning asserting the row is not over -
+and a fifty-cent overage printed "$1", double the real figure. The overage carries cents; the spend
+beside it stays whole. That mixed precision is the call `cappedMessage` already documents.
+
+**Nothing refreshes while the dialog is open, and the `missing` arm's re-read moved to the close its
+own copy asks for.** Two defects, one fix. The route re-read can drop `unallocated` to zero, which
+unmounts `AllocateBanner` through `SpendingSummaryCard`'s own gate and this dialog with it - so a
+cross-tab race could take the explanation of why nothing saved, and every cap the user had typed, off
+the screen at once with nothing accounting for it. And refreshing the grid _behind_ a dialog that goes
+on listing the dead category fixes the half of the screen the user is not looking at: Save stayed
+enabled over a draft that is read once on open and never resynced, so the retry the copy invites
+re-sent the dead id and could only 404 again, the only escape being the Close that discards
+everything. So a `missing` answer sets a `stale` flag that disables Save - the explanation is on screen
+and no edit can make the payload acceptable - and the re-read fires from `onClose`. This is the one
+place in this app where a modal's refresh is deliberately **not** on the arm that discovered the
+staleness; `ConfirmDeleteDialog`'s `staleReasons` still refreshes immediately, and correctly, because
+that dialog is mounted by `CategoriesScreen` rather than inside a subtree the re-read can remove - the
+card it is deleting can vanish behind it and the dialog is still there. This one lives inside a banner
+the same re-read can unmount, which is the whole difference.
+
+**The cap fields freeze while the save is out, unlike Cancel beside them.** The body is serialised at
+press time and the success path closes the dialog, so a keystroke landing during the round trip was
+dropped in silence and the user watched the modal close on a limit that was never sent. Cancel stays
+live for the reason both category modals give: no fetch in this app carries a timeout.
+
+**Two reachable states had nothing to say, and both were the same mistake as an empty state that
+lies.** An account that has deleted every other category still draws the Allocate banner - the whole
+budget is unassigned - over a modal whose only row is the one it excludes, so it opened on a column
+header above an empty box beside a Save that could never enable. It draws one sentence now and
+suppresses the footer hint, which would be advice about fields that are not there. And a diff of more
+than a hundred rows is refused here rather than sent: `@ArrayMaxSize` answers 400, which classifies as
+`invalid`, whose copy asks the user to check amounts that are every one of them valid - advice that
+can never work on a screen offering no way to submit a subset. `MAX_CAP_ROWS` is a literal restating
+the DTO's own bound, which this repo does in exactly one other place (`CategoryPicker` against
+`RegisterDto`) and for the same reason: `maxItems` reaches no generated type, so there is nothing to
+read it out of.
+
+**The snap's live region is mounted from the first render and only its text changes.** A polite region
+created in the same commit as its content is generally not announced at all - assistive technology
+registers regions and then watches them - so the one event the treatment exists to report was silent,
+and `getByRole('status')` cannot tell that apart from a working one. It ships empty and fills, which
+is why its suite asserts the region's **text** rather than its presence. The revert stays silent for
+the reason the original note gives: `aria-relevant` defaults to additions and text, so emptying
+announces nothing.
 
 **Focus opens on the field the trigger implies**, which is the one thing the two entry points
 disagree about. The kebab's "Edit" is an unspecific invitation and focuses Name; "Set limit" sits on
