@@ -69,7 +69,12 @@ const SIBLINGS: TransactionDetail['recentInCategory'] = [
 
 function renderCard(category: CategoryContext, recent = SIBLINGS, query = '') {
   return render(
-    <CategoryContextCard category={category} recentInCategory={recent} query={query} />,
+    <CategoryContextCard
+      currency="USD"
+      category={category}
+      recentInCategory={recent}
+      query={query}
+    />,
   );
 }
 

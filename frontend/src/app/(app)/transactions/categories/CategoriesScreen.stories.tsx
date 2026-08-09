@@ -229,9 +229,14 @@ function Frame({
   update = async () => ({ ok: true }),
   create = async () => ({ ok: true }),
   save = async () => ({ ok: true }),
+  // Defaulted here rather than per story for the same reason the four actions are: a story that
+  // forgot it would render a screen with no currency to format with, and the shared default is
+  // what makes that unreachable.
+  currency = 'USD',
   ...props
-}: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette'> & {
+}: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette' | 'currency'> & {
   palette?: Palette | null;
+  currency?: string;
 }) {
   return (
     // `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the gutter
@@ -239,6 +244,7 @@ function Frame({
     <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
       <CategoriesScreen
         {...props}
+        currency={currency}
         palette={palette}
         remove={remove}
         update={update}

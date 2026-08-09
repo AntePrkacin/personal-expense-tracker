@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { readCategoryLabels } from '@/lib/categories';
+import { requireProfile } from '@/lib/profile';
 import { ACCESS_ROUTES } from '@/lib/routes';
 import { readTransactionsView } from '@/lib/transactions';
 
@@ -52,6 +53,10 @@ export default async function TransactionsPage({
 }) {
   const filters = parseTransactionFilters(await searchParams);
 
+  // Free: `requireProfile()` is `cache()`-memoized per render pass and the shell's layout has
+  // already called it to gate this route, so this resolves against that same promise.
+  const { currency } = await requireProfile();
+
   const [view, categories] = await Promise.all([
     readTransactionsView(filters),
     readCategoryLabels(),
@@ -93,6 +98,7 @@ export default async function TransactionsPage({
       table={
         view.state === 'populated' ? (
           <TransactionsTable
+            currency={currency}
             transactions={view.transactions}
             categories={categories.data}
             // PET-34: each row's merchant links to its detail page and carries these along, so

@@ -1,6 +1,23 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
-import { TrendCard } from './TrendCard';
+import { PreferencesProvider } from '../PreferencesProvider';
+import { TrendCard as Card } from './TrendCard';
+
+/**
+ * TrendCard inside the shell's preferences, which is what gives it a currency to format with.
+ *
+ * **A wrapper rather than a `decorators` entry.** The story smoke test builds each story from
+ * `render` or `meta.component` and never applies a meta's decorators, so a decorator would work in
+ * the browser and throw under Jest - the trap `frontend/src/app/CLAUDE.md` records under Storybook.
+ * Wrapping the component keeps every story body below unchanged.
+ */
+function TrendCard(props: React.ComponentProps<typeof Card>) {
+  return (
+    <PreferencesProvider currency="USD" monthStartDay={1}>
+      <Card {...props} />
+    </PreferencesProvider>
+  );
+}
 
 // The card itself (Figma node 22:55's trend area, DSH-6), filed under Shell rather than
 // Screens: a card is one band of the dashboard rather than a whole frame, the same distinction

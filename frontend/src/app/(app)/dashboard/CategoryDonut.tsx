@@ -1,5 +1,5 @@
 import { categoryDotClass, categoryFillVar } from '@/components/ui/categoryColour';
-import { formatWhole } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { DashboardSummary } from '@/lib/dashboard';
 
 import { CategoryRing, type RingSlice } from './CategoryRing';
@@ -55,9 +55,20 @@ const EMPTY_COPY = {
   },
 } as const;
 
-export type CategoryDonutProps = Pick<DashboardSummary, 'categories' | 'spent'>;
+export type CategoryDonutProps = Pick<DashboardSummary, 'categories' | 'spent'> & {
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
+};
 
-export function CategoryDonut({ categories, spent }: CategoryDonutProps) {
+export function CategoryDonut({ categories, spent, currency }: CategoryDonutProps) {
+  const { formatWhole } = moneyFormatters(currency);
+
   // **Not** the screen-wide empty state: `categories` is empty whenever the period is, but it
   // is also reachable on its own through the dangling-category race
   // `backend/src/dashboard/dashboard.service.ts` documents, so this card's guard is its own

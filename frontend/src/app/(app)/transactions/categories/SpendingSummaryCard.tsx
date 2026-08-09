@@ -1,4 +1,5 @@
-import { formatWhole, monthLabel } from '@/lib/format';
+import { monthLabel } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
@@ -69,6 +70,14 @@ type SpendingSummaryCardProps = {
   categories: Category[];
   /** The bulk cap write, threaded through for the same reason. `AllocateBanner` defaults it. */
   save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
 export function SpendingSummaryCard({
@@ -76,7 +85,10 @@ export function SpendingSummaryCard({
   allocation,
   categories,
   save,
+  currency,
 }: SpendingSummaryCardProps) {
+  const { formatWhole } = moneyFormatters(currency);
+
   const { monthlyBudget, unallocated } = allocation;
 
   // Rounded once and the pair derived from the rounded figures, which is `BudgetCard`'s rule

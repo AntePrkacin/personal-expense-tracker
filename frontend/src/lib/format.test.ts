@@ -1,12 +1,9 @@
 import {
   amountCaret,
   formatAmountInput,
-  formatCurrency,
   formatIsoDate,
   formatIsoDayMonth,
-  formatNegative,
   formatRelativeDate,
-  formatWhole,
   initials,
   monthLabel,
   monthOverline,
@@ -14,14 +11,11 @@ import {
   shortName,
 } from './format';
 
-// The point of these tests is the sign glyph.
-//
-// Every assertion below writes the expected minus as the escape − rather
-// than a pasted character, because U+2212 MINUS SIGN and U+002D HYPHEN-MINUS
-// are visually near-identical in most editors and terminals. Pasting the glyph
-// works right up until someone retypes it, and then the diff is unreadable.
-
-const MINUS = '−';
+// **The sign-glyph note this file opened on moved to `money.test.ts` with the assertions it was
+// about.** It said every expected minus is written as the escape − rather than as a pasted
+// character, because U+2212 MINUS SIGN and U+002D HYPHEN-MINUS are near-identical in most editors
+// and terminals - and nothing left here formats a signed amount, so the constant it introduced had
+// no remaining reader. The rule still holds wherever a minus is asserted.
 
 /**
  * Runs `body` with the process pinned to `zone`, restoring whatever `TZ` held before it.
@@ -46,82 +40,12 @@ function inZone(zone: string, body: () => void) {
   }
 }
 
-describe('formatCurrency', () => {
-  it('formats a whole amount with cents', () => {
-    expect(formatCurrency(24)).toBe('$24.00');
-  });
-
-  it('separates thousands', () => {
-    expect(formatCurrency(1240)).toBe('$1,240.00');
-  });
-
-  it('keeps two decimal places', () => {
-    expect(formatCurrency(18.5)).toBe('$18.50');
-    expect(formatCurrency(15.99)).toBe('$15.99');
-  });
-
-  it('formats zero unsigned', () => {
-    expect(formatCurrency(0)).toBe('$0.00');
-  });
-
-  it('uses U+2212 for a negative input rather than the hyphen Intl emits', () => {
-    // Intl.NumberFormat returns "-$24.00" with U+002D. The replacement in
-    // formatCurrency is what makes this pass, so this test is what stops the
-    // replacement being dropped as redundant.
-    expect(formatCurrency(-24)).toBe(`${MINUS}$24.00`);
-    expect(formatCurrency(-24)).not.toContain('-');
-  });
-});
-
-describe('formatNegative', () => {
-  it('renders a stored positive amount as a negative one', () => {
-    // Transactions are stored as magnitudes; the sign is presentation.
-    expect(formatNegative(24)).toBe(`${MINUS}$24.00`);
-    expect(formatNegative(1240)).toBe(`${MINUS}$1,240.00`);
-  });
-
-  it('ignores the sign of the input', () => {
-    // Defensive: an API that starts returning signed amounts must not produce
-    // a double negative or flip back to positive.
-    expect(formatNegative(-24)).toBe(`${MINUS}$24.00`);
-  });
-
-  it('leaves zero unsigned', () => {
-    expect(formatNegative(0)).toBe('$0.00');
-    expect(formatNegative(-0)).toBe('$0.00');
-  });
-});
-
-describe('formatWhole', () => {
-  it('drops the cents, e.g. the dashboard budget readout', () => {
-    // The design draws "$1,240", never "$1,240.00" - node 21:4's real budget card and frame
-    // 01's sample card both. formatCurrency keeps the cents for a per-transaction amount.
-    expect(formatWhole(1240)).toBe('$1,240');
-  });
-
-  it('separates thousands, matching formatCurrency', () => {
-    expect(formatWhole(12400)).toBe('$12,400');
-  });
-
-  it('formats zero unsigned', () => {
-    expect(formatWhole(0)).toBe('$0');
-  });
-
-  it('rounds rather than truncating', () => {
-    // Rounding keeps a whole-dollar aggregate as close to the real total as one dollar
-    // allows; truncating would bias every figure on the dashboard downwards.
-    expect(formatWhole(54.4)).toBe('$54');
-    expect(formatWhole(54.6)).toBe('$55');
-  });
-
-  it('uses U+2212 for a negative input rather than the hyphen Intl emits', () => {
-    // Defensive, matching formatCurrency's own case: nothing in this epic hands formatWhole a
-    // negative figure, but a caller that started would get the design's glyph rather than
-    // Intl's hyphen.
-    expect(formatWhole(-1240)).toBe(`${MINUS}$1,240`);
-    expect(formatWhole(-1240)).not.toContain('-');
-  });
-});
+// **The three money formatters moved to `lib/money.ts` at PET-47**, where they take the profile's
+// currency, and their suite moved with them to `money.test.ts` - including the cases this file used
+// to own: the two-decimal-place pinning, the unsigned zero on all three, and the U+2212
+// substitution that is the whole point of the comment at the top of this file. Nothing re-exports
+// them from here any more, because after the thread landed the last consumer turned out to be a
+// comment in `app/DecorativePanel.tsx` explaining why that file uses literal strings instead.
 
 describe('initials', () => {
   it('takes the first letter of each name', () => {

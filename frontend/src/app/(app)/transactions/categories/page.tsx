@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { readCategoriesView } from '@/lib/categories';
 import { readPalette } from '@/lib/palette';
+import { requireProfile } from '@/lib/profile';
 import { ACCESS_ROUTES } from '@/lib/routes';
 import { readTransactionCount } from '@/lib/transactions';
 
@@ -46,6 +47,9 @@ import { CategoriesScreen } from './CategoriesScreen';
 // rendering on its own, as it does everywhere else in the app.
 
 export default async function CategoriesPage() {
+  // Free, for the reason `transactions/page.tsx` records: the shell's gate already read it.
+  const { currency } = await requireProfile();
+
   const [categories, transactionCount, palette] = await Promise.all([
     readCategoriesView(),
     readTransactionCount(),
@@ -85,6 +89,7 @@ export default async function CategoriesPage() {
   // to unpick, and this read arriving with a second one would be exactly that shape again.
   return (
     <CategoriesScreen
+      currency={currency}
       categories={categories.data.categories}
       allocation={categories.data.allocation}
       transactionCount={transactionCount}

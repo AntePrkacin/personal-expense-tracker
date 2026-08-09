@@ -1,4 +1,5 @@
 import { readDashboard } from '@/lib/dashboard';
+import { requireProfile } from '@/lib/profile';
 
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
@@ -33,25 +34,35 @@ import { TrendCard } from './TrendCard';
 // static rendering on its own, exactly as it does everywhere else in the app.
 
 export default async function DashboardPage() {
+  // **Two reads, one request each, and the profile one is free.** `requireProfile()` is
+  // `cache()`-memoized per render pass and `(app)/layout.tsx` has already called it to gate this
+  // route, so this resolves against that same promise rather than issuing a second
+  // `GET /api/profile`. The two are deliberately not awaited together: `Promise.all` would start
+  // the dashboard read before the gate had a chance to redirect a dead session.
   const summary = await readDashboard();
+  const { currency } = await requireProfile();
   const isEmpty = summary.transactionCount === 0;
 
   return (
     <DashboardScreen
-      budgetCard={<BudgetCard {...summary} isEmpty={isEmpty} />}
+      budgetCard={<BudgetCard {...summary} isEmpty={isEmpty} currency={currency} />}
       trendCard={
         <TrendCard
           weeklyBuckets={summary.weeklyBuckets}
           daysLeft={summary.daysLeft}
           isEmpty={isEmpty}
+          currency={currency}
         />
       }
-      donutCard={<CategoryDonut categories={summary.categories} spent={summary.spent} />}
+      donutCard={
+        <CategoryDonut categories={summary.categories} spent={summary.spent} currency={currency} />
+      }
       recentTransactionsCard={
         <RecentTransactionsCard
           recentTransactions={summary.recentTransactions}
           categories={summary.categories}
           isEmpty={isEmpty}
+          currency={currency}
         />
       }
       insightCard={<InsightTeaserCard insight={summary.insight} isEmpty={isEmpty} />}

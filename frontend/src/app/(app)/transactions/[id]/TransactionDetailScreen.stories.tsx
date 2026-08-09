@@ -119,6 +119,7 @@ function Frame({ detail }: { detail: TransactionDetail }) {
               the gutter the `(app)` shell owns, since neither wraps a story. */}
           <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
             <TransactionDetailScreen
+              currency="USD"
               detail={detail}
               backHref="/transactions"
               query=""

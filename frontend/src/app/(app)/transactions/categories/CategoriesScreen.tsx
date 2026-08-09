@@ -108,6 +108,14 @@ type CategoriesScreenProps = {
    * convenience.
    */
   save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
 export function CategoriesScreen({
@@ -119,6 +127,7 @@ export function CategoriesScreen({
   update,
   create,
   save,
+  currency,
 }: CategoriesScreenProps) {
   // **Summed here rather than read from a field, and the sum is sound rather than approximate.**
   // `GET /api/categories` publishes no period total of its own, but every transaction in the
@@ -177,6 +186,7 @@ export function CategoriesScreen({
           />
 
           <SpendingSummaryCard
+            currency={currency}
             spent={spent}
             allocation={allocation}
             categories={categories}
@@ -221,7 +231,7 @@ export function CategoriesScreen({
               // is its own <section> with an <h2>, so the list adds structure without competing
               // with the headings inside it.
               <li key={category.id}>
-                <CategoryCard category={category} />
+                <CategoryCard category={category} currency={currency} />
               </li>
             ))}
           </ul>

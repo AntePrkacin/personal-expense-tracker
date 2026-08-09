@@ -1,5 +1,4 @@
 import { dateFromIso, partsFromIso, todayIsoDate } from './date';
-import { DEFAULT_CURRENCY, moneyFormatters } from './money';
 
 // Display formatting: money, the two forms a stored name takes on screen, the
 // two forms the current period takes in the page header, the two forms a single
@@ -12,29 +11,16 @@ import { DEFAULT_CURRENCY, moneyFormatters } from './money';
 // is ever a number. None of them is a property of the data, so they live
 // here, once, instead of in every screen that shows them.
 
-// Money moved to `lib/money.ts` at PET-47, where it is parameterised by the profile's currency.
-// The three names below stay exported and stay bound to `DEFAULT_CURRENCY`, for two distinct
-// reasons that should not be collapsed into one:
+// **Money is not here any more.** `lib/money.ts` owns `formatCurrency`, `formatWhole` and
+// `formatNegative`, because PET-47 made them take the profile's currency and a formatter bound to
+// one currency at module scope is exactly what that ticket removed. A Server Component calls
+// `moneyFormatters(currency)` with a currency threaded from its page; a Client Component calls
+// `useMoney()`. Nothing re-exports the old default-bound trio from here: the plan expected
+// `app/DecorativePanel.tsx` to keep needing them, and it turned out that file draws its figures as
+// literal strings and only *mentions* `formatCurrency` in a comment saying why.
 //
-// - **`app/DecorativePanel.tsx` must never read a profile.** It renders on the access screens,
-//   before anybody is signed in, and every figure in it is fabricated and permanently so (WEL-4).
-//   That consumer is the permanent one, and it is why these do not become a deprecated shim.
-// - **Every other consumer is mid-migration.** PET-47 threads the profile's currency through the
-//   dashboard, the transactions screens and the categories tab file by file; until a file is
-//   threaded it keeps importing from here and keeps rendering dollars.
-//
-// So a new call site should reach for `useMoney()` or `moneyFormatters(profile.currency)` and not
-// for these. When the thread is complete the only importer left should be the decorative panel.
-const DEFAULT_MONEY = moneyFormatters(DEFAULT_CURRENCY);
-
-/** Formats an amount as currency, e.g. `1240` -> `"$1,240.00"`. Always the default currency. */
-export const formatCurrency = DEFAULT_MONEY.formatCurrency;
-
-/** Formats an amount as whole currency, e.g. `1240` -> `"$1,240"`. Always the default currency. */
-export const formatWhole = DEFAULT_MONEY.formatWhole;
-
-/** Formats a stored (positive) amount as the negative the UI shows, e.g. `24` -> `"−$24.00"`. */
-export const formatNegative = DEFAULT_MONEY.formatNegative;
+// What stays is the amount **field** - `formatAmountInput`, `parseAmountInput` and `amountCaret` -
+// which is deliberately currency-blind and must not follow the currency. That module records why.
 
 /**
  * The first character of a name, uppercased, or `''` for an empty one.

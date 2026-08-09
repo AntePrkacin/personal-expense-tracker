@@ -59,6 +59,14 @@ type TransactionsTableProps = {
    * they were actually looking at rather than to the unfiltered default.
    */
   filters: TransactionFilters;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
 /**
@@ -83,7 +91,12 @@ function categoryIndex(categories: CategoryLabel[]): Map<string, RowCategory> {
   );
 }
 
-export function TransactionsTable({ transactions, categories, filters }: TransactionsTableProps) {
+export function TransactionsTable({
+  transactions,
+  categories,
+  filters,
+  currency,
+}: TransactionsTableProps) {
   const index = categoryIndex(categories);
   // Once for the table, not once per row.
   const query = toQuery(filters);
@@ -130,6 +143,7 @@ export function TransactionsTable({ transactions, categories, filters }: Transac
         <tbody>
           {transactions.map((transaction) => (
             <TransactionRow
+              currency={currency}
               key={transaction.id}
               transaction={transaction}
               query={query}

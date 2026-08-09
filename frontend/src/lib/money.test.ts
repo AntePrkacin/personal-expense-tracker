@@ -23,6 +23,15 @@ describe('moneyFormatters', () => {
       expect(moneyFormatters('EUR').formatCurrency(1240.5)).not.toContain('1.240');
     });
 
+    it('keeps exactly two decimal places for a currency that has them', () => {
+      expect(moneyFormatters('USD').formatCurrency(18.5)).toBe('$18.50');
+      expect(moneyFormatters('USD').formatCurrency(15.99)).toBe('$15.99');
+    });
+
+    it('formats zero unsigned', () => {
+      expect(moneyFormatters('USD').formatCurrency(0)).toBe('$0.00');
+    });
+
     it('substitutes U+2212 MINUS SIGN for the U+002D Intl emits', () => {
       // The failure this guards reads `expected "−$24.00", received "-$24.00"` in a terminal,
       // where the two glyphs are near-indistinguishable. Asserted by code point for that reason.
@@ -39,6 +48,14 @@ describe('moneyFormatters', () => {
       expect(moneyFormatters('USD').formatWhole(1240.4)).toBe('$1,240');
     });
 
+    it('separates thousands, matching formatCurrency', () => {
+      expect(moneyFormatters('USD').formatWhole(12400)).toBe('$12,400');
+    });
+
+    it('formats zero unsigned', () => {
+      expect(moneyFormatters('USD').formatWhole(0)).toBe('$0');
+    });
+
     it('carries the currency through like the others', () => {
       expect(moneyFormatters('GBP').formatWhole(1240.5)).toBe('£1,241');
     });
@@ -51,6 +68,7 @@ describe('moneyFormatters', () => {
 
     it('returns zero unsigned, because a negative zero reads as a bug rather than a debit', () => {
       expect(moneyFormatters('USD').formatNegative(0)).toBe('$0.00');
+      expect(moneyFormatters('USD').formatNegative(-0)).toBe('$0.00');
     });
 
     it('takes the magnitude, so a negative input does not double the sign', () => {

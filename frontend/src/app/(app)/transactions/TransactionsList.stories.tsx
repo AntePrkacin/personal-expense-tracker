@@ -116,6 +116,7 @@ function Frame({ filters }: { filters: TransactionFilters }) {
               filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
               table={
                 <TransactionsTable
+                  currency="USD"
                   transactions={TRANSACTIONS}
                   categories={CATEGORIES}
                   filters={filters}

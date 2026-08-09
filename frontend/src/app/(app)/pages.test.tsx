@@ -1,4 +1,8 @@
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+
+// `render` comes from the shell wrapper: these pages render inside `(app)/layout.tsx` in
+// production, so the cards below reach `PreferencesProvider` there. See `shellRender.tsx`.
+import { render } from './shellRender';
 
 import { readCategoryLabels } from '../../lib/categories';
 import { readDashboard } from '../../lib/dashboard';
@@ -406,6 +410,79 @@ describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
     expect(
       screen.getByRole('heading', { name: 'Insights unlock after your first expense.' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("the profile's currency reaches the figures (PET-47)", () => {
+  // **The one test that proves the whole server-side thread**, which nothing else does. Every
+  // card has its own suite passing `currency="USD"` by hand, so a `page.tsx` that stopped reading
+  // the profile - or read it and forgot to pass it on - would leave all of those green while the
+  // app rendered a euro account in dollars. This renders the real page against a real profile and
+  // asserts the symbol that could only have come through it.
+  //
+  // Deliberately at the page level rather than per card, and deliberately EUR rather than USD:
+  // the default is what a broken thread falls back to, so asserting dollars proves nothing.
+  it('renders the dashboard in the profile currency', async () => {
+    (requireProfile as jest.Mock).mockResolvedValue({
+      firstName: 'Marko',
+      lastName: 'Kovač',
+      email: 'marko@email.com',
+      currency: 'EUR',
+      monthlyBudget: 2000,
+      monthStartDay: 1,
+    });
+    (readDashboard as jest.Mock).mockResolvedValue({
+      spent: 1240,
+      monthlyBudget: 2000,
+      remaining: 760,
+      daysLeft: 8,
+      transactionCount: 12,
+      averagePerDay: 155,
+      topCategory: null,
+      weeklyBuckets: [],
+      categories: [],
+      recentTransactions: [],
+      insight: null,
+    });
+
+    await renderScreen(DashboardPage);
+
+    // `getAllBy`, because two cards draw the period's spend - the budget card's headline and the
+    // donut's centre readout - and both arriving in euros is the point rather than an annoyance.
+    expect(screen.getAllByText('€1,240').length).toBeGreaterThan(1);
+    expect(screen.getByText('of €2,000')).toBeInTheDocument();
+    expect(screen.queryAllByText('$1,240')).toHaveLength(0);
+  });
+
+  it('renders the transactions table in the profile currency', async () => {
+    (requireProfile as jest.Mock).mockResolvedValue({
+      firstName: 'Marko',
+      lastName: 'Kovač',
+      email: 'marko@email.com',
+      currency: 'GBP',
+      monthlyBudget: 2000,
+      monthStartDay: 1,
+    });
+    (readTransactionsView as jest.Mock).mockResolvedValue({
+      state: 'populated',
+      transactions: [
+        {
+          id: 't1',
+          merchant: 'Whole Foods',
+          categoryId: 'cat-1',
+          amount: 86.4,
+          date: '2025-10-08',
+          note: null,
+          createdAt: '2025-10-08T12:00:00.000Z',
+          updatedAt: '2025-10-08T12:00:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+
+    await renderScreen(TransactionsPage);
+
+    expect(screen.getByText('−£86.40')).toBeInTheDocument();
   });
 });
 

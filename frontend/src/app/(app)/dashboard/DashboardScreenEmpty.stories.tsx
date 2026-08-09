@@ -57,6 +57,7 @@ export const Empty: Story = {
         <DashboardScreen
           budgetCard={
             <BudgetCard
+              currency="USD"
               spent={0}
               monthlyBudget={2000}
               remaining={2000}
@@ -67,10 +68,15 @@ export const Empty: Story = {
               isEmpty={true}
             />
           }
-          trendCard={<TrendCard weeklyBuckets={[]} daysLeft={31} isEmpty={true} />}
-          donutCard={<CategoryDonut categories={[]} spent={0} />}
+          trendCard={<TrendCard currency="USD" weeklyBuckets={[]} daysLeft={31} isEmpty={true} />}
+          donutCard={<CategoryDonut currency="USD" categories={[]} spent={0} />}
           recentTransactionsCard={
-            <RecentTransactionsCard recentTransactions={[]} categories={[]} isEmpty={true} />
+            <RecentTransactionsCard
+              currency="USD"
+              recentTransactions={[]}
+              categories={[]}
+              isEmpty={true}
+            />
           }
           insightCard={<InsightTeaserCard insight={null} isEmpty={true} />}
         />
