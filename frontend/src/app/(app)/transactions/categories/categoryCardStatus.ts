@@ -79,11 +79,20 @@ const CHIP: Record<CappedStatus, { badge: string; dot: string; label: string }> 
  * Recorded here because the frame is otherwise this screen's authority on structure and
  * content, and a reviewer diffing against it will notice.
  */
+/**
+ * **`bg-base-300` is on every arm and is not decoration: without it the track is a tint of the
+ * fill.** daisyUI's `.progress` paints its background as `color-mix(in oklab, currentcolor 20%,
+ * transparent)` and each `progress-*` modifier sets `currentcolor` - so `progress-success` gives a
+ * 20% green track, and a category at 0% used drew as one solid green pill with no fill visible in
+ * it. The design system draws a neutral track under every colour, which is also what
+ * `transactions/[id]/CategoryContextCard.tsx` already does with its own div-based bar. Tailwind's
+ * `bg-*` wins here on layer order, verified in the browser rather than assumed.
+ */
 const BAR: Record<CappedStatus, string> = {
-  on_track: 'progress progress-success w-full',
-  near: 'progress progress-warning w-full',
-  full: 'progress progress-warning w-full',
-  over: 'progress progress-error w-full',
+  on_track: 'progress progress-success bg-base-300 w-full',
+  near: 'progress progress-warning bg-base-300 w-full',
+  full: 'progress progress-warning bg-base-300 w-full',
+  over: 'progress progress-error bg-base-300 w-full',
 };
 
 /**

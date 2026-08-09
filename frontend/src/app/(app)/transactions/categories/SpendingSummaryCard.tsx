@@ -41,18 +41,22 @@ import { BannerCardBody } from './CardBanner';
  * So the split is the one the data really supports: the budget is either overspent or it is
  * not. Duplicated from `BudgetCard` rather than shared, per the rule of three - a third
  * consumer is the signal to lift it, and there are two.
+ *
+ * **`bg-base-300` on each bar pins the track neutral**, for the reason `categoryCardStatus.ts`
+ * records in full: daisyUI derives a `<progress>`'s track from the fill colour, so without it an
+ * unspent budget drew as one solid green pill.
  */
 const CHIP = {
   onTrack: {
     badge: 'badge badge-soft badge-success',
     dot: 'status status-success',
-    bar: 'progress progress-success w-full',
+    bar: 'progress progress-success bg-base-300 w-full',
     label: 'On track',
   },
   overBudget: {
     badge: 'badge badge-soft badge-error',
     dot: 'status status-error',
-    bar: 'progress progress-error w-full',
+    bar: 'progress progress-error bg-base-300 w-full',
     label: 'Over budget',
   },
 } as const;

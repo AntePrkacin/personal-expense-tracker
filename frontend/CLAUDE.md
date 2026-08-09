@@ -197,6 +197,30 @@ rules and they answer these questions in one grep.
   and nothing else could; `frontend/src/app/CLAUDE.md` owns the account of it, under The app
   shell, along with the `translate-none scale-none` that pays for it.
 
+- **A `<progress>`'s track is a tint of its own fill, so a coloured bar at 0% is a solid coloured
+  pill.** `.progress` sets `background-color: color-mix(in oklab, currentcolor 20%, transparent)`
+  and every `progress-*` modifier sets `currentcolor` - so `progress-success` paints a 20% green
+  track, and a category with nothing spent read as a full green bar rather than an empty grey one.
+  This is the first entry in this section that is a _visible_ wrong result rather than an invisible
+  missing one, and it still could not fail a gate: `toHaveClass('progress-success')` is green either
+  way. **Pin the track with `bg-base-300`**, which is the token an empty surface should be and what
+  `transactions/[id]/CategoryContextCard.tsx`'s div-based bar already uses. The three call sites are
+  `transactions/categories/categoryCardStatus.ts`, `transactions/categories/SpendingSummaryCard.tsx`
+  and `dashboard/BudgetCard.tsx`; `app/DecorativePanel.tsx` needs nothing, because it carries no
+  colour modifier and its `currentcolor` is already `base-content`.
+
+- **daisyUI ships `.card-body p { flex-grow: 1 }`, so `justify-between` does nothing in a card
+  footer whose children are both `<p>`.** Both stretch, there is no free space left to distribute,
+  and each paragraph's text renders at the left edge of its own over-wide box - so a figure meant to
+  sit against the card's right edge sits in the middle of the row instead. It bit the Categories
+  card's transaction count and the dashboard budget card's "days left" caption, and every row beside
+  them escaped it only because their right-hand child is a `<span>` or an `<a>`, which the selector
+  does not match. **Fix it with `text-right` rather than `grow-0`**: the plugin's selector is (0,1,1)
+  against a utility's (0,1,0), so it wins on specificity rather than on layer order and the utility
+  loses - measured in Chrome, where adding `grow-0` left `flex-grow` computing to `1`. `text-right`
+  sets a property daisyUI never touches, so there is nothing to outrank. Keep the
+  `justify-between`: it is what positions the boxes the moment either child stops growing.
+
 **The daisyUI Blueprint MCP is this repo's method for writing that markup, and its three stages
 earn three different levels of trust** - follow the syntax stage verbatim, adjudicate the quality
 inspector's findings rather than applying them, and treat the browser walk as the real output.

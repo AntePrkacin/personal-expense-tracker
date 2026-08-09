@@ -115,8 +115,13 @@ export function BudgetCard({
             assistive technology. Not aria-hidden, unlike DecorativePanel's decorative bar -
             this one reports the reader's own budget, so it needs a real accessible name
             instead of none at all. */}
+        {/* **`bg-base-300` pins the track neutral and is not decoration.** daisyUI derives a
+            `<progress>`'s track from its fill - `color-mix(currentcolor 20%, transparent)`, where
+            `progress-primary` sets `currentcolor` - so an unspent budget drew as one solid violet
+            pill with no fill visible in it. `transactions/categories/categoryCardStatus.ts` carries
+            the full account. */}
         <progress
-          className="progress progress-primary w-full"
+          className="progress progress-primary bg-base-300 w-full"
           value={Math.min(spent, monthlyBudget)}
           max={monthlyBudget}
           aria-label="Monthly budget spent"
@@ -157,8 +162,14 @@ export function BudgetCard({
 
               The plural is a local ternary rather than a helper: `daysLeft` is documented as 1
               on the last day of the period and never 0, so "1 days left" is a state every user
-              reaches once a month, and this is the app's only pluralized string. */}
-          <p className="text-base-content/60">
+              reaches once a month, and this is the app's only pluralized string.
+
+              **`text-right` is load-bearing here, exactly as on the category card's footer.**
+              daisyUI's `.card-body p { flex-grow: 1 }` stretches both paragraphs in this row, so
+              `justify-between` has no free space to distribute and this caption rendered at the left
+              edge of its own over-wide box rather than against the card's right edge. The rows above
+              escape it because their right-hand child is a `<span>` or an `<a>`. */}
+          <p className="text-base-content/60 text-right">
             {isEmpty && daysLeft >= SHORTEST_PERIOD_DAYS
               ? 'Full month ahead'
               : `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`}

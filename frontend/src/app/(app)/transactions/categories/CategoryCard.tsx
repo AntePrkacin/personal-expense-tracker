@@ -231,9 +231,20 @@ export function CategoryCard({ category }: { category: Category }) {
           aria-label={`${category.name} budget used`}
         />
 
+        {/* **`text-right` on the count, and `justify-between` alone was not enough - which only a
+            browser could say.** daisyUI ships `.card-body p { flex-grow: 1 }`, so both of these
+            paragraphs stretch, there is no free space left for `justify-between` to distribute, and
+            the count's text rendered at the left edge of its own over-wide box - visibly adrift in
+            the middle of the row while the design has it flush right. The row above it looks correct
+            only by accident: its right-hand child is a `<span>`, which that rule does not match.
+            Fixed by right-aligning the text rather than by fighting the grow - `grow-0` is (0,1,0)
+            against the plugin's (0,1,1) and loses, measured rather than assumed. `justify-between`
+            stays because it is what positions the boxes the moment either child stops growing. */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <p className={figure.className}>{figure.label}</p>
-          <p className="text-base-content/60">{transactionCountLabel(category.transactionCount)}</p>
+          <p className="text-base-content/60 text-right">
+            {transactionCountLabel(category.transactionCount)}
+          </p>
         </div>
       </div>
     </section>
