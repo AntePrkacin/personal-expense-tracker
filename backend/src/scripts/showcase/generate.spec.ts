@@ -139,15 +139,17 @@ describe('generate', () => {
 
   it('emits every month in full, including the current one', () => {
     const fixture = generate(42);
-    const byMonth = new Map<number, number>();
+    const byMonth = new Map<string, number>();
     for (const t of fixture.transactions) {
-      byMonth.set(t.monthsAgo, (byMonth.get(t.monthsAgo) ?? 0) + 1);
+      const key = `${t.month}:${t.occurrence}`;
+      byMonth.set(key, (byMonth.get(key) ?? 0) + 1);
     }
 
     expect(byMonth.size).toBe(fixture.months);
-    // Month zero is not truncated here - that is the seeder's job - so it must
-    // be the same size as any other month rather than a partial one.
-    expect(byMonth.get(0)).toBeGreaterThan(40);
+    // The most recent occurrence of January (month 0, occurrence 0) is not
+    // truncated here - that is the seeder's job - so it must be the same size
+    // as any other month rather than a partial one.
+    expect(byMonth.get('0:0')).toBeGreaterThan(40);
   });
 
   it('carries a cap for every category it files a transaction under', () => {

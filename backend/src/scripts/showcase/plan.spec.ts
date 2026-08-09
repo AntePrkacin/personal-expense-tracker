@@ -4,11 +4,20 @@ import {
   FIXED_BILLS,
   MAJOR_IRREGULAR,
   MINOR_IRREGULAR,
+  MONTHS,
+  MONTH_TARGETS,
+  assertMonthTargetsAreCoherent,
+  assertMonthsIsAMultipleOfTwelve,
   assertNoMerchantCollisions,
   assertPlanIsCoherent,
   assertShocksCanClearBudget,
 } from './plan';
-import type { CategoryPlan, FixedBill, IrregularExpense } from './plan';
+import type {
+  CategoryPlan,
+  FixedBill,
+  IrregularExpense,
+  MonthTarget,
+} from './plan';
 
 /**
  * **These specs are about the asserts, not about the tables.**
@@ -93,12 +102,19 @@ describe('assertPlanIsCoherent', () => {
 });
 
 describe('assertShocksCanClearBudget', () => {
+  // A single over-budget band, 100-104%, against a 500,000-cent budget and an
+  // 88% ordinary floor: the widest gap it can ask for is 16% of $5,000, or
+  // $800 - the same figure the pre-calendar version of these specs pinned.
+  const oneBand: MonthTarget[] = [
+    { minPercent: 100, maxPercent: 104, overBudget: true },
+  ];
+
   it('passes on the committed tables', () => {
     expect(() => assertShocksCanClearBudget()).not.toThrow();
   });
 
   // Narrowing a range is silent otherwise: the run still succeeds, the month
-  // simply lands under budget, and a month picked to be over stops being it.
+  // simply lands under its band, and a month picked to be over stops being it.
   it('fires when the cheapest pair cannot close the widest gap', () => {
     const major: IrregularExpense[] = [
       { category: 'A', merchant: 'M', minCents: 1, maxCents: 10_000 },
@@ -107,7 +123,7 @@ describe('assertShocksCanClearBudget', () => {
       { category: 'B', merchant: 'N', minCents: 1, maxCents: 5_000 },
     ];
     expect(() =>
-      assertShocksCanClearBudget(major, minor, 520_000, 440_000),
+      assertShocksCanClearBudget(major, minor, oneBand, 500_000, 88),
     ).toThrow(/cannot close the \$800 gap/);
   });
 
@@ -119,7 +135,7 @@ describe('assertShocksCanClearBudget', () => {
       { category: 'B', merchant: 'N', minCents: 1, maxCents: 20_000 },
     ];
     expect(() =>
-      assertShocksCanClearBudget(major, minor, 520_000, 440_000),
+      assertShocksCanClearBudget(major, minor, oneBand, 500_000, 88),
     ).not.toThrow();
   });
 
@@ -132,8 +148,102 @@ describe('assertShocksCanClearBudget', () => {
       { category: 'B', merchant: 'N', minCents: 1, maxCents: 20_000 },
     ];
     expect(() =>
-      assertShocksCanClearBudget(major, minor, 520_000, 440_000),
+      assertShocksCanClearBudget(major, minor, oneBand, 500_000, 88),
     ).toThrow(/tops out at \$300/);
+  });
+
+  it('ignores bands that are not over budget when finding the widest gap', () => {
+    const bands: MonthTarget[] = [
+      { minPercent: 100, maxPercent: 200, overBudget: false },
+      { minPercent: 100, maxPercent: 104, overBudget: true },
+    ];
+    const major: IrregularExpense[] = [
+      { category: 'A', merchant: 'M', minCents: 1, maxCents: 60_000 },
+    ];
+    const minor: IrregularExpense[] = [
+      { category: 'B', merchant: 'N', minCents: 1, maxCents: 20_000 },
+    ];
+    // If the 200%-max band (not marked over budget) fed the gap calculation,
+    // this would throw; it must not.
+    expect(() =>
+      assertShocksCanClearBudget(major, minor, bands, 500_000, 88),
+    ).not.toThrow();
+  });
+});
+
+describe('assertMonthsIsAMultipleOfTwelve', () => {
+  it('passes on the committed value', () => {
+    expect(() => assertMonthsIsAMultipleOfTwelve()).not.toThrow();
+  });
+
+  it('fires when MONTHS does not divide evenly by 12', () => {
+    expect(() => assertMonthsIsAMultipleOfTwelve(18)).toThrow(/multiple of 12/);
+  });
+
+  it('passes 36, the committed value', () => {
+    expect(MONTHS).toBe(36);
+    expect(() => assertMonthsIsAMultipleOfTwelve(MONTHS)).not.toThrow();
+  });
+});
+
+describe('assertMonthTargetsAreCoherent', () => {
+  it('passes on the committed table', () => {
+    expect(() => assertMonthTargetsAreCoherent()).not.toThrow();
+  });
+
+  it('fires when there are not exactly 12 bands', () => {
+    expect(() =>
+      assertMonthTargetsAreCoherent([
+        { minPercent: 80, maxPercent: 90, overBudget: false },
+      ]),
+    ).toThrow(/exactly 12 bands/);
+  });
+
+  it('fires when the over-budget count is not exactly 3', () => {
+    const allUnderBudget: MonthTarget[] = Array.from({ length: 12 }, () => ({
+      minPercent: 80,
+      maxPercent: 90,
+      overBudget: false,
+    }));
+    expect(() => assertMonthTargetsAreCoherent(allUnderBudget)).toThrow(
+      /exactly 3 months over budget/,
+    );
+  });
+
+  it("fires when a band's overBudget flag disagrees with its own range", () => {
+    const mismatched: MonthTarget[] = [
+      ...Array.from({ length: 8 }, () => ({
+        minPercent: 80,
+        maxPercent: 90,
+        overBudget: false,
+      })),
+      { minPercent: 105, maxPercent: 110, overBudget: false }, // wrongly false
+      { minPercent: 105, maxPercent: 110, overBudget: true },
+      { minPercent: 105, maxPercent: 110, overBudget: true },
+      { minPercent: 90, maxPercent: 95, overBudget: true }, // wrongly true
+    ];
+    expect(() => assertMonthTargetsAreCoherent(mismatched)).toThrow(
+      /disagrees with its own range/,
+    );
+  });
+
+  it('names exactly Dec, Jul and Aug as over budget in the committed table', () => {
+    const overBudgetIndexes = MONTH_TARGETS.map((target, i) => ({
+      target,
+      i,
+    }))
+      .filter(({ target }) => target.overBudget)
+      .map(({ i }) => i);
+    // 0-based, January first: index 6 is July, 7 is August, 11 is December.
+    expect(overBudgetIndexes.sort((a, b) => a - b)).toEqual([6, 7, 11]);
+  });
+
+  it('keeps May (index 4) as the near-miss, 97-99%', () => {
+    expect(MONTH_TARGETS[4]).toEqual({
+      minPercent: 97,
+      maxPercent: 99,
+      overBudget: false,
+    });
   });
 });
 

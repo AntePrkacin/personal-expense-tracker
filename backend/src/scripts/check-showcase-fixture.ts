@@ -1,7 +1,7 @@
 /**
  * Measures the showcase model without seeding anything.
  *
- * `mise run showcase:check` for one account, or `--trials=200` to generate that
+ * `mise run seed:check` for one account, or `--trials=200` to generate that
  * many and report the distribution across all of them - which is the mode worth
  * using, since a single account cannot tell you whether a category goes over its
  * cap 5% of the time or 60% of the time.

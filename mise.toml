@@ -173,12 +173,12 @@ run = "scripts/deploy-backend.sh"
 # equally forgiving: a mistaken local run writes a gitignored SQLite file, a
 # mistaken cloud run creates a real database and 1,200-odd rows in the shared
 # Turso organization. Reaching the cloud has to be typed out.
-[tasks."seed:showcase"]
+[tasks."seed"]
 description = "Seed the showcase user into the local SQLite files"
 dir = "backend"
 run = "npx ts-node src/scripts/seed-showcase.ts --local"
 
-[tasks."seed:showcase:cloud"]
+[tasks."seed:cloud"]
 description = "Seed the showcase user into Turso Cloud (needs backend/.env)"
 dir = "backend"
 run = "npx ts-node src/scripts/seed-showcase.ts --cloud"
@@ -188,7 +188,20 @@ run = "npx ts-node src/scripts/seed-showcase.ts --cloud"
 # after changing the model: one account cannot tell you whether a category goes
 # over its cap 5% of the time or 60% of the time, and that difference is the
 # whole question.
-[tasks."showcase:check"]
+[tasks."seed:check"]
 description = "Measure the showcase spending model without seeding anything"
 dir = "backend"
 run = "npx ts-node src/scripts/check-showcase-fixture.ts"
+
+# Regenerates a committed artifact
+# (backend/src/scripts/showcase/fixture.data.json - named .data.json rather
+# than .json because a same-named fixture.json next to fixture.ts makes Node
+# resolve a bare `./fixture` import to the JSON file instead of the module),
+# so it belongs in its own commit - never bundled with an unrelated change,
+# and never hand-edited. Run `seed:check` against the result before
+# committing: this command reproduces the model faithfully, it has no opinion
+# on whether the numbers it produced are the ones you want.
+[tasks."seed:fixture"]
+description = "Regenerate the committed showcase fixture.data.json"
+dir = "backend"
+run = "npx ts-node src/scripts/build-showcase-fixture.ts"

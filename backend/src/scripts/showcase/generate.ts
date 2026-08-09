@@ -7,7 +7,7 @@
  * without seeding anything and generated without connecting to anything.
  */
 import { faker } from '@faker-js/faker';
-import type { CategoryPlan } from './plan';
+import type { CategoryPlan, MonthTarget } from './plan';
 import {
   BUDGET_CENTS,
   CATEGORY_PLANS,
@@ -19,11 +19,12 @@ import {
   MIN_TRANSACTIONS,
   MIN_TRANSACTION_CENTS,
   MONTHS,
-  ORDINARY_MAX_CENTS,
-  ORDINARY_MIN_CENTS,
-  ORDINARY_OVER_MIN_CENTS,
-  OVER_BUDGET_FLOOR_CENTS,
-  OVER_BUDGET_MONTHS,
+  MONTH_TARGETS,
+  OCCURRENCES,
+  ORDINARY_OVER_LEVEL_MAX_PERCENT,
+  ORDINARY_OVER_LEVEL_MIN_PERCENT,
+  assertMonthTargetsAreCoherent,
+  assertMonthsIsAMultipleOfTwelve,
   assertNoMerchantCollisions,
   assertPlanIsCoherent,
   assertShocksCanClearBudget,
@@ -165,7 +166,82 @@ export function shareOut(
 }
 
 /**
- * The whole account, month by month.
+ * What an over-budget month spends before its shock, drawn from
+ * `ORDINARY_OVER_LEVEL_MIN/MAX_PERCENT`.
+ *
+ * A month that is not over budget has no separate "ordinary" level to draw -
+ * its whole target, band and all, is ordinary - so this is only ever called
+ * for the three bands `assertMonthTargetsAreCoherent` requires.
+ */
+function drawOrdinaryOverLevel(): number {
+  return faker.number.int({
+    min: Math.round((ORDINARY_OVER_LEVEL_MIN_PERCENT / 100) * BUDGET_CENTS),
+    max: Math.round((ORDINARY_OVER_LEVEL_MAX_PERCENT / 100) * BUDGET_CENTS),
+  });
+}
+
+/**
+ * One month's worth of shock transactions - one major, one minor - sized so
+ * `ordinaryTarget + shock` lands on `targetCents`.
+ *
+ * The shock is computed rather than drawn a second time: `targetCents` and
+ * `ordinaryTarget` already carry their own randomness (the band and the
+ * ordinary-level draw), and a further free draw here would let the month's
+ * total wander past the band `MONTH_TARGETS` promised it. Clamping to
+ * `[capacityMin, capacityMax]` is the same belt-and-braces
+ * `assertShocksCanClearBudget` already guarantees never binds at the
+ * cheapest combination; a pricier combination has even more room.
+ */
+function drawShocks(
+  month: number,
+  occurrence: number,
+  targetCents: number,
+  ordinaryTarget: number,
+): FixtureTransaction[] {
+  const major = faker.helpers.arrayElement(MAJOR_IRREGULAR);
+  const minor = faker.helpers.arrayElement(MINOR_IRREGULAR);
+
+  const capacityMin = major.minCents + minor.minCents;
+  const capacityMax = major.maxCents + minor.maxCents;
+  const shockCents = Math.min(
+    capacityMax,
+    Math.max(capacityMin, targetCents - ordinaryTarget),
+  );
+
+  // Split in proportion to what each can absorb, then clamped to its own
+  // range. Clamping can only push a piece up (the major takes at most its
+  // own maximum, which leaves the minor no more than its own), so the pair
+  // still sums to at least `shockCents` and the month stays over budget.
+  const majorCents = Math.min(
+    major.maxCents,
+    Math.max(
+      major.minCents,
+      Math.round((shockCents * major.maxCents) / capacityMax),
+    ),
+  );
+  const minorCents = Math.min(
+    minor.maxCents,
+    Math.max(minor.minCents, shockCents - majorCents),
+  );
+
+  return (
+    [
+      [major, majorCents],
+      [minor, minorCents],
+    ] as const
+  ).map(([expense, amountCents]) => ({
+    month,
+    occurrence,
+    day: faker.number.int({ min: 1, max: MAX_DAY_OF_MONTH }),
+    merchant: expense.merchant,
+    category: expense.category,
+    amountCents: Math.max(MIN_TRANSACTION_CENTS, amountCents),
+  }));
+}
+
+/**
+ * The whole account, calendar month by calendar month, each recurring
+ * `OCCURRENCES` times.
  *
  * **Every month is generated in full, including the current one**, which is the
  * change PET-69's split forces and an improvement on what it replaces. The old
@@ -177,11 +253,19 @@ export function shareOut(
  * days after today removes proportionally as many of them, and the pro-rata
  * behaviour falls out of the truncation rather than being computed.
  *
+ * **Looping calendar month first is what gives the year a shape.** Each of the
+ * twelve `MONTH_TARGETS` bands is drawn from independently on every one of its
+ * `OCCURRENCES` recurrences, so December is always December - over budget for
+ * Christmas every time it comes around - rather than four `monthsAgo` values
+ * picked at random with no pattern a demo can explain.
+ *
  * Pass a `seed` to make the run reproducible. Every source of randomness in this
  * file and in `plan.ts` goes through faker, with no `Math.random` anywhere, so
  * the same seed really does give the same account.
  */
 export function generate(seed: number): Fixture {
+  assertMonthsIsAMultipleOfTwelve();
+  assertMonthTargetsAreCoherent();
   assertPlanIsCoherent();
   assertNoMerchantCollisions();
   assertShocksCanClearBudget();
@@ -189,154 +273,108 @@ export function generate(seed: number): Fixture {
   faker.seed(seed);
 
   const planned = Object.entries(CATEGORY_PLANS);
-
-  // Drawn from the complete months only. The month containing the seeding day
-  // is truncated by the seeder, so putting the overspend there would mean an
-  // over-budget month that lands under budget whenever the seed runs early in
-  // the month.
-  const overBudgetMonths = new Set(
-    faker.helpers
-      .shuffle(Array.from({ length: MONTHS - 1 }, (_, i) => i + 1))
-      .slice(0, OVER_BUDGET_MONTHS),
-  );
-
   const rows: FixtureTransaction[] = [];
 
-  for (let monthsAgo = 0; monthsAgo < MONTHS; monthsAgo++) {
-    const isOverBudget = overBudgetMonths.has(monthsAgo);
+  for (let month = 0; month < 12; month++) {
+    const band: MonthTarget = MONTH_TARGETS[month];
 
-    const count = faker.number.int({
-      min: MIN_TRANSACTIONS,
-      max: MAX_TRANSACTIONS,
-    });
-    const ordinaryTarget = faker.number.int({
-      min: isOverBudget ? ORDINARY_OVER_MIN_CENTS : ORDINARY_MIN_CENTS,
-      max: ORDINARY_MAX_CENTS,
-    });
-
-    let fixedCents = 0;
-
-    for (const bill of FIXED_BILLS) {
-      const swing = bill.varianceCents ?? 0;
-      const amountCents = Math.max(
-        MIN_TRANSACTION_CENTS,
-        bill.amountCents +
-          (swing === 0 ? 0 : faker.number.int({ min: -swing, max: swing })),
-      );
-      fixedCents += amountCents;
-
-      rows.push({
-        monthsAgo,
-        day: bill.dayOfMonth,
-        merchant: bill.merchant,
-        category: bill.category,
-        amountCents,
+    for (let occurrence = 0; occurrence < OCCURRENCES; occurrence++) {
+      const targetCents = faker.number.int({
+        min: Math.round((band.minPercent / 100) * BUDGET_CENTS),
+        max: Math.round((band.maxPercent / 100) * BUDGET_CENTS),
       });
-    }
+      const ordinaryTarget = band.overBudget
+        ? drawOrdinaryOverLevel()
+        : targetCents;
 
-    // The overspend, as one or two irregular expenses rather than as 15% on
-    // every category. An over-budget month spread evenly puts nothing over its
-    // cap, so the donut, the category cards and the over-cap insight have
-    // nothing to show - which is the point of seeding an over-budget month at
-    // all. Concentrating it also happens to be how real months go over.
-    const shocks: FixtureTransaction[] = [];
-
-    if (isOverBudget) {
-      const major = faker.helpers.arrayElement(MAJOR_IRREGULAR);
-      const minor = faker.helpers.arrayElement(MINOR_IRREGULAR);
-
-      // What the pair can deliver between them, and what the month needs to
-      // clear the budget. `assertShocksCanClearBudget` has already established
-      // that the floor never exceeds the capacity, so the Math.min is a
-      // belt-and-braces rather than a real branch.
-      const capacityMin = major.minCents + minor.minCents;
-      const capacityMax = major.maxCents + minor.maxCents;
-      const floorCents = Math.max(
-        capacityMin,
-        OVER_BUDGET_FLOOR_CENTS - ordinaryTarget,
-      );
-      const shockCents = faker.number.int({
-        min: Math.min(floorCents, capacityMax),
-        max: capacityMax,
+      const count = faker.number.int({
+        min: MIN_TRANSACTIONS,
+        max: MAX_TRANSACTIONS,
       });
 
-      // Split in proportion to what each can absorb, then clamped to its own
-      // range. Clamping can only push a piece up (the major takes at most its
-      // own maximum, which leaves the minor no more than its own), so the pair
-      // still sums to at least `shockCents` and the month stays over budget.
-      const majorCents = Math.min(
-        major.maxCents,
-        Math.max(
-          major.minCents,
-          Math.round((shockCents * major.maxCents) / capacityMax),
-        ),
-      );
-      const minorCents = Math.min(
-        minor.maxCents,
-        Math.max(minor.minCents, shockCents - majorCents),
-      );
+      let fixedCents = 0;
 
-      for (const [expense, amountCents] of [
-        [major, majorCents],
-        [minor, minorCents],
-      ] as const) {
-        shocks.push({
-          monthsAgo,
-          day: faker.number.int({ min: 1, max: MAX_DAY_OF_MONTH }),
-          merchant: expense.merchant,
-          category: expense.category,
-          amountCents: Math.max(MIN_TRANSACTION_CENTS, amountCents),
-        });
-      }
-    }
+      for (const bill of FIXED_BILLS) {
+        const swing = bill.varianceCents ?? 0;
+        const amountCents = Math.max(
+          MIN_TRANSACTION_CENTS,
+          bill.amountCents +
+            (swing === 0 ? 0 : faker.number.int({ min: -swing, max: swing })),
+        );
+        fixedCents += amountCents;
 
-    rows.push(...shocks);
-
-    // Whatever the bills and the shocks did not take. The bills come out of the
-    // month's target rather than sitting on top of it, so the totals still land
-    // where the over-budget months need them.
-    const variableTarget = Math.max(1, ordinaryTarget - fixedCents);
-    const variableCount = Math.max(
-      1,
-      count - FIXED_BILLS.length - shocks.length,
-    );
-
-    // Which categories happen at all this month. Only the three occasional ones
-    // can sit out; everything else has no `monthlyChance` and is always here.
-    const present = planned.filter(
-      ([, plan]) =>
-        plan.monthlyChance === undefined ||
-        faker.number.float({ min: 0, max: 1 }) < plan.monthlyChance,
-    );
-    const perCategory = shareOut(variableCount, present);
-
-    // Only categories that actually drew a transaction share the target, so a
-    // short month cannot lose the 2% Travel was owed into a category with
-    // nowhere to put it - the month would then quietly undershoot.
-    const active = present.filter(([name]) => (perCategory.get(name) ?? 0) > 0);
-    const activeSpend = active.reduce(
-      (sum, [, plan]) => sum + plan.spendPercent,
-      0,
-    );
-
-    for (const [name, plan] of active) {
-      const categoryCount = perCategory.get(name)!;
-      const categoryTarget = Math.round(
-        (variableTarget * plan.spendPercent) / activeSpend,
-      );
-
-      for (const amountCents of drawAmounts(
-        categoryTarget,
-        categoryCount,
-        plan.sigma,
-      )) {
         rows.push({
-          monthsAgo,
-          day: faker.number.int({ min: 1, max: MAX_DAY_OF_MONTH }),
-          merchant: pickMerchant(plan.merchants),
-          category: name,
+          month,
+          occurrence,
+          day: bill.dayOfMonth,
+          merchant: bill.merchant,
+          category: bill.category,
           amountCents,
         });
+      }
+
+      // The overspend, as one or two irregular expenses rather than as 15% on
+      // every category. An over-budget month spread evenly puts nothing over
+      // its cap, so the donut, the category cards and the over-cap insight
+      // have nothing to show - which is the point of seeding an over-budget
+      // month at all. Concentrating it also happens to be how real months go
+      // over.
+      const shocks = band.overBudget
+        ? drawShocks(month, occurrence, targetCents, ordinaryTarget)
+        : [];
+
+      rows.push(...shocks);
+
+      // Whatever the bills and the shocks did not take. The bills come out of
+      // the month's target rather than sitting on top of it, so the totals
+      // still land where the over-budget months need them.
+      const variableTarget = Math.max(1, ordinaryTarget - fixedCents);
+      const variableCount = Math.max(
+        1,
+        count - FIXED_BILLS.length - shocks.length,
+      );
+
+      // Which categories happen at all this month. Only the three occasional
+      // ones can sit out; everything else has no `monthlyChance` and is
+      // always here.
+      const present = planned.filter(
+        ([, plan]) =>
+          plan.monthlyChance === undefined ||
+          faker.number.float({ min: 0, max: 1 }) < plan.monthlyChance,
+      );
+      const perCategory = shareOut(variableCount, present);
+
+      // Only categories that actually drew a transaction share the target, so
+      // a short month cannot lose the 2% Travel was owed into a category with
+      // nowhere to put it - the month would then quietly undershoot.
+      const active = present.filter(
+        ([name]) => (perCategory.get(name) ?? 0) > 0,
+      );
+      const activeSpend = active.reduce(
+        (sum, [, plan]) => sum + plan.spendPercent,
+        0,
+      );
+
+      for (const [name, plan] of active) {
+        const categoryCount = perCategory.get(name)!;
+        const categoryTarget = Math.round(
+          (variableTarget * plan.spendPercent) / activeSpend,
+        );
+
+        for (const amountCents of drawAmounts(
+          categoryTarget,
+          categoryCount,
+          plan.sigma,
+        )) {
+          rows.push({
+            month,
+            occurrence,
+            day: faker.number.int({ min: 1, max: MAX_DAY_OF_MONTH }),
+            merchant: pickMerchant(plan.merchants),
+            category: name,
+            amountCents,
+          });
+        }
       }
     }
   }

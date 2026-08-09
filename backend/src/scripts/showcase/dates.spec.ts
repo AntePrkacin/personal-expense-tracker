@@ -1,4 +1,4 @@
-import { dateMonthsAgo, hasHappened, parseDate } from './dates';
+import { dateMonthsAgo, hasHappened, monthsAgoFor, parseDate } from './dates';
 
 describe('parseDate', () => {
   it('reads a YYYY-MM-DD string as a zero-based month', () => {
@@ -8,6 +8,39 @@ describe('parseDate', () => {
   it('rejects anything else, rather than returning NaN fields', () => {
     expect(() => parseDate('09/08/2026')).toThrow(/YYYY-MM-DD/);
   });
+});
+
+describe('monthsAgoFor', () => {
+  const OCCURRENCES = 3;
+
+  it('matches the hand-checked values for anchorMonth = 7 (August)', () => {
+    expect(monthsAgoFor(7, 0, 7)).toBe(0);
+    expect(monthsAgoFor(8, 0, 7)).toBe(11);
+    expect(monthsAgoFor(7, 2, 7)).toBe(24);
+    expect(monthsAgoFor(8, 2, 7)).toBe(35);
+  });
+
+  // The whole reason this function exists rather than a plain monthsAgo
+  // counter: every (month, occurrence) slot must map to exactly one value in
+  // 0..35, for every possible anchor - not just today's - or the generator's
+  // "December is always over budget" stops being true the moment the seed
+  // runs in a different month.
+  it.each(Array.from({ length: 12 }, (_, anchorMonth) => anchorMonth))(
+    'is a bijection onto 0..35 for anchorMonth = %i',
+    (anchorMonth) => {
+      const seen = new Set<number>();
+      for (let occurrence = 0; occurrence < OCCURRENCES; occurrence++) {
+        for (let month = 0; month < 12; month++) {
+          const monthsAgo = monthsAgoFor(month, occurrence, anchorMonth);
+          expect(monthsAgo).toBeGreaterThanOrEqual(0);
+          expect(monthsAgo).toBeLessThan(12 * OCCURRENCES);
+          expect(seen.has(monthsAgo)).toBe(false);
+          seen.add(monthsAgo);
+        }
+      }
+      expect(seen.size).toBe(12 * OCCURRENCES);
+    },
+  );
 });
 
 describe('dateMonthsAgo', () => {

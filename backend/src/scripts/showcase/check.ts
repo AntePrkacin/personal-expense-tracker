@@ -21,8 +21,23 @@
  * model is being tuned is a checker somebody deletes. Once the numbers settle,
  * the few lines worth defending become assertions in a spec.
  */
-import { FIXED_BILLS, MAX_DAY_OF_MONTH } from './plan';
+import { FIXED_BILLS, MAX_DAY_OF_MONTH, MONTH_TARGETS } from './plan';
 import type { Fixture } from './fixture';
+
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 const money = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
 const pct = (part: number, whole: number): string =>
@@ -43,11 +58,11 @@ function padStart(text: string, width: number): string {
   return text.length >= width ? text : ' '.repeat(width - text.length) + text;
 }
 
-/** One month of one generated account. */
+/** One (month, occurrence) slot of one generated account. */
 type MonthKey = string;
 
-const monthKey = (trial: number, monthsAgo: number): MonthKey =>
-  `${trial}:${monthsAgo}`;
+const monthKey = (trial: number, month: number, occurrence: number): MonthKey =>
+  `${trial}:${month}:${occurrence}`;
 
 /**
  * The whole report, as text.
@@ -96,40 +111,64 @@ export function checkFixtures(fixtures: readonly Fixture[]): string {
       `   over $200 ${pct(amounts.filter((a) => a > 20000).length, amounts.length)}`,
   );
 
-  // ---- Months --------------------------------------------------------------
+  // ---- Months ----------------------------------------------------------------
+  // Every (month, occurrence) slot the generator emits is a complete month -
+  // truncation only ever happens once the seeder resolves one slot against
+  // today, and which slot that is depends on the real calendar date rather
+  // than on anything this pure checker knows. So every slot here counts.
   const monthTotals = new Map<MonthKey, number>();
   const monthCounts = new Map<MonthKey, number>();
+  const monthOfKey = new Map<MonthKey, number>();
   for (const [trial, fixture] of fixtures.entries()) {
     for (const t of fixture.transactions) {
-      const key = monthKey(trial, t.monthsAgo);
+      const key = monthKey(trial, t.month, t.occurrence);
       monthTotals.set(key, (monthTotals.get(key) ?? 0) + t.amountCents);
       monthCounts.set(key, (monthCounts.get(key) ?? 0) + 1);
+      monthOfKey.set(key, t.month);
     }
   }
 
-  // Complete months only. Month zero is truncated by the seeder, so its total
-  // says nothing about the model.
-  const completeTotals = [...monthTotals.entries()]
-    .filter(([key]) => !key.endsWith(':0'))
-    .map(([, total]) => total);
-  const overBudget = completeTotals.filter((total) => total > budget);
-  const meanMonth =
-    completeTotals.reduce((s, t) => s + t, 0) / completeTotals.length;
+  const allTotals = [...monthTotals.values()];
+  const overBudget = allTotals.filter((total) => total > budget);
+  const meanMonth = allTotals.reduce((s, t) => s + t, 0) / allTotals.length;
   const counts = [...monthCounts.values()];
 
-  out.push('', 'MONTHS (complete only)');
+  out.push('', 'MONTHS');
   out.push(
     `  mean total ${money(meanMonth)} (${pct(meanMonth, budget)} of budget)` +
-      `   range ${money(Math.min(...completeTotals))} to ${money(Math.max(...completeTotals))}`,
+      `   range ${money(Math.min(...allTotals))} to ${money(Math.max(...allTotals))}`,
   );
   out.push(
-    `  over budget ${overBudget.length} of ${completeTotals.length} (${pct(overBudget.length, completeTotals.length)})` +
+    `  over budget ${overBudget.length} of ${allTotals.length} (${pct(overBudget.length, allTotals.length)})` +
       `, ${(overBudget.length / trials).toFixed(1)} per account`,
   );
   out.push(
     `  transactions per month ${Math.min(...counts)} to ${Math.max(...counts)}` +
       `, mean ${(counts.reduce((s, c) => s + c, 0) / counts.length).toFixed(1)}`,
   );
+
+  // ---- Calendar ----------------------------------------------------------
+  // The claim `MONTH_TARGETS` exists to make true: December, July and August
+  // are the only months that ever go over, and every other month's actual
+  // spend lands inside the band it was drawn from. Per-calendar-month rather
+  // than per-slot, since that is the shape a demo audience actually sees.
+  out.push('', 'CALENDAR (mean % of budget, over-budget rate, by month)');
+  for (let month = 0; month < 12; month++) {
+    const totals = [...monthTotals.entries()]
+      .filter(([key]) => monthOfKey.get(key) === month)
+      .map(([, total]) => total);
+    const meanPct =
+      (totals.reduce((sum, total) => sum + total, 0) / totals.length / budget) *
+      100;
+    const over = totals.filter((total) => total > budget).length;
+    const band = MONTH_TARGETS[month];
+    out.push(
+      `  ${pad(MONTH_NAMES[month], 4)} band ${padStart(`${band.minPercent}-${band.maxPercent}%`, 10)}` +
+        `   mean ${padStart(`${meanPct.toFixed(1)}%`, 7)}` +
+        `   over budget ${padStart(pct(over, totals.length), 7)}` +
+        (band.overBudget ? '  (over-budget band)' : ''),
+    );
+  }
 
   // ---- Categories ----------------------------------------------------------
   const capByName = new Map(
@@ -143,7 +182,7 @@ export function checkFixtures(fixtures: readonly Fixture[]): string {
     for (const t of fixture.transactions) {
       const byMonth =
         spendPerCategoryMonth.get(t.category) ?? new Map<MonthKey, number>();
-      const key = monthKey(trial, t.monthsAgo);
+      const key = monthKey(trial, t.month, t.occurrence);
       byMonth.set(key, (byMonth.get(key) ?? 0) + t.amountCents);
       spendPerCategoryMonth.set(t.category, byMonth);
       txnsPerCategory.set(
@@ -243,18 +282,27 @@ export function checkFixtures(fixtures: readonly Fixture[]): string {
       }
     }
     for (const t of fixture.transactions) {
-      if (t.monthsAgo < 0 || t.monthsAgo >= fixture.months) {
-        problems.push(`trial ${trial}: monthsAgo ${t.monthsAgo} outside range`);
+      if (t.month < 0 || t.month > 11) {
+        problems.push(`trial ${trial}: month ${t.month} outside 0-11`);
+        break;
+      }
+    }
+    for (const t of fixture.transactions) {
+      if (t.occurrence < 0 || t.occurrence * 12 >= fixture.months) {
+        problems.push(
+          `trial ${trial}: occurrence ${t.occurrence} outside range`,
+        );
         break;
       }
     }
     // Every fixed bill, once a month, every month. A bill that also sits in the
     // variable pool would show up here as a count above one.
     for (const bill of FIXED_BILLS) {
-      const perMonth = new Map<number, number>();
+      const perMonth = new Map<string, number>();
       for (const t of fixture.transactions) {
         if (t.merchant === bill.merchant) {
-          perMonth.set(t.monthsAgo, (perMonth.get(t.monthsAgo) ?? 0) + 1);
+          const key = `${t.month}:${t.occurrence}`;
+          perMonth.set(key, (perMonth.get(key) ?? 0) + 1);
         }
       }
       const wrong = [...perMonth.entries()].filter(([, n]) => n !== 1);

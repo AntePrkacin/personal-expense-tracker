@@ -19,49 +19,76 @@
 export const BUDGET_CENTS = 500_000;
 
 /** Whole months of history, the current (partial) one included. */
-export const MONTHS = 18;
+export const MONTHS = 36;
 
 /**
- * How many of the 17 complete months are seeded over budget.
+ * How many times each calendar month recurs across `MONTHS` of history.
  *
- * **Four rather than six, and the reason is the caps.** Every over-budget month
- * pulls the 18-month average up by about $30, the caps have to sum to exactly
- * the budget, and the headroom every category gets is whatever the budget has
- * left over that average. At six the average sat at 91% of budget, leaving 9%
- * to share out - so ordinary month-to-month variance put Dining out over its
- * cap in twelve months of eighteen and Uncategorized in thirteen, which is not
- * a budget anybody would keep using. At four the average is nearer 86% and each
- * category carries roughly 15-20% of slack, which is what makes going over mean
- * something when it happens.
+ * `MONTH_TARGETS` gives every calendar month one band, and each of the three
+ * Decembers, three Julys and so on draws independently from the same band -
+ * which is what makes December always read as December rather than as
+ * whichever `monthsAgo` the dice picked. `assertMonthsIsAMultipleOfTwelve`
+ * guards the one precondition that makes the division exact: 18 would have
+ * left four months with only 1.5 occurrences, which is not a number of times
+ * anything happens.
  */
-export const OVER_BUDGET_MONTHS = 4;
+export const OCCURRENCES = MONTHS / 12;
 
 /**
- * A month's ordinary spending, before any irregular expense - 70% to 90% of the
- * budget.
+ * One band per calendar month (`0` is January, matching `parseDate`), each a
+ * percentage-of-budget range the month's **total** spend should land in.
  *
- * This is the whole month, fixed bills included, not the discretionary part. It
- * sits below the budget on purpose: a month goes over because something
- * irregular happened, not because the weekly shop crept up 20%, which is what
- * `IRREGULAR_*` below models.
+ * **This replaces picking `OVER_BUDGET_MONTHS` at random.** A demo where
+ * somebody asks "why is this month red" now has an answer beyond "the dice":
+ * December runs hot for Christmas, July and August for the summer holiday, and
+ * May is the deliberate near-miss - the month the account *just* made it.
+ * `overBudget` is derived from the band lying entirely above 100%, not stored
+ * twice, so the two cannot disagree.
+ *
+ * The bands average a shade under 91%, shaved down from an earlier draft that
+ * averaged 93.5% - `seed:check --trials=200` is what caught the reason
+ * this matters: at 93.5% every category has only 6.5% of headroom against
+ * ordinary variance, which is what put Gifts over its cap in 25.7% of months
+ * and Uncategorized in 22.4%, both far above the 4-11% every other category
+ * saw. `assertMonthTargetsAreCoherent` checks there are twelve bands and that
+ * exactly three are over budget, since a fourth would eat into the headroom
+ * the same way the old `OVER_BUDGET_MONTHS = 6` did.
  */
-export const ORDINARY_MIN_CENTS = 350_000;
-export const ORDINARY_MAX_CENTS = 450_000;
+export type MonthTarget = {
+  minPercent: number;
+  maxPercent: number;
+  overBudget: boolean;
+};
+
+export const MONTH_TARGETS: readonly MonthTarget[] = [
+  { minPercent: 70, maxPercent: 79, overBudget: false }, // Jan - post-Christmas recovery
+  { minPercent: 72, maxPercent: 81, overBudget: false }, // Feb - post-Christmas recovery
+  { minPercent: 82, maxPercent: 89, overBudget: false }, // Mar
+  { minPercent: 76, maxPercent: 84, overBudget: false }, // Apr
+  { minPercent: 97, maxPercent: 99, overBudget: false }, // May - the near-miss showcase
+  { minPercent: 88, maxPercent: 93, overBudget: false }, // Jun - pre-holiday creep
+  { minPercent: 105, maxPercent: 112, overBudget: true }, // Jul - holiday
+  { minPercent: 105, maxPercent: 112, overBudget: true }, // Aug - holiday
+  { minPercent: 80, maxPercent: 88, overBudget: false }, // Sep
+  { minPercent: 80, maxPercent: 88, overBudget: false }, // Oct
+  { minPercent: 86, maxPercent: 92, overBudget: false }, // Nov - pre-Christmas
+  { minPercent: 108, maxPercent: 115, overBudget: true }, // Dec - Christmas
+];
 
 /**
- * An over-budget month draws its ordinary spending from the top of that range,
- * then takes one major and one minor irregular expense on top.
+ * What an over-budget month spends before its shock, as a percentage of
+ * budget - drawn well under every over-budget band's `minPercent` so the shock
+ * always has real ground to cover.
  *
- * `OVER_BUDGET_FLOOR_CENTS` is the total such a month must clear, and the two
- * constants are load-bearing together: the widest gap the irregulars ever have
- * to cover is `OVER_BUDGET_FLOOR_CENTS - ORDINARY_OVER_MIN_CENTS`, and the
- * cheapest major-plus-minor pair has to be able to cover it or a month picked
- * to be over budget quietly lands under it and the over-cap insight has nothing
- * to fire on. `assertShocksCanClearBudget` checks exactly that rather than
- * leaving it to whoever edits a range next.
+ * The gap `assertShocksCanClearBudget` has to guarantee the shocks can close is
+ * `max(band.maxPercent) - ORDINARY_OVER_LEVEL_MIN_PERCENT`, the widest case:
+ * the highest band (`Dec` at 115%) paired with the lowest ordinary draw. At
+ * 90% that gap is 25 points of a $5,000 budget, roughly $1,250 - up from the
+ * $850 the previous two-tier ranges could guarantee, which is why they widen
+ * alongside this.
  */
-export const ORDINARY_OVER_MIN_CENTS = 440_000;
-export const OVER_BUDGET_FLOOR_CENTS = 520_000;
+export const ORDINARY_OVER_LEVEL_MIN_PERCENT = 90;
+export const ORDINARY_OVER_LEVEL_MAX_PERCENT = 95;
 
 /** Transactions a complete month carries, fixed bills and shocks included. */
 export const MIN_TRANSACTIONS = 55;
@@ -229,6 +256,25 @@ export const FIXED_BILLS: readonly FixedBill[] = [
  * nobody takes 1.0 trips a month for a year and a half. A category that sits
  * out has both its shares redistributed over the ones that did not, so the
  * month still lands on its target.
+ *
+ * **The caps were rebalanced once already, non-uniformly, against
+ * `seed:check --trials=200` - and the result is measured, not perfect.**
+ * Every category's monthly total moves with the same calendar band (a
+ * category is a near-fixed share of one month-wide draw), so a cap's real
+ * margin is against the highest **ordinary** band a category ever sees, not
+ * against its all-months mean - a category near a shock target additionally
+ * carries a roughly 5-8% baseline from being the one `MAJOR_IRREGULAR` or
+ * `MINOR_IRREGULAR` picks that month. `Healthcare`, `Utilities`,
+ * `Entertainment`, `Education` and `Transportation` land inside the 4-11%
+ * target this way. **They do not all fit**: caps sum to exactly the budget,
+ * `Loans & debt` alone is 30% of it and cannot spare a cent without going over
+ * on the rent alone, and giving every remaining category the same headroom
+ * those five have would ask for more than the other 70% holds. `Groceries`,
+ * `Dining out`, `Family & pets`, `Personal care`, `Uncategorized`, `Travel`
+ * and `Gifts` are cut roughly in half to two-thirds from where they started -
+ * see the table `seed:check` prints for the exact figures - and sit above
+ * 11% anyway. That is a property of a $5,000 budget with a $1,450 rent in it,
+ * not a number left untuned.
  */
 export type CategoryPlan = {
   spendPercent: number;
@@ -244,7 +290,7 @@ export const CATEGORY_PLANS: Record<string, CategoryPlan> = {
     spendPercent: 25,
     countPercent: 22,
     sigma: 0.55,
-    capCents: 70_000,
+    capCents: 73_000,
     merchants: [
       { name: 'Konzum', weight: 12 },
       { name: 'Lidl', weight: 9 },
@@ -264,7 +310,7 @@ export const CATEGORY_PLANS: Record<string, CategoryPlan> = {
     spendPercent: 17,
     countPercent: 27,
     sigma: 0.8,
-    capCents: 48_000,
+    capCents: 50_000,
     merchants: [
       { name: 'Cogito Coffee', weight: 10 },
       { name: 'Submarine', weight: 6 },
@@ -361,7 +407,7 @@ export const CATEGORY_PLANS: Record<string, CategoryPlan> = {
     spendPercent: 5,
     countPercent: 3,
     sigma: 0.9,
-    capCents: 36_000,
+    capCents: 31_000,
     merchants: [
       { name: 'City Pharmacy', weight: 8 },
       { name: 'Smile Dental', weight: 4 },
@@ -375,7 +421,7 @@ export const CATEGORY_PLANS: Record<string, CategoryPlan> = {
     spendPercent: 4,
     countPercent: 3,
     sigma: 0.85,
-    capCents: 10_000,
+    capCents: 12_000,
     monthlyChance: 0.6,
     merchants: [
       { name: 'Flower Shop', weight: 5 },
@@ -389,7 +435,7 @@ export const CATEGORY_PLANS: Record<string, CategoryPlan> = {
     spendPercent: 3,
     countPercent: 2,
     sigma: 0.9,
-    capCents: 13_000,
+    capCents: 10_000,
     monthlyChance: 0.5,
     merchants: [
       { name: 'Udemy', weight: 5 },
@@ -403,7 +449,7 @@ export const CATEGORY_PLANS: Record<string, CategoryPlan> = {
     spendPercent: 1,
     countPercent: 3,
     sigma: 0.6,
-    capCents: 29_000,
+    capCents: 28_500,
     merchants: [
       { name: 'Waste Services', weight: 4 },
       { name: 'Telcom Top-up', weight: 3 },
@@ -425,7 +471,7 @@ export const CATEGORY_PLANS: Record<string, CategoryPlan> = {
     spendPercent: 5,
     countPercent: 6,
     sigma: 0.8,
-    capCents: 13_500,
+    capCents: 15_000,
     merchants: [
       { name: 'ATM Withdrawal', weight: 6 },
       { name: 'Kiosk Tisak', weight: 5 },
@@ -456,7 +502,14 @@ export const CATEGORY_PLANS: Record<string, CategoryPlan> = {
  * read as 650% of a $200 cap - a haircut budget wearing a car repair. A range
  * per expense keeps every overspend the size that expense actually is, and
  * drawing one major plus one minor is what guarantees the pair can always cover
- * the gap to `OVER_BUDGET_FLOOR_CENTS` however the dice land.
+ * whatever gap the calendar bands ask of them, however the dice land.
+ *
+ * **Widened once already, for the calendar bands.** The two-tier ranges only
+ * had to clear an $850 gap against `OVER_BUDGET_FLOOR_CENTS`; December's 115%
+ * band against a 90% ordinary floor asks for roughly $1,250, so every maximum
+ * here moved up until the cheapest pair - Education and Personal care - could
+ * still cover it. `assertShocksCanClearBudget` checks the margin rather than
+ * leaving it to arithmetic nobody re-does when a band moves.
  */
 export type IrregularExpense = {
   category: string;
@@ -470,25 +523,25 @@ export const MAJOR_IRREGULAR: readonly IrregularExpense[] = [
     category: 'Travel',
     merchant: 'Booking.com',
     minCents: 30_000,
-    maxCents: 100_000,
+    maxCents: 130_000,
   },
   {
     category: 'Transportation',
     merchant: 'Autoservis Mrak',
     minCents: 25_000,
-    maxCents: 90_000,
+    maxCents: 120_000,
   },
   {
     category: 'Healthcare',
     merchant: 'Smile Dental',
     minCents: 20_000,
-    maxCents: 70_000,
+    maxCents: 100_000,
   },
   {
     category: 'Education',
     merchant: 'Algebra Courses',
     minCents: 20_000,
-    maxCents: 60_000,
+    maxCents: 90_000,
   },
 ];
 
@@ -497,31 +550,31 @@ export const MINOR_IRREGULAR: readonly IrregularExpense[] = [
     category: 'Family & pets',
     merchant: 'Vet Clinic',
     minCents: 12_000,
-    maxCents: 45_000,
+    maxCents: 65_000,
   },
   {
     category: 'Utilities',
     merchant: 'Chimney Service',
     minCents: 9_000,
-    maxCents: 32_000,
+    maxCents: 52_000,
   },
   {
     category: 'Gifts',
     merchant: 'Gift Gallery',
     minCents: 8_000,
-    maxCents: 30_000,
+    maxCents: 50_000,
   },
   {
     category: 'Entertainment',
     merchant: 'Ticketshop',
     minCents: 8_000,
-    maxCents: 28_000,
+    maxCents: 48_000,
   },
   {
     category: 'Personal care',
     merchant: 'Spa Retreat',
     minCents: 7_000,
-    maxCents: 25_000,
+    maxCents: 45_000,
   },
 ];
 
@@ -583,33 +636,99 @@ export function assertPlanIsCoherent(
 }
 
 /**
- * Fails when the cheapest pair of irregular expenses cannot put a month over
- * budget.
+ * Fails when `MONTHS` cannot be split into a whole number of occurrences per
+ * calendar month.
  *
- * The gap an over-budget month has to close is at most
- * `OVER_BUDGET_FLOOR_CENTS - ORDINARY_OVER_MIN_CENTS`, and the pair drawn to
- * close it is one major plus one minor - so the worst case is the cheapest of
- * each. Narrowing a range without checking this is silent: the run still
- * succeeds, the month simply lands under budget, and six of the seventeen
- * months stop being the thing they were picked to be.
+ * `monthsAgoFor` is a bijection onto `0..MONTHS-1` only when every calendar
+ * month recurs the same whole number of times; 18 would have left four months
+ * with 1.5 occurrences, which silently produces a lopsided year rather than a
+ * clean error.
+ */
+export function assertMonthsIsAMultipleOfTwelve(months: number = MONTHS): void {
+  if (months % 12 !== 0) {
+    throw new Error(
+      `MONTHS must be a multiple of 12 so every calendar month recurs the ` +
+        `same number of times; got ${months}.`,
+    );
+  }
+}
+
+/**
+ * Fails when `MONTH_TARGETS` has stopped describing one band per calendar
+ * month with exactly three of them over budget.
+ *
+ * A thirteenth entry, or a fourth `overBudget` band, is silent otherwise: the
+ * generator still runs, it simply gives the year a different shape than the
+ * one this file documents - one calendar month with no band, or one budget
+ * with less headroom than `assertShocksCanClearBudget` was tuned against.
+ */
+export function assertMonthTargetsAreCoherent(
+  monthTargets: readonly MonthTarget[] = MONTH_TARGETS,
+): void {
+  if (monthTargets.length !== 12) {
+    throw new Error(
+      `MONTH_TARGETS must carry exactly 12 bands, one per calendar month; ` +
+        `got ${monthTargets.length}.`,
+    );
+  }
+
+  const overBudget = monthTargets.filter((target) => target.overBudget);
+  if (overBudget.length !== 3) {
+    throw new Error(
+      `MONTH_TARGETS must mark exactly 3 months over budget; got ` +
+        `${overBudget.length}.`,
+    );
+  }
+
+  const mismatched = monthTargets.filter(
+    (target) => target.overBudget !== target.minPercent > 100,
+  );
+  if (mismatched.length > 0) {
+    throw new Error(
+      `A MONTH_TARGETS band's overBudget flag disagrees with its own range: ` +
+        `${mismatched.map((t) => `${t.minPercent}-${t.maxPercent}%`).join(', ')}.`,
+    );
+  }
+}
+
+/**
+ * Fails when the cheapest pair of irregular expenses cannot close the widest
+ * gap a calendar-banded over-budget month may ask of it.
+ *
+ * The gap is `max(band.maxPercent) - ORDINARY_OVER_LEVEL_MIN_PERCENT` for the
+ * over-budget bands, applied against the budget - December's 115% against a
+ * 90% ordinary floor is the worst case among the three today - and the pair
+ * drawn to close it is one major plus one minor, so the worst case is the
+ * cheapest of each. Narrowing a range without checking this is silent: the run
+ * still succeeds, the month simply lands under its band, and one of the three
+ * over-budget months stops being the thing it was picked to be.
  */
 export function assertShocksCanClearBudget(
   major: readonly IrregularExpense[] = MAJOR_IRREGULAR,
   minor: readonly IrregularExpense[] = MINOR_IRREGULAR,
-  floorCents: number = OVER_BUDGET_FLOOR_CENTS,
-  ordinaryOverMinCents: number = ORDINARY_OVER_MIN_CENTS,
+  monthTargets: readonly MonthTarget[] = MONTH_TARGETS,
+  budgetCents: number = BUDGET_CENTS,
+  ordinaryOverLevelMinPercent: number = ORDINARY_OVER_LEVEL_MIN_PERCENT,
 ): void {
   const cheapest =
     Math.min(...major.map((expense) => expense.maxCents)) +
     Math.min(...minor.map((expense) => expense.maxCents));
-  const widestGap = floorCents - ordinaryOverMinCents;
+
+  const widestMaxPercent = Math.max(
+    ...monthTargets
+      .filter((target) => target.overBudget)
+      .map((target) => target.maxPercent),
+  );
+  const widestGap = Math.round(
+    ((widestMaxPercent - ordinaryOverLevelMinPercent) / 100) * budgetCents,
+  );
 
   if (cheapest < widestGap) {
     throw new Error(
       `The cheapest major-plus-minor irregular pair tops out at ` +
         `$${cheapest / 100}, which cannot close the $${widestGap / 100} gap ` +
         `an over-budget month may have to. Widen a range, or raise ` +
-        `ORDINARY_OVER_MIN_CENTS.`,
+        `ORDINARY_OVER_LEVEL_MIN_PERCENT.`,
     );
   }
 }

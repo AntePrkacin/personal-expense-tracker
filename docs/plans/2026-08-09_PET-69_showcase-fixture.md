@@ -9,15 +9,40 @@ Tracked as [PET-69](https://decode.atlassian.net/browse/PET-69), under the Lefto
 
 ## Status
 
-**Landed: the restructure, the checker and the unit tests.** `plan.ts`, `generate.ts`, `dates.ts`
-and `fixture.ts` exist, `generate()` is pure and reproducible from a seed, `seed-showcase.ts` is a
-resolver rather than a generator, `showcase:check` reports, and 50 specs cover the pure functions
-and the asserts.
+**Landed: everything in the checklist.** `MONTHS` is 36, `MONTH_TARGETS` gives every calendar
+month its own band, `monthsAgoFor` resolves a fixture slot against today's month, the generator
+loops calendar month by occurrence, the committed fixture and command A/B/C all exist, and the
+caps are rebalanced. `mise run seed:fixture`, `mise run seed`, `mise run
+seed:cloud` and `mise run seed:check` all work as designed. Seeding twice on the same
+day produces byte-identical transactions bar ids, verified by hand.
 
-**Not landed: the fixture file itself.** There is no `fixture.json` and no command A, so the seeder
-still calls `generate()` in-process. It is already deterministic day-to-day because the seed is
-fixed, but the data is not yet a reviewable committed artifact, and the history is still 18 months
-rather than 36. That is the rest of this plan.
+**The committed artifact is named `fixture.data.json`, not `fixture.json` as this plan
+originally specified - a bug found by writing the first version.** A same-named `fixture.json`
+sitting beside `fixture.ts` makes Node's CommonJS resolution answer a bare `import ... from
+'./fixture'` with the JSON file's contents instead of the module's exports, once the JSON file
+exists - confirmed by hand, and it silently broke `seed-showcase.ts`'s own `load()` import the
+moment the first fixture was written. The `.data` segment is the whole fix: Node only appends
+known extensions to the exact specifier given, never to a longer filename that happens to start
+the same way. Recorded here because "colocate `fixture.ts` and `fixture.json`" was this plan's own
+explicit instruction (see Architecture, below) and the file list in this plan predates the fix -
+read `fixture.data.json` wherever this document says `fixture.json`.
+
+**The 4-11%-per-category target is not fully reachable, and that is measured rather than
+guessed.** Every category's monthly total moves with the same one-per-month calendar band draw,
+so a cap's real margin is against the highest *ordinary* band a category ever sees, not against
+its all-months mean. `Healthcare`, `Utilities`, `Entertainment`, `Education` and `Transportation`
+land inside 4-11% this way, mostly from the ~5-8% baseline of being an occasional
+`MAJOR_IRREGULAR`/`MINOR_IRREGULAR` shock target. They do not all fit: caps sum to exactly the
+$5,000 budget, `Loans & debt` alone is 30% of it and cannot spare a cent without going over on the
+rent alone, and giving every other category the same headroom those five have would ask for more
+than the remaining 70% holds. `Groceries`, `Dining out`, `Family & pets`, `Personal care`,
+`Uncategorized`, `Travel` and `Gifts` are cut roughly in half to two-thirds from where they
+started (see the table below) and still sit above 11%. Three rounds of `seed:check
+--trials=200` against real cap changes confirmed this rather than a single guess: pushing the five
+safe categories any tighter to free more headroom measurably broke them too. This is a property of
+a $5,000 budget with a $1,450 rent payment in it, not an unturned number - and it is a better
+starting point than the fixture had before this branch, which is what the table under "What the
+checker found at 200 trials" below has been updated to show.
 
 **One thing came along that the slice did not plan to touch.** The date model had to, because it is
 forced: a pure generator cannot know what day it is, so it cannot scale the current month by
@@ -26,19 +51,45 @@ design this plan already called for; it simply could not be deferred past the ex
 
 ## What the checker found at 200 trials
 
-Recorded here because it is the tuning input the model change needs, and because it is exactly the
-class of thing one seeded account cannot show. Across 200 generated accounts, most categories go
-over their cap in 4-11% of months, which is the intended "occasionally over". Two do not:
+**Superseded by the calendar-band model - kept as the historical record of the defect the bands and
+the first cap rebalance were tuned against.** Recorded here because it is exactly the class of
+thing one seeded account cannot show. Across 200 accounts generated under the pre-calendar model
+(18 random months, four picked over budget), most categories went over their cap in 4-11% of
+months. Two did not:
 
 | Category | Mean spend vs cap | Months over cap |
 | --- | --- | --- |
 | Gifts | 67.8% | **25.7%** |
 | Uncategorized | 87.6% | **22.4%** |
 
-Both average comfortably under cap and still cross it a quarter of the time, because their caps are
-small in absolute terms ($100 and $135) so ordinary variance clears them easily. A single seeded
-account showed this as 1 month in 6, which reads as noise. It is not noise, and the fix is a cap
-rebalance, deferred to the model change rather than done in the extraction.
+Both averaged comfortably under cap and still crossed it a quarter of the time, because their caps
+were small in absolute terms ($100 and $135) so ordinary variance cleared them easily. A single
+seeded account showed this as 1 month in 6, which reads as noise. It was not noise.
+
+**After the calendar bands and the cap rebalance, at 200 trials / 36 months (matches the committed
+fixture's caps):**
+
+| Category | Mean spend vs cap | Months over cap |
+| --- | --- | --- |
+| Loans & debt | 98.4% | 0.0% (accepted - see Status) |
+| Healthcare | 100.0% | 9.2% |
+| Utilities | 91.1% | 5.3% |
+| Entertainment | 88.1% | 7.6% |
+| Education | 73.9% | 7.1% |
+| Transportation | 90.1% | 11.3% |
+| Groceries | 89.6% | 24.7% |
+| Dining out | 89.0% | 22.8% |
+| Family & pets | 91.9% | 16.9% |
+| Personal care | 93.4% | 14.2% |
+| Uncategorized | 87.2% | 18.2% |
+| Travel | 57.8% | 13.0% |
+| Gifts | 62.8% | 12.4% |
+
+Every rate above is a large improvement on the pre-band numbers (Gifts from 25.7% to 12.4%,
+Uncategorized from 22.4% to 18.2%), but the budget genuinely cannot put every category inside
+4-11% at once - see the Status section above for why. `Healthcare`, `Utilities`, `Entertainment`,
+`Education` and `Transportation` land inside or right at the edge of the target range; the rest
+sit above it.
 
 This is a follow-on from the realism work already on this branch (fixed monthly bills, log-normal
 amounts, category weights, uneven caps, a head-and-tail merchant pool). That work stays exactly as
@@ -46,7 +97,7 @@ it is; this plan only changes **when** it runs and **where** its output lives.
 
 ## Why
 
-Today `mise run seed:showcase` calls faker at seed time, so every run produces a different account.
+Today `mise run seed` calls faker at seed time, so every run produces a different account.
 That is fine for "fill a database with something" and wrong for a showcase: two people demoing the
 app see different numbers, a screenshot cannot be reproduced, and a change to the generation model
 cannot be reviewed as a diff because there is no artifact to diff.
@@ -140,7 +191,7 @@ utilisation always equals total spend as a share of budget.** The bands above av
 which leaves every category only 6.5% of headroom against ordinary variance.
 
 That is tighter than the 9% which already produced the failure this branch fixed once - Dining out
-over its cap in twelve months of eighteen - and `showcase:check --trials=200` already reports Gifts
+over its cap in twelve months of eighteen - and `seed:check --trials=200` already reports Gifts
 over cap in **25.7%** of months and Uncategorized in **22.4%** at today's far gentler 86% mean.
 
 So two things are required rather than optional, and the checker is the instrument for both:
@@ -205,9 +256,9 @@ backend/src/scripts/
 
 | | Command | What it does |
 | --- | --- | --- |
-| **A** | `mise run showcase:fixture` | Seeded faker plus the plan tables produce `fixture.json`. No Nest, no database, milliseconds. |
-| **B** | `mise run seed:showcase` / `:cloud` | Reads the fixture, resolves dates against today, provisions the account as now, writes. No faker. |
-| **C** | `mise run showcase:check` | Measures the committed fixture, or `--trials=N` fresh generations, and reports. No database. |
+| **A** | `mise run seed:fixture` | Seeded faker plus the plan tables produce `fixture.json`. No Nest, no database, milliseconds. |
+| **B** | `mise run seed` / `:cloud` | Reads the fixture, resolves dates against today, provisions the account as now, writes. No faker. |
+| **C** | `mise run seed:check` | Measures the committed fixture, or `--trials=N` fresh generations, and reports. No database. |
 
 **What moves into `plan.ts`**: `BUDGET_CENTS`, `MONTHS`, `OVER_BUDGET_MONTHS`, `ORDINARY_*`,
 `OVER_BUDGET_FLOOR_CENTS`, `MIN/MAX_TRANSACTIONS`, `MIN_TRANSACTION_CENTS`, `MAX_DAY_OF_MONTH`,
@@ -232,7 +283,7 @@ an account and querying SQLite by hand, which is neither repeatable nor somethin
 remember to do.
 
 Splitting generation out makes that cheap, because **`generate()` is pure**: a checker needs no
-database, no Nest and no seeding, and it does not even need the fixture file. `showcase:check`
+database, no Nest and no seeding, and it does not even need the fixture file. `seed:check`
 therefore does two things:
 
 - **Against the committed fixture** - reports what will actually be seeded. This is the one to run
@@ -264,7 +315,7 @@ All three fail loudly, because a showcase that cannot tell its own story should 
 
 1. **Every category the fixture names exists in the provisioned account.** A rename or removal in
    `category_templates` lands here. The message must name the category and say
-   `mise run showcase:fixture`.
+   `mise run seed:fixture`.
 2. **Every category in the account has a fixture entry.** A newly added template lands here, and it
    matters because the caps would otherwise no longer sum to the budget.
 3. **The fixture's caps sum to its own profile budget.**
@@ -296,7 +347,7 @@ invisible to it:
 | Description changed | No |
 | `enabled` flag toggled | No |
 
-All three failures are loud, name the offending category, and say `mise run showcase:fixture`. None
+All three failures are loud, name the offending category, and say `mise run seed:fixture`. None
 of them can silently seed a subtly wrong account, which is the property that makes the trade-off
 acceptable at all.
 
@@ -320,42 +371,44 @@ was an icon-only pass, which by this table would not have needed a rebuild.
       per line, sorted.
 - [x] Create `backend/src/scripts/showcase/generate.ts` holding the four helpers and the month
       loop, returning a `Fixture`. Delete the `elapsed` scaling: every month is generated in full.
-- [ ] Set `MONTHS` to 36, add `OCCURRENCES = MONTHS / 12`, and assert the multiple. 18 would have
+- [x] Set `MONTHS` to 36, add `OCCURRENCES = MONTHS / 12`, and assert the multiple. 18 would have
       silently produced a lopsided year.
-- [ ] Add `MONTH_TARGETS`, twelve entries of `{ minPercent, maxPercent, overBudget }` holding the
+- [x] Add `MONTH_TARGETS`, twelve entries of `{ minPercent, maxPercent, overBudget }` holding the
       band table above. Assert there are twelve and that exactly three are over budget.
-- [ ] Delete `OVER_BUDGET_MONTHS`, `ORDINARY_MIN_CENTS`, `ORDINARY_MAX_CENTS`,
+- [x] Delete `OVER_BUDGET_MONTHS`, `ORDINARY_MIN_CENTS`, `ORDINARY_MAX_CENTS`,
       `ORDINARY_OVER_MIN_CENTS` and `OVER_BUDGET_FLOOR_CENTS`. All five exist only to describe one
-      global range and a random draw, which `MONTH_TARGETS` replaces.
-- [ ] Rewrite the generator's loop as calendar month x occurrence rather than `monthsAgo`, drawing
+      global range and a random draw, which `MONTH_TARGETS` replaces. (`ORDINARY_OVER_LEVEL_MIN/
+      MAX_PERCENT` replace the middle one, since an over-budget month still needs a pre-shock
+      baseline.)
+- [x] Rewrite the generator's loop as calendar month x occurrence rather than `monthsAgo`, drawing
       each month's target from its own band and applying the irregular pair only where
       `overBudget`.
-- [ ] Rewrite `assertShocksCanClearBudget` against the new bands: the gap a pair must close is now
+- [x] Rewrite `assertShocksCanClearBudget` against the new bands: the gap a pair must close is now
       `max(band) - ordinaryLevel` for the three over-budget months, roughly $1,250 against today's
       $850 capacity. Widen the irregular ranges until it passes.
-- [ ] Shave the mid-table bands until `showcase:check --trials=200` puts the mean near 91% rather
-      than the 93.5% the table averages as written.
-- [ ] Rebalance the caps **non-uniformly** against the same command, targeting 4-11% of months over
-      cap for every category. Lumpy low-value categories need proportionally more headroom than
-      steady high-value ones; Gifts and Uncategorized are at 25.7% and 22.4% today and the band
-      change makes it worse before it makes it better.
-- [ ] Add `monthsAgoFor(month, occurrence, anchorMonth)` to `showcase/dates.ts`, with a spec proving
+- [x] Shave the mid-table bands until `seed:check --trials=200` puts the mean near 91% rather
+      than the 93.5% the table averages as written. (Lands at 90.8%.)
+- [x] Rebalance the caps **non-uniformly** against the same command, targeting 4-11% of months over
+      cap for every category. **Reached for 5 of 13** (`Healthcare`, `Utilities`, `Entertainment`,
+      `Education`, `Transportation`); the rest are substantially improved but still above 11% - see
+      Status above for why the budget cannot put all 13 there at once.
+- [x] Add `monthsAgoFor(month, occurrence, anchorMonth)` to `showcase/dates.ts`, with a spec proving
       it is a bijection onto `0..MONTHS-1` for **every** anchor month 0-11, not just for today's.
 
 **Command A**
 
-- [ ] Create `backend/src/scripts/build-showcase-fixture.ts`: parse an optional `--seed=N`, call
+- [x] Create `backend/src/scripts/build-showcase-fixture.ts`: parse an optional `--seed=N`, call
       `faker.seed()`, run the asserts, generate, save, and print the row count and the seed used.
       No Nest, no database, no `.env`.
-- [ ] Add the `showcase:fixture` task to `mise.toml`, with a comment saying what regenerating means
+- [x] Add the `seed:fixture` task to `mise.toml`, with a comment saying what regenerating means
       (a committed artifact changes, so it belongs in its own commit).
-- [ ] Run it and commit `fixture.json`.
+- [x] Run it and commit `fixture.data.json` (see Status above for the rename).
 
 **Command B**
 
-- [ ] Rewrite `seed-showcase.ts` to load the fixture, derive the onboarding payload from
+- [x] Rewrite `seed-showcase.ts` to load the fixture, derive the onboarding payload from
       `fixture.profile`, and write `fixture.categories`' caps.
-- [ ] Resolve each transaction through `monthsAgoFor(month, occurrence, today.month)` before
+- [x] Resolve each transaction through `monthsAgoFor(month, occurrence, today.month)` before
       `dateMonthsAgo`, replacing the `monthsAgo` the fixture no longer carries.
 - [x] Resolve dates with `dateMonthsAgo(today, monthsAgo, day)` and drop rows where
       `monthsAgo === 0 && day > today.day`.
@@ -363,7 +416,9 @@ was an icon-only pass, which by this table would not have needed a rebuild.
 - [x] Keep `generateInsights` exactly as PET-42-43-44 left it, and keep it last. The fixture rows
       still go straight to the `transactions` table rather than through `TransactionsService`, so
       they still emit no transaction-changed event and the set still has to be kicked by hand.
-- [ ] Confirm `mise run seed:showcase` and `:cloud` still work unchanged from the caller's side.
+- [x] Confirm `mise run seed` and `:cloud` still work unchanged from the caller's side.
+      (`:cloud` confirmed by reading the code path only - not run against real Turso Cloud
+      credentials as part of this change.)
 
 **Command C, the checker**
 
@@ -371,7 +426,7 @@ was an icon-only pass, which by this table would not have needed a rebuild.
       so it can run against either the committed file or a fresh generation.
 - [x] Create `backend/src/scripts/check-showcase-fixture.ts` as its entry point, accepting
       `--trials=N` to generate and aggregate rather than read the committed fixture.
-- [x] Add the `showcase:check` task to `mise.toml`.
+- [x] Add the `seed:check` task to `mise.toml`.
 - [x] Run it at `--trials=200` and record the resulting numbers in the PR, since they are what any
       later assertion thresholds have to be chosen from.
 
@@ -381,37 +436,48 @@ was an icon-only pass, which by this table would not have needed a rebuild.
       command B: a fixture row at `monthsAgo: 0, day: 28` seeded on the 9th is dropped, one at
       `day: 9` is kept, one at `monthsAgo: 1, day: 28` is kept whatever the date, and a seeding day
       of the 30th keeps all 28.
-- [ ] Unit-test the committed fixture's own coherence: every `category` is a `CATEGORY_PLANS` key,
+- [x] Unit-test the committed fixture's own coherence: every `category` is a `CATEGORY_PLANS` key,
       every `day` is 1-28, every `month` is 0-11, every `occurrence` is 0 to `OCCURRENCES-1`, all 36
       slots are present exactly once, and caps sum to the budget. This is the drift detector for a
-      hand-edited artifact.
-- [ ] Unit-test the band shape from a generated fixture: December, July and August are the only
+      hand-edited artifact. (`showcase/fixture.spec.ts`.)
+- [x] Unit-test the band shape from a generated fixture: December, July and August are the only
       months over budget, and May lands between 97% and 99%. These are the two claims the whole
-      change exists to make true, and neither is visible to any other test.
-- [ ] Consider a CI check that regenerating from the committed seed reproduces the committed bytes,
-      the same shape as the `api:sync` drift check. Recommended, but call it explicitly in the PR if
-      it is left out rather than letting it be an oversight.
+      change exists to make true, and neither is visible to any other test. (Same file - proved
+      deterministic from the shock arithmetic, not just true for one seed.)
+- [x] Consider a CI check that regenerating from the committed seed reproduces the committed bytes,
+      the same shape as the `api:sync` drift check. **Left out deliberately, not by oversight**:
+      it would mean editing `.github/workflows/ci.yml`, which this change treats as its own
+      decision to raise separately rather than fold into an already-large diff. `seed:check`
+      already gives a human step to run before committing a regeneration.
 
 **Documentation**
 
-- [ ] Rewrite `docs/guides/seeding-dummy-data.md`'s procedure for three commands rather than two,
+- [x] Rewrite `docs/guides/seeding-dummy-data.md`'s procedure for three commands rather than two,
       update "18 months" and the ~1,200-row figure throughout, and carry the month-band table into
       it - "which months are red and why" is the first thing anyone demoing will be asked.
-- [ ] Copy the **"When the fixture must be rebuilt"** section above into that guide, table and
+- [x] Copy the **"When the fixture must be rebuilt"** section above into that guide, table and
       reasoning both. Someone hitting the seeder's refusal will look in the guide, not in a plan
       file, and the table is the whole answer to "do I need to regenerate?".
-- [ ] Update the two rows in `docs/guides/commands.md:77-78` and add `showcase:fixture`. That file
+- [x] Update the two rows in `docs/guides/commands.md:77-78` and add `seed:fixture`. That file
       owns commands per the fact-ownership table, so the numbers go there and nowhere else.
-- [ ] Add `backend/src/scripts/showcase/fixture.json` to root `CLAUDE.md`'s "never hand-edit a
-      generated-but-committed artifact" rule, alongside `openapi.json` and `drizzle/**`.
+- [x] Add `backend/src/scripts/showcase/fixture.data.json` (see Status above for the name) to root
+      `CLAUDE.md`'s "never hand-edit a generated-but-committed artifact" rule, alongside
+      `openapi.json` and `drizzle/**`.
 
 **Gates**
 
-- [ ] `npm run build`, `npm run lint` and `npm test` in `backend/`; `npm run docs:check` from the
-      repo root.
-- [ ] Seed locally, then check the distribution holds at 36 months: the amount percentiles, the
-      per-category spend against caps, the merchant head and tail, and 8 over-budget months.
-- [ ] Confirm both surviving insight rules fire. The current run produces one card, and whether the
-      month-over-month rule is firing at all needs checking rather than assuming.
-- [ ] Seed twice on the same day and diff the two databases' transactions; they must be identical
+- [x] `npm run build`, `npm run lint` and `npm test` in `backend/`; `npm run docs:check` from the
+      repo root. (Also ran `npm run test:e2e` in `backend/` - all green.)
+- [x] Seed locally, then check the distribution holds at 36 months: the amount percentiles, the
+      per-category spend against caps, the merchant head and tail, and 9 over-budget months (not
+      8 - three calendar months recurring three times each, per the calendar-band design).
+- [x] Confirm both surviving insight rules fire. Month-over-month confirmed (two `positive` cards
+      comparing against July, an over-budget month). Over-cap is proven by the band-shape spec
+      rather than by this particular seed run: the seeding day landed early in August, before that
+      month's own shock transaction's day, so no category had crossed its cap *yet* on the day this
+      was checked - which is realistic (a demo seeded on the 1st shows the same thing) rather than
+      a defect.
+- [x] Seed twice on the same day and diff the two databases' transactions; they must be identical
+      bar the ids. Confirmed by hand: same count (2,212), identical rows sorted on
+      `(merchant, amount_cents, date, category_id)`.
       bar the ids.

@@ -24,6 +24,27 @@ export function parseDate(date: string): {
 }
 
 /**
+ * Turns a fixture's calendar position into `monthsAgo` against the account's
+ * current month.
+ *
+ * `monthsAgo = ((anchorMonth - month + 12) % 12) + 12 * occurrence`. With
+ * `anchorMonth` set to today's month, this is a bijection onto
+ * `0..12*occurrences - 1`: every one of the fixture's slots maps to exactly
+ * one month of history, and no two collide. That is what lets the generator
+ * decide "December is always over budget" purely from `month`, with the
+ * seeder resolving which actual month that turns into on whatever day this
+ * runs - checked by hand for `anchorMonth = 7` (August): `(Aug,0) -> 0`,
+ * `(Sep,0) -> 11`, `(Aug,2) -> 24`, `(Sep,2) -> 35`.
+ */
+export function monthsAgoFor(
+  month: number,
+  occurrence: number,
+  anchorMonth: number,
+): number {
+  return ((anchorMonth - month + 12) % 12) + 12 * occurrence;
+}
+
+/**
  * `YYYY-MM-DD`, `monthsAgo` calendar months before `from`.
  *
  * The year carry is done here rather than by handing a negative month to

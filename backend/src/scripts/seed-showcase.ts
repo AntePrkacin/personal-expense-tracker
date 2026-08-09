@@ -17,15 +17,20 @@ import { categories, profile, transactions } from '../database/user/schema';
 import { InsightsService } from '../insights/insights.service';
 import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
-import { generate } from './showcase/generate';
-import { dateMonthsAgo, hasHappened, parseDate } from './showcase/dates';
+import {
+  dateMonthsAgo,
+  hasHappened,
+  monthsAgoFor,
+  parseDate,
+} from './showcase/dates';
 import { MAX_DAY_OF_MONTH } from './showcase/plan';
+import { load } from './showcase/fixture';
 import type { Fixture } from './showcase/fixture';
 
 /**
  * Fills one account with plausible spending, so a demo has something to show.
- * Run it through `mise run seed:showcase` (local files) or
- * `mise run seed:showcase:cloud` (Turso Cloud); `docs/guides/seeding-dummy-data.md`
+ * Run it through `mise run seed` (local files) or
+ * `mise run seed:cloud` (Turso Cloud); `docs/guides/seeding-dummy-data.md`
  * is the procedure.
  *
  * It boots the real AppModule and goes through the real services rather than
@@ -35,11 +40,14 @@ import type { Fixture } from './showcase/fixture';
  * from that the first time provisioning changed.
  *
  * **The data itself is no longer invented here.** PET-69 split generation out
- * into `showcase/generate.ts`, which is pure and knows nothing about dates or
- * databases; this file resolves what it produces against today and writes it.
- * The remaining PET-69 work is to persist that output as a committed
- * `fixture.json` and read it here instead of generating on the fly, which is
- * what makes a seeded account reproducible rather than merely well-shaped.
+ * into `showcase/generate.ts` and its output into the committed
+ * `showcase/fixture.data.json`, both pure and knowing nothing about dates or
+ * databases. This file only resolves that fixture against today - each
+ * transaction's `(month, occurrence)` becomes a `monthsAgo` through
+ * `monthsAgoFor`, then a date through `dateMonthsAgo` - and writes the result,
+ * which is what makes a seeded account reproducible rather than merely
+ * well-shaped: two seeds on the same day produce byte-identical transactions,
+ * ids aside.
  *
  * Re-running is safe and idempotent: an existing user is reused, the profile is
  * re-asserted, and the transactions are replaced wholesale inside one
@@ -57,15 +65,6 @@ import type { Fixture } from './showcase/fixture';
  * from the terminal that has the logs.
  */
 const SHOWCASE_EMAIL = 'dummy@spendifico.eu';
-
-/**
- * The faker seed the account is generated from.
- *
- * Fixed, so two runs on the same day already produce the same account even
- * before the fixture file exists. Once PET-69 commits `fixture.json` this
- * becomes provenance rather than an input.
- */
-const GENERATION_SEED = 20260809;
 
 /**
  * How long the seed waits for the insight run it starts, as attempts times an
@@ -233,7 +232,7 @@ async function seed(app: INestApplicationContext): Promise<void> {
   const config = app.get(ConfigService);
   const userDatabaseService = app.get(UserDatabaseService);
 
-  const fixture = generate(GENERATION_SEED);
+  const fixture = load();
 
   const userId = await ensureShowcaseUser(app, fixture);
   const userDb = await userDatabaseService.getUserDb(userId);
@@ -271,7 +270,18 @@ async function seed(app: INestApplicationContext): Promise<void> {
   // computes - all of which resolve their window against APP_TIMEZONE.
   const today = parseDate(todayIn(config.get<string>('APP_TIMEZONE')!));
 
+  // The fixture carries no monthsAgo - only the calendar position
+  // (month, occurrence) `MONTH_TARGETS` was drawn against - so it is resolved
+  // here, against whichever month this run actually lands in.
   const rows = fixture.transactions
+    .map((transaction) => ({
+      ...transaction,
+      monthsAgo: monthsAgoFor(
+        transaction.month,
+        transaction.occurrence,
+        today.month,
+      ),
+    }))
     .filter((transaction) => hasHappened(transaction, today, MAX_DAY_OF_MONTH))
     .map((transaction) => ({
       id: newId(),
