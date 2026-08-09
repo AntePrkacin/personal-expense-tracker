@@ -5,7 +5,7 @@ import { SEED_MODE } from './seed-showcase.env';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import type { INestApplicationContext } from '@nestjs/common';
 import { AppModule } from '../app.module';
 import { LoginTokenService } from '../auth/login-token.service';
@@ -68,7 +68,7 @@ const SHOWCASE_EMAIL = 'dummy@spendifico.eu';
 
 /**
  * How long the seed waits for the insight run it starts, as attempts times an
- * interval - roughly 15 seconds.
+ * interval.
  *
  * Generously above the sub-second a rule-based run really takes, because the
  * cost of waiting too long is a slower script and the cost of giving up too
@@ -196,9 +196,12 @@ async function ensureShowcaseUser(
  * stop summing to the budget and the allocation summary reports an unallocated
  * remainder the demo never meant to show.
  *
- * Either way the cause is the same - `category_templates` changed under a
- * fixture generated before it - so the message says which category and what to
- * do about it rather than leaving the reader to work it out from a missing row.
+ * The usual cause is `category_templates` changing under a fixture generated
+ * before it; the other is this account having a category deleted through the
+ * API, which the tombstone filter on the read below turns into the same
+ * missing-category failure rather than a silently dead id. So the message says
+ * which category, which cause, and what actually fixes it - regenerating does
+ * not, since the fixture's categories come from a hand-written table.
  */
 function assertCategoriesMatch(
   fixture: Fixture,
@@ -224,7 +227,12 @@ function assertCategoriesMatch(
   throw new Error(
     `The showcase fixture and the category templates disagree: ` +
       `${problems.join('; ')}. A category template has been added, renamed or ` +
-      `removed since this data was generated. Regenerate it.`,
+      `removed since this data was generated - or this account had a category ` +
+      `deleted through the API. Regenerating alone will not fix it: the ` +
+      `fixture's categories come from CATEGORY_PLANS in ` +
+      `src/scripts/showcase/plan.ts, so add, rename or remove the row there ` +
+      `first (rebalancing spendPercent, countPercent and capCents until ` +
+      `assertPlanIsCoherent passes), then run \`mise run seed:fixture\`.`,
   );
 }
 
@@ -249,7 +257,15 @@ async function seed(app: INestApplicationContext): Promise<void> {
     })
     .where(eq(profile.id, userId));
 
-  const allCategories = await userDb.select().from(categories);
+  // Tombstones filtered, like every other read in this codebase, and here it is
+  // load-bearing rather than conventional: a category deleted through the API
+  // is still a row, so an unfiltered read would satisfy the assert below and
+  // then bind that name to the dead id - filing every transaction for it under
+  // a category each of those reads discards.
+  const allCategories = await userDb
+    .select()
+    .from(categories)
+    .where(isNull(categories.deletedAt));
   assertCategoriesMatch(fixture, allCategories);
 
   const idByName = new Map(allCategories.map((c) => [c.name, c.id]));
@@ -325,9 +341,9 @@ async function seed(app: INestApplicationContext): Promise<void> {
  * returns as soon as the placeholder `generating` row is committed and floats the
  * real work, while `bootstrap()`'s `finally` closes every replica underneath it.
  * The account would be left holding a bare `generating` row: a wedged skeleton
- * screen for the five minutes until the read's staleness cutoff reclaims it, and
- * no insights after that either. So this polls `getSet` until the state settles,
- * which is the only completion signal the service's public surface offers.
+ * screen until the read's staleness cutoff reclaims it, and no insights after
+ * that either. So this polls `getSet` until the state settles, which is the
+ * only completion signal the service's public surface offers.
  */
 async function generateInsights(
   app: INestApplicationContext,
@@ -335,7 +351,23 @@ async function generateInsights(
 ): Promise<void> {
   const insights = app.get(InsightsService);
 
-  await insights.generate(userId);
+  try {
+    await insights.generate(userId);
+  } catch (error) {
+    // Guarded for the same reason the loop below warns rather than throws.
+    // `generate()` answers `ConflictException` when a `generating` row younger
+    // than the staleness cutoff exists, which is exactly what an interrupted
+    // previous run leaves behind. Unguarded, re-running the seed inside that
+    // window lets the exception escape to `bootstrap`, printing "Seeding
+    // failed." and exiting non-zero **after** every transaction has already
+    // been written - reporting a successful seed as a failure.
+    console.warn(
+      `Insight generation for ${SHOWCASE_EMAIL} could not be started: ` +
+        `${error instanceof Error ? error.message : String(error)} ` +
+        `The transactions are seeded; regenerate from the Insights page.`,
+    );
+    return;
+  }
 
   // Rule-based generation settles in well under a second; the ceiling is a
   // wedged-run guard, not an expected wait.

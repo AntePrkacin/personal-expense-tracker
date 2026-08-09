@@ -765,20 +765,3 @@ export function assertNoMerchantCollisions(
     );
   }
 }
-
-/** One plan by category name, or a failure that says which one is missing. */
-export function requirePlan(name: string): CategoryPlan {
-  const plan = CATEGORY_PLANS[name];
-
-  if (!plan) {
-    throw new Error(
-      `The showcase seed has no plan for the "${name}" category. Either a ` +
-        `category template was added or renamed, or this account's categories ` +
-        `were edited through the API. Add a row to CATEGORY_PLANS in ` +
-        `src/scripts/seed-showcase.ts (and rebalance the percentages and caps, ` +
-        `which must still sum to 100, 100 and the budget).`,
-    );
-  }
-
-  return plan;
-}

@@ -107,10 +107,10 @@ function sortedTransactions(
 /**
  * Writes a fixture as one transaction per line.
  *
- * `JSON.stringify(fixture, null, 2)` turns ~2,200 transactions into ~13,000
- * lines of nested indentation, where a regeneration diff has to be read
- * bracket by bracket. One transaction per line keeps the diff at roughly one
- * line per changed row instead.
+ * `JSON.stringify(fixture, null, 2)` spreads every transaction over six lines
+ * of nested indentation, so a regeneration diff has to be read bracket by
+ * bracket. One transaction per line keeps it at roughly one line per changed
+ * row instead.
  */
 export function save(fixture: Fixture, path: string = FIXTURE_PATH): void {
   const transactions = sortedTransactions(fixture.transactions);

@@ -171,8 +171,8 @@ run = "scripts/deploy-backend.sh"
 
 # Two tasks rather than one with a flag, because the two targets are not
 # equally forgiving: a mistaken local run writes a gitignored SQLite file, a
-# mistaken cloud run creates a real database and 1,200-odd rows in the shared
-# Turso organization. Reaching the cloud has to be typed out.
+# mistaken cloud run creates a real database and thousands of rows in the
+# shared Turso organization. Reaching the cloud has to be typed out.
 [tasks."seed"]
 description = "Seed the showcase user into the local SQLite files"
 dir = "backend"

@@ -39,7 +39,7 @@ mise run seed:cloud   # Turso Cloud, using backend/.env
 
 Local is the default and cloud has to be typed out, because the two are not equally forgiving. A
 mistaken local run writes a gitignored SQLite file. A mistaken cloud run creates a real database
-in the shared Turso organization and pushes about 2,200 rows into it.
+in the shared Turso organization and pushes thousands of rows into it.
 
 `seed` ignores `backend/.env` entirely, the same way the e2e suite and the OpenAPI
 emitter do. That is deliberate: having cloud credentials in `.env` must not turn a local seed into
@@ -165,11 +165,11 @@ rather than a plain file, which changes what is locked and nothing about the out
   a bill cannot also draw a second charge at an unrelated amount under the same name - a `Fiberlink`
   at $23.40 beside the real $55 one. The seed fails loudly if an edit puts one of these merchants
   back into the pool.
-- **About 95 merchants**, hand-written per category rather than generated, with weights that give
-  each category a few regulars and a long tail - the coffee shop turns up about 3 times a month and
-  the main supermarket about 2.5, while a dozen names appear once or twice in the whole 36 months.
-- **About 2,200 transactions** over 36 months - 55 to 72 per month, so the exact total differs by
-  seed. Roughly 3% land on `Uncategorized`.
+- **Merchants are hand-written per category** rather than generated, with weights that give each
+  category a few regulars and a long tail - the coffee shop turns up about 3 times a month and the
+  main supermarket about 2.5, while a good many names appear once or twice in the whole 36 months.
+- **55 to 72 transactions a month** over 36 months, so the exact total differs by seed. Roughly 3%
+  land on `Uncategorized`. `mise run seed:fixture` prints the total it wrote.
 - **Amounts drawn log-normally, per category**, so the spread looks like real spending rather than
   like arithmetic: a median near $35, roughly 9% of transactions under $10 and roughly 3% over
   $200, with each category's typical size set by its own share of spend against its share of the
@@ -245,11 +245,23 @@ invisible to it:
 | Colour changed | No |
 | Icon changed | No |
 | Description changed | No |
-| `enabled` flag toggled | No |
+| `enabled` flag toggled | **Yes, for an account that does not exist yet** - see below |
 
-All three failures are loud, name the offending category, and say to run `mise run
-seed:fixture`. None of them can silently seed a subtly wrong account, which is the property
-that makes the trade-off acceptable at all.
+The `enabled` row is the subtle one. `GET /api/templates/categories` serves only enabled
+templates, and that is the list the seed hands to onboarding - so a template disabled before the
+showcase account is first provisioned is never seeded as a category, and the seeder refuses. An
+account provisioned earlier already has the category and is unaffected, which is why re-running
+against an existing showcase user keeps working while a fresh one fails.
+
+Every one of these failures is loud and names the offending category. None of them can silently
+seed a subtly wrong account, which is the property that makes the trade-off acceptable at all.
+
+**Regenerating alone does not fix any of them**, and the error says so. The fixture's categories
+come from the hand-written `CATEGORY_PLANS` table in
+`backend/src/scripts/showcase/plan.ts`, so `mise run seed:fixture` reproduces exactly the same
+names and the next run refuses identically. Edit that table first - add, rename or remove the
+row, then rebalance `spendPercent`, `countPercent` and `capCents` until `assertPlanIsCoherent`
+passes - and regenerate after.
 
 To rebuild: run `mise run seed:fixture`, then `mise run seed:check --trials=200` against
 the result before committing - the fixture command has no opinion on whether the numbers it

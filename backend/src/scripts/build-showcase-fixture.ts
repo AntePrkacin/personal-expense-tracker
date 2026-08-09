@@ -23,11 +23,16 @@ function parseSeed(argv: readonly string[]): number {
     return DEFAULT_SEED;
   }
 
-  const seed = Number(flag.slice('--seed='.length));
-  if (!Number.isInteger(seed)) {
+  // Tested on the text, not on the parsed number, because this command
+  // overwrites a committed artifact: `Number('')` is 0 and `Number('2e7')` is
+  // an integer, so both would pass `Number.isInteger` and regenerate the
+  // fixture against a seed nobody asked for, with the wrong value visible only
+  // in the success line.
+  const raw = flag.slice('--seed='.length);
+  if (!/^-?\d+$/.test(raw)) {
     throw new Error(`--seed must be an integer, got "${flag}".`);
   }
-  return seed;
+  return Number(raw);
 }
 
 function main(): void {
