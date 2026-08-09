@@ -1483,6 +1483,84 @@ deliberate departure worth naming: PET-38's edit modal opens this confirmation o
 come down with a successful delete, which is a caller one ticket away with a concrete job rather than
 the forecast `TransactionsTable`'s unreachable `pending` prop was.
 
+**PET-38 built that caller, and `onDeleted` is the one prediction in this file that landed exactly as
+written.** `EditCategoryProvider` passes it, a delete that really removed the category takes the form
+down with the confirmation, and a cancelled or failed one leaves the form exactly as it was - which
+is why the callback is on the success arm rather than on `onClose`.
+
+**The Edit modal is a second component rather than a mode on `AddCategoryModal`**, which is the call
+`(app)/EditTransactionModal.tsx` made about its own pair and which holds here for the same reasons.
+The fields, their order, their validation and the currency caret are all shared through
+`categoryForm.ts` and the `ui/` primitives; what is not shared is the diff, the footer's third
+control, the prefill, five of the messages, and the fact that submitting an unchanged form is a
+legitimate no-op. A `mode` prop would carry all of that as branches inside one file.
+
+**Its provider is `DeleteCategoryProvider`'s shape, and this is the second use of an argument that
+file wrote for one consumer.** Every clause transfers unchanged - a modal owned by each card sits
+inside the card being edited, where the success path's `router.refresh()` can unmount it out from
+under its own `close()`, and a modal on `(app)/layout.tsx` would put a category form on all four
+routes to serve one screen. What this feature adds is the evidence: that file's criterion for
+screen-scoped is "N triggers on one route", and it had one kind of trigger where this has **two** - a
+kebab on every non-fallback card and a "Set limit" banner on every uncapped one - so a category with
+no cap draws two ways into the same modal. **The nesting order is a requirement rather than a
+tidiness**: the footer's "Delete category" is a `useDeleteCategory()` call, so the edit provider sits
+inside the delete one.
+
+**`toUpdateCategoryBody` is `toUpdateTransactionBody` with two differences**, both worth knowing
+before touching either. **A blank cap sends `null`**, which is the only way a capped category becomes
+uncapped and the whole reason `isCapValid` accepts a blank field - note the asymmetry with
+`toCreateCategoryBody`, which _omits_ a blank cap, because `CreateCategoryDto` reads absent as "no
+cap" and does not accept `null` at all. The two rules look inconsistent and are one rule stated
+against two DTOs. And **`color` and `icon` are skipped while they are `''`** rather than the function
+taking a narrowed `ChosenCategoryValues`: `''` is reachable here, for `icon` through the ordinary
+case of a stored row that carries none, since `CategoryResponseDto.icon` is nullable while
+`UpdateCategoryDto.icon` documents itself as not clearable.
+
+**A failed palette read does not block a save, and that is the one place this form must not copy
+`AddCategoryModal`.** That modal guards submission on `hasChosenMarks` because a create has no colour
+until the palette arrives. An edit has one, prefilled from the row, and both pickers are `disabled`
+when the palette is unusable so no rejectable value can reach the body - so the name and the budget
+stay saveable and the line says which two fields are affected rather than implying the modal is
+broken. This is the identical finding a review made about `EditTransactionModal`'s `categoriesFailed`
+guard, which returned before any state changed and made Save do nothing observable.
+
+**The `Uncategorized` card draws no kebab and no banner, which is where AC1 and AC6 both ended up.**
+Both actions behind a kebab are refused for that row - `DELETE` answers 409 because it is where every
+other deletion sends its transactions, and `PATCH` answers 409 for a rename because its name is fixed
+
+- and PET-39 had already hidden Delete, leaving a kebab holding one disabled "Edit". Offering a live
+  Edit whose Name field alone was greyed out would have been a third state to explain on the one
+  category nobody asked for, so nothing on that card is drawn that cannot be acted on. **The cost is
+  stated rather than hidden**: `Uncategorized` can now be neither renamed nor capped from the UI, though
+  the API accepts a cap on it, and `docs/TODO.md` records that. Both 409s stay classified in
+  `lib/deleteCategory.ts` and `lib/updateCategory.ts`, because a control that is not drawn is not an
+  enforcement. Deciding it in `CategoryCard` rather than inside the menu is what let `CategoryCardMenu`
+  drop its own `isFallback` guard: a component only ever mounted for a category with both actions has
+  nothing left to branch on.
+
+**"Set limit" is live and "Allocate" is not, so the symmetry `CardBanner` shipped with is gone.**
+That component grew an optional `onAction`: with a handler the button is live, without one it keeps
+the `aria-disabled` treatment, and PET-39's `aria-disabled:` variants paid off exactly as their
+comment promised - one prop decides both halves and the class string never moved. The handler cannot
+come from `CategoryCard`, which is a Server Component, so `SetLimitBanner.tsx` is a one-purpose
+client wrapper, the same smallest-wrapper rule `SidebarNav` and `TrendChart` follow. **"Allocate"
+stays inert deliberately**: no frame draws where it goes, so it remains the screen's one control
+announcing its own unavailability, and `frontend/CLAUDE.md`'s gap list still carries it.
+
+**Focus opens on the field the trigger implies**, which is the one thing the two entry points
+disagree about. The kebab's "Edit" is an unspecific invitation and focuses Name; "Set limit" sits on
+a banner reading "No limit set for this category", which is a request to type a number, so it focuses
+the budget. Frame 21 draws the budget field with a focus ring and settles neither case, being a
+mid-fill snapshot rather than an on-open state - the same reading `AddCategoryModal` gives frame 19.
+
+**All three of this screen's Server Actions are injectable now, and the third closes a gap
+`docs/TODO.md` had nominated this ticket for.** Storybook's Vite build has no notion of
+`'use server'`, so it bundles each action as an ordinary module and a press reaches `cookies()` from
+`next/headers` in the browser. `remove` was fixed at PET-39 after a review found the seam unreachable
+from the story; `update` ships with one; and `create` is threaded to `AddCategoryButton` rather than
+to a provider, because that component owns its own modal. `CategoriesScreen.stories.tsx` defaults all
+three in its shared `Frame`, so a story added later cannot forget one.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

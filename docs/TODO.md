@@ -1556,6 +1556,54 @@ on top of page 1's reading. Worth a designer's answer alongside the copy A29 alr
 feature, and worth knowing that the desktop path has only the augmenting control at all, since
 the camera is `pointer-fine:hidden`.
 
+### `CardBanner`'s dark theme measures 4.13:1, below the AA floor
+
+PET-38's browser walk measured the accent strip both category cards and the summary card sit on,
+compositing the text over the background and reading the pixel back rather than trusting
+`getComputedStyle`. Light measures **6.75:1** and passes. **Dark measures 4.13:1**, where AA wants
+4.5:1 for text this size - the strip is `bg-primary` and everything on it is `text-primary-content`,
+which is stock daisyUI, so nothing in this repo chose those two values.
+
+**The action and the sentence beside it measure identically, on both cards**, which is what says the
+finding belongs to the strip rather than to any one control. It has been there since PET-36 built
+`CardBanner`; PET-38 only made one of its buttons live, and if anything improved that button by
+dropping the `opacity-60` the inert state carried.
+
+Not fixed there because both available fixes are decisions rather than refactors. Re-theming
+`primary-content` is exactly what `frontend/CLAUDE.md` forbids - it would repaint every category
+colour and both preview artifacts would need re-measuring. Changing the strip's colour pair is a
+design call on a component the team's Claude Design system supplied, whose own note says the tinted
+variant "was too quiet to notice". The numbers are recorded here so whoever picks one starts from a
+measurement instead of an impression, and so a theme change is seen to move them.
+
+### `Uncategorized` cannot be renamed or capped from the UI
+
+PET-38 gave the fallback card no kebab and no banner, because `PATCH /api/categories/:id` refuses to
+rename that row and `DELETE` refuses to remove it, so a menu on it held nothing operable. The API
+does accept a **cap** on it, and there is now no control anywhere that sets one.
+
+Deliberate, and the alternatives were weighed: a menu holding a single Edit whose Name field alone
+was greyed out is three explanations deep on the one category nobody asked for, and a live "Set
+limit" on a card with no other affordance would have made Edit reachable one way and not the other.
+What would change the call is a reason for a user to cap the fallback - which is really a question
+about whether unfiled spending should count against a budget line, and nothing in the design asks it
+yet. Both 409s stay classified in `lib/deleteCategory.ts` and `lib/updateCategory.ts` regardless,
+because a control that is not drawn is not an enforcement.
+
+### A stored colour or icon the palette no longer offers reads as "Select…"
+
+`GET /api/templates/palette` returns `enabled` rows only, so an admin disabling a token a user
+already has produces a category whose mark matches no row in either picker - and both derive their
+trigger label by finding that row. The Edit modal therefore shows "Select…" beside a swatch that is
+painting the correct colour, which reads as "unset" for a value that is very much set.
+
+Nothing is lost by it: `toUpdateCategoryBody` omits a mark that was not touched, so saving any other
+field leaves the stored token alone, and `categoryColour.ts` supplies the swatch and the glyph
+independently of the palette. What is missing is a **label** for a token the palette declines to
+describe, which is a contract question - either the palette carries disabled rows with a flag, or
+the response for a single category carries its own labels - rather than something either picker can
+answer locally. The same gap exists in `IconSelect`.
+
 ## Operational
 
 ### Unverified registrations accumulate, and hold their address
@@ -2242,25 +2290,6 @@ be told they are deliberate rather than drift: it says `Uncategorized` where CED
 it scopes the count to "this month" where CED-9 states it as a total. Both are recorded on the issue
 with their reasoning.
 
-### `Screens/13 Categories` can still reach the real create action in the browser
-
-Storybook's Vite build has no notion of `'use server'`, so it bundles `lib/createCategory.ts` as an
-ordinary module. `AddCategoryButton` imports the create action directly and takes no prop for it, so
-that story cannot inject a stub: pressing Save there reaches `cookies()` from `next/headers`, which
-`.storybook/main.ts` aliases to the framework's browser-safe mock rather than to anything that works.
-
-**The delete half of this is fixed and is the worked example of the fix.** PET-39 first shipped the
-same defect from the other direction - `DeleteCategoryProvider` had an injectable `remove` and
-`CategoriesScreen` constructed the provider itself, so the seam existed with no path from the story
-to reach it, which is worse than not having one because the prop's comment claimed otherwise. A code
-review caught it, `CategoriesScreen` now takes the action as an optional prop and threads it, and
-`CategoriesScreen.stories.tsx` defaults it in its shared `Frame` so a story added later cannot forget
-it. The create path wants exactly the same treatment: a prop on `AddCategoryButton`, defaulted to the
-real action, passed a stub by the story.
-
-Worth doing with PET-38 rather than on its own, since that ticket adds a third action to the same
-screen and would otherwise ship the third copy of the same gap.
-
 ### The two kebab glyphs are toned differently, and nobody decided that
 
 `transactions/TransactionRowMenu.tsx` draws its `EllipsisVertical` with `text-base-content/40` and
@@ -2275,7 +2304,8 @@ collapse to none.
 
 Not resolved in that PR on purpose: either value is a visible change to one of the two screens, and
 picking one to match the other is a design call rather than a refactor. Frame 10 and frame 18 are
-what to hold side by side. Worth doing with PET-38, which is already touching that menu.
+what to hold side by side. PET-38 touched that menu and deliberately left this alone for the same
+reason: making Edit live changed no glyph, and choosing a tone is still the designer's.
 
 ### Neither delete dialog's stories are in a Jest story smoke harness
 

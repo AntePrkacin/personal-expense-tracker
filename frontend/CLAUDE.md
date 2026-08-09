@@ -510,6 +510,17 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   why they are a different claim from the Dashboard's month select. The **fallback card offers no
   Delete at all** (AC6), which until PET-38 lands leaves that one card with a menu holding nothing
   operable.
+  **PET-38 built the Edit modal, so two of those three are live and the paragraph above is dated.**
+  The menu's "Edit" opens frame 21 prefilled from the card, and every uncapped card's "Set limit"
+  opens the same modal focused on its budget field - which makes the Categories tab the first screen
+  in the app carrying create, edit and delete for one resource. **The summary card's "Allocate" is
+  the one that stays inert**, because no frame draws where it goes, so it is now the only control on
+  that screen announcing `aria-disabled`. The sentence about the fallback card is history in a
+  stronger sense than "resolved": that card now draws **no kebab and no banner at all**, because
+  `PATCH` refuses to rename it just as `DELETE` refuses to remove it, so nothing on it is drawn that
+  cannot be acted on. What that costs belongs on this list rather than only in the plan -
+  **`Uncategorized` can be neither renamed nor capped from the UI**, though the API accepts a cap on
+  it, and `docs/TODO.md` carries the reasoning.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session
@@ -611,3 +622,16 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   forever - the same argument the `missing` arm already carries next door. Everything else about it is
   the transaction delete's and unchanged: an id and nothing else, a result rather than a throw, and no
   `redirect()`. Every **profile** write is still unbuilt.
+  **PET-38 added the seventh, `lib/updateCategory.ts`, so "every category write is unbuilt" is now
+  true of none of them** and this bullet's lead-in is down to the profile alone. It publishes
+  **five** reasons, which is `updateTransaction`'s count reached by a different route: that one
+  splits an ambiguous 404 in two, and this one has a 409 the create does not. `missing` is
+  unambiguous here where the transaction patch has to hedge, because this body references nothing by
+  id - it carries a name, a cap, a colour token, an icon name and a note - so the copy can say the
+  category is gone and mean it. `fallback` is the 409, a refused rename of `Uncategorized`, and it is
+  **unreachable through the UI** for a stronger reason than the delete's hidden menu item: that card
+  draws no trigger into this modal at all. It is classified anyway, on the same argument its
+  neighbour makes. Its diffed body is `toUpdateTransactionBody`'s with one difference worth
+  carrying: **a blank cap sends `null`**, which is the only way a capped category becomes uncapped,
+  where `toCreateCategoryBody` _omits_ a blank cap because `CreateCategoryDto` reads absent as "no
+  cap" and takes no `null` at all.

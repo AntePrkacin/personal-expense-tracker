@@ -62,7 +62,7 @@ spending against the monthly budget. The eleventh is PET-37's, and it is the fir
 outside transactions: that tab's "Add category" opens a modal that really creates one, with its
 colour and icon offered from the admin-managed template tables rather than from a list the frontend
 keeps, and a monthly budget that may be left blank because an uncapped category is a first-class
-choice. The eleventh is PET-39's, and it makes that tab's card kebab real: each one opens a menu
+choice. The twelfth is PET-39's, and it makes that tab's card kebab real: each one opens a menu
 whose "Delete" removes the category behind a confirmation, and the transactions filed under it move
 to the `Uncategorized` fallback rather than disappearing - which is why the dialog names that row
 rather than the "Other" the ticket asked for. It does **not** clear the tab: that menu's "Edit",
