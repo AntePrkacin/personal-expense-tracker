@@ -101,3 +101,53 @@ describe('Input', () => {
     expect(screen.getByRole('textbox')).toHaveClass('input-error');
   });
 });
+
+describe('the hint line', () => {
+  it('describes the control without marking it invalid', () => {
+    // The whole point of the prop: standing guidance is not a validation failure, so it must not
+    // borrow aria-invalid or the error colour on its way to being announced.
+    renderInput({ id: 'email', label: 'Email', hint: 'Login links will be sent here.' });
+
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveAttribute('aria-describedby', 'email-hint');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByText('Login links will be sent here.')).toHaveAttribute('id', 'email-hint');
+  });
+
+  it('is named alongside the error when the field carries both', () => {
+    // The regression this exists for: a control that names only the error stops describing its
+    // own hint at exactly the moment the reader most needs the whole picture. Both ids, in the
+    // order the two lines render.
+    renderInput({
+      id: 'email',
+      label: 'Email',
+      hint: 'Login links will be sent here.',
+      error: 'Enter a valid email address.',
+    });
+
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveAttribute('aria-describedby', 'email-hint email-error');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('renders no hint element when none is passed', () => {
+    renderInput({ id: 'email', label: 'Email', error: 'Enter a valid email address.' });
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-describedby', 'email-error');
+    expect(document.getElementById('email-hint')).toBeNull();
+  });
+
+  it('reaches the currency variant too, whose control is nested in a label', () => {
+    // The currency box wraps the input in a daisyUI prefix label, so the aria wiring travels a
+    // different path to the same element. Worth an assertion, because only that variant could
+    // lose it.
+    renderInput({
+      id: 'budget',
+      label: 'Monthly budget',
+      variant: 'currency',
+      hint: 'You can change this anytime.',
+    });
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-describedby', 'budget-hint');
+  });
+});

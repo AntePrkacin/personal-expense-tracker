@@ -13,7 +13,7 @@
 // with controlled messages passed through the `error` prop, so `input-error`
 // is applied from that prop instead.
 
-import { FieldShell, fieldErrorId } from './FieldShell';
+import { FieldShell, fieldDescribedBy } from './FieldShell';
 
 export type InputVariant = 'default' | 'currency';
 
@@ -58,6 +58,11 @@ type InputProps = {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  /**
+   * One line of standing guidance beneath the control, described by this input rather than merely
+   * sitting near it. `ui/FieldShell` owns what it is for and why it is a prop.
+   */
+  hint?: string;
   /** One line of validation copy, rendered beneath the control. */
   error?: string;
 };
@@ -75,9 +80,13 @@ export function Input({
   placeholder,
   required,
   disabled,
+  hint,
   error,
 }: InputProps) {
-  const errorId = fieldErrorId(id, error);
+  // Both lines at once when the field carries both, which is the case a naive `errorId` drops:
+  // an invalid field would stop describing its own hint at exactly the moment the reader most
+  // needs the whole picture.
+  const describedBy = fieldDescribedBy(id, hint, error);
 
   const control = (
     <input
@@ -92,13 +101,13 @@ export function Input({
       required={required}
       disabled={disabled}
       aria-invalid={error ? true : undefined}
-      aria-describedby={errorId}
+      aria-describedby={describedBy}
       className={variant === 'currency' ? 'grow' : INPUT_CONTROL[error ? 'invalid' : 'valid']}
     />
   );
 
   return (
-    <FieldShell id={id} label={label} error={error}>
+    <FieldShell id={id} label={label} hint={hint} error={error}>
       {variant === 'currency' ? (
         // The wrapping label is daisyUI's prefix pattern: the box styling sits on
         // it, the inner input is bare, and a click anywhere in the box - the "$"

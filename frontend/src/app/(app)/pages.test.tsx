@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 import { readCategoryLabels } from '../../lib/categories';
 import { readDashboard } from '../../lib/dashboard';
 import { requireInsights } from '../../lib/insights';
+import { requireProfile } from '../../lib/profile';
 import { readTransactionsView } from '../../lib/transactions';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
@@ -17,12 +18,11 @@ import TransactionsPage from './transactions/page';
 // worth asserting is the *set*: that every screen has its designed overline,
 // title and action, and that the differences between them are the designed ones.
 //
-// Three of the four are still plain Server Components with no data of their own.
-// **Transactions is not, as of PET-30**: it awaits `readTransactionsView()`, so it is
-// mocked here and every page goes through the `renderScreen` helper below - which works
-// uniformly, since awaiting a synchronous component's return value is a no-op. The
-// layout that wraps them is not exercised here - SidebarNav.test.tsx covers the
-// sidebar half.
+// **All four fetch as of PET-46**, so every page goes through the `renderScreen` helper below and
+// every read is mocked. That helper predates the fourth: it works uniformly because awaiting a
+// synchronous component's return value is a no-op, which is the property PET-30 relied on when
+// Transactions became the first async one. The layout that wraps them is not exercised here -
+// SidebarNav.test.tsx covers the sidebar half.
 //
 // A relative specifier, because `jest.mock` cannot resolve the `@/` alias from
 // anywhere in this repo - see the note in frontend/src/app/CLAUDE.md.
@@ -38,9 +38,13 @@ jest.mock('../../lib/dashboard', () => ({ readDashboard: jest.fn() }));
 jest.mock('../../lib/categories', () => ({ readCategoryLabels: jest.fn() }));
 
 // AI Insights is not a plain Server Component either, as of PET-42-43-44: it awaits
-// `requireInsights()`, the same shape as the two above. Three of the four routed views fetch
-// now; Settings is the last one that does not.
+// `requireInsights()`, the same shape as the two above.
 jest.mock('../../lib/insights', () => ({ requireInsights: jest.fn() }));
+
+// Settings was the last plain one and stopped being so at PET-46: it awaits `requireProfile()`,
+// which reaches `cookies()` and would throw outside a request scope. Note this is the same read
+// `(app)/layout.tsx` makes, which is not exercised here.
+jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
 
 // Two of these screens now hold an "Add transaction" trigger that calls
 // `useAddTransaction`, which throws outside its provider by design - so every render
@@ -152,6 +156,19 @@ beforeEach(() => {
     insights: [{ tone: 'warning', title: 'Dining out is over budget', body: '$12 over' }],
     generatedAt: '2025-10-08T09:00:00.000Z',
   });
+
+  // The Figma persona, which is what the whole file is drawn with. The Profile card's own
+  // behaviour is `SettingsForm.test.tsx`'s subject; this file needs the read only to succeed, and
+  // asserts the header above it. `requireProfile` redirects or throws rather than returning a
+  // wrapper, so there is no `{ ok }` to mock - the same shape as `readDashboard` above.
+  (requireProfile as jest.Mock).mockResolvedValue({
+    firstName: 'Marko',
+    lastName: 'Kovač',
+    email: 'marko@email.com',
+    currency: 'USD',
+    monthlyBudget: 2000,
+    monthStartDay: 1,
+  });
 });
 
 // October 2025 is the month the whole Figma file is drawn in, so pinning the
@@ -238,10 +255,18 @@ describe('the header action, which differs on every screen', () => {
   it('Settings offers no header action at all', async () => {
     // AC2's second half. "Save changes" belongs at the foot of the form, not up
     // here, so there is no control in the header to find.
-    await renderScreen(SettingsPage);
+    //
+    // **Scoped to the `<header>` as of PET-46, and the criterion it pins is unchanged.** It used
+    // to sweep the whole page for buttons and links, which was the same assertion only while the
+    // `<main>` below was empty - so the moment this screen grew its form and its Save button, a
+    // page-wide sweep would have failed for a reason having nothing to do with the header. What
+    // AC2 says is that the header carries no action, and that is what this now measures.
+    const { container } = await renderScreen(SettingsPage);
+    const header = container.querySelector('header');
 
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
-    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(header).not.toBeNull();
+    expect(within(header!).queryAllByRole('button')).toHaveLength(0);
+    expect(within(header!).queryAllByRole('link')).toHaveLength(0);
   });
 });
 

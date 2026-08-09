@@ -24,8 +24,14 @@ import type { components } from '@/types/api';
 // fix is this file distinguishing "not signed in" from "could not ask", and only the
 // first of those redirecting.
 
-/** What `GET /api/profile` answers. Read from the contract, never restated. */
-type Profile = components['schemas']['ProfileResponseDto'];
+/**
+ * What `GET /api/profile` answers. Read from the contract, never restated.
+ *
+ * Exported since PET-46, for the Settings form: that screen prefills from this shape and diffs
+ * against it, and every consumer naming `components['schemas']['ProfileResponseDto']` for itself
+ * would be a second spelling of one alias rather than a second reading of the contract.
+ */
+export type Profile = components['schemas']['ProfileResponseDto'];
 
 /**
  * The signed-in user's profile, or the access flow.
