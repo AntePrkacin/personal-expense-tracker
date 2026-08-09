@@ -518,28 +518,71 @@ generator has run, so the placeholder `generating` row is written first and then
 generator returns `null` (no transactions, AC7). The account flickers `generating` for a
 sub-millisecond and settles back to `empty`; it never leaves a bare `ready` set behind.
 
-**The four content rules live behind an `InsightGenerator` seam.** `RuleBasedInsightGenerator` is the
+**The two content rules live behind an `InsightGenerator` seam.** `RuleBasedInsightGenerator` is the
 only implementation: deterministic detectors filling templated copy, composing `CategoriesService`
 and `TransactionsService` rather than querying their tables (it reads `profile.currency` directly, the
 one static field neither surfaces). Each rule yields at most one card and is omitted when it has
-nothing to say, so a set can carry fewer than four. Over-cap is `warning`, a favourable
-month-over-month move is `positive` (an unfavourable one `neutral`), the projection is `info`,
-recurring merchants are `neutral`. **Recurring** means a merchant seen in at least **three** distinct
-calendar months (`RECURRING_MONTHS`), the number most likely to be tuned - which is the point of the
-seam: a later `LlmInsightGenerator` replaces the whole class through the one `INSIGHT_GENERATOR`
-provider binding in `InsightsModule`, storage, the read and the frontend untouched.
+nothing to say. Over-cap is `warning`, a favourable month-over-month move is `positive`, an
+unfavourable one `neutral`. That is the point of the seam: a later `LlmInsightGenerator` replaces
+the whole class through the one `INSIGHT_GENERATOR` provider binding in `InsightsModule`, storage,
+the read and the frontend untouched.
 
-**Three months is necessary and nowhere near sufficient, and treating it as sufficient was a bug.**
-Anywhere a person shops regularly clears that bar exactly as easily as Netflix does, so a
-supermarket, a petrol station and a café were all reported as subscriptions. Two further conditions
-separate a subscription from a habit, and both are about behaviour rather than about guessing
-brands from a keyword list: it bills **once a month** (`charges === months`), where somewhere you
-shop is visited whenever you need something, and it bills **the same amount** (every month within
-`RECURRING_TOLERANCE` of the mean), where a shop's total is whatever was in the basket. The card
-also names at most `RECURRING_NAMED` merchants and counts the remainder, because the title's count
-and the combined total stay honest while an unbounded name list turns the card into a paragraph.
-PET-60's showcase seed is what made this visible - it named all 26 of its merchants in one
-sentence - but the defect was the rule's, not the seed's, and real data trips it too.
+**There were four rules until PET-42-43-44, and a zero-card `ready` set is now the steady state.**
+`projectionCard` went because the summary banner's headline already said the same thing, and
+`recurringMerchantCard` went because month counting cannot separate a subscription from a habit - a
+monthly travel pass at a steady price is mathematically identical to Netflix, and irregular manual
+logging disqualifies a genuine subscription. That amends two criteria that already shipped, tech
+spec **INS-4 / AC5** and **PET-40 AC5**; PET-40 and PET-62 stay Done as the record of what shipped,
+and PET-62 in particular exists only to fix the rule deleted here. The consequence for anyone
+reading a response: over-cap can only fire for a category that _has_ a cap, which is optional and
+absent on the fallback, and month-over-month needs a previous month - so a first-month user who set
+no caps gets the summary banner and nothing else, indefinitely. That is not an edge case to guard,
+it is what most accounts show.
+
+**The `info` tone went with `projectionCard`, and the narrowed enum is a promise about what is
+generated rather than about what is stored.** `InsightTone` is `warning | positive | neutral` now.
+`insights.tone` is a plain `text` column with no CHECK constraint and `cardsFor` casts it unchecked,
+so every set generated before the cut still holds an `info` card and the read serves it verbatim.
+Two things cover that rather than a backfill: the write-path trigger below, which replaces such a
+set on the account's next transaction, and the frontend's tone map, which falls back rather than
+rendering an unknown tone with no styling. `test/insights.e2e-spec.ts` asserts both directions -
+that nothing generated carries a retired tone, and that a stored one still reads back.
+
+**A transaction write regenerates the set, which is what makes `state: 'empty'` mean the account has
+never logged anything.** `TransactionsService.create`, `update` and `remove` all emit through
+`@nestjs/event-emitter`, and `TransactionChangedListener` inside `InsightsModule` calls
+`InsightsService.generate`. An emitter rather than a direct call because `InsightsModule` already
+imports `TransactionsModule` for the generator, so calling back would close the loop into a circular
+module dependency - the write path never learns that insights exist. **`emitAsync`, not `emit`, and
+that is load-bearing**: `generate` commits the `generating` row before returning, so awaiting the
+listener carries that guarantee out to the request, and by the time `POST /api/transactions`
+responds `GET /api/insights` already reports `generating`. A user who saves an expense and navigates
+straight to `/insights` gets the skeletons with no race and no flash of the wrong state.
+
+**The 409 is swallowed in two places and neither is redundant.** `emitAsync` rejects when a listener
+rejects, so a catch only at the emit site still lets a listener throwing synchronously escape, and a
+catch only in the listener leaves the hazard for whoever adds a second one. A run already in flight
+means fresh-enough content is already being generated, which is benign; the losing write's data is
+missing from that set until the next save, bounded by one run and self-healing. **All three
+arguments rest on generation being sub-second**, so binding a real `LlmInsightGenerator` to
+`INSIGHT_GENERATOR` needs a debounce or a dirty flag before that swap - `docs/TODO.md` records it
+next to the entry this trigger supersedes.
+
+**The converse of that guarantee does not hold, deliberately.** `runGeneration` deletes only its own
+placeholder when the generator returns `null`, leaving any previous `ready` set intact - so an
+account that deletes its way back to zero transactions keeps being served content describing
+spending that no longer exists. `empty` implies never-written; `ready` does not imply the
+transactions behind it still exist. Clearing the set on the way down would mean the generator
+distinguishing "nothing to say this month" from "nothing at all" and the read's state derivation
+acting on the difference, which is a larger change than the one it fixes.
+
+**Floated runs are tracked and drained on shutdown.** A run outlives the request that started it by
+design, and that was harmless while only an explicit POST started one. Now a write does, so a
+shutdown can land on a run mid-flight - and `DatabaseModule.onApplicationShutdown` closing every
+replica underneath it is the same silent write loss the kill-timeout paragraph under Deployment
+describes for the final push. `InsightsService.onApplicationShutdown` waits for them, bounded, since
+a wedged generator must not hold the process open. It is also what keeps the three e2e suites that
+post transactions without ever reading an insight from racing their own teardown.
 
 **The single-run guard is enforced at the database, and an abandoned run self-heals.** The
 409 is not left to a check-then-insert: a partial unique index on `status = 'generating'` (the

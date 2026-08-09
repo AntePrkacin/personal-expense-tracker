@@ -1035,7 +1035,9 @@ field id, which `ui/FieldShell` requires as a literal prop precisely because `us
 failure PET-30's own `pages.test.tsx` comment already names. The payoff is that PET-25's DSH-9
 teaser added its trigger in two lines with no prop threading through `<main>` - the unlock state's
 `AddTransactionButton`, its "Add transaction →" the one label variant this component ever needed,
-exactly as predicted here before it landed. PET-44's INS-7 card still owes the same two lines.
+exactly as predicted here before it landed. **PET-42-43-44 paid the same two lines for INS-7**, the
+AI Insights empty state, which is the fifth trigger and the last one ADD-1 names - so that sentence
+is settled rather than owed, and the prediction held a third time.
 
 **A closed modal renders nothing, and the reason is text queries rather than role queries.** A
 closed `<dialog>` is `display: none`, so `queryByRole` cannot see inside it - but
@@ -1448,14 +1450,16 @@ job is choosing which of two static shapes to render around whichever strings it
 That paragraph used to end "the condition is `insight === null`, and it needs no third state",
 defended on the contract folding "nothing generated yet" and "the first run is still in flight"
 into one null. Both halves of that are true and the conclusion did not follow, because **nothing
-in either app generates a set**: no frontend caller of `POST /api/insights/generate`, `/insights`
-still an empty `<main>` (PET-44), and no backend path generating on a write. So `insight` is null
-for every account there is, and the unlock copy - "Insights unlock after your first expense." over
+in either app generated a set** at the time: no frontend caller of `POST /api/insights/generate`,
+`/insights` still an empty `<main>`, and no backend path generating on a write. (**PET-42-43-44
+ended all three**, and the paragraph below records what that leaves of this one - read the present
+tense here as PET-25's.) So `insight` was null
+for every account there was, and the unlock copy - "Insights unlock after your first expense." over
 an "Add transaction" - was the only state a running app could reach, shown to an account with two
 hundred of them. The card then took `transactionCount` beside `insight` and split the null: at
 zero it drew frame 44:706's designed copy, above zero it said nothing has been analysed yet and
 offered the same link to Insights the ready state does. Still two shapes rather than three, still
-no `generating` skeleton - that card is PET-44's, reading `GET /api/insights` directly rather than
+no `generating` skeleton - that card is PET-42's, reading `GET /api/insights` directly rather than
 this field - and the two new strings join what A29 owes a designer. The lesson is the one
 `TransactionsScreen`'s no-results copy already paid for: **an empty state has to be honest about
 which emptiness it is describing**, and the reachable state is the one to check first.
@@ -1465,6 +1469,21 @@ which emptiness it is describing**, and the reachable state is the one to check 
 fetching nothing.** Every trap statement above naming "the Dashboard, AI Insights and Settings"
 as the unbuilt three is dated to before this ticket; Dashboard's own `<main>` is real as of
 PET-21 and complete as of this one.
+
+**PET-42-43-44 makes a set reachable, and the teaser's `isEmpty` workaround becomes a fallback
+rather than the common path.** Every transaction create, edit and delete regenerates the set
+backend-side, so `insight` is non-null for any account that has logged anything and settled a run.
+The `transactionCount` split above still earns its place - the window between the first save and
+the first run settling is real, and so is an account whose transactions predate the trigger - but
+it is no longer standing in for a capability nothing had. The third state it was invented to
+paper over, "expenses exist and nothing has analysed them", is now genuinely transient.
+
+**Settings is the last `<main>` still empty and still fetching nothing.** `/insights` is a
+complete screen as of PET-42-43-44: `page.tsx` awaits `lib/insights.ts`'s `requireInsights()` and
+hands the resolved set to a synchronous `InsightsScreen`, which renders frames 14, 15 and 16 off
+the one `state` the read carries. Three of the four routed views fetch now. Read every trap
+statement above naming "the Dashboard, AI Insights and Settings" as the unbuilt three, and the one
+above naming two, as dated to before this ticket.
 
 **PET-26 is frame 05, the Dashboard's designed empty state, and it closes the Dashboard epic.**
 Five cards had each been shipping the _populated_ mock their own ticket drew, with an empty
@@ -1618,3 +1637,54 @@ same disposition PET-32 and PET-33 both recorded. The dashboard is no longer the
 PET-26 closed as an epic rather than staying an open stack, so its category totals are real
 figures on a real screen now, the same cross-check this page's own category cap and spend already
 invite.
+
+**PET-42-43-44 fills `/insights`, and its one genuinely new mechanism is a poll.** Same split as
+the three screens before it - `page.tsx` async and fetching, a synchronous screen taking the
+resolved set - with one difference that forces the rest: `InsightsScreen` is a **client component**,
+because the generating state has to resolve itself without a navigation. Four things about it are
+decisions rather than shape.
+
+**Nothing fires on mount, in any state**, and that is the largest thing this ticket deleted rather
+than added. The three-branch stack it replaces had the empty state POST `/api/insights/generate`
+when the read returned `empty` - which made a read-only screen write to the database on every visit
+and made React Strict Mode's dev double-mount issue a second POST that 409'd against the first. The
+trigger lives on the **write path** now: `TransactionsService` emits and `InsightsModule` listens,
+so saving, editing or deleting an expense regenerates the set. `InsightsScreen.test.tsx` pins that
+nothing is POSTed on mount in either state, which is the regression test for a mechanism that no
+longer exists.
+
+**The poll goes through `app/api/insights/route.ts` and could not go anywhere else.** `lib/insights.ts`
+reads the httpOnly cookie through `next/headers` and uses the server-only `BACKEND_URL`, so a
+`useEffect` cannot call it; a Server Action polled from a client component is a write pretending to
+be a read. That handler is the **third** in the repo and the second of the "route handler the client
+fetches" shape `docs/agents/api-contract.md` records - and unlike the categories one it projects
+nothing, because every field it returns is drawn. `lib/insights.ts` exports both a plain
+`AuthorizedResult` read and a redirecting wrapper for the same reason `lib/categories.ts` refuses to
+redirect internally: a `redirect()` answers the browser's `fetch` with an HTML login page carrying a
+200, which the page would parse as a set.
+
+**There is no poll cap, and the two-minute one the stacked plan carried was worse than none.**
+`hasRunInFlight` treats a `generating` row as live until the backend's five-minute staleness cutoff,
+so a click after a two-minute cap can only 409 - which this design treats as success and re-enters
+polling on, putting the page back into skeletons for another two minutes. The cap added a click to
+the same wait rather than shortening it. The read self-heals at the cutoff with no POST needed, so
+the screen polls with a backoff, keeps the button disabled off `state === 'generating'`, and keeps
+one hard ceiling just past five minutes purely so a wedged timer cannot outlive the guarantee.
+
+**The poll starts from the `state` prop changing as well as from a click, and that third path is
+the one a review caught.** `AddTransactionModal` calls `router.refresh()` on save, which re-runs
+the Server Component and flips this screen's prop from `empty` to `generating` - with no click
+anywhere and no action result to hang a timer off. Without adopting the changed prop, the empty
+state's own "Add your first transaction" left the user looking at skeletons with no timer running,
+stuck until a manual reload, on the one flow this ticket newly creates. It is a **render-phase state
+adjustment** rather than an effect, the shape `TransactionSearch` already records, and it compares
+`state` and `generatedAt` rather than object identity because the server hands back a fresh object
+on every refresh.
+
+Two smaller notes. **The header overline is the period, not INS-1's "Your money assistant"** - a
+deliberate deviation decided at the 2026-08-08 review so the four routed views read consistently,
+with the Jira ticket amended. And **the tone map inverts twice**: backend `warning` renders as
+daisyUI `error` and backend `neutral` as `warning`, so a name-to-name map compiles cleanly and is
+wrong in two places. `insights/insightTone.ts` holds whole class strings per key, the shape
+`frontend/CLAUDE.md` names `ui/categoryColour.ts` as the pattern for, plus a fallback so an `info`
+stored before the enum narrowed still renders.

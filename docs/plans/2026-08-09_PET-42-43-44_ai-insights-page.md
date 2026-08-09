@@ -324,13 +324,17 @@ guarantee.
 - [ ] Remove the specs for both deleted rules from
       `backend/src/insights/rule-based-insight.generator.spec.ts`, including the two PET-62
       added, and add one asserting neither card can ever appear in a generated set.
-- [ ] Fix the two `tone: 'info'` fixtures in `backend/src/insights/insights.service.spec.ts`,
-      which are two different problems. `:56` is a typed `GeneratedSet` using
-      `tone: 'info' as const` and genuinely stops compiling when the union narrows. `:81` is
-      inside `cardRows()`, an untyped object-literal factory standing in for database rows, and
-      compiles fine either way - it needs changing because it feeds `cardsFor`'s unchecked
-      `row.tone as InsightCardDto['tone']` (`insights.service.ts:347`) and is therefore the
-      natural home for the stale-tone test, not because the compiler objects.
+- [ ] Fix the two `tone: 'info'` fixtures in `backend/src/insights/insights.service.spec.ts`.
+      **Neither of them stops compiling, which both this plan and the review that revised it got
+      wrong** - `generatedSet()` at `:48` is an untyped arrow whose object literal is handed to a
+      `jest.fn()`, so its `as const` narrows a literal that is never checked against
+      `GeneratedCard`, and `cardRows()` at `:74` stands in for database rows. Verified by running
+      `tsc`: the only two files the narrow breaks are
+      `rule-based-insight.generator.spec.ts:246` and `test/insights.e2e-spec.ts:406`. So the
+      first is an ordinary fixture update and the second is a **deliberate keep** - a stored
+      `info` is what `cardsFor`'s unchecked `row.tone as InsightCardDto['tone']`
+      (`insights.service.ts:347`) really passes through, so that factory is the stale-tone case
+      rather than stale test data, and it needs a comment saying so rather than a new tone.
 - [ ] Fix `backend/test/insights.e2e-spec.ts`, which breaks in two independent ways. First the
       content cut: the `tone: 'info'` fixture at line 163 and the two assertions at lines
       405-406, whose own comment states the invariant this branch destroys - "Spend in the

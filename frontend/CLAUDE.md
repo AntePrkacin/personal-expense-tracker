@@ -442,8 +442,10 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `app/auth/verify/route.ts` is, and it is the one to copy the shape from.
 - **The shell's content.** The `(app)` group, the four routes and the page header exist, every
   screen renders its designed header, and the shell is really gated and really shows the signed-in
-  user's profile as of PET-52. What is missing is everything below the header on **two** of the
-  four: the AI Insights and Settings `<main>` elements are empty. Dashboard is no longer one of
+  user's profile as of PET-52. What is missing is everything below the header on **one** of the
+  four: the Settings `<main>` is empty. AI Insights was the other until PET-42-43-44, which fills
+  it with frames 14, 15 and 16 off the one `state` its read carries - so read the sentence that
+  named two as dated. Dashboard is no longer one of
   them as of PET-21: its `<main>` is a grid holding the real Monthly budget card, PET-22 filled
   the second, the weekly spending trend chart, PET-23 the third, the spending-by-category donut,
   PET-24 the fourth, the recent transactions card, and PET-25 the fifth and last, the AI insight
@@ -489,7 +491,12 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   that. PET-34's `lib/transactionDetail.ts` took the transaction _detail_ **and** the
   categories' month stats off this list together, in one request: `GET /api/transactions/:id`
   embeds the whole `CategoryResponseDto`, caps included, so the narrowing above is intact and
-  `lib/categories.ts` was not widened. It is also the read to copy for a **404**, which is the
+  `lib/categories.ts` was not widened. PET-42-43-44 added `lib/insights.ts`, which is the first to
+  export **two** reads over one endpoint for two callers rather than two projections for two
+  screens: `readInsights` returns `AuthorizedResult` and `requireInsights` redirects on top of it,
+  because the Server Component must redirect a dead session and the route handler serving the
+  browser's poll must never - a `redirect()` there answers a `fetch` with an HTML login page
+  carrying a 200. It is also the read to copy for a **404**, which is the
   app's third failure policy - `authorizedGet` grew a `missing` arm so a deleted transaction calls
   `notFound()` instead of throwing like an unreachable backend. No other read's endpoint answers
   404, so the five above are unchanged.
@@ -534,4 +541,9 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   apps. Its other reusable half is the **diffed body**: `(app)/transactionForm.ts`'s
   `toUpdateTransactionBody` sends only the fields that changed, `null` to clear a note, and an
   empty object when nothing did - which the caller must treat as "close without asking", because
-  the endpoint rejects an empty patch. Every **category and profile** write is still unbuilt.
+  the endpoint rejects an empty patch. PET-42-43-44 added the fourth, `lib/generateInsights.ts`,
+  and its classification is the shortest of the four for a reason worth copying: a **409 is
+  reported as `ok`**. The single-run guard answers it when another tab, or a transaction the user
+  just saved, already started a run - so the thing the button was pressed for is already happening,
+  and the caller's next move is identical either way. A failure taxonomy is for failures the caller
+  would do something different about. Every **category and profile** write is still unbuilt.
