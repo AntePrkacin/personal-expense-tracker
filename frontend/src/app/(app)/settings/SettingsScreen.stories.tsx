@@ -176,6 +176,55 @@ export const EmailTaken: Story = {
 };
 
 /**
+ * The expired session, which is the only failure on this form that carries a control.
+ *
+ * The first version of this arm named a control the signed-in shell does not publish, so the only
+ * way to follow its advice discarded the edits the sentence promised were still savable. The link
+ * opens in a new tab deliberately: the action does not `redirect()` precisely so a dead session
+ * does not destroy a half-edited form, and signing in elsewhere sets the cookie for this origin, so
+ * coming back and pressing Save works.
+ *
+ * Worth reviewing as a story because it is the one place a link sits inside an error line, and
+ * `link link-primary` deliberately keeps its own colour rather than inheriting `text-error`.
+ */
+export const SessionExpired: Story = {
+  args: {
+    save: async (): Promise<UpdateProfileResult> => ({ ok: false, reason: 'unauthenticated' }),
+  },
+  render: (args) => {
+    function Demo() {
+      const host = useRef<HTMLDivElement>(null);
+
+      useEffect(() => {
+        const first = host.current?.querySelector<HTMLInputElement>('#settings-first-name');
+
+        if (first) {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+            first,
+            'Ana',
+          );
+          first.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        const timer = setTimeout(() => {
+          host.current?.querySelector('form')?.requestSubmit();
+        }, 0);
+
+        return () => clearTimeout(timer);
+      }, []);
+
+      return (
+        <div ref={host}>
+          <SettingsScreen {...args} />
+        </div>
+      );
+    }
+
+    return <Demo />;
+  },
+};
+
+/**
  * The success confirmation, the third state SET-5 draws nothing for.
  *
  * A polite `role="status"` line rather than a toast or a banner: it follows a round trip with

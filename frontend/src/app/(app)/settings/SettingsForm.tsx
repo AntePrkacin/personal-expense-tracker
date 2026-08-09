@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
 import type { Profile } from '@/lib/profile';
+import { ACCESS_ROUTES } from '@/lib/routes';
 import { updateProfile, type UpdateProfileResult } from '@/lib/updateProfile';
 
 import { ProfileCard } from './ProfileCard';
@@ -56,7 +58,13 @@ const MESSAGES = {
   // Names the cause, because an authenticated form cannot tell a typo from a taken address unless
   // it is told - and says nothing that could identify who holds it.
   taken: 'That email address already belongs to another account.',
-  unauthenticated: 'Your session has expired. Log in again to save your changes.',
+  // **Names a control that is actually on screen, which the first version did not.** It said "Log
+  // in again to save your changes" on a shell that publishes no log-in control anywhere - so the
+  // only way to follow it was a sidebar link, whose server read 401s and redirects, discarding the
+  // edits the sentence had just promised were still savable. A code review caught it; it is the
+  // same defect `app/check-email`'s `expired` arm already paid for, and the same answer: give the
+  // reader a real control rather than advice that cannot be taken.
+  unauthenticated: 'Your session has expired. Log in again in a new tab, then save.',
   failed: "We couldn't save your changes. Please try again.",
   saved: 'Changes saved',
 } as const;
@@ -105,6 +113,9 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
   const [values, setValues] = useState<SettingsFormValues>(() => toSettingsFormValues(profile));
   const [errors, setErrors] = useState<Partial<Record<SettingsFormField, string>>>({});
   const [failure, setFailure] = useState<string | null>(null);
+  // The 401 arm alone, because it is the one failure whose message needs a control beside it and
+  // therefore cannot be a bare string in `FormError`. See the alert it renders, below.
+  const [expired, setExpired] = useState(false);
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -183,6 +194,7 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
     setValues((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: undefined }));
     setFailure(null);
+    setExpired(false);
     setSaved(false);
 
     // **A keystroke abandons a pending resync, and that window is real rather than theoretical.**
@@ -229,17 +241,35 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
 
     setErrors({});
 
-    // **An empty diff sends nothing and says nothing.** `PATCH /api/profile` answers 400 to a body
-    // with no keys, so this is a correct answer to a question the user did not ask - the same call
-    // `EditTransactionModal` makes, minus the dialog it has to close. There is no message, because
-    // claiming "Changes saved" over a save that never happened would be the one lie this form can
-    // tell; and Save stays *enabled* rather than being disabled on a clean form, because the frame
-    // draws one enabled primary button and A29 designs no disabled treatment for it.
+    // **An untouched form sends nothing, and this guard is what actually makes that true.**
+    //
+    // The diff below cannot answer it on its own, which a code review caught. `toUpdateProfileBody`
+    // trims on the way out and compares against the *untrimmed* stored value - deliberately, so a
+    // stored name carrying stray whitespace tidies itself on the first save that touches anything -
+    // and the cost is that a profile stored as `"  Marko  "` differs from itself. Opening Settings
+    // on one of those, touching nothing and pressing Save fired a PATCH and announced "Changes
+    // saved" for an edit nobody made, which is exactly the claim this form must never make.
+    //
+    // Asking "did the user type anything" rather than "would the body be empty" separates the two
+    // questions that were being conflated. `synced` is the server's values as this form last
+    // adopted them, so this is literally "is the form as it arrived" - and it reuses the state the
+    // resync above already maintains rather than inventing a second notion of clean.
+    if (sameSettingsValues(values, synced)) return;
+
+    // **An empty diff sends nothing and says nothing** either. `PATCH /api/profile` answers 400 to
+    // a body with no keys, so this is a correct answer to a question the user did not ask - the
+    // same call `EditTransactionModal` makes, minus the dialog it has to close. Still reachable
+    // with the guard above in place: retyping the address in a different case is a real edit that
+    // diffs to nothing, because the comparison is case-insensitive.
+    //
+    // Save stays *enabled* rather than being disabled on a clean form, because the frame draws one
+    // enabled primary button and A29 designs no disabled treatment for it.
     const body = toUpdateProfileBody(profile, values);
 
     if (Object.keys(body).length === 0) return;
 
     setFailure(null);
+    setExpired(false);
     setSaved(false);
 
     // Captured *before* `setPending(true)`, because that commit is what disables the control the
@@ -266,6 +296,13 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
 
     if (!result.ok) {
       setPending(false);
+
+      // The 401 renders its own alert with a way out of it; the other three are bare strings.
+      if (result.reason === 'unauthenticated') {
+        setExpired(true);
+        return;
+      }
+
       setFailure(MESSAGES[result.reason]);
       return;
     }
@@ -294,7 +331,49 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
 
       {/* PET-47's `<PreferencesCard />` and `<CategoriesSummaryCard />` go here. */}
 
-      <FormError message={failure} />
+      {/* **The 401 is the one failure that carries a control, so it does not go through
+          `FormError`.** That component renders a bare string by design, and this arm needs a link
+          inside the same `role="alert"` - announced together, because a control announced
+          separately from the sentence explaining it is the dead end this replaces. Not a reason to
+          give `FormError` a slot: `components/ResendLink.tsx` already declines to use it for the
+          same shape of reason, and one arm of one form is not three consumers.
+
+          **It opens in a new tab deliberately, and that is what makes the copy true.** The action
+          does not `redirect()` precisely so a dead session does not discard a half-edited form; a
+          same-tab link would throw that away at the last step. Signing in elsewhere sets the
+          session cookie for this origin, so coming back and pressing Save works - the edits were
+          never lost. `rel` is mandatory with `target="_blank"`, and a `link` rather than `ui/Button`
+          because this is a phrase inside a sentence, not a footer control.
+
+          **Bare `link`, with no colour modifier, and that is a measurement rather than a taste.**
+          `link-primary` was the obvious choice and paints `oklch(0.58 0.233 277)`, which composites
+          to **3.40:1** against the dark card - under WCAG AA's 4.5:1 for body text, on the one line
+          a reader in trouble has to follow. Without the modifier the anchor inherits the
+          paragraph's own `text-error`, and daisyUI's `.link` supplies the underline on its own - so
+          the link is distinguished by decoration rather than by a hue that fails the check.
+          Measured by compositing and reading the pixel, which is the only way to check a token in
+          this theme: `getComputedStyle` reports oklch and cannot answer it.
+
+          Inheriting also means this link is **exactly as legible as the sentence around it** in
+          both themes, which is the point: it measures 5.53:1 in dark and 2.86:1 in light, and that
+          second figure is `text-error`'s own, a failure `docs/TODO.md` already tracks for every
+          error line in this app rather than one this link introduces. `link-primary` would have
+          added a *second*, separately-failing colour on top of it. */}
+      {expired ? (
+        <p role="alert" className="text-error text-sm">
+          {MESSAGES.unauthenticated}{' '}
+          <Link
+            className="link"
+            href={ACCESS_ROUTES.login}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Log in again
+          </Link>
+        </p>
+      ) : (
+        <FormError message={failure} />
+      )}
 
       <div className="flex items-center justify-end gap-4">
         {/* **Mounted from the first render, empty, with only its text changing** - which

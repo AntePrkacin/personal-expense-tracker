@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { Profile } from '@/lib/profile';
@@ -338,7 +338,7 @@ describe('the four failures', () => {
   it.each([
     ['invalid', "We couldn't save your changes. Please check the values and try again."],
     ['taken', 'That email address already belongs to another account.'],
-    ['unauthenticated', 'Your session has expired. Log in again to save your changes.'],
+    ['unauthenticated', 'Your session has expired. Log in again in a new tab, then save.'],
     ['failed', "We couldn't save your changes. Please try again."],
   ])('renders the %s copy on an assertive line', async (reason, message) => {
     const user = userEvent.setup();
@@ -599,5 +599,114 @@ describe('focus', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByLabelText('First name')).toHaveFocus();
+  });
+});
+
+describe('a form nobody touched', () => {
+  it('sends nothing even when the stored name carries whitespace', async () => {
+    // The diff cannot answer this on its own: `toUpdateProfileBody` trims on the way out and
+    // compares against the untrimmed stored value, so `"  Marko  "` differs from itself and an
+    // untouched form fired a PATCH announcing "Changes saved" for an edit nobody made.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    render(<SettingsForm profile={{ ...PROFILE, firstName: '  Marko  ' }} save={save} />);
+
+    await user.click(saveButton());
+
+    expect(save).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('still normalises that whitespace on a save that changes something else', async () => {
+    // The behaviour the guard must not cost: the asymmetric trim is deliberate, so a stored name
+    // with stray whitespace tidies itself the first time the user really edits the form.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    render(<SettingsForm profile={{ ...PROFILE, firstName: '  Marko  ' }} save={save} />);
+
+    await user.type(screen.getByLabelText('Last name'), 'ić');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith({ firstName: 'Marko', lastName: 'Kovačić' });
+  });
+
+  it('sends nothing when an edit is typed and undone', async () => {
+    const user = userEvent.setup();
+    const save = renderForm();
+
+    await user.type(screen.getByLabelText('First name'), 'x');
+    await user.keyboard('{Backspace}');
+    await user.click(saveButton());
+
+    expect(save).not.toHaveBeenCalled();
+  });
+});
+
+describe('the expired session', () => {
+  async function expire(user: ReturnType<typeof userEvent.setup>) {
+    renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'unauthenticated' }));
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  }
+
+  it('offers a real way to log in, inside the same alert as the sentence', async () => {
+    // The dead end this replaces: the copy named a control the signed-in shell does not publish,
+    // so the only way to follow it discarded the edits it promised were still savable.
+    const user = userEvent.setup();
+    await expire(user);
+
+    const alert = screen.getByRole('alert');
+    const link = within(alert).getByRole('link', { name: 'Log in again' });
+    expect(link).toHaveAttribute('href', '/login');
+  });
+
+  it('opens that link in a new tab, which is what makes the copy true', async () => {
+    // The action deliberately does not redirect, so a dead session does not discard a half-edited
+    // form; a same-tab link would throw that away at the last step. Signing in elsewhere sets the
+    // cookie for this origin, so returning and pressing Save works.
+    const user = userEvent.setup();
+    await expire(user);
+
+    const link = within(screen.getByRole('alert')).getByRole('link', { name: 'Log in again' });
+    expect(link).toHaveAttribute('target', '_blank');
+    // Mandatory with target="_blank".
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
+
+  it('keeps the edits on screen', async () => {
+    const user = userEvent.setup();
+    await expire(user);
+
+    expect(screen.getByLabelText('First name')).toHaveValue('Ana');
+  });
+
+  it('clears the whole alert on the next keystroke', async () => {
+    const user = userEvent.setup();
+    await expire(user);
+
+    await user.type(screen.getByLabelText('Last name'), 'x');
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Log in again' })).not.toBeInTheDocument();
+  });
+
+  it('offers no such link on the other three failures', async () => {
+    // The link belongs to the one arm a login can fix. On a 409 it would be advice that changes
+    // nothing.
+    const user = userEvent.setup();
+    renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'taken' }));
+
+    await user.clear(screen.getByLabelText('Email'));
+    await user.type(screen.getByLabelText('Email'), 'taken@email.com');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 });

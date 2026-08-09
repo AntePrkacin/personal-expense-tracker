@@ -2100,6 +2100,15 @@ have to rediscover why a screen with no transactions on it reads the transaction
 
 ### `text-error` is 2.86:1 in the light theme, and PET-36 is where it became measurable
 
+**PET-46 adds a link to that list rather than a second failing colour, and the choice was measured
+rather than reasoned.** The Settings form's expired-session line carries a "Log in again" anchor
+inside its own `role="alert"`, and the obvious `link link-primary` composites to **3.40:1** against
+the dark card - a *new* failure, on the one line a reader in trouble has to follow. A bare `link`
+inherits the paragraph's `text-error` instead and is distinguished by daisyUI's underline, so it
+measures 5.53:1 in dark and rides on the 2.86:1 above in light: exactly as legible as the sentence
+around it, and one problem to fix here rather than two. Whatever replaces `text-error` fixes the
+link with it.
+
 Frame 13 draws the over-budget figure in red and CTG-4 says so in as many words, so
 `CategoryCard`'s footer takes `text-error` when a category is at or past its cap. PET-36's browser
 walk measured it: composited over `bg-base-100` it is **2.864:1 in light** and **5.53:1 in dark**,
