@@ -8,10 +8,10 @@ import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { reformatAmountInput } from '@/lib/amountField';
 import type { CategoryOption } from '@/lib/categories';
 import type { CreateTransactionResult } from '@/lib/createTransaction';
 import { todayIsoDate } from '@/lib/date';
-import { amountCaret, formatAmountInput } from '@/lib/format';
 import {
   compressReceiptFiles,
   MAX_PDF_BYTES,
@@ -252,28 +252,14 @@ export function AddTransactionModal({
   /**
    * The amount field, reformatted under the caret on every keystroke.
    *
-   * Lifted wholesale from `app/setup/BudgetForm.tsx`, including why it works: the handler
-   * writes the formatted value and the caret onto `event.currentTarget` directly, which is
-   * already the node, so `ui/Input` needs no `ref` prop. It depends on `formatAmountInput`
-   * being idempotent - `lib/format.test.ts` pins that property for exactly this reason - and
-   * on `amountCaret` computing the *semantic* position, because React restores the raw offset
-   * and that is wrong precisely when a separator is inserted to the left of the caret.
-   *
-   * jsdom cannot observe the outcome either way, so the suite asserts `setSelectionRange` was
-   * called with the computed offset and the visible behaviour is a Storybook check. That gap
-   * is recorded in `docs/TODO.md` against the budget field already.
+   * This used to be seven lines copied from `app/setup/BudgetForm.tsx` along with the paragraph
+   * explaining them; both live in `lib/amountField.ts` now, which is where a fourth consumer sent
+   * them. Read that file before changing the call order - the DOM write, the idempotence it rests
+   * on and the semantic caret are each load-bearing, and the suite here can only see the last of
+   * the three.
    */
   function onAmountChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const element = event.currentTarget;
-    const raw = element.value;
-    const caret = element.selectionStart ?? raw.length;
-    const formatted = formatAmountInput(raw);
-
-    element.value = formatted;
-    const at = amountCaret(raw, caret, formatted);
-    element.setSelectionRange(at, at);
-
-    set('amount', formatted);
+    set('amount', reformatAmountInput(event.currentTarget));
   }
 
   /**

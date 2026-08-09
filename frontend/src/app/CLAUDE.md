@@ -287,6 +287,14 @@ assertion pass with the restore deleted, which an earlier version of the test di
 therefore asserts that `setSelectionRange` was called with the computed offset, and the visible
 behaviour is a Storybook or manual check. docs/TODO.md records the gap.
 
+**That handler is no longer written by hand here, or in any of the other three forms that copied
+it.** It was seven identical lines in `app/setup/BudgetForm.tsx`, `(app)/AddTransactionModal.tsx`,
+`(app)/EditTransactionModal.tsx` and `(app)/transactions/categories/AddCategoryModal.tsx` - one
+past the rule of three, with a fix to the call order owing four edits and three chances to be
+missed. `lib/amountField.ts`'s `reformatAmountInput` is the owner now, and `frontend/CLAUDE.md`
+carries what belongs to that module; every call site is one line, and every paragraph above still
+describes what it does.
+
 **The step indicator is `aria-hidden`.** The card's own overline states "STEP 1 OF 3" in text,
 so three unlabelled shapes carry nothing a reader is missing - unhidden they announce as three
 empty generics. Same call `ui/Input` makes on its `$` prefix. `SetupShell.tsx` records the two
@@ -1083,7 +1091,7 @@ comes up; `AddTransactionProvider` wires the real `lib/scanReceipt.ts` action, m
 `create`'s wiring line for line. The two file inputs sit in their own tinted panel above Amount -
 `pointer-fine:hidden` on the camera one, so a desktop never sees a control that opens the
 identical file picker under a second label - and both carry `btn-outline btn-primary`: peers, not
-a primary and a secondary, so no `btn` style modifier has to vary by viewport (a paired *style*
+a primary and a secondary, so no `btn` style modifier has to vary by viewport (a paired _style_
 modifier, unlike a paired colour one, is resolved by daisyUI's emission order rather than by the
 attribute - see `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight). The loading overlay is
 `absolute inset-0` over a `relative` wrapper around the scan panel and every field, not over the
@@ -1117,7 +1125,7 @@ above that stands unchanged and is the whole reason `date` is overwritable at al
 **Two mechanical consequences worth not undoing.** The ref is **replaced, never mutated**:
 `setValues` takes a functional updater that React runs later, so widening the set in place would
 hand the deferred merge a set already claiming every field it was about to fill, and it would fill
-nothing. And the caller needs the filled list *before* the merge runs, which no updater can hand
+nothing. And the caller needs the filled list _before_ the merge runs, which no updater can hand
 back, so `scannedFieldsToFill` is exported beside `mergeScannedFields` and the merge is written in
 terms of it - one authority, two entry points. The list is needed twice: to widen the lock, and to
 clear those fields' validation messages, because the merge is the one write to `values` that does
@@ -1221,6 +1229,459 @@ borrows `VerifyFailedScreen`'s answer - `AccessCard`, one heading, one line, one
 strings join what A29 owes a designer. It shows `error.digest` and never `error.message`, because
 production redacts the message to a generic string and the digest is the half that ties the screen
 to a server log line.
+
+**PET-36 built `/transactions/categories`, and every paragraph above saying the two tabs are inert
+is history now.** Read them as dated: "Categories" opened frame 13, that frame had no `page.tsx`,
+and `lib/routes.test.ts` keeps an empty `PENDING` list - so a link would have 404ed or forced an
+exemption into the one check that catches a renamed route. The route exists, so both labels are
+real `next/link`s and the reasoning has expired rather than been overturned.
+
+**It is a nested route rather than a top-level `/categories`, and the sidebar is the whole reason.**
+`SidebarNav.matchItem()` maps a pathname to one of the four sidebar items by prefix with a
+trailing-slash boundary and returns `undefined` for a miss, which the caller turns into
+`FALLBACK_ITEM`, `'dashboard'`. A sibling path would therefore have lit **Dashboard** while the tab
+bar on that very page said Transactions, and frame 13 draws Transactions lit. Nested, it needs no
+change to that file at all - the same free ride `/transactions/[id]` already takes. It is also a
+static segment beside a dynamic one, which Next resolves first, so no transaction id can shadow it.
+
+**The tab bar is a `<nav>` of links and deliberately not a tablist, which corrects what this file
+predicted.** The old paragraph said making the tabs real was "two `next/link`s plus `aria-current`,
+or a full tablist if the Categories view ends up client-side" - the second half is wrong for a
+reason that has nothing to do with where the view renders. The ARIA tab pattern describes one
+container swapping panels in place, with `aria-controls` pointing at a `role="tabpanel"` in the
+same document; these two navigate to separate routes and replace the whole page. So `role="tab"`
+would promise a relationship that does not exist, and both `pages.test.tsx` and
+`TransactionTabs.test.tsx` pin its absence.
+
+**The bar uses no daisyUI `tab` or `tabs` class at all, and this paragraph said otherwise until a
+review caught it.** It described a version built on stock `tabs tabs-border`, where
+`[aria-current=page]` drew the underline through the plugin's own active-state selector and the
+inactive label was dimmed by its `:not()` rule. That version was replaced before merge, because
+`tabs-border` draws a **3px `currentColor`** underline **inset by the tab's inline padding**
+where the design draws a **2px accent** rule spanning the **full tab** - and neither is reachable
+from outside, since `--tab-border-color` and `--tab-p` are both set at a specificity of (0,3,0)
+against a utility's (0,1,0). So `TransactionTabs.tsx` is plain utilities: `LABEL_CLASS` writes the
+`text-base-content/50` dimming out by hand, and the underline is an `aria-hidden` span carrying
+`bg-primary absolute inset-x-0 -bottom-px h-0.5`. **Neither is a plugin-supplied duplicate and
+deleting either leaves the bar with no visible current-page indicator**, which every test would
+survive - the suites assert `aria-current`, not the paint. That is what the browser walk is for,
+and it measures the rule's height, span, position and colour in both themes.
+
+**`TAB_HREFS` in `TransactionTabs.tsx` is the third route declaration in this app, and it had to
+be.** `SIDEBAR_HREFS` declares the four the sidebar renders and `lib/routes.ts` declares the six
+access screens, and that file says outright the two sets must not restate each other.
+`/transactions/categories` is neither: an app route that is not a sidebar destination. It is
+declared once beside the component that links to it, built from `SIDEBAR_HREFS.transactions` so the
+nesting cannot drift, and `TransactionTabs.test.tsx` asserts with `fs` that both hrefs have a
+`page.tsx` - the same check `SidebarNav.test.tsx` and `lib/routes.test.ts` run for their own sets,
+and one this route would otherwise escape entirely.
+
+**Two controls on that screen ship inert and say so, which is PET-33's precedent rather than the
+month pill's.** The card kebab is PET-39's - its AC1 describes the same menu - and the header's
+"Add category" is PET-37's, so both render as real `<button aria-disabled>` rather than as enabled
+controls that do nothing or as inert `div`s announcing nothing. **`aria-disabled` rather than
+`disabled`** throughout, including the two banner actions: `disabled` removes a control from the
+tab order, so the screen's most prominent action would be unreachable by keyboard and unannounced.
+That also means `ui/Button` was **not** widened to carry the state - it offers `disabled` only, and
+a local `<button>` wearing the same `btn btn-primary` literal is what PET-37 replaces with a
+provider-backed trigger.
+
+**The uncapped card is the state frame 13 does not draw, and it is the common case.** A cap is
+optional and the preselected `Uncategorized` fallback ships without one, so `status: "uncapped"` is
+what the one category every account has reports. `CategoryCard` therefore has two shapes, and the
+guard tests `monthlyCap` as well as `status` because the contract types every derived field as
+nullable independently - a card built on `status` alone can still print "of null". Same answer
+PET-34 gave for the same gap on the detail page: draw none of the budget furniture rather than
+explain its absence.
+
+**PET-37 made "Add category" real, and the paragraph above is now history in one respect: the
+provider it predicted does not exist.** `AddCategoryButton` owns its own open state and renders the
+modal itself. `AddTransactionProvider`'s one-instance-per-shell rule is not a style to copy - it
+exists because ADD-1 lists five triggers across three routes and two of them sit on one page, which
+would mount two `<dialog>` elements with two focus traps and two copies of every field id, the ids
+`ui/FieldShell` requires as literal props precisely because `useId` would force `'use client'` onto
+the field layer. One trigger on one route has none of that, and a context with a single consumer
+expresses no choice. PET-38's Edit modal does not change it either: a per-card kebab is a different
+trigger carrying different state, not a second way into this one. The card kebab is still PET-39's
+and still `aria-disabled`.
+
+**The palette is a prop threaded from `page.tsx`, not a fetch on open, and the two shapes are not
+interchangeable.** `transactions/categories/page.tsx` reads `GET /api/templates/palette` as a third
+entry in the `Promise.all` it already had, and `CategoriesScreen` passes it through. That costs one
+request per view of the tab for a modal that usually does not open - `docs/TODO.md` records the
+price - and it buys away a route handler, a hook, and the null-versus-failed-versus-loading triple
+`AddTransactionModal` has to model. The read is server-side, so the token never leaves the server and
+Storybook can render the whole screen from a literal. **Do not give the palette read the categories
+read's failure policy**: a failed palette is `null` and a degraded modal, never a throw and never a
+redirect, because only the categories read decides whether the session is alive - two opinions about
+that on one page is the shape the `/dashboard` to `/login` loop came out of.
+
+**The budget field is optional and its label is the only thing that says so**, which is the one place
+this app's UI states a rule instead of enforcing it silently. `CreateCategoryDto` accepts an absent
+`monthlyCap` and rejects `0`, so `categoryForm.ts`'s `isCapValid` returns **true for `''`** - and the
+whole decision lives in that one line, deliberately, so it is testable without a DOM. Two
+consequences worth carrying: an untouched form produces **one** message rather than two, because only
+the name is wrong; and the budget's message has to name blank as a valid choice ("or leave it blank
+for no limit"), because the field looks required and nothing else on screen says otherwise. A19 and
+A29 still owe the treatment a sign-off, which `Screens/19 Add category`'s `WithMessages` story exists
+to collect.
+
+**The Color field is `ColourSelect`, a control of our own, and the Icon field beside it is still
+`ui/Select`.** That asymmetry is deliberate and the reason is worth knowing before anyone "fixes" it. A
+native `<option>` cannot contain markup in any browser that matters and its tick is drawn by the
+operating system, so a swatch-and-tick list is unreachable from a native control; Chromium's
+`appearance: base-select` would give both, but daisyUI ships nothing for it, so opting in means
+hand-written CSS re-creating what daisyUI already provides, in one browser only. **Three rules carry
+over from elsewhere and must not be undone.** The popover is the platform's, exactly as in
+`(app)/transactions/TransactionRowMenu.tsx` - `popovertarget` opens it, `popovertargetaction="hide"`
+closes it, and the only React state is the one `aria-expanded` needs, fed by the popover's own `toggle`
+so it cannot disagree with a light dismiss. There is **no `role="listbox"` and no `role="option"`**,
+because those promise a keyboard contract this does not implement; `aria-current` names the chosen row
+instead, which is the third time this app has declined a roles-plus-keyboard promise. And the trigger
+wears `select`'s own class string, byte-identical to `(app)/DateField.tsx`'s, so the two fields are one
+box when closed and differ only when opened. The costs - no arrow keys, no native mobile picker, no
+anchoring in Firefox, and a panel Figma never drew - are all in `docs/TODO.md`.
+
+**The Icon field is `IconSelect`, and the sentence that used to end the paragraph above - that Icon
+stays native because 64 options want a grid - was answered in the same PR rather than deferred.** It is
+the same trigger and the same platform popover, holding a **search box over a six-across scrolling
+grid**; the shapes differ because sixteen colours read as words and 64 glyphs are looked for by shape.
+So this modal imports `ui/Select` nowhere, and the two fields differ from each other only in what the
+panel contains. Three things in it are load-bearing. **Enter in the search box is intercepted**, because
+`(app)/Modal.tsx` wraps the body in a real form so Enter submits it - correct for every other field, and
+it would create the category from two letters of a search here. **The search matches the lucide name as
+well as the label**, because "Television" is `tv` and nobody typing knows which vocabulary they hold.
+And the cells are `w-full aspect-square p-0` rather than `btn-square`, which a browser walk forced: six
+fixed cells fit the panel until the vertical scrollbar takes 15px, and `overflow-y: auto` makes
+`overflow-x` compute to `auto`, so the panel grew a second scrollbar along the bottom. The search box
+itself and its empty state are invented, and `docs/TODO.md` records that they owe a designer.
+
+**Both pickers centre their chosen row when the panel opens, through `categories/pickerScroll.ts`, and
+the one thing not to simplify is that it is not `scrollIntoView`.** That method scrolls _every_
+scrollable ancestor, and a panel is a DOM descendant of daisyUI's `modal-box`, which is itself
+`overflow-y: auto` - so centring a cell would also jog the modal behind the popover, which reads as the
+page lurching. The helper writes one `scrollTop` on one element and can move nothing else. It finds the
+row by `[aria-current]`, so the accessibility attribute doubles as the hook and there is no second
+source of truth about which row is chosen. Lifted to one module at two consumers rather than copied,
+which is `(app)/useCategoryOptions.ts`'s exception to the rule of three: a second hand-maintained copy
+of a geometric formula is how one of them quietly stops matching. jsdom runs no layout, so its suite
+pins the arithmetic against stubbed rects and the real behaviour is a browser check.
+
+**The Note field exists in the markup and is not drawn, behind a `SHOWS_NOTE` flag.** Frame 19 draws
+it and CED-4 specifies it; A42 is why it is hidden, because a note surfaces on no screen once saved,
+and a field whose value nothing ever shows back is a request to write into a void. It waits for a
+category detail page. **Read the flag's own comment before touching it** - the two things not to undo
+are that it is a flag rather than commented-out JSX, so the markup stays typechecked and cannot rot
+while hidden, and that nothing behind the field was removed: `categoryForm.ts` still trims and omits
+`note`, its suite still pins that, and `CreateCategoryDto.note` and the `categories.note` column are
+untouched. Flipping it to true fails exactly three cases in `AddCategoryModal.test.tsx`, which is the
+cost of re-enabling, stated by the suite rather than left to be discovered. One consequence worth
+knowing: with the Note gone, **the budget is the only label carrying "(optional)"**, so it now carries
+A12's whole signal on its own.
+
+**`color` and `icon` are literal unions on the wire, and a `<select>` hands back a `string`.** The
+form models the gap rather than casting across it: `CategoryFormValues` types both as
+`Token | ''`, and `hasChosenMarks` narrows to the shape `toCreateCategoryBody` will accept. The
+empty string is not a placeholder the user can select - both selects are preselected - it is "the
+palette did not arrive", which is exactly the state the submit guard refuses on.
+
+**Neither field puts its value through the DOM at all, which is what closed that gap rather than
+guarding it.** This paragraph used to end on the change handlers looking the chosen value up in the
+palette to recover a typed token from a `string` - the honest answer while the fields were
+`ui/Select`s, and false the moment `ColourSelect` and `IconSelect` replaced them in the same PR. Both
+call `onChange` with the row's own `token` or `name`, already the contract's union, so `chooseColour`
+and `chooseIcon` do a `setValues` and nothing else. **Read that as a property of these two controls,
+not of the form**: a field wired to anything that hands back a bare `string` - a native `<select>`, a
+URL parameter, a devtools-written value - is back to needing a real membership check before it may be
+typed as a token, and a cast would be asserting what nothing checked.
+
+**PET-39 made the card kebab real.** Every paragraph above calling it "still PET-39's" and "still
+`aria-disabled`" is history now, and the whole of the change to `CategoryCard.tsx` is that one
+attribute going away: `CategoryCardMenu.tsx` is the menu behind it, the card **stays a Server
+Component**, and the `'use client'` lands on the menu alone because its Delete calls into a context.
+The same boundary `TransactionRow` and `TransactionRowMenu` settled on, arrived at the same way - the
+popover means there is no open state to hold.
+
+**It does not empty the screen's inert list, and the first draft of this section said it did.** That
+sentence read "so the Categories tab has no inert control left on it", which is false and was caught
+by a code review rather than by any gate - the same shape of error this file's own "Two controls on
+that screen ship inert and say so" paragraph exists to prevent. **Three remain, and all three are
+PET-38's**: `CardBanner`'s "Set limit" on every uncapped card, which is every account, since the
+`Uncategorized` fallback ships without a cap; the summary card's "Allocate" whenever budget is
+unassigned; and the menu's own "Edit". All three carry `aria-disabled` rather than `disabled`, so
+they stay focusable and announce their condition. Worth stating plainly because a gap list that
+claims a screen is finished is worse than one that never mentioned it.
+
+**The menu is the platform popover, which is now the fourth time this app makes that argument and the
+third on this one screen**, after `TransactionRowMenu`, `ColourSelect` and `IconSelect`. Nothing new
+is decided by it: light dismiss and Escape are the platform's, no z-index is picked, no listener is
+attached to `document`, and the two costs are the inherited ones - jsdom implements none of the
+Popover API so under Jest the menu is permanently open and the suites assert wiring, and Firefox
+falls back to a centred popover behind a dimmed backdrop. It publishes **no `role="menu"` and no
+`aria-haspopup`**, the fourth refusal of a keyboard contract this repo has not implemented.
+
+**Its confirmation is mounted once by `CategoriesScreen`, and that is deliberately neither of the two
+provider shapes already here.** Read `DeleteCategoryProvider.tsx` before copying either of them onto
+a third feature, because the reasoning is what distinguishes them rather than the file layout. A
+dialog owned by each card - `AddCategoryButton`'s shape, and the obvious one - sits **inside the card
+being deleted**, so the success path's `router.refresh()` can unmount the dialog out from under its
+own `close()`; that is this file's own rule about a platform guarantee firing during an event React
+unmounts inside, reached from a new direction. A dialog on `(app)/layout.tsx` -
+`DeleteTransactionProvider`'s shape - would put a category dialog on all four routes to serve one
+screen, where that provider's own criterion is three entry points across three segments and
+`AddTransactionProvider`'s is five triggers across three routes. Screen-scoped is the shape that fits
+N triggers on one route, and PET-38's "Delete category" enters through the same seam.
+
+**Three amendments to PET-39 are visible in the copy, and two of them are worth not "correcting"
+back.** The dialog says **`Uncategorized`, not "Other"**, because that role was deliberately split
+when the backend was built - "Other" is an ordinary chip anyone can rename or delete, and the row
+deletions reassign to is the `isFallback` one; `CategoriesScreen` resolves the name off its own list
+response so no string here claims to know the backend's name for that row. It says the count is
+**this month's**, because `transactionCount` is the current period's while the delete moves every
+transaction the category ever held, so the ticket's sentence understates on any account with history.
+And **Delete is omitted on the fallback card** rather than offered and refused, which is AC6; the
+409 is still classified in `lib/deleteCategory.ts`, because a hidden control is not an enforcement.
+The consequence to know before PET-38 lands is that the fallback card's menu is a single disabled
+"Edit", i.e. a menu with nothing operable in it.
+
+**`lib/deleteCategory.ts` publishes four reasons, which is one more than either existing delete**, and
+the extra arm is the 409. That is the only interesting thing about it; everything else - the id and
+nothing else, the result rather than a throw, the deliberate absence of a `redirect()` - is
+`lib/deleteTransaction.ts`'s and unchanged.
+
+**Two things were lifted out of this feature after a code review, and both broke the rule of three
+on purpose.** `(app)/ConfirmDeleteDialog.tsx` and `(app)/PopoverMenu.tsx` each have exactly two
+consumers, where `frontend/src/components/CLAUDE.md` says to duplicate until a third appears. That
+rule is right about markup and this is not markup: what moved is six behaviours that a code review
+found and fixed **once each**, which PET-39 then duplicated by copy-paste into a second file where
+the next such fix would not have reached them. The `try` around the client-to-Server-Action RPC, the
+404 arm that still refreshes, the refresh-then-close-then-`onDeleted` ordering, Delete disabling
+while Cancel deliberately does not, the `triggerRef.current?.focus()` before a dialog mounts, and
+`aria-expanded` being fed by the popover's own `toggle` event. Two copies of a `<p>` is cheap; two
+copies of a hard-won fix is a divergence waiting for its next reviewer.
+
+**Both keep their wrappers, and that is what stops the shared thing learning what it serves.**
+`ConfirmDeleteDialog` takes a rendered `body` string and a `remove` the caller has already bound to
+its own id, so it never sees a `DeleteTarget` or a `DeleteCategoryTarget` - two shapes that share
+nothing. `PopoverMenu` takes the whole popover id from its caller rather than inventing a prefix,
+so `row-menu-<uuid>` and `category-menu-<uuid>` still say what they are in the DOM and in the two
+suites that assert the pairing. The proof the extraction was behaviour-preserving is that **all 128
+delete tests and all 44 menu tests passed unchanged**, and the browser walk re-ran green on both
+screens.
+
+**`ConfirmDeleteResult` unions `'failed'` in rather than leaving it to the caller's `R`**, which is
+what removes a cast. The component must be able to produce a result itself when the RPC rejects and
+can only name one reason to do it with; `'failed' as R` asserted membership nothing had checked,
+which is the move `categoryForm.ts` refuses to make about colour tokens. Carried in the type, every
+caller's `messages` must supply that line and the compiler says so.
+
+**It takes no `navigates` option, unlike the transaction confirmation, and that is the same call
+PET-33 made about `onDeleted`.** Every entry point this dialog has is on a route that survives the
+delete, so there is no caller for the parameter; `/transactions/[id]` is what made that option
+necessary next door. The one option it _does_ carry ahead of its caller is `onDeleted`, and that is a
+deliberate departure worth naming: PET-38's edit modal opens this confirmation over itself and has to
+come down with a successful delete, which is a caller one ticket away with a concrete job rather than
+the forecast `TransactionsTable`'s unreachable `pending` prop was.
+
+**PET-38 built that caller, and `onDeleted` is the one prediction in this file that landed exactly as
+written.** `EditCategoryProvider` passes it, a delete that really removed the category takes the form
+down with the confirmation, and a cancelled or failed one leaves the form exactly as it was - which
+is why the callback is on the success arm rather than on `onClose`.
+
+**The Edit modal is a second component rather than a mode on `AddCategoryModal`**, which is the call
+`(app)/EditTransactionModal.tsx` made about its own pair and which holds here for the same reasons.
+The fields, their order, their validation and the currency caret are all shared through
+`categoryForm.ts` and the `ui/` primitives; what is not shared is the diff, the footer's third
+control, the prefill, five of the messages, and the fact that submitting an unchanged form is a
+legitimate no-op. A `mode` prop would carry all of that as branches inside one file.
+
+**Its provider is `DeleteCategoryProvider`'s shape, and this is the second use of an argument that
+file wrote for one consumer.** Every clause transfers unchanged - a modal owned by each card sits
+inside the card being edited, where the success path's `router.refresh()` can unmount it out from
+under its own `close()`, and a modal on `(app)/layout.tsx` would put a category form on all four
+routes to serve one screen. What this feature adds is the evidence: that file's criterion for
+screen-scoped is "N triggers on one route", and it had one kind of trigger where this has **two** - a
+kebab on every non-fallback card and a "Set limit" banner on every uncapped one - so a category with
+no cap draws two ways into the same modal. **The nesting order is a requirement rather than a
+tidiness**: the footer's "Delete category" is a `useDeleteCategory()` call, so the edit provider sits
+inside the delete one.
+
+**`toUpdateCategoryBody` is `toUpdateTransactionBody` with two differences**, both worth knowing
+before touching either. **A blank cap sends `null`**, which is the only way a capped category becomes
+uncapped and the whole reason `isCapValid` accepts a blank field - note the asymmetry with
+`toCreateCategoryBody`, which _omits_ a blank cap, because `CreateCategoryDto` reads absent as "no
+cap" and does not accept `null` at all. The two rules look inconsistent and are one rule stated
+against two DTOs. And **`color` and `icon` are skipped while they are `''`** rather than the function
+taking a narrowed `ChosenCategoryValues`: `''` is reachable here, for `icon` through the ordinary
+case of a stored row that carries none, since `CategoryResponseDto.icon` is nullable while
+`UpdateCategoryDto.icon` documents itself as not clearable.
+
+**A failed palette read does not block a save, and that is the one place this form must not copy
+`AddCategoryModal`.** That modal guards submission on `hasChosenMarks` because a create has no colour
+until the palette arrives. An edit has one, prefilled from the row, and both pickers are `disabled`
+when the palette is unusable so no rejectable value can reach the body - so the name and the budget
+stay saveable and the line says which two fields are affected rather than implying the modal is
+broken. This is the identical finding a review made about `EditTransactionModal`'s `categoriesFailed`
+guard, which returned before any state changed and made Save do nothing observable.
+
+**The `Uncategorized` card draws no kebab and no banner, which is where AC1 and AC6 both ended up.**
+Both actions behind a kebab are refused for that row - `DELETE` answers 409 because it is where every
+other deletion sends its transactions, and `PATCH` answers 409 for a rename because its name is fixed
+
+- and PET-39 had already hidden Delete, leaving a kebab holding one disabled "Edit". Offering a live
+  Edit whose Name field alone was greyed out would have been a third state to explain on the one
+  category nobody asked for, so nothing on that card is drawn that cannot be acted on. **The cost is
+  stated rather than hidden**: `Uncategorized` can now be neither renamed nor capped from the UI, though
+  the API accepts a cap on it, and `docs/TODO.md` records that. Both 409s stay classified in
+  `lib/deleteCategory.ts` and `lib/updateCategory.ts`, because a control that is not drawn is not an
+  enforcement. Deciding it in `CategoryCard` rather than inside the menu is what let `CategoryCardMenu`
+  drop its own `isFallback` guard: a component only ever mounted for a category with both actions has
+  nothing left to branch on.
+
+**"Set limit" is live and "Allocate" is not, so the symmetry `CardBanner` shipped with is gone.**
+That component grew an optional `onAction`: with a handler the button is live, without one it keeps
+the `aria-disabled` treatment, and PET-39's `aria-disabled:` variants paid off exactly as their
+comment promised - one prop decides both halves and the class string never moved. The handler cannot
+come from `CategoryCard`, which is a Server Component, so `SetLimitBanner.tsx` is a one-purpose
+client wrapper, the same smallest-wrapper rule `SidebarNav` and `TrendChart` follow. **"Allocate"
+stays inert deliberately**: no frame draws where it goes, so it remains the screen's one control
+announcing its own unavailability, and `frontend/CLAUDE.md`'s gap list still carries it.
+
+**PET-70 built where it goes, so that last sentence is history and the symmetry is back.**
+`AllocateBanner.tsx` is `SetLimitBanner`'s second instance, which turns that file's smallest-wrapper
+argument from a one-off into a pattern - and because both callers now pass a handler,
+`CardBanner`'s optional `onAction` became an exclusive union and its inert branch was deleted rather
+than left as archaeology about a state nothing can reach. **The Categories tab is the first screen in
+this app with no inert control on it.** Four things about the modal behind it are decisions rather
+than shape.
+
+**It owns its open state and takes no provider**, which is `AddCategoryButton`'s criterion applied
+unchanged: one trigger on one route, where `EditCategoryProvider` exists because the edit modal has a
+kebab per card _and_ a "Set limit" per uncapped card. Being a large modal changes nothing about that.
+**The banner could not be hoisted into `CategoriesScreen`** either, which is why
+`SpendingSummaryCard` takes two props it never renders: the overlap effect needs the strip to be a
+sibling of `BannerCardBody` inside that file's own `<section>`, so moving the banner up means moving
+the card body with it, and a `banner` slot with one possible occupant is what that screen's own
+doctrine refuses.
+
+**All of the arithmetic is in `allocateForm.ts`, in integer cents, and the one figure worth knowing
+about is the reserve.** The modal excludes `Uncategorized` while `allocation.allocated` counts it, so
+the cap held by rows it does not draw is derived as `allocated - Σ visible caps` rather than read off
+the fallback - exact, because every figure on the wire is a safe integer over 100, and still correct
+if the row filter ever widens. Each field's ceiling is written as "the budget less everything that is
+not this row", never as "the remainder plus this row's own cap": the two are equal, and only the first
+keeps the displayed remainder's clamp-at-zero out of the arithmetic.
+
+**The snap fires on keystroke rather than on blur, and blur would be a correctness bug.** `Modal`
+wraps its children in a real `<form>` and Enter does not blur the focused input, so a blur-snap lets a
+value past the budget submit. On the snapping keystroke the handler writes the value and collapses the
+caret to the end explicitly, because the string the user was editing no longer exists - the one place
+in this app that overrides `lib/amountField.ts`'s caret restore rather than relying on it.
+
+**A ceiling of zero clears the field instead of writing `0.00`, and only a browser found it.** The
+design system's own version snaps to the ceiling literally, which plants a cap of zero - rejected by
+`isCapValid` and by `@IsPositive()` - so the app would invent an invalid value and then answer "Enter
+an amount greater than 0" as though the user had typed it. Blank is valid _and_ true: there is nothing
+left to give that category. A typed `0` still lands and is still caught on submit, which is the same
+answer every other amount field here gives.
+
+**A code review of PET-70 changed seven things about that modal, and they group into four
+corrections.** Every one is a rule this app had already written down for some other screen and this
+modal broke in a new place, which is the reason they are worth keeping as corrections rather than
+edited away.
+
+**Money is rounded once and the remainder derived, in the ledger as much as on the cards.**
+`dashboard/BudgetCard.tsx` and `SpendingSummaryCard.tsx` both carry that rule and both say why; the
+summary island rounded its three figures independently, so a budget of `$2,000.50` against a cap of
+`$1,000.25` printed "Monthly budget $2,001 / Assigned $1,000 / Unassigned $1,000" - two rows summing
+to $2,000 in a column drawn with a rule above the total, and reachable on a whole budget too, since a
+cap may carry cents. `allocateForm.ts`'s `toAllocateTotals` owns all three now and the headline reads
+the same figure as the row, so the two cannot disagree. **The row caption is the same rule from the
+other end**: `formatWhole` is right for an aggregate and wrong for a **residual**, so a cap exceeded
+by one cent printed "$0 over this cap" in `text-error` - a red warning asserting the row is not over -
+and a fifty-cent overage printed "$1", double the real figure. The overage carries cents; the spend
+beside it stays whole. That mixed precision is the call `cappedMessage` already documents.
+
+**Nothing refreshes while the dialog is open, and the `missing` arm's re-read moved to the close its
+own copy asks for.** Two defects, one fix. The route re-read can drop `unallocated` to zero, which
+unmounts `AllocateBanner` through `SpendingSummaryCard`'s own gate and this dialog with it - so a
+cross-tab race could take the explanation of why nothing saved, and every cap the user had typed, off
+the screen at once with nothing accounting for it. And refreshing the grid _behind_ a dialog that goes
+on listing the dead category fixes the half of the screen the user is not looking at: Save stayed
+enabled over a draft that is read once on open and never resynced, so the retry the copy invites
+re-sent the dead id and could only 404 again, the only escape being the Close that discards
+everything. So a `missing` answer sets a `stale` flag that disables Save - the explanation is on screen
+and no edit can make the payload acceptable - and the re-read fires from `onClose`. This is the one
+place in this app where a modal's refresh is deliberately **not** on the arm that discovered the
+staleness; `ConfirmDeleteDialog`'s `staleReasons` still refreshes immediately, and correctly, because
+that dialog is mounted by `CategoriesScreen` rather than inside a subtree the re-read can remove - the
+card it is deleting can vanish behind it and the dialog is still there. This one lives inside a banner
+the same re-read can unmount, which is the whole difference.
+
+**The cap fields freeze while the save is out, unlike Cancel beside them.** The body is serialised at
+press time and the success path closes the dialog, so a keystroke landing during the round trip was
+dropped in silence and the user watched the modal close on a limit that was never sent. Cancel stays
+live for the reason both category modals give: no fetch in this app carries a timeout.
+
+**Two reachable states had nothing to say, and both were the same mistake as an empty state that
+lies.** An account that has deleted every other category still draws the Allocate banner - the whole
+budget is unassigned - over a modal whose only row is the one it excludes, so it opened on a column
+header above an empty box beside a Save that could never enable. It draws one sentence now and
+suppresses the footer hint, which would be advice about fields that are not there. And a diff of more
+than a hundred rows is refused here rather than sent: `@ArrayMaxSize` answers 400, which classifies as
+`invalid`, whose copy asks the user to check amounts that are every one of them valid - advice that
+can never work on a screen offering no way to submit a subset. `MAX_CAP_ROWS` is a literal restating
+the DTO's own bound, which this repo does in exactly one other place (`CategoryPicker` against
+`RegisterDto`) and for the same reason: `maxItems` reaches no generated type, so there is nothing to
+read it out of.
+
+**The snap's live region is mounted from the first render and only its text changes.** A polite region
+created in the same commit as its content is generally not announced at all - assistive technology
+registers regions and then watches them - so the one event the treatment exists to report was silent,
+and `getByRole('status')` cannot tell that apart from a working one. It ships empty and fills, which
+is why its suite asserts the region's **text** rather than its presence. The revert stays silent for
+the reason the original note gives: `aria-relevant` defaults to additions and text, so emptying
+announces nothing.
+
+**Focus opens on the field the trigger implies**, which is the one thing the two entry points
+disagree about. The kebab's "Edit" is an unspecific invitation and focuses Name; "Set limit" sits on
+a banner reading "No limit set for this category", which is a request to type a number, so it focuses
+the budget. Frame 21 draws the budget field with a focus ring and settles neither case, being a
+mid-fill snapshot rather than an on-open state - the same reading `AddCategoryModal` gives frame 19.
+
+**Two of the paragraphs above were wrong when they were written, and a code review is what found
+them.** Both are worth keeping as corrections rather than quiet edits, because both were assertions
+a comment made about behaviour that did not exist.
+
+The first is the diff's `note`. That comparison trimmed the field and then measured it against the
+**untrimmed** stored value, so a category stored with `"  weekly shop  "` differed from itself -
+and since `SHOWS_NOTE` is false the user could neither see nor touch that field, so a rename carried
+a rewritten note along with it, a note of nothing but spaces was **deleted** by a save that never
+mentioned it, and Save on a wholly untouched form fired a PATCH instead of closing. The docblock
+claimed the opposite in as many words. Both sides are trimmed now. **`name` deliberately keeps the
+asymmetry**, which is `toUpdateTransactionBody`'s documented call about `merchant`: a stored name
+with stray whitespace normalises on the first save that touches anything, and that is acceptable
+precisely because the Name field is on screen with its value in it. Visibility is the whole
+difference between the two rules, so when `SHOWS_NOTE` flips, that is the line to revisit.
+
+The second is the `missing` arm. `EditTransactionModal`'s copy says "Close this **and refresh the
+list**"; this modal reworded it to "Close this to see the current list" - a promise of an automatic
+refresh - and did not add one, so the deleted category's card stayed in the grid, in the tab badge
+and in the allocation summary, and reopening it answered 404 forever. It calls `router.refresh()` on
+that one arm now, keeping the modal open so the edits and the explanation stay in front of the user.
+`(app)/ConfirmDeleteDialog.tsx` carries the same rule as a `staleReasons` prop; it is inlined here
+because this modal has exactly one such arm - `fallback` describes a category that is still there,
+and the other three changed nothing on the server - and a second would be the signal to lift a list.
+**The suite had pinned the wrong behaviour**: a blanket "never refreshes on any failure" assertion
+across all five arms, which is why no gate caught either defect. That claim is now per-arm.
+
+**All three of this screen's Server Actions are injectable now, and the third closes a gap
+`docs/TODO.md` had nominated this ticket for.** Storybook's Vite build has no notion of
+`'use server'`, so it bundles each action as an ordinary module and a press reaches `cookies()` from
+`next/headers` in the browser. `remove` was fixed at PET-39 after a review found the seam unreachable
+from the story; `update` ships with one; and `create` is threaded to `AddCategoryButton` rather than
+to a provider, because that component owns its own modal. `CategoriesScreen.stories.tsx` defaults all
+three in its shared `Frame`, so a story added later cannot forget one.
 
 ## Not built here
 

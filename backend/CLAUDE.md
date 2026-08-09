@@ -437,7 +437,7 @@ row before PET-64 took it away.
 `STARTER_CATEGORIES`: that table is the onboarding chip list, this must never appear there, and
 its name is a system invariant rather than something an admin may rename. See `## Templates`.
 
-Five things about the rest of it are easy to get wrong:
+Six things about the rest of it are easy to get wrong:
 
 - **A cap is optional, and `0` is not how you say "no cap".** The ticket originally required
   one above zero, which would have made uncapped categories a legacy artifact the API could
@@ -470,6 +470,40 @@ Five things about the rest of it are easy to get wrong:
   visible and fixed by retrying, where the reverse strands rows pointing at a tombstone. The
   reassignment deliberately sweeps **tombstoned** transactions too, so the offline-sync record
   carries no dangling category id.
+  **Ordering is one of two sanctioned shapes, and this is where to look for the other.** It works
+  here only because the two writes are order-_dependent_, so one direction of a mid-way failure is
+  harmless. Where writes are order-independent - `setCaps` below - there is no safe order to pick,
+  and the answer is a conditional single statement instead.
+
+- **The bulk cap write is one conditional statement, not a transaction and not a loop.** `PATCH
+/api/categories` sets many caps at once for the Allocate budget modal, and its `WHERE` carries the
+  live filter, the id set **and** a `(select count(*) ...) = n` subquery, with `RETURNING id`. That
+  subquery is the whole all-or-nothing story: the database refuses the statement unless every id in
+  the payload is live at the instant it runs, so there is no window between a check and a write for a
+  concurrent delete to land in, and a payload naming one dead category is a **404 with nothing
+  written**. It is the shape `docs/TODO.md` has prescribed since PET-30 and the first place it is
+  used; `LoginTokenService.consume()` is the same shape one table over.
+
+  Five traps in it, and the first would be silent. **The `CASE` arms and the `IN` list must come from
+  one array**: a row matched by the `WHERE` with no arm of its own falls off the end of the `CASE` and
+  is set to **NULL**, so building the two halves from two sources wipes caps the caller never named
+  and answers 200 doing it. **`@ArrayUnique` is load-bearing**, because a repeated id makes `count(*)
+= ids.length` unreachable and turns every duplicate into a permanent 404 rather than a clean 400.
+  **`@ValidateNested` and `@Type` are both mandatory** or the entries arrive unvalidated - and a
+  wrapper object is mandatory too, since `ValidationPipe` skips a body whose reflected metatype is
+  `Array` outright, at which point SQLite's INTEGER affinity stores a string cap as TEXT and the row
+  serialises as a shape `CategoryResponseDto` says is impossible. **`monthlyCap` is
+  required-and-nullable**, the inverse of `UpdateCategoryDto`'s tri-state: this route has no
+  leave-alone case, so an omitted cap is a 400 and `@ValidateIf` rather than `@IsOptional` is what
+  makes it one. And **there is no 409 and no budget ceiling** - the fallback's cap is editable and no
+  rename is in play, so this is the one categories write with no conflict case, and caps may sum past
+  the monthly budget exactly as `PATCH /categories/{id}` allows. `test/openapi.e2e-spec.ts` pins both
+  absences.
+
+  **A cap change regenerates no insights**, deliberately. `PATCH /categories/{id}` has never done so,
+  so emitting only here would make one user action behave differently depending on which modal
+  performed it. The over-cap rule does read caps, so a `ready` set can go stale; `docs/TODO.md`
+  carries the `CATEGORY_CHANGED` event that would close it, beside the debounce the LLM swap needs.
 
 Renaming or deleting the fallback is a **409**, not a 403: the request is well-formed and the
 caller is entitled to make it, it just conflicts with an invariant of the resource. Everything

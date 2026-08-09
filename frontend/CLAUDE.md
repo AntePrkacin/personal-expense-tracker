@@ -197,6 +197,30 @@ rules and they answer these questions in one grep.
   and nothing else could; `frontend/src/app/CLAUDE.md` owns the account of it, under The app
   shell, along with the `translate-none scale-none` that pays for it.
 
+- **A `<progress>`'s track is a tint of its own fill, so a coloured bar at 0% is a solid coloured
+  pill.** `.progress` sets `background-color: color-mix(in oklab, currentcolor 20%, transparent)`
+  and every `progress-*` modifier sets `currentcolor` - so `progress-success` paints a 20% green
+  track, and a category with nothing spent read as a full green bar rather than an empty grey one.
+  This is the first entry in this section that is a _visible_ wrong result rather than an invisible
+  missing one, and it still could not fail a gate: `toHaveClass('progress-success')` is green either
+  way. **Pin the track with `bg-base-300`**, which is the token an empty surface should be and what
+  `transactions/[id]/CategoryContextCard.tsx`'s div-based bar already uses. The three call sites are
+  `transactions/categories/categoryCardStatus.ts`, `transactions/categories/SpendingSummaryCard.tsx`
+  and `dashboard/BudgetCard.tsx`; `app/DecorativePanel.tsx` needs nothing, because it carries no
+  colour modifier and its `currentcolor` is already `base-content`.
+
+- **daisyUI ships `.card-body p { flex-grow: 1 }`, so `justify-between` does nothing in a card
+  footer whose children are both `<p>`.** Both stretch, there is no free space left to distribute,
+  and each paragraph's text renders at the left edge of its own over-wide box - so a figure meant to
+  sit against the card's right edge sits in the middle of the row instead. It bit the Categories
+  card's transaction count and the dashboard budget card's "days left" caption, and every row beside
+  them escaped it only because their right-hand child is a `<span>` or an `<a>`, which the selector
+  does not match. **Fix it with `text-right` rather than `grow-0`**: the plugin's selector is (0,1,1)
+  against a utility's (0,1,0), so it wins on specificity rather than on layer order and the utility
+  loses - measured in Chrome, where adding `grow-0` left `flex-grow` computing to `1`. `text-right`
+  sets a property daisyUI never touches, so there is nothing to outrank. Keep the
+  `justify-between`: it is what positions the boxes the moment either child stops growing.
+
 **The daisyUI Blueprint MCP is this repo's method for writing that markup, and its three stages
 earn three different levels of trust** - follow the syntax stage verbatim, adjudicate the quality
 inspector's findings rather than applying them, and treat the browser walk as the real output.
@@ -360,6 +384,16 @@ and touches neither `Intl` nor UTC, because a calendar date is a day rather than
 must never follow a locale. That file records the two directions the mistake runs in;
 `lib/calendar.ts` builds the picker's month grid on top of it.
 
+**`lib/amountField.ts` is a third module in that family, and the line it draws is "does this touch
+the DOM".** `reformatAmountInput(element)` is the currency field's keystroke handler: it writes the
+formatted value onto the input, restores the caret to the position `amountCaret` computes, and
+returns what the caller should store. It sits outside `lib/format.ts` because everything in that
+file is strings in and strings out, which is exactly what lets its suite pin idempotence with no
+document in sight. It arrived late and by the worst route - four byte-identical copies across
+`app/setup/BudgetForm.tsx`, both transaction modals and the Add category modal, one past the rule of
+three - so read it before changing the call order rather than reasoning from any one call site;
+`frontend/src/app/CLAUDE.md` records what those copies cost.
+
 All seven parts hard-code `en-US` and its separators, "Today" and "Yesterday" included. When the currency chosen during onboarding
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
 that. The one thing that must **not** follow it is `lib/date.ts`, for the reason above.
@@ -476,6 +510,49 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `/transactions/[id]`, the app's first dynamic route. Read the sentence above as history - though
   "a row click" stays literally true of the other four cells, because the link is on the merchant
   alone for the accessible-name reason `frontend/src/app/CLAUDE.md` records.
+  **PET-36 made both tabs real, so the "stays inert" list above is down to the Dashboard's month
+  select alone.** `/transactions/categories` exists, both labels are `next/link`s carrying
+  `aria-current`, and the badge on each tab now reads a real count - so the sentence naming "both
+  transactions tabs" is history. What that ticket adds to _this_ list is smaller and of the same
+  kind: its card kebab and its "Add category" header button are drawn and not yet operable,
+  belonging to PET-39 and PET-37, and unlike every inert control before them they announce
+  `aria-disabled` rather than staying silent. The Categories screen is otherwise complete - it
+  reads its own data and renders every state the contract can hand it, the uncapped card included.
+  **PET-37 made "Add category" real, so the card kebab is the last inert control on that screen**
+  and PET-39 owns it. The header button opens frame 19 and really creates, which also makes the
+  Categories tab the second screen in the app with a working write. Note it needed no provider,
+  unlike every "Add transaction" trigger: `frontend/src/app/CLAUDE.md` records why one button on one
+  route does not want one, and it is the paragraph to read before copying the transaction shape.
+  **PET-39 made the kebab real, so the sentence above naming it "the last" inert control is history -
+  but the tab is not clear, and an earlier draft of this bullet said it was.** The kebab opens frame
+  18's menu, whose Delete opens frame 20 and really deletes. **Three controls on that screen are
+  still inert, and all three are PET-38's**: `CardBanner`'s "Set limit", which every uncapped card
+  draws and therefore every account sees on `Uncategorized` at minimum; the summary card's
+  "Allocate", drawn whenever budget is unassigned; and **"Edit" inside the menu**, which renders
+  `menu-disabled` with `aria-disabled` because the Edit category modal does not exist. All three
+  announce `aria-disabled` rather than staying silent, which is the distinction PET-33 drew and is
+  why they are a different claim from the Dashboard's month select. The **fallback card offers no
+  Delete at all** (AC6), which until PET-38 lands leaves that one card with a menu holding nothing
+  operable.
+  **PET-38 built the Edit modal, so two of those three are live and the paragraph above is dated.**
+  The menu's "Edit" opens frame 21 prefilled from the card, and every uncapped card's "Set limit"
+  opens the same modal focused on its budget field - which makes the Categories tab the first screen
+  in the app carrying create, edit and delete for one resource. **The summary card's "Allocate" is
+  the one that stays inert**, because no frame draws where it goes, so it is now the only control on
+  that screen announcing `aria-disabled`. The sentence about the fallback card is history in a
+  stronger sense than "resolved": that card now draws **no kebab and no banner at all**, because
+  `PATCH` refuses to rename it just as `DELETE` refuses to remove it, so nothing on it is drawn that
+  cannot be acted on. What that costs belongs on this list rather than only in the plan -
+  **`Uncategorized` can be neither renamed nor capped from the UI**, though the API accepts a cap on
+  it, and `docs/TODO.md` carries the reasoning.
+  **PET-70 made "Allocate" live, so the clause above about it is dated and the screen now has no
+  inert control at all.** The summary card's banner opens the Allocate budget modal, which sets every
+  category's cap in one write - so `CardBanner`'s optional `onAction` is gone with it, replaced by an
+  exclusive union in which an action with no handler does not typecheck. That deleted the
+  `aria-disabled` treatment and its two `aria-disabled:` variants, which had exactly one caller. The
+  `Uncategorized` sentence **survives unchanged and is the one to cite**: this modal excludes that row
+  too, so a limitation the fallback card already had is extended rather than resolved, and the API is
+  still the only way to cap it.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session
@@ -519,6 +596,15 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   route-handler caller would be handed an HTML login page with a 200 on it - so a Server
   Component using it applies the 401 policy at the call site, which
   `app/(app)/transactions/page.tsx` is the worked example of.
+  **PET-37 added `lib/palette.ts` and it is the sibling of that module rather than a copy of it.**
+  Both read `/api/templates/*`, and there the resemblance stops: `GET /api/templates/palette` is
+  guarded, so this one goes through `authorizedGet` and classifies its failures, which is exactly the
+  split `TemplatesController` argues for by name. Its policy is a **fourth**: the caller degrades to
+  `null` and draws a disabled picker with a line saying why, because the palette is the contents of a
+  modal rather than the contents of a screen - so neither `lib/transactions.ts`'s throw nor
+  `lib/categoryTemplates.ts`'s empty list is right for it. Critically it also **does not decide
+  whether the session is alive**: `transactions/categories/page.tsx` reads it beside the categories
+  and lets only the categories redirect on a 401, for the reason that file records.
 - **Every write except creating, editing and deleting a transaction.** PET-31 is the app's first authenticated write:
   `lib/createTransaction.ts` is a Server Action over `authorizedPost` in `lib/session.ts`, the
   write half of `authorizedGet` and the second thing to reuse rather than re-derive. Two of its
@@ -546,4 +632,38 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   reported as `ok`**. The single-run guard answers it when another tab, or a transaction the user
   just saved, already started a run - so the thing the button was pressed for is already happening,
   and the caller's next move is identical either way. A failure taxonomy is for failures the caller
-  would do something different about. Every **category and profile** write is still unbuilt.
+  would do something different about.
+  **PET-37 added the fifth, `lib/createCategory.ts`, and it is the first write outside
+  transactions - so "every category write is unbuilt" is now only true of editing and deleting one.**
+  Its arithmetic is the endpoint's rather than a
+  simplification: **three** reasons, because `POST /api/categories` documents 400 and 401 and nothing
+  else. There is no `categoryMissing`, because the body references nothing by id; no 409, because
+  unlike `PATCH` and `DELETE` nothing about creating a category collides with the `Uncategorized`
+  invariants; and **a duplicate name is not a conflict either**, since `categories` carries no unique
+  index on `name`, `color` or `icon`. Read that as a fact about the backend rather than an oversight
+  here - a uniqueness rule would arrive as a fourth arm. Its other half worth copying is that it
+  **does not read the created row**: a 2xx means the category exists, so the modal returns `{ ok: true }`
+  and lets `router.refresh()` bring the new card back through the same list read every other card
+  comes from, rather than trusting a second source of truth.
+  **PET-39 added the sixth, `lib/deleteCategory.ts`, so "every category write is unbuilt" is now true
+  of editing alone.** It publishes **four** reasons, one more than either existing delete, and the
+  extra arm is the whole reason it is not `lib/deleteTransaction.ts` with the noun changed: 409 is
+  `fallback`, which the endpoint answers for deleting `Uncategorized`. That arm is **unreachable
+  through the UI**, since the card menu omits Delete on the fallback row, and it is classified anyway
+  because a hidden control is not an enforcement and "please try again" would be advice that loops
+  forever - the same argument the `missing` arm already carries next door. Everything else about it is
+  the transaction delete's and unchanged: an id and nothing else, a result rather than a throw, and no
+  `redirect()`. Every **profile** write is still unbuilt.
+  **PET-38 added the seventh, `lib/updateCategory.ts`, so "every category write is unbuilt" is now
+  true of none of them** and this bullet's lead-in is down to the profile alone. It publishes
+  **five** reasons, which is `updateTransaction`'s count reached by a different route: that one
+  splits an ambiguous 404 in two, and this one has a 409 the create does not. `missing` is
+  unambiguous here where the transaction patch has to hedge, because this body references nothing by
+  id - it carries a name, a cap, a colour token, an icon name and a note - so the copy can say the
+  category is gone and mean it. `fallback` is the 409, a refused rename of `Uncategorized`, and it is
+  **unreachable through the UI** for a stronger reason than the delete's hidden menu item: that card
+  draws no trigger into this modal at all. It is classified anyway, on the same argument its
+  neighbour makes. Its diffed body is `toUpdateTransactionBody`'s with one difference worth
+  carrying: **a blank cap sends `null`**, which is the only way a capped category becomes uncapped,
+  where `toCreateCategoryBody` _omits_ a blank cap because `CreateCategoryDto` reads absent as "no
+  cap" and takes no `null` at all.

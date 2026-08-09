@@ -91,11 +91,12 @@ export type CategoryOptionsResult = AuthorizedResult<CategoryOption[]>;
 export type CategoryLabelsResult = AuthorizedResult<CategoryLabel[]>;
 
 /**
- * The one request, shared by both projections.
+ * The one request, shared by all three exports.
  *
  * There is still exactly one `authorizedGet('/api/categories')` in this app, which is the
- * property the module comment above is about. What differs between the two exports is only
- * which fields survive.
+ * property the module comment above is about, and PET-36 did not add a second. What differs
+ * between the exports is only which fields survive - and for `readCategoriesView`, that the
+ * answer is "all of them", for the reason that function records.
  */
 async function readCategories(): Promise<AuthorizedResult<CategoriesResponse>> {
   return authorizedGet<CategoriesResponse>('/api/categories');
@@ -149,4 +150,47 @@ export async function readCategoryLabels(): Promise<CategoryLabelsResult> {
       icon,
     })),
   };
+}
+
+/**
+ * One category with everything the Categories tab draws (PET-36, CTG-3, CTG-4).
+ *
+ * The whole DTO rather than a `Pick`, and that is the point rather than laziness: this screen
+ * is the one the endpoint was shaped for, so a projection here would list every field the
+ * response has and go stale the moment a fourteenth appeared.
+ */
+export type Category = components['schemas']['CategoryResponseDto'];
+
+/** The budget against the sum of the caps, straight off the contract. */
+export type Allocation = components['schemas']['AllocationResponseDto'];
+
+export type CategoriesViewResult = AuthorizedResult<CategoriesResponse>;
+
+/**
+ * Reads the account's categories whole, for the Categories tab.
+ *
+ * **This is the third export over the one request, and it is the only one that narrows
+ * nothing** - which cuts directly against the argument the module comment above makes, so it
+ * is worth saying why it does not undermine it. That argument is not "projections are tidy",
+ * it is that a cap and a month's spend must not reach a browser bundle drawing neither: the
+ * Add transaction modal's `<select>` renders an option list, and shipping it eight numbers per
+ * category to do that is waste with a privacy edge on it. The Categories tab draws **every one
+ * of those fields**. The cap is on the card, the spend is on the card, the percentage is the
+ * bar, the status is the chip, the count is the footer, the colour and icon are the tile. So
+ * the narrowing has nothing left to remove here, and a `Pick` listing the whole DTO would be a
+ * maintenance cost buying a guarantee that was already satisfied.
+ *
+ * **`allocation` is the half no existing projection could have carried**, which is the second
+ * reason this is a new export rather than a widened one. It is not a field on a category at
+ * all - it is the monthly budget beside the sum of every live cap - so neither
+ * `CategoryOption` nor `CategoryLabel` had anywhere to put it, and widening either would have
+ * pushed a budget figure into a modal and a table that have no use for one.
+ *
+ * Same inherited failure classification and the same deliberate absence of a `redirect()` as
+ * the two above it; the module comment gives that reason in full and it is unchanged here. The
+ * call site applies the policy, which for this screen is `/transactions`'s own: 401 to the
+ * access flow, anything else thrown to the error boundary.
+ */
+export async function readCategoriesView(): Promise<CategoriesViewResult> {
+  return readCategories();
 }

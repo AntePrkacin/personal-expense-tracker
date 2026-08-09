@@ -258,7 +258,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Set the cap on several categories at once.
+         * @description What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen, exactly as `GET /categories` does.
+         */
+        patch: operations["CategoriesController_setCaps"];
         trace?: never;
     };
     "/api/categories/{id}": {
@@ -692,6 +696,22 @@ export interface components {
             name: string;
             /** @description Captured, but surfaces on no screen today (CED-4, A42). */
             note?: string;
+        };
+        CategoryCapDto: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Major units. `null` clears the cap, leaving the category uncapped.
+             *
+             *     **Required on every entry**, unlike `UpdateCategoryDto.monthlyCap`: this
+             *     endpoint has no "leave this field alone" case, so an omitted cap is a 400
+             *     rather than a no-op.
+             */
+            monthlyCap: number | null;
+        };
+        UpdateCategoryCapsDto: {
+            /** @description One entry per category, at least one. A repeated `id` is a 400. Either every entry is applied or none is. */
+            categories: components["schemas"]["CategoryCapDto"][];
         };
         UpdateCategoryDto: {
             /**
@@ -1526,6 +1546,56 @@ export interface operations {
             };
             /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    CategoriesController_setCaps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCategoryCapsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriesResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

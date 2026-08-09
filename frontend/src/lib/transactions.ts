@@ -151,3 +151,36 @@ export async function readTransactionsView(
 
   return anything.total > 0 ? { state: 'noResults', total: 0 } : { state: 'empty', total: 0 };
 }
+
+/**
+ * The current period's transaction count, for the tab badge on a screen that renders no
+ * transactions (PET-36, TRN-2).
+ *
+ * **The Categories tab draws both badges, not just its own**, which is what makes this exist:
+ * frame 13 shows "All transactions 128" beside "Categories 8", so the route that has no
+ * transactions on it still has to state how many there are. `/transactions` needs no mirror of
+ * this - it already reads the categories for the table's name-and-colour join, so its own
+ * second badge is `categories.length` and costs nothing.
+ *
+ * **It is not `readTransactionsView`**, and the difference is the probe. That function fires a
+ * second request when the first returns zero, to tell an empty account from an empty filter -
+ * a distinction that decides which of three screens to render. A badge has no such branch: it
+ * prints the number, and 0 is a perfectly good number to print. So this is one request always,
+ * where the view is one or two.
+ *
+ * No filters, so `period` defaults to `current` and this counts the budgeting period the rest
+ * of the screen is about. That matches what the badge means on `/transactions` itself, where
+ * A17 was amended to "matches after the filter bar" - from here there is no filter bar, so the
+ * unfiltered period count is the same question asked with nothing narrowing it.
+ *
+ * **A failure takes the page down rather than hiding the badge**, deliberately. The policy is
+ * inherited from `readTransactions` above rather than softened here, because both reads on that
+ * page hit the same backend through the same guard: an account that cannot reach it to count
+ * transactions could not reach it to load the categories either, so a degraded badge would be a
+ * second answer to a question the other read has already failed.
+ */
+export async function readTransactionCount(): Promise<number> {
+  const list = await readTransactions({});
+
+  return list.total;
+}

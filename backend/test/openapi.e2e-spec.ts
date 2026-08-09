@@ -493,6 +493,150 @@ describe('openapi.json', () => {
     });
   });
 
+  describe('the category endpoints', () => {
+    const collection = () => spec.paths[`/${API_PREFIX}/categories`];
+    const item = () => spec.paths[`/${API_PREFIX}/categories/{id}`];
+
+    it('declares three collection operations and two on the item', () => {
+      // This assertion did not exist until PET-70 added the third collection
+      // operation, which is exactly the gap it now closes: a sixth one cannot
+      // appear without somebody updating this line. There is deliberately no
+      // `GET /categories/{id}` - nothing in the design reads one on its own.
+      expect(Object.keys(collection()).sort()).toEqual([
+        'get',
+        'patch',
+        'post',
+      ]);
+      expect(Object.keys(item()).sort()).toEqual(['delete', 'patch']);
+    });
+
+    // Each row is already in sorted order, so a status added to an operation
+    // shows up here as a mismatch rather than being absorbed.
+    it.each([
+      ['list', () => collection().get, ['200', '401']],
+      ['create', () => collection().post, ['201', '400', '401']],
+      ['bulk caps', () => collection().patch, ['200', '400', '401', '404']],
+      ['update', () => item().patch, ['200', '400', '401', '404', '409']],
+      ['delete', () => item().delete, ['204', '401', '404', '409']],
+    ])('documents %s with exactly its own statuses', (_name, op, codes) => {
+      expect(Object.keys(op().responses).sort()).toEqual(codes);
+
+      for (const status of codes.filter((code) => code.startsWith('4'))) {
+        expect(
+          op().responses[status].content?.['application/json'].schema?.$ref,
+        ).toBe(ERROR_REF);
+      }
+    });
+
+    it('declares no 409 on the bulk write, unlike the two item writes', () => {
+      // The fallback's cap is editable and no rename is in play, so this is the
+      // one categories write with no conflict case. Pinned separately from the
+      // status table above because it is the assertion somebody would break by
+      // adding a budget ceiling server-side - which A43 and PET-38's own test
+      // say must not happen.
+      expect(collection().patch.responses['409']).toBeUndefined();
+      expect(item().patch.responses['409']).toBeDefined();
+      expect(item().delete.responses['409']).toBeDefined();
+    });
+
+    it('requires the bearer on every one of them', () => {
+      for (const op of [
+        collection().get,
+        collection().post,
+        collection().patch,
+        item().patch,
+        item().delete,
+      ]) {
+        expect(op.security).toEqual([{ bearer: [] }]);
+      }
+    });
+
+    it('answers the whole screen from the bulk write, not a bare {}', () => {
+      // The same shape `GET /categories` returns, deliberately: a cap moving
+      // changes every card's status and the allocation header with it.
+      expect(
+        collection().patch.responses['200'].content?.['application/json'].schema
+          ?.$ref,
+      ).toBe('#/components/schemas/CategoriesResponseDto');
+    });
+
+    it('publishes the bulk body as a wrapper object of nested entries', () => {
+      // A wrapper rather than a bare array because `ValidationPipe` skips a body
+      // whose reflected metatype is `Array`, which would leave every decorator
+      // below unrun. A bare array also cannot carry `@ApiProperty`, so if this
+      // ever stops being a `$ref` the validation has probably gone with it.
+      expect(
+        collection().patch.requestBody?.content['application/json'].schema
+          ?.$ref,
+      ).toBe('#/components/schemas/UpdateCategoryCapsDto');
+
+      const entries = schema('UpdateCategoryCapsDto').properties!
+        .categories as {
+        type?: string;
+        description?: string;
+        minItems?: number;
+        maxItems?: number;
+        uniqueItems?: boolean;
+        items?: { $ref?: string };
+      };
+
+      expect(entries).toMatchObject({
+        type: 'array',
+        // Both spelled into `@ApiProperty`: the plugin publishes neither
+        // `@ArrayNotEmpty` nor `@ArrayMaxSize` on its own.
+        minItems: 1,
+        maxItems: 100,
+        // This one the plugin does derive, from `@ArrayUnique`. It is weaker
+        // than the real rule, which is uniqueness by `id` rather than by whole
+        // entry, which is why the description states the id rule in prose.
+        uniqueItems: true,
+      });
+      expect(entries.items?.$ref).toBe('#/components/schemas/CategoryCapDto');
+      // On the field rather than the operation, because it is what `uniqueItems`
+      // fails to express: uniqueness there is by whole entry, and the real rule
+      // is by `id` alone.
+      expect(entries.description).toMatch(/repeated `id`/i);
+    });
+
+    it('makes every cap entry carry both an id and a nullable cap', () => {
+      // `monthlyCap` in `required` **and** nullable is the whole shape: this
+      // endpoint has no leave-alone case, so an omitted cap is a 400, while
+      // `null` is the supported way to clear one. Turning the `@ValidateIf` into
+      // an `@IsOptional` would drop it out of `required` here.
+      expect(schema('CategoryCapDto').required!.slice().sort()).toEqual([
+        'id',
+        'monthlyCap',
+      ]);
+      expect(schema('CategoryCapDto').properties!.id).toMatchObject({
+        type: 'string',
+        format: 'uuid',
+      });
+
+      const cap = schema('CategoryCapDto').properties!.monthlyCap;
+
+      expect(cap).toMatchObject({
+        type: 'number',
+        nullable: true,
+        minimum: 0,
+        exclusiveMinimum: true,
+        maximum: 1_000_000_000,
+      });
+      // The same @IsPositive trap the transaction amounts carry: rendered as
+      // `minimum: 1` it would forbid every cap under a unit.
+      expect(cap).not.toMatchObject({ minimum: 1 });
+    });
+
+    it('says the bulk write is all-or-nothing and lets caps exceed the budget', () => {
+      // Both are properties a client cannot see from the shape. The first is
+      // what makes retrying the identical payload safe; the second is why there
+      // is no 409 above.
+      const description = collection().patch.description!;
+
+      expect(description).toMatch(/all or nothing/i);
+      expect(description).toMatch(/negative/i);
+    });
+  });
+
   describe('the profile endpoints', () => {
     const path = () => spec.paths[`/${API_PREFIX}/profile`];
 

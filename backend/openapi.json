@@ -956,6 +956,72 @@
         "tags": [
           "categories"
         ]
+      },
+      "patch": {
+        "description": "What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no \"leave this field alone\" case, so an omitted cap is a 400 rather than a no-op. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen, exactly as `GET /categories` does.",
+        "operationId": "CategoriesController_setCaps",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCategoryCapsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoriesResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the cap on several categories at once.",
+        "tags": [
+          "categories"
+        ]
       }
     },
     "/api/categories/{id}": {
@@ -2298,6 +2364,45 @@
           "color",
           "icon",
           "name"
+        ]
+      },
+      "CategoryCapDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "monthlyCap": {
+            "type": "number",
+            "nullable": true,
+            "description": "Major units. `null` clears the cap, leaving the category uncapped.\n\n**Required on every entry**, unlike `UpdateCategoryDto.monthlyCap`: this\nendpoint has no \"leave this field alone\" case, so an omitted cap is a 400\nrather than a no-op.",
+            "maximum": 1000000000,
+            "minimum": 0,
+            "exclusiveMinimum": true
+          }
+        },
+        "required": [
+          "id",
+          "monthlyCap"
+        ]
+      },
+      "UpdateCategoryCapsDto": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "description": "One entry per category, at least one. A repeated `id` is a 400. Either every entry is applied or none is.",
+            "minItems": 1,
+            "uniqueItems": true,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryCapDto"
+            }
+          }
+        },
+        "required": [
+          "categories"
         ]
       },
       "UpdateCategoryDto": {

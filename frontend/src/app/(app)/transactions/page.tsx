@@ -82,6 +82,10 @@ export default async function TransactionsPage({
     <TransactionsScreen
       view={view}
       filters={filters}
+      // The Categories tab's badge, free here: this page already holds the category list for
+      // the table's join, so the count costs no request. The mirror image on the other route
+      // is not free, which is what `readTransactionCount()` exists for.
+      categoryCount={categories.data.length}
       filterBar={<TransactionFilterBar filters={filters} categories={categories.data} />}
       // Built only for the state that renders it. The screen drops both slots in the empty
       // state anyway, so this is about types rather than output: narrowing here lets the

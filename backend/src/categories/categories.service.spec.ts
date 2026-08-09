@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { queryChain } from '../../test/query-chain';
+import { argsOf, paramsOf, queryChain, toSql } from '../../test/query-chain';
 import { UserDatabaseService } from '../database/user-database.service';
 import { categories, transactions } from '../database/user/schema';
 import { CategoriesService } from './categories.service';
@@ -103,6 +103,202 @@ describe('CategoriesService', () => {
         .catch(() => undefined);
 
       expect(db.update).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * `setCaps` is the file's one conditional single statement, so what is worth
+   * asserting here is the statement itself - the shape of the SET and the WHERE,
+   * read back through the dialect rather than trusted. The e2e suite proves the
+   * behaviour those clauses buy; only it can show a rollback.
+   *
+   * Note `db` still has no `transaction` key, and that absence is the regression
+   * test for the no-transaction rule: reaching for `db.transaction()` here fails
+   * with "not a function" rather than passing quietly.
+   */
+  describe('setCaps', () => {
+    // v7, like every id this app mints.
+    const A = '018f0000-0000-7000-8000-000000000001';
+    const B = '018f0000-0000-7000-8000-000000000002';
+
+    /** The update chain, so its recorded arguments can be read back. */
+    const written = () =>
+      db.update.mock.results[0].value as ReturnType<typeof queryChain>;
+
+    const setExpression = () =>
+      (argsOf(written(), 'set')[0] as { monthlyCapCents: unknown })
+        .monthlyCapCents;
+
+    /**
+     * Runs a save whose guard passes, letting the `list()` re-read fail. The
+     * statement is what these cases are about, and stubbing three more selects
+     * to reach a response nothing asserts on would only obscure it.
+     */
+    const save = async (dto: Parameters<typeof service.setCaps>[1]) => {
+      // Every id comes back, so the count guard passes and the statement is the
+      // only thing under test. The `list()` re-read then fails on the profile.
+      db.update.mockReturnValue(
+        queryChain(dto.categories.map((item) => ({ id: item.id }))),
+      );
+      db.select.mockReturnValue(queryChain([]));
+      await service.setCaps('user-id', dto).catch(() => undefined);
+    };
+
+    it('writes every entry in a single statement', async () => {
+      await save({
+        categories: [
+          { id: A, monthlyCap: 250.5 },
+          { id: B, monthlyCap: 420 },
+        ],
+      });
+
+      expect(db.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders one CASE arm per entry, binding caps in cents', async () => {
+      await save({
+        categories: [
+          { id: A, monthlyCap: 250.5 },
+          { id: B, monthlyCap: 420 },
+        ],
+      });
+
+      const sqlText = toSql(setExpression());
+      expect(sqlText).toMatch(/^case /);
+      expect(sqlText.match(/when /g)).toHaveLength(2);
+      // Cents, not major units. This is the only cheap place the toCents
+      // boundary for this route is pinned.
+      expect(paramsOf(setExpression())).toEqual([A, 25050, B, 42000]);
+    });
+
+    it('binds a cleared cap as SQL NULL rather than zero', async () => {
+      await save({ categories: [{ id: A, monthlyCap: null }] });
+
+      // 0 would be a cap of zero, which the DTO rejects and which means
+      // something else entirely - "spend nothing here".
+      expect(paramsOf(setExpression())).toEqual([A, null]);
+    });
+
+    it('never sets updatedAt by hand', async () => {
+      await save({ categories: [{ id: A, monthlyCap: 100 }] });
+
+      // drizzle v1's buildUpdateSet applies $onUpdateFn columns itself, and does
+      // so even when the set carries a raw sql expression.
+      expect(Object.keys(argsOf(written(), 'set')[0] as object)).toEqual([
+        'monthlyCapCents',
+      ]);
+    });
+
+    it('guards the statement on the live count, so it is all or nothing', async () => {
+      await save({
+        categories: [
+          { id: A, monthlyCap: 100 },
+          { id: B, monthlyCap: 200 },
+        ],
+      });
+
+      const where = argsOf(written(), 'where')[0];
+      const sqlText = toSql(where);
+
+      expect(sqlText).toContain('"deleted_at" is null');
+      expect(sqlText).toContain('select count(*)');
+      // The ids appear twice - once for the UPDATE's own filter, once inside the
+      // guard subquery - and the count compared against is the payload's length.
+      expect(paramsOf(where)).toEqual([A, B, A, B, 2]);
+    });
+
+    it('covers the same ids in the CASE arms and the id filter', async () => {
+      await save({
+        categories: [
+          { id: A, monthlyCap: 100 },
+          { id: B, monthlyCap: null },
+        ],
+      });
+
+      // Derived from the rendered parameters, not from the input, so this fails
+      // if the two halves are ever built from separate sources. That matters
+      // more than it looks: a row matched by the WHERE with no arm of its own
+      // falls off the end of the CASE and has its cap set to NULL, so the two
+      // drifting apart would wipe caps the caller never mentioned - and answer
+      // 200 while doing it.
+      const armed = paramsOf(setExpression()).filter(
+        (param) => typeof param === 'string',
+      );
+      const filtered = paramsOf(argsOf(written(), 'where')[0]).filter(
+        (param) => typeof param === 'string',
+      );
+
+      expect(new Set(armed)).toEqual(new Set([A, B]));
+      expect(new Set(filtered)).toEqual(new Set(armed));
+    });
+
+    it('answers 404 without re-reading the screen when the guard refuses', async () => {
+      // The guard matched nothing, so nothing was written.
+      db.update.mockReturnValue(queryChain([]));
+      db.select.mockReturnValue(queryChain([{ id: A }]));
+
+      await expect(
+        service.setCaps('user-id', {
+          categories: [
+            { id: A, monthlyCap: 100 },
+            { id: B, monthlyCap: 200 },
+          ],
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      // One select: the diagnostic read. `list()` is never reached, so a caller
+      // that got a 404 knows the screen it is holding was not changed.
+      expect(db.select).toHaveBeenCalledTimes(1);
+    });
+
+    it('names only the ids that are not live', async () => {
+      db.update.mockReturnValue(queryChain([]));
+      db.select.mockReturnValue(queryChain([{ id: A }]));
+
+      await expect(
+        service.setCaps('user-id', {
+          categories: [
+            { id: A, monthlyCap: 100 },
+            { id: B, monthlyCap: 200 },
+          ],
+        }),
+      ).rejects.toThrow(new RegExp(`${B}[^]*No cap was changed`));
+    });
+
+    it('throws a plain Error when the guard and the diagnostic read disagree', async () => {
+      // Unreachable as far as anything can arrange: a tombstone is never lifted
+      // and `create` mints a fresh id. It is a broken invariant if it happens,
+      // so it is a 500 rather than a 404 naming nothing.
+      db.update.mockReturnValue(queryChain([]));
+      db.select.mockReturnValue(queryChain([{ id: A }, { id: B }]));
+
+      await expect(
+        service.setCaps('user-id', {
+          categories: [
+            { id: A, monthlyCap: 100 },
+            { id: B, monthlyCap: 200 },
+          ],
+        }),
+      ).rejects.toThrow(/matched no rows, yet every id reads back live/);
+    });
+
+    it('has no guard of its own against an empty payload, by design', async () => {
+      // The mirror of `update`'s first case, and the opposite answer.
+      // `update({})` is rejected here in code because no decorator can say "at
+      // least one of these five fields"; an empty array is exactly the shape
+      // `@ArrayNotEmpty` expresses, so the DTO owns it and this method opens a
+      // database instead of guarding. Asserted so nobody adds a redundant guard
+      // on top - and note what it would be guarding: with no entries the count
+      // check reads `0 = 0` and passes, so this is the one payload the statement
+      // would happily accept.
+      db.update.mockReturnValue(queryChain([]));
+      db.select.mockReturnValue(queryChain([]));
+
+      await service
+        .setCaps('user-id', { categories: [] })
+        .catch(() => undefined);
+
+      expect(getUserDb).toHaveBeenCalled();
     });
   });
 

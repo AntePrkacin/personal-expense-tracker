@@ -403,6 +403,21 @@ pulling in a positioning library for one engine and one control. Both cost more 
 degradation, and the fallback is a coherent design rather than a broken one. Worth revisiting
 when Firefox ships anchor positioning, at which point the fix is deleting nothing.
 
+**Firefox has shipped it, so the condition this entry set for itself is met.** PET-39's browser
+walk measured Firefox **153** directly rather than reading a support table:
+`CSS.supports('position-area', 'bottom')`, `CSS.supports('anchor-name', '--a')` and
+`'showPopover' in HTMLElement.prototype` are all **true**. So daisyUI's
+`@supports not (position-area: bottom)` branch no longer matches there, both this menu and the
+category card menu anchor normally, and "the fix is deleting nothing" turned out to be literally
+right: nothing was ever written for it and nothing has to be removed.
+
+What is owed is only the deletion of this entry, and it is left standing for one release rather
+than removed on the spot, because the measurement was taken on one machine's Firefox and the
+degradation is still real for anyone on an older build. Delete it once the supported-version floor
+is clearly past 153. **Do not read this as the two costs being gone**: jsdom still implements none
+of the Popover API, so the "under Jest the menu is permanently open" half of every popover suite is
+unchanged and is a separate note.
+
 ### The icon set is lucide's now, and three marks are near-misses the designer has not seen
 
 PET-33 added `lucide-react` and migrated all thirteen hand-traced glyphs onto it, so there is one
@@ -668,6 +683,19 @@ deleted_at IS NULL)` that inserts zero rows when the category died, with the sam
 to the update's `WHERE`. Atomic, no transaction, no overlap. It needs a decision about error
 semantics first, since a zero-row update then means either "no such transaction" or "the category
 just died" and the endpoint currently promises a 404 always means the transaction id.
+
+**PET-70 shipped the first instance of that shape, so this is a pattern to copy rather than an idea
+to evaluate.** `CategoriesService.setCaps` puts the condition in the statement's own `WHERE` - a
+`(select count(*) ...) = n` subquery alongside the id set and the tombstone filter, with
+`RETURNING id` reporting what landed - and it holds the property this entry wants: atomic, no
+transaction, no overlap. It also **made the error-semantics decision** this paragraph says is needed
+first, for its own case: all-or-nothing, a 404 naming the whole payload, and a message stating that
+nothing was written so the identical body is safe to retry. That maps onto the transaction fix
+directly, since the ambiguity here is the same shape - the difference is only that this endpoint has
+an existing 404 promise to keep, so the new condition needs its own status or its own wording rather
+than folding into that one. One trap worth carrying over: `setCaps` had to build its `CASE` arms and
+its `IN` list from one array, because a row matched by the `WHERE` with no arm falls through and is
+written NULL. Any conditional statement whose SET is per-row inherits that hazard.
 
 A repair pass for rows already orphaned belongs with it: one
 `UPDATE transactions SET category_id = <fallback> WHERE category_id NOT IN (SELECT id FROM
@@ -1112,6 +1140,14 @@ menu is still the one that reaches it. **The fix has not become cheaper and has 
 likelier** - what changed is only that the app's newest delete entry point does not need it,
 which is worth knowing before somebody reads the absence as the gap having been closed.
 
+**PET-39 adds a fourth route, and it is the same case on a different noun.** Deleting a category
+destroys the card kebab that opened the confirmation, so `Modal`'s `isConnected` guard finds
+nothing and focus lands on `<body>`. `CategoryCardMenu` carries the same pre-focus fix the row
+menu got above, so the Cancel path is correct there from the start and only the successful delete
+reaches the gap. Nothing about the fix changes; what changes is that the surviving case is now
+reachable from two features rather than one, which is the first time it has been worth counting
+that way. PET-38's edit modal will add a fifth by the two-dialog route PET-32 already documents.
+
 ### A delete cannot be cancelled once it is sent, and Cancel no longer implies otherwise
 
 A code review asked for an `AbortController` behind the confirmation dialog's Cancel, because
@@ -1533,6 +1569,54 @@ on top of page 1's reading. Worth a designer's answer alongside the copy A29 alr
 feature, and worth knowing that the desktop path has only the augmenting control at all, since
 the camera is `pointer-fine:hidden`.
 
+### `CardBanner`'s dark theme measures 4.13:1, below the AA floor
+
+PET-38's browser walk measured the accent strip both category cards and the summary card sit on,
+compositing the text over the background and reading the pixel back rather than trusting
+`getComputedStyle`. Light measures **6.75:1** and passes. **Dark measures 4.13:1**, where AA wants
+4.5:1 for text this size - the strip is `bg-primary` and everything on it is `text-primary-content`,
+which is stock daisyUI, so nothing in this repo chose those two values.
+
+**The action and the sentence beside it measure identically, on both cards**, which is what says the
+finding belongs to the strip rather than to any one control. It has been there since PET-36 built
+`CardBanner`; PET-38 only made one of its buttons live, and if anything improved that button by
+dropping the `opacity-60` the inert state carried.
+
+Not fixed there because both available fixes are decisions rather than refactors. Re-theming
+`primary-content` is exactly what `frontend/CLAUDE.md` forbids - it would repaint every category
+colour and both preview artifacts would need re-measuring. Changing the strip's colour pair is a
+design call on a component the team's Claude Design system supplied, whose own note says the tinted
+variant "was too quiet to notice". The numbers are recorded here so whoever picks one starts from a
+measurement instead of an impression, and so a theme change is seen to move them.
+
+### `Uncategorized` cannot be renamed or capped from the UI
+
+PET-38 gave the fallback card no kebab and no banner, because `PATCH /api/categories/:id` refuses to
+rename that row and `DELETE` refuses to remove it, so a menu on it held nothing operable. The API
+does accept a **cap** on it, and there is now no control anywhere that sets one.
+
+Deliberate, and the alternatives were weighed: a menu holding a single Edit whose Name field alone
+was greyed out is three explanations deep on the one category nobody asked for, and a live "Set
+limit" on a card with no other affordance would have made Edit reachable one way and not the other.
+What would change the call is a reason for a user to cap the fallback - which is really a question
+about whether unfiled spending should count against a budget line, and nothing in the design asks it
+yet. Both 409s stay classified in `lib/deleteCategory.ts` and `lib/updateCategory.ts` regardless,
+because a control that is not drawn is not an enforcement.
+
+### A stored colour or icon the palette no longer offers reads as "Select…"
+
+`GET /api/templates/palette` returns `enabled` rows only, so an admin disabling a token a user
+already has produces a category whose mark matches no row in either picker - and both derive their
+trigger label by finding that row. The Edit modal therefore shows "Select…" beside a swatch that is
+painting the correct colour, which reads as "unset" for a value that is very much set.
+
+Nothing is lost by it: `toUpdateCategoryBody` omits a mark that was not touched, so saving any other
+field leaves the stored token alone, and `categoryColour.ts` supplies the swatch and the glyph
+independently of the palette. What is missing is a **label** for a token the palette declines to
+describe, which is a contract question - either the palette carries disabled rows with a flag, or
+the response for a single category carries its own labels - rather than something either picker can
+answer locally. The same gap exists in `IconSelect`.
+
 ## Operational
 
 ### Unverified registrations accumulate, and hold their address
@@ -1946,6 +2030,373 @@ category breakdown available" ring name and "This period's spending is not attri
 category." - while the budget card falls back to the days-left count it already draws in every
 other state. A designer reading this list should know that two of the five designed strings are
 reachable in fewer situations than frame 05 implies.
+
+### The uncapped category card has no frame, and it is the common case rather than the edge
+
+Frame 13 (node 36:423) draws eight capped categories and nothing else, but a monthly cap is
+optional throughout the contract and the preselected `Uncategorized` fallback ships without one -
+`CategoryResponseDto` documents `status: "uncapped"` with a null cap, percent, remaining and over,
+and says to expect it most of the time. So the one category every account has is the one the
+design never drew. PET-36 answers it the way PET-34 answered the same gap on the transaction
+detail page: draw none of the budget furniture rather than explain its absence.
+
+**What is owed.** Three strings and one layout, all invented here: the card's "{spent} in {n}
+transactions" line, the banner reading "No limit set for this category", and its "Set limit"
+action, plus the decision that an uncapped card keeps the same footprint as a capped one so the
+grid does not go ragged. `Screens/13 Categories`' `AllUncapped` story is the whole state in one
+place, which is what to put in front of a designer. Joins the A29 group with A15's no-results
+copy, A38's verify-failure copy and the donut's two fallback strings: real until somebody looks
+at it, not a placeholder.
+
+The summary card's own banner - "{amount} of your budget isn't assigned to a category." with an
+"Allocate" action - is a fourth invented string on the same screen, and it arrived for a different
+reason: the ticket's AC4 was amended away from frame 13's "Budget allocation" summary toward a
+spending summary, so the unassigned figure needed somewhere else to live. Same sign-off owed.
+
+**That banner's action now opens a modal whose every string is invented too**, which is a longer list
+than this entry anticipated when it called it a fourth string - see the Allocate modal's own entry
+below for the enumeration and for the three decisions inside it. The banner's own sentence is
+unchanged and still owes what this paragraph says it owes.
+
+### `BudgetCard` hands `<progress>` a `max` that can be zero
+
+PET-36's review found this on its own summary card and fixed it there:
+`RegisterDto.monthlyBudget` is only `@IsPositive()`, so `0.40` is an accepted budget and
+`Math.round` takes it to zero. A `<progress max="0">` is invalid, and the failure is silent
+rather than loud - the HTML spec says to fall back to `max=1`, so the bar renders **empty**, and
+announces 0%, beside a chip reading "Over budget" for an account that has overspent everything it
+has. `categories/SpendingSummaryCard.tsx` now floors the max at 1 and clamps the value against
+that same floor, so the overspent case fills the bar.
+
+**`dashboard/BudgetCard.tsx` has the identical shape and was left alone**, deliberately:
+`value={Math.min(spent, monthlyBudget)} max={monthlyBudget}` on an unrounded pair, reachable the
+same way. It is PET-21's file and PET-36 had no business editing it, so the fix travels with
+whoever next touches that card. Note the dashboard version is marginally worse, since it does not
+round first: a budget of `0.4` reaches `max={0.4}`, which is valid HTML, so it fails only at
+exactly `0`.
+
+### The Categories tab pays one extra request for the other tab's badge
+
+Frame 13 draws both tab counts on the Categories tab - "All transactions 128" beside
+"Categories 8" - so the route that renders no transactions still has to say how many there are.
+`/transactions` gets its half free, because it already reads the categories to join names and
+colours onto the table's rows and the count is `categories.length` over data in hand.
+`/transactions/categories` has no such luck and calls `readTransactionCount()`, which is one
+unfiltered current-period list read whose only surviving field is `total`.
+
+**What is owed.** Nothing urgent, and it is smaller than the redundant-request item above it: this
+is one request per page load rather than one per debounced keystroke, and the endpoint is the
+account's own list. The honest fix is a count the API can answer without building a page of rows,
+which PET-28's plan considered and dropped because no frame drew two numbers - frame 13 does draw
+two numbers, so the reason has expired. Logged so the next person costing this screen does not
+have to rediscover why a screen with no transactions on it reads the transactions endpoint.
+
+### `text-error` is 2.86:1 in the light theme, and PET-36 is where it became measurable
+
+Frame 13 draws the over-budget figure in red and CTG-4 says so in as many words, so
+`CategoryCard`'s footer takes `text-error` when a category is at or past its cap. PET-36's browser
+walk measured it: composited over `bg-base-100` it is **2.864:1 in light** and **5.53:1 in dark**,
+against WCAG AA's 4.5:1 for normal-size text. The bars themselves are fine - success, warning and
+error measure 1.96, 1.76 and 2.86 against the card in light and 8.08, 8.98 and 5.53 in dark, which
+clears the 1.5:1 floor PET-22 set for a bar after `base-300` failed it at 1.16.
+
+**This is not PET-36's defect and PET-36 must not fix it locally.** `text-error` is daisyUI's
+stock light `error` token, and it is already what `ui/Button`'s `textDanger` variant and every
+field error message in this app paint - so the same 2.86:1 applies to the delete actions on frames
+08, 11 and 21 and to every inline validation message. Darkening it means re-theming a semantic
+colour, which `frontend/CLAUDE.md` forbids outright, and doing it in one component would leave the
+app with two different reds.
+
+**What is owed.** A decision that belongs to a designer and applies app-wide: accept 2.86:1 in
+light, or change what "danger text" is made of. Worth noting the affected text is never
+colour-alone - the figure reads "$12 over" and the chip beside it reads "Over", so WCAG 1.4.1 is
+satisfied and it is 1.4.3 that is not. The measurement harness is in PET-36's plan; re-measure
+rather than reuse these numbers if the theme ever changes, for the reason
+`frontend/CLAUDE.md`'s category-palette guard gives.
+
+**The same walk found a second stock pairing just under the line, and it is broader.**
+`text-primary-content` on `bg-primary` measures **4.13:1 in dark** and 6.75:1 in light, against
+the same 4.5:1 for normal-size text. PET-36's `CardBanner` is where it was measured, but that is
+not where it lives: `btn-primary` sets `--btn-color: var(--color-primary)` and
+`--btn-fg: var(--color-primary-content)`, so **every primary button in the app already paints
+this pair** - "Get started", "Continue", "Finish setup", "Add transaction" at all four of its
+trigger sites, and "Add category". A banner is simply the first place it was put under a
+contrast meter.
+
+Same owner and the same shape of answer as the `text-error` item above: accept it, or change what
+the theme's primary pair is made of, which is a re-theme and therefore out of any single ticket's
+reach. Both numbers are dark-and-light specific, so a theme change invalidates both.
+
+### The Add category modal deviates from frame 19 twice, and both owe a designer
+
+PET-37 built the modal at node 102:878 and departed from it in two visible ways, neither of which
+a gate can catch because both are correct-looking.
+
+**The budget field reads "Monthly budget (optional)" where the frame draws it bare.** Forced rather
+than chosen: `CreateCategoryDto` makes `monthlyCap` optional, and A12 is this app's rule that a
+required field is marked only by the absence of "(optional)" - so a bare label would make the one
+optional money field in the app read as required. The alternative is a designed marker for optional
+fields, which would be an app-wide change and is a designer's call rather than this ticket's.
+
+**Focus opens on Name, not on the budget field the frame rings.** That frame draws a name, a budget
+and a note all already typed, so the ring is a mid-fill snapshot rather than an on-open state, and
+honouring it literally would land focus past an empty required field. `AddTransactionModal` honours
+its own frame's focused field only because there it happens to be the first one. Worth confirming,
+because it is the one deviation a designer would notice immediately and disagree with cheaply.
+
+A third item is not a deviation but an invention: **the tile-and-name preview under the two selects
+has no counterpart in the file at all.** AC2 asks that the chosen colour "previews on the category"
+and nothing in frame 19 does that, so both the element and its placement are ours. It is
+`aria-hidden`, since every fact in it is already announced by the three fields above it.
+
+### The Icon picker is a searchable grid, and its search box is invented
+
+PET-37's Icon field is `IconSelect`: the same trigger and platform popover as `ColourSelect`, holding a
+**search box over a six-across scrolling grid** of every glyph the palette offers. A grid rather than a
+list because 64 glyphs are looked for by *shape*, and a one-per-row list of names makes that eleven
+screens of scrolling - which is what PET-65's plan meant when it observed that 64 grids evenly and noted
+this picker had no design behind it.
+
+**The search box has no counterpart anywhere in the design, and it is the part that needs signing off.**
+Nor does the empty-search state, whose copy ("No icons match that.") is ours like everything else under
+A29. `Screens/19 Add category`'s `IconPickerOpen` story is where both get reviewed, along with the grid
+width, the cell size and the filled-primary chosen cell.
+
+**It matches on the label *and* the lucide name**, deliberately: "Television" is `tv`, "Bank" is
+`landmark`, "Bolt" is `zap`, and somebody typing has no idea which vocabulary they hold. Anything that
+narrows this to one of the two makes glyphs unfindable.
+
+**Two things about it that a reviewer should not simplify.** Enter in the search box is intercepted,
+because `(app)/Modal.tsx` wraps the body in a real `<form>` so that Enter submits it - right for every
+other field, and it would create the category from two letters of a search here. And the cells are
+`w-full aspect-square p-0` rather than `btn-square`: a browser walk found that six fixed-width cells fit
+`w-72` until the vertical scrollbar appears and takes 15px, at which point the grid overflowed sideways
+and, because `overflow-y: auto` makes `overflow-x: visible` compute to `auto`, the panel grew a second
+scrollbar along the bottom.
+
+**What it does not have is two-dimensional keyboard navigation.** A real grid pattern wants arrows in
+four directions, plus Home/End and `role="grid"`/`role="gridcell"`; Tab reaches every cell instead, and
+the search box is what makes that bearable - type two letters and the cell you want is one Tab away.
+That is the same refusal `ColourSelect` records below, and it is the bigger of the two to fix.
+
+### The Color picker is a control of our own, and it owes three things
+
+PET-37's Color field is `ColourSelect`, not `ui/Select`: a `<button>` trigger plus a `[popover]` list
+drawing a swatch, a name and a tick on the chosen row. A native `<option>` cannot hold a swatch and
+its tick is drawn by the operating system, so the designed list is simply unreachable from a native
+control. Chromium's `appearance: base-select` would give both, but daisyUI 5.7.16 ships nothing for it,
+so opting in resets the control and its popup to UA base styling and the result exists only in
+Chromium - a control of our own is the smaller change and the portable one.
+
+**Four things it costs, none of them fixed here.**
+
+**Arrow keys do not work; Tab does.** No `role="listbox"` and no `role="option"`, because those roles
+promise a keyboard contract - arrows, Home/End, type-ahead, `aria-activedescendant` - that this does
+not implement. That is `TransactionRowMenu`'s refusal of `role="menu"` and `SetupShell`'s refusal of
+`aria-current="step"`, made a third time. What ships is a list of ordinary buttons with `aria-current`
+on the chosen one. Implementing the real listbox pattern is the fix, and it is a bigger piece of work
+than the picker itself.
+
+**The native mobile picker is gone for this one field.** `ui/Select`'s own note cites the platform
+picker on a phone as a reason it chose a native control; a popover list is what a touch user gets
+instead. Worth a look on a real phone before anyone calls this done.
+
+**Firefox does not anchor it.** No CSS anchor positioning there, so daisyUI's
+`@supports not (position-area: bottom)` fallback centres the panel over a dimmed backdrop. Degraded
+rather than broken, and identical to the transactions row menu, which already carries this entry.
+
+**Nothing in Figma draws either list open** (A16, A40), so the panel's width, the swatch size, the row
+height, the tick and its position are all ours. `Screens/19 Add category`'s `ColourPickerOpen` story is
+where a designer reviews them.
+
+**The asymmetry this entry used to carry is closed**, and the note is kept rather than deleted because
+the *reasoning* still holds. It said the Icon field stayed a native `<select>` and that the two controls
+would therefore behave differently when opened, with a grid left to a later ticket. That grid is
+`IconSelect`, built in the same PR - so both fields are now controls of ours, both wear `select`'s class
+string when closed, and they differ from each other only in shape: a named list for sixteen colours, a
+searchable grid for 64 glyphs. `ui/Select` is no longer imported by this modal at all.
+
+### The Add category modal captures no note, and the field is hidden rather than removed
+
+`AddCategoryModal` has a `SHOWS_NOTE` flag, set to **false**, so the Note field frame 19 draws and
+CED-4 specifies is not rendered. The reason is A42, which the contract restates in
+`CreateCategoryDto`: a category's note **surfaces on no screen once saved**. Asking somebody to write
+a note that nothing ever shows back is asking them to write into a void, so the field waits for a
+category detail page to show it on, the way `/transactions/[id]` shows a transaction's.
+
+**Nothing was removed to achieve that, which is the whole point of the flag.** `categoryForm.ts`
+still carries `note` in `CategoryFormValues`, still trims it and still omits it from the body when
+blank, and `categoryForm.test.ts` still pins all three - so the conversion keeps its coverage and only
+its input stopped being a control. `CreateCategoryDto.note` and the `categories.note` column are
+untouched, so **no migration is owed in either direction**.
+
+**Re-enabling it is one word plus four assertions.** Flip `SHOWS_NOTE` to true, and
+`AddCategoryModal.test.tsx` will fail on exactly the cases that need their expectations back: the
+field-order case, the "renders no Note field" case, the A12 one-optional-label case, and AC4's body.
+That is deliberate - the suite is what tells the next person the full cost rather than leaving them to
+find it.
+
+**A flag rather than commented-out JSX**, because a commented block is not typechecked: renaming
+`CategoryFormValues.note` or changing `ui/Input`'s props would leave it broken with the build green,
+and whoever restored it months later would inherit the breakage. This way the markup compiles on
+every build.
+
+What is owed is the product decision this defers: whether a category ever gets a detail page, and if
+not, whether the note should be dropped from the DTO and the column altogether rather than left as a
+field nothing writes. Note the onboarding seed **does** write notes - each picked template copies its
+`description` into the category's `note` - so the column is not dead data today even though the modal
+no longer adds to it.
+
+### The Add category picker offers no grey-out, and PET-65 is what changed the reasoning
+
+The modal lets two categories carry the same colour and the same icon, silently, matching a backend
+with no unique index on `name`, `color` or `icon`. When PET-37 was planned that was close to forced:
+against the 13 icons PET-64 seeded, a full onboarding pick consumed **all** of them, so greying out
+what was in use would have rendered every option of a required field disabled.
+
+**PET-65 removed that argument by taking the set to 64, and the decision was kept anyway** - as
+scope rather than as impossibility, which is a weaker reason and is recorded as such. What is owed
+is a product answer: whether the picker should mark colours and icons already in use, and if so
+whether it disables them or merely annotates them. The data is already in hand on that screen, so it
+is a modal-side change with no backend part.
+
+**The colour half stays awkward whatever is decided.** 17 tokens exist, 16 are offered, and Tailwind
+cannot build a class from runtime data - so a seventeenth colour is a deploy rather than admin data,
+and colour collisions past the thirteenth category remain forced where icon collisions no longer
+are. Raising that ceiling is its own ticket and starts in `ui/categoryColour.ts`, not in the palette
+tables.
+
+### The Categories tab reads the palette on every view, for a modal that usually does not open
+
+`transactions/categories/page.tsx` reads `GET /api/templates/palette` as a third parallel read
+alongside the categories and the transaction count, so the Add category modal can take it as a prop.
+The alternative - `AddTransactionProvider`'s route handler plus a hook plus a fetch on open - was
+declined deliberately: that shape earns its three loading states by serving five triggers across
+three routes, and this is one button on one route which was already awaiting two reads.
+
+**The cost is one request per view of the tab whether or not anybody opens the modal**, and it is
+paid in parallel so it adds no latency to the page. It is also the most cacheable read in the app:
+the response is admin-managed template data, identical for every user, and changes only when an
+admin edits it. Nothing caches it today, because `authorizedGet` sends `cache: 'no-store'` for every
+caller and giving one read a different policy is a change to a shared helper. Worth revisiting
+together with the redundant-request item the transactions screen already owes, rather than on its
+own.
+
+Note this joins, and does not replace, the extra-request item the same route already carries for the
+other tab's badge: that tab now makes three reads, two of which are for something other than its own
+cards.
+
+### The category delete confirmation's six strings are ours, and two of them are load-bearing
+
+PET-39's dialog owes A29 the same sign-off every invented state in this app owes, and the list is
+longer than the transaction confirmation's because the endpoint answers one more status. Four
+failure lines - `That category is already gone. Close this to see the current list.`, `That category
+cannot be deleted: it is where deleting any other category moves its transactions.`, `Your session
+has expired. Log in again to delete this.` and `We couldn't delete this category. Please try again.`
+- plus **two body shapes**, one for a category with transactions in the period and one for a category
+with none. `Shell/Delete category`'s stories render all six, which is the quickest thing to put in
+front of a designer.
+
+**Two of them must not be softened into "try again" during that review.** `missing` describes a
+category the server no longer has, so a retry answers 404 forever; `fallback` describes a request the
+backend refuses by design, so a retry is refused forever. Those two are the whole reason
+`DeleteCategoryResult` has four arms rather than two, and collapsing either into the generic line
+would give advice that cannot work.
+
+**The body copy is also where two amendments to the ticket are visible**, and a copy review should
+be told they are deliberate rather than drift: it says `Uncategorized` where CED-9 says "Other", and
+it scopes the count to "this month" where CED-9 states it as a total. Both are recorded on the issue
+with their reasoning.
+
+### The two kebab glyphs are toned differently, and nobody decided that
+
+`transactions/TransactionRowMenu.tsx` draws its `EllipsisVertical` with `text-base-content/40` and
+`transactions/categories/CategoryCardMenu.tsx` draws the same glyph with no tone class at all, so
+it takes `btn-ghost`'s own colour. The two kebabs sit one tab apart and read differently.
+
+It surfaced when PET-39's review had the two menus lifted onto a shared `(app)/PopoverMenu.tsx`:
+that component needs a `glyphClassName` prop whose only purpose is to keep this difference, which
+is the smell that says the difference is unowned rather than designed. **The prop is a placeholder
+for a decision, not the decision** - delete it once a designer picks one, and the two call sites
+collapse to none.
+
+Not resolved in that PR on purpose: either value is a visible change to one of the two screens, and
+picking one to match the other is a design call rather than a refactor. Frame 10 and frame 18 are
+what to hold side by side. PET-38 touched that menu and deliberately left this alone for the same
+reason: making Edit live changed no glyph, and choosing a tone is still the designer's.
+
+### The Allocate modal's ceiling holds only inside one open dialog
+
+`AllocateBudgetModal` reads its budget, its caps and the reserve held by rows it does not draw
+**once, on open**, and never resyncs - deliberately, because a `router.refresh()` behind the open
+dialog would otherwise rewrite the fields under the user's hands mid-edit. So a monthly budget or a
+cap changed anywhere else while the modal sits open leaves every ceiling computed against stale
+figures, and the caps it then saves can sum above the current budget.
+
+Nothing is wrong server-side when that happens: caps exceeding the budget is a state the API accepts
+by design (A43), `allocation.unallocated` simply goes negative, and the summary card behind the modal
+renders it. So there is no error to raise and no arm to add - which is exactly why this is recorded
+rather than fixed. The honest fix is the server-side ceiling PET-70 rejected on the grounds that it
+would make this endpoint disagree with `PATCH /api/categories/{id}`, which enforces none; the cheaper
+partial fix is re-reading on open through a route handler, the way `(app)/useCategoryOptions.ts`
+does, which shrinks the window to "while open" without closing it.
+
+A review of PET-70 narrowed one consequence of the same never-resync decision, and it is worth
+separating from the ceiling above because it was a defect rather than a limitation. A **deleted**
+category is the one stale figure the server refuses outright, and the modal's answer to that 404 used
+to leave Save enabled - so the retry its own copy invites re-sent the dead id and could only fail
+identically, forever. Save is disabled once the server says the list is out of date, and the re-read
+happens on close rather than in front of the open dialog. What is still recorded here is everything
+the server accepts: a budget or another cap changed elsewhere raises no error, so there is nothing
+for the modal to notice.
+
+### A cap change can leave the insight set stale, and no category write regenerates
+
+`RuleBasedInsightGenerator`'s over-cap rule reads category caps, so lowering a cap can make the
+latest `ready` set describe a category as within budget when it is now over - and **no** category
+write regenerates anything. `PATCH /api/categories/{id}` has never done so, and PET-70's bulk write
+deliberately did not start, because emitting from one and not the other would make the same user
+action behave differently depending on which modal performed it.
+
+The clean version is a single `CATEGORY_CHANGED` event emitted from `create`, `update`, `remove` and
+`setCaps`, with a listener in `InsightsModule` - `CategoriesModule` needs no new imports for it, since
+`EventEmitterModule` is global and `InsightsModule` already imports `CategoriesModule`, so a direct
+call would close the cycle the emitter exists to avoid. It wants building **with** the debounce or
+dirty flag the `LlmInsightGenerator` swap already owes, above: a rule-based run per cap change is
+cheap, and an LLM run per cap change is not.
+
+### The Allocate modal's copy is invented end to end, and three decisions inside it want a look
+
+There is no Figma frame for this modal at all, so every string in it joins the A29 group rather than
+being a diff against anything: the title and its subtitle, "Left to assign", the three ledger rows,
+"Your monthly budget is set in Settings.", the column headers, the `No limit` placeholder, the
+`{amount} spent · {amount} over this cap` caption, the footer hint, both snap messages and all five
+failure lines. A review of PET-70 added two more: the line the list draws when the account has no
+allocatable category at all, and the one refusing a payload past the endpoint's hundred-row bound.
+`Screens/Allocate budget`'s seven stories are the whole of the review surface, `NothingToAllocate`
+being the one that review added.
+
+Three of those are decisions rather than wording, and each is where a designer could reasonably
+disagree. **The snap message mixes precision on purpose** - `formatCurrency` for the capped amount
+because it must match the field two centimetres away, which routinely carries cents, and
+`formatWhole` for the budget because it must match the summary card behind the modal; one formatter
+for both would contradict one of the two. **A ceiling of zero gets a different sentence entirely**,
+"Nothing left to assign. Free up budget from another category first.", because "Capped at $0.00"
+would be true and useless - and the field is cleared rather than set to zero, since a cap of zero is
+one the API rejects. **Sub-pixel segments are accepted rather than floored**: a $1 cap against a
+$3,200 budget is 0.03% of the bar and renders as nothing, and the obvious `min-w-px` was rejected
+because it pushes the widths past 100% and flex then shrinks the *large* segments to compensate, so
+the bar would stop being accurate everywhere to make one invisible segment visible.
+`Screens/Allocate budget`'s `TinySegments` is that case.
+
+### Saving the last of the budget destroys the control that opened the modal
+
+A third route to the focus-restore gap this file already carries for saving from an empty state and
+for deleting a row: the Allocate banner renders only while `allocation.unallocated > 0`, so a save
+that assigns the remainder removes the banner during `router.refresh()`, and `Modal`'s focus restore
+aims at an element no longer connected. Focus lands on `<body>`, so the next Tab starts from the top
+of the page. Walked in Chrome on PET-70. It joins the existing entry rather than opening a second
+one, and the fix is the same one: a fallback target when the captured element has gone.
 
 ---
 

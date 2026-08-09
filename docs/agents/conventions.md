@@ -122,6 +122,18 @@ Both promotions kept a stub section behind, `## The screens` and `## Persistence
 deleting the heading outright. The parent is what a reader lands on first, and a topic that
 simply vanishes from it reads as a topic nobody wrote down.
 
+**`backend/CLAUDE.md` is well past the trigger again and the next candidate is
+`backend/src/categories/CLAUDE.md`**, named here in advance the way the persistence one was.
+PET-70 took the file past 1,000 lines while adding to `## Category endpoints`, which is now the
+longest section in it and the one carrying the most reasoning nobody needs unless they are in that
+folder: the fallback row's whole history, the five status bands, the two no-transaction shapes and
+the bulk write's five traps. It has not been promoted yet because PET-70 had no business making the
+move as a side effect of adding a bullet, which is the same restraint the third promotion above
+describes - but the evidence is in, and the next ticket touching `backend/src/categories/` should
+do it rather than add to the section again. Note what would *not* travel with it, by the trigger
+locality test: `## Backend conventions`' money and month-window rules are cited by transactions,
+dashboard and insights too, so they stay in the parent.
+
 ## Working conventions
 
 How work is carried out here, as distinct from what the code does. Each of these was

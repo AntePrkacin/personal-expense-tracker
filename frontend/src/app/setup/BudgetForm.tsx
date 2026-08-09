@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { amountCaret, formatAmountInput } from '@/lib/format';
+import { reformatAmountInput } from '@/lib/amountField';
 import { ACCESS_ROUTES } from '@/lib/routes';
 
 import { DEFAULT_CURRENCY, isBudgetValid } from './draft';
@@ -53,28 +53,12 @@ export function BudgetForm() {
   const [error, setError] = useState<string | undefined>(undefined);
 
   function onBudgetChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const element = event.currentTarget;
-    const raw = element.value;
-    const caret = element.selectionStart ?? raw.length;
-    const formatted = formatAmountInput(raw);
-
-    // Write the DOM before React does, which is the whole trick and the reason
-    // `ui/Input` needed no `ref` prop: `event.currentTarget` is already the node.
-    // It works only because formatAmountInput is idempotent - format.test.ts pins
-    // that property for exactly this reason.
-    //
-    // React does restore a selection around its own controlled-input commit, so
-    // this is not the difference between "caret preserved" and "caret at the end".
-    // React restores the raw *offset*, which is wrong precisely when the reformat
-    // inserts a separator to the left of the caret: typing the last 0 of 2000
-    // would leave '2,00|0' rather than '2,000|'. amountCaret computes the semantic
-    // position, and setting it here is what wins, because React's own save happens
-    // before this handler's write lands.
-    element.value = formatted;
-    const at = amountCaret(raw, caret, formatted);
-    element.setSelectionRange(at, at);
-
-    patchDraft({ budget: formatted });
+    // The reformat-and-restore-the-caret dance lives in `lib/amountField.ts`, which is where the
+    // account of it went when a fourth field wanted the same seven lines. The three things worth
+    // knowing before touching it are all in that file: it writes the DOM before React does, it
+    // depends on `formatAmountInput` being idempotent, and the caret it sets is the *semantic*
+    // position rather than the raw offset React would restore.
+    patchDraft({ budget: reformatAmountInput(event.currentTarget) });
 
     // Clears as soon as the user starts fixing it, rather than surviving until a
     // second submit. The message appears on submit only - see onSubmit.
