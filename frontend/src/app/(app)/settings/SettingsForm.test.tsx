@@ -30,6 +30,25 @@ function renderForm(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true }))
   return save;
 }
 
+/**
+ * The same render, plus the handle a `router.refresh()` needs to be simulated.
+ *
+ * `refresh` is a `jest.fn()` here, so nothing re-runs the Server Component on its own - the way a
+ * refreshed profile actually reaches this component is as a **new prop**, which is what `land()`
+ * delivers. A fresh object every time, deliberately: `page.tsx` builds one on every server render,
+ * so a resync comparing by identity rather than by value would fire on refreshes that changed
+ * nothing.
+ */
+function renderWithRefresh(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true })) {
+  const view = render(<SettingsForm profile={PROFILE} save={save} />);
+
+  return {
+    save,
+    land: (next: Partial<Profile>) =>
+      view.rerender(<SettingsForm profile={{ ...PROFILE, ...next }} save={save} />),
+  };
+}
+
 const saveButton = () => screen.getByRole('button', { name: 'Save changes' });
 
 beforeEach(() => {
@@ -439,5 +458,146 @@ describe('the form element', () => {
     const { container } = render(<SettingsForm profile={PROFILE} save={jest.fn()} />);
 
     expect(container.querySelector('form')).toHaveAttribute('novalidate');
+  });
+});
+
+// The three defects a code review found in the first version of this form, all one root cause:
+// `values` was seeded once at mount while the diff baseline read the live `profile` prop, so the
+// two drifted apart the moment the server stored something other than what was typed.
+describe('the resync after a save', () => {
+  async function saveAnEdit(
+    user: ReturnType<typeof userEvent.setup>,
+    field: string,
+    value: string,
+  ) {
+    await user.clear(screen.getByLabelText(field));
+    await user.type(screen.getByLabelText(field), value);
+    await user.click(saveButton());
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  }
+
+  it('adopts the address the server actually stored, not the casing that was typed', async () => {
+    // `UpdateProfileDto` lowercases through `normalizeEmail`, so the account holds a different
+    // string from the one on screen. Without the resync the one screen whose job is to report the
+    // login identifier goes on showing an address login links are not sent to.
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await saveAnEdit(user, 'Email', 'Marko.Kovac@Email.com');
+    land({ email: 'marko.kovac@email.com' });
+
+    expect(screen.getByLabelText('Email')).toHaveValue('marko.kovac@email.com');
+  });
+
+  it('adopts the trimmed name, so the avatar stops disagreeing with the sidebar', async () => {
+    // AC5's own requirement: `toUpdateProfileBody` sends the trimmed name, `initials()` does not
+    // trim, so a leading space rendered " K" here while the refreshed sidebar footer showed "AK".
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await saveAnEdit(user, 'First name', ' ana');
+    expect(screen.getByText(/^\s*K$/)).toBeInTheDocument();
+
+    land({ firstName: 'Ana' });
+
+    expect(screen.getByText('AK')).toBeInTheDocument();
+    expect(screen.getByLabelText('First name')).toHaveValue('Ana');
+  });
+
+  it('adopts a field another tab changed, so the next save cannot revert it', async () => {
+    // The cross-tab revert: without this, `values.lastName` stays at the mount-time value and the
+    // second save puts it back on the wire, undoing the other tab silently.
+    const user = userEvent.setup();
+    const { save, land } = renderWithRefresh();
+
+    await saveAnEdit(user, 'First name', 'Ana');
+    land({ firstName: 'Ana', lastName: 'Novak' });
+
+    save.mockClear();
+    refresh.mockClear();
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Iva');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith({ firstName: 'Iva' });
+  });
+
+  it('leaves the form alone when a refresh it did not cause arrives', async () => {
+    // The other half, and the reason the resync is armed by a save rather than by any prop change:
+    // a background refresh must never rewrite what somebody is in the middle of typing.
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Iva');
+    land({ firstName: 'Somebody else' });
+
+    expect(screen.getByLabelText('First name')).toHaveValue('Iva');
+  });
+
+  it('abandons the resync if the user types before the refresh lands', async () => {
+    // `router.refresh()` resolves asynchronously while the fields re-enable immediately, so this
+    // window is real. Keystrokes win; the normalisation is picked up by the next save.
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await saveAnEdit(user, 'First name', 'Ana');
+    await user.type(screen.getByLabelText('Last name'), 'x');
+    land({ firstName: 'Ana', lastName: 'Overwritten' });
+
+    expect(screen.getByLabelText('Last name')).toHaveValue('Kovačx');
+  });
+});
+
+describe('focus', () => {
+  it('moves to the first invalid field, so a refused submit is announced', async () => {
+    // The inline messages are reached through `aria-describedby`, which announces on focus and at
+    // no other time - so without this a screen-reader user pressed Save, got no request and heard
+    // nothing at all. Draw order, so focus lands at the top of the problems.
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('Last name'));
+    await user.clear(screen.getByLabelText('Email'));
+    await user.click(saveButton());
+
+    expect(screen.getByLabelText('Last name')).toHaveFocus();
+  });
+
+  it('returns to the control the save was fired from', async () => {
+    // Every control is disabled while the request is out, and the browser blurs a control the
+    // moment it becomes disabled - so focus fell to <body> and the next Tab restarted at the top
+    // of the page. Nothing unmounts, so the platform does not restore it.
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana{Enter}');
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByLabelText('First name')).toHaveFocus());
+  });
+
+  it('returns focus on a failure too, not only on the happy path', async () => {
+    const user = userEvent.setup();
+    renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'taken' }));
+
+    await user.clear(screen.getByLabelText('Email'));
+    await user.type(screen.getByLabelText('Email'), 'taken@email.com{Enter}');
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.getByLabelText('Email')).toHaveFocus();
+  });
+
+  it('returns focus after a rejected RPC', async () => {
+    const user = userEvent.setup();
+    renderForm(jest.fn().mockRejectedValue(new Error('connection lost')));
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana{Enter}');
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.getByLabelText('First name')).toHaveFocus();
   });
 });

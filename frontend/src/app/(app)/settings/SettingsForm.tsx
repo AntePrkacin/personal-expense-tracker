@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
@@ -10,7 +10,9 @@ import { updateProfile, type UpdateProfileResult } from '@/lib/updateProfile';
 
 import { ProfileCard } from './ProfileCard';
 import {
+  FIELD_ID,
   invalidFields,
+  sameSettingsValues,
   toSettingsFormValues,
   toUpdateProfileBody,
   type SettingsFormField,
@@ -74,9 +76,17 @@ type SettingsFormProps = {
    * save `router.refresh()` re-runs `(app)/layout.tsx` *and* `settings/page.tsx`, handing this
    * component a fresh profile - so a `useState(() => profile)` baseline, which is
    * `AllocateBudgetModal`'s shape and the tempting one to copy, would freeze at the pre-save values
-   * and a second press with no further edits would re-send a body the server already applied. The
-   * modals read once on open because a background refresh would rewrite fields under the user's
-   * hands; here `values` is already state, so that protection is had for free.
+   * and a second press with no further edits would re-send a body the server already applied.
+   *
+   * **A code review found that half of this argument shipped without its other half.** Reading the
+   * baseline live is right, and it is only safe if `values` follows the same profile - otherwise
+   * the two disagree, which is a *mirror* of the bug the paragraph above avoids and produced three
+   * of its own: the address kept the casing the user typed rather than the one the server stored,
+   * the avatar kept deriving initials from whitespace the save trimmed away (drifting from the
+   * sidebar footer, which is AC5), and a field another tab had changed was quietly reverted by the
+   * next save. The resync in the component body is the missing half; it is on the *save*'s refresh
+   * only, so a background one still cannot rewrite fields under the user's hands - which is the
+   * protection the modals get by reading once on open.
    */
   profile: Profile;
   /**
@@ -98,6 +108,67 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
 
+  // **The server's values `values` was last seeded from, and the flag that says a save is waiting
+  // for its refresh.** Together these are the resync below; both exist because `router.refresh()`
+  // resolves asynchronously, so the new `profile` is not readable at the moment the save succeeds.
+  const [synced, setSynced] = useState<SettingsFormValues>(() => toSettingsFormValues(profile));
+  const [awaitingSaved, setAwaitingSaved] = useState(false);
+
+  /**
+   * **Adopt what the server actually stored, once the save's refresh lands.**
+   *
+   * A render-phase state adjustment rather than an effect, which is the shape `TransactionSearch`
+   * and `InsightsScreen` already use here: `react-hooks/set-state-in-effect` rejects the effect
+   * version and this repo carries no eslint-disable comments.
+   *
+   * **It fires only after this form's own save**, which is what makes adopting *every* field safe.
+   * A background refresh from anywhere else leaves the form alone, because a user mid-sentence must
+   * not have their typing replaced; but by the time a save resolves, every field has been disabled
+   * for the whole round trip, so there is nothing in flight to destroy and the server is
+   * authoritative about all three values.
+   *
+   * That matters because the server does not store what was typed. It lowercases the address
+   * through `normalizeEmail` and it stores the trimmed name, so without this the Email field goes
+   * on showing a casing the account no longer has, and the avatar goes on deriving initials from
+   * whitespace the save removed - drifting from the sidebar footer, which is exactly what AC5 says
+   * must not happen. It also picks up any field another tab changed in the meantime, so the next
+   * diff cannot silently revert it.
+   *
+   * The comparison is by **value**, never by object identity: `page.tsx` builds a fresh profile
+   * object on every server render, so an identity test would be true after every refresh in the app.
+   */
+  const fromServer = toSettingsFormValues(profile);
+
+  if (awaitingSaved && !sameSettingsValues(fromServer, synced)) {
+    setSynced(fromServer);
+    setValues(fromServer);
+    setAwaitingSaved(false);
+  }
+
+  /**
+   * Focus, put back where the save took it from.
+   *
+   * Every control on the form is `disabled` while the request is out, and the browser blurs a
+   * control the moment it becomes disabled - so a keyboard user who pressed Enter in Last name had
+   * focus dropped to `<body>` and their next Tab restarted at the top of the page. The platform
+   * does not restore it, because nothing was unmounted.
+   *
+   * An effect with no `setState` in it, so the `set-state-in-effect` rule above does not apply, and
+   * keyed on `pending` falling rather than on the result: every exit from the request restores,
+   * including the two failure arms and the rejected RPC. The captured element is still connected -
+   * it was disabled, not removed - which is what makes this simpler than `(app)/Modal.tsx`'s
+   * version of the same fix.
+   */
+  const focusOnSubmit = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (pending) return;
+
+    const target = focusOnSubmit.current;
+    focusOnSubmit.current = null;
+    target?.focus();
+  }, [pending]);
+
   /**
    * One keystroke.
    *
@@ -113,6 +184,15 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
     setErrors((current) => ({ ...current, [field]: undefined }));
     setFailure(null);
     setSaved(false);
+
+    // **A keystroke abandons a pending resync, and that window is real rather than theoretical.**
+    // `router.refresh()` resolves asynchronously while `setPending(false)` re-enables the fields
+    // immediately, so there is a moment after a save where the user can type and the refresh has
+    // not landed. Adopting the server's values then would delete what they just typed. Giving up
+    // costs the normalisation this save would have picked up - the field keeps the casing on
+    // screen - and their next save resyncs it. Losing keystrokes is the worse of the two, and it
+    // is the one this repo has paid for before, in `AddTransactionModal`'s scan merge.
+    setAwaitingSaved(false);
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -130,6 +210,19 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
       setErrors(
         Object.fromEntries(problems.map(({ field, reason }) => [field, messageFor(field, reason)])),
       );
+
+      // **Focus the first invalid field, or a refused submit is silent to a screen reader.** The
+      // inline messages are ordinary `<p>`s reached through `aria-describedby`, which announces
+      // them on focus and at no other time - and unlike the four form-level failures they do not
+      // go through `FormError`'s `role="alert"`. So a reader who pressed Save heard nothing, got
+      // no request, and had no way to learn why. Moving focus is the fix rather than a second live
+      // region, because it announces the field, its label and its message together *and* leaves
+      // the caret where the work is.
+      //
+      // The first in `invalidFields`' order, which is draw order, so focus lands at the top of the
+      // problems rather than the bottom.
+      document.getElementById(FIELD_ID[problems[0]!.field])?.focus();
+
       // Nothing is persisted, which is the second half of AC4: the request is not made at all.
       return;
     }
@@ -148,6 +241,11 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
 
     setFailure(null);
     setSaved(false);
+
+    // Captured *before* `setPending(true)`, because that commit is what disables the control the
+    // user is standing on and blurs it. The effect above puts them back.
+    focusOnSubmit.current = document.activeElement as HTMLElement | null;
+
     setPending(true);
 
     // **The `catch` is not defensive, and without it a failed submit freezes the page.** `save` is
@@ -174,9 +272,16 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
 
     // **`router.refresh()` is the whole of AC5.** It re-runs this route's Server Components *and*
     // the shell's layout above it, so `requireProfile()` runs again and the sidebar footer's short
-    // name and initials follow what was just saved. The form keeps rendering `values`, which are
-    // already what the server now holds, so there is nothing to reconcile here.
+    // name and initials follow what was just saved.
+    //
+    // **`setAwaitingSaved(true)` is the other half of it, and the first draft of this file left it
+    // out.** The comment here used to claim `values` was "already what the server now holds", which
+    // is false in three ordinary ways: the address is stored lowercased, the names are stored
+    // trimmed, and another tab may have changed a field this form did not send. The refresh is
+    // asynchronous, so the corrected profile cannot be read on this line - the flag is what makes
+    // the resync at the top of this component adopt it when it arrives.
     router.refresh();
+    setAwaitingSaved(true);
     setPending(false);
     setSaved(true);
   }

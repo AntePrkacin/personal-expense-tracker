@@ -1,7 +1,7 @@
 import { Input } from '@/components/ui/Input';
 import { initials } from '@/lib/format';
 
-import type { SettingsFormField, SettingsFormValues } from './settingsForm';
+import { FIELD_ID, type SettingsFormField, type SettingsFormValues } from './settingsForm';
 
 // The "Profile" card on 17 Settings (frame `40:682`): the avatar tile over the three fields
 // registration collected (SET-2, REG-2).
@@ -83,7 +83,7 @@ export function ProfileCard({ values, errors, disabled, onChange }: ProfileCardP
             an 820px card reads as `gap-3`. */}
         <div className="grid grid-cols-2 gap-3">
           <Input
-            id="settings-first-name"
+            id={FIELD_ID.firstName}
             label="First name"
             value={values.firstName}
             onChange={(event) => onChange('firstName', event.target.value)}
@@ -92,7 +92,7 @@ export function ProfileCard({ values, errors, disabled, onChange }: ProfileCardP
             error={errors.firstName}
           />
           <Input
-            id="settings-last-name"
+            id={FIELD_ID.lastName}
             label="Last name"
             value={values.lastName}
             onChange={(event) => onChange('lastName', event.target.value)}
@@ -105,7 +105,7 @@ export function ProfileCard({ values, errors, disabled, onChange }: ProfileCardP
         {/* A sibling of the grid rather than a third cell, which is what makes it full width -
             frame `40:700` draws it spanning both columns. */}
         <Input
-          id="settings-email"
+          id={FIELD_ID.email}
           label="Email"
           type="email"
           value={values.email}

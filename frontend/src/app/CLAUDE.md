@@ -2345,3 +2345,46 @@ while the `<main>` below was empty - so the moment this screen grew a form it wo
 a reason having nothing to do with the header. It is scoped to `<header>` now. What AC2 says is that
 the header carries no action, which is still exactly what is measured; the version that leaned on
 the rest of the page being empty was measuring something stronger by accident.
+
+**A code review of PET-46 found that the paragraph above got the profile prop half right, and the
+missing half caused three defects.** Reading the diff baseline off the live prop is correct; it is
+only safe if `values` follows the _same_ profile, and it did not - `values` was seeded once at
+mount and never reconciled. That pairing is a **mirror** of the bug the original reasoning avoided,
+and it is worth keeping as a correction rather than an edit, because the argument for it was
+written down confidently and was incomplete rather than wrong.
+
+Three things it produced, all invisible to every gate and to a single-tab browser walk. The address
+kept the casing the user typed while the account held the lowercased one `normalizeEmail` stores,
+on the one screen whose job is to report the login identifier. The avatar went on deriving initials
+from whitespace the save had trimmed away, so it disagreed with the sidebar footer - which is AC5
+itself, the criterion `initials()` is a shared function _for_. And a field another tab had changed
+was picked up by the next diff and silently reverted.
+
+**The fix is a resync armed by the save rather than by any prop change, and that distinction is the
+whole of it.** A render-phase state adjustment - `TransactionSearch`'s shape, because
+`react-hooks/set-state-in-effect` rejects the effect version - adopts the server's values when a
+refreshed profile arrives _after this form's own save_. Adopting every field is safe there and only
+there: every control is `disabled` for the whole round trip, so nothing is in flight to destroy,
+and the server is authoritative about all three values. A background refresh is deliberately
+ignored, because a user mid-sentence must not have their typing replaced, which is the protection
+the modals buy by reading once on open. Two details not to undo. The comparison is **by value**,
+since `page.tsx` builds a fresh profile object on every server render and an identity test would
+fire after every refresh in the app. And **a keystroke abandons a pending resync**: `router.refresh()`
+resolves asynchronously while `setPending(false)` re-enables the fields immediately, so there is a
+window where typing and adoption race, and the keystrokes win - the same call `AddTransactionModal`'s
+scan merge already makes.
+
+**Two accessibility defects came out of the same review, and both are about a control that stops
+being focusable.** Disabling every field plus the Save button for the round trip blurs whichever
+one the user was standing on, and the platform restores nothing because nothing unmounted - so a
+keyboard user's next Tab restarted at the top of the page, on the path taken by _every_ save. The
+form captures `document.activeElement` before `setPending(true)` and restores it in an effect keyed
+on `pending` falling, which covers the success arm, both failure arms and the rejected RPC. And a
+refused submit was **silent**: the inline messages are ordinary paragraphs reached through
+`aria-describedby`, which announces on focus and at no other time, and unlike the form-level
+failures they do not go through `FormError`'s `role="alert"`. Focus now moves to the first invalid
+field in draw order, which announces the field, its label and its message together and leaves the
+caret where the work is - chosen over a second live region because it is actionable rather than
+merely audible. `FIELD_ID` in `settings/settingsForm.ts` is what makes that call possible: the ids
+`ui/Input` requires as literal props are declared once beside the field union, so the focus target
+and the markup cannot drift.

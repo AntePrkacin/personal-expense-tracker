@@ -45,6 +45,35 @@ export type SettingsFormValues = {
 export type SettingsFormField = keyof SettingsFormValues;
 
 /**
+ * The DOM id each field's control carries, declared once beside the union rather than written out
+ * at the markup.
+ *
+ * `ui/Input` requires `id` as a literal prop - `useId()` is a hook and would force `'use client'`
+ * onto the whole field layer - so these strings have to exist somewhere. They live here because
+ * two files need them and must not disagree: `ProfileCard` labels the controls with them, and
+ * `SettingsForm` moves focus to the first invalid one on a refused submit. A second hand-written
+ * copy is how that focus call quietly starts finding nothing.
+ */
+export const FIELD_ID: Record<SettingsFormField, string> = {
+  firstName: 'settings-first-name',
+  lastName: 'settings-last-name',
+  email: 'settings-email',
+};
+
+/**
+ * Whether two sets of form values are the same strings.
+ *
+ * Exists for the resync in `SettingsForm`, which has to answer "did the server's profile actually
+ * change" and cannot do it by object identity: `page.tsx` builds a **fresh object on every server
+ * render**, so `profile !== previous` is true after any `router.refresh()` in the app, whether or
+ * not a single character moved. Comparing by value is what keeps an unrelated refresh from
+ * rewriting the form.
+ */
+export function sameSettingsValues(a: SettingsFormValues, b: SettingsFormValues): boolean {
+  return a.firstName === b.firstName && a.lastName === b.lastName && a.email === b.email;
+}
+
+/**
  * What is wrong with a field, rather than merely that something is.
  *
  * `categoryForm.invalidFields` returns bare field names, because each of its two fields has exactly
