@@ -108,6 +108,20 @@ the caps never reach the browser. The module behind it, `lib/categories.ts`, del
 handler answering a `fetch()` would hand the modal an HTML login page with a 200 on it, so the
 failure has to stay data.
 
+**That shape has a second consumer as of PET-42-43-44, and the two agree on everything except the
+projection.** `app/api/insights/route.ts` serves the AI Insights page's poll: the read behind it
+uses `cookies()` and the server-only `BACKEND_URL`, so a browser timer has nowhere else to call,
+which is the same "the caller is already on screen" test the categories handler passes. It copies
+the no-store at both hops, the 401 travelling through unchanged and the 503 for an unreachable
+backend, and its module refuses to redirect internally for the identical reason. Where it differs
+is that it **passes the response straight through**: every field is drawn by the page, so a
+projection would be a second place for the shape to drift rather than a narrowing that keeps
+anything out of the browser. That module is also the first to export both a plain
+`AuthorizedResult` read and a redirecting wrapper over it, because its two callers answer a dead
+session differently - which is what the categories one solved by leaving the policy to every call
+site. The same branch narrows `InsightCardDto`'s tone enum, so it is a DTO change and a route
+handler in one, and both halves went through `npm run api:sync`.
+
 **There are four verbs in `lib/session.ts` now**: `authorizedGet`, `authorizedPost`,
 PET-33's `authorizedDelete` and PET-32's `authorizedPatch`. The three writes share one
 `AuthorizedWriteResult` rather than growing shapes of their own, and each new one is a handful of

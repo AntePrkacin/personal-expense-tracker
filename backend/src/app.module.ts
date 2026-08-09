@@ -1,6 +1,7 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -41,6 +42,14 @@ import { UsersModule } from './users/users.module';
         process.env.OPENAPI_EMIT === '1' ||
         process.env.SEED_LOCAL === '1',
     }),
+    // In-process only, and the app's one indirect call. `TransactionsService`
+    // emits that a user's numbers moved and `InsightsModule` listens, which is
+    // what regenerates the insight set on every write. A direct call would be a
+    // circular module dependency, since InsightsModule already imports
+    // TransactionsModule for the generator - see
+    // src/transactions/transaction-changed.event.ts. Registered globally rather
+    // than per-module because forRoot() may only be called once.
+    EventEmitterModule.forRoot(),
     DatabaseModule,
     UsersModule,
     TemplatesModule,

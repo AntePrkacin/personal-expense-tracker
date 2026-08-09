@@ -48,9 +48,12 @@ category is doing against that month's cap, and carries the list's filters there
 seventh is PET-21's: `/dashboard` reads the dashboard summary and renders its first card, the
 monthly budget, joined by PET-22's second, the weekly spending trend chart, PET-23's third, the
 spending-by-category donut, PET-24's fourth, the recent transactions list, and PET-25's fifth and
-last, the AI insight teaser card - so the Dashboard is a complete screen. What is still missing is
-most of what the other two unbuilt screens *show*: the AI Insights and Settings `<main>` elements
-below the page header are empty.
+last, the AI insight teaser card - so the Dashboard is a complete screen. The eighth is
+PET-42-43-44's: `/insights` reads `GET /api/insights` and renders all three designed states, and
+the same branch moves generation onto the write path, so every transaction create, edit and
+delete regenerates the set and the screen is a pure read plus a Regenerate button rather than the
+thing that has to decide when a first run happens. What is still missing is what the one
+remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
 
 ## Repository map
 

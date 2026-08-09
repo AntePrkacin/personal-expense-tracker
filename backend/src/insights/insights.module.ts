@@ -5,6 +5,7 @@ import { INSIGHT_GENERATOR } from './insight-generator';
 import { InsightsController } from './insights.controller';
 import { InsightsService } from './insights.service';
 import { RuleBasedInsightGenerator } from './rule-based-insight.generator';
+import { TransactionChangedListener } from './transaction-changed.listener';
 
 /**
  * Insight set storage, the read, and asynchronous generation.
@@ -23,12 +24,20 @@ import { RuleBasedInsightGenerator } from './rule-based-insight.generator';
  * `InsightsService` is exported because the dashboard composes it for the teaser
  * (DSH-9), the same reason `CategoriesModule` and `TransactionsModule` export
  * theirs.
+ *
+ * **`TransactionChangedListener` is what regenerates on a write, and the
+ * direction of the dependency is the whole point.** It listens here rather than
+ * `TransactionsModule` calling `InsightsService`, because the import above
+ * already runs the other way and a direct call would close the loop into a
+ * circular module dependency. Nothing is exported for it: the emitter is the
+ * only coupling.
  */
 @Module({
   imports: [CategoriesModule, TransactionsModule],
   controllers: [InsightsController],
   providers: [
     InsightsService,
+    TransactionChangedListener,
     { provide: INSIGHT_GENERATOR, useClass: RuleBasedInsightGenerator },
   ],
   exports: [InsightsService],

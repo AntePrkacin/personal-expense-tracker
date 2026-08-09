@@ -26,11 +26,18 @@ import { AddTransactionButton } from '../AddTransactionButton';
 // copy says the truthful thing instead, that nothing has been analysed yet, and offers the same
 // link to Insights the ready state does.
 //
+// **PET-42-43-44 removed the cause, and the split above is now a fallback rather than the
+// common path.** Every transaction write regenerates the set backend-side, so an account with
+// expenses has a set or is generating one - which means the pending copy is reachable only in
+// the window between the first save and the first run settling, or for an account that logged
+// its transactions before that trigger shipped. It stays because both windows are real; read
+// the paragraph above as history rather than as a description of the running app.
+//
 // **Neither of those is a `generating` state, and the card still needs no third shape.** The
 // contract folds "the first run is still in flight" into the same null, and a teaser has nothing
 // useful to say while one is - so the pending copy covers it as honestly as it covers a run that
-// was never started. The card that needs a skeleton is PET-44's, reading `GET /api/insights`
-// directly rather than this one field.
+// was never started. The card that needs a skeleton is PET-42's, reading `GET /api/insights`
+// directly rather than this one field, and it exists now.
 //
 // **The prop is `isEmpty` as of PET-26, not `transactionCount`.** This card had already computed
 // the screen's shared empty condition, under its own name, before that ticket's branch started -
