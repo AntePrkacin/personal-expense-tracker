@@ -1,6 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule, seconds } from '@nestjs/throttler';
 import { normalizeEmail } from '../common/normalize-email';
 import { MailModule } from '../mail/mail.module';
 import { TemplatesModule } from '../templates/templates.module';
@@ -10,10 +8,6 @@ import { AuthService } from './auth.service';
 import { LoginTokenService } from './login-token.service';
 import { SessionService } from './session.service';
 import { VerificationService } from './verification.service';
-
-const DEFAULT_EMAIL_RATE_LIMIT = 5;
-const DEFAULT_IP_RATE_LIMIT = 30;
-const DEFAULT_RATE_TTL_S = 900;
 
 /**
  * Two throttlers, deliberately NOT one composite `ip:email` key.
@@ -55,6 +49,17 @@ const DEFAULT_RATE_TTL_S = 900;
  * proxy chain, while this needs the frontend to forward the browser's address
  * *and* a reason to trust that header, which is more than a config line. See
  * docs/TODO.md.
+ *
+ * These two trackers, and the module they register with, moved to `AppModule`
+ * at PET-59: `ThrottlerModule` is `@Global()`, so a second `forRootAsync` call
+ * in a feature module does not scope anything - it resolves the same
+ * `THROTTLER_OPTIONS` token, and whichever registration loses that race is
+ * silently absent, leaving its routes with no limit at all. One registration
+ * now carries a third named throttler, `scan`, for `POST
+ * /api/transactions/scan` - see `AppModule`. The functions stay here rather
+ * than moving with it because they are exported for `auth.module.spec.ts`,
+ * which cannot vary the caller's IP under supertest and so unit-tests these
+ * directly.
  */
 export function trackByIp(req: Record<string, unknown>): string {
   return typeof req.ip === 'string' ? req.ip : '';
@@ -71,13 +76,23 @@ export function trackByEmail(req: Record<string, unknown>): string {
 }
 
 /**
+ * The signed-in caller, for the `scan` throttler `AppModule` registers.
+ * `SessionGuard` is a global `APP_GUARD`, so it runs ahead of the
+ * controller-scoped `ThrottlerGuard` on `/scan` and `request.user` is already
+ * set by the time this reads it - the route carries no `@Public()`, so a
+ * missing principal here would itself be a bug rather than a case to handle.
+ * Keyed on the user id rather than on IP because the budget this throttler
+ * protects is the project's shared Gemini quota, not a per-caller one, and IP
+ * would let one NAT share a bucket across unrelated accounts.
+ */
+export function trackByUser(req: Record<string, unknown>): string {
+  const user = req.user as { userId?: string } | undefined;
+  return user?.userId ?? trackByIp(req);
+}
+
+/**
  * The passwordless access flow: register, request a login link, verify one, and
  * answer "who am I" for the session it created.
- *
- * ThrottlerModule is configured here rather than globally because these are the
- * only routes that need it - `AuthController` carries the guard, with named
- * skips per route - and because the limits are exposed as configuration so the
- * e2e suite can trip them without waiting out a fifteen-minute window.
  *
  * `SessionService` is exported because AppModule's `APP_GUARD` registration of
  * `SessionGuard` resolves it from here. The guard itself is deliberately not a
@@ -93,41 +108,6 @@ export function trackByEmail(req: Record<string, unknown>): string {
     // template ids against central before stashing them, and verification reads
     // the same rows back to seed the account's categories.
     TemplatesModule,
-    ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        // v5+ takes ttl in MILLISECONDS. AUTH_RATE_TTL_S is seconds, and
-        // getting this conversion wrong is silent: the window would become
-        // 900ms instead of 900s and the limit would never be reached.
-        const ttl = seconds(
-          config.get<number>('AUTH_RATE_TTL_S', DEFAULT_RATE_TTL_S),
-        );
-
-        return {
-          throttlers: [
-            {
-              name: 'email',
-              limit: config.get<number>(
-                'AUTH_RATE_LIMIT',
-                DEFAULT_EMAIL_RATE_LIMIT,
-              ),
-              ttl,
-              getTracker: trackByEmail,
-            },
-            {
-              name: 'ip',
-              limit: config.get<number>(
-                'AUTH_RATE_IP_LIMIT',
-                DEFAULT_IP_RATE_LIMIT,
-              ),
-              ttl,
-              getTracker: trackByIp,
-            },
-          ],
-        };
-      },
-    }),
   ],
   controllers: [AuthController],
   providers: [

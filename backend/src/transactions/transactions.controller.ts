@@ -10,26 +10,37 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { SessionPrincipal } from '../auth/session.service';
 import { ApiErrorResponse } from '../common/decorators/api-error-response.decorator';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
+import { ScanReceiptResponseDto } from './dto/scan-receipt-response.dto';
 import { TransactionResponseDto } from './dto/transaction-response.dto';
 import {
   TransactionDetailResponseDto,
   TransactionsResponseDto,
 } from './dto/transactions-response.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { MAX_RECEIPT_FILES } from './receipt-scan.constants';
+import { ReceiptScanService } from './receipt-scan.service';
+import { receiptUploadOptions } from './receipt-scan.upload';
 import { TransactionsService } from './transactions.service';
 
 /**
@@ -42,17 +53,20 @@ import { TransactionsService } from './transactions.service';
  * re-bucket history correctly. There is deliberately no month column to keep in
  * step.
  *
- * No `@UseGuards` and no throttler. `SessionGuard` is global (see AppModule), so
- * these routes are protected by saying nothing at all; the bearer declaration is
- * class-level so it cannot drift route by route. Rate limiting is deliberately
- * absent: these are authenticated reads and writes over the caller's own
- * database, where the budget an abuser would burn is their own.
+ * No `@UseGuards` and no throttler on the reads and writes below. `SessionGuard`
+ * is global (see AppModule), so these routes are protected by saying nothing at
+ * all; the bearer declaration is class-level so it cannot drift route by route.
+ * Rate limiting is deliberately absent from them: these are authenticated reads
+ * and writes over the caller's own database, where the budget an abuser would
+ * burn is their own. **`scan` is the one exception** - see its own doc comment.
  *
  * **Route order is load-bearing.** `GET :id` must stay below any literal sibling
- * path, or Nest matches `:id` against the literal first. There is no literal
- * sibling today - PET-20's dashboard lives on its own path - so this is a note
- * rather than a constraint, and it is written down because the failure is a 400
- * from `ParseUUIDPipe` on a route that looks fine.
+ * path, or Nest matches `:id` against the literal first. `scan` is that literal
+ * sibling as of PET-59 - a POST, so it cannot actually collide with `GET :id`,
+ * but it is declared above it anyway so the ordering reads as intentional rather
+ * than accidental should a future `GET /transactions/scan` ever be added. The
+ * failure this note guards against is a 400 from `ParseUUIDPipe` on a route that
+ * looks fine.
  *
  * Several 404s below are the same status for two different resources, which is
  * why each operation says out loud which one it means.
@@ -61,7 +75,10 @@ import { TransactionsService } from './transactions.service';
 @ApiBearerAuth()
 @Controller('transactions')
 export class TransactionsController {
-  constructor(private readonly transactions: TransactionsService) {}
+  constructor(
+    private readonly transactions: TransactionsService,
+    private readonly receiptScan: ReceiptScanService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -76,6 +93,61 @@ export class TransactionsController {
     @Query() query: ListTransactionsQueryDto,
   ): Promise<TransactionsResponseDto> {
     return this.transactions.list(user.userId, query);
+  }
+
+  /**
+   * Extracts a transaction's fields from a photo or PDF of a receipt.
+   *
+   * **Carries its own rate limiter**, unlike every other route in this
+   * controller: the budget an abuser burns here is not their own, it is the
+   * project's shared Gemini quota. `scan` is a third named throttler
+   * `AppModule` registers, keyed on the session user id, and this route
+   * skips the two auth throttlers that would otherwise also apply -
+   * `ThrottlerGuard` runs every configured throttler on a route it guards,
+   * and `email`'s tracker reads `req.body.email`, which is `undefined` on a
+   * multipart request and would put every caller in one shared fallback
+   * bucket.
+   */
+  @Post('scan')
+  @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ email: true, ip: true })
+  @UseInterceptors(
+    FilesInterceptor('files', MAX_RECEIPT_FILES, receiptUploadOptions),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description:
+            'At most 4 images (pages of one receipt), or exactly one PDF.',
+        },
+      },
+    },
+  })
+  @ApiOperation({
+    summary:
+      'Extract merchant, amount, date, category and note from a receipt.',
+    description:
+      'Every field is null when it could not be read or failed validation against live data, with `missing` naming which of `merchant`, `amount`, `date` and `categoryId` came back that way. **503** means scanning is not configured (no `GEMINI_API_KEY`), and **504** means the extraction call timed out - both distinct from a 200 with everything missing, which means the photo was read but nothing on it was legible.',
+  })
+  @ApiOkResponse({ type: ScanReceiptResponseDto })
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    HttpStatus.UNAUTHORIZED,
+    HttpStatus.PAYLOAD_TOO_LARGE,
+    HttpStatus.TOO_MANY_REQUESTS,
+    HttpStatus.SERVICE_UNAVAILABLE,
+    HttpStatus.GATEWAY_TIMEOUT,
+  )
+  scan(
+    @CurrentUser() user: SessionPrincipal,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
+  ): Promise<ScanReceiptResponseDto> {
+    return this.receiptScan.scan(user.userId, files ?? []);
   }
 
   // Below `@Get()` and below any literal path a future ticket adds here. See the

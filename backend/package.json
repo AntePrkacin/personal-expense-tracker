@@ -30,6 +30,7 @@
     "db:studio:user": "drizzle-kit studio --config=drizzle.user.config.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.16.0",
     "@nestjs/common": "^11.1.28",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.28",
@@ -56,6 +57,7 @@
     "@nestjs/testing": "^11.1.28",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.2.0",
     "@types/node": "^24.13.3",
     "@types/supertest": "^7.2.1",
     "drizzle-kit": "^1.0.0-rc.4",

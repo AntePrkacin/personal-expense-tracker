@@ -35,10 +35,10 @@ export class TemplatesController {
 
   /**
    * **The fifth `@Public()` route.** No throttler, matching the hello route and
-   * unlike the three auth routes: `ThrottlerModule` is configured inside
-   * `AuthModule` and `ThrottlerGuard` sits on `AuthController` alone, so there
-   * is nothing here to skip and nothing to mis-skip. Worth stating rather than
-   * leaving to be discovered, since a bare `@SkipThrottle()` means
+   * unlike the auth routes and PET-59's scan: `ThrottlerModule` is registered
+   * once in `AppModule` now, but nothing here carries `@UseGuards(ThrottlerGuard)`,
+   * so there is nothing to skip and nothing to mis-skip. Worth stating rather
+   * than leaving to be discovered, since a bare `@SkipThrottle()` means
    * `{ default: true }` and would silently skip nothing anyway.
    *
    * It reads no request state at all and returns the same bytes to everybody,

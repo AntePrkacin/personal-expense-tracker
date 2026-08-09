@@ -19,6 +19,12 @@ import type { TransactionResponseDto } from './../src/transactions/dto/transacti
 import { MemoryMailer } from './memory-mailer';
 
 /**
+ * Set by setup-e2e.ts, which is the only place early enough to be read - see
+ * the comment there. Mirrored rather than hardcoded so the two cannot drift.
+ */
+const SCAN_RATE_LIMIT = Number(process.env.SCAN_RATE_LIMIT);
+
+/**
  * The transaction write endpoints, against real databases.
  *
  * What only an e2e can prove here: that a `YYYY-MM-DD` date survives the round
@@ -513,6 +519,86 @@ describe('Transaction writes (e2e)', () => {
       await remove(otherBearer, created.id).expect(404);
 
       expect((await storedRow(created.id)).deletedAt).toBeNull();
+    });
+  });
+
+  /**
+   * `GEMINI_API_KEY` is never set anywhere in this suite (see setup-e2e.ts),
+   * so every one of these answers 503 before it would ever reach the
+   * network - which is exactly what lets the throttler test below run
+   * without a real key. What an e2e can prove that a unit test cannot: the
+   * real multer pipeline (the fileFilter's 400s, the file-count cap) and the
+   * real throttler wiring (that `scan` counts a request the auth limiters
+   * never see, and vice versa).
+   */
+  describe('POST /api/transactions/scan', () => {
+    // Own account per test, so one test's scan-throttle bucket cannot affect
+    // another's - unlike the writes above, which safely share `bearer`.
+    let scanBearer: string;
+
+    beforeEach(async () => {
+      scanBearer = (await provision()).token;
+    });
+
+    const scanRequest = (token: string) =>
+      request(app.getHttpServer())
+        .post('/api/transactions/scan')
+        .set('Authorization', `Bearer ${token}`);
+
+    const scanWithReceipt = (token: string) =>
+      scanRequest(token).attach(
+        'files',
+        Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+        { filename: 'receipt.png', contentType: 'image/png' },
+      );
+
+    it('answers 503 with no GEMINI_API_KEY configured', async () => {
+      await scanWithReceipt(scanBearer).expect(503);
+    });
+
+    it('400s an upload with no files', async () => {
+      await scanRequest(scanBearer).expect(400);
+    });
+
+    it('400s a file of an unsupported type', async () => {
+      await scanRequest(scanBearer)
+        .attach('files', Buffer.from('not a receipt'), {
+          filename: 'notes.txt',
+          contentType: 'text/plain',
+        })
+        .expect(400);
+    });
+
+    it('400s a PDF sent alongside another file', async () => {
+      await scanRequest(scanBearer)
+        .attach('files', Buffer.from('%PDF-1.4'), {
+          filename: 'receipt.pdf',
+          contentType: 'application/pdf',
+        })
+        .attach('files', Buffer.from([0x89, 0x50, 0x4e, 0x47]), {
+          filename: 'page2.png',
+          contentType: 'image/png',
+        })
+        .expect(400);
+    });
+
+    it('refuses every request with no bearer at all', async () => {
+      await scanWithReceipt('').expect(401);
+    });
+
+    it('trips its own throttler without touching the auth limiters', async () => {
+      for (let i = 0; i < SCAN_RATE_LIMIT; i++) {
+        await scanWithReceipt(scanBearer).expect(503);
+      }
+      await scanWithReceipt(scanBearer).expect(429);
+
+      // Keyed on the session user id, not on the auth routes' email/ip
+      // trackers - so a fresh address can still request a login link right
+      // after this account's scan bucket is spent.
+      await request(app.getHttpServer())
+        .post('/api/auth/login-link')
+        .send({ email: nextEmail() })
+        .expect(202);
     });
   });
 });

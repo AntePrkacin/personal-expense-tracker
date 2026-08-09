@@ -86,6 +86,7 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/templates/categories`,
       `/${API_PREFIX}/templates/palette`,
       `/${API_PREFIX}/transactions`,
+      `/${API_PREFIX}/transactions/scan`,
       `/${API_PREFIX}/transactions/{id}`,
     ]);
   });
@@ -431,6 +432,64 @@ describe('openapi.json', () => {
       expect(
         schema('TransactionResponseDto').properties!.amount.description,
       ).toMatch(/major units/i);
+    });
+  });
+
+  describe('the scan endpoint (PET-59)', () => {
+    const op = () => spec.paths[`/${API_PREFIX}/transactions/scan`].post;
+
+    it('requires the bearer, like every other transaction operation', () => {
+      expect(op().security).toEqual([{ bearer: [] }]);
+    });
+
+    it('declares multipart/form-data, not JSON', () => {
+      // The plugin cannot infer a file field, so this is described by hand
+      // with @ApiConsumes/@ApiBody - pinned because nothing else would catch
+      // it silently reverting to the default application/json.
+      expect(op().requestBody?.content).toHaveProperty('multipart/form-data');
+      expect(op().requestBody?.content).not.toHaveProperty('application/json');
+    });
+
+    it('documents exactly its own statuses, the keyless 503 and timeout 504 included', () => {
+      expect(Object.keys(op().responses).sort()).toEqual([
+        '200',
+        '400',
+        '401',
+        '413',
+        '429',
+        '503',
+        '504',
+      ]);
+
+      for (const status of ['400', '401', '413', '429', '503', '504']) {
+        expect(
+          op().responses[status].content?.['application/json'].schema?.$ref,
+        ).toBe(ERROR_REF);
+      }
+    });
+
+    it('returns the extraction shape, with missing as a real enum', () => {
+      expect(
+        op().responses['200'].content?.['application/json'].schema?.$ref,
+      ).toBe('#/components/schemas/ScanReceiptResponseDto');
+
+      const missing = schema('ScanReceiptResponseDto').properties!.missing as {
+        items?: { enum?: string[] };
+      };
+      expect(missing.items?.enum?.sort()).toEqual([
+        'amount',
+        'categoryId',
+        'date',
+        'merchant',
+      ]);
+    });
+
+    it('marks every extracted field nullable, since an unreadable receipt is a real 200', () => {
+      for (const name of ['merchant', 'amount', 'date', 'categoryId', 'note']) {
+        expect(
+          schema('ScanReceiptResponseDto').properties![name],
+        ).toMatchObject({ nullable: true });
+      }
     });
   });
 

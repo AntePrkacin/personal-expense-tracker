@@ -32,6 +32,9 @@ interface ValidatedEnv {
   AUTH_RATE_LIMIT: number;
   AUTH_RATE_IP_LIMIT: number;
   AUTH_RATE_TTL_S: number;
+  GEMINI_API_KEY?: string;
+  SCAN_RATE_LIMIT: number;
+  SCAN_RATE_TTL_S: number;
   TRUST_PROXY_HOPS: number;
 }
 
@@ -97,6 +100,8 @@ describe('envValidationSchema', () => {
         AUTH_RATE_LIMIT: 5,
         AUTH_RATE_IP_LIMIT: 30,
         AUTH_RATE_TTL_S: 900,
+        SCAN_RATE_LIMIT: 10,
+        SCAN_RATE_TTL_S: 3600,
         // 0, not 1: the default has to be safe with nothing in front, because
         // trusting X-Forwarded-For unproxied lets a caller pick its own per-IP
         // rate-limit bucket. The deployment opts in.
@@ -180,6 +185,17 @@ describe('envValidationSchema', () => {
     });
   });
 
+  describe('the Gemini key is optional and unpaired', () => {
+    it('accepts an environment with no key at all', () => {
+      expect(validate({}).error).toBeUndefined();
+      expect(validate({}).value.GEMINI_API_KEY).toBeUndefined();
+    });
+
+    it('accepts a key set on its own', () => {
+      expect(validate({ GEMINI_API_KEY: 'test-key' }).error).toBeUndefined();
+    });
+  });
+
   describe('value constraints', () => {
     it('coerces a numeric PORT from its string form', () => {
       expect(validate({ PORT: '4000' }).value.PORT).toBe(4000);
@@ -208,6 +224,11 @@ describe('envValidationSchema', () => {
       expect(validate({ AUTH_RATE_LIMIT: '2.5' }).error).toBeDefined();
       expect(validate({ AUTH_RATE_IP_LIMIT: '0' }).error).toBeDefined();
       expect(validate({ AUTH_RATE_TTL_S: '90.5' }).error).toBeDefined();
+    });
+
+    it('rejects fractional and non-positive scan rate limits', () => {
+      expect(validate({ SCAN_RATE_LIMIT: '0' }).error).toBeDefined();
+      expect(validate({ SCAN_RATE_TTL_S: '90.5' }).error).toBeDefined();
     });
 
     it('accepts zero proxy hops but rejects a negative or fractional count', () => {

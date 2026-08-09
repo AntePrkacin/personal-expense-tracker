@@ -79,10 +79,17 @@ const ACCEPTED_RESPONSE = {
  * Note that Nest's default key includes the handler, so each route gets its own
  * buckets rather than sharing them - accepted, since a legitimate journey can
  * touch several.
+ *
+ * **Class-level `@SkipThrottle({ scan: true })`** because `ThrottlerModule`
+ * registers a third named throttler, `scan`, for `POST
+ * /api/transactions/scan` (see `AppModule`) - `ThrottlerGuard` runs every
+ * configured throttler on a route it guards, so without this skip every route
+ * here would also count against that budget for no reason.
  */
 @ApiTags('auth')
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
+@SkipThrottle({ scan: true })
 export class AuthController {
   constructor(
     private readonly authService: AuthService,

@@ -556,6 +556,114 @@
         ]
       }
     },
+    "/api/transactions/scan": {
+      "post": {
+        "description": "Every field is null when it could not be read or failed validation against live data, with `missing` naming which of `merchant`, `amount`, `date` and `categoryId` came back that way. **503** means scanning is not configured (no `GEMINI_API_KEY`), and **504** means the extraction call timed out - both distinct from a 200 with everything missing, which means the photo was read but nothing on it was legible.",
+        "operationId": "TransactionsController_scan",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "At most 4 images (pages of one receipt), or exactly one PDF."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanReceiptResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The upload exceeded its size cap. `message` names which cap was passed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Refused by the throttler guard, which runs before the request body is ever validated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The feature is not configured on this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "A downstream call did not finish in time. Safe to retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Extract merchant, amount, date, category and note from a receipt.",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
     "/api/transactions/{id}": {
       "get": {
         "description": "Carries two extras on **different windows**, deliberately. `category` is that category's progress for the **current** period, even when this transaction is from an earlier one - the bar answers where the category stands now. `recentInCategory` is the latest transactions in the same category from **any** month, excluding this one. **404** here always means the id in the URL. Expect `category.status` to be `uncapped` most of the time: caps are optional and the preselected fallback has none.",
@@ -1710,6 +1818,55 @@
         "required": [
           "transactions",
           "total"
+        ]
+      },
+      "ScanReceiptResponseDto": {
+        "type": "object",
+        "properties": {
+          "merchant": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "nullable": true,
+            "format": "date"
+          },
+          "categoryId": {
+            "type": "string",
+            "nullable": true,
+            "description": "An id from the caller's own live categories, verbatim, or null. Never a hallucinated id: `ReceiptScanService` validates it against the same list the prompt was given.",
+            "format": "uuid"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "missing": {
+            "type": "array",
+            "description": "Which of `merchant`, `amount`, `date` and `categoryId` came back null.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "merchant",
+                "amount",
+                "date",
+                "categoryId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "merchant",
+          "amount",
+          "date",
+          "categoryId",
+          "note",
+          "missing"
         ]
       },
       "CategoryResponseDto": {

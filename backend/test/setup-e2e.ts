@@ -57,5 +57,16 @@ process.env.AUTH_RATE_LIMIT = '3';
  */
 process.env.AUTH_RATE_IP_LIMIT = '1000';
 
+/**
+ * Same reasoning as `AUTH_RATE_LIMIT` above, and set here for the same
+ * "before any hook" reason: small enough for `transactions.e2e-spec.ts` to
+ * trip the `scan` throttler in a few requests. `GEMINI_API_KEY` stays unset
+ * throughout the suite (never assigned here, and nothing under `TURSO_`/mail
+ * strips it because it never inherits one from the shell in CI), so every
+ * scan request answers 503 before it would ever reach the network - which is
+ * what lets the throttler test run with no real Gemini key.
+ */
+process.env.SCAN_RATE_LIMIT = '3';
+
 /** Exported so suites can clean the directory up in `afterAll`. */
 export const E2E_DATABASE_DIR = dir;
