@@ -238,9 +238,27 @@ describe('Dashboard (e2e)', () => {
       expect(body.recentTransactions.length).toBeLessThanOrEqual(3);
     });
 
-    it('answers insight: null, stubbed until PET-41', async () => {
-      const response = await dashboard(bearer).expect(200);
-      expect(dashboardBody(response).insight).toBeNull();
+    it('answers the teaser from the set the writes above generated', async () => {
+      // This asserted `insight: null` until PET-42-43-44, on the grounds that
+      // nothing in either app generated a set. The four rows in `beforeAll` go
+      // through `POST /api/transactions`, and every such write now regenerates,
+      // so the teaser is the summary of what those writes produced. Asserting
+      // null here would not merely be wrong, it would be *flakily* wrong: it
+      // races the floated run.
+      // Polled rather than read once, because the run is floated: the teaser is
+      // null for as long as it is still in flight, and a bare read would be the
+      // same race in the other direction.
+      let insight: DashboardResponseDto['insight'] = null;
+      for (let attempt = 0; attempt < 50 && insight === null; attempt++) {
+        insight = dashboardBody(await dashboard(bearer).expect(200)).insight;
+        if (insight === null) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
+
+      expect(insight).not.toBeNull();
+      expect(insight!.headline).toBeTruthy();
+      expect(insight!.body).toBeTruthy();
     });
 
     it('shows another account nothing of this one’s', async () => {
@@ -306,6 +324,9 @@ describe('Dashboard (e2e)', () => {
       expect(body.categories).toEqual([]);
       expect(body.topCategory).toBeNull();
       expect(body.recentTransactions).toEqual([]);
+      // Load-bearing since PET-42-43-44 made a write regenerate: this account
+      // posts nothing, so it is the one place a null teaser is still guaranteed
+      // rather than a race against a floated run.
       expect(body.insight).toBeNull();
     });
 

@@ -15,6 +15,7 @@ import { todayIn } from '../common/month-window';
 import { newId } from '../common/ids';
 import { UserDatabaseService } from '../database/user-database.service';
 import { categories, profile, transactions } from '../database/user/schema';
+import { InsightsService } from '../insights/insights.service';
 import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
 
@@ -78,13 +79,25 @@ const MAX_DAY_OF_MONTH = 28;
 const UNCATEGORIZED_PERCENT = 5;
 
 /**
+ * How long the seed waits for the insight run it starts, as attempts times an
+ * interval - roughly 15 seconds.
+ *
+ * Generously above the sub-second a rule-based run really takes, because the
+ * cost of waiting too long is a slower script and the cost of giving up too
+ * early is a demo account with no insights on it.
+ */
+const INSIGHT_POLL_ATTEMPTS = 60;
+const INSIGHT_POLL_INTERVAL_MS = 250;
+
+/**
  * Fixed monthly charges, so the account has real subscriptions in it.
  *
- * They are deliberately not part of the random merchant pool. A subscription is
- * recognised by behaviour rather than by name - one charge a month, the same
- * amount every month - and drawing these from the pool as well would give them
- * a second charge in some months and break exactly the property the insight
- * rule looks for. Each bills on its own day so the transaction list does not
+ * No insight rule reads them any more - PET-42-43-44 deleted the
+ * recurring-merchant detector, because month counting cannot separate a
+ * subscription from a habit. **The data stays anyway**: a realistic account has
+ * subscriptions in it, so a demo without any is a demo of something else. The
+ * fixed day and fixed amount stay too, for a reason that outlived the rule -
+ * they keep these off the random merchant pool, so the transaction list does not
  * show five identical-looking rows stacked on one date.
  */
 const SUBSCRIPTIONS = [
@@ -144,14 +157,13 @@ const ONBOARDING_PROFILE = {
 };
 
 /**
- * The name of the category the subscription story is attached to.
+ * The name of the category the subscriptions above are filed under.
  *
  * It was "Subscriptions", which PET-64's template list does not contain -
  * "streaming subscriptions" is part of what Entertainment's own description
  * covers. Named as a constant and looked up **strictly** below, because the old
- * lookup fell back to `pickableCategories[0]` and so degraded silently: a demo
- * whose recurring-merchant story sat on an arbitrary category, with nothing
- * failing.
+ * lookup fell back to `pickableCategories[0]` and so degraded silently: five
+ * fixed monthly charges landing on an arbitrary category, with nothing failing.
  */
 const SUBSCRIPTION_CATEGORY = 'Entertainment';
 
@@ -545,6 +557,59 @@ async function seed(app: INestApplicationContext): Promise<void> {
 
   console.log(
     `Seeded ${SHOWCASE_EMAIL} with ${rows.length} transactions across ${MONTHS} months (${SEED_MODE} mode).`,
+  );
+
+  await generateInsights(app, userId);
+}
+
+/**
+ * Generates the showcase account's insight set, and **waits for the run to
+ * finish** rather than for it to start.
+ *
+ * Needed at all because the rows above are written straight to `transactions`
+ * rather than through `TransactionsService`, so none of them emits the
+ * transaction-changed event that regenerates a set on every ordinary write. Left
+ * out, the showcase account demos the empty state - the one frame it has the
+ * least business showing.
+ *
+ * **`generate()` alone is not enough, and is worse than leaving it out.** It
+ * returns as soon as the placeholder `generating` row is committed and floats the
+ * real work, while `bootstrap()`'s `finally` closes every replica underneath it.
+ * The account would be left holding a bare `generating` row: a wedged skeleton
+ * screen for the five minutes until the read's staleness cutoff reclaims it, and
+ * no insights after that either. So this polls `getSet` until the state settles,
+ * which is the only completion signal the service's public surface offers.
+ */
+async function generateInsights(
+  app: INestApplicationContext,
+  userId: string,
+): Promise<void> {
+  const insights = app.get(InsightsService);
+
+  await insights.generate(userId);
+
+  // Rule-based generation settles in well under a second; the ceiling is a
+  // wedged-run guard, not an expected wait.
+  for (let attempt = 0; attempt < INSIGHT_POLL_ATTEMPTS; attempt++) {
+    const set = await insights.getSet(userId);
+    if (set.state !== 'generating') {
+      console.log(
+        `Generated ${set.insights.length} insight card${set.insights.length === 1 ? '' : 's'} (${set.state}).`,
+      );
+      return;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, INSIGHT_POLL_INTERVAL_MS),
+    );
+  }
+
+  // A warning rather than a throw: the transactions are the point of this script
+  // and they are already committed, so failing here would report a successful
+  // seed as a failure. The account self-heals at the staleness cutoff.
+  console.warn(
+    `Insight generation for ${SHOWCASE_EMAIL} did not settle within ` +
+      `${(INSIGHT_POLL_ATTEMPTS * INSIGHT_POLL_INTERVAL_MS) / 1000}s. The transactions are seeded; ` +
+      `regenerate from the Insights page.`,
   );
 }
 

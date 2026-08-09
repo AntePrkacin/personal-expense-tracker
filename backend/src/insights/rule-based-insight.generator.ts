@@ -30,28 +30,10 @@ const MONTHS = [
   'December',
 ];
 
-/** How many distinct months a merchant must appear in to count as recurring. */
-const RECURRING_MONTHS = 3;
-
 /**
- * How far a month's charge may stray from the merchant's mean and still read as
- * the same subscription. A subscription bills the same amount every month; a
- * habit does not.
- */
-const RECURRING_TOLERANCE = 0.15;
-
-/**
- * How many are named before the rest are merely counted.
- *
- * Without a cap the card is a wall of merchant names - the showcase seed put 26
- * in one sentence. The count in the title still covers all of them.
- */
-const RECURRING_NAMED = 5;
-
-/**
- * The deterministic generator: the four designed content rules over the user's
- * real data, filling templated copy. No external API, no key, no
- * non-determinism - which is what lets the specs assert AC-exact strings.
+ * The deterministic generator: the two content rules over the user's real data,
+ * filling templated copy. No external API, no key, no non-determinism - which is
+ * what lets the specs assert AC-exact strings.
  *
  * It **composes `CategoriesService` and `TransactionsService`** rather than
  * querying `categories` or `transactions` itself, the same discipline the
@@ -62,8 +44,19 @@ const RECURRING_NAMED = 5;
  * not the month arithmetic the "don't re-query" rule is about.
  *
  * Each rule yields at most one card and a rule with nothing to say is omitted,
- * so an account can generate fewer than four cards. Only a genuinely empty
- * account - no transactions at all - yields `null` and no set (AC7).
+ * so an account can generate two cards, one, or none at all. **A zero-card
+ * `ready` set is the steady state rather than an edge case**: over-cap needs a
+ * category that has a cap and is past it, month-over-month needs a previous
+ * month, so a first-month user who set no caps gets the summary banner alone.
+ * Only a genuinely empty account - no transactions at all - yields `null` and no
+ * set (AC7).
+ *
+ * There were four rules until PET-42-43-44. `projectionCard` went because the
+ * summary banner's headline already says the same thing, and
+ * `recurringMerchantCard` went because month counting cannot separate a
+ * subscription from a habit - a monthly travel pass at a steady price is
+ * mathematically identical to Netflix. That cut is also what retired the `info`
+ * tone.
  */
 @Injectable()
 export class RuleBasedInsightGenerator implements InsightGenerator {
@@ -80,6 +73,9 @@ export class RuleBasedInsightGenerator implements InsightGenerator {
     ).transactions;
 
     // AC7: no transactions means nothing to generate and the empty state stands.
+    // Since PET-42-43-44 cut `recurringMerchantCard` this whole-history read
+    // serves only this check, and a count would be cheaper - left as a list
+    // because turning it into one means a new `TransactionsService` method.
     if (allTransactions.length === 0) {
       return null;
     }
@@ -105,6 +101,9 @@ export class RuleBasedInsightGenerator implements InsightGenerator {
     const daysElapsed = daysBetween(window.start, today) + 1;
     const totalDays = daysBetween(window.start, window.end);
     const daysLeft = daysLeftInWindow(window, today);
+    // No card reads this any more, but `summaryOf` picks between three headlines
+    // on it. Deleting it with `projectionCard` would silently collapse the banner
+    // to two states.
     const projectedCents =
       spentCents === 0 ? 0 : (spentCents / daysElapsed) * totalDays;
 
@@ -119,8 +118,6 @@ export class RuleBasedInsightGenerator implements InsightGenerator {
         previousWindow.start,
         money,
       ),
-      projectionCard(spentCents, projectedCents, budget, money),
-      recurringMerchantCard(allTransactions, money),
     ].filter((card): card is GeneratedCard => card !== null);
 
     return {
@@ -236,123 +233,6 @@ function monthOverMonthCard(
   };
 }
 
-/**
- * End-of-month projection against the budget, in the info tone. Uses the
- * elapsed-days pace the dashboard already defines. Omitted before any spend this
- * period, when there is no pace to extrapolate.
- */
-function projectionCard(
-  spentCents: number,
-  projectedCents: number,
-  budget: number,
-  money: (major: number) => string,
-): GeneratedCard | null {
-  if (spentCents === 0) {
-    return null;
-  }
-
-  const projected = fromCents(projectedCents);
-  const underBudget = projected <= budget;
-
-  return {
-    tone: 'info',
-    title: underBudget
-      ? 'On track to stay under budget'
-      : 'Trending over budget',
-    body: `At your current pace you'll land around ${money(projected)} - ${underBudget ? 'just under' : 'over'} your ${money(budget)} target`,
-  };
-}
-
-/**
- * Subscriptions, named with their combined monthly total (each merchant's mean
- * monthly charge), in the neutral tone. Reads the whole history, not one
- * period. Omitted when nothing recurs.
- *
- * **Appearing in three months is necessary and nowhere near sufficient**, and
- * treating it as sufficient is what this rule used to do. Anywhere a person
- * shops regularly clears that bar just as easily as Netflix does, so a
- * supermarket, a petrol station and a café were all reported as subscriptions.
- * The showcase seed made it unmissable by naming all 26 of its merchants in one
- * sentence, but real data trips it too - the bug was never the seed's.
- *
- * Two further conditions separate a subscription from a habit. It bills **once
- * a month**, where somewhere you shop is visited whenever you need something.
- * And it bills **the same amount**, where a shop's total is whatever was in the
- * basket. Both are cheap to check and neither needs a category or a keyword
- * list, which is what keeps this rule about behaviour rather than about
- * guessing brands.
- */
-function recurringMerchantCard(
-  allTransactions: TransactionResponseDto[],
-  money: (major: number) => string,
-): GeneratedCard | null {
-  const byMerchant = new Map<
-    string,
-    { charges: number; monthlyCents: Map<string, number> }
-  >();
-
-  for (const transaction of allTransactions) {
-    const entry = byMerchant.get(transaction.merchant) ?? {
-      charges: 0,
-      monthlyCents: new Map<string, number>(),
-    };
-    const month = transaction.date.slice(0, 7);
-    entry.charges += 1;
-    entry.monthlyCents.set(
-      month,
-      (entry.monthlyCents.get(month) ?? 0) + toCents(transaction.amount),
-    );
-    byMerchant.set(transaction.merchant, entry);
-  }
-
-  const recurring = [...byMerchant.entries()]
-    .filter(([, entry]) => {
-      if (entry.monthlyCents.size < RECURRING_MONTHS) {
-        return false;
-      }
-      // Once a month, every month it appears in.
-      if (entry.charges !== entry.monthlyCents.size) {
-        return false;
-      }
-      const totals = [...entry.monthlyCents.values()];
-      const mean =
-        totals.reduce((sum, cents) => sum + cents, 0) / totals.length;
-      return totals.every(
-        (cents) => Math.abs(cents - mean) <= mean * RECURRING_TOLERANCE,
-      );
-    })
-    .map(([merchant, entry]) => {
-      const totals = [...entry.monthlyCents.values()];
-      return {
-        merchant,
-        monthlyCents:
-          totals.reduce((sum, cents) => sum + cents, 0) / totals.length,
-      };
-    })
-    .sort((a, b) => b.monthlyCents - a.monthlyCents);
-
-  if (recurring.length === 0) {
-    return null;
-  }
-
-  const combined = money(
-    fromCents(recurring.reduce((total, item) => total + item.monthlyCents, 0)),
-  );
-
-  // The title counts them all, so the total does too - only the naming is
-  // capped.
-  const named = recurring.slice(0, RECURRING_NAMED).map((it) => it.merchant);
-  const unnamed = recurring.length - named.length;
-  const names = joinNames(unnamed > 0 ? [...named, `${unnamed} more`] : named);
-  const plural = recurring.length !== 1;
-
-  return {
-    tone: 'neutral',
-    title: `${recurring.length} recurring subscription${plural ? 's' : ''}`,
-    body: `${names} ${plural ? 'total' : 'totals'} ${combined}/mo`,
-  };
-}
-
 /** The summary banner: a headline that reflects the projection, and a body. */
 function summaryOf(
   spent: number,
@@ -412,15 +292,4 @@ function monthLabelOf(date: string): string {
 /** `2025-09-15` -> `September`, without constructing a Date. */
 function monthNameOf(date: string): string {
   return MONTHS[Number(date.split('-')[1]) - 1];
-}
-
-/** `[a]` -> `a`, `[a, b]` -> `a and b`, `[a, b, c]` -> `a, b and c`. */
-function joinNames(names: string[]): string {
-  if (names.length === 1) {
-    return names[0];
-  }
-  if (names.length === 2) {
-    return `${names[0]} and ${names[1]}`;
-  }
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }

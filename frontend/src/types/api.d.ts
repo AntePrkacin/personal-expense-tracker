@@ -762,7 +762,7 @@ export interface components {
              * @description Maps to the Status palette the frontend draws the card in.
              * @enum {string}
              */
-            tone: "warning" | "positive" | "info" | "neutral";
+            tone: "warning" | "positive" | "neutral";
             /** @example Dining out is over budget */
             title: string;
             /** @example $312 of $300 - $12 over */

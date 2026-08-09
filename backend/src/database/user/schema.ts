@@ -281,8 +281,11 @@ export const insights = sqliteTable(
     // only ever written together in one transaction.
     setId: text('set_id').notNull(),
 
-    // `warning` | `positive` | `info` | `neutral`, mapping to the Status palette.
-    // A plain text column for the same reason as `insight_sets.status`.
+    // `warning` | `positive` | `neutral`, mapping to the Status palette. A plain
+    // text column for the same reason as `insight_sets.status` - which means rows
+    // written before PET-42-43-44 retired `info` are still readable here, and the
+    // narrowed DTO union is a promise about what is generated rather than about
+    // what is stored.
     tone: text('tone').notNull(),
 
     title: text('title').notNull(),

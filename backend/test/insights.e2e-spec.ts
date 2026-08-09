@@ -83,6 +83,34 @@ describe('Insight endpoints (e2e)', () => {
       .send({ merchant: 'Konzum', ...payload })
       .expect(201);
 
+  /** One of the account's own categories, by name. */
+  const categoryNamed = async (token: string, name: string) => {
+    const response = await request(app.getHttpServer())
+      .get('/api/categories')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const { categories } = response.body as {
+      categories: { id: string; name: string }[];
+    };
+    return categories.find((row) => row.name === name)!;
+  };
+
+  /** Puts a monthly cap on a category, so the over-cap rule can reach it. */
+  const setCap = (token: string, categoryId: string, monthlyCap: number) =>
+    request(app.getHttpServer())
+      .patch(`/api/categories/${categoryId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ monthlyCap })
+      .expect(200);
+
+  /**
+   * The tones `InsightCardDto`'s `@ApiProperty` enum publishes, restated here
+   * rather than imported from the union: a type cannot be iterated at runtime,
+   * and the point is to catch the generator drifting from the published contract
+   * rather than from itself.
+   */
+  const DECLARED_TONES = ['warning', 'positive', 'neutral'];
+
   /** The current period, since registration leaves `monthStartDay` at 1. */
   const window = monthWindow(1, todayIn('Europe/Zagreb'));
 
@@ -160,6 +188,11 @@ describe('Insight endpoints (e2e)', () => {
         body: '$312 of $300 - $12 over',
       },
       {
+        // Deliberately a tone the enum no longer declares. PET-42-43-44 retired
+        // `info` with the projection card that produced it, but `insights.tone`
+        // is a plain text column and every set generated before the cut still
+        // holds one - so this fixture is the pre-cut set on disk, not stale test
+        // data. `seedCards` takes a plain `string` for exactly this reason.
         tone: 'info',
         title: 'On pace for $1,980',
         body: 'Just under your $2,000 target',
@@ -371,18 +404,20 @@ describe('Insight endpoints (e2e)', () => {
     expect(body.state).toBe('empty');
   });
 
-  it('generates a ready set from real transactions', async () => {
+  it('generates a ready set carrying real cards', async () => {
     // A fresh account so the seeded-row tests above do not interfere, and its
     // own transactions drive a real generation rather than a seeded set.
     const fresh = await provision();
-    const listResponse = await request(app.getHttpServer())
-      .get('/api/categories')
-      .set('Authorization', `Bearer ${fresh.token}`)
-      .expect(200);
-    const { categories } = listResponse.body as {
-      categories: { id: string; name: string }[];
-    };
-    const groceries = categories.find((row) => row.name === 'Groceries')!;
+    const groceries = await categoryNamed(fresh.token, 'Groceries');
+
+    // A cap, and spend past it. Before PET-42-43-44 the projection card fired on
+    // any spend at all, so this test needed no setup to see a card - the comment
+    // it used to carry said "spend in the current period always yields at least
+    // the projection card". After the cut, over-cap is the only rule a
+    // first-month account can reach: month-over-month needs a previous month
+    // this account does not have. Without the cap the honest assertion would be
+    // zero cards, which is covered separately below.
+    await setCap(fresh.token, groceries.id, 300);
 
     await addTransaction(fresh.token, {
       categoryId: groceries.id,
@@ -395,15 +430,82 @@ describe('Insight endpoints (e2e)', () => {
       date: window.start,
     });
 
+    // Each write starts its own run now, so the account may already be
+    // generating; settling first is what keeps the POST below a 202 rather than
+    // the 409 the in-flight guard would otherwise answer.
+    await waitForSettled(fresh.token);
     await generate(fresh.token).expect(202);
     const body = await waitForSettled(fresh.token);
 
     expect(body.state).toBe('ready');
     expect(body.summary?.headline).toBeTruthy();
     expect(body.generatedAt).not.toBeNull();
-    // Spend in the current period always yields at least the projection card.
     expect(body.insights.length).toBeGreaterThanOrEqual(1);
-    expect(body.insights.some((card) => card.tone === 'info')).toBe(true);
+    expect(body.insights).toContainEqual(
+      expect.objectContaining({
+        tone: 'warning',
+        title: 'Groceries is over budget',
+      }),
+    );
+  });
+
+  it('generates a ready set with no cards when neither rule fires', async () => {
+    // The same account shape without the cap: spend, but nothing over a cap and
+    // no previous month. This is the steady state for a first-month user, and
+    // before the cut it was unreachable - the projection card always fired.
+    const fresh = await provision();
+    const groceries = await categoryNamed(fresh.token, 'Groceries');
+
+    await addTransaction(fresh.token, {
+      categoryId: groceries.id,
+      amount: 40,
+      date: window.start,
+    });
+
+    const body = await waitForSettled(fresh.token);
+
+    expect(body.state).toBe('ready');
+    expect(body.summary?.headline).toBeTruthy();
+    expect(body.insights).toEqual([]);
+  });
+
+  it('never generates a card outside the tone enum the contract declares', async () => {
+    // The contract half of the stale-`info` hazard. `insights.tone` is a plain
+    // text column with no CHECK constraint and `cardsFor` casts it unchecked, so
+    // nothing in the database stops a retired tone being served - only the
+    // generator not producing one. This asserts that, rather than trusting the
+    // frontend's fallback to hide it.
+    const fresh = await provision();
+    const groceries = await categoryNamed(fresh.token, 'Groceries');
+    await setCap(fresh.token, groceries.id, 300);
+    await addTransaction(fresh.token, {
+      categoryId: groceries.id,
+      amount: 600,
+      date: window.start,
+    });
+
+    const body = await waitForSettled(fresh.token);
+
+    expect(body.insights.length).toBeGreaterThanOrEqual(1);
+    for (const card of body.insights) {
+      expect(DECLARED_TONES).toContain(card.tone);
+    }
+  });
+
+  it('still serves a stale `info` card stored before the cut', async () => {
+    // The other half, and the reason the frontend keeps a fallback in its tone
+    // map. A set generated before PET-42-43-44 is still on disk holding a tone
+    // the enum no longer declares, and the read passes it straight through -
+    // `seedReadySet`'s second card is exactly such a row. Nothing repairs it;
+    // the account's next transaction write replaces the whole set.
+    await seedReadySet(
+      'You are on track this month',
+      new Date('2025-10-20T09:00:00.000Z'),
+    );
+
+    const body = insightsBody(await get().expect(200));
+
+    expect(body.insights.map((card) => card.tone)).toContain('info');
   });
 
   it('refuses a second run while one is in flight (409)', async () => {
@@ -479,5 +581,109 @@ describe('Insight endpoints (e2e)', () => {
     // The placeholder run is removed once the generator finds nothing to say,
     // so the account settles back to empty rather than a bare ready set.
     expect(body.state).toBe('empty');
+  });
+
+  describe('regenerating on a transaction write', () => {
+    it('leaves the read generating the moment a create responds', async () => {
+      const fresh = await provision();
+      const groceries = await categoryNamed(fresh.token, 'Groceries');
+
+      expect(insightsBody(await get(fresh.token).expect(200)).state).toBe(
+        'empty',
+      );
+
+      await addTransaction(fresh.token, {
+        categoryId: groceries.id,
+        amount: 40,
+        date: window.start,
+      });
+
+      // Read with no wait at all. This is the `emitAsync` guarantee: the
+      // listener is awaited, `generate` commits the placeholder row before it
+      // returns, so by the time the 201 lands the state has already moved. With
+      // a plain `emit` this races and a user who saves then navigates straight
+      // to /insights sees the empty state's copy over an account with expenses.
+      expect(insightsBody(await get(fresh.token).expect(200)).state).not.toBe(
+        'empty',
+      );
+
+      await waitForSettled(fresh.token);
+    });
+
+    it('regenerates on an edit and on a delete too', async () => {
+      const fresh = await provision();
+      const groceries = await categoryNamed(fresh.token, 'Groceries');
+
+      const created = await addTransaction(fresh.token, {
+        categoryId: groceries.id,
+        amount: 40,
+        date: window.start,
+      });
+      const { id } = created.body as { id: string };
+      const first = await waitForSettled(fresh.token);
+
+      await request(app.getHttpServer())
+        .patch(`/api/transactions/${id}`)
+        .set('Authorization', `Bearer ${fresh.token}`)
+        .send({ amount: 90 })
+        .expect(200);
+      expect(insightsBody(await get(fresh.token).expect(200)).state).not.toBe(
+        'empty',
+      );
+      const second = await waitForSettled(fresh.token);
+      expect(second.generatedAt).not.toBe(first.generatedAt);
+
+      // And a delete, which moves the numbers exactly as much. The set it
+      // produces is the account's last: the generator answers null for an empty
+      // account, so the run deletes only its own placeholder and the previous
+      // ready set stays the read's answer. Deleting your last expense does not
+      // return you to the empty state - a recorded limit, not a bug.
+      await request(app.getHttpServer())
+        .delete(`/api/transactions/${id}`)
+        .set('Authorization', `Bearer ${fresh.token}`)
+        .expect(204);
+
+      const after = await waitForSettled(fresh.token);
+      expect(after.state).toBe('ready');
+    });
+
+    it('still saves a transaction while a run is in flight', async () => {
+      // The 409 the write path must swallow. A run is already in flight, so the
+      // listener's `generate` throws ConflictException - and the transaction
+      // still saves, because a benign scheduling outcome must never fail a write
+      // the user actually made.
+      const fresh = await provision();
+      const groceries = await categoryNamed(fresh.token, 'Groceries');
+      const service = app.get(InsightsService);
+
+      await addTransaction(fresh.token, {
+        categoryId: groceries.id,
+        amount: 40,
+        date: window.start,
+      });
+      await waitForSettled(fresh.token);
+
+      // A run held open by hand, so the next write is guaranteed to collide
+      // rather than merely likely to.
+      const db = await userDatabases.getUserDb(fresh.id);
+      await db.insert(insightSets).values({
+        id: newId(),
+        status: 'generating',
+        monthLabel: null,
+        summaryHeadline: null,
+        summaryBody: null,
+        generatedAt: null,
+      });
+      await expect(service.generate(fresh.id)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+
+      // `addTransaction` asserts 201 itself, which is the whole assertion.
+      await addTransaction(fresh.token, {
+        categoryId: groceries.id,
+        amount: 60,
+        date: window.start,
+      });
+    });
   });
 });

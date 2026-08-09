@@ -14,15 +14,21 @@ export type InsightState = 'empty' | 'generating' | 'ready';
 /**
  * An insight's tone, mapping to the frontend's Status palette. Set per content
  * rule by the generator (PET-40): over-cap is `warning`, a favourable
- * month-over-month move is `positive`, the projection is `info`, and
- * recurring-merchant detection is `neutral`.
+ * month-over-month move is `positive`, an unfavourable one `neutral`.
+ *
+ * **`info` was the fourth and is retired** (PET-42-43-44), with the
+ * `projectionCard` that was its only producer. It is not repurposed: nothing is
+ * redesigned to use it. `insights.tone` is a plain text column with no CHECK
+ * constraint, so sets generated before the cut can still hold `info` on disk -
+ * the write-path trigger replaces such a set on the account's next transaction,
+ * and the frontend's tone map keeps a fallback for the window in between.
  */
-export type InsightTone = 'warning' | 'positive' | 'info' | 'neutral';
+export type InsightTone = 'warning' | 'positive' | 'neutral';
 
 /** One insight card: rendered prose, not re-derived on read. */
 export class InsightCardDto {
   @ApiProperty({
-    enum: ['warning', 'positive', 'info', 'neutral'],
+    enum: ['warning', 'positive', 'neutral'],
     description: 'Maps to the Status palette the frontend draws the card in.',
   })
   tone!: InsightTone;

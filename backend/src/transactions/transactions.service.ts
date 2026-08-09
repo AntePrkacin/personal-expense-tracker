@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   and,
   asc,
@@ -39,6 +41,10 @@ import type {
   TransactionDetailResponseDto,
   TransactionsResponseDto,
 } from './dto/transactions-response.dto';
+import {
+  TRANSACTION_CHANGED,
+  type TransactionChangedEvent,
+} from './transaction-changed.event';
 import type { UpdateTransactionDto } from './dto/update-transaction.dto';
 
 const NO_TRANSACTION = 'Transaction not found.';
@@ -100,10 +106,49 @@ type TransactionUpdate = Partial<
  */
 @Injectable()
 export class TransactionsService {
+  private readonly logger = new Logger(TransactionsService.name);
+
   constructor(
     private readonly userDatabases: UserDatabaseService,
     private readonly categories: CategoriesService,
+    private readonly events: EventEmitter2,
   ) {}
+
+  /**
+   * Announces that this user's numbers moved, and **can never fail the write**.
+   *
+   * `emitAsync` rather than `emit`, which is load-bearing rather than tidy:
+   * `InsightsService.generate` commits its `generating` row before returning, so
+   * awaiting the listener carries that guarantee out to here. By the time
+   * `POST /api/transactions` responds, `GET /api/insights` already reports
+   * `generating` - a user who saves an expense and navigates straight to
+   * `/insights` gets the skeletons with no race and no flash of the wrong state.
+   *
+   * **Every error is swallowed, and the catch is here as well as in the
+   * listener.** `emitAsync` rejects when any listener rejects, so a listener
+   * throwing synchronously would otherwise escape into the request; and a catch
+   * only inside the listener would leave the hazard for whoever adds a second
+   * one. Both halves are needed and neither is redundant. The expected error is
+   * a `ConflictException` from the single-run guard, which means fresh content is
+   * already being generated - benign, not a failure. Nothing here is worth
+   * failing a transaction that really did save.
+   */
+  private async announceChange(
+    userId: string,
+    reason: TransactionChangedEvent['reason'],
+  ): Promise<void> {
+    try {
+      await this.events.emitAsync(TRANSACTION_CHANGED, {
+        userId,
+        reason,
+      } satisfies TransactionChangedEvent);
+    } catch (error) {
+      this.logger.warn(
+        `A ${TRANSACTION_CHANGED} listener failed for user ${userId} (${reason}); the write stands.`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
 
   /**
    * The filtered, sorted list plus the count after filters.
@@ -203,6 +248,8 @@ export class TransactionsService {
       })
       .returning();
 
+    await this.announceChange(userId, 'created');
+
     return toResponse(row);
   }
 
@@ -243,6 +290,10 @@ export class TransactionsService {
       throw new NotFoundException(NO_TRANSACTION);
     }
 
+    // After the 404, so a rejected edit announces nothing. Editing an expense
+    // moves the numbers exactly as much as adding one does.
+    await this.announceChange(userId, 'updated');
+
     return toResponse(row);
   }
 
@@ -268,6 +319,8 @@ export class TransactionsService {
     if (!row) {
       throw new NotFoundException(NO_TRANSACTION);
     }
+
+    await this.announceChange(userId, 'deleted');
   }
 
   /**

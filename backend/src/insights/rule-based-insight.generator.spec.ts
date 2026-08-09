@@ -8,7 +8,7 @@ import type { TransactionsService } from '../transactions/transactions.service';
 import { RuleBasedInsightGenerator } from './rule-based-insight.generator';
 
 /**
- * The four content rules and the summary, over mocked composition surfaces.
+ * The two content rules and the summary, over mocked composition surfaces.
  *
  * `CategoriesService` and `TransactionsService` are mocked rather than composed,
  * the same reason the dashboard spec mocks them: the arithmetic under test is the
@@ -237,136 +237,67 @@ describe('RuleBasedInsightGenerator', () => {
     });
   });
 
-  it('projects the month-end total against the budget, in the info tone (AC4)', async () => {
-    // $500 over 20 elapsed days of a 31-day period projects to $775.
-    const current = [tx({ id: 't1', amount: 500, categoryId: 'cat-1' })];
+  // The projection survives PET-42-43-44 as the summary banner's middle
+  // headline, and nowhere else. Deleting `projectionCard` without keeping
+  // `projectedCents` would have left the banner with two states and no test
+  // able to tell, since "trending over" and "on track" only differ by it.
+  it('picks the trending-over headline from the projection alone (AC1)', async () => {
+    // $1,500 over 20 elapsed days of a 31-day period projects to $2,325: under
+    // the $2,000 budget on spend so far, over it at this pace.
+    const current = [tx({ id: 't1', amount: 1500, categoryId: 'cat-1' })];
     build({ budget: 2000, all: current, current });
 
     const set = await generator.generate(USER_ID);
-    const card = set?.cards.find((c) => c.tone === 'info');
 
-    expect(card).toEqual({
-      tone: 'info',
-      title: 'On track to stay under budget',
-      body: "At your current pace you'll land around $775 - just under your $2,000 target",
-    });
+    expect(set?.summary.headline).toBe("You're trending over budget");
   });
 
-  it('names recurring merchants and totals their monthly cost, in the neutral tone (AC5)', async () => {
-    // Three merchants, each seen in three distinct months.
-    const months = ['2025-08-05', '2025-09-05', '2025-10-05'];
-    const recurring = [
-      ...months.map((date, i) =>
-        tx({
-          id: `n${i}`,
-          merchant: 'Netflix',
-          amount: 15,
-          date,
-          categoryId: 'subs',
-        }),
-      ),
-      ...months.map((date, i) =>
-        tx({
-          id: `s${i}`,
-          merchant: 'Spotify',
-          amount: 12,
-          date,
-          categoryId: 'subs',
-        }),
-      ),
-      ...months.map((date, i) =>
-        tx({
-          id: `i${i}`,
-          merchant: 'iCloud',
-          amount: 10,
-          date,
-          categoryId: 'subs',
-        }),
-      ),
-    ];
-    build({ all: recurring, current: [] });
-
-    const set = await generator.generate(USER_ID);
-    const card = set?.cards.find((c) => c.title.includes('recurring'));
-
-    expect(card).toEqual({
-      tone: 'neutral',
-      title: '3 recurring subscriptions',
-      body: 'Netflix, Spotify and iCloud total $37/mo',
-    });
-  });
-
-  it('does not call a place you shop regularly a subscription', async () => {
-    // Konzum in four distinct months, which is what the rule used to consider
-    // sufficient - but several times a month and never the same amount. The
-    // showcase seed reported all 26 of its merchants this way.
-    const habit = [
-      ['2025-07-02', 41],
-      ['2025-07-19', 12],
-      ['2025-08-04', 63],
-      ['2025-08-22', 28],
-      ['2025-09-09', 17],
-      ['2025-10-01', 55],
-    ].map(([date, amount], i) =>
-      tx({
-        id: `k${i}`,
-        merchant: 'Konzum',
-        amount: amount as number,
-        date: date as string,
-      }),
-    );
-    build({ all: habit, current: [] });
+  it('picks the over-budget headline from spend, not from the projection', async () => {
+    const current = [tx({ id: 't1', amount: 2500, categoryId: 'cat-1' })];
+    build({ budget: 2000, all: current, current });
 
     const set = await generator.generate(USER_ID);
 
-    expect(
-      set?.cards.find((c) => c.title.includes('recurring')),
-    ).toBeUndefined();
+    expect(set?.summary.headline).toBe("You're over budget this month");
   });
 
-  it('names at most five subscriptions and counts the rest', async () => {
-    const months = ['2025-08', '2025-09', '2025-10'];
-    const seven = [
-      'Rent',
-      'Netflix',
-      'Spotify',
-      'Gym',
-      'HBO',
-      'iCloud',
-      'News',
-    ];
-    const all = seven.flatMap((merchant, index) =>
-      months.map((month) =>
-        tx({
-          id: `${merchant}-${month}`,
-          merchant,
-          // Descending, so the naming order is predictable: 70, 60, 50...
-          amount: 70 - index * 10,
-          date: `${month}-05`,
-        }),
-      ),
-    );
-    build({ all, current: [] });
-
-    const set = await generator.generate(USER_ID);
-    const card = set?.cards.find((c) => c.title.includes('recurring'));
-
-    expect(card).toEqual({
-      tone: 'neutral',
-      title: '7 recurring subscriptions',
-      body: 'Rent, Netflix, Spotify, Gym, HBO and 2 more total $280/mo',
-    });
-  });
-
-  it('omits a rule that has nothing to say', async () => {
-    // One uncapped category, one month of history, spend only in the current
-    // period: no over-cap, no month-over-month, no recurring - projection only.
+  it('returns a ready set with no cards at all when neither rule fires', async () => {
+    // One uncapped category, no previous month, spend only in the current
+    // period: neither surviving rule has anything to say. Before PET-42-43-44
+    // the projection filled this gap, so a set always carried a card - the
+    // banner now stands alone, which is the steady state for a first-month user
+    // who set no caps rather than an edge case.
     const current = [tx({ id: 't1', amount: 40, categoryId: 'cat-1' })];
     build({ categories: [category()], all: current, current });
 
     const set = await generator.generate(USER_ID);
 
-    expect(set?.cards.map((c) => c.tone)).toEqual(['info']);
+    expect(set).not.toBeNull();
+    expect(set?.summary.headline).toBeTruthy();
+    expect(set?.cards).toEqual([]);
+  });
+
+  // The regression test for the cut itself. Both deleted rules fired on data
+  // shaped like this, so if either is ever restored by a bad merge it shows up
+  // here rather than in a rendered card nobody looked at.
+  it('generates neither of the two rules cut in PET-42-43-44', async () => {
+    // Netflix at a flat $15 in three distinct months, one charge each: exactly
+    // what `recurringMerchantCard` demanded. And $500 of current-period spend,
+    // which is all `projectionCard` ever needed.
+    const months = ['2025-08-05', '2025-09-05', '2025-10-05'];
+    const all = months.map((date, i) =>
+      tx({ id: `n${i}`, merchant: 'Netflix', amount: 15, date }),
+    );
+    const current = [tx({ id: 't1', amount: 500, categoryId: 'cat-1' })];
+    build({ budget: 2000, all: [...all, ...current], current });
+
+    const set = await generator.generate(USER_ID);
+
+    expect(set?.cards.some((c) => c.title.includes('recurring'))).toBe(false);
+    expect(set?.cards.some((c) => c.body.includes('current pace'))).toBe(false);
+    // The narrowed union has no `info`, so this is the type-level cut asserted
+    // at runtime: nothing generated can carry the retired tone.
+    expect(set?.cards.map((c) => c.tone)).not.toContain('info');
   });
 
   it('renders money in the user’s currency', async () => {

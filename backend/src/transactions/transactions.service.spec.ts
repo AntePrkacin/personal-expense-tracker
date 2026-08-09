@@ -1,9 +1,11 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { argsOf, paramsOf, queryChain, toSql } from '../../test/query-chain';
 import type { CategoriesService } from '../categories/categories.service';
 import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
 import type { UserDatabaseService } from '../database/user-database.service';
 import type { TransactionRow } from '../database/user/schema';
+import { TRANSACTION_CHANGED } from './transaction-changed.event';
 import { TransactionsService } from './transactions.service';
 
 describe('TransactionsService', () => {
@@ -97,6 +99,10 @@ describe('TransactionsService', () => {
         previousWindow,
         monthStatsFor,
       } as unknown as CategoriesService,
+      // A real emitter with nothing listening, rather than a mock: `emitAsync`
+      // resolving is the behaviour every write here depends on, and a jest.fn()
+      // would pass whether or not the call is awaited.
+      new EventEmitter2(),
     );
   };
 
@@ -441,6 +447,73 @@ describe('TransactionsService', () => {
       expect(result.transaction.amount).toBe(4.02);
       expect(result.transaction.id).toBe(TX_ID);
       expect(result.recentInCategory[0].amount).toBe(4.02);
+    });
+  });
+
+  describe('announcing a change', () => {
+    /** Rebuilds the service around an emitter with one listener attached. */
+    const withListener = (listener: (...args: unknown[]) => unknown) => {
+      const events = new EventEmitter2();
+      events.on(TRANSACTION_CHANGED, listener);
+      getUserDb = jest.fn().mockResolvedValue({ select, insert, update });
+      return new TransactionsService(
+        { getUserDb } as unknown as UserDatabaseService,
+        {
+          currentWindow,
+          previousWindow,
+          monthStatsFor,
+        } as unknown as CategoriesService,
+        events,
+      );
+    };
+
+    it('emits after a create, naming the user and the reason', async () => {
+      const heard: unknown[] = [];
+      const withEvents = withListener((event) => heard.push(event));
+
+      await withEvents.create(USER_ID, validCreate);
+
+      expect(heard).toEqual([{ userId: USER_ID, reason: 'created' }]);
+    });
+
+    it('emits after an update and after a remove, because both move the numbers', async () => {
+      const heard: { reason: string }[] = [];
+      const withEvents = withListener((event) =>
+        heard.push(event as { reason: string }),
+      );
+
+      await withEvents.update(USER_ID, TX_ID, { amount: 12 });
+      await withEvents.remove(USER_ID, TX_ID);
+
+      expect(heard.map((event) => event.reason)).toEqual([
+        'updated',
+        'deleted',
+      ]);
+    });
+
+    // The write path's own catch, which is not the listener's. `emitAsync`
+    // rejects when a listener rejects, so without this a benign 409 from the
+    // single-run guard would turn a transaction that really saved into a 500 -
+    // and a listener throwing synchronously would escape a catch placed only
+    // inside the listener. Both layers are deliberate.
+    it('saves the transaction even when a listener rejects', async () => {
+      const withEvents = withListener(() =>
+        Promise.reject(new Error('a run is already in flight')),
+      );
+
+      await expect(
+        withEvents.create(USER_ID, validCreate),
+      ).resolves.toMatchObject({ id: TX_ID });
+    });
+
+    it('saves the transaction even when a listener throws synchronously', async () => {
+      const withEvents = withListener(() => {
+        throw new Error('bad listener');
+      });
+
+      await expect(
+        withEvents.create(USER_ID, validCreate),
+      ).resolves.toMatchObject({ id: TX_ID });
     });
   });
 

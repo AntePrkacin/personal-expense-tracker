@@ -53,9 +53,9 @@ describe('InsightsService', () => {
     },
     cards: [
       {
-        tone: 'info' as const,
-        title: 'On pace for $1,980',
-        body: 'Just under',
+        tone: 'warning' as const,
+        title: 'Dining out is over budget',
+        body: '$312 of $300 - $12 over',
       },
     ],
   });
@@ -71,6 +71,17 @@ describe('InsightsService', () => {
     deletedAt: null,
   });
 
+  /**
+   * Stored card rows, deliberately including a tone the DTO union no longer
+   * declares.
+   *
+   * `insights.tone` is a plain text column with no CHECK constraint and
+   * `cardsFor` casts it unchecked, so PET-42-43-44 retiring `info` did nothing
+   * to the sets already on disk. This factory is untyped for that reason - it
+   * stands in for database rows rather than for generated cards - so a retired
+   * tone travels through the read exactly as it would in production, which is
+   * what the frontend's tone-map fallback exists to catch.
+   */
   const cardRows = () => [
     {
       tone: 'warning',
