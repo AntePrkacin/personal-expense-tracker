@@ -277,6 +277,78 @@ payment method, status and account (DET-8, A20). No form captures them and no co
 them, so `forbidNonWhitelisted` answers 400 rather than dropping them silently and letting a
 frontend believe they were saved.
 
+## Receipt scanning
+
+**`POST /api/transactions/scan` (PET-59) extracts a transaction's fields from a photo or PDF
+of a receipt, and stores nothing.** The image is read in memory, sent to Gemini, and discarded;
+nothing about the request reaches a database column. It lives on `TransactionsController`,
+declared above `GET :id` as that class's own note on route order explains, and its two
+collaborators, `ReceiptScanService` and `ReceiptExtractionService`, are split so a spec can
+mock the SDK wholesale without touching the database reads.
+
+**A model that returns the same id it was given, or none.** The prompt hands Gemini the
+caller's live categories as `{id, name}` pairs and asks for the same id back; `ReceiptScanService`
+then validates `categoryId` against that same list and **drops** anything that fails to match,
+reporting the field in `missing` rather than falling back to `Uncategorized`. A silent fallback
+would render as a confident categorization and quietly mis-file the expense, where a missing
+field asks the user to pick. `date` and `amount` get the identical treatment for the identical
+reason: a model's answer is not a validated DTO, and trusting an invented value only moves the
+failure downstream. `note` is deliberately never reported in `missing` - a receipt may carry
+nothing worth noting at all, so its absence is not something another photo would fix.
+
+**The merchant history is capped at the top 50 by transaction count, over the past year, and
+the cap is the point.** Unbounded, `seed-showcase.ts` alone would put hundreds of rows into the
+prompt on every scan - paid for in latency, in tokens, and on the free tier in exactly the data
+Google retains. `MERCHANT_HISTORY_LIMIT` and `MERCHANT_HISTORY_DAYS` in
+`transactions/receipt-scan.constants.ts` are named constants for exactly that reason: the
+number is meant to be tuned against a real prompt, not rediscovered. The query groups by
+merchant and category in one pass and folds the per-category breakdown in memory, because
+ranking merchants by their total count while also breaking each one down by category is two
+different groupings over the same rows.
+
+**The key is optional, and `/scan` has a defined keyless answer.** `GEMINI_API_KEY` is
+unpaired in `env.validation.ts`, matching the contract every other variable there keeps: the
+backend must still boot with no `.env` at all. Its absence answers **503**, checked in
+`ReceiptScanService.scan` ahead of opening the database, so an unconfigured deployment costs no
+wasted reads. The buttons stay visible on the frontend regardless - see
+`frontend/src/app/CLAUDE.md`.
+
+**The call is bounded.** `ReceiptExtractionService` wraps the Gemini call in an
+`AbortController` with a timeout (`RECEIPT_SCAN_TIMEOUT_MS`), and a call that does not finish
+in time answers **504**, distinguished from the keyless 503 rather than collapsing into it -
+the failure PET-56 was an entire ticket about is a hung or quota-throttled call leaving a
+frontend loading state up forever.
+
+**Four size limits, layered strictly smallest-innermost.** At most 4 images per scan, or
+exactly one PDF (`MAX_RECEIPT_FILES` in `receipt-scan.constants.ts`). Multer's own `fileSize`
+limit is set to the larger of the two per-kind caps, 4MB (a PDF's) - it applies one number to
+every file regardless of kind - and the smaller cap, 1.5MB (an image's), is checked after
+upload in `ReceiptScanService.scan`, which is what lets the 413 name which cap was actually
+passed. A `fileFilter` in `receipt-scan.upload.ts` rejects an unsupported MIME type and a PDF
+sent beside any other file, both as 400: multer calls it once per part in arrival order, so a
+PDF's siblings are tracked on the request object itself, the only place one call can see what
+an earlier one accepted.
+
+**`/scan` carries a rate limiter, which meant moving the throttler registration rather than
+adding a second one.** `ThrottlerModule` is `@Global()`, so a second `forRootAsync` call in
+`TransactionsModule` would not scope anything - both registrations export the same
+`THROTTLER_OPTIONS` token, and whichever loses the resolution race is silently absent from
+every route that names it. The one registration therefore moved from `AuthModule` to
+`AppModule`, byte-identical for the existing `email` and `ip` throttlers, with a third named
+throttler, `scan`, added beside them - keyed on the session user id rather than IP, because the
+budget it protects is the project's shared Gemini quota rather than a per-caller one. Every
+route not named `scan` carries `@SkipThrottle({ scan: true })` (`AuthController`'s class
+decorator), and `/scan` itself carries `@SkipThrottle({ email: true, ip: true })`: `ThrottlerGuard`
+runs every configured throttler on a route it guards, and the `email` tracker reads
+`req.body.email`, which is `undefined` on a multipart request and would otherwise put every
+caller in one shared fallback bucket.
+
+**What the scan limiter protects, stated honestly.** It does not cap total consumption of the
+shared Gemini quota - the throttler store is in-memory, so more than one Fly machine gives each
+user a full bucket per machine, and a per-user limit is per-user by construction. What it buys
+is fairness and blast radius: one account in a retry loop cannot outrun everybody else. A
+genuine aggregate cap needs a shared store and a global counter; see `docs/TODO.md`.
+
 ## Category endpoints
 
 **One `Uncategorized` category exists per account, and it is a system row rather than a
@@ -680,11 +752,12 @@ because both halves of the access flow compose it.
 Four things about it are easy to get wrong:
 
 - **The public route is public because onboarding has no session, and it carries no throttler.**
-  `ThrottlerModule` is configured inside `AuthModule` and `ThrottlerGuard` sits on
-  `AuthController` alone, so there is nothing here to skip - which is worth stating rather than
-  leaving to be discovered, since a bare `@SkipThrottle()` means `{ default: true }` and would
-  silently skip nothing anyway. The route reads no request state and returns the same bytes to
-  everybody, so it enumerates nothing.
+  `ThrottlerModule` is registered once in `AppModule` (PET-59 moved it there from `AuthModule` to
+  add a third named throttler, `scan`), but nothing on this controller carries
+  `@UseGuards(ThrottlerGuard)`, so there is nothing here to skip - which is worth stating rather
+  than leaving to be discovered, since a bare `@SkipThrottle()` means `{ default: true }` and
+  would silently skip nothing anyway. The route reads no request state and returns the same
+  bytes to everybody, so it enumerates nothing.
 - **Validation checks the code-side allowlist and never the `enabled` flag.** `enabled` is
   presentation: the palette read offers what is enabled, while `@IsIn(COLOUR_TOKENS)` accepts the
   whole allowlist - so a category carrying a since-disabled colour still saves and still renders.
@@ -907,7 +980,25 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
+- **A page-count guard on a scanned PDF.** The backend has no PDF parser, so a 40-page bank
+  statement is accepted up to the 4MB size cap and billed as roughly 10,000 tokens of prompt
+  describing no receipt at all. The 4MB cap is the practical bound today.
+
+- **A per-scan opt-in for training on the free tier.** V1's disclosure beside the scan buttons is
+  on-screen copy, not a setting: a real opt-in belongs in Settings, whose `<main>` is not built,
+  and migrating to the paid tier is the only mechanism that actually turns training off. See
+  `docs/TODO.md`.
+
+- **A shared-store aggregate cap on the Gemini quota.** The `scan` throttler is per-user and
+  in-memory, so it protects fairness and blast radius, not total consumption of the project's
+  shared free-tier quota. A real cap needs a shared store and a global counter.
+
 - **No LLM behind the insights.** Generation is deterministic rules
   (`RuleBasedInsightGenerator`); the "AI" is branding. An `LlmInsightGenerator` can replace it
   through the `INSIGHT_GENERATOR` binding without touching storage, the read or the frontend, but
   no such implementation exists and none is wired.
+
+- **Scanning several distinct receipts into several transactions.** One scan produces one
+  transaction; every image in a request is treated as a page of the *same* receipt and
+  synthesized into one extraction. A batch import needs a review queue, N draft rows and a bulk
+  write, none of which `POST /transactions/scan` can express.

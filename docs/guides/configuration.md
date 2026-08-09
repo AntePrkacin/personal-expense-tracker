@@ -36,6 +36,9 @@ Backend variables:
 | `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per submitted address       |
 | `AUTH_RATE_IP_LIMIT`     | `30`                    | Auth requests per window, per caller IP               |
 | `AUTH_RATE_TTL_S`        | `900`                   | Window length in seconds, shared by both limiters     |
+| `GEMINI_API_KEY`         | -                       | Google AI Studio key for receipt scanning; unset means 503 |
+| `SCAN_RATE_LIMIT`        | `10`                    | Receipt scans per window, per session user id         |
+| `SCAN_RATE_TTL_S`        | `3600`                  | Window length in seconds for the scan limiter         |
 | `TRUST_PROXY_HOPS`       | `0`                     | Reverse proxies in front; 0 means `req.ip` is the socket |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.

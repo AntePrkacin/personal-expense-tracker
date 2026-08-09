@@ -1077,6 +1077,36 @@ with `aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `I
 keeps no eslint-disable comments - so `select-error`'s border and `aria-describedby` carry the
 state.
 
+**PET-59 gave the modal a sixth prop, `scan`, following `create`'s own reasoning exactly.** It is
+injected rather than imported, so the suite passes a `jest.fn()` and the `@/` alias trap never
+comes up; `AddTransactionProvider` wires the real `lib/scanReceipt.ts` action, matching
+`create`'s wiring line for line. The two file inputs sit in their own tinted panel above Amount -
+`pointer-fine:hidden` on the camera one, so a desktop never sees a control that opens the
+identical file picker under a second label - and both carry `btn-outline btn-primary`: peers, not
+a primary and a secondary, so no `btn` style modifier has to vary by viewport (a paired *style*
+modifier, unlike a paired colour one, is resolved by daisyUI's emission order rather than by the
+attribute - see `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight). The loading overlay is
+`absolute inset-0` over a `relative` wrapper around the scan panel and every field, not over the
+whole `modal-box`: `Modal.tsx` owns the header and footer as separate props from `children`, so a
+full-box overlay would need a slot that component does not have, and the header's Close and the
+footer's Cancel staying reachable underneath the overlay is an acceptable substitute for the
+preview's fully-covering plate.
+
+**The merge tracks touched fields, not empty ones, and `set()` is the one function that marks a
+field touched.** `values.date` starts as `todayIsoDate()`, so an emptiness test would refuse to
+ever overwrite it; `mergeScannedFields` in `(app)/transactionForm.ts` instead takes a
+`ReadonlySet<keyof TransactionFormValues>` built only by real edits, which is what lets a scan
+fill the receipt's actual date on an untouched form and leaves a typed field - blank or not -
+alone. The set is local `useState`, never derived from `values`, precisely so the merge itself
+never marks anything touched.
+
+**There is no client-side abort for a scan in flight, only a soft one.** Unlike `authorizedPost`'s
+plain `fetch`, calling a Server Action exposes no `AbortController` a client component can reach
+into - so the overlay's "Cancel scan" invalidates a ref-held generation counter instead: the
+request may finish server-side, but its result is discarded if the token it captured no longer
+matches. The backend's own `RECEIPT_SCAN_TIMEOUT_MS` is what actually bounds the call; this only
+bounds how long the UI waits on it.
+
 **`/transactions/[id]` is the app's first dynamic route, and PET-34's detail page fills it.** Same
 split as `/transactions`: `page.tsx` is async and fetches, `TransactionDetailScreen` is
 synchronous and takes the resolved response, which is what lets `Screens/08 Transaction detail`
