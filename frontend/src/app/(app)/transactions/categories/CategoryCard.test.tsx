@@ -1,26 +1,31 @@
 import { render, screen } from '@testing-library/react';
 
-import { category, UNCAPPED_CATEGORY } from './categoryFixture';
+import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixture';
 import { CategoryCard } from './CategoryCard';
 
 // One card, in every status the contract can hand it (AC2, AC3, AC7).
 //
 // The figures are the frame's own, so a reviewer can hold this file beside node 36:423:
 // Groceries is `near`, Dining out is `over`, Housing is `full` and the rest are `on_track`.
-// `Uncategorized` supplies the uncapped shape, which the frame does not draw at all.
+// `UNCAPPED_CATEGORY` supplies the uncapped shape, which the frame does not draw at all, and
+// `FALLBACK_CATEGORY` the one card that is not the user's to act on.
 //
-// **The kebab's context is mocked rather than wrapped in the real provider**, which is the
+// **The two contexts are mocked rather than wrapped in the real providers**, which is the
 // opposite of what `transactions/TransactionRow.test.tsx` does, and the reason is what each suite
 // is about. That one renders a row inside both real providers because the row is the thing the
 // providers exist to serve. This file is about what the *card* draws in five states, and every one
-// of its seventeen renders would otherwise have to be wrapped to reach an opener no assertion
-// here touches. The menu's own wiring - the popover pairing, Edit's disabled state, the payload
-// Delete sends, and the fallback row's missing Delete - is `CategoryCardMenu.test.tsx`'s.
+// of its renders would otherwise have to be wrapped to reach openers no assertion here touches. The
+// menu's own wiring - the popover pairing, the two payloads, the focus hand-back - is
+// `CategoryCardMenu.test.tsx`'s, and the modal's is `EditCategoryModal.test.tsx`'s.
 //
-// A relative specifier, because `jest.mock('@/...')` fails with "Cannot find module" from
-// anywhere in this repo.
+// **What this file gained at PET-38 is the fallback card**, because "which controls that row gets"
+// stopped being a question the menu answers and became one the card does. Relative specifiers,
+// because `jest.mock('@/...')` fails with "Cannot find module" from anywhere in this repo.
 jest.mock('./DeleteCategoryProvider', () => ({
   useDeleteCategory: () => ({ open: jest.fn() }),
+}));
+jest.mock('./EditCategoryProvider', () => ({
+  useEditCategory: () => ({ open: jest.fn() }),
 }));
 
 const bar = () => screen.getByRole('progressbar');
@@ -186,15 +191,15 @@ describe('an uncapped category (AC7)', () => {
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
   });
 
-  it('offers to set a limit, announcing that the control is not live yet', () => {
+  it('offers a live "Set limit", which PET-38 is what made true', () => {
+    // It shipped `aria-disabled`, with a note saying this ticket would make it live. Asserting the
+    // absence is what stops the attribute coming back.
     render(<CategoryCard category={UNCAPPED_CATEGORY} />);
 
-    const setLimit = screen.getByRole('button', { name: 'Set limit for Uncategorized' });
+    const setLimit = screen.getByRole('button', { name: 'Set limit for Subscriptions' });
 
-    expect(setLimit).toHaveAttribute('aria-disabled', 'true');
-    // Not `disabled`: that removes it from the tab order, so the control would be unreachable
-    // by keyboard and announce nothing. PET-38 is what makes it live.
-    expect(setLimit).not.toBeDisabled();
+    expect(setLimit).not.toHaveAttribute('aria-disabled');
+    expect(setLimit).toBeEnabled();
   });
 
   it('keeps the visible label inside the accessible name (WCAG 2.5.3)', () => {
@@ -207,7 +212,7 @@ describe('an uncapped category (AC7)', () => {
     const name = screen.getByRole('button', { name: /Set limit/ }).getAttribute('aria-label');
 
     expect(name).toContain('Set limit');
-    expect(name).toContain('Uncategorized');
+    expect(name).toContain('Subscriptions');
   });
 
   it('falls back to a capped-looking status with no cap without drawing furniture', () => {
@@ -254,6 +259,51 @@ describe('the kebab (AC6)', () => {
     // moving the kebab into the capped branch alone.
     render(<CategoryCard category={UNCAPPED_CATEGORY} />);
 
+    expect(screen.getByRole('button', { name: 'Actions for Subscriptions' })).toBeInTheDocument();
+  });
+});
+
+describe('the fallback category (AC6, amended)', () => {
+  // **AC1 and AC6 both land here as of PET-38, and neither is where the ticket put them.** AC1 says
+  // the row menu's Edit opens the modal on a card; AC6 said the confirmation must protect the
+  // fallback. Both actions are refused for `Uncategorized` - `DELETE` answers 409 because it is
+  // where every other deletion sends its transactions, and `PATCH` answers 409 for a rename - so
+  // nothing on that card is drawn rather than drawn and refused.
+
+  it('draws no kebab at all, where PET-39 drew one holding a single disabled Edit', () => {
+    render(<CategoryCard category={FALLBACK_CATEGORY} />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Actions for Uncategorized' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('draws no banner either, because "Set limit" would have nowhere to lead', () => {
+    // The Edit modal is what sets a cap, and this card has no trigger for it. A strip here would be
+    // either a dead control or a second explanation of a rule nobody asked about.
+    render(<CategoryCard category={FALLBACK_CATEGORY} />);
+
+    expect(screen.queryByRole('button', { name: /Set limit/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('No limit set for this category')).not.toBeInTheDocument();
+  });
+
+  it('still draws the card, its spend and its count', () => {
+    // The category is one the user really has, so hiding it would leave the grid unable to account
+    // for spend the dashboard donut does show. Only its controls go.
+    render(<CategoryCard category={FALLBACK_CATEGORY} />);
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Uncategorized' })).toBeInTheDocument();
+    expect(screen.getByText('$148')).toBeInTheDocument();
+    expect(screen.getByText('in 6 transactions')).toBeInTheDocument();
+  });
+
+  it('keeps its kebab and its banner when the row is not the fallback', () => {
+    // The control, so neither absence above can pass for a card that simply draws nothing.
+    render(<CategoryCard category={{ ...FALLBACK_CATEGORY, isFallback: false }} />);
+
     expect(screen.getByRole('button', { name: 'Actions for Uncategorized' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Set limit/ })).toBeInTheDocument();
   });
 });

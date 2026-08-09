@@ -3,8 +3,9 @@
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
-import { createCategory } from '@/lib/createCategory';
+import { createCategory, type CreateCategoryResult } from '@/lib/createCategory';
 import type { Palette } from '@/lib/palette';
+import type { components } from '@/types/api';
 
 import { AddCategoryModal } from './AddCategoryModal';
 
@@ -38,9 +39,23 @@ type AddCategoryButtonProps = {
    * `AddTransactionProvider` needs for a modal that can open from anywhere.
    */
   palette: Palette | null;
+  /**
+   * The create action, defaulting to the real one. Overridden only by Storybook.
+   *
+   * **`docs/TODO.md` nominated PET-38 for this and the reason was that it would otherwise be the
+   * third copy of one gap on one screen.** Storybook's Vite build has no notion of `'use server'`,
+   * so it bundles `lib/createCategory.ts` as an ordinary module and pressing Save in
+   * `Screens/13 Categories` reached `cookies()` from `next/headers` in the browser. The delete seam
+   * was fixed at PET-39 after a code review, the edit seam ships with one, and this closes the set -
+   * so the rule on this screen is now uniform rather than two-thirds true.
+   *
+   * Defaulted rather than required, so the app's one real call site stays a bare
+   * `<AddCategoryButton palette={palette} />`.
+   */
+  create?: (body: components['schemas']['CreateCategoryDto']) => Promise<CreateCategoryResult>;
 };
 
-export function AddCategoryButton({ palette }: AddCategoryButtonProps) {
+export function AddCategoryButton({ palette, create = createCategory }: AddCategoryButtonProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -52,11 +67,7 @@ export function AddCategoryButton({ palette }: AddCategoryButtonProps) {
           and `queryAllByLabelText` **can**, so an always-mounted modal would make every text and
           label query on this screen ambiguous forever. `(app)/pages.test.tsx` depends on this. */}
       {open ? (
-        <AddCategoryModal
-          palette={palette}
-          create={createCategory}
-          onClose={() => setOpen(false)}
-        />
+        <AddCategoryModal palette={palette} create={create} onClose={() => setOpen(false)} />
       ) : null}
     </>
   );

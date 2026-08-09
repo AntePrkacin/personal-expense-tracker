@@ -4,9 +4,10 @@ import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour'
 import { formatWhole } from '@/lib/format';
 import type { Category } from '@/lib/categories';
 
-import { BannerCardBody, CardBanner } from './CardBanner';
+import { BannerCardBody } from './CardBanner';
 import { barClassFor, barPercent, chipFor, isCapped } from './categoryCardStatus';
 import { CategoryCardMenu } from './CategoryCardMenu';
+import { SetLimitBanner } from './SetLimitBanner';
 
 // One category card on frame 13 (nodes 37:471 and its seven siblings, CTG-3, CTG-4).
 //
@@ -29,6 +30,20 @@ import { CategoryCardMenu } from './CategoryCardMenu';
 // **`Uncategorized` gets no special case here.** It is uncapped by default, which the shape
 // above already covers, and it is a category the user really has - so hiding it would leave the
 // grid unable to account for spend the donut on the dashboard does show.
+//
+// **That last paragraph is now true of the card and false of its controls, which PET-38 changed.**
+// The fallback card still draws - the reason above is unaffected - and it draws **no kebab and no
+// banner**. Both actions behind that kebab are refused for it: `DELETE` answers 409 because it is
+// where every other deletion sends its transactions, and `PATCH` answers 409 for a rename because
+// its name is fixed. PET-39 had already hidden Delete, which left a kebab holding one disabled
+// "Edit"; adding a live Edit that could change four fields and not the first one would have been a
+// third state to explain on the one category nobody asked for. So nothing on this card is drawn
+// that cannot be acted on, which is the rule the whole screen has been converging on since PET-36.
+//
+// **The cost is stated rather than hidden**: `Uncategorized` can now be neither renamed nor capped
+// from the UI, though the API accepts a cap on it. `docs/TODO.md` records it, and both 409s stay
+// classified in `lib/deleteCategory.ts` and `lib/updateCategory.ts`, because a control that is not
+// drawn is not an enforcement.
 
 /**
  * The transaction count line, pluralized.
@@ -112,10 +127,16 @@ function CategoryCardHeader({ category }: { category: Category }) {
           `CategoryCardMenu` is that menu, and it keeps this element's class string and its
           `aria-label` byte-identical so the two suites that name the control did not have to
           change their query. The card **stays a Server Component**: the menu is a popover, so
-          there is no open state to hold, and its `'use client'` is there only because Delete
-          calls into a context - exactly the boundary `TransactionRow` and `TransactionRowMenu`
-          settled on next door. */}
-      <CategoryCardMenu category={category} />
+          there is no open state to hold, and its `'use client'` is there only because both items
+          call into a context - exactly the boundary `TransactionRow` and `TransactionRowMenu`
+          settled on next door.
+
+          **PET-38 made the whole menu conditional, which is where AC6 now lives.** Both of its
+          items are refused for the fallback row, so the kebab is not drawn there at all rather
+          than opening onto nothing operable - see this file's header. Deciding it here rather than
+          inside the menu is what let `CategoryCardMenu` drop its own guard: a component that is
+          only mounted for a category with both actions has nothing left to branch on. */}
+      {category.isFallback ? null : <CategoryCardMenu category={category} />}
     </div>
   );
 }
@@ -129,33 +150,44 @@ export function CategoryCard({ category }: { category: Category }) {
   // designed fixed size becomes a ceiling here. A hard height would also clip a wrapped chip on
   // a card whose category name and status labels are longer than the mock's.
   if (!isCapped(category)) {
+    // The uncapped body, identical in both of the two shapes below.
+    const body = (
+      <div className="card-body gap-4">
+        <CategoryCardHeader category={category} />
+
+        <p className="flex flex-wrap items-baseline gap-1.5">
+          <span className="text-base font-semibold">{formatWhole(category.spent)}</span>
+          <span className="text-base-content/60 text-sm">
+            in {transactionCountLabel(category.transactionCount)}
+          </span>
+        </p>
+      </div>
+    );
+
+    // **The fallback card has no banner, because it has nowhere for one to lead.** Every other
+    // uncapped card's strip is a live "Set limit" as of PET-38, and the control that sets a cap is
+    // the Edit modal, which this card has no trigger for - so a strip here would be either a dead
+    // control or a second explanation of a rule nobody asked about. It draws the plain card box
+    // instead, which is the same `card bg-base-100 shadow-sm` the capped shape below uses, so the
+    // grid stays on one rhythm with one fewer element rather than with an empty one.
+    if (category.isFallback) {
+      return <section className="card bg-base-100 shadow-sm">{body}</section>;
+    }
+
     return (
       // The same `CardBanner` idiom the summary card above uses, and the same one the source
       // design system uses for both: the body keeps its four rounded corners and overlaps a
       // strip pulled up by one radius. It sits exactly where the bar and the footer sit on a
       // capped card, so a grid mixing the two shapes stays on one rhythm.
       <section className="flex flex-col">
-        <BannerCardBody>
-          <div className="card-body gap-4">
-            <CategoryCardHeader category={category} />
+        <BannerCardBody>{body}</BannerCardBody>
 
-            <p className="flex flex-wrap items-baseline gap-1.5">
-              <span className="text-base font-semibold">{formatWhole(category.spent)}</span>
-              <span className="text-base-content/60 text-sm">
-                in {transactionCountLabel(category.transactionCount)}
-              </span>
-            </p>
-          </div>
-        </BannerCardBody>
-
-        {/* The action is the one the summary card's banner offers, and inert for the same
-            reason - PET-38's Edit category modal is what sets a cap. It passes the category as
-            *context* rather than a whole replacement label, so the accessible name comes out as
-            "Set limit for Groceries": distinct across eight cards, and still containing the
-            visible words a speech-input user can actually say. */}
-        <CardBanner action="Set limit" actionContext={category.name}>
-          No limit set for this category
-        </CardBanner>
+        {/* **Live as of PET-38, and the paragraph this replaces called it inert "for the same
+            reason" as the summary card's "Allocate".** That symmetry is gone: "Set limit" has one
+            obvious destination and now goes there, while "Allocate" still has none designed.
+            `SetLimitBanner` is the client wrapper that carries the handler, so this card stays a
+            Server Component; the accessible-name composition it relies on is `CardBanner`'s. */}
+        <SetLimitBanner category={category} />
       </section>
     );
   }

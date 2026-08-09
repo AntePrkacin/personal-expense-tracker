@@ -42,9 +42,21 @@ import { CategoriesScreen } from './CategoriesScreen';
 // constructs it, so this file passes a stub action instead of a wrapper. What stays inert is "Set
 // limit", "Allocate" and the menu's own "Edit", all three PET-38's.
 //
-// **Every story therefore passes `remove`, and a code review is why.** Storybook's Vite build has no
-// notion of `'use server'`, so it bundles `lib/deleteCategory.ts` as an ordinary module and pressing
-// Delete in the confirmation would run `cookies()` from `next/headers` in the page instead of an RPC.
+// **PET-38 landed two of those three, so read the sentence above as dated too.** The menu's "Edit"
+// opens frame 21 and every uncapped card's "Set limit" opens the same modal focused on its budget
+// field. **"Allocate" is the one that stays inert**, because no frame draws where it goes - so this
+// screen still has exactly one control announcing `aria-disabled`, and the summary card is where to
+// look at it. The other visible change is the `Uncategorized` card, which now draws **no kebab and
+// no banner**: both of its actions are refused by the API, so nothing on it is drawn that cannot be
+// acted on. `Default` and `SingleCategory` are the two stories to check that in.
+//
+// **Every story therefore passes all three actions, and a code review plus `docs/TODO.md` are why.**
+// Storybook's Vite build has no notion of `'use server'`, so it bundles `lib/deleteCategory.ts`,
+// `lib/updateCategory.ts` and `lib/createCategory.ts` as ordinary modules, and pressing Delete in the
+// confirmation, or Save in either modal, would run `cookies()` from `next/headers` in the page
+// instead of an RPC. The delete seam was closed at PET-39 after a review found it unreachable; the
+// create seam was the open gap that register nominated PET-38 for, and the edit seam ships with one,
+// so the screen is uniform now rather than two-thirds covered.
 // The sibling tab's stories close that by mounting their own provider with a stub
 // (`TransactionsList.stories.tsx`); this screen owns its provider, so for one commit the seam was
 // unreachable from here and this story ran the real action. `CategoriesScreen` takes the stub as an
@@ -193,13 +205,16 @@ const PALETTE: Palette = {
 // `palette` is defaulted here rather than repeated in every story's `render`, since none of the four
 // is about the picker and all four would otherwise carry the same noise.
 //
-// **`remove` is defaulted for a sharper reason than noise**: every story draws a live kebab, so any
-// of them could otherwise reach the real Server Action in the browser. Defaulting it here means a
-// story added later cannot forget it, which is the failure mode that made this necessary in the
-// first place - the seam existed and nothing was passing through it.
+// **`remove` and `update` are defaulted for a sharper reason than noise**: every story draws a live
+// kebab, and as of PET-38 a live "Set limit" beside it, so any of them could otherwise reach a real
+// Server Action in the browser. Defaulting them here means a story added later cannot forget one,
+// which is the failure mode that made this necessary in the first place - the seam existed and
+// nothing was passing through it.
 function Frame({
   palette = PALETTE,
   remove = async () => ({ ok: true }),
+  update = async () => ({ ok: true }),
+  create = async () => ({ ok: true }),
   ...props
 }: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette'> & {
   palette?: Palette | null;
@@ -208,7 +223,13 @@ function Frame({
     // `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the gutter
     // the `(app)` shell owns, since neither wraps a story.
     <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-      <CategoriesScreen {...props} palette={palette} remove={remove} />
+      <CategoriesScreen
+        {...props}
+        palette={palette}
+        remove={remove}
+        update={update}
+        create={create}
+      />
     </div>
   );
 }
@@ -294,6 +315,11 @@ export const OverBudget: Story = {
  * The grid cannot be empty: `Uncategorized` is a system category `DELETE /api/categories/:id`
  * refuses to remove, so this is the floor rather than an empty state. Worth opening to check the
  * single card does not stretch to two columns.
+ *
+ * **It is also the fallback card on its own, which is the one to open after PET-38.** That row draws
+ * no kebab and no banner, so this story is a whole screen whose only operable controls are the two
+ * tabs and the header's "Add category" - deliberately, since both actions behind a kebab are refused
+ * for it. Check that the bare card still reads as a card rather than as a truncated one.
  */
 export const SingleCategory: Story = {
   render: () => (

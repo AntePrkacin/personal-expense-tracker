@@ -6,6 +6,7 @@ import type { Category } from '@/lib/categories';
 
 import { PopoverMenu, PopoverMenuItem } from '../../PopoverMenu';
 import { useDeleteCategory } from './DeleteCategoryProvider';
+import { useEditCategory } from './EditCategoryProvider';
 
 // 18 Categories - Row menu (node 75:806): the kebab on a category card, and the two actions behind
 // it (CED-1, CED-2, A19).
@@ -18,29 +19,24 @@ import { useDeleteCategory } from './DeleteCategoryProvider';
 //
 // **`CategoryCard` stays a Server Component**, exactly as `TransactionRow` did when its own menu
 // came out of it: the popover means there is no open state to hold, so the only reason for the
-// directive here is that Delete calls into a context.
+// directive here is that both items call into a context.
+//
+// **Neither item is conditional any more, and the card decides who gets a menu.** PET-39 shipped
+// this with an `offersDelete` guard, because `Uncategorized` cannot be deleted and its card still
+// drew a kebab holding one disabled "Edit" - a menu with nothing operable in it, which that ticket
+// recorded as the consequence to fix here. PET-38 fixes it a level up: `CategoryCard` renders no
+// menu at all for the fallback, so this component is only ever mounted for a category with both
+// actions and the guard has nothing left to decide. `lib/deleteCategory.ts` and
+// `lib/updateCategory.ts` still classify their 409s, because a control that is not drawn is not an
+// enforcement.
 
 type CategoryCardMenuProps = {
   category: Category;
 };
 
 export function CategoryCardMenu({ category }: CategoryCardMenuProps) {
-  const { open } = useDeleteCategory();
-
-  /**
-   * AC6: the fallback category offers no Delete.
-   *
-   * **Decided here from `isFallback` rather than by letting the backend answer 409.** That row is
-   * where deleting any *other* category sends its transactions, so the endpoint refuses to remove
-   * it, and offering a control whose only outcome is an error message is the failure every inert
-   * control on this screen was built to avoid. `lib/deleteCategory.ts` still classifies the 409,
-   * because a hidden control is not an enforcement.
-   *
-   * One consequence, recorded rather than hidden: until PET-38 lands, this card's menu is a single
-   * disabled "Edit", i.e. a menu with nothing operable in it. That is still better than a kebab
-   * that opens nothing, and it announces its condition.
-   */
-  const offersDelete = !category.isFallback;
+  const { open: openDelete } = useDeleteCategory();
+  const { open: openEdit } = useEditCategory();
 
   return (
     // The `aria-label` and the trigger's `shrink-0` are byte-identical to what PET-36 shipped on
@@ -54,34 +50,37 @@ export function CategoryCardMenu({ category }: CategoryCardMenuProps) {
       label={`Actions for ${category.name}`}
       triggerClassName="shrink-0"
     >
-      {/* **Edit ships disabled, which amends AC1 and is PET-33's call for the same control one
-          screen over.** PET-38's Edit category modal does not exist, and the alternatives were both
-          worse: a live item that does nothing is the failure every inert control on this screen
-          exists to avoid, and dropping the item makes frame 18 a different design. PET-38 makes it
-          live by deleting `disabled` and adding its own `onSelect`. */}
+      {/* **PET-38 made this live, and the whole of the change is that `disabled` is gone.** It
+          shipped disabled because the Edit category modal did not exist, and that paragraph
+          predicted it would become live by "deleting `disabled` and adding its own `onSelect`",
+          which is exactly what happened.
+
+          **The whole category, where Delete below hands over three fields.** A prefilled form
+          cannot do without the cap, the colour and the note; a confirmation has no business
+          rendering any of them. The same asymmetry the transaction menu already has, and the
+          reason `useEditCategory().open` takes a `Category` while `useDeleteCategory().open` takes
+          a target shape of its own.
+
+          No `focus` option: the kebab's "Edit" is an unspecific invitation, so the modal opens on
+          its first field. `SetLimitBanner` is the trigger that asks for the budget instead. */}
       <PopoverMenuItem
         label="Edit"
         icon={<Pencil className="size-4" aria-hidden="true" />}
-        disabled
+        onSelect={() => openEdit(category)}
       />
 
-      {offersDelete ? (
-        <PopoverMenuItem
-          label="Delete"
-          icon={<Trash2 className="size-4" aria-hidden="true" />}
-          className="text-error"
-          onSelect={() =>
-            // **Three fields, where PET-38's Edit will hand over the whole category.** A
-            // confirmation quoting a cap, a colour or a note would be rendering things it has no
-            // business knowing; the same asymmetry the transaction menu already has.
-            open({
-              id: category.id,
-              name: category.name,
-              transactionCount: category.transactionCount,
-            })
-          }
-        />
-      ) : null}
+      <PopoverMenuItem
+        label="Delete"
+        icon={<Trash2 className="size-4" aria-hidden="true" />}
+        className="text-error"
+        onSelect={() =>
+          openDelete({
+            id: category.id,
+            name: category.name,
+            transactionCount: category.transactionCount,
+          })
+        }
+      />
     </PopoverMenu>
   );
 }

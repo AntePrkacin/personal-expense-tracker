@@ -50,11 +50,44 @@ export function category(overrides: Partial<Category> = {}): Category {
  * The uncapped shape, with every derived field null - which is what the contract guarantees and
  * what `status: "uncapped"` means.
  *
- * This is the **common** case rather than the edge, because a cap is optional throughout and the
- * seeded `Uncategorized` fallback ships without one. Frame 13 draws it nowhere.
+ * This is the **common** case rather than the edge, because a cap is optional throughout. Frame 13
+ * draws it nowhere.
+ *
+ * **It is an ordinary category rather than the fallback, and it was the fallback until PET-38.**
+ * The two were one fixture while nothing on the screen distinguished them: both drew the same card
+ * and the same banner, and the only test that cared about `isFallback` was the one asserting the
+ * menu omits Delete. That stopped being true when the fallback card lost its kebab and its banner
+ * entirely, at which point a single fixture would have made "uncapped" and "unactionable" the same
+ * case and hidden the live "Set limit" this ticket adds. `FALLBACK_CATEGORY` below is the other
+ * half.
  */
 export const UNCAPPED_CATEGORY: Category = category({
+  id: '0198c2a1-0000-7000-8000-0000000000a2',
+  name: 'Subscriptions',
+  color: 'primary',
+  icon: 'tv',
+  monthlyCap: null,
+  percentUsed: null,
+  remaining: null,
+  over: null,
+  status: 'uncapped',
+  spent: 148,
+  transactionCount: 6,
+});
+
+/**
+ * The seeded `Uncategorized` row: uncapped, and the one category that is not the user's to act on.
+ *
+ * Every account has exactly one, `DELETE` refuses to remove it and `PATCH` refuses to rename it - so
+ * as of PET-38 its card draws **no kebab and no banner**, which is what this fixture exists to pin.
+ * Uncapped as well as fallback, because that is how it is provisioned; a suite wanting one property
+ * without the other overrides it.
+ */
+export const FALLBACK_CATEGORY: Category = category({
+  id: '0198c2a1-0000-7000-8000-0000000000a9',
   name: 'Uncategorized',
+  color: 'base-content/50',
+  icon: 'circle-question-mark',
   isFallback: true,
   monthlyCap: null,
   percentUsed: null,

@@ -351,3 +351,108 @@ describe('the delete seam', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 });
+
+describe('the edit seam', () => {
+  // `remove`'s twin, and it exists for the reason that block's own comment records at length: this
+  // screen constructs its own providers, so a seam on `EditCategoryProvider` alone would be one no
+  // story could reach - which is exactly how the delete seam shipped inert for a commit.
+
+  it('threads its update prop through to the modal', async () => {
+    // `advanceTimers` is mandatory here and its absence is a five-second timeout rather than a
+    // failed assertion: this suite runs on fake timers so `monthOverline(new Date())` is pinned,
+    // and user-event's default real-timer waits never resolve against them.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const update = jest.fn().mockResolvedValue({ ok: true });
+    renderScreen({ categories: [category()], update });
+
+    // jsdom implements no Popover API, so the menu is permanently open and both items are
+    // reachable without opening anything - the caveat `CategoryCardMenu.test.tsx` records.
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.clear(screen.getByLabelText('Name'));
+    await user.type(screen.getByLabelText('Name'), 'Food');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(update).toHaveBeenCalledWith(category().id, { name: 'Food' });
+  });
+
+  it('threads the palette into the edit modal as well as the header trigger', async () => {
+    // One prop, two destinations as of PET-38. A picker opening on "Select…" for a category whose
+    // colour is right there in the palette would mean the thread was dropped.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    renderScreen({ categories: [category()] });
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByRole('button', { name: /^Color/ })).toHaveAccessibleName('Color Emerald');
+  });
+
+  it('opens the same modal from an uncapped card’s "Set limit", focused on the budget', async () => {
+    // The feature's second entry point, and the reason the provider is screen-scoped rather than
+    // per-card: a category with no cap draws two ways into one modal.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    renderScreen({
+      categories: [
+        category({
+          name: 'Subscriptions',
+          monthlyCap: null,
+          percentUsed: null,
+          remaining: null,
+          over: null,
+          status: 'uncapped',
+        }),
+      ],
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Set limit for Subscriptions' }));
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Edit category' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Monthly budget (optional)')).toHaveFocus();
+  });
+
+  it('falls back to the real action when no prop is passed, rather than doing nothing', () => {
+    // The other half of the same guard: a default of `undefined` would make every card's Edit
+    // silently inert in the app while every story kept working.
+    renderScreen({ categories: [category()] });
+
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled();
+  });
+
+  it('renders neither modal until something opens one', () => {
+    // The property `(app)/pages.test.tsx` leans on: a closed <dialog> is display:none so
+    // `queryByRole` cannot see inside it, but `queryAllByLabelText` can - so two always-mounted
+    // modals would make every label query on this screen ambiguous forever.
+    renderScreen();
+
+    expect(screen.queryByText('Edit category')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+  });
+});
+
+describe('the fallback card on a real grid', () => {
+  it('draws no kebab and no banner, where every other card draws both', () => {
+    // AC6 as amended: both actions behind a kebab are refused for `Uncategorized`, so nothing on
+    // that card is drawn rather than drawn and refused. Asserted here as well as on the card,
+    // because the count is what says the other cards are unaffected.
+    renderScreen({
+      categories: [
+        category({ name: 'Groceries' }),
+        category({
+          id: '0198c2a1-0000-7000-8000-0000000000a9',
+          name: 'Uncategorized',
+          isFallback: true,
+          monthlyCap: null,
+          percentUsed: null,
+          remaining: null,
+          over: null,
+          status: 'uncapped',
+        }),
+      ],
+    });
+
+    expect(screen.getByRole('button', { name: 'Actions for Groceries' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Actions for Uncategorized' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Set limit/ })).not.toBeInTheDocument();
+  });
+});

@@ -1,34 +1,32 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import type { Category } from '../../../../lib/categories';
-
-import { category, UNCAPPED_CATEGORY } from './categoryFixture';
+import { category } from './categoryFixture';
 import { CategoryCardMenu } from './CategoryCardMenu';
 
 // 18 Categories - Row menu. **jsdom 26.1.0 implements none of the Popover API** and
 // `jest.setup.ts` deliberately polyfills none of it, unlike `<dialog>` - faking light dismiss
 // would turn AC1 into a test of the fake, passing just as happily with `popover` deleted from the
 // markup. So this menu is permanently "open" here, and what this suite pins is the **wiring**: the
-// trigger's name, the target and id pairing, the anchor idents, Edit's disabled state, and that
-// Delete opens the dialog with that card's values. Opening and closing are Chrome and Storybook
-// checks.
+// trigger's name, the target and id pairing, the anchor idents, and that each item opens its own
+// dialog with that card's values. Opening and closing are Chrome and Storybook checks.
 //
-// A relative specifier, because `jest.mock('@/...')` fails with "Cannot find module" from anywhere
-// in this repo - the alias trap `frontend/src/app/CLAUDE.md` records - and the accompanying import
-// names the same one.
-const open = jest.fn();
+// **The fallback cases moved to `CategoryCard.test.tsx` at PET-38**, and that is a real relocation
+// rather than a deletion. AC6 used to be "this menu omits Delete", so it belonged here; it is now
+// "that card draws no menu", which is a decision one level up. What is left in this file is a
+// component that is only ever mounted for a category with both actions.
+//
+// Relative specifiers, because `jest.mock('@/...')` fails with "Cannot find module" from anywhere in
+// this repo - the alias trap `frontend/src/app/CLAUDE.md` records - and the accompanying imports
+// name the same ones.
+const openDelete = jest.fn();
+const openEdit = jest.fn();
 jest.mock('./DeleteCategoryProvider', () => ({
-  useDeleteCategory: () => ({ open }),
+  useDeleteCategory: () => ({ open: openDelete }),
 }));
-
-/**
- * The account's fallback row, which AC6 protects.
- *
- * The shared uncapped shape with an id of its own, so a case rendering it beside `category()` gets
- * two distinct popover ids rather than a collision.
- */
-const FALLBACK: Category = { ...UNCAPPED_CATEGORY, id: '0198c2a1-0000-7000-8000-0000000000a9' };
+jest.mock('./EditCategoryProvider', () => ({
+  useEditCategory: () => ({ open: openEdit }),
+}));
 
 const trigger = (name = 'Groceries') => screen.getByRole('button', { name: `Actions for ${name}` });
 
@@ -144,29 +142,70 @@ describe('the two items', () => {
 });
 
 describe('Edit', () => {
-  it('announces that it is not available yet, which amends AC1', () => {
-    // PET-38's modal does not exist. `menu-disabled` is the visible half of the `aria-disabled`
-    // beside it, which is the one case this repo asserts a class string.
+  it('is live, which is the whole of PET-38s change to this file', () => {
+    // It shipped `aria-disabled` with a `menu-disabled` li, because the Edit modal did not exist.
+    // Both are gone, and this asserts their absence so nobody restores them.
     render(<CategoryCardMenu category={category()} />);
 
     const edit = screen.getByRole('button', { name: 'Edit' });
 
-    expect(edit).toHaveAttribute('aria-disabled', 'true');
-    expect(edit.closest('li')).toHaveClass('menu-disabled');
+    expect(edit).not.toHaveAttribute('aria-disabled');
+    expect(edit.closest('li')).not.toHaveClass('menu-disabled');
+    expect(edit).toBeEnabled();
   });
 
-  it('stays in the tab order, because disabled would remove it', () => {
-    render(<CategoryCardMenu category={category()} />);
+  it('opens the modal with the whole category, which Delete deliberately does not get', async () => {
+    // A prefilled form cannot do without the cap, the colour and the note; a confirmation has no
+    // business rendering any of them. The same asymmetry the transaction menu already has.
+    const target = category({ note: 'Weekly shop' });
+    render(<CategoryCardMenu category={target} />);
 
-    expect(screen.getByRole('button', { name: 'Edit' })).not.toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(openEdit).toHaveBeenCalledWith(target);
   });
 
-  it('opens nothing', async () => {
+  it('asks for no particular field, because the kebab is an unspecific invitation', async () => {
+    // "Set limit" is the trigger that asks for the budget. This one takes the modal's default.
     render(<CategoryCardMenu category={category()} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
-    expect(open).not.toHaveBeenCalled();
+    expect(openEdit.mock.calls[0]!).toHaveLength(1);
+  });
+
+  it('opens no confirmation', async () => {
+    render(<CategoryCardMenu category={category()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(openDelete).not.toHaveBeenCalled();
+  });
+
+  it('closes the menu declaratively on the way out, exactly as Delete does', async () => {
+    // So the modal never opens underneath an open popover, which is the same argument Delete's own
+    // case below makes and which became this item's problem the moment it opened a dialog.
+    render(<CategoryCardMenu category={category()} />);
+
+    const edit = screen.getByRole('button', { name: 'Edit' });
+
+    expect(edit).toHaveAttribute('popovertargetaction', 'hide');
+    expect(edit).toHaveAttribute('popovertarget', trigger().getAttribute('popovertarget')!);
+  });
+
+  it('hands focus back to the kebab before the modal captures it', async () => {
+    // `Modal` captures `document.activeElement` on mount and React flushes this click
+    // synchronously, so without the refocus the captured element is the menu item that
+    // `popovertargetaction="hide"` is about to hide inside a closed popover.
+    let focusedWhenOpened: Element | null = null;
+    openEdit.mockImplementation(() => {
+      focusedWhenOpened = document.activeElement;
+    });
+    render(<CategoryCardMenu category={category()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(focusedWhenOpened).toBe(trigger());
   });
 });
 
@@ -176,7 +215,7 @@ describe('Delete', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(open).toHaveBeenCalledWith({
+    expect(openDelete).toHaveBeenCalledWith({
       id: '0198c2a1-0000-7000-8000-0000000000a1',
       name: 'Groceries',
       transactionCount: 24,
@@ -184,13 +223,13 @@ describe('Delete', () => {
   });
 
   it('hands nothing the confirmation has no business rendering', async () => {
-    // Three fields, where PET-38's Edit will hand over the whole category. A dialog quoting a cap,
-    // a colour or a note would be rendering things it does not need.
+    // Three fields, where Edit above hands over the whole category. A dialog quoting a cap, a
+    // colour or a note would be rendering things it does not need.
     render(<CategoryCardMenu category={category({ note: 'a private note' })} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(Object.keys(open.mock.calls[0]![0] as object).sort()).toEqual([
+    expect(Object.keys(openDelete.mock.calls[0]![0] as object).sort()).toEqual([
       'id',
       'name',
       'transactionCount',
@@ -220,7 +259,7 @@ describe('Delete', () => {
     // `popovertargetaction="hide"` is about to hide inside a closed popover - still `isConnected`,
     // no longer focusable, and focus lands on `<body>` even on the Cancel path.
     let focusedWhenOpened: Element | null = null;
-    open.mockImplementation(() => {
+    openDelete.mockImplementation(() => {
       focusedWhenOpened = document.activeElement;
     });
     render(<CategoryCardMenu category={category()} />);
@@ -228,25 +267,5 @@ describe('Delete', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     expect(focusedWhenOpened).toBe(trigger());
-  });
-});
-
-describe('the fallback category (AC6)', () => {
-  it('offers no Delete at all', () => {
-    // Decided from `isFallback` rather than by letting the backend answer 409: a control whose
-    // only outcome is an error message is the failure every inert control on this screen exists
-    // to avoid.
-    render(<CategoryCardMenu category={FALLBACK} />);
-
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
-  });
-
-  it('still draws the kebab and the disabled Edit', () => {
-    // Which makes it a menu with nothing operable in it until PET-38 lands, recorded rather than
-    // hidden. Still better than a kebab that opens nothing, and it announces its condition.
-    render(<CategoryCardMenu category={FALLBACK} />);
-
-    expect(trigger('Uncategorized')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Edit' })).toHaveAttribute('aria-disabled', 'true');
   });
 });

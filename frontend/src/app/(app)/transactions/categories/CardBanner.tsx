@@ -51,32 +51,51 @@ type CardBannerProps = {
    * reachable.
    */
   actionContext?: string;
+  /**
+   * What the action does. **Omit it and the control ships inert**, announcing `aria-disabled`.
+   *
+   * That is not a defensive default, it is the screen's two remaining cases stated in one prop. The
+   * category cards' "Set limit" has a destination as of PET-38 and passes one; the summary card's
+   * "Allocate" still has none - no frame draws where it goes - so it keeps the inert treatment and
+   * keeps its place on `frontend/CLAUDE.md`'s gap list.
+   *
+   * **This component takes no `'use client'` of its own**, so a handler has to arrive from a caller
+   * that has one. `SetLimitBanner.tsx` is that caller and exists for no other reason, which is what
+   * keeps `CategoryCard` a Server Component.
+   */
+  onAction?: () => void;
 };
 
-export function CardBanner({ children, action, actionContext }: CardBannerProps) {
+export function CardBanner({ children, action, actionContext, onAction }: CardBannerProps) {
   return (
     <footer className="bg-primary text-primary-content mt-[calc(var(--radius-box)*-1)] flex flex-wrap items-center justify-between gap-4 rounded-b-[var(--radius-box)] px-6 pt-[calc(var(--radius-box)+0.625rem)] pb-2.5 text-sm">
       <span className="font-medium">{children}</span>
 
       {action === undefined ? null : (
-        // Inert on the same terms as the card kebab and the header's "Add category": the control
-        // that assigns a budget to a category is PET-37's Add category modal and PET-38's Edit.
-        // `aria-disabled` rather than `disabled`, so it stays focusable and announces its state
-        // instead of vanishing from the tab order.
+        // **Live when the caller passed a handler, inert when it did not**, which as of PET-38 is
+        // exactly the difference between the category cards' "Set limit" and the summary card's
+        // "Allocate". The paragraph this comment replaces said both were inert "until PET-37's Add
+        // category modal and PET-38's Edit"; half of that is now history, and the other half is a
+        // control with nowhere designed to go.
+        //
+        // `aria-disabled` rather than `disabled` for the inert half, so it stays focusable and
+        // announces its state instead of vanishing from the tab order.
         <button
           type="button"
-          aria-disabled="true"
+          onClick={onAction}
+          aria-disabled={onAction === undefined ? 'true' : undefined}
           // Composed so the visible label is always a prefix of the accessible name (WCAG 2.5.3).
           aria-label={actionContext === undefined ? undefined : `${action} for ${actionContext}`}
           // **`aria-disabled:` variants, because `aria-disabled` alone tells a sighted mouse
-          // user nothing.** The screen's other two inert controls wear daisyUI's `btn`, which
+          // user nothing.** The screen's other inert controls wear daisyUI's `btn`, which
           // greys them and sets `pointer-events: none` from its own
           // `.btn:is([aria-disabled=true])` rule. This one is bare text on the accent strip, so
           // it got none of that and previously carried an unconditional `cursor-pointer` - it
           // looked and hovered exactly like a live button and did nothing on click, which is the
           // failure this file's comment above claims `aria-disabled` avoids. Written as
           // `aria-disabled:` variants rather than flat classes so PET-38 gets the live styling
-          // back by deleting the attribute, with nothing here left to remember.
+          // back by not setting the attribute, with nothing here left to remember - and that is
+          // exactly how it played out: one prop decides both halves and this string never moved.
           className="inline-flex shrink-0 cursor-pointer items-center gap-2 font-semibold aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
         >
           {action}
