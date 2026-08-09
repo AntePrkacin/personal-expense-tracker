@@ -1,9 +1,16 @@
 import type { CategoryColour, IconName } from '@/components/ui/categoryColour';
-import { parseAmountInput } from '@/lib/format';
+import type { Category } from '@/lib/categories';
+import { formatAmountInput, parseAmountInput } from '@/lib/format';
 import type { components } from '@/types/api';
 
 // The Add category form's shape, its validity rules, and the single boundary where five display
 // values become a `CreateCategoryDto`.
+//
+// **PET-38 added a second boundary and a way in**, so the sentence above is now half the file:
+// `toCategoryFormValues` turns a stored category into these same five display values, and
+// `toUpdateCategoryBody` turns them back into the *changed* ones. The shape, the rules and the error
+// vocabulary are shared by both modals, which is what makes the Edit modal a second component rather
+// than a mode - see `EditCategoryModal.tsx` for the rest of that argument.
 //
 // React-free on purpose, the same split `(app)/transactionForm.ts` and `app/setup/draft.ts` both
 // make: the rules and the conversion are plain functions whose suite needs no jsdom, and
@@ -15,7 +22,8 @@ import type { components } from '@/types/api';
 // that is a narrower home than its neighbour's on purpose.** The transaction form module sits at the
 // `(app)` root because its two modals open from five triggers across three routes. Both consumers of
 // this one - the Add modal here and PET-38's Edit modal - live on this single route, so hoisting it
-// two levels would put a module where no reader of the Categories screen would look for it.
+// two levels would put a module where no reader of the Categories screen would look for it. That
+// prediction held: the Edit modal shipped and this file did not move.
 //
 // **Note this exports its own `invalidFields`, which `(app)/transactionForm.ts` also exports.** Two
 // modules, two different value types, no relationship. They must not be unified: the fields differ,
@@ -179,4 +187,107 @@ export function toCreateCategoryBody(
     ...(cap === '' ? {} : { monthlyCap: parseAmountInput(cap) }),
     ...(note === '' ? {} : { note }),
   };
+}
+
+/**
+ * The Edit modal's prefill: a stored category as the five display values (PET-38 AC1).
+ *
+ * The mirror of `toCreateCategoryBody`, and `(app)/transactionForm.ts`'s `toTransactionFormValues`
+ * is the shape it copies. Four conversions, each the inverse of one above:
+ *
+ * - **`monthlyCap` goes through `formatAmountInput`**, not `String(cap)`, so the prefilled value is
+ *   one the field could itself have produced - which is what lets the first keystroke here behave
+ *   exactly as the tenth does in the Add modal, since `reformatAmountInput` runs over it. `.toFixed(2)`
+ *   first, because the wire carries major units as a bare number and `1250.5` would prefill as
+ *   `"1,250.5"`, a value the field would never emit.
+ * - **An absent cap becomes `''`**, which is the same "no limit" `isCapValid` accepts and the blank
+ *   the user clears a cap by leaving. There is no third state to model: `CategoryResponseDto.monthlyCap`
+ *   is `null` when the category is uncapped, never absent.
+ * - **`color` passes through as itself**, being the contract's own union on a stored row.
+ * - **`icon` is `''` when the row carries none, and that asymmetry is the contract's rather than a
+ *   convenience.** `CategoryResponseDto.icon` is **nullable** where `color` is not, and
+ *   `UpdateCategoryDto.icon` documents itself as "not clearable" - so a category with no icon is a
+ *   state the API can hand out and this form can never send back. `''` is exactly the "no mark
+ *   chosen" the picker already models: the trigger reads "Select…", picking one sends it, and
+ *   leaving it alone contributes no key. The alternative, substituting some default glyph, would
+ *   silently write a mark the user never chose onto the first save of any other field.
+ * - **`note` becomes `''` when null**, because a controlled input's value cannot be `undefined`
+ *   without React warning about it. It becomes `null` again at the boundary below.
+ *
+ * **`name` is not trimmed on the way in**, which is `toTransactionFormValues`'s call about `merchant`:
+ * a stored value is what it is, and trimming here would make the diff report a change the user did
+ * not make.
+ */
+export function toCategoryFormValues(category: Category): CategoryFormValues {
+  return {
+    name: category.name,
+    monthlyCap:
+      category.monthlyCap === null ? '' : formatAmountInput(category.monthlyCap.toFixed(2)),
+    color: category.color,
+    icon: category.icon ?? '',
+    note: category.note ?? '',
+  };
+}
+
+/**
+ * The request body for `PATCH /api/categories/:id`: **only the fields that changed**.
+ *
+ * Read off the contract rather than declared, which is the rule `docs/agents/api-contract.md` sets
+ * for every caller. `(app)/transactionForm.ts`'s `toUpdateTransactionBody` is the shape this copies,
+ * and everything that file argues holds here: a diff rather than all five fields, because the DTO is
+ * a real partial patch and sending everything every time would rewrite four fields the user never
+ * touched; **an empty object is a legitimate return value** meaning nothing changed, which the caller
+ * must answer by closing rather than by sending it, since the endpoint answers 400 for a body with no
+ * keys; and callers must check `invalidFields` first, because `parseAmountInput` of junk is `NaN` and
+ * `JSON.stringify` writes that as `null`.
+ *
+ * Three comparisons are this function's own rather than inherited.
+ *
+ * **A blank cap sends `null`, and that is the only way a capped category becomes uncapped.** It is
+ * also the whole reason `isCapValid` accepts a blank field, which that function's own comment
+ * predicted this ticket would use. Note the asymmetry with `toCreateCategoryBody`, which *omits* a
+ * blank cap: `CreateCategoryDto` reads absent as "no cap" and does not accept `null` at all, while
+ * here absent means "leave it alone" and only `null` clears it. The two rules look inconsistent and
+ * are the same rule stated against two different DTOs.
+ *
+ * **`color` and `icon` are skipped while they are `''`, rather than this taking a narrowed
+ * `ChosenCategoryValues`.** `toCreateCategoryBody` demands that type because a create with no colour
+ * is a body the DTO rejects. Here `''` is reachable and means "no mark chosen": for `color` only
+ * through a devtools-emptied form, and for `icon` through the ordinary case of a stored row that
+ * carries none, since `CategoryResponseDto.icon` is nullable and `UpdateCategoryDto.icon` cannot
+ * clear one. Skipping is the honest answer to both - an unchosen mark is not a change, and there is
+ * no value this DTO would accept for it anyway - and it narrows the type as a side effect, which is
+ * the cheaper of the two ways to satisfy the compiler.
+ *
+ * **`note` is compared against `original.note ?? ''`**, so a blank field over a stored `null` is *no
+ * change* and a blank field over a stored note sends `null`. Identical to the transaction rule, and
+ * it matters here even though the Note field is not drawn: with `SHOWS_NOTE` false the value can
+ * never diverge from the prefill, so this comparison is what keeps a hidden field from contributing a
+ * key to every patch.
+ *
+ * Keys are assigned rather than spread conditionally, for `toUpdateTransactionBody`'s reason: every
+ * field is optional here, and five nested spreads would obscure the one thing this function is for.
+ * `Object.keys` still sees exactly the changed fields, which is what the caller's empty check reads.
+ */
+export function toUpdateCategoryBody(
+  original: Category,
+  values: CategoryFormValues,
+): components['schemas']['UpdateCategoryDto'] {
+  const body: components['schemas']['UpdateCategoryDto'] = {};
+
+  const name = values.name.trim();
+  if (name !== original.name) body.name = name;
+
+  const cap = values.monthlyCap.trim();
+  const monthlyCap = cap === '' ? null : parseAmountInput(cap);
+  if (monthlyCap !== original.monthlyCap) body.monthlyCap = monthlyCap;
+
+  if (values.color !== '' && values.color !== original.color) body.color = values.color;
+
+  if (values.icon !== '' && values.icon !== original.icon) body.icon = values.icon;
+
+  const note = values.note.trim();
+  if (note !== (original.note ?? '')) body.note = note === '' ? null : note;
+
+  return body;
 }

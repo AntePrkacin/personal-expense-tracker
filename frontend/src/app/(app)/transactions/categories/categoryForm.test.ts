@@ -1,9 +1,12 @@
+import { category } from './categoryFixture';
 import {
   hasChosenMarks,
   invalidFields,
   isCapValid,
   isNameValid,
+  toCategoryFormValues,
   toCreateCategoryBody,
+  toUpdateCategoryBody,
   type CategoryFormValues,
   type ChosenCategoryValues,
 } from './categoryForm';
@@ -189,5 +192,178 @@ describe('toCreateCategoryBody', () => {
     const body = toCreateCategoryBody({ ...FILLED, monthlyCap: '', note: '' });
 
     expect(Object.keys(body).sort()).toEqual(['color', 'icon', 'name']);
+  });
+});
+
+describe('toCategoryFormValues', () => {
+  // The prefill AC1 asks for, and the inverse of `toCreateCategoryBody` above.
+  it('prefills every field from the stored row', () => {
+    expect(
+      toCategoryFormValues(
+        category({
+          name: 'Subscriptions',
+          monthlyCap: 250,
+          color: 'primary',
+          icon: 'tv',
+          note: 'Streaming, apps & memberships',
+        }),
+      ),
+    ).toEqual({
+      name: 'Subscriptions',
+      monthlyCap: '250.00',
+      color: 'primary',
+      icon: 'tv',
+      note: 'Streaming, apps & memberships',
+    });
+  });
+
+  it('formats the cap as a value the field could itself have produced', () => {
+    // `String(1250.5)` is "1250.5", which the currency field would never emit - so the first
+    // keystroke would reformat it under the caret and look like a glitch. Round-tripping through
+    // `formatAmountInput` is what makes the prefilled value indistinguishable from a typed one.
+    expect(toCategoryFormValues(category({ monthlyCap: 1250.5 })).monthlyCap).toBe('1,250.50');
+  });
+
+  it('prefills a blank budget for an uncapped category', () => {
+    // Blank is the same "no limit" `isCapValid` accepts, so an uncapped category opens on a form
+    // that is already valid and stays uncapped if the field is not touched.
+    expect(toCategoryFormValues(category({ monthlyCap: null })).monthlyCap).toBe('');
+  });
+
+  it('prefills a blank note for a category with none', () => {
+    // A controlled input's value cannot be `undefined` without React warning about it. The
+    // distinction comes back at the boundary below.
+    expect(toCategoryFormValues(category({ note: null })).note).toBe('');
+  });
+
+  it('does not trim the name, so the diff reports no change the user did not make', () => {
+    expect(toCategoryFormValues(category({ name: '  Groceries  ' })).name).toBe('  Groceries  ');
+  });
+
+  it('produces values the form treats as valid, for every shape a stored row can take', () => {
+    for (const stored of [
+      category(),
+      category({ monthlyCap: null }),
+      category({ note: 'Weekly shop' }),
+    ]) {
+      expect(invalidFields(toCategoryFormValues(stored))).toEqual([]);
+    }
+  });
+});
+
+describe('toUpdateCategoryBody', () => {
+  const STORED = category({
+    name: 'Subscriptions',
+    monthlyCap: 250,
+    color: 'primary',
+    icon: 'tv',
+    note: 'Streaming, apps & memberships',
+  });
+
+  const PREFILLED = toCategoryFormValues(STORED);
+
+  it('sends nothing at all when nothing changed', () => {
+    // The caller must close rather than send this: the endpoint answers 400 for a body with no
+    // keys, which is a correct answer to a question the user did not ask.
+    expect(toUpdateCategoryBody(STORED, PREFILLED)).toEqual({});
+  });
+
+  it('sends only the field that changed', () => {
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, name: 'Streaming' })).toEqual({
+      name: 'Streaming',
+    });
+  });
+
+  it('trims the name once, here', () => {
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, name: '  Streaming  ' })).toEqual({
+      name: 'Streaming',
+    });
+  });
+
+  it('reports no change for a name that differs only in whitespace it already had', () => {
+    const stored = category({ name: 'Streaming' });
+
+    expect(
+      toUpdateCategoryBody(stored, { ...toCategoryFormValues(stored), name: ' Streaming ' }),
+    ).toEqual({});
+  });
+
+  it('parses the cap rather than sending the display string', () => {
+    // `Number('1,250.50')` is NaN, which `JSON.stringify` writes as null - the one value that
+    // would silently clear the cap it meant to raise.
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, monthlyCap: '1,250.50' })).toEqual({
+      monthlyCap: 1250.5,
+    });
+  });
+
+  it('sends null for a blank budget, which is the only way to uncap a category', () => {
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, monthlyCap: '' })).toEqual({
+      monthlyCap: null,
+    });
+  });
+
+  it('treats a budget of nothing but spaces as blank', () => {
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, monthlyCap: '   ' })).toEqual({
+      monthlyCap: null,
+    });
+  });
+
+  it('reports no change when an uncapped category is left uncapped', () => {
+    // The mirror of the case above, and the one that would send `monthlyCap: null` on every save
+    // if the comparison were written against `''` rather than against the stored value.
+    const stored = category({ monthlyCap: null });
+
+    expect(toUpdateCategoryBody(stored, toCategoryFormValues(stored))).toEqual({});
+  });
+
+  it('sends a cap for a category that had none', () => {
+    const stored = category({ monthlyCap: null });
+
+    expect(
+      toUpdateCategoryBody(stored, { ...toCategoryFormValues(stored), monthlyCap: '250.00' }),
+    ).toEqual({ monthlyCap: 250 });
+  });
+
+  it('sends a changed colour and a changed icon as the contract unions', () => {
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, color: 'accent', icon: 'music' })).toEqual({
+      color: 'accent',
+      icon: 'music',
+    });
+  });
+
+  it('skips an unchosen colour or icon rather than sending an empty string', () => {
+    // `''` cannot occur from a prefill, since a stored row's marks are real tokens - so this is
+    // the guard that lets the function take `CategoryFormValues` instead of demanding the
+    // narrowed type `toCreateCategoryBody` needs.
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, color: '', icon: '' })).toEqual({});
+  });
+
+  it('sends null for a cleared note, and the note itself for a changed one', () => {
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, note: '' })).toEqual({ note: null });
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, note: 'Monthly' })).toEqual({
+      note: 'Monthly',
+    });
+  });
+
+  it('reports no change for a blank note over a stored null', () => {
+    // The comparison is against `original.note ?? ''`, which is what keeps the hidden Note field
+    // from contributing a key to every patch.
+    const stored = category({ note: null });
+
+    expect(toUpdateCategoryBody(stored, toCategoryFormValues(stored))).toEqual({});
+  });
+
+  it('sends every field when every field changed, and nothing else', () => {
+    expect(
+      Object.keys(
+        toUpdateCategoryBody(STORED, {
+          name: 'Streaming',
+          monthlyCap: '300.00',
+          color: 'accent',
+          icon: 'music',
+          note: 'Monthly',
+        }),
+      ).sort(),
+    ).toEqual(['color', 'icon', 'monthlyCap', 'name', 'note']);
   });
 });
