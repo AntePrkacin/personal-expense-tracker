@@ -6,6 +6,7 @@ import {
   authorizedGet,
   authorizedPatch,
   authorizedPost,
+  authorizedPostFormData,
   hasSession,
   SESSION_COOKIE,
   sessionCookieOptions,
@@ -618,5 +619,75 @@ describe('authorizedPatch', () => {
       .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
 
     await expect(authorizedPatch(PATH, BODY)).resolves.toBeDefined();
+  });
+});
+
+describe('authorizedPostFormData', () => {
+  const PATH = '/api/transactions/scan';
+
+  const body = () => {
+    const data = new FormData();
+    data.append('files', new File(['x'], 'receipt.png', { type: 'image/png' }));
+    return data;
+  };
+
+  it('POSTs the FormData body with no Content-Type set by hand, and no store', async () => {
+    // Unlike authorizedPost/Patch, which serialise JSON themselves: fetch derives the
+    // multipart boundary from a FormData body, which this function could not compute.
+    const fetchMock = respondWith(200, { ok: true });
+    const data = body();
+
+    await authorizedPostFormData(PATH, data);
+
+    expect(fetchMock).toHaveBeenCalledWith(`http://backend.test${PATH}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      body: data,
+      cache: 'no-store',
+    });
+  });
+
+  it('reports 401 with no round trip when there is no cookie', async () => {
+    const fetchMock = respondWith(200, {});
+    store(undefined);
+
+    expect(await authorizedPostFormData(PATH, body())).toEqual({ ok: false, status: 401 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns the parsed body on success, unlike every JSON-body write above', async () => {
+    // The one difference AuthorizedWriteResult's own doc anticipates: the scan's response
+    // body is the entire point of the call, so this is the write that finally needed it.
+    respondWith(200, { merchant: 'Konzum' });
+
+    expect(await authorizedPostFormData(PATH, body())).toEqual({
+      ok: true,
+      data: { merchant: 'Konzum' },
+    });
+  });
+
+  it.each([400, 401, 413, 429, 500, 503, 504])('passes %d through as a status', async (status) => {
+    respondWith(status, {});
+
+    expect(await authorizedPostFormData(PATH, body())).toEqual({ ok: false, status });
+  });
+
+  it('reports an unreachable backend with no status at all', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    const result = await authorizedPostFormData(PATH, body());
+
+    expect(result).toEqual({ ok: false });
+    expect(result).not.toHaveProperty('status');
+  });
+
+  it('never throws, whatever the backend does', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
+
+    await expect(authorizedPostFormData(PATH, body())).resolves.toBeDefined();
   });
 });

@@ -189,6 +189,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/transactions/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract merchant, amount, date, category and note from a receipt.
+         * @description Every field is null when it could not be read or failed validation against live data, with `missing` naming which of `merchant`, `amount`, `date` and `categoryId` came back that way. **503** means scanning is not configured (no `GEMINI_API_KEY`), and **504** means the extraction call timed out - both distinct from a 200 with everything missing, which means the photo was read but nothing on it was legible.
+         */
+        post: operations["TransactionsController_scan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/transactions/{id}": {
         parameters: {
             query?: never;
@@ -514,6 +534,20 @@ export interface components {
             transactions: components["schemas"]["TransactionResponseDto"][];
             /** @description Matches after every filter, not the account total. Equal to `transactions.length` while there is no pagination; read this rather than the array length, so a future page size cannot silently turn the badge into a page count. */
             total: number;
+        };
+        ScanReceiptResponseDto: {
+            merchant: string | null;
+            amount: number | null;
+            /** Format: date */
+            date: string | null;
+            /**
+             * Format: uuid
+             * @description An id from the caller's own live categories, verbatim, or null. Never a hallucinated id: `ReceiptScanService` validates it against the same list the prompt was given.
+             */
+            categoryId: string | null;
+            note: string | null;
+            /** @description Which of `merchant`, `amount`, `date` and `categoryId` came back null. */
+            missing: ("merchant" | "amount" | "date" | "categoryId")[];
         };
         CategoryResponseDto: {
             /** Format: uuid */
@@ -1196,6 +1230,86 @@ export interface operations {
             };
             /** @description No such resource. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    TransactionsController_scan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description At most 4 images (pages of one receipt), or exactly one PDF. */
+                    files?: string[];
+                };
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanReceiptResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The upload exceeded its size cap. `message` names which cap was passed. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Rate limited. Refused by the throttler guard, which runs before the request body is ever validated. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The feature is not configured on this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description A downstream call did not finish in time. Safe to retry. */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

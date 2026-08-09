@@ -17,6 +17,12 @@ const DESCRIPTIONS: Partial<Record<HttpStatus, string>> = {
   [HttpStatus.CONFLICT]: 'The request conflicts with the current state.',
   [HttpStatus.TOO_MANY_REQUESTS]:
     'Rate limited. Refused by the throttler guard, which runs before the request body is ever validated.',
+  [HttpStatus.PAYLOAD_TOO_LARGE]:
+    'The upload exceeded its size cap. `message` names which cap was passed.',
+  [HttpStatus.SERVICE_UNAVAILABLE]:
+    'The feature is not configured on this deployment.',
+  [HttpStatus.GATEWAY_TIMEOUT]:
+    'A downstream call did not finish in time. Safe to retry.',
   [HttpStatus.INTERNAL_SERVER_ERROR]:
     'Unexpected failure. Logged in full server-side and reduced to this generic body outward.',
 };

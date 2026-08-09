@@ -1472,6 +1472,67 @@ in the picker: admin-managed rows, no new mechanism, no user-data migration. So 
 is worth doing before this rather than after, and this entry exists so the next person costing
 income starts from the transaction model instead of from the category list.
 
+### PET-59's receipt scanning deferred six things, each for a reason recorded on the ticket
+
+`POST /api/transactions/scan` extracts a transaction's fields from a photo or PDF and stores
+nothing, but six things the plan considered are not in this build. Each is a decision rather
+than an oversight, and each is recorded here rather than only in
+`docs/plans/2026-08-06_PET-59_receipt-scanning.md` so it survives that plan being superseded.
+
+**A per-scan training opt-in, blocked on the Settings screen.** The free tier's terms mean
+everything the request carries is used to improve Google's models on every scan - the receipt
+image, up to 50 merchant names and every category name, inventoried in `backend/CLAUDE.md`;
+V1 answers that with an on-screen disclosure line rather than a toggle, because a real opt-in
+needs a new profile column, a migration, an `api:sync` and a screen to host it - none of which
+exist while Settings' `<main>` is empty. Migrating the whole project to the paid tier is the
+*only* mechanism that actually turns training off; a $10 prepay to buy that for a portfolio
+app's seeded test data was judged not worth it. Revisit both the toggle and the tier once
+Settings has a `<main>` and once this app has a real user.
+
+**A shared-store aggregate cap on the Gemini quota.** The `scan` throttler is per-user and its
+store is in-memory (see "The auth throttler is in-memory" below, which the same store serves),
+so it buys fairness and blast radius - one account in a retry loop cannot outrun everybody else
+- and nothing more. N users each sitting at their own limit can still exhaust the shared
+free-tier quota between them, and more than one Fly machine gives each user a fresh bucket per
+machine on top of that. A genuine cap needs a shared store and a global counter, which is a
+real piece of infrastructure this project has not needed before.
+
+**A page-count guard on a scanned PDF.** Gemini reads PDFs natively, which is what makes
+accepting one cheap enough to ship - but the backend has no PDF parser, so it cannot look at a
+PDF's page count before sending it. A 40-page bank statement is accepted up to the 4MB size cap
+and billed as roughly 10,000 tokens of prompt describing no receipt at all. The 4MB cap bounds
+the damage today; an explicit guard needs a parser this project does not carry for anything
+else.
+
+**Scanning several distinct receipts into several transactions.** The modal writes one
+`POST /transactions`, so every image in a scan request is synthesized into one extraction - the
+multi-image control is for pages of *one* receipt, never a batch. A real batch import needs a
+review queue, N draft rows and a bulk write, none of which the current endpoint or modal can
+express; it is a different feature rather than an extension of this one; and it is why the
+upload control is labelled "Upload receipt" rather than "Upload receipts" - the plural would
+promise exactly this and silently lose every receipt but the one the model led with.
+
+**Sliding the frontend's per-image compression numbers against real devices.** `maxSizeMB:
+0.75` and `maxWidthOrHeight: 2000` (`frontend/src/lib/receiptCompression.ts`) are the plan's
+starting point rather than a measurement against real receipt photos on real hardware. If OCR
+accuracy or the 413 rate ever becomes a visible problem, this is the first pair of numbers to
+revisit, and it wants a phone in hand rather than a guess from a desk.
+
+**A way to make a scan correct an earlier scan's mistake.** The review of this branch found the
+merge could not honour its own doc: `mergeScannedFields` locks a field once a scan has filled it,
+which is what "Add pages" has to mean - that control sends only the newly picked file, the model
+reads that page on its own, and page 2's re-reading of the merchant would otherwise replace page
+1's correct one. The price is paid by the other control. The camera reads "Scan again" after a
+success and goes through the identical handler, so a user whose first photo produced a wrong
+merchant cannot fix it by rephotographing; they edit the field, which is one keystroke and
+unambiguous, but it is not what the label promises. Two ways out, neither taken here because both
+are product decisions rather than review fixes: split the two controls so the camera replaces and
+the picker augments, which makes one button's semantics invisible until it is pressed; or let a
+scan overwrite a previous scan while still respecting typed fields, which puts page 2's guess back
+on top of page 1's reading. Worth a designer's answer alongside the copy A29 already owes this
+feature, and worth knowing that the desktop path has only the augmenting control at all, since
+the camera is `pointer-fine:hidden`.
+
 ## Operational
 
 ### Unverified registrations accumulate, and hold their address

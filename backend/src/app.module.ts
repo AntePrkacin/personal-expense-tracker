@@ -1,10 +1,12 @@
 import { Module, ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ThrottlerModule, seconds } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { trackByEmail, trackByIp, trackByUser } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SessionGuard } from './auth/session.guard';
@@ -16,6 +18,12 @@ import { ProfileModule } from './profile/profile.module';
 import { TemplatesModule } from './templates/templates.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { UsersModule } from './users/users.module';
+
+const DEFAULT_EMAIL_RATE_LIMIT = 5;
+const DEFAULT_IP_RATE_LIMIT = 30;
+const DEFAULT_AUTH_RATE_TTL_S = 900;
+const DEFAULT_SCAN_RATE_LIMIT = 10;
+const DEFAULT_SCAN_RATE_TTL_S = 3600;
 
 @Module({
   imports: [
@@ -53,6 +61,69 @@ import { UsersModule } from './users/users.module';
     DatabaseModule,
     UsersModule,
     TemplatesModule,
+    // Registered here, once, rather than inside AuthModule: ThrottlerModule is
+    // @Global(), so a second forRootAsync in a feature module would not scope
+    // anything - both registrations export the same THROTTLER_OPTIONS token,
+    // resolution order decides which survives, and the loser's throttler is
+    // silently absent from every route that names it. `email` and `ip` are
+    // AuthModule's own, moved here byte-identical at PET-59; `scan` is the
+    // third, for POST /api/transactions/scan, keyed on the session user id
+    // rather than IP because the budget it protects - the project's shared
+    // Gemini quota - is per-user by construction. Every route not named
+    // `scan` must carry `@SkipThrottle({ scan: true })`, and `/scan` itself
+    // must skip `email` and `ip`: `ThrottlerGuard` runs every configured
+    // throttler on a guarded route, so leaving either skip off would either
+    // apply the scan limiter where it makes no sense or run the email
+    // tracker's `no-email:<ip>` fallback (req.body is undefined on a
+    // multipart request, guards running ahead of pipes) against a single
+    // shared bucket.
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        // v5+ takes ttl in MILLISECONDS. The *_TTL_S variables are seconds,
+        // and getting this conversion wrong is silent: the window would
+        // become 900ms instead of 900s and the limit would never be reached.
+        const authTtl = seconds(
+          config.get<number>('AUTH_RATE_TTL_S', DEFAULT_AUTH_RATE_TTL_S),
+        );
+        const scanTtl = seconds(
+          config.get<number>('SCAN_RATE_TTL_S', DEFAULT_SCAN_RATE_TTL_S),
+        );
+
+        return {
+          throttlers: [
+            {
+              name: 'email',
+              limit: config.get<number>(
+                'AUTH_RATE_LIMIT',
+                DEFAULT_EMAIL_RATE_LIMIT,
+              ),
+              ttl: authTtl,
+              getTracker: trackByEmail,
+            },
+            {
+              name: 'ip',
+              limit: config.get<number>(
+                'AUTH_RATE_IP_LIMIT',
+                DEFAULT_IP_RATE_LIMIT,
+              ),
+              ttl: authTtl,
+              getTracker: trackByIp,
+            },
+            {
+              name: 'scan',
+              limit: config.get<number>(
+                'SCAN_RATE_LIMIT',
+                DEFAULT_SCAN_RATE_LIMIT,
+              ),
+              ttl: scanTtl,
+              getTracker: trackByUser,
+            },
+          ],
+        };
+      },
+    }),
     AuthModule,
     ProfileModule,
     TransactionsModule,

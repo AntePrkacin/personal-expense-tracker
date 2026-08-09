@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { useEffect, useRef } from 'react';
 
+import type { ScanReceiptResult } from '../../lib/scanReceipt';
+
 import { AddTransactionModal } from './AddTransactionModal';
 
 // Type-only Storybook import, for the reason Sidebar.stories.tsx records: importing any *value*
@@ -46,6 +48,12 @@ const CATEGORIES = [
 /** Accepts everything, so the happy path closes. */
 const accept = async () => ({ ok: true }) as const;
 
+/** A stub scan action: these stories are not about PET-59's scanning states, only its controls. */
+const scan = async (): Promise<ScanReceiptResult> => ({
+  ok: true,
+  data: { merchant: null, amount: null, date: null, categoryId: null, note: null, missing: [] },
+});
+
 /**
  * The modal as frame 09 draws it (node 28:384).
  *
@@ -61,7 +69,9 @@ const accept = async () => ({ ok: true }) as const;
  * (ADD-7, A14).
  */
 export const Default: Story = {
-  render: () => <AddTransactionModal categories={CATEGORIES} create={accept} onClose={() => {}} />,
+  render: () => (
+    <AddTransactionModal categories={CATEGORIES} create={accept} scan={scan} onClose={() => {}} />
+  ),
 };
 
 /**
@@ -95,7 +105,12 @@ export const WithMessages: Story = {
 
       return (
         <div ref={host}>
-          <AddTransactionModal categories={CATEGORIES} create={accept} onClose={() => {}} />
+          <AddTransactionModal
+            categories={CATEGORIES}
+            create={accept}
+            scan={scan}
+            onClose={() => {}}
+          />
         </div>
       );
     }
@@ -113,6 +128,12 @@ export const WithMessages: Story = {
  */
 export const CategoriesUnavailable: Story = {
   render: () => (
-    <AddTransactionModal categories={null} categoriesFailed create={accept} onClose={() => {}} />
+    <AddTransactionModal
+      categories={null}
+      categoriesFailed
+      create={accept}
+      scan={scan}
+      onClose={() => {}}
+    />
   ),
 };

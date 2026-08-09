@@ -1,10 +1,25 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 
 import type { CreateTransactionResult } from '../../lib/createTransaction';
+import { compressReceiptFiles, type ReceiptCompressionResult } from '../../lib/receiptCompression';
+import type { ScanReceiptFailureReason, ScanReceiptResult } from '../../lib/scanReceipt';
 
 import { AddTransactionModal } from './AddTransactionModal';
+import type { ScannedTransactionFields } from './transactionForm';
+
+// A relative specifier, because `jest.mock('@/lib/receiptCompression')` cannot resolve the
+// alias anywhere in this repo - `frontend/src/app/CLAUDE.md` records why. `requireActual`
+// keeps the three constants (`MAX_RECEIPT_FILES`, `RECEIPT_PDF_MIME_TYPE`, `MAX_PDF_BYTES`)
+// coming from the module that owns them rather than restating them here, and replaces the
+// one export that cannot run: `browser-image-compression` decodes through canvas, which
+// jsdom does not implement, so the real function answers `unsupportedFormat` for every file
+// and no happy path would be reachable.
+jest.mock('../../lib/receiptCompression', () => ({
+  ...jest.requireActual('../../lib/receiptCompression'),
+  compressReceiptFiles: jest.fn(),
+}));
 
 // PET-31's acceptance suite. AC1 and AC3 to AC7 live here; AC2's designed focus style and AC5's
 // list half are not observable in jsdom and are named in the plan's verification steps.
@@ -17,6 +32,8 @@ jest.mock('next/navigation', () => ({ useRouter: jest.fn() }));
 const refresh = jest.fn();
 const onClose = jest.fn();
 const create = jest.fn<Promise<CreateTransactionResult>, [unknown]>();
+const scan = jest.fn<Promise<ScanReceiptResult>, [FormData]>();
+const compress = compressReceiptFiles as jest.MockedFunction<typeof compressReceiptFiles>;
 
 const CATEGORIES = [
   { id: '0198c2a1-0000-7000-8000-0000000000a1', name: 'Groceries' },
@@ -30,6 +47,20 @@ beforeEach(() => {
   jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8, 12, 0));
   (useRouter as jest.Mock).mockReturnValue({ refresh });
   create.mockResolvedValue({ ok: true });
+  compress.mockImplementation(async (files: File[]) => ({ ok: true as const, files }));
+  // Not exercised by most of this suite - only 'the scan controls' below opens a file picker
+  // at all - so the default just has to be a shape-valid, internally consistent response.
+  scan.mockResolvedValue({
+    ok: true,
+    data: {
+      merchant: null,
+      amount: null,
+      date: null,
+      categoryId: null,
+      note: null,
+      missing: ['merchant', 'amount', 'date', 'categoryId'],
+    },
+  });
 });
 
 afterEach(() => {
@@ -40,7 +71,13 @@ const user = () => userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
 function open(props: Partial<React.ComponentProps<typeof AddTransactionModal>> = {}) {
   return render(
-    <AddTransactionModal categories={CATEGORIES} create={create} onClose={onClose} {...props} />,
+    <AddTransactionModal
+      categories={CATEGORIES}
+      create={create}
+      scan={scan}
+      onClose={onClose}
+      {...props}
+    />,
   );
 }
 
@@ -553,5 +590,377 @@ describe('the categories read', () => {
 
     expect(screen.getByText('Choose a category.')).toBeInTheDocument();
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('the scan controls', () => {
+  // PET-59. Everything here is the *client* half: the guards that answer before a request is
+  // ever sent, the merge over what the user has already typed, the failure copy and the
+  // overlay's own lifetime. What the backend does with an upload it accepts belongs to
+  // `backend/test/transactions.e2e-spec.ts`.
+
+  const MEGABYTE = 1024 * 1024;
+
+  /** A file whose `size` is stated rather than allocated - a 12MB buffer per test is not free. */
+  function file(name: string, type: string, size = 1024) {
+    const made = new File(['x'], name, { type });
+    Object.defineProperty(made, 'size', { value: size });
+    return made;
+  }
+
+  const photo = (name = 'receipt.jpg', size?: number) => file(name, 'image/jpeg', size);
+  const pdf = (size?: number) => file('receipt.pdf', 'application/pdf', size);
+
+  /** A shape-valid success carrying only the fields a case cares about. */
+  function found(fields: Partial<ScannedTransactionFields>, missing: string[] = []): ScanReceiptResult {
+    return {
+      ok: true,
+      data: {
+        merchant: null,
+        amount: null,
+        date: null,
+        categoryId: null,
+        note: null,
+        ...fields,
+        missing,
+      },
+    } as ScanReceiptResult;
+  }
+
+  function deferred<T>() {
+    let settle!: (value: T) => void;
+    const promise = new Promise<T>((resolve) => {
+      settle = resolve;
+    });
+    return { promise, settle };
+  }
+
+  const upload = () => screen.getByLabelText(/Upload receipt|Add pages/);
+  const camera = () => screen.getByLabelText(/Scan receipt|Scan again/);
+  const overlay = () => screen.queryByText('Reading your receipt…');
+
+  describe('the guards that answer before a request', () => {
+    it('refuses a PDF sent beside a photo, naming the one-PDF rule', async () => {
+      const u = user();
+      open();
+
+      await u.upload(upload(), [pdf(), photo()]);
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Send a PDF on its own - it already holds every page.',
+      );
+      expect(compress).not.toHaveBeenCalled();
+      expect(scan).not.toHaveBeenCalled();
+    });
+
+    it('refuses more photos than one scan takes', async () => {
+      const u = user();
+      open();
+
+      await u.upload(upload(), [
+        photo('a.jpg'),
+        photo('b.jpg'),
+        photo('c.jpg'),
+        photo('d.jpg'),
+        photo('e.jpg'),
+      ]);
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Send up to 4 photos, or a single PDF.');
+      expect(scan).not.toHaveBeenCalled();
+    });
+
+    it('refuses a PDF over the size cap its own message promises', async () => {
+      // The one size check this side makes, and the only one it can: a PDF is passed through
+      // uncompressed, so it is the single file that can reach the Server Action over
+      // `next.config.ts`'s `bodySizeLimit` - where the call throws rather than answering a
+      // 413 anything could name a cap from.
+      const u = user();
+      open();
+
+      await u.upload(upload(), pdf(5 * MEGABYTE));
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'That file is too big. Photos can be up to 1.5 MB after compressing, a PDF up to 4 MB.',
+      );
+      expect(compress).not.toHaveBeenCalled();
+      expect(scan).not.toHaveBeenCalled();
+    });
+
+    it('sends a PDF that is inside that cap', async () => {
+      const u = user();
+      open();
+
+      await u.upload(upload(), pdf(3 * MEGABYTE));
+
+      await waitFor(() => expect(scan).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('does not size-check a photo, because compression is what decides that', async () => {
+      // A 12MP phone photo is the ordinary input rather than an error - it is compressed
+      // toward 0.75MB first, so its size before that says nothing about what gets sent, and
+      // the backend's 413 stays the real answer for one that overshoots anyway.
+      const u = user();
+      open();
+
+      await u.upload(upload(), photo('big.jpg', 12 * MEGABYTE));
+
+      await waitFor(() => expect(scan).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('the overlay', () => {
+    it('covers compression as well as the request', async () => {
+      // The whole operation it claims to describe, not just the second half: compressing four
+      // photos takes seconds, and until it appears the click reads as ignored.
+      const compressing = deferred<ReceiptCompressionResult>();
+      compress.mockReturnValue(compressing.promise);
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      expect(overlay()).toBeInTheDocument();
+      expect(scan).not.toHaveBeenCalled();
+
+      await act(async () => {
+        compressing.settle({ ok: true, files: [photo()] });
+      });
+
+      await waitFor(() => expect(scan).toHaveBeenCalledTimes(1));
+    });
+
+    it('disables both file inputs while a scan is out', async () => {
+      const scanning = deferred<ScanReceiptResult>();
+      scan.mockReturnValue(scanning.promise);
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      await waitFor(() => expect(overlay()).toBeInTheDocument());
+      expect(upload()).toBeDisabled();
+      expect(camera()).toBeDisabled();
+
+      await act(async () => {
+        scanning.settle(found({ merchant: 'Whole Foods' }));
+      });
+    });
+
+    it('discards a result that lands after Cancel scan', async () => {
+      // There is no client-side abort for a Server Action, so "dismissible" means the UI
+      // stops waiting rather than the request stopping - and a late result must not
+      // resurrect a scan the user already dismissed.
+      const scanning = deferred<ScanReceiptResult>();
+      scan.mockReturnValue(scanning.promise);
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+      await waitFor(() => expect(overlay()).toBeInTheDocument());
+
+      await u.click(screen.getByRole('button', { name: 'Cancel scan' }));
+      expect(overlay()).not.toBeInTheDocument();
+
+      await act(async () => {
+        scanning.settle(found({ merchant: 'Whole Foods', amount: '31.50' }));
+      });
+
+      expect(merchant()).toHaveValue('');
+      expect(amount()).toHaveValue('');
+    });
+  });
+
+  describe('the merge', () => {
+    it('fills every field the user has not typed into, the default date included', async () => {
+      scan.mockResolvedValue(
+        found({
+          merchant: 'Whole Foods',
+          amount: '31.50',
+          date: '2025-10-06',
+          categoryId: CATEGORIES[0]!.id,
+          note: 'Weekly shop',
+        }),
+      );
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      await waitFor(() => expect(merchant()).toHaveValue('Whole Foods'));
+      expect(amount()).toHaveValue('31.50');
+      expect(category()).toHaveValue(CATEGORIES[0]!.id);
+      expect(note()).toHaveValue('Weekly shop');
+      // Date starts holding todayIsoDate()'s output, which is the whole reason the lock set
+      // tracks written fields rather than non-empty ones: an emptiness test would refuse this.
+      expect(screen.getByText('Oct 6, 2025')).toBeInTheDocument();
+    });
+
+    it('leaves a field alone that was typed into while the receipt was still compressing', async () => {
+      // The window this closes: compression runs under the overlay, but the lock set is read
+      // at the moment of the merge rather than at the moment the picker fired, so a field
+      // edited in between is still respected.
+      const compressing = deferred<ReceiptCompressionResult>();
+      compress.mockReturnValue(compressing.promise);
+      scan.mockResolvedValue(found({ merchant: 'Whole Foods', amount: '31.50' }));
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      await u.type(merchant(), 'Costco');
+
+      await act(async () => {
+        compressing.settle({ ok: true, files: [photo()] });
+      });
+
+      await waitFor(() => expect(amount()).toHaveValue('31.50'));
+      expect(merchant()).toHaveValue('Costco');
+    });
+
+    it('fills only the gaps a first scan left, so a second page cannot overwrite page one', async () => {
+      scan.mockResolvedValueOnce(found({ merchant: 'Whole Foods', date: '2025-10-06' }, ['amount']));
+      scan.mockResolvedValueOnce(found({ merchant: 'WHOLEFDS #1234', amount: '31.50' }));
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo('page1.jpg'));
+      await waitFor(() => expect(merchant()).toHaveValue('Whole Foods'));
+
+      await u.upload(upload(), photo('page2.jpg'));
+
+      await waitFor(() => expect(amount()).toHaveValue('31.50'));
+      // Page 2 is the model reading the merchant again off less evidence. "Add pages" means
+      // pages of one receipt, so a later page fills gaps and never replaces.
+      expect(merchant()).toHaveValue('Whole Foods');
+    });
+
+    it('clears the validation messages of the fields it filled', async () => {
+      // The merge is the one write to `values` that does not go through `set()`, which is
+      // otherwise the only thing that clears a message.
+      scan.mockResolvedValue(
+        found({ merchant: 'Whole Foods', amount: '31.50', categoryId: CATEGORIES[0]!.id }),
+      );
+
+      const u = user();
+      open();
+      await u.click(submit());
+
+      expect(screen.getByText('Enter an amount greater than 0.')).toBeInTheDocument();
+      expect(screen.getByText('Choose a category.')).toBeInTheDocument();
+      expect(screen.getByText('Enter a merchant.')).toBeInTheDocument();
+
+      await u.upload(upload(), photo());
+
+      await waitFor(() => expect(screen.queryByText('Enter a merchant.')).not.toBeInTheDocument());
+      expect(screen.queryByText('Enter an amount greater than 0.')).not.toBeInTheDocument();
+      expect(screen.queryByText('Choose a category.')).not.toBeInTheDocument();
+    });
+
+    it('names the fields it could not read', async () => {
+      scan.mockResolvedValue(found({ merchant: 'Whole Foods' }, ['amount', 'date']));
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      // By text rather than by `role="status"`: the overlay's own heading claims that role
+      // too, and findByRole would resolve on it while the scan is still out.
+      const note = await screen.findByText(
+        "Couldn't read the amount and date. Fill them in below, or photograph the rest of the receipt.",
+      );
+      // Polite rather than assertive, because this follows a scan the user just watched run.
+      expect(note.closest('[role="status"]')).toBeInTheDocument();
+    });
+
+    it('says nothing was readable when every invented field came back empty', async () => {
+      scan.mockResolvedValue(found({}, ['merchant', 'amount', 'date', 'categoryId']));
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      expect(
+        await screen.findByText('Nothing readable in that photo. Try again with the whole receipt in frame.'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('the failure lines', () => {
+    it.each([
+      ['rejected', "That file isn't a receipt we can read. Use photos, or a single PDF."],
+      [
+        'tooLarge',
+        'That file is too big. Photos can be up to 1.5 MB after compressing, a PDF up to 4 MB.',
+      ],
+      ['unauthenticated', 'Your session has expired. Log in again to save this.'],
+      [
+        'unavailable',
+        'Receipt scanning is switched off right now. You can still add the transaction by hand.',
+      ],
+      ['rateLimited', "You've scanned a lot in a short time. Wait a minute and try again."],
+      ['timedOut', 'That scan took too long. Try again, or add the transaction by hand.'],
+      ['failed', "We couldn't read that receipt. Please try again."],
+    ] as [ScanReceiptFailureReason, string][])(
+      'shows its own message for %s',
+      async (reason, message) => {
+        // Seven reasons rather than one, because two of them must not say "try again":
+        // scanning being switched off is not broken, and a rejected file fails identically
+        // forever.
+        scan.mockResolvedValue({ ok: false, reason });
+
+        const u = user();
+        open();
+        await u.upload(upload(), photo());
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(overlay()).not.toBeInTheDocument();
+      },
+    );
+
+    it('takes the overlay down when the Server Action rejects rather than resolving', async () => {
+      // A body over `bodySizeLimit`, or a connection dropped mid-action. Uncaught, this
+      // skipped every `setScanning(false)` and left the overlay up forever with nothing on it
+      // but Cancel - and `handleFiles` is invoked as `void handleFiles(...)`, so there is no
+      // caller to catch it either.
+      scan.mockRejectedValue(new Error('Body exceeded 8mb limit'));
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        "We couldn't read that receipt. Please try again.",
+      );
+      expect(overlay()).not.toBeInTheDocument();
+      expect(upload()).toBeEnabled();
+    });
+
+    it('explains a format the browser cannot decode, and sends nothing', async () => {
+      compress.mockResolvedValue({ ok: false, reason: 'unsupportedFormat' });
+
+      const u = user();
+      open();
+      await u.upload(upload(), file('IMG_0001.HEIC', 'image/heic'));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/HEIC/);
+      expect(scan).not.toHaveBeenCalled();
+      expect(overlay()).not.toBeInTheDocument();
+    });
+  });
+
+  it('relabels both controls once a scan has succeeded', async () => {
+    scan.mockResolvedValue(found({ merchant: 'Whole Foods' }));
+
+    const u = user();
+    open();
+    expect(screen.getByLabelText('Upload receipt')).toBeInTheDocument();
+    expect(screen.getByLabelText('Scan receipt')).toBeInTheDocument();
+
+    await u.upload(upload(), photo());
+
+    await waitFor(() => expect(screen.getByLabelText('Add pages')).toBeInTheDocument());
+    expect(screen.getByLabelText('Scan again')).toBeInTheDocument();
   });
 });

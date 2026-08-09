@@ -1077,6 +1077,72 @@ with `aria-current="date"` instead. And it sets **no `aria-invalid`**, unlike `I
 keeps no eslint-disable comments - so `select-error`'s border and `aria-describedby` carry the
 state.
 
+**PET-59 gave the modal a sixth prop, `scan`, following `create`'s own reasoning exactly.** It is
+injected rather than imported, so the suite passes a `jest.fn()` and the `@/` alias trap never
+comes up; `AddTransactionProvider` wires the real `lib/scanReceipt.ts` action, matching
+`create`'s wiring line for line. The two file inputs sit in their own tinted panel above Amount -
+`pointer-fine:hidden` on the camera one, so a desktop never sees a control that opens the
+identical file picker under a second label - and both carry `btn-outline btn-primary`: peers, not
+a primary and a secondary, so no `btn` style modifier has to vary by viewport (a paired *style*
+modifier, unlike a paired colour one, is resolved by daisyUI's emission order rather than by the
+attribute - see `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight). The loading overlay is
+`absolute inset-0` over a `relative` wrapper around the scan panel and every field, not over the
+whole `modal-box`: `Modal.tsx` owns the header and footer as separate props from `children`, so a
+full-box overlay would need a slot that component does not have, and the header's Close and the
+footer's Cancel staying reachable underneath the overlay is an acceptable substitute for the
+preview's fully-covering plate.
+
+**The merge tracks touched fields, not empty ones, and `set()` is the one function that marks a
+field touched.** `values.date` starts as `todayIsoDate()`, so an emptiness test would refuse to
+ever overwrite it; `mergeScannedFields` in `(app)/transactionForm.ts` instead takes a
+`ReadonlySet<keyof TransactionFormValues>` built only by real edits, which is what lets a scan
+fill the receipt's actual date on an untouched form and leaves a typed field - blank or not -
+alone. The set is local `useState`, never derived from `values`, precisely so the merge itself
+never marks anything touched.
+
+**The review of PET-59 changed both halves of that sentence, and the paragraph above is dated to
+before it.** The set is a **ref**, not `useState`, and the merge **does** add to it. Take them in
+turn, because each fixes a defect rather than tidying a shape. As state it was read from the
+render closure that started the scan, and `handleFiles` reads it across two awaits - so a field
+typed into while the receipt was still compressing was silently overwritten by the result, which
+is the exact case the set exists to prevent. Nothing renders from it, so a ref is not merely
+adequate, it is the only spelling that reads the value at the moment of the merge. And a scan's
+own fields have to join it, or "Add pages" is not what the label says: that control sends only
+the newly picked file, the model reads that page alone, and page 2's guess at the merchant would
+replace page 1's correct one. So the set is now every field somebody decided on - typed or
+scanned - and `(app)/transactionForm.ts` calls it `locked` rather than `touched` for that reason.
+The one thing it deliberately still never tracks is emptiness, which is the half of the paragraph
+above that stands unchanged and is the whole reason `date` is overwritable at all.
+
+**Two mechanical consequences worth not undoing.** The ref is **replaced, never mutated**:
+`setValues` takes a functional updater that React runs later, so widening the set in place would
+hand the deferred merge a set already claiming every field it was about to fill, and it would fill
+nothing. And the caller needs the filled list *before* the merge runs, which no updater can hand
+back, so `scannedFieldsToFill` is exported beside `mergeScannedFields` and the merge is written in
+terms of it - one authority, two entry points. The list is needed twice: to widen the lock, and to
+clear those fields' validation messages, because the merge is the one write to `values` that does
+not go through `set()`, which is otherwise the only thing that clears one.
+
+**The overlay covers compression, and the scan call is wrapped in a `try`.** Both were review
+findings on the same handler. `setScanning(true)` fires before `compressReceiptFiles`, not after:
+four 12MP photos take seconds, and until the overlay appears there is no spinner, both file inputs
+are enabled and the click reads as ignored - so a user re-picks and starts a second `handleFiles`
+that silently invalidates the first through `scanTokenRef`. And a Server Action call can **reject**
+rather than resolving to `{ ok: false }` - a body over `next.config.ts`'s `bodySizeLimit`, a
+connection dropped mid-action - which, uncaught, skipped every `setScanning(false)` and left the
+overlay up forever with nothing on it but Cancel. Both onChange handlers invoke this as
+`void handleFiles(...)`, so there is no caller to catch it either. There is also now one
+client-side size check, and it is **PDFs only**: an image is compressed toward 0.75MB first so its
+prior size says nothing, while a PDF is passed through untouched and is the single file that can
+reach the action over the body limit.
+
+**There is no client-side abort for a scan in flight, only a soft one.** Unlike `authorizedPost`'s
+plain `fetch`, calling a Server Action exposes no `AbortController` a client component can reach
+into - so the overlay's "Cancel scan" invalidates a ref-held generation counter instead: the
+request may finish server-side, but its result is discarded if the token it captured no longer
+matches. The backend's own `RECEIPT_SCAN_TIMEOUT_MS` is what actually bounds the call; this only
+bounds how long the UI waits on it.
+
 **`/transactions/[id]` is the app's first dynamic route, and PET-34's detail page fills it.** Same
 split as `/transactions`: `page.tsx` is async and fetches, `TransactionDetailScreen` is
 synchronous and takes the resolved response, which is what lets `Screens/08 Transaction detail`

@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useState } from 'react';
 
 import { createTransaction } from '@/lib/createTransaction';
+import { scanReceipt } from '@/lib/scanReceipt';
 
 import { AddTransactionModal } from './AddTransactionModal';
 import { useCategoryOptions } from './useCategoryOptions';
@@ -86,6 +87,7 @@ export function AddTransactionProvider({ children }: { children: React.ReactNode
           categories={categories}
           categoriesFailed={failed}
           create={createTransaction}
+          scan={scanReceipt}
           onClose={() => setOpen(false)}
         />
       ) : null}
