@@ -352,6 +352,63 @@ describe('the delete seam', () => {
   });
 });
 
+describe('the allocate seam', () => {
+  // The fourth of four, and it exists for the reason the delete block's comment records at length:
+  // this screen builds the card that builds the banner that owns the modal, so a seam any shallower
+  // than the screen is one no story could reach - which is exactly how the delete seam shipped inert
+  // for a commit. Note the thread is two components deep here rather than one, since
+  // `SpendingSummaryCard` takes a prop it does not itself render.
+
+  it('threads its save prop through to the modal', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderScreen({ save });
+
+    await user.click(screen.getByRole('button', { name: 'Allocate' }));
+    const field = screen.getByLabelText(`Monthly cap for ${CATEGORIES[0].name}`);
+    await user.clear(field);
+    await user.type(field, '250');
+    await user.click(screen.getByRole('button', { name: 'Save caps' }));
+
+    expect(save).toHaveBeenCalledWith({
+      categories: [{ id: CATEGORIES[0].id, monthlyCap: 250 }],
+    });
+  });
+
+  it('threads the categories through, so the modal has rows to draw', async () => {
+    // The other prop `SpendingSummaryCard` carries without rendering. Dropped, the modal would open
+    // on an empty list with a ledger that still claimed money was unassigned.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Allocate' }));
+
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Allocate your budget' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(`Monthly cap for ${CATEGORIES[0].name}`)).toBeInTheDocument();
+  });
+
+  it('falls back to the real action when no prop is passed, rather than doing nothing', () => {
+    // The other half of the same guard, and the one that matters most on this control: "Allocate"
+    // was inert by design for four tickets, so a silently-inert version would look exactly like the
+    // state it just left.
+    renderScreen();
+
+    expect(screen.getByRole('button', { name: 'Allocate' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Allocate' })).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('draws no Allocate action once the budget is fully assigned', () => {
+    // Unchanged from PET-36, and asserted here because this ticket had every reason to touch it:
+    // `unallocated` is returned unclamped, so a truthy check would show the banner to somebody who
+    // has over-allocated and tell them an amount is unassigned when the opposite is true.
+    renderScreen({ allocation: { monthlyBudget: 2000, allocated: 2000, unallocated: 0 } });
+
+    expect(screen.queryByRole('button', { name: 'Allocate' })).not.toBeInTheDocument();
+  });
+});
+
 describe('the edit seam', () => {
   // `remove`'s twin, and it exists for the reason that block's own comment records at length: this
   // screen constructs its own providers, so a seam on `EditCategoryProvider` alone would be one no

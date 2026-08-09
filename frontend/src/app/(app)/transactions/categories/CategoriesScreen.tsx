@@ -4,7 +4,10 @@ import type { CreateCategoryResult } from '@/lib/createCategory';
 import type { DeleteCategoryResult } from '@/lib/deleteCategory';
 import type { Palette } from '@/lib/palette';
 import type { UpdateCategoryResult } from '@/lib/updateCategory';
+import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 import type { components } from '@/types/api';
+
+import type { toAllocateBody } from './allocateForm';
 
 import { PageHeader } from '../../PageHeader';
 import { TransactionTabs } from '../TransactionTabs';
@@ -94,6 +97,17 @@ type CategoriesScreenProps = {
    * context, and `AddCategoryButton`'s own prop for why the seam was owed.
    */
   create?: (body: components['schemas']['CreateCategoryDto']) => Promise<CreateCategoryResult>;
+  /**
+   * The bulk cap write behind the summary card's "Allocate", defaulting to the real one.
+   *
+   * The fourth of four, and threaded to a plain component rather than to a provider for
+   * `create`'s reason: `AllocateBanner` owns its own modal, because one trigger on one route wants
+   * no context. Same Storybook argument as the three above, and `CategoriesScreen.stories.tsx`
+   * defaults it in the shared `Frame` rather than per story - that file records the seam-unreachable
+   * defect happening twice, which is what makes the shared default the rule here rather than a
+   * convenience.
+   */
+  save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
 };
 
 export function CategoriesScreen({
@@ -104,6 +118,7 @@ export function CategoriesScreen({
   remove,
   update,
   create,
+  save,
 }: CategoriesScreenProps) {
   // **Summed here rather than read from a field, and the sum is sound rather than approximate.**
   // `GET /api/categories` publishes no period total of its own, but every transaction in the
@@ -161,7 +176,12 @@ export function CategoriesScreen({
             categoryCount={categories.length}
           />
 
-          <SpendingSummaryCard spent={spent} allocation={allocation} />
+          <SpendingSummaryCard
+            spent={spent}
+            allocation={allocation}
+            categories={categories}
+            save={save}
+          />
 
           {/* **The column count is responsive, and the ladder is chosen against the *content*
               width rather than the viewport's.** The shell's sidebar is a fixed 260px from `lg`

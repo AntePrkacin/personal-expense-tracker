@@ -210,11 +210,14 @@ const PALETTE: Palette = {
 // Server Action in the browser. Defaulting them here means a story added later cannot forget one,
 // which is the failure mode that made this necessary in the first place - the seam existed and
 // nothing was passing through it.
+// `save` joins them as of PET-70, and it is the sharpest case yet: every story with unassigned
+// budget draws a live "Allocate", and the modal behind it writes every cap on the screen at once.
 function Frame({
   palette = PALETTE,
   remove = async () => ({ ok: true }),
   update = async () => ({ ok: true }),
   create = async () => ({ ok: true }),
+  save = async () => ({ ok: true }),
   ...props
 }: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette'> & {
   palette?: Palette | null;
@@ -229,6 +232,7 @@ function Frame({
         remove={remove}
         update={update}
         create={create}
+        save={save}
       />
     </div>
   );

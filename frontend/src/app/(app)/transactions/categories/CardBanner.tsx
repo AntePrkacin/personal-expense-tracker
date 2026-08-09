@@ -30,41 +30,54 @@ import { ArrowRight } from 'lucide-react';
 // whose nearest ancestor is a `<section>` is not the `contentinfo` landmark, so it adds meaning
 // without adding a second page-level region.
 
+/**
+ * **An exclusive union, so an action with no handler is unrepresentable.**
+ *
+ * `onAction` used to be optional, and omitting it shipped the control inert with `aria-disabled` -
+ * which was the right shape while the screen had one live action and one with nowhere to go. PET-70
+ * gave "Allocate" a destination, so both call sites pass a handler and that branch had no reachable
+ * caller left: dead code plus a paragraph of comment explaining a state nothing could produce.
+ *
+ * A union rather than two loose props, which is the technique `ModalShape` and `ui/Button`'s
+ * `href`-versus-`onClick` already use here, and it is what stops the inert case coming back by
+ * accident rather than by decision. The fact-only banner survives as the arm with no action at all,
+ * and `npm run build` is the gate that rejects the combination.
+ */
 type CardBannerProps = {
   /** The sentence. Passed as a whole string, never assembled from adjacent JSX nodes. */
   children: React.ReactNode;
-  /** The action's visible label, e.g. "Allocate". Omit for a banner that only states a fact. */
-  action?: string;
-  /**
-   * What this particular action acts on, when the visible label is not distinct on its own.
-   *
-   * Eight category cards each drawing "Set limit" would announce as eight identical buttons, so
-   * the card passes its category name and the accessible name becomes "Set limit for Groceries".
-   * The summary card's "Allocate" is unique on the screen and passes nothing.
-   *
-   * **A context to append rather than a replacement label, and that is WCAG 2.5.3 rather than a
-   * preference.** The first version took the whole accessible name and the card passed "Set a
-   * monthly limit for Groceries" - which does not contain the visible string "Set limit", so a
-   * speech-input user saying "click Set limit", the only words on screen, matched nothing and
-   * could not activate the one control on the card. Composing the name here instead of trusting
-   * each call site makes the visible label a prefix by construction, so the violation is not
-   * reachable.
-   */
-  actionContext?: string;
-  /**
-   * What the action does. **Omit it and the control ships inert**, announcing `aria-disabled`.
-   *
-   * That is not a defensive default, it is the screen's two remaining cases stated in one prop. The
-   * category cards' "Set limit" has a destination as of PET-38 and passes one; the summary card's
-   * "Allocate" still has none - no frame draws where it goes - so it keeps the inert treatment and
-   * keeps its place on `frontend/CLAUDE.md`'s gap list.
-   *
-   * **This component takes no `'use client'` of its own**, so a handler has to arrive from a caller
-   * that has one. `SetLimitBanner.tsx` is that caller and exists for no other reason, which is what
-   * keeps `CategoryCard` a Server Component.
-   */
-  onAction?: () => void;
-};
+} & (
+  | {
+      /** The action's visible label, e.g. "Allocate". */
+      action: string;
+      /**
+       * What this particular action acts on, when the visible label is not distinct on its own.
+       *
+       * Eight category cards each drawing "Set limit" would announce as eight identical buttons, so
+       * the card passes its category name and the accessible name becomes "Set limit for Groceries".
+       * The summary card's "Allocate" is unique on the screen and passes nothing.
+       *
+       * **A context to append rather than a replacement label, and that is WCAG 2.5.3 rather than a
+       * preference.** The first version took the whole accessible name and the card passed "Set a
+       * monthly limit for Groceries" - which does not contain the visible string "Set limit", so a
+       * speech-input user saying "click Set limit", the only words on screen, matched nothing and
+       * could not activate the one control on the card. Composing the name here instead of trusting
+       * each call site makes the visible label a prefix by construction, so the violation is not
+       * reachable.
+       */
+      actionContext?: string;
+      /**
+       * What the action does.
+       *
+       * **This component takes no `'use client'` of its own**, so a handler has to arrive from a
+       * caller that has one. `SetLimitBanner.tsx` and `AllocateBanner.tsx` are those callers and
+       * exist for no other reason, which is what keeps `CategoryCard` and `SpendingSummaryCard`
+       * Server Components.
+       */
+      onAction: () => void;
+    }
+  | { action?: never; actionContext?: never; onAction?: never }
+);
 
 export function CardBanner({ children, action, actionContext, onAction }: CardBannerProps) {
   return (
@@ -72,31 +85,22 @@ export function CardBanner({ children, action, actionContext, onAction }: CardBa
       <span className="font-medium">{children}</span>
 
       {action === undefined ? null : (
-        // **Live when the caller passed a handler, inert when it did not**, which as of PET-38 is
-        // exactly the difference between the category cards' "Set limit" and the summary card's
-        // "Allocate". The paragraph this comment replaces said both were inert "until PET-37's Add
-        // category modal and PET-38's Edit"; half of that is now history, and the other half is a
-        // control with nowhere designed to go.
+        // **Always live now, and the `aria-disabled` half is deliberately gone.** It existed for
+        // one caller - the summary card's "Allocate", which had nowhere designed to go - and PET-70
+        // gave it a destination, so the attribute, its two `aria-disabled:` variants and the
+        // paragraph explaining them had no reachable caller left. The union above is what keeps them
+        // from returning by accident: an action with no handler no longer typechecks.
         //
-        // `aria-disabled` rather than `disabled` for the inert half, so it stays focusable and
-        // announces its state instead of vanishing from the tab order.
+        // Worth keeping from the deleted comment, because it is the reason those variants existed
+        // rather than a bare `aria-disabled`: this control is text on the accent strip, not a
+        // daisyUI `btn`, so it inherits none of the plugin's own disabled greying or its
+        // `pointer-events: none`. Any future inert state here needs both halves written out again.
         <button
           type="button"
           onClick={onAction}
-          aria-disabled={onAction === undefined ? 'true' : undefined}
           // Composed so the visible label is always a prefix of the accessible name (WCAG 2.5.3).
           aria-label={actionContext === undefined ? undefined : `${action} for ${actionContext}`}
-          // **`aria-disabled:` variants, because `aria-disabled` alone tells a sighted mouse
-          // user nothing.** The screen's other inert controls wear daisyUI's `btn`, which
-          // greys them and sets `pointer-events: none` from its own
-          // `.btn:is([aria-disabled=true])` rule. This one is bare text on the accent strip, so
-          // it got none of that and previously carried an unconditional `cursor-pointer` - it
-          // looked and hovered exactly like a live button and did nothing on click, which is the
-          // failure this file's comment above claims `aria-disabled` avoids. Written as
-          // `aria-disabled:` variants rather than flat classes so PET-38 gets the live styling
-          // back by not setting the attribute, with nothing here left to remember - and that is
-          // exactly how it played out: one prop decides both halves and this string never moved.
-          className="inline-flex shrink-0 cursor-pointer items-center gap-2 font-semibold aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          className="inline-flex shrink-0 cursor-pointer items-center gap-2 font-semibold"
         >
           {action}
           <ArrowRight className="size-3.5" aria-hidden="true" />

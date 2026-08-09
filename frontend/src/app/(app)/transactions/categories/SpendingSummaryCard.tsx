@@ -1,7 +1,10 @@
 import { formatWhole, monthLabel } from '@/lib/format';
-import type { Allocation } from '@/lib/categories';
+import type { Allocation, Category } from '@/lib/categories';
+import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
-import { BannerCardBody, CardBanner } from './CardBanner';
+import { AllocateBanner } from './AllocateBanner';
+import type { toAllocateBody } from './allocateForm';
+import { BannerCardBody } from './CardBanner';
 
 // The summary card at the top of frame 13 (node 36:490, CTG-2).
 //
@@ -14,7 +17,15 @@ import { BannerCardBody, CardBanner } from './CardBanner';
 // match, and both readings are served by the same `allocation` block, so nothing about the read
 // changed with the decision.
 //
-// A Server Component. The one control on it is inert, so there is no state and no boundary.
+// A Server Component, and it stays one. Its banner's action is live as of PET-70, and the state
+// behind it lives in `AllocateBanner` - a client wrapper whose only job is holding the directive, so
+// nothing here needs one. The sentence above this one used to read "the one control on it is inert,
+// so there is no state and no boundary"; read that as history.
+//
+// **It takes two props it does not itself render**, `categories` and `save`, and passes both to that
+// banner. The alternative was hoisting the banner into `CategoriesScreen`, which the overlap effect
+// forbids: the strip has to be a sibling of the card body inside this file's own `<section>`.
+// `AllocateBanner.tsx` carries the rest of that argument.
 
 /**
  * The chip's two tones, complete literal class strings per key.
@@ -50,9 +61,18 @@ type SpendingSummaryCardProps = {
   /** The period's spend, summed from the categories. See `CategoriesScreen` for why that sum is sound. */
   spent: number;
   allocation: Allocation;
+  /** Every category, for the banner's modal. Not rendered here - see the note above. */
+  categories: Category[];
+  /** The bulk cap write, threaded through for the same reason. `AllocateBanner` defaults it. */
+  save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
 };
 
-export function SpendingSummaryCard({ spent, allocation }: SpendingSummaryCardProps) {
+export function SpendingSummaryCard({
+  spent,
+  allocation,
+  categories,
+  save,
+}: SpendingSummaryCardProps) {
   const { monthlyBudget, unallocated } = allocation;
 
   // Rounded once and the pair derived from the rounded figures, which is `BudgetCard`'s rule
@@ -137,9 +157,9 @@ export function SpendingSummaryCard({ spent, allocation }: SpendingSummaryCardPr
         // whitespace that contains a newline next to an expression, so the readable two-line
         // version renders "$850of your budget" with no space - which a suite caught here and
         // which no typecheck or lint could.
-        <CardBanner action="Allocate">
+        <AllocateBanner categories={categories} allocation={allocation} save={save}>
           {`${formatWhole(unallocated)} of your budget isn’t assigned to a category.`}
-        </CardBanner>
+        </AllocateBanner>
       ) : null}
     </section>
   );
