@@ -161,11 +161,13 @@ export const GeneratingNoCards: Story = {
  *
  * What to check: `components/EmptyState`'s box centred in the remaining height, the single
  * four-pointed `Sparkle` rather than `Sparkles`, the US "analyze" the design draws against
- * frame 07's UK "categorised" (A30), and **no Regenerate button in the header at all**.
+ * frame 07's UK "categorised" (A30), and **the Regenerate button present in the header**,
+ * which is where this story diverges from the frame.
  *
- * As of PET-42-43-44 this state is literally what its copy claims: every transaction write
- * regenerates the set backend-side, so an account with expenses can never reach this card.
- * The button really opens modal 09.
+ * That last part amends INS-1. The card's copy is not always true - an account whose
+ * transactions predate the write-path trigger, and one whose first run failed, both land here
+ * with a set worth generating - and with no header control either was a dead end. The empty
+ * card's own button really opens modal 09.
  */
 export const Empty: Story = {
   render: () => <Frame set={EMPTY} />,

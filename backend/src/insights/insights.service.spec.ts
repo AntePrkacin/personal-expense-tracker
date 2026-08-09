@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { argsOf, queryChain, toSql } from '../../test/query-chain';
+import { argsOf, paramsOf, queryChain, toSql } from '../../test/query-chain';
 import { UserDatabaseService } from '../database/user-database.service';
 import { INSIGHT_GENERATOR } from './insight-generator';
 import { InsightsService } from './insights.service';
@@ -336,15 +336,36 @@ describe('InsightsService', () => {
   });
 
   describe('the completion path, reached through generate', () => {
-    /** Drives one floated run and hands back the transaction it wrote through. */
-    const runWith = async (claimed: unknown[]) => {
+    /**
+     * Drives one floated run and hands back the transaction it wrote through.
+     *
+     * `settled` is what the prune's own read finds - every non-`generating` set
+     * in the account, newest first, this run's own included. The default of one
+     * row is the ordinary case: a first completion supersedes nothing.
+     *
+     * The `tx` handle carries `select` and `delete` as well as `update` and
+     * `insert`, and that is load-bearing rather than completeness: without them
+     * the prune throws inside the completion transaction, the run is caught and
+     * logged as failed, and every assertion below still passes.
+     */
+    const runWith = async (
+      claimed: unknown[],
+      settled: unknown[] = [{ id: 'run-1' }],
+    ) => {
       db.select.mockReturnValue(queryChain([]));
       generatorGenerate.mockResolvedValue(generatedSet());
 
       const updateChain = queryChain(claimed);
+      // Cards first, then their sets - the order `runGeneration` deletes in.
+      const cardDelete = queryChain([]);
+      const setDelete = queryChain([]);
+      const pending = [cardDelete, setDelete];
+      const selectChain = queryChain(settled);
       const tx = {
         update: jest.fn().mockReturnValue(updateChain),
         insert: jest.fn().mockReturnValue(queryChain([])),
+        select: jest.fn().mockReturnValue(selectChain),
+        delete: jest.fn(() => pending.shift() ?? queryChain([])),
       };
       db.transaction.mockImplementation(
         (body: (handle: typeof tx) => Promise<unknown>) => body(tx),
@@ -353,7 +374,7 @@ describe('InsightsService', () => {
       await service.generate('user-id');
       await flushFloatedRun();
 
-      return { tx, updateChain };
+      return { tx, updateChain, cardDelete, setDelete, selectChain };
     };
 
     it('writes the set and its cards when the run still owns the state', async () => {
@@ -374,6 +395,43 @@ describe('InsightsService', () => {
       const { tx } = await runWith([]);
 
       expect(tx.insert).not.toHaveBeenCalled();
+      // And it prunes nothing either: a run that lost its claim must not delete
+      // history on behalf of the run that replaced it.
+      expect(tx.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes nothing when the completed run supersedes nothing', async () => {
+      // The ordinary first completion: one settled set in the account, its own.
+      const { tx } = await runWith([{ id: 'run-1' }], [{ id: 'run-1' }]);
+
+      expect(tx.select).toHaveBeenCalled();
+      expect(tx.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes the sets past the retention with their cards, cards first', async () => {
+      // Five settled sets, newest first. The retention keeps three, so the two
+      // oldest go - and their cards go before them, or a failure between the two
+      // statements would strand cards pointing at a set that no longer exists.
+      const { tx, cardDelete, setDelete, selectChain } = await runWith(
+        [{ id: 'run-1' }],
+        ['run-1', 'run-2', 'run-3', 'run-4', 'run-5'].map((id) => ({ id })),
+      );
+
+      expect(tx.delete).toHaveBeenCalledTimes(2);
+      expect(paramsOf(argsOf(cardDelete, 'where')[0])).toEqual([
+        'run-4',
+        'run-5',
+      ]);
+      expect(paramsOf(argsOf(setDelete, 'where')[0])).toEqual([
+        'run-4',
+        'run-5',
+      ]);
+
+      // The read behind it skips live runs rather than ordering around them: a
+      // `generating` row is either this run's own, already updated to `ready`
+      // above, or a claim that is not this prune's to delete.
+      const [where] = argsOf(selectChain, 'where');
+      expect(toSql(where)).toContain('"status" <> ?');
     });
   });
 });

@@ -15,9 +15,11 @@ import { INSIGHTS_EMPTY_COPY } from './InsightsEmpty';
 jest.mock('../../../lib/generateInsights', () => ({ generateInsights: jest.fn() }));
 
 // The empty state renders `AddTransactionButton`, and the modal its provider mounts reaches
-// `useRouter` for its refresh.
+// `useRouter` for its refresh. The screen itself reaches it too, for the dead-session branch
+// below, which is why `refresh` is one shared mock rather than a fresh one per call.
+const mockRefresh = jest.fn();
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ refresh: jest.fn(), replace: jest.fn(), push: jest.fn() }),
+  useRouter: () => ({ refresh: mockRefresh, replace: jest.fn(), push: jest.fn() }),
 }));
 
 const generate = generateInsights as jest.Mock;
@@ -154,10 +156,14 @@ describe('the empty state', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('offers no Regenerate button, because there is nothing to regenerate', () => {
+  it('still offers Regenerate, because this state is reachable with a set to generate', () => {
+    // Amends INS-1, which draws no header control on frame 16. The premise that `empty` means
+    // "never logged a transaction" fails for an account whose transactions predate the
+    // write-path trigger and for one whose first run failed - and hiding the button made both
+    // a dead end with nothing on screen that could generate anything.
     renderScreen(emptySet());
 
-    expect(screen.queryByRole('button', { name: /Regenerate|Generating/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
   });
 });
 
@@ -313,6 +319,80 @@ describe('the generating state and the poll', () => {
     unmount();
     await advance(60_000);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  /** Past `POLL_CEILING_MS`, one backoff step at a time. */
+  const advancePastCeiling = async () => {
+    // A single large advance cannot chain the poll: each tick schedules its successor from
+    // inside an awaited continuation, so the timer only exists once microtasks have run.
+    for (let step = 0; step < 80; step++) {
+      await advance(5_000);
+    }
+  };
+
+  it('falls back to the last-good set and re-enables the button when the poll gives up', async () => {
+    // Stopping the timer was all the ceiling used to do, which left `state` on `generating`
+    // with the effect's only dependency unable to change again - permanent skeletons under a
+    // disabled "Generating...", recoverable only by a reload. A backend unreachable for the
+    // whole 5.5 minutes is the reachable way in, so every tick throws here.
+    (global.fetch as jest.Mock).mockRejectedValue(new Error('unreachable'));
+    renderScreen(readySet({ state: 'generating' }));
+
+    expect(screen.getByText('Analyzing your spending...')).toBeInTheDocument();
+
+    await advancePastCeiling();
+
+    expect(screen.queryByText('Analyzing your spending...')).not.toBeInTheDocument();
+    expect(screen.getByText(CARDS[0].title)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+
+    // And it really stopped asking, rather than merely rendering as though it had.
+    const calls = (global.fetch as jest.Mock).mock.calls.length;
+    await advance(60_000);
+    expect(global.fetch).toHaveBeenCalledTimes(calls);
+  });
+
+  it('falls back to the empty card when the run it gave up on had no content behind it', async () => {
+    // The other arm: the read carries content independently of `state`, and a first run has
+    // none to fall back to. The empty card plus the header's Regenerate is the honest pair -
+    // skeletons would keep asserting a run this screen has no way left to ask about.
+    (global.fetch as jest.Mock).mockRejectedValue(new Error('unreachable'));
+    renderScreen({ ...emptySet(), state: 'generating' });
+
+    await advancePastCeiling();
+
+    expect(screen.getByRole('heading', { name: INSIGHTS_EMPTY_COPY.heading })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+  });
+
+  it('re-enters polling when Regenerate is clicked after the poll gave up', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    (global.fetch as jest.Mock).mockRejectedValue(new Error('unreachable'));
+    renderScreen(readySet({ state: 'generating' }));
+
+    await advancePastCeiling();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    // `state` never moved off `generating`, so this only works because the click clears the
+    // giving-up flag as well as setting the state.
+    await waitFor(() => expect(screen.getByText('Analyzing your spending...')).toBeInTheDocument());
+  });
+
+  it('refreshes the route when the session died, rather than doing nothing at all', async () => {
+    // A26 designs no error surface for a failed *run*, and this is not that: a 401 means
+    // nothing on the page will work again, and without this branch the click was silent and
+    // stayed silent on every subsequent press. The redirect belongs to the server, so
+    // re-running the Server Component puts `requireInsights()` in front of the dead cookie.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    generate.mockResolvedValue({ ok: false, reason: 'unauthenticated' });
+    renderScreen(readySet());
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(() => expect(mockRefresh).toHaveBeenCalled());
+    expect(screen.queryByText('Analyzing your spending...')).not.toBeInTheDocument();
   });
 
   it('starts polling when the state prop changes, with no click anywhere', async () => {

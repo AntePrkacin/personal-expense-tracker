@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
@@ -30,6 +31,22 @@ import { SummaryBanner, SummaryBannerSkeleton } from './SummaryBanner';
 // pure read plus one button. A mount trigger is what PET-44's plan had, and it made a read-only
 // screen write to the database on every visit while React Strict Mode's dev double-mount 409'd
 // against itself.
+//
+// **The Regenerate button is in the header in every state, including `empty`, which amends
+// INS-1.** The frame draws no control on frame 16 and this screen honoured that, on the premise
+// that `empty` had come to mean "this account has never logged a transaction" and so had nothing
+// to regenerate. The review of PET-42-43-44 found two ordinary ways to reach `empty` with that
+// premise false, and in both the screen was a dead end with no control on it that could generate
+// anything. An account that logged its transactions **before** this branch shipped has no `ready`
+// set, so the read answers `empty` for a user with two hundred expenses - the very account
+// `dashboard/InsightTeaserCard.tsx` keeps its `transactionCount` split for. And a **failed first
+// run** falls back to `empty` too, so the failure state and the never-used state render
+// identically. The only escape either had was creating or editing another transaction.
+//
+// The cost of the amendment is that a genuinely new account carries a button that briefly draws
+// skeletons and settles back to the same card, because the generator answers `null` for an
+// account with no transactions and the placeholder run is removed. That is honest, and it is
+// cheaper than the two dead ends. `InsightsEmpty.tsx` no longer claims the premise either.
 
 /** The frontend's own route handler. One half of a contract; its suite pins the other. */
 const POLL_PATH = '/api/insights';
@@ -55,6 +72,13 @@ const POLL_MAX_DELAY = 5000;
  * by `gt(createdAt, staleBefore())`, so five minutes after an abandoned run the state stops
  * reporting `generating` with no POST needed. This ceiling sits just past that, so a wedged
  * timer cannot outlive the guarantee.
+ *
+ * **Reaching it puts the screen into `stalled` rather than merely stopping the timer**, which
+ * is the review finding this constant produced. The self-healing above is the *backend read's*,
+ * and the client stops asking at the same moment - so a session that died, or a backend
+ * unreachable for the whole 5.5 minutes, left `state` on `generating` with the effect's only
+ * dependency unable to change again. The page held skeletons and a disabled "Generating..."
+ * for the lifetime of the mount, recoverable only by a reload.
  */
 const POLL_CEILING_MS = 5.5 * 60 * 1000;
 
@@ -79,7 +103,16 @@ export type InsightsScreenProps = {
 };
 
 export function InsightsScreen({ set: fromServer, overline }: InsightsScreenProps) {
+  const router = useRouter();
   const [set, setSet] = useState(fromServer);
+
+  /**
+   * Whether the poll gave up on a `generating` state that never settled.
+   *
+   * Deliberately client-only and never read from the server: it is a fact about *this mount's*
+   * polling rather than about the account, so a refresh or a fresh read clears it below.
+   */
+  const [stalled, setStalled] = useState(false);
 
   // **The prop wins when it changes, and this is what starts the poll from a save.** The Add
   // transaction modal calls `router.refresh()`, which re-runs the Server Component and hands
@@ -102,9 +135,24 @@ export function InsightsScreen({ set: fromServer, overline }: InsightsScreenProp
   if (fromServer.state !== seen.state || fromServer.generatedAt !== seen.generatedAt) {
     setSeen({ state: fromServer.state, generatedAt: fromServer.generatedAt });
     setSet(fromServer);
+    // A fresh server read is a newer answer than the one this mount gave up on, so the giving
+    // up is discarded with it - otherwise a `router.refresh()` landing after the ceiling would
+    // render a set the server has just confirmed as generating through the stalled treatment.
+    setStalled(false);
   }
 
-  const generating = set.state === 'generating';
+  const generating = set.state === 'generating' && !stalled;
+
+  /**
+   * What the body draws, which is the read's own state except once the poll has given up.
+   *
+   * Stalled, the state is genuinely unknown, so the screen falls back to what it can still
+   * stand behind: the last-good content the read carries independently of `state`, or the empty
+   * card when it carries none. Holding skeletons instead would keep asserting a run is in
+   * flight long after this screen stopped having any way to find out.
+   */
+  const displayState =
+    set.state === 'generating' && stalled ? (set.summary ? 'ready' : 'empty') : set.state;
 
   // The poll. Keyed on the state alone, so a poll that returns another `generating` set does
   // not restart the loop and lose its own backoff.
@@ -138,7 +186,15 @@ export function InsightsScreen({ set: fromServer, overline }: InsightsScreenProp
         // render, and the last-good content is already on screen underneath the skeletons.
       }
 
-      if (cancelled || Date.now() - startedAt > POLL_CEILING_MS) {
+      if (cancelled) {
+        return;
+      }
+
+      if (Date.now() - startedAt > POLL_CEILING_MS) {
+        // Stop asking *and* say so, or the page keeps the skeletons and the disabled button
+        // forever: `generating` is this effect's only dependency, and nothing left would move
+        // it. See the constant above.
+        setStalled(true);
         return;
       }
 
@@ -164,12 +220,26 @@ export function InsightsScreen({ set: fromServer, overline }: InsightsScreenProp
     // committed the `generating` row before answering, so this is reporting what is already
     // true rather than optimistically guessing.
     if (result.ok) {
+      // Before the state, so a click after the poll gave up really re-enters polling rather
+      // than setting a state the `stalled` flag immediately renders through.
+      setStalled(false);
       setSet((previous) => ({ ...previous, state: 'generating' }));
+      return;
     }
 
-    // On failure the previous set stays on screen and the button re-enables on its own, because
-    // both are derived from `state` and `state` never moved. A26 designs no error surface and
-    // this screen deliberately invents none.
+    // **A dead session is not the undesigned failure A26 is about.** That one is a *run* that
+    // failed, which is invisible by contract - and for it the previous set stays on screen and
+    // the button re-enables on its own, because both are derived from `state` and `state` never
+    // moved. A 401 is different in kind: nothing on this page will ever work again, and without
+    // this branch the click did nothing observable at all, forever, on every subsequent press.
+    //
+    // `router.refresh()` rather than a message, because the redirect already exists and belongs
+    // to the server: re-running the Server Component puts `requireInsights()` in front of the
+    // same dead cookie, and it redirects to the login screen the way every other read in this
+    // app does. `lib/generateInsights.ts` records why the action itself must not redirect.
+    if (result.reason === 'unauthenticated') {
+      router.refresh();
+    }
   };
 
   return (
@@ -178,20 +248,19 @@ export function InsightsScreen({ set: fromServer, overline }: InsightsScreenProp
         overline={overline}
         title="AI Insights"
         action={
-          // Absent in the empty state (INS-1), where there is nothing to regenerate.
-          set.state === 'empty' ? undefined : (
-            <Button
-              label={generating ? 'Generating...' : 'Regenerate'}
-              variant="secondary"
-              disabled={generating}
-              onClick={() => void regenerate()}
-            />
-          )
+          // Present in every state, including `empty`, which amends INS-1 - see the header
+          // comment for the two reachable dead ends that bought.
+          <Button
+            label={generating ? 'Generating...' : 'Regenerate'}
+            variant="secondary"
+            disabled={generating}
+            onClick={() => void regenerate()}
+          />
         }
       />
 
       <main className="flex flex-1 flex-col gap-6 pb-10">
-        <InsightsBody set={set} />
+        <InsightsBody set={set} state={displayState} />
       </main>
     </>
   );
@@ -202,13 +271,18 @@ export function InsightsScreen({ set: fromServer, overline }: InsightsScreenProp
  *
  * Split out so the screen above reads as "header, poll, body" rather than as one function with
  * three returns inside a `<main>`.
+ *
+ * **`state` is a parameter rather than `set.state`**, because the screen resolves one case the
+ * read cannot: a poll that gave up renders the set's *content* under a state the response no
+ * longer justifies. Passing it keeps that single decision at the one call site instead of
+ * teaching this function about polling.
  */
-function InsightsBody({ set }: { set: InsightSet }) {
-  if (set.state === 'empty') {
+function InsightsBody({ set, state }: { set: InsightSet; state: InsightSet['state'] }) {
+  if (state === 'empty') {
     return <InsightsEmpty />;
   }
 
-  if (set.state === 'generating') {
+  if (state === 'generating') {
     return (
       <>
         <SummaryBannerSkeleton />

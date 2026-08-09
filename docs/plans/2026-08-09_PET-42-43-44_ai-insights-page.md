@@ -543,3 +543,50 @@ guarantee.
   exists so a later reader does not diagnose the seed as broken. The showcase account will still
   exercise both surviving rules, since it has capped categories and more than one month of
   history.
+
+## The post-implementation code review, and the six things it changed
+
+A third review pass ran against the **built branch** rather than against this file, and its
+findings are recorded here rather than folded into the prose above, because by then the plan
+described work that had already shipped. All six were things no gate could see: both apps' test
+suites, both builds, backend lint and `tsc --noEmit` were green throughout.
+
+**The empty state was a dead end for two ordinary accounts (high).** This plan reasoned that the
+write-path trigger made `state: 'empty'` mean "never logged a transaction", and hid the Regenerate
+button on the strength of it - a premise stated three times, in `InsightsScreen.tsx`,
+`InsightsEmpty.tsx` and `backend/CLAUDE.md`. It is false for an account whose transactions predate
+the trigger, which has no `ready` set and so reads `empty` over two hundred expenses, and false for
+an account whose first run failed, since the read falls back to `empty` there too. In both the
+screen offered no control that could generate anything, and the only escape was creating or editing
+another transaction. The button is now present in every state, which amends INS-1; the trade is a
+brand-new account carrying a button that flickers skeletons and settles back to the same card.
+
+**`insight_sets` grew without bound (medium).** `docs/TODO.md` already carried "Insight sets
+accumulate, and nothing prunes them", closing on "worth settling before any automatic or scheduled
+regeneration, which is what would turn a slow accrual into an unbounded one" - and this branch
+built exactly that trigger without settling it. A completed run now hard-deletes what it supersedes
+past a retention of three, cards first, inside the same transaction. That also settles the missing
+index on `generated_at` the review raised beside it: the prune makes `latestReadySet` sort a
+handful of rows, so the index is the wrong answer and is deliberately not added.
+
+**"Self-heals" was wrong about the swallowed 409 (medium).** Nothing re-runs after the in-flight
+run completes - no retry, no dirty flag, no sweep - so a burst of writes leaves one stale set until
+the next write. The behaviour is unchanged and still deferred, for the reason Out of scope already
+gives; the claim is corrected in the listener, in `backend/CLAUDE.md` and in a new `docs/TODO.md`
+entry, and it should be built once alongside the debounce the LLM swap needs.
+
+**Three smaller ones.** `seed-showcase.ts` called `insights.generate()` unguarded while the poll
+below it deliberately warns rather than throwing, so re-running the seed inside the five-minute
+stale window printed "Seeding failed." and exited 1 after every transaction had been written. The
+poll's ceiling stopped the timer without touching `state`, leaving permanent skeletons under a
+disabled button when a session died or the backend was unreachable for the whole 5.5 minutes - it
+now flips a stalled flag the header and body both read, falling back to the content the read
+carries independently of `state`. And `regenerate()` had no branch for a 401, so a dead session
+made the button silent forever; it calls `router.refresh()`, which puts `requireInsights()` in
+front of the same cookie and lets the server's own redirect fire.
+
+**What the review cleared** is worth keeping too: the `onApplicationShutdown` drain ordering, the
+`inFlight.delete(run)` self-reference inside `.finally()`, the render-phase `seen` adjustment
+across every refresh/poll interleaving, the poll's `cancelled` flag on all three exit paths,
+`announceChange`'s placement after every 404 guard, and `openapi.json` / `api.d.ts` being in sync
+with the narrowed `InsightTone`.

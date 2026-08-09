@@ -631,6 +631,37 @@ global and `cause instanceof Error` is `false` for an object that prints as one.
 catches any of this is one that forces a real collision, which is why `test/insights.e2e-spec.ts`
 races two runs rather than asserting a hand-written message.
 
+**A completed run deletes what it supersedes, and that is new since the write-path trigger.**
+Until PET-42-43-44 a set was written only when somebody pressed Regenerate, so `insight_sets` and
+its child `insights` growing by a row per run was a slow accrual `docs/TODO.md` recorded and left
+alone. A run per transaction write turns that into growth proportional to how much the user
+spends - roughly 1,800 set rows and 3,600 card rows a year at five expenses a day, in that user's
+own replica, every one of them carried to Turso Cloud by the shutdown push. So the transaction
+that flips a run to `ready` now also hard-deletes every settled set past the newest few, cards
+first. Three things about it are decisions. It is a **hard** delete, the second and last exemption
+from this database's tombstone convention alongside the empty-account placeholder removal, because
+a tombstoned row is still a row and soft-deleting would bound nothing. It runs **inside the
+completion transaction**, so the tables are bounded at every commit rather than between them. And
+it skips `generating` rows rather than ordering around them, so a live run past the stale cutoff
+cannot be deleted out from under its own claim.
+
+**That is also why `generated_at` still carries no index, and must not grow one on the strength of
+a plan that reads the table as unbounded.** `latestReadySet` orders by it, which was a full scan
+and sort over a table growing with the user's transaction count and is now a sort of a handful of
+rows. The retention constant lives in `insights.service.ts`; the index is the wrong answer to a
+problem the prune removes, and adding both would be paying twice.
+
+**"Self-healing" was the wrong word for the swallowed 409, and the correction is worth more than
+the tidy version.** This section said the losing write's data is "missing from that set until the
+next save, bounded by one run and self-healing". The first half is right and the second is not:
+nothing re-runs after the in-flight run completes, so there is no retry, no dirty flag and no
+sweep. A user deleting three transactions in a row has the first delete's run read the table
+mid-burst while the next two land on the 409, and both `/insights` and the dashboard teaser keep
+quoting spend including rows already removed - until the next transaction write, or a click on
+Regenerate. The accurate statement is **heals on the next write**, `docs/TODO.md` carries it as
+deferred work beside the debounce the LLM swap already needs, and the two want the same fix built
+once.
+
 ## Templates
 
 **`src/templates/` serves the admin-managed data behind onboarding and the category picker, and

@@ -1778,19 +1778,25 @@ leaving both consistent. If either is ever fixed, fix both, and the fix is to pu
 the index predicate rather than to take it out of the queries. Manual recovery in the meantime is
 one statement: clear the row's `deleted_at`, or set its `status` to `failed`.
 
-### Insight sets accumulate, and nothing prunes them
+### A burst of transaction writes leaves one stale set, and it heals on the next write
 
-Every run leaves a row behind for good: `ready` sets are superseded by `generated_at DESC` rather
-than removed (AC5), and `failed` rows are now written by both a genuinely failed run and PET-56's
-stale-run reclaim. Only the empty-account placeholder is ever deleted. So a user who regenerates
-daily accrues a row and a card set per run, and the read pays for it in an `ORDER BY generated_at`
-over an unindexed column plus a `deleted_at IS NULL` scan.
+`TransactionChangedListener` swallows the `ConflictException` a write gets when a run is already
+in flight, on the reasoning that fresh-enough content is already being generated. Nothing re-runs
+once that run completes: there is no retry, no dirty flag and no scheduled sweep, so when writes
+2..N of a burst all lose the single-run guard, the surviving set is whatever the first run read
+part-way through the burst. Deleting three transactions in a row from the list is the ordinary way
+in - `/insights` and the dashboard teaser then both quote spend that includes rows the user has
+already removed, until the account's next transaction write or a click on Regenerate.
 
-Nothing to do at this scale - a set is a handful of short rows, and the screen offers one
-regenerate button - and it is in this section rather than under Scaling because the shape of the
-answer is a policy decision, not a capacity one: keep the last N sets, or keep a window of history,
-or keep everything and index `generated_at`. Worth settling before any automatic or scheduled
-regeneration, which is what would turn a slow accrual into an unbounded one.
+**The listener and `backend/CLAUDE.md` both called this "self-healing" until the review of
+PET-42-43-44, and that was wrong rather than loose**: a reader checking whether a burst could
+leave stale content was being told a mechanism existed that does not. Both now say "heals on the
+next write", and this entry is what "recorded rather than mitigated" was supposed to point at.
+
+Not fixed here because every honest fix is a re-entrant loop on the write path - a dirty flag the
+completing run re-reads and re-runs from, or a debounce - and generation is sub-second, so the
+window is small and the manual escape is one click. It is the same fix the `LlmInsightGenerator`
+entry below already needs before that swap, and it should be built once, for both.
 
 ### Generate-on-write was argued against here, and PET-42-43-44 reversed it
 

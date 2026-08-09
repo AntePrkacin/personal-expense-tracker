@@ -46,9 +46,24 @@ export class TransactionChangedListener {
    *
    * A `ConflictException` is the expected outcome rather than an error: it means
    * a run is already in flight, so fresh-enough content is already being
-   * generated. On a genuine burst the losing write's data is missing from that
-   * set until the next save, which is bounded by one run and self-heals - the
-   * accepted cost, recorded rather than mitigated.
+   * generated.
+   *
+   * **What that costs is one stale set, and it heals on the next write rather
+   * than on its own.** Nothing re-runs after the in-flight run completes: there
+   * is no retry, no dirty flag and no sweep, so when writes 2..N of a burst all
+   * lose this guard the surviving set is whatever the first run read part-way
+   * through it. Deleting three transactions in a row is the ordinary way in -
+   * the first delete's run reads mid-burst, the next two land here, and both
+   * `/insights` and the dashboard teaser keep quoting spend that includes rows
+   * the user has already removed. It ends at the account's next transaction
+   * write, or at the Insights page's Regenerate button, which is on screen in
+   * every state for exactly this class of reason.
+   *
+   * This docblock said "bounded by one run and self-heals" until the review of
+   * PET-42-43-44, and the word was wrong rather than imprecise: a reader
+   * checking whether a burst could leave stale content was being told the
+   * mechanism that would fix it exists. `docs/TODO.md` carries it as deferred
+   * work, which is what "recorded rather than mitigated" is supposed to mean.
    */
   @OnEvent(TRANSACTION_CHANGED)
   async regenerate(event: TransactionChangedEvent): Promise<void> {

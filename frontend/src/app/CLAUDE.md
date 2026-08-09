@@ -1688,3 +1688,40 @@ daisyUI `error` and backend `neutral` as `warning`, so a name-to-name map compil
 wrong in two places. `insights/insightTone.ts` holds whole class strings per key, the shape
 `frontend/CLAUDE.md` names `ui/categoryColour.ts` as the pattern for, plus a fallback so an `info`
 stored before the enum narrowed still renders.
+
+**The Regenerate button is in the header in every state, which amends INS-1, and the review of
+this branch is why.** The frame draws no control on frame 16 and the screen honoured that, on the
+premise the paragraphs above state twice: that the write-path trigger had made `empty` mean "this
+account has never logged a transaction". Two ordinary accounts reach `empty` with that premise
+false. One logged its transactions **before** this branch shipped, so no `ready` set exists and
+the read answers `empty` over two hundred expenses - the exact account `dashboard/InsightTeaserCard.tsx`
+keeps its `transactionCount` split for, which `/insights` had no equivalent of. The other's
+**first run failed**, since `runGeneration` marks the row `failed` and the read falls back here,
+making a failure and a fresh account render identically. With the button hidden both were dead
+ends whose only escape was creating or editing another transaction. The cost of the amendment is
+that a genuinely new account carries a button that draws skeletons for a moment and settles back
+to the same card, because the generator answers `null` and the placeholder run is removed. Read
+the empty-state premise above as narrowed rather than deleted: it is what usually holds, and
+`InsightsEmpty.tsx` no longer asserts it.
+
+**The poll's ceiling now puts the screen into a stalled state rather than only stopping the
+timer**, which is the second half of the same finding. The paragraph above is right that the
+backend read self-heals at the five-minute cutoff with no POST needed - but that is the _read's_
+guarantee, and the client stopped asking at the same moment. A session that died, or a backend
+unreachable for the whole 5.5 minutes, left `state` on `generating` with the effect's only
+dependency unable to change again: permanent skeletons under a disabled "Generating...", for the
+lifetime of the mount. Giving up now flips a flag the header and the body both read, so the button
+re-enables and the body falls back to the content the read carries **independently of `state`** -
+the ready set when there is one, the empty card when there is not. A fresh server read clears the
+flag, because it is a fact about this mount's polling rather than about the account.
+
+**And a 401 from Regenerate refreshes the route, because a dead session is not A26's undesigned
+failure.** That one is a failed _run_, which is invisible by contract and correctly leaves the
+previous set on screen with the button re-enabled. A 401 is different in kind: nothing on the page
+will work again, and the click was silent and stayed silent on every subsequent press. The
+redirect is the server's, so `router.refresh()` puts `requireInsights()` in front of the same dead
+cookie and it redirects to `/login` like every other read - which is also why
+`lib/generateInsights.ts` must keep **not** redirecting from inside the action, for the reason it
+records. This is the screen's only router call, and both gates were already paying for one: the
+suite mocks `next/navigation` and the stories carry `nextjs: { appDirectory: true }` for the
+provider subtree.

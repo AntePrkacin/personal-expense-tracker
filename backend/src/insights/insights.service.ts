@@ -5,7 +5,18 @@ import {
   Logger,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+} from 'drizzle-orm';
 import { newId } from '../common/ids';
 import { isUniqueViolation } from '../common/unique-violation';
 import type { UserDatabase } from '../database/database.types';
@@ -41,6 +52,22 @@ export const GENERATING_STALE_AFTER_MS = 5 * 60 * 1000;
 // is reclaimed as stale five minutes later, and the previous ready set is still
 // the read's answer in the meantime.
 const SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
+
+// How many settled sets survive a completed run. Every superseded set past this
+// is deleted with its cards, which is what keeps these two tables bounded now
+// that a run starts on every transaction write rather than on a button press:
+// unpruned, a user logging five expenses a day accumulates roughly 1,800 set
+// rows and 3,600 card rows a year in their own replica, all of which the
+// shutdown push carries to Turso Cloud.
+//
+// **Only the newest `ready` set is ever read**, by `latestReadySet` and by the
+// dashboard teaser through it, so the retained remainder is for reading a recent
+// run's history by hand rather than for anything the API serves. Three is enough
+// to see the run before last and small enough that `latestReadySet`'s
+// `ORDER BY generated_at` sorts a handful of rows - which is why that column
+// still carries no index of its own, and must not grow one on the strength of a
+// plan that reads the table as unbounded.
+const SETTLED_SET_RETENTION = 3;
 
 /**
  * Stores, reads and orchestrates generation of insight sets. The read derives the
@@ -187,9 +214,11 @@ export class InsightsService implements OnApplicationShutdown {
   /**
    * The floated body of a run: generate, then persist or fail.
    *
-   * On success the `generating` row becomes `ready` and its cards are inserted in
-   * **one transaction**. An empty account generates nothing (`null`), so the
-   * placeholder run is removed and the read falls back to whatever it was. On any
+   * On success the `generating` row becomes `ready`, its cards are inserted and
+   * everything it supersedes past {@link SETTLED_SET_RETENTION} is deleted, all
+   * in **one transaction**. An empty account generates nothing (`null`), so the
+   * placeholder run is removed and the read falls back to whatever it was - and
+   * nothing is pruned, because a run that produced no set supersedes none. On any
    * failure the row is marked `failed` and nothing else is touched, so the
    * previous `ready` set stays the read's answer (AC6).
    *
@@ -247,6 +276,46 @@ export class InsightsService implements OnApplicationShutdown {
               sortOrder: index,
             })),
           );
+        }
+
+        // Drop what this run supersedes, in the same transaction that made it
+        // the newest set - so the tables are bounded at every commit rather
+        // than between them, and a crash cannot leave a half-pruned history.
+        //
+        // A **hard** delete, the second and last exemption from this database's
+        // tombstone convention alongside the placeholder removal above, and for
+        // the same reason: a tombstoned set is still a row, so soft-deleting
+        // here would bound nothing at all.
+        //
+        // `generating` rows are excluded rather than ordered around. A row in
+        // that state is either this run's own - already updated to `ready`
+        // above and so not matched - or a live run belonging to a caller past
+        // the stale cutoff, whose claim is `stillRunning`'s to settle and not
+        // this prune's to delete out from under it.
+        //
+        // Read in full and sliced in TypeScript rather than expressed as a
+        // correlated `NOT IN (SELECT ... LIMIT n)`, because this reads at most
+        // a handful of rows once the first prune has run and the legible
+        // version is worth more than the subquery.
+        const settled = await tx
+          .select({ id: insightSets.id })
+          .from(insightSets)
+          .where(ne(insightSets.status, 'generating'))
+          .orderBy(desc(insightSets.createdAt));
+
+        const superseded = settled
+          .slice(SETTLED_SET_RETENTION)
+          .map((row) => row.id);
+
+        if (superseded.length > 0) {
+          // Cards first. Reversed, a failure between the two statements would
+          // strand cards pointing at a set that no longer exists - the same
+          // ordering argument `CategoriesService.remove` makes about
+          // reassigning before it tombstones.
+          await tx.delete(insights).where(inArray(insights.setId, superseded));
+          await tx
+            .delete(insightSets)
+            .where(inArray(insightSets.id, superseded));
         }
 
         return true;

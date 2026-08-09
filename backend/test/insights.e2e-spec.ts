@@ -583,6 +583,47 @@ describe('Insight endpoints (e2e)', () => {
     expect(body.state).toBe('empty');
   });
 
+  it('keeps only the most recent settled sets, with their cards', async () => {
+    // Every run used to leave its row behind for good. That was a slow accrual
+    // while only a button press started one; the write-path trigger turned it
+    // into growth proportional to how much the user spends, so a completed run
+    // now deletes what it supersedes. Asserted against a real database rather
+    // than against the builder, because the delete has to actually reach both
+    // tables - a prune that removed the sets and orphaned their cards would
+    // satisfy every unit assertion about it.
+    const fresh = await provision();
+    const groceries = await categoryNamed(fresh.token, 'Groceries');
+    await setCap(fresh.token, groceries.id, 300);
+
+    // Over its cap, so every run produces exactly one card and the cards are
+    // countable rather than incidental.
+    await addTransaction(fresh.token, {
+      categoryId: groceries.id,
+      amount: 500,
+      date: window.start,
+    });
+
+    for (let run = 0; run < 6; run++) {
+      await waitForSettled(fresh.token);
+      await generate(fresh.token).expect(202);
+    }
+    const body = await waitForSettled(fresh.token);
+
+    const db = await userDatabases.getUserDb(fresh.id);
+    const sets = await db.select({ id: insightSets.id }).from(insightSets);
+    const cards = await db.select({ id: insights.id }).from(insights);
+
+    // Seven completed runs - the transaction write started one of its own -
+    // against a retention of three.
+    expect(sets).toHaveLength(3);
+    expect(cards).toHaveLength(3);
+
+    // And the newest is still what the read serves, so the prune cost the API
+    // nothing: pruning the wrong end would show up here as an older set.
+    expect(body.state).toBe('ready');
+    expect(body.insights).toHaveLength(1);
+  });
+
   describe('regenerating on a transaction write', () => {
     it('leaves the read generating the moment a create responds', async () => {
       const fresh = await provision();

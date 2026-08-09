@@ -586,7 +586,24 @@ async function generateInsights(
 ): Promise<void> {
   const insights = app.get(InsightsService);
 
-  await insights.generate(userId);
+  try {
+    await insights.generate(userId);
+  } catch (error) {
+    // The same call the ceiling below makes, for the same reason, and it was
+    // missing here: `generate()` throws `ConflictException` when a `generating`
+    // row younger than the staleness cutoff exists, which is exactly what an
+    // interrupted previous `seed:showcase` leaves behind. Unguarded, re-running
+    // the seed inside that window let the exception escape all the way to
+    // `bootstrap`, printing "Seeding failed." and exiting 1 **after** every
+    // transaction had already been written - reporting a successful seed as a
+    // failure, which is the one thing the loop below is careful not to do.
+    console.warn(
+      `Insight generation for ${SHOWCASE_EMAIL} could not be started: ` +
+        `${error instanceof Error ? error.message : String(error)} ` +
+        `The transactions are seeded; regenerate from the Insights page.`,
+    );
+    return;
+  }
 
   // Rule-based generation settles in well under a second; the ceiling is a
   // wedged-run guard, not an expected wait.
