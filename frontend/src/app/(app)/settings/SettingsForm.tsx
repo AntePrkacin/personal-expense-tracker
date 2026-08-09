@@ -10,6 +10,7 @@ import type { Profile } from '@/lib/profile';
 import { ACCESS_ROUTES } from '@/lib/routes';
 import { updateProfile, type UpdateProfileResult } from '@/lib/updateProfile';
 
+import { PreferencesCard } from './PreferencesCard';
 import { ProfileCard } from './ProfileCard';
 import {
   FIELD_ID,
@@ -53,6 +54,10 @@ const MESSAGES = {
   lastName: 'Enter your last name.',
   emailRequired: 'Enter your email address.',
   emailFormat: 'Enter a valid email address.',
+  // BUD-6 and A5's one message, and the same string `app/setup/BudgetForm.tsx` shows for the same
+  // rule - copied rather than shared, which is `LoginForm`'s call about its own two: there is no
+  // copy module in this repo and two overlapping strings are the wrong reason to invent one.
+  monthlyBudget: 'Enter an amount greater than 0.',
   // Never "try again": a body the DTO rejects is rejected again forever.
   invalid: "We couldn't save your changes. Please check the values and try again.",
   // Names the cause, because an authenticated form cannot tell a typo from a taken address unless
@@ -86,6 +91,7 @@ const SAVED_VISIBLE_MS = 5_000;
 function messageFor(field: SettingsFormField, reason: 'required' | 'format'): string {
   if (field === 'firstName') return MESSAGES.firstName;
   if (field === 'lastName') return MESSAGES.lastName;
+  if (field === 'monthlyBudget') return MESSAGES.monthlyBudget;
   return reason === 'required' ? MESSAGES.emailRequired : MESSAGES.emailFormat;
 }
 
@@ -200,9 +206,21 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
    * suppresses implicit submission in the browsers that matter, but the button is not the only way
    * in - and a control being invisible is not an enforcement, which is the rule this repo already
    * applies to the two unreachable 409s.
+   *
+   * **PET-47 adds a third term, and without it the card ships a dead end.** `toUpdateProfileBody`
+   * deliberately omits an unparseable budget - `parseAmountInput('')` is `NaN`, which serialises as
+   * a `null` the DTO refuses - so clearing the budget produces an *edited* form whose diff is
+   * empty. On the two conditions above that disables Save, which means a user who empties the field
+   * gets a greyed-out button, no message, and nothing on screen saying why: the form is
+   * unrecoverable without retyping a value they cannot be told is required. Enabling on a real
+   * problem is what routes that press into `onSubmit`'s validation, which is where the inline
+   * message comes from. The empty-body case this gate exists for is unaffected, because a form with
+   * no problems and no diff is still clean.
    */
   const edited = !sameSettingsValues(values, synced);
-  const hasChangesToSave = edited && Object.keys(toUpdateProfileBody(profile, values)).length > 0;
+  const hasProblems = invalidFields(values).length > 0;
+  const hasChangesToSave =
+    edited && (hasProblems || Object.keys(toUpdateProfileBody(profile, values)).length > 0);
 
   useEffect(() => {
     if (pending) return;
@@ -240,7 +258,7 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
    * twice: both describe the last save, and the moment the form changes neither describes anything.
    * Leaving "Changes saved" up over an edited form is the version that lies.
    */
-  function change(field: SettingsFormField, value: string) {
+  function change<Field extends SettingsFormField>(field: Field, value: SettingsFormValues[Field]) {
     setValues((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: undefined }));
     setFailure(null);
@@ -380,7 +398,13 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
     <form noValidate onSubmit={onSubmit} className="flex max-w-205 flex-col gap-5">
       <ProfileCard values={values} errors={errors} disabled={pending} onChange={change} />
 
-      {/* PET-47's `<PreferencesCard />` and `<CategoriesSummaryCard />` go here. */}
+      {/* **A literal sibling, sharing the form's state and its one Save**, which is exactly what
+          this file's own header predicted PET-47 would be. AC6 falls out of that rather than being
+          implemented: both cards write into `values`, `toUpdateProfileBody` diffs the whole profile
+          at once, and one press sends one PATCH carrying whatever changed on either.
+
+          `<CategoriesSummaryCard />` is still PET-47's third card and is still not drawn. */}
+      <PreferencesCard values={values} errors={errors} disabled={pending} onChange={change} />
 
       {/* **The 401 is the one failure that carries a control, so it does not go through
           `FormError`.** That component renders a bare string by design, and this arm needs a link

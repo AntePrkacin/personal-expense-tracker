@@ -1,4 +1,6 @@
+import { isFilled, isPositiveAmount } from '@/lib/amount';
 import { isEmailValid } from '@/lib/email';
+import { formatAmountInput, parseAmountInput } from '@/lib/format';
 import type { Profile } from '@/lib/profile';
 import type { components } from '@/types/api';
 
@@ -39,9 +41,22 @@ export type SettingsFormValues = {
   firstName: string;
   lastName: string;
   email: string;
+  /** An ISO 4217 code, never the display name. `BudgetField` hands back the code itself. */
+  currency: string;
+  /**
+   * The **display** string, grouped, e.g. `'2,000'`. Not a number.
+   *
+   * The first field on this page that needs the conversion `SetupDraft.budget` and
+   * `CategoryFormValues.monthlyCap` both make, and for the identical reason: no number represents
+   * `'2000.'` mid-type, so the value stays a string until `toUpdateProfileBody` turns it into the
+   * major units `UpdateProfileDto` wants. The paragraph above this type predicted exactly this.
+   */
+  monthlyBudget: string;
+  /** The day a period opens on, 1 to 28. A **number**, because `MonthStartField` returns one. */
+  monthStartDay: number;
 };
 
-/** The three fields that can carry a message, which on this card is all of them. */
+/** Every field on the form. Not all of them can carry a message - see `invalidFields`. */
 export type SettingsFormField = keyof SettingsFormValues;
 
 /**
@@ -58,6 +73,14 @@ export const FIELD_ID: Record<SettingsFormField, string> = {
   firstName: 'settings-first-name',
   lastName: 'settings-last-name',
   email: 'settings-email',
+  // `currency` has no control of its own: it is the left segment of the budget field, which carries
+  // `monthlyBudget`'s id. The entry exists because `Record<SettingsFormField, _>` is an
+  // exhaustiveness proof and dropping it would mean typing this as `Partial`, which is what lets a
+  // real field quietly lose its id. It points at the field the segment lives in, so a focus call
+  // that ever reaches for it lands somewhere true.
+  currency: 'settings-monthly-budget',
+  monthlyBudget: 'settings-monthly-budget',
+  monthStartDay: 'settings-month-start',
 };
 
 /**
@@ -70,7 +93,14 @@ export const FIELD_ID: Record<SettingsFormField, string> = {
  * rewriting the form.
  */
 export function sameSettingsValues(a: SettingsFormValues, b: SettingsFormValues): boolean {
-  return a.firstName === b.firstName && a.lastName === b.lastName && a.email === b.email;
+  return (
+    a.firstName === b.firstName &&
+    a.lastName === b.lastName &&
+    a.email === b.email &&
+    a.currency === b.currency &&
+    a.monthlyBudget === b.monthlyBudget &&
+    a.monthStartDay === b.monthStartDay
+  );
 }
 
 /**
@@ -93,13 +123,23 @@ export type SettingsFieldProblem = {
  * exactly what is stored, or `toUpdateProfileBody` would report a change the user never made and a
  * wholly untouched form would fire a PATCH. Trimming happens once, at the boundary below.
  *
- * It reads the three fields it draws and ignores the other three. PET-47 widens it.
+ * It read three fields and ignored three until PET-47, which is the ticket that widened it: all six
+ * are here now, and the page is the whole profile.
+ *
+ * `monthlyBudget` goes through `formatAmountInput` rather than `String(...)`, which is
+ * `toCategoryFormValues`'s own rule: the prefill has to be something the field could have produced,
+ * or the first keystroke reformats it and `toUpdateProfileBody` reports a change nobody made. It is
+ * handed `toFixed(2)` for the same reason that function is - a stored `2000` must prefill as
+ * `'2,000.00'`, matching what the field writes back after any edit.
  */
 export function toSettingsFormValues(profile: Profile): SettingsFormValues {
   return {
     firstName: profile.firstName,
     lastName: profile.lastName,
     email: profile.email,
+    currency: profile.currency,
+    monthlyBudget: formatAmountInput(profile.monthlyBudget.toFixed(2)),
+    monthStartDay: profile.monthStartDay,
   };
 }
 
@@ -113,7 +153,7 @@ export function toSettingsFormValues(profile: Profile): SettingsFormValues {
  * a number in this file that nothing checks against the backend's.
  */
 export function isNameValid(name: string): boolean {
-  return name.trim() !== '';
+  return isFilled(name);
 }
 
 /**
@@ -149,6 +189,19 @@ export function invalidFields(values: SettingsFormValues): SettingsFieldProblem[
 
   const email = emailProblem(values.email);
   if (email !== null) problems.push({ field: 'email', reason: email });
+
+  // **Three of the six fields can never appear here, and that is a property of the controls rather
+  // than an omission.** `currency` and `monthStartDay` are picked from closed lists of valid values,
+  // so no interaction can put either in a state the DTO would refuse; a message for them would be
+  // one nothing could reach, the shape `TransactionsTable`'s `pending` prop shipped as once.
+  //
+  // The budget can be wrong, and it has exactly one way to be: `isPositiveAmount` folds "blank",
+  // "zero" and "unparseable junk" onto one comparison, which is why BUD-6 and A5 specify one
+  // message rather than two. `required` rather than a new reason, so the component's `MESSAGES`
+  // stays a map over reasons it already handles.
+  if (!isPositiveAmount(values.monthlyBudget)) {
+    problems.push({ field: 'monthlyBudget', reason: 'required' });
+  }
 
   return problems;
 }
@@ -204,6 +257,25 @@ export function toUpdateProfileBody(
   // address" means.
   const email = values.email.trim();
   if (email.toLowerCase() !== original.email.toLowerCase()) body.email = email;
+
+  if (values.currency !== original.currency) body.currency = values.currency;
+
+  // **Compared as a number, never as a string**, which is `toUpdateTransactionBody`'s call about
+  // its own amount: the field rewrites its display value on every keystroke, so retyping `2,000`
+  // over a stored `2000` is not an edit and `'2,000.00' !== '2000'` would say it was - firing a
+  // PATCH on a form nobody changed, which the endpoint answers 400 to when it is the only key.
+  //
+  // Guarded on validity rather than sent regardless: `parseAmountInput('')` is `NaN`, and
+  // `JSON.stringify` writes that as `null`, which `UpdateProfileDto` rejects for a field that
+  // accepts no nulls at all. `SettingsForm` validates before it diffs, so this is unreachable
+  // through the UI - it is here because the two orderings are one refactor apart and only one of
+  // them is safe.
+  const monthlyBudget = parseAmountInput(values.monthlyBudget);
+  if (isPositiveAmount(values.monthlyBudget) && monthlyBudget !== original.monthlyBudget) {
+    body.monthlyBudget = monthlyBudget;
+  }
+
+  if (values.monthStartDay !== original.monthStartDay) body.monthStartDay = values.monthStartDay;
 
   return body;
 }

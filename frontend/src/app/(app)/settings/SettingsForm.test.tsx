@@ -299,6 +299,93 @@ describe('AC5: a valid save', () => {
   });
 });
 
+describe('the Preferences card (PET-47)', () => {
+  it('prefills all three from the stored profile', () => {
+    renderForm();
+
+    expect(screen.getByLabelText('Monthly budget')).toHaveValue('2,000.00');
+    expect(screen.getByRole('button', { name: /^Currency/ })).toHaveAccessibleName('Currency USD');
+    expect(screen.getByRole('button', { name: /^Month starts on/ })).toHaveAccessibleName(
+      'Month starts on 1st of the month',
+    );
+  });
+
+  it('sends both cards in one PATCH, which is AC6', async () => {
+    // **The criterion this whole card rests on.** One "Save changes" beneath two cards, one
+    // request carrying whatever changed on either - which falls out of both cards writing into one
+    // `values` rather than being implemented anywhere. A second request, or a body missing one
+    // card's edit, is what this catches.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(screen.getByRole('button', { name: '15th of the month' }));
+    await user.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith({ firstName: 'Ana', monthStartDay: 15 });
+  });
+
+  it('sends a picked currency as its ISO code', async () => {
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.click(screen.getByRole('button', { name: /British Pound/ }));
+    await user.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ currency: 'GBP' }));
+  });
+
+  it('refuses a budget of zero inline, and sends nothing', async () => {
+    // AC3: an inline message and nothing persisted. One message for blank, zero and junk alike,
+    // because `isPositiveAmount` folds all three onto one comparison.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '0');
+    await user.click(saveButton());
+
+    expect(screen.getByText('Enter an amount greater than 0.')).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('refuses a cleared budget the same way', async () => {
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.click(saveButton());
+
+    expect(screen.getByText('Enter an amount greater than 0.')).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('freezes its controls while the save is in flight', async () => {
+    // Every field on the page, not just the card that was edited: `pending` is one flag threaded to
+    // both cards, so a save begun from Profile must not leave a preference editable underneath it.
+    const user = userEvent.setup();
+    let release: (value: UpdateProfileResult) => void = () => {};
+    const save = jest.fn().mockReturnValue(new Promise<UpdateProfileResult>((r) => (release = r)));
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(screen.getByLabelText('Monthly budget')).toBeDisabled());
+    expect(screen.getByRole('button', { name: /^Month starts on/ })).toBeDisabled();
+
+    release({ ok: true });
+    await waitFor(() => expect(screen.getByLabelText('Monthly budget')).not.toBeDisabled());
+  });
+});
+
 describe('the clean form', () => {
   it('sends nothing and says nothing', async () => {
     // `PATCH /api/profile` answers 400 to a body with no keys, so a press on an untouched form is

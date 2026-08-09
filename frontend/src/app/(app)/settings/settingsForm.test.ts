@@ -4,6 +4,7 @@ import {
   emailProblem,
   invalidFields,
   isNameValid,
+  sameSettingsValues,
   toSettingsFormValues,
   toUpdateProfileBody,
   type SettingsFormValues,
@@ -27,10 +28,16 @@ const VALUES: SettingsFormValues = {
   firstName: 'Marko',
   lastName: 'Kovač',
   email: 'marko@email.com',
+  currency: 'USD',
+  // The stored 2000 as the field's own display string. `toSettingsFormValues` runs it through
+  // `formatAmountInput(toFixed(2))` so the prefill is something the field could have produced -
+  // otherwise the first keystroke reformats it and the diff reports a change nobody made.
+  monthlyBudget: '2,000.00',
+  monthStartDay: 1,
 };
 
 describe('toSettingsFormValues', () => {
-  it('takes the three fields the card draws', () => {
+  it('takes all six fields the page draws', () => {
     expect(toSettingsFormValues(PROFILE)).toEqual(VALUES);
   });
 
@@ -98,14 +105,27 @@ describe('invalidFields', () => {
     expect(invalidFields(VALUES)).toEqual([]);
   });
 
-  it('reports all three at once, in draw order', () => {
+  it('reports every problem at once, in draw order', () => {
     // Never stopping at the first, which is `categoryForm.invalidFields`'s rule: a blank form
-    // shows three messages rather than one at a time down three submits.
-    expect(invalidFields({ firstName: '', lastName: '', email: '' })).toEqual([
+    // shows every message rather than one at a time down four submits. Four rather than three
+    // since PET-47, and the budget is last because it is drawn last.
+    expect(
+      invalidFields({ ...VALUES, firstName: '', lastName: '', email: '', monthlyBudget: '' }),
+    ).toEqual([
       { field: 'firstName', reason: 'required' },
       { field: 'lastName', reason: 'required' },
       { field: 'email', reason: 'required' },
+      { field: 'monthlyBudget', reason: 'required' },
     ]);
+  });
+
+  it('never names the two fields picked from closed lists', () => {
+    // `currency` and `monthStartDay` come from pickers offering only valid values, so no
+    // interaction can make either wrong. A message for them would be one nothing could reach.
+    const problems = invalidFields({ ...VALUES, currency: '', monthStartDay: 99 });
+
+    expect(problems.map((problem) => problem.field)).not.toContain('currency');
+    expect(problems.map((problem) => problem.field)).not.toContain('monthStartDay');
   });
 
   it('distinguishes an absent address from a malformed one', () => {
@@ -123,6 +143,73 @@ describe('invalidFields', () => {
     expect(invalidFields({ ...VALUES, firstName: '   ' })).toEqual([
       { field: 'firstName', reason: 'required' },
     ]);
+  });
+});
+
+describe("PET-47's three preference fields", () => {
+  it('prefills the budget as a string the field could have produced', () => {
+    // `formatAmountInput(toFixed(2))`, not `String(2000)`. A raw "2000" prefill would be rewritten
+    // to "2,000.00" by the first keystroke, and the diff would then report an edit nobody made.
+    expect(toSettingsFormValues({ ...PROFILE, monthlyBudget: 2000 }).monthlyBudget).toBe(
+      '2,000.00',
+    );
+    expect(toSettingsFormValues({ ...PROFILE, monthlyBudget: 1240.5 }).monthlyBudget).toBe(
+      '1,240.50',
+    );
+  });
+
+  it('sends the budget as a number in major units', () => {
+    // `UpdateProfileDto.monthlyBudget` is `@IsNumber({ maxDecimalPlaces: 2 })` in major units, so
+    // the display string has to be parsed rather than passed through.
+    const body = toUpdateProfileBody(PROFILE, { ...VALUES, monthlyBudget: '2,500.50' });
+
+    expect(body.monthlyBudget).toBe(2500.5);
+  });
+
+  it('treats a retyped budget as unchanged, because it compares numbers', () => {
+    // The field rewrites its own display value on every keystroke, so a string comparison would
+    // read "2,000.00" against a stored 2000 as an edit and fire a PATCH on an untouched form.
+    expect(toUpdateProfileBody(PROFILE, { ...VALUES, monthlyBudget: '2000' })).toEqual({});
+    expect(toUpdateProfileBody(PROFILE, { ...VALUES, monthlyBudget: '2,000.00' })).toEqual({});
+  });
+
+  it('never sends an unparseable budget, which would serialise as null', () => {
+    // `parseAmountInput('')` is `NaN` and `JSON.stringify` writes that as `null`, which the DTO
+    // rejects for a field accepting no nulls. Unreachable through the UI - the form validates
+    // before it diffs - and guarded because the two orderings are one refactor apart.
+    expect(toUpdateProfileBody(PROFILE, { ...VALUES, monthlyBudget: '' })).toEqual({});
+    expect(toUpdateProfileBody(PROFILE, { ...VALUES, monthlyBudget: 'junk' })).toEqual({});
+  });
+
+  it('sends a changed currency and month start, and omits them when they match', () => {
+    expect(toUpdateProfileBody(PROFILE, { ...VALUES, currency: 'EUR' })).toEqual({
+      currency: 'EUR',
+    });
+    expect(toUpdateProfileBody(PROFILE, { ...VALUES, monthStartDay: 15 })).toEqual({
+      monthStartDay: 15,
+    });
+    expect(toUpdateProfileBody(PROFILE, VALUES)).toEqual({});
+  });
+
+  it('carries both cards in one body, which is what AC6 rests on', () => {
+    // One "Save changes" sends one PATCH. The cards do not each write their own request; they
+    // write into one `values`, and this is the function that turns it into one body.
+    const body = toUpdateProfileBody(PROFILE, {
+      ...VALUES,
+      firstName: 'Ana',
+      monthStartDay: 15,
+    });
+
+    expect(body).toEqual({ firstName: 'Ana', monthStartDay: 15 });
+  });
+
+  it('notices a preference change in sameSettingsValues', () => {
+    // The resync in `SettingsForm` compares by value, so a field it did not know about would make
+    // an edited form look identical to the server's and be silently reverted.
+    expect(sameSettingsValues(VALUES, { ...VALUES, monthStartDay: 15 })).toBe(false);
+    expect(sameSettingsValues(VALUES, { ...VALUES, currency: 'EUR' })).toBe(false);
+    expect(sameSettingsValues(VALUES, { ...VALUES, monthlyBudget: '3,000.00' })).toBe(false);
+    expect(sameSettingsValues(VALUES, { ...VALUES })).toBe(true);
   });
 });
 
@@ -192,6 +279,7 @@ describe('toUpdateProfileBody', () => {
     // 400 rather than a skipped field. This is the exact mirror of `toUpdateCategoryBody`, whose
     // blank cap *must* send null, which is why it is worth an assertion rather than a comment.
     const body = toUpdateProfileBody(PROFILE, {
+      ...VALUES,
       firstName: 'Ana',
       lastName: 'Marić',
       email: 'a@b.co',

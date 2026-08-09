@@ -1,4 +1,5 @@
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
+import { isFilled, isPositiveAmount } from '@/lib/amount';
 import { DEFAULT_CURRENCY } from '@/lib/money';
 import type { components } from '@/types/api';
 
@@ -240,12 +241,12 @@ export function parseDraft(raw: string | null): SetupDraft {
  * A5 designs none, and the backend's own cap is its business to enforce.
  */
 export function isBudgetValid(budget: string): boolean {
-  return parseAmountInput(budget) > 0;
+  return isPositiveAmount(budget);
 }
 
 /** Whether a name field is filled (REG-2), matching the DTO's `@IsNotEmpty()`. */
 export function isNameValid(name: string): boolean {
-  return name.trim() !== '';
+  return isFilled(name);
 }
 
 // `isEmailValid` used to sit here, beside the other two rules, and moved to
