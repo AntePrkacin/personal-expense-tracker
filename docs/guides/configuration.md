@@ -62,5 +62,36 @@ unable to start.
 prefix because it is read server-side only. A `NEXT_PUBLIC_` variable is inlined into the browser
 bundle and is therefore public forever.
 
+## Getting a `GEMINI_API_KEY`
+
+The one variable in the table you cannot get from another part of this repo, and the only one
+whose absence disables a feature rather than a mode. Receipt scanning is off without it and the
+rest of the app is unaffected, so skipping this is a legitimate way to run the project.
+
+1. Sign in to [Google AI Studio](https://aistudio.google.com/apikey) with any Google account.
+2. **Create API key**, then pick or let it create a Google Cloud project. A new account is put on
+   the free tier with no card and no billing account, which is the tier this project runs on.
+3. Copy the key - it starts `AIza` - and paste it into `backend/.env`, uncommenting the line:
+
+   `GEMINI_API_KEY=AIza...`
+
+   Uncomment it only with a value on it. An empty `GEMINI_API_KEY=` is an empty string rather
+   than an unset variable, and the Joi schema rejects it at boot.
+4. Restart the backend. There is nothing to enable per model and no allowlist to join: the model
+   name is a constant in `backend/src/transactions/receipt-scan.constants.ts`.
+
+Check it worked by scanning a receipt from the Add transaction modal. A key the backend never
+saw reports scanning as switched off rather than failing, so "the buttons say it is off" is the
+symptom of a missing or misspelled key, not of a broken scan.
+
+**The free tier trains on what you send it.** Google's free-tier terms let everything in the
+request improve their models; the paid tier does not. What a scan actually sends - and what it
+deliberately does not - is inventoried in `backend/CLAUDE.md` under Receipt scanning. The modal
+says so beside the buttons, and `docs/TODO.md` carries why no per-scan opt-in exists. Use a key
+from an account you are willing to send test receipts through.
+
+For the deployed backend the same key is a Fly secret rather than a `.env` line; see
+[Deployment](deployment.md).
+
 Note that drizzle-kit never passes through that schema: it reads raw `process.env`, which is why
 the two `drizzle.*.config.ts` files repeat the `DATABASE_DIR` default themselves.

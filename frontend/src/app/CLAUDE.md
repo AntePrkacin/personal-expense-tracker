@@ -1100,6 +1100,42 @@ fill the receipt's actual date on an untouched form and leaves a typed field - b
 alone. The set is local `useState`, never derived from `values`, precisely so the merge itself
 never marks anything touched.
 
+**The review of PET-59 changed both halves of that sentence, and the paragraph above is dated to
+before it.** The set is a **ref**, not `useState`, and the merge **does** add to it. Take them in
+turn, because each fixes a defect rather than tidying a shape. As state it was read from the
+render closure that started the scan, and `handleFiles` reads it across two awaits - so a field
+typed into while the receipt was still compressing was silently overwritten by the result, which
+is the exact case the set exists to prevent. Nothing renders from it, so a ref is not merely
+adequate, it is the only spelling that reads the value at the moment of the merge. And a scan's
+own fields have to join it, or "Add pages" is not what the label says: that control sends only
+the newly picked file, the model reads that page alone, and page 2's guess at the merchant would
+replace page 1's correct one. So the set is now every field somebody decided on - typed or
+scanned - and `(app)/transactionForm.ts` calls it `locked` rather than `touched` for that reason.
+The one thing it deliberately still never tracks is emptiness, which is the half of the paragraph
+above that stands unchanged and is the whole reason `date` is overwritable at all.
+
+**Two mechanical consequences worth not undoing.** The ref is **replaced, never mutated**:
+`setValues` takes a functional updater that React runs later, so widening the set in place would
+hand the deferred merge a set already claiming every field it was about to fill, and it would fill
+nothing. And the caller needs the filled list *before* the merge runs, which no updater can hand
+back, so `scannedFieldsToFill` is exported beside `mergeScannedFields` and the merge is written in
+terms of it - one authority, two entry points. The list is needed twice: to widen the lock, and to
+clear those fields' validation messages, because the merge is the one write to `values` that does
+not go through `set()`, which is otherwise the only thing that clears one.
+
+**The overlay covers compression, and the scan call is wrapped in a `try`.** Both were review
+findings on the same handler. `setScanning(true)` fires before `compressReceiptFiles`, not after:
+four 12MP photos take seconds, and until the overlay appears there is no spinner, both file inputs
+are enabled and the click reads as ignored - so a user re-picks and starts a second `handleFiles`
+that silently invalidates the first through `scanTokenRef`. And a Server Action call can **reject**
+rather than resolving to `{ ok: false }` - a body over `next.config.ts`'s `bodySizeLimit`, a
+connection dropped mid-action - which, uncaught, skipped every `setScanning(false)` and left the
+overlay up forever with nothing on it but Cancel. Both onChange handlers invoke this as
+`void handleFiles(...)`, so there is no caller to catch it either. There is also now one
+client-side size check, and it is **PDFs only**: an image is compressed toward 0.75MB first so its
+prior size says nothing, while a PDF is passed through untouched and is the single file that can
+reach the action over the body limit.
+
 **There is no client-side abort for a scan in flight, only a soft one.** Unlike `authorizedPost`'s
 plain `fetch`, calling a Server Action exposes no `AbortController` a client component can reach
 into - so the overlay's "Cancel scan" invalidates a ref-held generation counter instead: the

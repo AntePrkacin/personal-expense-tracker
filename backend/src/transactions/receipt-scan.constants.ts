@@ -12,7 +12,7 @@
  */
 export const RECEIPT_SCAN_MODEL = 'gemini-3.6-flash';
 
-/** The five MIME types Gemini is asked to read. A `fileFilter` rejects anything else with a 400. */
+/** The MIME types Gemini is asked to read. A `fileFilter` rejects anything else with a 400. */
 export const RECEIPT_MIME_TYPES = [
   'image/png',
   'image/jpeg',

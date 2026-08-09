@@ -349,6 +349,44 @@ user a full bucket per machine, and a per-user limit is per-user by construction
 is fairness and blast radius: one account in a retry loop cannot outrun everybody else. A
 genuine aggregate cap needs a shared store and a global counter; see `docs/TODO.md`.
 
+### What crosses the wire to Google
+
+**This is the one place in the app that sends a user's data to a third party, so what goes is
+written down rather than left to be reconstructed from four files.** The literal prompt string
+is `buildPrompt` in `backend/src/transactions/receipt-extraction.service.ts` and is not restated
+here - it would drift the first time somebody tuned a sentence. What is here is the inventory,
+which is what the modal's disclosure line and `docs/TODO.md`'s training-opt-in entry are both
+claims about.
+
+One `generateContent` call carries four things: the model name, the prompt string, the files, and
+a response schema.
+
+- **The files, inlined as base64.** `createPartFromBase64`, not the Files API, so nothing persists
+  on Google's side beyond the request. This is what "Nothing is stored" in the modal's copy means
+  on both ends: no column here, no uploaded file there.
+- **Every live category, as `{id, name}` pairs.** Uncapped, deliberately not narrowed, because the
+  model is asked to return one of these ids verbatim and an id it was never shown cannot be
+  returned. Note the asymmetry with the merchant list below, which *is* capped: the categories are
+  bounded by how many a person makes (thirteen seeded) rather than by a constant, so nothing
+  enforces it. If prompt size ever matters, this is where an unbounded list is.
+- **The top `MERCHANT_HISTORY_LIMIT` merchants of the past `MERCHANT_HISTORY_DAYS`**, each with the
+  categories it has been filed under and how many times. Merchant name, category id, category name,
+  count - and nothing else about those transactions.
+- **The response schema's field descriptions**, which are instruction as much as shape: they are
+  where "the final total charged", "in major currency units" and "the id verbatim, not the name"
+  are actually said. Editing one changes the model's behaviour, so treat that object as prompt.
+
+**What deliberately does not go, and is worth being able to say quickly:** no email, no user id, no
+session token, no transaction amounts, no transaction dates, no notes, no category caps and no
+spend figures. The personal data in a scan is the receipt image plus two sets of user-authored
+strings - merchant names and category names.
+
+**The disclosure line names all three, and naming only two was a review finding.** It read "what
+you upload and your recent merchant names" while category names were going too, on a free-tier key
+where both are training input. The copy is in `AddTransactionModal.tsx` and mirrored in
+`docs/explainers/receipt-scanning-modal-preview.html`; the two must agree, and nothing checks that
+they do. Widening the prompt is what obliges that sentence to widen with it.
+
 ## Category endpoints
 
 **One `Uncategorized` category exists per account, and it is a system row rather than a

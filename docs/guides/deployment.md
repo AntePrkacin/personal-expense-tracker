@@ -76,16 +76,22 @@ app against an incomplete set and Joi fails it each time. On a brand-new app the
 until the first deploy, which is why step 4 comes before step 6. To change a secret later without
 an immediate restart, use `fly secrets set --stage` and then `fly secrets deploy`.
 
-Five secrets are set: `TURSO_ORG`, `TURSO_ORG_TOKEN`, `TURSO_CENTRAL_DB_URL`,
-`TURSO_CENTRAL_DB_TOKEN` and `MAILPACE_API_TOKEN`. Everything else the app reads is non-secret and
-lives in `fly.toml`'s `[env]`. `TURSO_GROUP_TOKEN` is deliberately **not** set, because the
-application never reads it.
+Six secrets are set: `TURSO_ORG`, `TURSO_ORG_TOKEN`, `TURSO_CENTRAL_DB_URL`,
+`TURSO_CENTRAL_DB_TOKEN`, `MAILPACE_API_TOKEN` and `GEMINI_API_KEY`. Everything else the app reads
+is non-secret and lives in `fly.toml`'s `[env]`. `TURSO_GROUP_TOKEN` is deliberately **not** set,
+because the application never reads it.
+
+`GEMINI_API_KEY` is the one secret the app boots without: unset, `POST /api/transactions/scan`
+answers 503 and the Add transaction modal's scan buttons report scanning as switched off, while
+every other endpoint works. So omitting it is a deploy that runs with one feature dark rather than
+a deploy that fails, which is exactly the failure a secret list is easy to leave it out of. Where
+to get a key is in [Configuration](configuration.md).
 
 Piping from a local `.env` keeps the values out of your shell history and out of any terminal
 transcript, since `fly secrets import` echoes only names:
 
 ```sh
-rg -N '^(TURSO_ORG|TURSO_ORG_TOKEN|TURSO_CENTRAL_DB_URL|TURSO_CENTRAL_DB_TOKEN|MAILPACE_API_TOKEN)=' \
+rg -N '^(TURSO_ORG|TURSO_ORG_TOKEN|TURSO_CENTRAL_DB_URL|TURSO_CENTRAL_DB_TOKEN|MAILPACE_API_TOKEN|GEMINI_API_KEY)=' \
   backend/.env | fly secrets import
 ```
 

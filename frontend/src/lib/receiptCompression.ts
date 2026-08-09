@@ -17,6 +17,21 @@ export const MAX_RECEIPT_FILES = 4;
 export const RECEIPT_PDF_MIME_TYPE = 'application/pdf';
 
 /**
+ * The backend's own per-PDF cap, mirrored here for the same reason
+ * `MAX_RECEIPT_FILES` is: this side has to refuse an oversized PDF *before*
+ * sending, and it cannot import a backend constant.
+ *
+ * It is checked on the client for PDFs only, and that asymmetry is the design.
+ * An image's size before this module runs says nothing - it is compressed
+ * toward `maxSizeMB` first, and a 12MB phone photo is the ordinary case - so
+ * the backend's 413 stays the real answer for one that overshoots. A PDF is
+ * passed through untouched, which makes it the one file that can arrive at the
+ * Server Action bigger than `next.config.ts`'s `bodySizeLimit`, where the call
+ * *throws* rather than answering a 413 anything could name a cap from.
+ */
+export const MAX_PDF_BYTES = 4 * 1024 * 1024;
+
+/**
  * `maxSizeMB` is best-effort - the library iterates toward the target and
  * gives up at its own `maxIteration` - which is answered by the backend's own
  * 413 rather than assumed away here.

@@ -12,7 +12,12 @@ import type { CategoryOption } from '@/lib/categories';
 import type { CreateTransactionResult } from '@/lib/createTransaction';
 import { todayIsoDate } from '@/lib/date';
 import { amountCaret, formatAmountInput } from '@/lib/format';
-import { compressReceiptFiles, MAX_RECEIPT_FILES, RECEIPT_PDF_MIME_TYPE } from '@/lib/receiptCompression';
+import {
+  compressReceiptFiles,
+  MAX_PDF_BYTES,
+  MAX_RECEIPT_FILES,
+  RECEIPT_PDF_MIME_TYPE,
+} from '@/lib/receiptCompression';
 import type { ScanReceiptResult } from '@/lib/scanReceipt';
 import type { components } from '@/types/api';
 
@@ -21,6 +26,7 @@ import { Modal, type ModalHandle } from './Modal';
 import {
   invalidFields,
   mergeScannedFields,
+  scannedFieldsToFill,
   toCreateTransactionBody,
   type TransactionFormField,
   type TransactionFormValues,
@@ -192,15 +198,25 @@ export function AddTransactionModal({
   const [pending, setPending] = useState(false);
 
   /**
-   * Which fields the user has typed into, for `mergeScannedFields` (PET-59).
+   * Which fields already hold a value somebody decided on, for `mergeScannedFields`
+   * (PET-59): every field `set()` has written, plus every field a scan has filled.
    *
-   * Written only by `set()` below, never by the merge itself - so the date field's own
-   * `todayIsoDate()` default is never marked touched just because it holds a value, and a
-   * scan is free to overwrite it with the receipt's real date. `Set` rather than a boolean
-   * per field because `mergeScannedFields` takes it as a `ReadonlySet`, matching the field
-   * names it already keys on.
+   * **A ref rather than state, and that is a correctness requirement rather than an
+   * optimisation.** Nothing renders from it, and `handleFiles` reads it across two awaits -
+   * so as state it would be read from the render closure that started the scan, and a field
+   * typed into while the receipt was still compressing would be silently overwritten by
+   * the result. That is the exact case the set exists to prevent, so it must be read at the
+   * moment of the merge rather than at the moment the picker fired.
+   *
+   * **Replaced, never mutated.** `handleFiles` hands the pre-merge snapshot to `setValues`'s
+   * updater, which React runs later; mutating in place would widen the set the deferred
+   * updater then reads and the merge would fill nothing at all.
+   *
+   * It deliberately does not track "is this field empty": `values.date` starts as
+   * `todayIsoDate()`, so an emptiness test would refuse to ever overwrite it with the
+   * receipt's real date.
    */
-  const [touched, setTouched] = useState<ReadonlySet<keyof TransactionFormValues>>(() => new Set());
+  const lockedRef = useRef<ReadonlySet<keyof TransactionFormValues>>(new Set());
 
   const [scanning, setScanning] = useState(false);
   /** The scan-outcome note beside the controls (missing fields, or nothing extracted). `role="status"`, not an error. */
@@ -224,7 +240,7 @@ export function AddTransactionModal({
   /** Writes one field and clears its message, which is this repo's timing rule for forms. */
   function set<K extends keyof TransactionFormValues>(field: K, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
-    setTouched((current) => new Set(current).add(field));
+    lockedRef.current = new Set(lockedRef.current).add(field);
 
     // Validation appears on submit only and clears as soon as the user starts fixing that
     // field - never on the next keystroke of a different one. Same as BudgetForm and
@@ -286,13 +302,35 @@ export function AddTransactionModal({
       setScanFailure(MESSAGES.scanTooMany);
       return;
     }
+    // The one size check worth making on this side, and only for a PDF -
+    // `receiptCompression.ts` carries why an image's size here says nothing.
+    // Without it the `scanTooLarge` message above promises a 4MB ceiling that
+    // nothing enforces until the backend, and a PDF past `bodySizeLimit`
+    // never reaches the backend at all: the Server Action call rejects, which
+    // is the throw the catch below exists for and a worse answer than this.
+    if (hasPdf && files[0]!.size > MAX_PDF_BYTES) {
+      setScanFailure(MESSAGES.scanTooLarge);
+      return;
+    }
 
     setScanFailure(null);
     setScanNote(null);
 
+    // **The overlay covers compression too, not just the request.** Four 12MP
+    // photos take seconds to compress, and until this flips there is no
+    // spinner, both file inputs stay enabled and the click reads as ignored -
+    // so a user re-picks and starts a second `handleFiles` that silently
+    // invalidates the first through the token below. The overlay describes
+    // "reading your receipt", and compressing it is part of that.
+    const token = ++scanTokenRef.current;
+    setScanning(true);
+
     const compressed = await compressReceiptFiles(files);
 
+    if (scanTokenRef.current !== token) return;
+
     if (!compressed.ok) {
+      setScanning(false);
       // Read at the moment of the failure rather than hoisted to render: this
       // is a one-off event handler, not part of the initial render decision
       // the camera input's `pointer-fine:hidden` has to be, so there is no
@@ -305,13 +343,26 @@ export function AddTransactionModal({
       return;
     }
 
-    const token = ++scanTokenRef.current;
-    setScanning(true);
-
     const formData = new FormData();
     for (const file of compressed.files) formData.append('files', file);
 
-    const result = await scan(formData);
+    // **A Server Action call can reject rather than resolve, and nothing above
+    // this would catch it.** `handleFiles` is invoked as `void handleFiles(...)`
+    // from both onChange handlers, so an escaping rejection is unhandled and -
+    // worse - skips `setScanning(false)` and every `setScanFailure`, leaving
+    // the overlay up forever with nothing on it but Cancel. The reachable
+    // paths are a body over `next.config.ts`'s `bodySizeLimit` and a
+    // connection dropped mid-action; both are "we couldn't read that receipt,
+    // try again", which is exactly `scanFailed`.
+    let result: ScanReceiptResult;
+    try {
+      result = await scan(formData);
+    } catch {
+      if (scanTokenRef.current !== token) return;
+      setScanning(false);
+      setScanFailure(MESSAGES.scanFailed);
+      return;
+    }
 
     // The overlay's Cancel was pressed while this was in flight - the result
     // arrived too late to matter, and applying it now would resurrect a
@@ -325,7 +376,29 @@ export function AddTransactionModal({
       return;
     }
 
-    setValues((current) => mergeScannedFields(current, touched, result.data));
+    // Snapshotted rather than read twice, because `setValues`'s updater runs
+    // later: widening `lockedRef` first would hand the deferred merge a set
+    // that already claims every field it was about to fill.
+    const locked = lockedRef.current;
+    const filled = scannedFieldsToFill(locked, result.data);
+
+    setValues((current) => mergeScannedFields(current, locked, result.data));
+    lockedRef.current = new Set([...locked, ...filled]);
+
+    // The merge is the one write to `values` that does not go through `set()`,
+    // which is otherwise the only thing that clears a field's message - so
+    // without this, submitting an empty form and then scanning a good receipt
+    // leaves three red lines under three fields that are now filled and valid.
+    if (filled.length > 0) {
+      setErrors((current) => {
+        const next = { ...current };
+        for (const field of filled) {
+          if (field !== 'note') delete next[field];
+        }
+        return next;
+      });
+    }
+
     setHasScanned(true);
 
     const { missing } = result.data;
@@ -489,9 +562,10 @@ export function AddTransactionModal({
           <p className="flex gap-2 text-xs leading-relaxed opacity-60">
             <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
             <span>
-              What you upload and your recent merchant names are sent to Google Gemini to read
-              the receipt, and may be used to improve their models. Nothing is stored. Up to{' '}
-              {MAX_RECEIPT_FILES} photos or one PDF, all treated as pages of one receipt.
+              What you upload, your recent merchant names and your category names are sent to
+              Google Gemini to read the receipt, and may be used to improve their models. Nothing
+              is stored. Up to {MAX_RECEIPT_FILES} photos or one PDF, all treated as pages of one
+              receipt.
             </span>
           </p>
 

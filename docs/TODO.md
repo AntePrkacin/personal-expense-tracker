@@ -1472,15 +1472,16 @@ in the picker: admin-managed rows, no new mechanism, no user-data migration. So 
 is worth doing before this rather than after, and this entry exists so the next person costing
 income starts from the transaction model instead of from the category list.
 
-### PET-59's receipt scanning deferred five things, each for a reason recorded on the ticket
+### PET-59's receipt scanning deferred six things, each for a reason recorded on the ticket
 
 `POST /api/transactions/scan` extracts a transaction's fields from a photo or PDF and stores
-nothing, but five things the plan considered are not in this build. Each is a decision rather
+nothing, but six things the plan considered are not in this build. Each is a decision rather
 than an oversight, and each is recorded here rather than only in
 `docs/plans/2026-08-06_PET-59_receipt-scanning.md` so it survives that plan being superseded.
 
-**A per-scan training opt-in, blocked on the Settings screen.** The free tier's terms mean the
-receipt image and up to 50 merchant names are used to improve Google's models on every scan;
+**A per-scan training opt-in, blocked on the Settings screen.** The free tier's terms mean
+everything the request carries is used to improve Google's models on every scan - the receipt
+image, up to 50 merchant names and every category name, inventoried in `backend/CLAUDE.md`;
 V1 answers that with an on-screen disclosure line rather than a toggle, because a real opt-in
 needs a new profile column, a migration, an `api:sync` and a screen to host it - none of which
 exist while Settings' `<main>` is empty. Migrating the whole project to the paid tier is the
@@ -1516,6 +1517,21 @@ promise exactly this and silently lose every receipt but the one the model led w
 starting point rather than a measurement against real receipt photos on real hardware. If OCR
 accuracy or the 413 rate ever becomes a visible problem, this is the first pair of numbers to
 revisit, and it wants a phone in hand rather than a guess from a desk.
+
+**A way to make a scan correct an earlier scan's mistake.** The review of this branch found the
+merge could not honour its own doc: `mergeScannedFields` locks a field once a scan has filled it,
+which is what "Add pages" has to mean - that control sends only the newly picked file, the model
+reads that page on its own, and page 2's re-reading of the merchant would otherwise replace page
+1's correct one. The price is paid by the other control. The camera reads "Scan again" after a
+success and goes through the identical handler, so a user whose first photo produced a wrong
+merchant cannot fix it by rephotographing; they edit the field, which is one keystroke and
+unambiguous, but it is not what the label promises. Two ways out, neither taken here because both
+are product decisions rather than review fixes: split the two controls so the camera replaces and
+the picker augments, which makes one button's semantics invisible until it is pressed; or let a
+scan overwrite a previous scan while still respecting typed fields, which puts page 2's guess back
+on top of page 1's reading. Worth a designer's answer alongside the copy A29 already owes this
+feature, and worth knowing that the desktop path has only the augmenting control at all, since
+the camera is `pointer-fine:hidden`.
 
 ## Operational
 

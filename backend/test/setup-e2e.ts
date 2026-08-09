@@ -10,9 +10,10 @@ import { join } from 'node:path';
  *   never touch the developer's `backend/databases/` and test files cannot
  *   collide, whether they run in parallel workers or share one;
  * - strip every TURSO_* variable inherited from the shell, plus the two mail
- *   ones, so the suite runs in local mode against plain files: no network, no
- *   cloud credentials, no databases created in a real Turso organization, and
- *   no real login emails sent to whatever addresses the tests invent.
+ *   ones and the Gemini key, so the suite runs in local mode against plain
+ *   files: no network, no cloud credentials, no databases created in a real
+ *   Turso organization, no real login emails sent to whatever addresses the
+ *   tests invent, and no real receipt-extraction calls billed to the project.
  *
  * This file alone is NOT enough for the second guarantee, and relying on it
  * was a real bug: ConfigModule also reads backend/.env from disk, which put
@@ -35,6 +36,14 @@ for (const key of Object.keys(process.env)) {
 // LogMailer and there is no transport that could reach the network.
 delete process.env.MAILPACE_API_TOKEN;
 delete process.env.MAIL_FROM;
+
+// Same reason, and the same hazard one endpoint further out: with a key in the
+// shell - direnv or mise loading backend/.env, or a plain `export` - the six
+// scan tests in transactions.e2e-spec.ts stop expecting 503 and start making
+// real Gemini calls with four bytes of fake PNG, taking the throttler test's
+// 3x503-then-429 sequence down with them. `ignoreEnvFile` covers backend/.env;
+// only this covers the shell.
+delete process.env.GEMINI_API_KEY;
 
 /**
  * A rate limit small enough for a test to reach in a few requests.
@@ -60,11 +69,10 @@ process.env.AUTH_RATE_IP_LIMIT = '1000';
 /**
  * Same reasoning as `AUTH_RATE_LIMIT` above, and set here for the same
  * "before any hook" reason: small enough for `transactions.e2e-spec.ts` to
- * trip the `scan` throttler in a few requests. `GEMINI_API_KEY` stays unset
- * throughout the suite (never assigned here, and nothing under `TURSO_`/mail
- * strips it because it never inherits one from the shell in CI), so every
- * scan request answers 503 before it would ever reach the network - which is
- * what lets the throttler test run with no real Gemini key.
+ * trip the `scan` throttler in a few requests. `GEMINI_API_KEY` is deleted
+ * above rather than merely left unassigned, so every scan request answers 503
+ * before it would ever reach the network - which is what lets the throttler
+ * test run with no real Gemini key, on a developer's machine as well as in CI.
  */
 process.env.SCAN_RATE_LIMIT = '3';
 

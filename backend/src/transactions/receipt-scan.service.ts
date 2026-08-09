@@ -102,8 +102,10 @@ export class ReceiptScanService {
 
     // Checked ahead of the database reads below: they would be wasted work on
     // an environment with no key, and the buttons stay visible regardless
-    // (see the plan's "the key is optional" decision), so this is the first
-    // thing every scan hits when it is unset.
+    // (see the plan's "the key is optional" decision). It sits *after* the two
+    // checks above rather than first, deliberately: both of those are facts
+    // about the request the caller can fix, and answering 503 to a request
+    // that was malformed anyway would tell them the wrong thing to fix.
     if (!this.extraction.isConfigured()) {
       throw new ServiceUnavailableException(
         'Receipt scanning is not configured.',

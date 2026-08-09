@@ -240,36 +240,67 @@ export type ScannedTransactionFields = {
   note: string | null;
 };
 
+/** The five fields a scan can fill, which is every key `ScannedTransactionFields` carries. */
+const SCANNED_FIELDS = ['merchant', 'amount', 'date', 'categoryId', 'note'] as const;
+
 /**
- * Merges a scan's fields into the form, honouring which the user has already
- * typed into.
+ * Which fields a scan would write, given what is already spoken for.
  *
- * **Tracks touched fields, not empty ones, and that is the whole point.**
+ * **Separate from the merge below because the caller needs the list before the
+ * merge runs, and `setValues` cannot hand it back.** React state updaters are
+ * functional and deferred, so a merge that returned "here is what I filled"
+ * would return it a render too late for the two things `AddTransactionModal`
+ * does with it: locking those fields against the next scan, and clearing their
+ * validation messages, which the merge otherwise bypasses because `set()` is
+ * the only other thing that clears one. The list depends on `locked` and
+ * `scanned` alone and never on the current values, which is what makes the
+ * split free rather than a second authority - `mergeScannedFields` is defined
+ * in terms of this function rather than repeating its condition.
+ */
+export function scannedFieldsToFill(
+  locked: ReadonlySet<keyof TransactionFormValues>,
+  scanned: ScannedTransactionFields,
+): (keyof TransactionFormValues)[] {
+  return SCANNED_FIELDS.filter((field) => !locked.has(field) && scanned[field] !== null);
+}
+
+/**
+ * Merges a scan's fields into the form, leaving every field in `locked` alone.
+ *
+ * **Locks written fields, never empty ones, and that is the whole point.**
  * `AddTransactionModal` initialises `date: todayIsoDate()`, so an emptiness
  * test would never overwrite it - a scan carrying the receipt's real date
- * would be silently refused in favour of today's. `touched` instead records
- * which fields the user has actually written into (through the form's `set`
- * function, never through this merge itself), so the pre-filled default date
- * counts as untouched and a field the user typed into - blank or not - is
- * left alone. This is also what makes a second scan safe on a partially
- * typed form: only the gaps a first scan left get filled.
+ * would be silently refused in favour of today's. `locked` instead records
+ * which fields already hold a value somebody decided on: every field the user
+ * has written into through the form's `set` function, plus every field a
+ * previous scan filled. So the pre-filled default date counts as unlocked and
+ * is free to be overwritten, while a field the user typed into - blank or not
+ * - is left alone.
+ *
+ * **A second scan is what the previous-scan half is for.** "Add pages" sends
+ * only the newly picked file, and the model reads that page on its own: page 2
+ * of a receipt carries the total and often re-reads the merchant differently,
+ * or not at all. Without the lock, the second page's guess would replace page
+ * 1's correct merchant and date. With it, a later scan fills only the gaps an
+ * earlier one left, which is what "pages of one receipt" has to mean. The cost
+ * is that a scan cannot correct an earlier scan's mistake - the user edits the
+ * field instead, which is one keystroke and unambiguous. `docs/TODO.md` carries
+ * that trade.
  *
  * A `null` field is a field the scan could not fill, so it never overwrites
- * anything, touched or not - the caller's existing value (blank, or a
- * previous scan's) survives.
+ * anything, locked or not - the caller's existing value (blank, or a previous
+ * scan's) survives.
  */
 export function mergeScannedFields(
   values: TransactionFormValues,
-  touched: ReadonlySet<keyof TransactionFormValues>,
+  locked: ReadonlySet<keyof TransactionFormValues>,
   scanned: ScannedTransactionFields,
 ): TransactionFormValues {
   const next = { ...values };
 
-  if (!touched.has('merchant') && scanned.merchant !== null) next.merchant = scanned.merchant;
-  if (!touched.has('amount') && scanned.amount !== null) next.amount = scanned.amount;
-  if (!touched.has('date') && scanned.date !== null) next.date = scanned.date;
-  if (!touched.has('categoryId') && scanned.categoryId !== null) next.categoryId = scanned.categoryId;
-  if (!touched.has('note') && scanned.note !== null) next.note = scanned.note;
+  for (const field of scannedFieldsToFill(locked, scanned)) {
+    next[field] = scanned[field]!;
+  }
 
   return next;
 }
