@@ -124,3 +124,55 @@ a local copy that can never reconcile with its remote. The directory is gitignor
 rebuilt from the migrations, so deleting it costs nothing but your local dev account, which
 you re-create by registering again.
 
+`mise run reset` is that same delete, if you would rather not remember the path.
+
+### Resetting everything to a clean state
+
+Test accounts accumulate as one Turso database per person plus rows in the central
+directory. Two commands clear them, and they are deliberately separate because they are not
+equally forgiving.
+
+```bash
+mise run reset         # local SQLite files only, no credentials needed
+mise run reset:cloud   # every Turso database and the deployed app's volume
+```
+
+`reset:cloud` **destroys production data**: every account, transaction, category and
+session, with no backup and no undo. It prints what it is about to do and asks you to type
+the app name before touching anything.
+
+**Why the order inside it matters, and why you should not improvise your own.** The Fly
+volume holds embedded *replicas*, not caches, and they sync in both directions - the client
+pushes then pulls on a timer, and the shutdown hook does a final push on every open replica.
+Deleting rows in Turso while the machine is running therefore lets the replica push them
+straight back, so the cleanup silently undoes itself. The script stops the machine before
+the first Turso call and replaces the volume rather than reusing it. It also captures the
+image digest that is already deployed and redeploys exactly that, so a reset can never ship
+whatever happens to be checked out.
+
+**It needs `TURSO_API_TOKEN`, which is not a backend environment variable.** The app's
+`TURSO_ORG_TOKEN` is scoped to `db:create`, `db:delete` and `db:mint-token`, so it cannot
+list databases - the Platform API answers 403 - and the reset has to enumerate them. Create
+a full-access API token at [app.turso.tech](https://app.turso.tech) under Account, API
+Tokens, then either export it or add it to `backend/.env.local`, which is gitignored:
+
+```bash
+export TURSO_API_TOKEN=...
+```
+
+It is deliberately absent from `.env.example` and from the Joi schema in
+`backend/src/config/env.validation.ts`. The application must never hold a credential that
+can delete databases, and a variable in that schema is one the app is expected to have.
+
+Two things it does on your behalf that are easy to forget by hand. The central database is
+recreated with the Turso engine rather than the libSQL default, and the script asserts the
+API really reported `engine: "tursodb"` before continuing, because that choice is fixed at
+creation and getting it wrong is silent. And the freshly minted data-plane token is verified
+with a real query, then written to both the Fly secret and every backend env file that
+already carries the key.
+
+`reset:cloud` does **not** touch your local files, and `reset` does not touch anything
+remote. Run both if you want everything clean. Afterwards the central template tables are
+re-seeded from current code, which is also the only way a change to the colour, icon or
+category seeds reaches an already-seeded database.
+
