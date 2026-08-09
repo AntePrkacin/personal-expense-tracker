@@ -28,7 +28,29 @@ import type { InsightCard } from '@/lib/insights';
 type InsightTone = InsightCard['tone'];
 
 type ToneStyle = {
-  /** The tinted circle behind the glyph, background and content halves together. */
+  /**
+   * The circle behind the glyph: a **solid** semantic background with its `-content` pair.
+   *
+   * **Not the `bg-error/10 text-error` tint this shipped as first, which failed in light and
+   * passed in dark.** Measured in headless Chromium, composited over the card: the
+   * full-strength glyph on a 10% tint is **2.864:1** for `error`, **1.959:1** for `success` and
+   * **1.763:1** for `neutral`'s amber - all three under the 3:1 non-text bar, and all three
+   * comfortably over it in dark (5.5, 8.1, 9.0), which is exactly how it would have survived a
+   * review done in one theme. The `-content` pairing measures **5.483**, **5.122** and
+   * **5.245** and is theme-stable, because daisyUI puts each `-content` at the opposite end of
+   * the lightness range from its base.
+   *
+   * This is the same shape `ui/categoryColour.ts`'s `CATEGORY_TILE` uses for the same reason,
+   * and the same mistake `backend/CLAUDE.md` records for `warning-content`: a semantic token is
+   * theme-aware, which is not the same as legible, and the only way to know is to measure it
+   * against the surface behind it.
+   *
+   * **The surface to measure against is the circle, not the card.** The circle's own fill
+   * measures 2.864:1 against the card in light, which is the property every `CATEGORY_TILE`
+   * already has - `COLOUR_CONTRAST` records that only `primary` and `secondary` clear 3:1
+   * against the card in both themes - and it is the container rather than the graphic. What
+   * has to be legible is the glyph on the circle, and that is the 5.483 above.
+   */
   circle: string;
   /** The glyph itself. */
   icon: LucideIcon;
@@ -51,17 +73,17 @@ type ToneStyle = {
  */
 const TONE_STYLE: Record<InsightTone, ToneStyle> = {
   warning: {
-    circle: 'bg-error/10 text-error',
+    circle: 'bg-error text-error-content',
     icon: TriangleAlert,
     label: 'Warning',
   },
   positive: {
-    circle: 'bg-success/10 text-success',
+    circle: 'bg-success text-success-content',
     icon: CircleCheck,
     label: 'Good news',
   },
   neutral: {
-    circle: 'bg-warning/10 text-warning',
+    circle: 'bg-warning text-warning-content',
     icon: Info,
     label: 'Worth a look',
   },
