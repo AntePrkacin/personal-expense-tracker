@@ -23,6 +23,12 @@ acceptance criterion depends on would not have existed on the branch that had to
 Splitting a screen by visual state rather than by seam put the trigger, the thing it triggers
 and the thing that observes the result on three different branches.
 
+**A second review pass ran against this file once it was one plan**, and its findings are folded
+in rather than kept as a separate record. Almost all of them are the same shape: the write-path
+trigger's blast radius into code that has nothing to do with insights. That is what the new
+subsection below on the e2e suites, the rewritten showcase-seed item and the prop-change poll
+item exist for, and it is the thing to re-check first if any further scope lands on this branch.
+
 ### Why the page no longer triggers anything
 
 The largest design change here is not on the page at all. **A transaction write regenerates the
@@ -87,6 +93,17 @@ row. The generation itself is floated with `void this.runGeneration(...)`
 any write generates. That is what makes the designed frame 16 copy honest, and it satisfies
 PET-44's AC6 and A3 as written rather than amending them.
 
+**The converse does not hold, and that is a recorded limit rather than an oversight.** When the
+generator returns `null`, `runGeneration` deletes only *its own* placeholder
+(`insights.service.ts:150-156`) and leaves any previous `ready` set exactly where it was. So an
+account that deletes its way back down to zero transactions still reads `ready`, and both
+`/insights` and the Dashboard teaser keep serving content describing spending that no longer
+exists, indefinitely. `empty` implies never-written; `ready` does not imply the transactions
+behind it still exist. Clearing the set on the way down would mean the generator distinguishing
+"nothing to say this month" from "nothing at all" and the read's state derivation acting on the
+difference, which is the one thing the Out of scope list below refuses to touch. Recorded here so
+a later reader finds a decision rather than a bug.
+
 Three things the stacked plans carried are therefore deleted rather than merged:
 
 - **The page's mount trigger.** PET-44's "fire `POST /api/insights/generate` when the read
@@ -102,18 +119,55 @@ Three things the stacked plans carried are therefore deleted rather than merged:
 Accounts that logged transactions *before* this ships keep reading `empty` until their next
 write or a Regenerate click. No backfill: test accounts get purged and there are no real users.
 
+### What the trigger does to the existing e2e suites
+
+The 2026-08-09 review's largest finding, and the reason the checklist below names test files the
+first draft did not. Making `POST /api/transactions` start a generation gives every existing
+suite that posts a transaction a side effect it was written without. Five files post one, and
+three distinct failures follow.
+
+**A write now consumes the single-run slot, so the next `generate()` 409s.**
+`backend/test/insights.e2e-spec.ts:387-398` posts two transactions and then asserts
+`generate(fresh.token).expect(202)`. With the trigger, the second POST leaves a `generating` row
+in flight and that call answers **409**, failing on the very next statement rather than at the
+assertions the item was written for. That call has to be re-sequenced: wait for the run to settle
+first, or accept 202-or-409. It is the file's only broken 202, because `addTransaction` is called
+in exactly one place - the two calls at `:387` and `:392` - and the other `expect(202)`s follow no
+write. Which is the point: this is not a file to fix by pattern, it is a file to re-read for
+"is there a write above this line".
+
+**A write makes the Dashboard teaser non-null, and races the assertion that it is not.**
+`backend/test/dashboard.e2e-spec.ts:243` asserts `insight` is `null` on an account whose four
+transactions were seeded through `POST /api/transactions` (`:103`). Once a write generates, that
+assertion is wrong, and wrong *flakily*, because it races the floated run. Its sibling at `:309`
+is safe: that account is genuinely empty and never posts. This is the finding the first draft
+came closest to missing, because it told itself to check that file for tones and card counts and
+the file has neither.
+
+**A write floats work past the suite's own teardown.** `categories.e2e-spec.ts`,
+`transactions.e2e-spec.ts` and `transaction-reads.e2e-spec.ts` all post transactions and none of
+them has anything to do with insights. Each write now floats a full generation - six-plus awaited
+reads and a `db.transaction()` (`insights.service.ts:158`) - that outlives the request and can
+still be running when `afterAll` closes the app and its replicas, which surfaces as unhandled
+rejections, open-handle warnings and "database is closed" noise in CI. `runGeneration` already
+swallows its own failures into a logged `failed` row, so this is loud rather than fatal, but a
+suite that prints database errors on a green run trains everyone to ignore them.
+
+The same teardown hazard is what makes the showcase seed's item real rather than cosmetic; it is
+argued where that item sits.
+
 ### The two rules being removed
 
 The generator assembles four independent rules at
-`backend/src/insights/rule-based-insight.generator.ts:113-121`, each returning one card or
+`backend/src/insights/rule-based-insight.generator.ts:113-124`, each returning one card or
 `null`. Two go:
 
 - **`projectionCard`** (line 244, tone `info`). Removed as duplicated content: the summary
   banner's headline already says the same thing, and the banner is the hero element.
 - **`recurringMerchantCard`** (line 285, tone `neutral`). Removed as unreliable by nature. It
   carries no merchant list and needs none - it groups whatever merchant strings the user's own
-  transactions contain (line 294) and buckets them by `YYYY-MM` (line 297), then demands three
-  or more distinct months, exactly one charge per month (line 313), and every monthly total
+  transactions contain (line 294) and buckets them by `YYYY-MM` (line 299), then demands three
+  or more distinct months, exactly one charge per month (line 314), and every monthly total
   within `RECURRING_TOLERANCE` of the mean. That test cannot separate a subscription from a
   habit: a monthly travel pass at a steady price is mathematically identical to Netflix,
   irregular manual logging disqualifies a genuine subscription, and usage-based billing that
@@ -128,15 +182,16 @@ which is worth knowing before someone reads the deletion as lost work.
 
 **Deleting `projectionCard` must not delete the projection maths.** `summaryOf` (line 357) uses
 `projected` to pick between three headlines - "You're over budget this month", "You're trending
-over budget" and "You're on track this month" (lines 366-369). Remove the pace calculation with
+over budget" and "You're on track this month" (lines 364-369). Remove the pace calculation with
 the card and the banner silently collapses to two states.
 
 **The tone names invert against daisyUI's, twice.** `frontend/CLAUDE.md:64-66` lists the only
 theme-aware colours and there is no `indigo` among them. Backend `warning` must render as
 `error`, and backend `neutral` must render as `warning`. A name-to-name map is wrong in two
 places and compiles cleanly. Worse, per `frontend/CLAUDE.md:81` an interpolated `bg-${tone}`
-compiles to nothing with no build error, so the map has to hold complete class strings - the
-shape `transactions/[id]/categoryStatus.ts` already uses for `CHIP_CLASSES`.
+compiles to nothing with no build error, so the map has to hold complete class strings. That is
+the shape `frontend/CLAUDE.md:82` names as *the* pattern for a variant map, `ui/categoryColour.ts`,
+and `transactions/[id]/categoryStatus.ts`'s `CHIP_CLASSES` is the same shape a second time.
 
 **`info` lives in two unrelated namespaces, and only one of them is being narrowed.** Besides
 `InsightTone`, `info` is one of the seventeen **category colour tokens** - it appears in
@@ -243,12 +298,24 @@ guarantee.
       emitter exists to avoid.
 - [ ] Await the listener with `emitAsync`, so the `generating` row is committed before the
       transaction write responds and a user who navigates straight to `/insights` sees frame 15.
-- [ ] Swallow and log a `ConflictException` from that call. A 409 means a run is already in
-      flight, which is benign; a transaction must never fail to save because of it. Swallow
-      every other error from the trigger too, for the same reason.
-- [ ] Add a `generate` call at the end of `backend/src/scripts/seed-showcase.ts`, which writes
-      rows straight to the table (`:539-542`) rather than through `TransactionsService` and so
-      fires no event. Without this the showcase account lands with no insights at all.
+- [ ] Swallow and log a `ConflictException` from that call **in both places, not one**: inside
+      the listener, and around the `await emitAsync(...)` at each `TransactionsService` call
+      site. `emitAsync` rejects when a listener rejects, so a catch only at the emit site still
+      lets a listener that throws synchronously escape, and a catch only in the listener leaves
+      the hazard for whoever adds a second listener. Getting this half-right turns
+      `POST /api/transactions` into a 409 or a 500, which is the one outcome the whole design
+      exists to prevent. Swallow every other error from the trigger too, for the same reason.
+- [ ] Generate the showcase account's set at the end of `backend/src/scripts/seed-showcase.ts`,
+      which writes rows straight to the table (`:539-542`) rather than through
+      `TransactionsService` and so fires no event. **Calling `InsightsService.generate` is not
+      enough and is worse than nothing**: it returns as soon as the placeholder commits and
+      floats the real work (`insights.service.ts:116`), while `bootstrap()`'s
+      `finally { await app.close() }` (`:565-569`) closes every replica out from under it. The
+      account would land with a bare `generating` row that renders as a wedged skeleton for five
+      minutes and then self-heals to nothing - exactly the "no insights at all" this item exists
+      to prevent, with a worse-looking intermediate state. Await the generation to completion
+      instead: invoke the generator and persist synchronously, or poll `getSet` until the state
+      leaves `generating`.
 - [ ] Run `npm run api:sync` from the repo root; commit the regenerated `backend/openapi.json`
       and `frontend/src/types/api.d.ts`.
 
@@ -257,22 +324,44 @@ guarantee.
 - [ ] Remove the specs for both deleted rules from
       `backend/src/insights/rule-based-insight.generator.spec.ts`, including the two PET-62
       added, and add one asserting neither card can ever appear in a generated set.
-- [ ] Fix `backend/src/insights/insights.service.spec.ts:56` and `:81`, whose fixtures use
-      `tone: 'info' as const` and stop compiling the moment the union narrows.
-- [ ] Fix `backend/test/insights.e2e-spec.ts`: the `tone: 'info'` fixture at line 163, and - the
-      important one - the two assertions at lines 405-406. Its own comment states the invariant
-      this branch destroys: "Spend in the current period always yields at least the projection
-      card." After the cut, spend guarantees no card at all. Decide explicitly between seeding
-      that account so a surviving rule fires (a category over its cap is the only one reachable
-      without a previous month) and relaxing the assertion to tolerate zero cards. Do not simply
-      delete the line: it is the only e2e coverage that a ready set carries cards.
+- [ ] Fix the two `tone: 'info'` fixtures in `backend/src/insights/insights.service.spec.ts`,
+      which are two different problems. `:56` is a typed `GeneratedSet` using
+      `tone: 'info' as const` and genuinely stops compiling when the union narrows. `:81` is
+      inside `cardRows()`, an untyped object-literal factory standing in for database rows, and
+      compiles fine either way - it needs changing because it feeds `cardsFor`'s unchecked
+      `row.tone as InsightCardDto['tone']` (`insights.service.ts:347`) and is therefore the
+      natural home for the stale-tone test, not because the compiler objects.
+- [ ] Fix `backend/test/insights.e2e-spec.ts`, which breaks in two independent ways. First the
+      content cut: the `tone: 'info'` fixture at line 163 and the two assertions at lines
+      405-406, whose own comment states the invariant this branch destroys - "Spend in the
+      current period always yields at least the projection card." After the cut, spend guarantees
+      no card at all. Decide explicitly between seeding that account so a surviving rule fires (a
+      category over its cap is the only one reachable without a previous month) and relaxing the
+      assertion to tolerate zero cards. Do not simply delete the line: it is the only e2e
+      coverage that a ready set carries cards.
+- [ ] Then the trigger, in the same file and the more disruptive half: `:387-398` posts two
+      transactions and then asserts `generate(fresh.token).expect(202)`, which now answers 409
+      because the second POST's run is still in flight. Re-sequence it by waiting for the run to
+      settle first or by accepting 202-or-409. Confirm it is still the only one: `addTransaction`
+      is called at `:387` and `:392` and nowhere else in the file, so `:463` and `:476` follow no
+      write and stay valid as written. See the trigger section above.
 - [ ] Add an e2e asserting the write-path trigger: creating a transaction leaves
       `GET /api/insights` reporting `generating` or `ready` rather than `empty`, and a second
       create while a run is in flight still returns 201.
 - [ ] Add an e2e asserting no served card ever carries a tone outside the narrowed enum, so the
       stale-`info` hazard is covered by the contract and not only by the frontend's fallback.
-- [ ] Check `backend/test/dashboard.e2e-spec.ts`, which also references insights, for any
-      assertion on tones or card counts.
+- [ ] Fix `backend/test/dashboard.e2e-spec.ts:243`, which asserts `insight` is `null` on an
+      account seeded through `POST /api/transactions` (`:103`) and so becomes wrong, and flakily
+      wrong, the moment a write generates. Assert what the trigger actually guarantees rather
+      than deleting the coverage. **Leave `:309` alone**: that account posts nothing, so its null
+      is still true and is now the load-bearing one. The file has no assertion on tones or card
+      counts at all, which is why looking for those would have missed this.
+- [ ] Settle the floated-run-past-teardown hazard in `backend/test/categories.e2e-spec.ts`,
+      `transactions.e2e-spec.ts` and `transaction-reads.e2e-spec.ts`, none of which touch
+      insights and all of which now float a generation into their own `afterAll`. Prefer one
+      shared fix over three local ones - draining in-flight runs before close, or not binding the
+      listener in suites that never read insights - and if the noise turns out to be harmless in
+      practice, say so in the PR rather than leaving it undiagnosed.
 
 **Frontend: the data layer**
 
@@ -319,6 +408,13 @@ guarantee.
 - [ ] Derive the button's label and disabled state from `state === 'generating'`, never from a
       local click flag. This is what makes a reload mid-run, a run started in another tab, and a
       run started by saving a transaction all render correctly.
+- [ ] **Start the poll from the `state` prop changing, not only from a click.** The modal calls
+      `router.refresh()` on save (`AddTransactionModal.tsx:203`), which re-runs the Server
+      Component and flips the page's `state` prop from `empty` to `generating` with no click and
+      no action result to hang a timer off. Without this the empty state's own "Add your first
+      transaction" button - wired two items above - leaves the user looking at skeletons with no
+      timer running, stuck until a manual reload, which is the one flow this branch newly creates
+      and would be the first thing anyone tried.
 - [ ] Show the Regenerate button only when `state !== 'empty'`.
 - [ ] Fire the generate action on click, and treat a 409 as success rather than an error: it
       means a run is already in flight, so enter polling.
@@ -347,6 +443,10 @@ guarantee.
       without a click, an unchanged `generatedAt` leaves the previous set on screen and
       re-enables the button, a changed one swaps in the new set, a 409 enters polling instead of
       erroring, and the poll stops on unmount.
+- [ ] Add the test for the item above: a page mounted with `state: 'empty'` and re-rendered with
+      `state: 'generating'` starts polling, with no click anywhere in the test. This is the
+      `router.refresh()` path a save takes, and it is the only one of the three ways into the
+      generating state that no other test covers.
 - [ ] Add Storybook stories for the ready state at two cards, one card and zero cards; the empty
       state; and the generating state at two skeleton cards and at none.
 
@@ -361,6 +461,13 @@ guarantee.
 - [ ] Update `backend/CLAUDE.md`'s Insights section (lines 521-527), which states four content
       rules and defines what "recurring" means, and add the write-path trigger and its
       `emitAsync` guarantee.
+- [ ] Delete or rewrite the paragraph immediately below it, `backend/CLAUDE.md:532-545`, "Three
+      months is necessary and nowhere near sufficient". It is a long, confident description of
+      `recurringMerchantCard`'s internals - `RECURRING_TOLERANCE`, `RECURRING_NAMED`, the
+      `charges === months` rule, PET-60's seed as the thing that exposed the bug - and every line
+      of it describes code this branch deletes. The item above stops one paragraph short of it,
+      which is how it would have survived. Keep the *lesson* if it earns its place in `docs/TODO.md`'s
+      reimplementation note; do not keep it here as documentation of the running system.
 - [ ] Update `docs/TODO.md`'s "Insights are generated by rules, not an LLM" entry (lines
       167-177), which names all four detectors and the three-month recurrence threshold. Note
       that the recurring-merchant rule was removed as unreliable rather than broken, with the
@@ -382,9 +489,21 @@ guarantee.
       generates a set, which stops being true here. Correct it in place rather than appending a
       contradiction, and note that the teaser's `isEmpty` workaround is now a fallback.
 - [ ] Correct the two places attributing the generating skeleton to PET-44
-      (`frontend/src/app/CLAUDE.md:1458` and `InsightTeaserCard.tsx:32`) when INS-5 belongs to
-      PET-43. Deliberately deferred while these were three branches, because it was nobody's;
-      on one branch owning all three tickets it is in scope and cheap.
+      (`frontend/src/app/CLAUDE.md:1458` and `InsightTeaserCard.tsx:32`). Retarget them to
+      **PET-42**, not PET-43: PET-43 is closed as absorbed by this branch, so pointing the next
+      reader at it swaps one dead ticket for another. PET-42 is the one that survives and owns
+      all three scopes. Deliberately deferred while these were three branches, because it was
+      nobody's; on one branch owning all three tickets it is in scope and cheap.
+- [ ] Update `frontend/src/app/CLAUDE.md:1038`, "PET-44's INS-7 card still owes the same two
+      lines", which the empty-state item above makes false by paying those two lines. It sits in
+      the modal-architecture paragraph rather than the insights one, which is why the five edits
+      listed above miss it.
+- [ ] Add a line to `docs/agents/api-contract.md` at the route-handler shape (`:100`), which
+      introduces that fourth shape with `app/api/categories/` as its only example. Root
+      `CLAUDE.md`'s table routes "change a DTO, a response shape, or how a page fetches" to that
+      file, and this branch does two of the three: it narrows a DTO enum and adds the shape's
+      second consumer. One sentence noting the second consumer and what it has in common with the
+      first is what that file exists for.
 - [ ] Update `docs/TODO.md` if it records A27 as open; it is closed by this branch.
 
 **Gates**
@@ -397,6 +516,9 @@ guarantee.
 ## Out of scope
 
 - Any change to the insights storage, the read's state derivation, or the single-run guard.
+- Clearing a `ready` set when an account deletes its last transaction. Argued above under what
+  this makes true: the set outlives the data it describes, and fixing it needs the state
+  derivation this line already refuses to touch.
 - Turning the empty-account check into a count, per the checklist note above.
 - The `info` tone is retired rather than repurposed: nothing is redesigned to use it.
 - A backfill for accounts holding pre-cut sets with `info` cards. Test accounts get purged and
