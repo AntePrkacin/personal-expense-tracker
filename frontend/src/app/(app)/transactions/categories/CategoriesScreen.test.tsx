@@ -1,4 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useRouter } from 'next/navigation';
 
 import type { Allocation, Category } from '../../../../lib/categories';
 import type { Palette } from '../../../../lib/palette';
@@ -107,7 +109,12 @@ function renderScreen(props: Partial<React.ComponentProps<typeof CategoriesScree
   );
 }
 
+// The delete confirmation calls `useRouter`, which throws outside a mounted router. A package
+// specifier, which is the one case `jest.mock` takes without the relative-path dance.
+jest.mock('next/navigation', () => ({ useRouter: jest.fn() }));
+
 beforeEach(() => {
+  (useRouter as jest.Mock).mockReturnValue({ refresh: jest.fn() });
   jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8));
 });
 
@@ -327,5 +334,38 @@ describe('the spending summary (AC4)', () => {
 
     expect(within(summaryCard()).getByRole('progressbar')).toHaveClass('progress-error');
     expect(within(summaryCard()).getByText('Over budget')).toBeInTheDocument();
+  });
+});
+
+describe('the delete seam', () => {
+  // **This exists because the prop shipped once with nothing able to reach it.**
+  // `DeleteCategoryProvider` takes an injectable `remove` so Storybook cannot fire a real Server
+  // Action in the browser, and `CategoriesScreen` constructs that provider itself - so for one
+  // commit the seam was there and `Screens/13 Categories` still ran `deleteCategory`, with the
+  // prop's own comment claiming otherwise. A code review found it. Asserting the thread here is
+  // what stops the prop being quietly dropped again, since nothing else in the suite would notice.
+
+  it('threads its remove prop through to the confirmation', async () => {
+    // `advanceTimers` is mandatory here and its absence is a five-second timeout rather than a
+    // failed assertion: this suite runs on fake timers so `monthOverline(new Date())` is pinned,
+    // and user-event's default real-timer waits never resolve against them.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const remove = jest.fn().mockResolvedValue({ ok: true });
+    renderScreen({ categories: [category()], remove });
+
+    // jsdom implements no Popover API, so the menu is permanently open and both items are
+    // reachable without opening anything - the caveat `CategoryCardMenu.test.tsx` records.
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+
+    expect(remove).toHaveBeenCalledWith(category().id);
+  });
+
+  it('falls back to the real action when no prop is passed, rather than doing nothing', () => {
+    // The other half of the same guard: a default of `undefined` would make every card's Delete
+    // silently inert in the app while every story kept working.
+    renderScreen({ categories: [category()] });
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 });

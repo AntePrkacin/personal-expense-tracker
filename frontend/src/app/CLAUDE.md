@@ -1395,12 +1395,22 @@ not of the form**: a field wired to anything that hands back a bare `string` - a
 URL parameter, a devtools-written value - is back to needing a real membership check before it may be
 typed as a token, and a cast would be asserting what nothing checked.
 
-**PET-39 made the card kebab real, so the Categories tab has no inert control left on it.** Every
-paragraph above calling it "still PET-39's" and "still `aria-disabled`" is history now, and the whole
-of the change to `CategoryCard.tsx` is that one attribute going away: `CategoryCardMenu.tsx` is the
-menu behind it, the card **stays a Server Component**, and the `'use client'` lands on the menu alone
-because its Delete calls into a context. The same boundary `TransactionRow` and `TransactionRowMenu`
-settled on, arrived at the same way - the popover means there is no open state to hold.
+**PET-39 made the card kebab real.** Every paragraph above calling it "still PET-39's" and "still
+`aria-disabled`" is history now, and the whole of the change to `CategoryCard.tsx` is that one
+attribute going away: `CategoryCardMenu.tsx` is the menu behind it, the card **stays a Server
+Component**, and the `'use client'` lands on the menu alone because its Delete calls into a context.
+The same boundary `TransactionRow` and `TransactionRowMenu` settled on, arrived at the same way - the
+popover means there is no open state to hold.
+
+**It does not empty the screen's inert list, and the first draft of this section said it did.** That
+sentence read "so the Categories tab has no inert control left on it", which is false and was caught
+by a code review rather than by any gate - the same shape of error this file's own "Two controls on
+that screen ship inert and say so" paragraph exists to prevent. **Three remain, and all three are
+PET-38's**: `CardBanner`'s "Set limit" on every uncapped card, which is every account, since the
+`Uncategorized` fallback ships without a cap; the summary card's "Allocate" whenever budget is
+unassigned; and the menu's own "Edit". All three carry `aria-disabled` rather than `disabled`, so
+they stay focusable and announce their condition. Worth stating plainly because a gap list that
+claims a screen is finished is worse than one that never mentioned it.
 
 **The menu is the platform popover, which is now the fourth time this app makes that argument and the
 third on this one screen**, after `TransactionRowMenu`, `ColourSelect` and `IconSelect`. Nothing new

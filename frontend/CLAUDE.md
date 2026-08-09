@@ -499,15 +499,17 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   Categories tab the second screen in the app with a working write. Note it needed no provider,
   unlike every "Add transaction" trigger: `frontend/src/app/CLAUDE.md` records why one button on one
   route does not want one, and it is the paragraph to read before copying the transaction shape.
-  **PET-39 made the kebab real, and the Categories tab now has no inert control on it at all** - so
-  the sentence above naming it "the last" is history, and the Dashboard's month select is once again
-  the only drawn-but-dead affordance in the whole shell. It opens frame 18's menu, whose Delete opens
-  frame 20 and really deletes. One thing inside it stays inert and says so: **"Edit" renders
-  `menu-disabled` with `aria-disabled`**, because PET-38's Edit category modal does not exist -
-  exactly the state PET-33's menu shipped in while PET-32 was unbuilt, and a different claim from the
-  drawn-but-dead controls before it, since this one announces its condition. The **fallback card
-  offers no Delete at all** (AC6), which until PET-38 lands leaves that one card with a menu holding
-  nothing operable.
+  **PET-39 made the kebab real, so the sentence above naming it "the last" inert control is history -
+  but the tab is not clear, and an earlier draft of this bullet said it was.** The kebab opens frame
+  18's menu, whose Delete opens frame 20 and really deletes. **Three controls on that screen are
+  still inert, and all three are PET-38's**: `CardBanner`'s "Set limit", which every uncapped card
+  draws and therefore every account sees on `Uncategorized` at minimum; the summary card's
+  "Allocate", drawn whenever budget is unassigned; and **"Edit" inside the menu**, which renders
+  `menu-disabled` with `aria-disabled` because the Edit category modal does not exist. All three
+  announce `aria-disabled` rather than staying silent, which is the distinction PET-33 drew and is
+  why they are a different claim from the Dashboard's month select. The **fallback card offers no
+  Delete at all** (AC6), which until PET-38 lands leaves that one card with a menu holding nothing
+  operable.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session

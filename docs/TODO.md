@@ -2242,23 +2242,24 @@ be told they are deliberate rather than drift: it says `Uncategorized` where CED
 it scopes the count to "this month" where CED-9 states it as a total. Both are recorded on the issue
 with their reasoning.
 
-### `Screens/13 Categories` can reach two real Server Actions in the browser, and PET-39 widened it
+### `Screens/13 Categories` can still reach the real create action in the browser
 
-Storybook's Vite build has no notion of `'use server'`, so it bundles `lib/createCategory.ts` and
-`lib/deleteCategory.ts` as ordinary modules. `AddCategoryButton` imports the create action directly
-and `CategoriesScreen` constructs `DeleteCategoryProvider` with its default `remove`, so neither is
-injectable from that story - pressing Save or Delete there calls into `authorizedGet`'s neighbours
-and reaches `cookies()` from `next/headers`, which `.storybook/main.ts` aliases to the framework's
-browser-safe mock rather than to anything that works.
+Storybook's Vite build has no notion of `'use server'`, so it bundles `lib/createCategory.ts` as an
+ordinary module. `AddCategoryButton` imports the create action directly and takes no prop for it, so
+that story cannot inject a stub: pressing Save there reaches `cookies()` from `next/headers`, which
+`.storybook/main.ts` aliases to the framework's browser-safe mock rather than to anything that works.
 
-**The seam already exists on the provider and not on the screen**, which is the asymmetry to fix
-rather than the bundling. `DeleteCategoryProvider` takes an injectable `remove` for exactly this
-reason - the gap a code review found on `DeleteTransactionProvider`, whose own screen story does
-inject one - but `CategoriesScreen` owns the provider, so a story cannot reach it without a prop
-threaded purely for Storybook. `AddCategoryButton` has the same shape and predates this ticket, so
-this is one item covering both rather than a regression PET-39 introduced. The cheap fix is an
-optional action prop on the screen; the question worth answering first is whether that prop earns
-its place or whether both stories should stop offering the press at all.
+**The delete half of this is fixed and is the worked example of the fix.** PET-39 first shipped the
+same defect from the other direction - `DeleteCategoryProvider` had an injectable `remove` and
+`CategoriesScreen` constructed the provider itself, so the seam existed with no path from the story
+to reach it, which is worse than not having one because the prop's comment claimed otherwise. A code
+review caught it, `CategoriesScreen` now takes the action as an optional prop and threads it, and
+`CategoriesScreen.stories.tsx` defaults it in its shared `Frame` so a story added later cannot forget
+it. The create path wants exactly the same treatment: a prop on `AddCategoryButton`, defaulted to the
+real action, passed a stub by the story.
+
+Worth doing with PET-38 rather than on its own, since that ticket adds a third action to the same
+screen and would otherwise ship the third copy of the same gap.
 
 ### Neither delete dialog's stories are in a Jest story smoke harness
 

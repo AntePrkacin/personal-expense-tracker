@@ -1,5 +1,6 @@
 import { monthOverline } from '@/lib/format';
 import type { Allocation, Category } from '@/lib/categories';
+import type { DeleteCategoryResult } from '@/lib/deleteCategory';
 import type { Palette } from '@/lib/palette';
 
 import { PageHeader } from '../../PageHeader';
@@ -48,6 +49,22 @@ type CategoriesScreenProps = {
    * separate. A story hands a fixture, or `null` to draw the degraded modal.
    */
   palette: Palette | null;
+  /**
+   * The category delete action, defaulting to the real one. Overridden only by Storybook.
+   *
+   * **It is threaded through the screen because the screen owns the provider**, and a code review
+   * is why it exists at all. `DeleteCategoryProvider` takes the same prop for the reason
+   * `DeleteTransactionProvider` does - Storybook's Vite build has no notion of `'use server'`, so
+   * it bundles `lib/deleteCategory.ts` as an ordinary module and a press would reach `cookies()`
+   * from `next/headers` in the browser. But the sibling tab's stories mount their provider
+   * themselves and can pass it directly, while this screen constructs its own, so the seam existed
+   * with **no path from the story to reach it** and `Screens/13 Categories` would have run the real
+   * action. One optional prop is what closes that, and it is also what makes the delete's success
+   * path reviewable on frame 13 at all.
+   *
+   * Optional, so `page.tsx` stays a bare `<CategoriesScreen ... />` with no action threaded through.
+   */
+  remove?: (id: string) => Promise<DeleteCategoryResult>;
 };
 
 export function CategoriesScreen({
@@ -55,6 +72,7 @@ export function CategoriesScreen({
   allocation,
   transactionCount,
   palette,
+  remove,
 }: CategoriesScreenProps) {
   // **Summed here rather than read from a field, and the sum is sound rather than approximate.**
   // `GET /api/categories` publishes no period total of its own, but every transaction in the
@@ -86,7 +104,7 @@ export function CategoriesScreen({
     // the success path's `router.refresh()` can unmount it out from under its own `close()`, and a
     // dialog on `(app)/layout.tsx` would serve one screen from all four routes. It wraps the header
     // as well as `<main>` so PET-38's edit modal can open it from either.
-    <DeleteCategoryProvider fallbackName={fallbackName}>
+    <DeleteCategoryProvider fallbackName={fallbackName} remove={remove}>
       <PageHeader
         overline={monthOverline(new Date())}
         title="Transactions"

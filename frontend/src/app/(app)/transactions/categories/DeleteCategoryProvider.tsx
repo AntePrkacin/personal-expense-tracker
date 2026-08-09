@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 import { deleteCategory, type DeleteCategoryResult } from '@/lib/deleteCategory';
 
@@ -100,10 +100,18 @@ type DeleteCategoryProviderProps = {
    * browser**, which is the gap a code review found on `DeleteTransactionProvider`: Storybook's
    * Vite build has no notion of `'use server'`, so it bundles `lib/deleteCategory.ts` as an
    * ordinary module and a press would call `cookies()` from `next/headers` in the browser rather
-   * than making an RPC. `Screens/13 Categories` mounts this provider so its kebabs work.
+   * than making an RPC.
+   *
+   * **The prop reaches it through `CategoriesScreen` rather than from the story directly, and the
+   * first version of this comment got that wrong.** It claimed `Screens/13 Categories` "mounts this
+   * provider", which is what the sibling tab's stories do - there the story is the thing that
+   * renders `DeleteTransactionProvider`, so it passes the stub in place. This screen constructs its
+   * own provider, so for one commit the seam was here with **nothing able to reach it** and that
+   * story ran the real action. `CategoriesScreen` now takes the same optional prop and threads it,
+   * which is what makes this one true. A second code review found it.
    *
    * Defaulted rather than required, so the app's one real call site stays a bare
-   * `<DeleteCategoryProvider fallbackName={...}>` with no action threaded through.
+   * `<CategoriesScreen ... />` with no action threaded through.
    */
   remove?: (id: string) => Promise<DeleteCategoryResult>;
 };
@@ -132,8 +140,20 @@ export function DeleteCategoryProvider({
     [],
   );
 
+  /**
+   * Memoized, and on this screen that is worth the line rather than being cargo-culted.
+   *
+   * `open` is already stable, so a bare `value={{ open }}` would still allocate a fresh object on
+   * every render and hand every consumer a changed context. `children` keeps its identity across
+   * this provider's state changes - it is a server-rendered subtree passed straight through - so
+   * React would otherwise skip it entirely; the object literal is the one thing that would drag
+   * **every** `CategoryCardMenu` into a re-render on each open, cancel and delete, and the cost
+   * grows with the category count rather than being fixed. Found by a code review.
+   */
+  const value = useMemo(() => ({ open }), [open]);
+
   return (
-    <DeleteCategoryContext.Provider value={{ open }}>
+    <DeleteCategoryContext.Provider value={value}>
       {children}
 
       {/* Rendered only while open, and that is load-bearing rather than an optimisation, for the

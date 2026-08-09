@@ -35,6 +35,21 @@ import { CategoriesScreen } from './CategoriesScreen';
 // story, with no wrapper - because the trigger owns its own state rather than reaching for a context.
 // See `AddCategoryButton.tsx` for why one button on one route does not want one. What stays inert is
 // each card's kebab, "Set limit" and "Allocate", which are PET-38's and PET-39's.
+//
+// **PET-39 made the kebab live, and the two paragraphs above are dated in one respect each.** There
+// is a provider now - `DeleteCategoryProvider` - but it is still not mounted *here*: `CategoriesScreen`
+// constructs it, so this file passes a stub action instead of a wrapper. What stays inert is "Set
+// limit", "Allocate" and the menu's own "Edit", all three PET-38's.
+//
+// **Every story therefore passes `remove`, and a code review is why.** Storybook's Vite build has no
+// notion of `'use server'`, so it bundles `lib/deleteCategory.ts` as an ordinary module and pressing
+// Delete in the confirmation would run `cookies()` from `next/headers` in the page instead of an RPC.
+// The sibling tab's stories close that by mounting their own provider with a stub
+// (`TransactionsList.stories.tsx`); this screen owns its provider, so for one commit the seam was
+// unreachable from here and this story ran the real action. `CategoriesScreen` takes the stub as an
+// optional prop for exactly that. Resolving `ok` also lets the whole delete flow be walked here,
+// which is the only review frame 20's success path gets on a real grid - nothing is deleted, and the
+// cards do not change, because no server answered.
 
 const meta: Meta<typeof CategoriesScreen> = {
   title: 'Screens/13 Categories',
@@ -195,8 +210,14 @@ const PALETTE: Palette = {
 
 // `palette` is defaulted here rather than repeated in every story's `render`, since none of the four
 // is about the picker and all four would otherwise carry the same noise.
+//
+// **`remove` is defaulted for a sharper reason than noise**: every story draws a live kebab, so any
+// of them could otherwise reach the real Server Action in the browser. Defaulting it here means a
+// story added later cannot forget it, which is the failure mode that made this necessary in the
+// first place - the seam existed and nothing was passing through it.
 function Frame({
   palette = PALETTE,
+  remove = async () => ({ ok: true }),
   ...props
 }: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette'> & {
   palette?: Palette | null;
@@ -205,7 +226,7 @@ function Frame({
     // `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the gutter
     // the `(app)` shell owns, since neither wraps a story.
     <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-      <CategoriesScreen {...props} palette={palette} />
+      <CategoriesScreen {...props} palette={palette} remove={remove} />
     </div>
   );
 }
