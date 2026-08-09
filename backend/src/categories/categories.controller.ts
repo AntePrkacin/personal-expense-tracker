@@ -25,6 +25,7 @@ import { CategoriesService } from './categories.service';
 import { CategoriesResponseDto } from './dto/categories-response.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryCapsDto } from './dto/update-category-caps.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 /**
@@ -72,6 +73,33 @@ export class CategoriesController {
     @Body() dto: CreateCategoryDto,
   ): Promise<CategoryResponseDto> {
     return this.categories.create(user.userId, dto);
+  }
+
+  // A bare `@Patch()`, not `@Patch('caps')`. The two collection-level patterns
+  // and `:id` are disjoint - a `:id` segment requires at least one character -
+  // so this needs no ordering care against the route below. A literal sub-path
+  // would need it, since `/categories/caps` does match `@Patch(':id')` and the
+  // failure would be a 400 from `ParseUUIDPipe` on a route that looks fine; it
+  // would also add a `spec.paths` key that `test/openapi.e2e-spec.ts` asserts on.
+  @Patch()
+  @ApiOperation({
+    summary: 'Set the cap on several categories at once.',
+    description:
+      'What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen, exactly as `GET /categories` does.',
+  })
+  @ApiOkResponse({ type: CategoriesResponseDto })
+  // No 409: the fallback's cap is editable and no rename is in play, so this is
+  // the one categories write with no conflict case.
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    HttpStatus.UNAUTHORIZED,
+    HttpStatus.NOT_FOUND,
+  )
+  setCaps(
+    @CurrentUser() user: SessionPrincipal,
+    @Body() dto: UpdateCategoryCapsDto,
+  ): Promise<CategoriesResponseDto> {
+    return this.categories.setCaps(user.userId, dto);
   }
 
   @Patch(':id')

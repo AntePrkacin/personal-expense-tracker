@@ -5,7 +5,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, asc, eq, gte, isNull, lt, notExists, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  sql,
+} from 'drizzle-orm';
 import { newId } from '../common/ids';
 import { fromCents, toCents } from '../common/money';
 import {
@@ -28,6 +38,7 @@ import type {
 } from './dto/category-response.dto';
 import type { CategoriesResponseDto } from './dto/categories-response.dto';
 import type { CreateCategoryDto } from './dto/create-category.dto';
+import type { UpdateCategoryCapsDto } from './dto/update-category-caps.dto';
 import type { UpdateCategoryDto } from './dto/update-category.dto';
 
 const NO_CATEGORY = 'Category not found.';
@@ -40,6 +51,12 @@ const NO_PROFILE = (userId: string) =>
   `Profile row missing for user ${userId}; a verified session implies one exists.`;
 const NO_FALLBACK = (userId: string) =>
   `No fallback category for user ${userId}; provisioning seeds one for every account.`;
+// The second sentence is not decoration: it is the only way a client learns the
+// identical payload is safe to retry whole, which is the point of the guard.
+const NO_CATEGORIES = (ids: string[]) =>
+  `No live category for ${ids.join(', ')}. No cap was changed.`;
+const GUARD_DISAGREES = (ids: string[]) =>
+  `Bulk cap update for ${ids.join(', ')} matched no rows, yet every id reads back live.`;
 
 /** The sparse column set an UPDATE applies. Never includes `updatedAt`. */
 type CategoryUpdate = Partial<
@@ -77,13 +94,21 @@ interface CategoryWithSpend {
  * the first time a threshold moved.
  *
  * **No `db.transaction()` anywhere in this file, deliberately** - including in
- * `remove`, which is the one operation with two writes. Both tables are in the
- * same database so a transaction is genuinely available, but
- * `backend/CLAUDE.md` records that `LoginTokenService.issue()` is the app's only
- * transactional call site on purpose: the embedded driver refuses overlapping
- * transactions rather than queueing them, so a second call site means two quick
- * deletes on one user's database collide. Ordering solves the same problem for
- * free - see `remove`.
+ * `remove`, which has two writes, and `setCaps`, which writes many rows at once.
+ * Both tables are in the same database so a transaction is genuinely available,
+ * but `backend/CLAUDE.md` records why the app keeps its transactional call sites
+ * countable: the embedded driver refuses overlapping transactions rather than
+ * queueing them, so a second call site on a user database means two quick writes
+ * on one person's database collide.
+ *
+ * **Two shapes replace it, and which one applies depends on the write.** Where
+ * the statements are order-dependent, ordering them so a failure between the two
+ * is the harmless direction costs nothing - `remove`. Where they are not, and a
+ * half-applied result would be a real one, the answer is a **conditional single
+ * statement**: one statement whose own `WHERE` carries the condition that makes
+ * it all-or-nothing, so the database decides rather than this code, and there is
+ * no await between a check and a write for a concurrent request to land in.
+ * `setCaps` is that, and `LoginTokenService.consume()` is the same shape.
  */
 @Injectable()
 export class CategoriesService {
@@ -192,6 +217,92 @@ export class CategoriesService {
     // copy, and it is also what turns a row deleted between `liveCategory` and
     // this UPDATE into the ordinary 404 rather than a TypeError.
     return this.monthStatsFor(userId, id);
+  }
+
+  /**
+   * Sets the cap on many categories at once, all of them or none.
+   *
+   * **One conditional statement, and still no `db.transaction()`.** The class
+   * note above forbids a second transactional call site on a user database; this
+   * is the shape that replaces it where ordering cannot help, because N cap
+   * writes are order-independent and a failure part-way through would leave a
+   * genuinely half-allocated budget. The `count(*)` subquery in the `WHERE` is
+   * the whole atomicity story: the statement refuses itself unless every id in
+   * the payload is live at the instant it runs, so there is no window between a
+   * check and a write, and a concurrent delete cannot land in one.
+   *
+   * **The `CASE` arms and the `IN` list are built from one array, deliberately.**
+   * A row matched by the `WHERE` with no arm of its own falls off the end of the
+   * `CASE` and is set to **NULL** - so assembling the two halves from two sources
+   * (arms from the payload, ids from a prior read) would clear caps the caller
+   * never mentioned, and answer 200 while doing it. Both derive from `items`
+   * here, and `categories.service.spec.ts` asserts they cover the same ids by
+   * reading the rendered parameters back, so a refactor cannot separate them
+   * quietly.
+   *
+   * **No ceiling against the monthly budget, on purpose.** Nothing stops these
+   * caps summing past it; `allocation.unallocated` simply comes back negative,
+   * which `CategoriesResponseDto` documents and A43 records as undesigned. The
+   * Allocate modal enforces a ceiling of its own, and `PATCH /categories/:id`
+   * enforces none - putting one here would make this endpoint disagree with that
+   * one about what a legal cap is.
+   *
+   * @throws NotFoundException if any id names no live category. Nothing is
+   * applied, so the same payload can be retried once the caller has refreshed.
+   */
+  async setCaps(
+    userId: string,
+    dto: UpdateCategoryCapsDto,
+  ): Promise<CategoriesResponseDto> {
+    const items = dto.categories;
+    const ids = items.map((item) => item.id);
+
+    // Read by both the UPDATE's own WHERE and the guard subquery, so the set the
+    // statement counts is exactly the set it would write.
+    const live = and(inArray(categories.id, ids), isNull(categories.deletedAt));
+
+    const arms = sql.join(
+      items.map(
+        (item) =>
+          sql`when ${item.id} then ${item.monthlyCap === null ? null : toCents(item.monthlyCap)}`,
+      ),
+      sql` `,
+    );
+
+    const db = await this.userDatabases.getUserDb(userId);
+
+    const applied = await db
+      .update(categories)
+      // Never sets `updatedAt` by hand, the same as `update()`: drizzle v1's
+      // buildUpdateSet applies `$onUpdateFn` columns itself, and it does so even
+      // when the set carries a raw `sql` expression - the filter there is
+      // `set[col] !== undefined || col.onUpdateFn !== undefined`.
+      .set({ monthlyCapCents: sql`case ${categories.id} ${arms} end` })
+      .where(
+        and(
+          live,
+          sql`(select count(*) from ${categories} where ${live}) = ${ids.length}`,
+        ),
+      )
+      // Returning ids rather than counting the driver's result: the two driver
+      // modes report different result shapes, which `database.types.ts` types as
+      // `any` for that reason, so a row count would be the one place in the app
+      // that depends on which mode it is running in.
+      .returning({ id: categories.id });
+
+    if (applied.length !== ids.length) {
+      throw new NotFoundException(
+        NO_CATEGORIES(await this.missingIds(db, ids)),
+      );
+    }
+
+    // The whole screen, recomputed. `list` already builds it, and a second copy
+    // of "sum the caps, subtract from the budget" is what this file's own money
+    // note calls a bug at the third occurrence. Note the frontend discards this
+    // body today and re-reads through `router.refresh()`; it is the right
+    // contract for the endpoint regardless, and the rest of the page needs that
+    // refresh anyway.
+    return this.list(userId);
   }
 
   /**
@@ -508,6 +619,32 @@ export class CategoriesService {
       throw new NotFoundException(NO_CATEGORY);
     }
     return row;
+  }
+
+  /**
+   * Which of these ids name no live category.
+   *
+   * Runs on the miss path only, so `setCaps`' success path stays exactly one
+   * statement - `LoginTokenService.consume()`'s diagnostic read, for the same
+   * reason: the classification is worth a second query precisely because it is
+   * never paid when nothing went wrong.
+   */
+  private async missingIds(db: UserDatabase, ids: string[]): Promise<string[]> {
+    const rows = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(inArray(categories.id, ids), isNull(categories.deletedAt)));
+
+    const live = new Set(rows.map((row) => row.id));
+    const missing = ids.filter((id) => !live.has(id));
+
+    // The guard matched nothing, so at least one id was not live. An empty answer
+    // means the guard and this read disagree, which is a broken invariant rather
+    // than a client error - the same shape as NO_PROFILE and NO_FALLBACK.
+    if (missing.length === 0) {
+      throw new Error(GUARD_DISAGREES(ids));
+    }
+    return missing;
   }
 
   /** The reassignment target every delete depends on. */
