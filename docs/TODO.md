@@ -2429,11 +2429,20 @@ already invented. Recorded because it looks like an omission and is a decision, 
 cheapest honest fix - marking the form dirty in the Save row - is one more undesigned state rather
 than none.
 
-The related choice is that **Save stays enabled on a clean form**, where `AllocateBudgetModal`
-disables its own on `!isDirty`. That modal has a designed disabled state and this frame does not, so
-a press on an untouched form is a deliberate silent no-op instead: the diff is empty, and
-`PATCH /api/profile` answers 400 to a body with no keys, so no request is made and nothing is said.
-A confirmation there would claim a save that never happened.
+The related choice **was** that Save stays enabled on a clean form, where `AllocateBudgetModal`
+disables its own on `!isDirty` - on the reasoning that this modal has a designed disabled state and
+this frame does not. **That was reversed by the product owner, and the reversal is the better call
+for a reason the original missed.** The guards in the submit handler already made a clean press do
+nothing, so the button was live, pressable and silently inert: a control that looks actionable and
+is not, which is the exact failure every drawn-but-unbuilt control on the Categories tab was given
+`aria-disabled` to avoid. Deviating from the frame by grey-ing a button is the smaller lie.
+
+It is `disabled` rather than that screen's `aria-disabled`, and the difference is what the state
+means: those controls are unbuilt and must stay focusable to announce why, while this one is built
+and momentarily has nothing to do, which is the ordinary meaning of a disabled submit. It
+re-enables on the next keystroke, so nothing is stranded, and it suppresses implicit submission so
+Enter cannot do what the button will not. What still owes A29 a sign-off is the disabled treatment
+itself, since the frame draws none - it is daisyUI's stock `btn` disabled state.
 
 ### The Settings form does not mirror `@MaxLength(100)`, so an over-long name gets generic copy
 

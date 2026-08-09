@@ -69,6 +69,19 @@ const MESSAGES = {
   saved: 'Changes saved',
 } as const;
 
+/**
+ * How long "Changes saved" stays up.
+ *
+ * A confirmation describes a moment rather than a state, so it retires itself instead of sitting
+ * there until the next keystroke - which on this form could be the rest of the session, since the
+ * page does not navigate after a save. Long enough to be read without hunting for it, short enough
+ * that it is gone before it starts describing something stale.
+ *
+ * It is the only timer on this screen, and clearing it is what makes that safe: without the
+ * cleanup, a save immediately before unmount would set state on a component that is gone.
+ */
+const SAVED_VISIBLE_MS = 5_000;
+
 /** The inline message for one problem, which is why `emailProblem` reports a reason rather than a boolean. */
 function messageFor(field: SettingsFormField, reason: 'required' | 'format'): string {
   if (field === 'firstName') return MESSAGES.firstName;
@@ -172,6 +185,25 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
    */
   const focusOnSubmit = useRef<HTMLElement | null>(null);
 
+  /**
+   * Whether pressing Save would do something the user asked for, which is what enables the button.
+   *
+   * **Two conditions, and neither is sufficient alone** - each one alone re-opens a defect the
+   * other closes. "Has the user typed since the last sync" on its own leaves the button live after
+   * a case-only retype of the address, which diffs to nothing, so the press is a silent no-op. "Is
+   * the body non-empty" on its own leaves it live on a wholly untouched form whose stored name
+   * carries whitespace, because the diff trims on the way out and that value differs from itself -
+   * the finding the submit guard already exists for. Together they say exactly "the user changed
+   * something, and it would reach the server".
+   *
+   * The guards inside `onSubmit` stay rather than being replaced by this. A disabled default button
+   * suppresses implicit submission in the browsers that matter, but the button is not the only way
+   * in - and a control being invisible is not an enforcement, which is the rule this repo already
+   * applies to the two unreachable 409s.
+   */
+  const edited = !sameSettingsValues(values, synced);
+  const hasChangesToSave = edited && Object.keys(toUpdateProfileBody(profile, values)).length > 0;
+
   useEffect(() => {
     if (pending) return;
 
@@ -179,6 +211,24 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
     focusOnSubmit.current = null;
     target?.focus();
   }, [pending]);
+
+  /**
+   * The confirmation retires itself after `SAVED_VISIBLE_MS`.
+   *
+   * Keyed on `saved` and cleaned up, so a second save restarts the clock rather than inheriting the
+   * first one's remaining time - which holds because a second save is only reachable through an
+   * edit, and `change()` clears `saved` on the way, so the flag really does go false and back.
+   *
+   * **Emptying the live region announces nothing**, which is what makes this safe to do behind the
+   * reader's back: `aria-relevant` defaults to additions and text, so a removal is not reported.
+   * `AllocateBudgetModal` records the same property for its own reverting message.
+   */
+  useEffect(() => {
+    if (!saved) return;
+
+    const timer = setTimeout(() => setSaved(false), SAVED_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [saved]);
 
   /**
    * One keystroke.
@@ -262,8 +312,9 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
     // with the guard above in place: retyping the address in a different case is a real edit that
     // diffs to nothing, because the comparison is case-insensitive.
     //
-    // Save stays *enabled* rather than being disabled on a clean form, because the frame draws one
-    // enabled primary button and A29 designs no disabled treatment for it.
+    // Both guards outlive the disabled button rather than being replaced by it: a control that is
+    // not offered is not an enforcement, which is the rule this repo applies to its two unreachable
+    // 409s, and this handler is reachable by other routes than a press.
     const body = toUpdateProfileBody(profile, values);
 
     if (Object.keys(body).length === 0) return;
@@ -384,8 +435,21 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
             element has no line box, so it takes no space while it says nothing.
 
             `role="status"` and not `FormError`'s `role="alert"`: this is a success after a round
-            trip, so polite is right and assertive would interrupt. */}
-        <p role="status" className="text-base-content/60 text-sm">
+            trip, so polite is right and assertive would interrupt.
+
+            **Green, and a filled `badge` rather than green text, which is a measurement rather
+            than a flourish.** The obvious `text-success` composites to **1.96:1** against the card
+            in the light theme - not marginal, effectively invisible - because daisyUI's `success`
+            is a *fill* colour that expects `success-content` on top of it, not a body-text colour.
+            Dark measures 8.08:1, so this is the failure mode a dark-only check waves through.
+            `badge badge-success` uses the pair the token was designed for and measures above AA in
+            both themes; a raw `text-green-700` would have been legible and is exactly the
+            bypass-the-theme move `frontend/CLAUDE.md` forbids.
+
+            The empty string still renders, so the region keeps its line box and the layout does not
+            move when the badge retires - and daisyUI's `badge` has no content of its own to draw
+            when the label is empty. */}
+        <p role="status" className={saved ? 'badge badge-success badge-sm' : 'text-sm'}>
           {saved ? MESSAGES.saved : ''}
         </p>
 
@@ -395,8 +459,23 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
 
             Disabled while the request is out, so a double press cannot send two patches. Nothing
             beside it is disabled, because there is nothing beside it: unlike the modals there is no
-            Cancel to keep live. */}
-        <Button type="submit" label="Save changes" disabled={pending} />
+            Cancel to keep live.
+
+            **Also disabled until something has actually changed, which reverses what this file
+            first argued.** That reasoning was that the frame draws one enabled primary button and
+            A29 designs no disabled treatment, so a dead-looking control was the bigger deviation.
+            It was wrong about which deviation costs more: the guards above already made a clean
+            press do nothing, so the button was live, pressable, and silently inert - a control that
+            looks actionable and is not, which is the exact failure every inert control on the
+            Categories tab was given `aria-disabled` to avoid. Saying so is the smaller lie.
+
+            **`disabled` rather than `aria-disabled`**, which is the opposite of that screen's call
+            and right for the opposite reason: those controls were *drawn but unbuilt*, so they had
+            to stay focusable and announce why. This one is built and momentarily has nothing to do,
+            which is the ordinary meaning of a disabled submit - and it re-enables on the next
+            keystroke, so nothing is stranded. It also suppresses implicit submission, which is what
+            stops Enter doing what the button will not. */}
+        <Button type="submit" label="Save changes" disabled={pending || !hasChangesToSave} />
       </div>
     </form>
   );

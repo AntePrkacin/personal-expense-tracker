@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { Profile } from '@/lib/profile';
@@ -314,11 +314,55 @@ describe('the clean form', () => {
     expect(screen.getByRole('status')).toHaveTextContent('');
   });
 
-  it('keeps Save enabled rather than disabling it', async () => {
-    // Deliberately not `AllocateBudgetModal`'s `!isDirty`: that modal has a designed disabled
-    // state and this frame does not, so a dead button with nothing beside it explaining itself
-    // would be worse than a press that does nothing.
+  it('disables Save until something has changed', async () => {
+    // This asserted the opposite for one ticket, on the reasoning that the frame draws no disabled
+    // treatment. Reversed by the product owner, and rightly: the submit guards already made a
+    // clean press do nothing, so the button was live, pressable and silently inert - a control
+    // that looks actionable and is not.
     renderForm();
+
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('enables Save on the first keystroke and disables it again when the edit is undone', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText('First name'), 'x');
+    expect(saveButton()).toBeEnabled();
+
+    await user.keyboard('{Backspace}');
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('stays disabled when a stored name carries whitespace', async () => {
+    // The button must not be enabled by the diff alone: `toUpdateProfileBody` trims on the way out
+    // and compares untrimmed, so a stored "  Marko  " differs from itself and would light up a
+    // Save the user has no reason to press.
+    render(<SettingsForm profile={{ ...PROFILE, firstName: '  Marko  ' }} save={jest.fn()} />);
+
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('stays disabled when the only edit is the address in a different case', async () => {
+    // And it must not be enabled by "did they type" alone either: this diffs to nothing, because
+    // the comparison is case-insensitive, so pressing Save would be a silent no-op.
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('Email'));
+    await user.type(screen.getByLabelText('Email'), 'MARKO@EMAIL.COM');
+
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('stays enabled while a field is blank, so the message can still be reached', async () => {
+    // Clearing a field is an edit, so the button lights up and the press produces the inline
+    // message rather than a control that refuses to explain itself.
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('First name'));
 
     expect(saveButton()).toBeEnabled();
   });
@@ -708,5 +752,143 @@ describe('the expired session', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+});
+
+describe('after a successful save', () => {
+  it('disables Save again, because the form now matches the server', async () => {
+    // The resync makes this fall out rather than needing its own reset: adopting the refreshed
+    // profile into `values` leaves the form equal to `synced`, so there is nothing to save.
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    expect(saveButton()).toBeEnabled();
+
+    await user.click(saveButton());
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    land({ firstName: 'Ana' });
+
+    expect(saveButton()).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Changes saved');
+  });
+
+  it('shows the confirmation in the success colour, not the muted caption one', async () => {
+    // One of the two places this repo allows a class assertion: a daisyUI state class that is the
+    // visible half of what the live region says.
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
+    expect(screen.getByRole('status')).toHaveClass('badge-success');
+  });
+
+  it('re-enables Save and clears the confirmation on the next edit', async () => {
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(saveButton());
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    land({ firstName: 'Ana' });
+
+    await user.type(screen.getByLabelText('Last name'), 'x');
+
+    expect(saveButton()).toBeEnabled();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+});
+
+describe('the confirmation retires itself', () => {
+  // Fake timers only in this block: `userEvent` schedules its own work on real ones, so it needs
+  // the advance-aware setup rather than the default.
+  function withTimers() {
+    jest.useFakeTimers();
+    return userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('clears "Changes saved" after five seconds', async () => {
+    const user = withTimers();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
+
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('keeps it up until then', async () => {
+    const user = withTimers();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
+
+    await act(async () => {
+      jest.advanceTimersByTime(4_900);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Changes saved');
+  });
+
+  it('leaves the region mounted, so the next save is still announced', async () => {
+    // The whole reason it ships empty rather than conditionally rendered: a live region created in
+    // the same commit as its content is generally not announced at all.
+    const user = withTimers();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(saveButton());
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
+
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('does not set state after the form has gone', async () => {
+    // Without the cleanup, a save immediately before an unmount updates a component that is no
+    // longer there. React logs rather than throws, so the assertion is on the console.
+    const user = withTimers();
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const view = render(
+      <SettingsForm profile={PROFILE} save={jest.fn().mockResolvedValue({ ok: true })} />,
+    );
+
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.click(saveButton());
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
+
+    view.unmount();
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
   });
 });
