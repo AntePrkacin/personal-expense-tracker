@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PET-59 - receipt scanning in the Add transaction modal</title>
+
+    <!--
+      The fourth page in this folder, and the first that draws a screen rather than a palette or a
+      mechanism. It is the design review artifact for PET-59: what the Add transaction modal looks
+      like once it can read a receipt, in the three states that differ and with every outcome the
+      scan can end in.
+
+      Same pins as the siblings, and here they matter for the same reason they matter in
+      how-category-templates-work.html: the point of the page is that these are the app's real
+      controls in the app's real themes, so a drifted pin would make it a picture of something
+      else.
+
+      One deviation from the siblings: this page also loads the two typefaces frontend/src/app/
+      fonts.ts loads through next/font, because it draws a screen and type is part of what is being
+      reviewed. The colour-reference pages have no such need and load none.
+
+      NOTHING ON THIS PAGE IS IMPLEMENTED YET. It is drawn from
+      docs/plans/2026-08-06_PET-59_receipt-scanning.md and is a proposal, not a screenshot.
+    -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+    <script src="https://unpkg.com/lucide@1.29.0"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Plus+Jakarta+Sans:wght@200..800&display=swap" rel="stylesheet">
+
+    <!--
+      Only the two font tokens, mapped exactly as globals.css maps them. The daisyUI plugin is NOT
+      declared here: it arrives through the stylesheet link above, and re-declaring it in a
+      text/tailwindcss block is what breaks a CDN page.
+    -->
+    <style type="text/tailwindcss">
+      @theme {
+        --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+        --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+      }
+    </style>
+</head>
+
+<body class="bg-base-200 text-base-content min-h-screen p-4 sm:p-8">
+  <div class="mx-auto flex w-full max-w-3xl flex-col gap-12">
+
+    <!-- Masthead -->
+    <header class="flex flex-col gap-5">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <p class="text-xs font-semibold tracking-widest uppercase opacity-60">
+                    PET-59 &middot; Frontend &middot; Proposal
+                </p>
+                <h1 class="font-display mt-1 text-3xl leading-tight font-extrabold text-balance sm:text-4xl">
+                    Scanning a receipt into the Add&nbsp;transaction modal
+                </h1>
+            </div>
+            <label class="flex shrink-0 cursor-pointer items-center gap-2">
+                <i data-lucide="sun" class="size-5" aria-hidden="true"></i>
+                <span class="sr-only">Dark theme</span>
+                <input type="checkbox" value="dark" class="toggle theme-controller" />
+                <i data-lucide="moon" class="size-5" aria-hidden="true"></i>
+            </label>
+        </div>
+
+        <p class="max-w-[62ch] leading-relaxed opacity-70">
+            The existing modal gains four things and loses none: two scan controls, a disclosure
+            line naming what leaves the device, a dismissible loading overlay, and a note saying
+            which fields a scan could not fill. Every control below is stock daisyUI on the app's
+            own <code class="bg-base-300 rounded px-1 py-0.5 text-[0.85em]">light</code> and
+            <code class="bg-base-300 rounded px-1 py-0.5 text-[0.85em]">dark</code> themes, so the
+            page follows your system setting and the toggle above overrides it.
+        </p>
+
+        <dl class="border-base-300 flex flex-wrap gap-x-8 gap-y-3 border-t pt-5 text-sm">
+            <div class="flex flex-col gap-0.5">
+                <dt class="text-xs tracking-wider uppercase opacity-50">Branch</dt>
+                <dd class="font-mono text-[0.8rem]">feat/PET-59-receipt-scanning</dd>
+            </div>
+            <div class="flex flex-col gap-0.5">
+                <dt class="text-xs tracking-wider uppercase opacity-50">Plan</dt>
+                <dd class="font-mono text-[0.8rem]">docs/plans/2026-08-06_PET-59_receipt-scanning.md</dd>
+            </div>
+            <div class="flex flex-col gap-0.5">
+                <dt class="text-xs tracking-wider uppercase opacity-50">Status</dt>
+                <dd>Not implemented - this is a proposal</dd>
+            </div>
+        </dl>
+    </header>
+
+    <!-- What is added -->
+    <section class="flex flex-col gap-4">
+        <h2 class="font-display text-xl font-bold">What is added to the modal</h2>
+        <ul class="grid gap-3 sm:grid-cols-2">
+            <li class="border-base-300 bg-base-100 rounded-box flex gap-3 border p-4">
+                <i data-lucide="camera" class="mt-0.5 size-5 shrink-0 opacity-60" aria-hidden="true"></i>
+                <div class="flex flex-col gap-1">
+                    <h3 class="text-sm font-semibold">Two controls on a phone, one on a desktop</h3>
+                    <p class="text-sm leading-relaxed opacity-70">
+                        Camera for one photo, upload for up to four images - or one PDF.
+                    </p>
+                </div>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box flex gap-3 border p-4">
+                <i data-lucide="info" class="mt-0.5 size-5 shrink-0 opacity-60" aria-hidden="true"></i>
+                <div class="flex flex-col gap-1">
+                    <h3 class="text-sm font-semibold">A disclosure line</h3>
+                    <p class="text-sm leading-relaxed opacity-70">
+                        Names what leaves the device, at the moment of action rather than in Settings.
+                    </p>
+                </div>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box flex gap-3 border p-4">
+                <i data-lucide="scan-text" class="mt-0.5 size-5 shrink-0 opacity-60" aria-hidden="true"></i>
+                <div class="flex flex-col gap-1">
+                    <h3 class="text-sm font-semibold">A dismissible overlay</h3>
+                    <p class="text-sm leading-relaxed opacity-70">
+                        The scan can always be abandoned, and a timeout sits behind it.
+                    </p>
+                </div>
+            </li>
+            <li class="border-base-300 bg-base-100 rounded-box flex gap-3 border p-4">
+                <i data-lucide="triangle-alert" class="mt-0.5 size-5 shrink-0 opacity-60" aria-hidden="true"></i>
+                <div class="flex flex-col gap-1">
+                    <h3 class="text-sm font-semibold">A missing-fields note</h3>
+                    <p class="text-sm leading-relaxed opacity-70">
+                        Says which fields to photograph again instead of failing silently at submit.
+                    </p>
+                </div>
+            </li>
+        </ul>
+    </section>
+
+    <!-- Device variants -->
+    <section class="flex flex-col gap-5">
+        <div class="flex flex-col gap-2">
+            <h2 class="font-display text-xl font-bold">The control row differs by device</h2>
+            <p class="max-w-[62ch] text-sm leading-relaxed opacity-70">
+                <code class="bg-base-300 rounded px-1 py-0.5 text-[0.85em]">capture="environment"</code>
+                is a hint desktop browsers ignore, so on a laptop the camera control is not merely
+                redundant - it is the same file picker as the one beside it, under a label promising
+                a camera. It is hidden there by
+                <code class="bg-base-300 rounded px-1 py-0.5 text-[0.85em]">@media (pointer: fine)</code>,
+                which asks about the input modality rather than sniffing the user agent. Written as
+                a <em>hide on fine</em> rather than a <em>show on coarse</em> deliberately: a device
+                reporting neither - a headless browser, some kiosks - then keeps the camera, and a
+                redundant button is a far cheaper failure than a phone that loses the one control
+                this ticket exists for. Both rows below are drawn unconditionally so both are
+                visible from one machine.
+            </p>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="border-base-300 bg-base-100 rounded-box flex flex-col gap-3 border p-4">
+                <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-semibold">On a phone</h3>
+                    <span class="badge badge-xs badge-soft font-mono">pointer: coarse</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <span class="btn btn-sm btn-outline btn-primary">
+                        <i data-lucide="camera" class="size-4" aria-hidden="true"></i>
+                        Scan receipt
+                    </span>
+                    <span class="btn btn-sm btn-outline btn-primary">
+                        <i data-lucide="images" class="size-4" aria-hidden="true"></i>
+                        Upload receipt
+                    </span>
+                </div>
+                <p class="text-xs leading-relaxed opacity-60">
+                    Peers, not a primary and a secondary. Neither may take the solid
+                    <code class="text-[0.9em]">btn-primary</code> - that belongs to "Add
+                    transaction".
+                </p>
+            </div>
+
+            <div class="border-base-300 bg-base-100 rounded-box flex flex-col gap-3 border p-4">
+                <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-semibold">On a desktop</h3>
+                    <span class="badge badge-xs badge-soft font-mono">pointer: fine</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <span class="btn btn-sm btn-outline btn-primary">
+                        <i data-lucide="images" class="size-4" aria-hidden="true"></i>
+                        Upload receipt
+                    </span>
+                </div>
+                <p class="text-xs leading-relaxed opacity-60">
+                    The camera input is <code class="text-[0.9em]">display: none</code>, so it
+                    leaves the tab order too rather than merely going invisible.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!--
+      The three plates below draw `modal-box` outside an open `.modal`, which needs three utilities
+      that the real component does not:
+
+        opacity-100   `.modal-box` ships `opacity: 0` and only an open `.modal` ancestor clears it,
+                      so without this the box paints nothing at all while every class looks right.
+        scale-none    the same base rule ships `scale: .95`; the app pairs this with translate-none
+                      for the containing-block reason frontend/src/app/CLAUDE.md records.
+        max-h-none    `.modal-box` is `max-height: 100vh` with `overflow-y: auto`, so in a static
+                      page the box scrolls internally and clips its own footer.
+
+      None of the three belongs in AddTransactionModal. They are the cost of drawing a modal inline.
+    -->
+
+    <!-- Plate 1 - resting -->
+    <section class="flex flex-col gap-5">
+        <div class="flex flex-col gap-2">
+            <div class="flex flex-wrap items-center gap-3">
+                <h2 class="font-display text-xl font-bold">1 &middot; Before a scan</h2>
+                <span class="badge badge-sm badge-soft">Live - adapts to this device</span>
+            </div>
+            <p class="max-w-[62ch] text-sm leading-relaxed opacity-70">
+                The form is unchanged below the fold. What is new sits above Amount, because
+                scanning is how the fields get filled - putting it under them would ask the user to
+                scroll past the work to find the shortcut. <strong class="font-semibold">This plate
+                carries the real media query</strong>, so on a laptop it shows one control and on a
+                phone two.
+            </p>
+        </div>
+
+        <div class="bg-neutral/60 rounded-box flex justify-center p-4 sm:p-8">
+            <div class="modal-box bg-base-100 w-full max-w-[472px] translate-none scale-none opacity-100 max-h-none">
+                <div class="mb-4 flex items-start justify-between gap-4">
+                    <h3 class="font-display text-lg font-bold">Add transaction</h3>
+                    <button type="button" class="btn btn-sm btn-circle btn-ghost" aria-label="Close">
+                        <i data-lucide="x" class="size-4" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="border-base-300 bg-base-200 rounded-box mb-5 flex flex-col gap-3 border p-3">
+                    <div class="flex flex-wrap gap-2">
+                        <label class="btn btn-sm btn-outline btn-primary pointer-fine:hidden">
+                            <i data-lucide="camera" class="size-4" aria-hidden="true"></i>
+                            Scan receipt
+                            <input type="file" accept="image/*" capture="environment" class="sr-only" />
+                        </label>
+                        <label class="btn btn-sm btn-outline btn-primary">
+                            <i data-lucide="images" class="size-4" aria-hidden="true"></i>
+                            Upload receipt
+                            <input type="file" accept="image/*,application/pdf" multiple class="sr-only" />
+                        </label>
+                    </div>
+                    <p class="flex gap-2 text-xs leading-relaxed opacity-60">
+                        <i data-lucide="info" class="mt-px size-3.5 shrink-0" aria-hidden="true"></i>
+                        <span>
+                            What you upload and your recent merchant names are sent to
+                            Google&nbsp;Gemini to read the receipt, and may be used to improve their
+                            models. Nothing is stored. Up to 4&nbsp;photos or one PDF, all treated as
+                            pages of one receipt.
+                        </span>
+                    </p>
+                </div>
+
+                <div class="fieldset">
+                    <label class="label" for="p1-amount">Amount</label>
+                    <label class="input input-lg w-full">
+                        <span class="opacity-50" aria-hidden="true">$</span>
+                        <input id="p1-amount" type="text" inputmode="decimal" class="grow" placeholder="0.00" />
+                    </label>
+                </div>
+
+                <div class="fieldset">
+                    <label class="label" for="p1-category">Category</label>
+                    <select id="p1-category" class="select w-full cursor-pointer">
+                        <option disabled selected>Select a category</option>
+                        <option>Groceries</option>
+                        <option>Transport</option>
+                        <option>Dining out</option>
+                    </select>
+                </div>
+
+                <div class="flex w-full gap-3">
+                    <div class="flex-1">
+                        <div class="fieldset">
+                            <label class="label" for="p1-date">Date</label>
+                            <button id="p1-date" type="button" class="select w-full cursor-pointer text-left">
+                                Aug 9, 2026
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex-1">
+                        <div class="fieldset">
+                            <label class="label" for="p1-merchant">Merchant</label>
+                            <input id="p1-merchant" type="text" class="input w-full" placeholder="Where you spent it" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="fieldset">
+                    <label class="label" for="p1-note">Note (optional)</label>
+                    <input id="p1-note" type="text" class="input w-full" />
+                </div>
+
+                <div class="modal-action">
+                    <button type="button" class="btn btn-sm">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary">Add transaction</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Plate 2 - scanning -->
+    <section class="flex flex-col gap-5">
+        <div class="flex flex-col gap-2">
+            <div class="flex flex-wrap items-center gap-3">
+                <h2 class="font-display text-xl font-bold">2 &middot; While the scan runs</h2>
+                <span class="badge badge-sm badge-soft">3-5 seconds</span>
+            </div>
+            <p class="max-w-[62ch] text-sm leading-relaxed opacity-70">
+                The overlay covers the box, not the page, and carries its own Cancel. A hung or
+                quota-throttled call is the failure PET-56 was an entire ticket about, so there is
+                always a way out and a timeout behind it.
+            </p>
+        </div>
+
+        <div class="bg-neutral/60 rounded-box flex justify-center p-4 sm:p-8">
+            <div class="relative w-full max-w-[472px]">
+                <div class="modal-box bg-base-100 w-full max-w-none translate-none scale-none opacity-100 max-h-none" aria-hidden="true">
+                    <div class="mb-4 flex items-start justify-between gap-4">
+                        <h3 class="font-display text-lg font-bold">Add transaction</h3>
+                    </div>
+                    <div class="border-base-300 bg-base-200 rounded-box mb-5 h-24 border"></div>
+                    <div class="bg-base-200 rounded-field mb-3 h-12"></div>
+                    <div class="bg-base-200 rounded-field mb-3 h-10"></div>
+                    <div class="bg-base-200 rounded-field h-10"></div>
+                </div>
+                <div class="bg-base-100/85 rounded-box absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center backdrop-blur-[2px]">
+                    <span class="loading loading-spinner loading-lg text-primary" aria-hidden="true"></span>
+                    <div class="flex flex-col gap-1">
+                        <p class="font-display text-base font-bold" role="status">Reading your receipt...</p>
+                        <p class="text-sm opacity-60">This usually takes a few seconds.</p>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-ghost">Cancel scan</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Plate 3 - after a scan -->
+    <section class="flex flex-col gap-5">
+        <div class="flex flex-col gap-2">
+            <div class="flex flex-wrap items-center gap-3">
+                <h2 class="font-display text-xl font-bold">3 &middot; After a scan</h2>
+                <span class="badge badge-sm badge-soft">Partial extraction</span>
+            </div>
+            <p class="max-w-[62ch] text-sm leading-relaxed opacity-70">
+                The scan filled Amount, Merchant and Date. It did not find a category, so that field
+                is named in the note rather than guessed at - a wrong category renders as a confident
+                answer, where a blank one asks. The Note field was typed by hand before scanning and
+                is left alone: the merge tracks which fields the user touched, not which are empty.
+                Both labels change, because a second scan fills gaps rather than starting over.
+            </p>
+        </div>
+
+        <div class="bg-neutral/60 rounded-box flex justify-center p-4 sm:p-8">
+            <div class="modal-box bg-base-100 w-full max-w-[472px] translate-none scale-none opacity-100 max-h-none">
+                <div class="mb-4 flex items-start justify-between gap-4">
+                    <h3 class="font-display text-lg font-bold">Add transaction</h3>
+                    <button type="button" class="btn btn-sm btn-circle btn-ghost" aria-label="Close">
+                        <i data-lucide="x" class="size-4" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="border-base-300 bg-base-200 rounded-box mb-4 flex flex-col gap-3 border p-3">
+                    <div class="flex flex-wrap gap-2">
+                        <label class="btn btn-sm btn-outline btn-primary pointer-fine:hidden">
+                            <i data-lucide="camera" class="size-4" aria-hidden="true"></i>
+                            Scan again
+                            <input type="file" accept="image/*" capture="environment" class="sr-only" />
+                        </label>
+                        <label class="btn btn-sm btn-outline btn-primary">
+                            <i data-lucide="images" class="size-4" aria-hidden="true"></i>
+                            Add pages
+                            <input type="file" accept="image/*,application/pdf" multiple class="sr-only" />
+                        </label>
+                    </div>
+                    <p class="text-warning flex gap-2 text-xs leading-relaxed" role="status">
+                        <i data-lucide="triangle-alert" class="mt-px size-3.5 shrink-0" aria-hidden="true"></i>
+                        <span>
+                            Couldn't read the <strong class="font-semibold">category</strong>. Pick
+                            one below, or photograph the rest of the receipt.
+                        </span>
+                    </p>
+                </div>
+
+                <div class="fieldset">
+                    <label class="label" for="p3-amount">Amount</label>
+                    <label class="input input-lg w-full">
+                        <span class="opacity-50" aria-hidden="true">$</span>
+                        <input id="p3-amount" type="text" inputmode="decimal" class="grow tabular-nums" value="86.40" />
+                    </label>
+                </div>
+
+                <div class="fieldset">
+                    <label class="label" for="p3-category">Category</label>
+                    <select id="p3-category" class="select select-warning w-full cursor-pointer">
+                        <option disabled selected>Select a category</option>
+                        <option>Groceries</option>
+                        <option>Transport</option>
+                        <option>Dining out</option>
+                    </select>
+                </div>
+
+                <div class="flex w-full gap-3">
+                    <div class="flex-1">
+                        <div class="fieldset">
+                            <label class="label" for="p3-date">Date</label>
+                            <button id="p3-date" type="button" class="select w-full cursor-pointer text-left">
+                                Aug 6, 2026
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex-1">
+                        <div class="fieldset">
+                            <label class="label" for="p3-merchant">Merchant</label>
+                            <input id="p3-merchant" type="text" class="input w-full" value="Whole Foods" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="fieldset">
+                    <label class="label" for="p3-note">Note (optional)</label>
+                    <input id="p3-note" type="text" class="input w-full" value="Weekly shop" />
+                    <p class="label text-xs opacity-50">You typed this, so the scan left it alone.</p>
+                </div>
+
+                <div class="modal-action">
+                    <button type="button" class="btn btn-sm">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary">Add transaction</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Outcomes -->
+    <section class="flex flex-col gap-5">
+        <div class="flex flex-col gap-2">
+            <h2 class="font-display text-xl font-bold">Every outcome has its own line</h2>
+            <p class="max-w-[62ch] text-sm leading-relaxed opacity-70">
+                Nine endings, each with copy of its own. A generic "something went wrong" would tell
+                a rate-limited user to retry immediately and a user with scanning switched off to
+                keep trying forever. The status column is what the backend answers.
+            </p>
+        </div>
+
+        <div class="border-base-300 bg-base-100 rounded-box overflow-x-auto border">
+            <table class="table-sm table">
+                <thead>
+                    <tr>
+                        <th class="w-px">Status</th>
+                        <th>Outcome</th>
+                        <th>What the user reads</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="font-mono text-xs tabular-nums">200</td>
+                        <td class="whitespace-nowrap">Filled, some missing</td>
+                        <td class="opacity-80">Couldn't read the <strong class="font-semibold">category</strong>. Pick one below, or photograph the rest of the receipt.</td>
+                    </tr>
+                    <tr>
+                        <td class="font-mono text-xs tabular-nums">200</td>
+                        <td class="whitespace-nowrap">Nothing extracted</td>
+                        <td class="opacity-80">Nothing readable in that photo. Try again with the whole receipt in frame.</td>
+                    </tr>
+                    <tr>
+                        <td class="font-mono text-xs tabular-nums">503</td>
+                        <td class="whitespace-nowrap">Scanning unavailable</td>
+                        <td class="opacity-80">Receipt scanning is switched off right now. You can still add the transaction by hand.</td>
+                    </tr>
+                    <tr>
+                        <td class="font-mono text-xs tabular-nums">429</td>
+                        <td class="whitespace-nowrap">Rate limited</td>
+                        <td class="opacity-80">You've scanned a lot in a short time. Wait a minute and try again.</td>
+                    </tr>
+                    <tr>
+                        <td class="font-mono text-xs tabular-nums">504</td>
+                        <td class="whitespace-nowrap">Timed out</td>
+                        <td class="opacity-80">That scan took too long. Try again, or add the transaction by hand.</td>
+                    </tr>
+                    <tr>
+                        <td class="font-mono text-xs tabular-nums">400</td>
+                        <td class="whitespace-nowrap">Upload rejected</td>
+                        <td class="opacity-80">That file isn't a receipt we can read. Use photos, or a single PDF.</td>
+                    </tr>
+                    <tr>
+                        <td class="font-mono text-xs tabular-nums">400</td>
+                        <td class="whitespace-nowrap">PDF sent with other files</td>
+                        <td class="opacity-80">Send a PDF on its own - it already holds every page.</td>
+                    </tr>
+                    <tr>
+                        <td class="font-mono text-xs tabular-nums">413</td>
+                        <td class="whitespace-nowrap">File too large</td>
+                        <td class="opacity-80">That file is too big. Photos can be up to 1.5&nbsp;MB after compressing, a PDF up to 4&nbsp;MB.</td>
+                    </tr>
+                    <tr>
+                        <td class="font-mono text-xs opacity-50">-</td>
+                        <td class="whitespace-nowrap">Compression failed</td>
+                        <td class="opacity-80">This phone saves photos in a format the browser can't read (HEIC). Use <strong class="font-semibold">Scan receipt</strong>, or convert the file first.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="text-xs leading-relaxed opacity-50">
+            Copy above is a first draft with no Figma frame behind it. It joins what A29 owes a
+            designer, alongside the other undesigned states this app already ships.
+        </p>
+    </section>
+
+    <!-- Open questions -->
+    <section class="border-base-300 flex flex-col gap-4 border-t pt-8">
+        <h2 class="font-display text-xl font-bold">Open for a designer</h2>
+        <ol class="flex flex-col gap-3">
+            <li class="flex gap-3 text-sm leading-relaxed">
+                <span class="badge badge-sm badge-soft mt-0.5 shrink-0 tabular-nums">1</span>
+                <span>
+                    <strong class="font-semibold">"Upload receipt", not "receipts".</strong> Picking
+                    several files at once is supported - up to four - but they are read as
+                    <em>pages of one receipt</em> and become one transaction. The plural would
+                    promise a batch import the modal cannot perform, where several receipts sent
+                    together are merged and all but one silently lost.
+                </span>
+            </li>
+            <li class="flex gap-3 text-sm leading-relaxed">
+                <span class="badge badge-sm badge-soft mt-0.5 shrink-0 tabular-nums">2</span>
+                <span>
+                    <strong class="font-semibold">Whether the camera should be hidden at all, or
+                    just be the only control everywhere.</strong> One "Upload receipt" on every
+                    viewport is one fewer control and one fewer conditional - the OS picker offers
+                    the camera anyway - but it buries the ticket's actual subject two taps deep on a
+                    phone.
+                </span>
+            </li>
+            <li class="flex gap-3 text-sm leading-relaxed">
+                <span class="badge badge-sm badge-soft mt-0.5 shrink-0 tabular-nums">3</span>
+                <span>
+                    <strong class="font-semibold">Where the controls sit.</strong> Drawn above
+                    Amount, inside a tinted panel with the disclosure. The alternative is a single
+                    icon button in the header, which is quieter but leaves the disclosure homeless.
+                </span>
+            </li>
+            <li class="flex gap-3 text-sm leading-relaxed">
+                <span class="badge badge-sm badge-soft mt-0.5 shrink-0 tabular-nums">4</span>
+                <span>
+                    <strong class="font-semibold">How loud the disclosure should be.</strong> It is
+                    <code class="text-xs">text-xs</code> muted here. It names a real transfer of
+                    financial data to a training-enabled endpoint, so quieter may be too quiet.
+                </span>
+            </li>
+            <li class="flex gap-3 text-sm leading-relaxed">
+                <span class="badge badge-sm badge-soft mt-0.5 shrink-0 tabular-nums">5</span>
+                <span>
+                    <strong class="font-semibold">Whether the unfilled field earns
+                    <code class="text-xs">select-warning</code>.</strong> It marks the one control
+                    the user must still touch, but warning colour normally means invalid, and
+                    nothing here is invalid yet.
+                </span>
+            </li>
+        </ol>
+    </section>
+
+  </div>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
