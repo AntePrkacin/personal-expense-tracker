@@ -2252,3 +2252,96 @@ cookie and it redirects to `/login` like every other read - which is also why
 records. This is the screen's only router call, and both gates were already paying for one: the
 suite mocks `next/navigation` and the stories carry `nextjs: { appDirectory: true }` for the
 provider subtree.
+
+**PET-46 filled the Settings `<main>`, so every sentence above calling it "the last one still empty
+and still fetching nothing" is history, and so is every trap statement naming two or three unbuilt
+screens.** All four routed views render content below their header and all four fetch. Read the
+paragraphs at "The AI Insights and Settings `<main>` elements are now the only two", "Settings is
+the last `<main>` still empty" and the closing line of the PET-29 trap as dated in the same way the
+Dashboard and Insights sentences before them already are.
+
+**What it does not do is finish frame 17, and that distinction is the one to carry.** The frame
+draws **three** cards over a single "Save changes", and only the Profile card is built. The
+Preferences card and the Categories summary are PET-47's and are **not drawn at all** - deliberately
+absent rather than inert, which is the opposite of every dead control this file otherwise records.
+An inert control is right when the thing behind it is one ticket away and the frame's layout depends
+on it being there; a card whose three fields would submit through a form that does not carry them is
+not a control at all, it is a promise the form cannot keep. So Settings ships as a short page rather
+than a full one with two dead cards on it.
+
+**The `'use client'` boundary is `SettingsForm`, and both of the places it is not are decisions.**
+It is not on `SettingsScreen`, because AC3's live initials and AC4's inline messages need state and
+nothing above the `<form>` does - the smallest-wrapper rule `SidebarNav` and `TrendChart` follow -
+and because a synchronous `SettingsScreen` is what lets Storybook render the screen at all. And it
+is not per card, which is the shape that looks tidier: one page-level Save means one `<form>`
+wrapping every card, because a footer button cannot read state held inside a sibling. That is what
+makes PET-47 additive. `ProfileCard.tsx` is a separate file for that ticket rather than for reuse -
+one consumer is normally the argument against a file, and what earns it one is that
+`PreferencesCard` is a structurally identical sibling taking the same four props. Not a slot, for
+`CategoriesScreen`'s reason: a slot with one possible occupant expresses no choice.
+
+**The page reads the profile a second time, and the shell's copy is deliberately not threaded
+down.** `(app)/layout.tsx` already called `requireProfile()` for the sidebar footer a moment
+earlier, and an App Router layout cannot pass props to the page it wraps. The two alternatives are a
+provider on all four routes to serve one screen, or this. What the second read buys beyond
+simplicity is that the form's **diff baseline is the current profile**: `original` is read off the
+prop on every render rather than frozen into `useState`, so after a save `router.refresh()` re-runs
+both the layout and this page and a second press with no further edits has nothing to send.
+`AllocateBudgetModal`'s `useState(() => ...)` baseline is the tempting shape to copy and is wrong
+here - that modal reads once on open because a background refresh would rewrite fields under the
+user's hands, and this form already holds `values` in state, so the protection is had for free.
+`docs/TODO.md` records the request's cost.
+
+**Three states on this screen have no frame behind them, which makes five with no frame in this
+app.** SET-5 draws no success, no error and no unsaved-changes visual, so pending, failure and
+confirmation are all ours. Two of them follow existing rules exactly: Save disables while the
+request is out, and the four failure lines go through `components/FormError.tsx`'s `role="alert"`.
+The third is new here and is the one to read the reasoning for before touching it. **The "Changes
+saved" line is mounted from the first render and only its text changes**, which
+`AllocateBudgetModal.tsx` records the mechanism for - a polite region created in the same commit as
+its content is generally not announced at all, and `getByRole('status')` cannot tell that apart from
+a working one, which is why the suite asserts the region's _text_. It is `role="status"` rather than
+`FormError`'s `role="alert"` because it follows a round trip that went right, and it clears on the
+next keystroke, because "Changes saved" over a form that has since been edited is the one lie this
+screen could tell.
+
+**Validation runs before the diff, and an empty diff sends nothing at all.** The order is
+load-bearing rather than stylistic: blanking First name must show its message even though the diff
+would be non-empty, and blanking it then restoring it must be silent. Then `PATCH /api/profile`
+answers 400 to a body with no keys, so a press on an untouched form returns without a request, a
+refresh or a message - `EditTransactionModal`'s call, minus the dialog it has to close, and
+deliberately without a confirmation, because claiming a save that never happened is worse than
+saying nothing. **Save stays enabled on a clean form**, which is the one place this departs from
+`AllocateBudgetModal`'s `!isDirty`: that modal has a designed disabled state and this frame does
+not, so a dead button with nothing beside it explaining itself would be the worse trade.
+
+**The avatar is announced where `ui/Sidebar`'s identical tile is `aria-hidden`, and the divergence
+is deliberate.** That one hides its initials because the full name is read out immediately after
+them, so they are a repeat; here the names live in inputs, whose values a reader hears only on
+focus, so "MK" is the only place a screen reader meets them on the card. `initials()` from
+`lib/format.ts` is reused rather than re-derived, which that function's own docblock has named SET-6
+and this card as the reason for since before either existed - the sidebar footer and this avatar
+have to agree, and that is AC5.
+
+**The caption says "Spendifico" where the frame says "Expensa"**, joining `ui/Sidebar.tsx` and
+`components/LogoLockup.tsx` as the third site carrying the PET-51 rename against the design file.
+`SettingsForm.test.tsx` pins the absence of the old string, as six other suites already do, so it
+cannot be half-reverted by somebody working from Figma in good faith.
+
+**The Email field carries a standing hint, and that is what widened `ui/Input`.** A39 designs no
+re-verification step and no warning anywhere, so editing that field silently moves where every
+future login link goes. "Login links will be sent here." states it where it happens, and it is a
+`hint` prop rather than a `<p>` beside the field so the control genuinely describes it - an
+unassociated caption is one a screen reader reaches only by wandering past the field. `ui/FieldShell`
+gained `fieldHintId` and `fieldDescribedBy` for it, and the case that assertion exists for is a
+field carrying **both**: a control naming only the error stops describing its own hint at exactly
+the moment the reader most needs the whole picture. Widening a shared primitive for one caller is
+what `frontend/src/components/CLAUDE.md` warns against; taken anyway, and PET-47's three Preferences
+fields are the obvious second consumer.
+
+**`(app)/pages.test.tsx`'s Settings header assertion narrowed, and the criterion it pins did not
+change.** It used to sweep the whole page for buttons and links, which was the same assertion only
+while the `<main>` below was empty - so the moment this screen grew a form it would have failed for
+a reason having nothing to do with the header. It is scoped to `<header>` now. What AC2 says is that
+the header carries no action, which is still exactly what is measured; the version that leaned on
+the rest of the page being empty was measuring something stronger by accident.

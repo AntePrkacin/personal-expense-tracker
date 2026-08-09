@@ -553,6 +553,18 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `Uncategorized` sentence **survives unchanged and is the one to cite**: this modal excludes that row
   too, so a limitation the fallback card already had is extended rather than resolved, and the API is
   still the only way to cap it.
+  **PET-46 filled the Settings `<main>`, so the "one of the four" this bullet opens on is none of
+  them and every sentence above naming Settings as the empty one is dated.** All four routed views
+  now render content below their header and all four fetch. What this ticket adds to _this_ list is
+  narrower than the bullet it closes and is worth stating precisely, because "Settings is built" is
+  the wrong summary: the frame draws **three** cards over one "Save changes", and only the first is
+  here. The Profile card is real and really writes; the **Preferences card** (Currency, Monthly
+  budget, Month starts on) and the **Categories summary** with its "Manage" are PET-47's and are not
+  drawn at all - so unlike every other gap on this list they are not inert controls with
+  `aria-disabled` on them, they are simply absent, which is the honest shape for a card whose fields
+  would otherwise submit through a form that does not carry them. The Save button beneath is
+  page-level rather than card-level for exactly that reason, and `settings/SettingsForm.tsx` records
+  what PET-47 has to touch to join it.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session
@@ -667,3 +679,21 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   carrying: **a blank cap sends `null`**, which is the only way a capped category becomes uncapped,
   where `toCreateCategoryBody` _omits_ a blank cap because `CreateCategoryDto` reads absent as "no
   cap" and takes no `null` at all.
+  **PET-46 added the eighth, `lib/updateProfile.ts`, so this bullet's lead-in is exhausted: there is
+  no unbuilt write left in this app.** It publishes **four** reasons, the shortest classification
+  since `generateInsights`, and two things about it are worth carrying rather than re-deriving.
+  **`taken` is the first 409 anywhere here that the UI can actually reach.** `updateCategory`'s
+  `fallback` and `deleteCategory`'s are both classified-but-unreachable, sitting behind controls that
+  are deliberately not drawn, and both carry a note saying a hidden control is not an enforcement;
+  this one is the ordinary case of two accounts wanting one address, so its copy **names the cause**
+  where those two hedge. The disclosure is the backend's deliberate choice - an authenticated form
+  cannot tell a typo from a taken address unless it is told, where the public auth routes answer
+  identical 202s to defeat enumeration - and the copy still must not imply the holder can be
+  identified. And its diffed body, `settings/settingsForm.ts`'s `toUpdateProfileBody`, is
+  `toUpdateCategoryBody`'s exact mirror on the one point that file flags: **it never sends `null`**,
+  because `UpdateProfileDto` accepts none and every column behind it is NOT NULL, where a blank cap
+  next door _must_ send `null` because that is the only way a capped category becomes uncapped. The
+  two look inconsistent and are one rule stated against two DTOs; read them together or neither
+  makes sense. It also publishes **no `missing` arm**, which is a decision rather than an omission:
+  the endpoint carries no id at all, so there is no resource to fail to find, and an absent profile
+  row is a broken invariant the backend answers 500 for.

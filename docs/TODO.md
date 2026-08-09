@@ -737,7 +737,9 @@ specific period:
   buckets whose last is three days.
 - Reaching either deliberately means setting `monthStartDay`, and **no screen can**: the Settings
   preferences card is PET-47 and is not built, so today it is a `PATCH /api/profile` by hand or a
-  direct write to the user database.
+  direct write to the user database. PET-46 built the Settings page's form and its Profile card but
+  deliberately not that card, so this stays true and its blocker narrowed from "Settings does not
+  exist" to "PET-47".
 
 **Deferred until there is a dummy-content script, and it should be built on that script rather
 than beside it.** Seeding a believable account is wanted for far more than this - every empty
@@ -1524,6 +1526,11 @@ exist while Settings' `<main>` is empty. Migrating the whole project to the paid
 *only* mechanism that actually turns training off; a $10 prepay to buy that for a portfolio
 app's seeded test data was judged not worth it. Revisit both the toggle and the tier once
 Settings has a `<main>` and once this app has a real user.
+**PET-46 gave it that `<main>`, so the last clause of the paragraph above is satisfied and the
+blocker is now the other three items on its own list.** There is a real `<form>` on `/settings` to
+host a toggle, and adding one is a profile column, a migration and an `api:sync` - the screen is no
+longer among the missing pieces. The tier question is untouched, and it is still the only mechanism
+that turns training off.
 
 **A shared-store aggregate cap on the Gemini quota.** The `scan` throttler is per-user and its
 store is in-memory (see "The auth throttler is in-memory" below, which the same store serves),
@@ -2388,6 +2395,78 @@ $3,200 budget is 0.03% of the bar and renders as nothing, and the obvious `min-w
 because it pushes the widths past 100% and flex then shrinks the *large* segments to compensate, so
 the bar would stop being accurate everywhere to make one invisible segment visible.
 `Screens/Allocate budget`'s `TinySegments` is that case.
+
+### The Settings profile card invents five strings and three states, and A29 owes all of them
+
+SET-5 draws no success, no error and no unsaved-changes visual anywhere on frame 17, so PET-46's
+pending, failure and confirmation treatments are ours. Four of the strings are the failure lines -
+`invalid` ("check the values", never "try again", because a body the DTO rejects loops forever),
+`taken` ("That email address already belongs to another account."), `unauthenticated` and `failed` -
+and the fifth is the success line, "Changes saved". The four *field* messages are not on this list:
+they are copied byte for byte from `app/setup/register/RegisterForm.tsx`, which collects the
+identical three fields under the identical three rules, so they are already whatever A29 makes them
+there.
+
+`Screens/17 Settings` carries three stories that exist to collect the answer rather than to diff
+against the design: `WithMessages` puts all three inline messages up at once, `EmailTaken` shows the
+409 line, and `Saved` shows the confirmation. Two of them are states an untouched form cannot reach.
+
+### The Settings page has no unsaved-changes guard, by design
+
+Navigating away from a half-edited Profile card discards it silently: no prompt, no dirty marker, no
+"you have unsaved changes" anywhere. SET-5 designs none, and A29 designs no state that could carry
+one, so inventing a `beforeunload` prompt would be a larger deviation than the three states PET-46
+already invented. Recorded because it looks like an omission and is a decision, and because the
+cheapest honest fix - marking the form dirty in the Save row - is one more undesigned state rather
+than none.
+
+The related choice is that **Save stays enabled on a clean form**, where `AllocateBudgetModal`
+disables its own on `!isDirty`. That modal has a designed disabled state and this frame does not, so
+a press on an untouched form is a deliberate silent no-op instead: the diff is empty, and
+`PATCH /api/profile` answers 400 to a body with no keys, so no request is made and nothing is said.
+A confirmation there would claim a save that never happened.
+
+### The Settings form does not mirror `@MaxLength(100)`, so an over-long name gets generic copy
+
+`settings/settingsForm.ts`'s `isNameValid` checks non-blankness and nothing else, which is
+`categoryForm.isNameValid`'s recorded call about `@MaxLength(60)` applied to a second DTO: a bound
+restated in the frontend is one that can drift from the backend's with every gate green. The cost is
+that a name past 100 characters is rejected by the DTO and surfaces as the form-level `invalid`
+line - "check the values" - rather than as an inline message naming the field and the limit. Closing
+it wants the bound published somewhere both apps read, which is the same wish `CategoryPicker`'s
+`@ArrayMaxSize` literal and `AllocateBudgetModal`'s `MAX_CAP_ROWS` already record: `maxLength`
+reaches no generated type, so there is nothing to read it out of.
+
+### Settings reads the profile twice per view
+
+`(app)/layout.tsx` calls `requireProfile()` for the sidebar footer and `settings/page.tsx` calls it
+again for the form. Both go through `authorizedGet` with `cache: 'no-store'`, so Next's per-request
+fetch memoisation may or may not collapse them - same URL, method and headers, but an explicit
+no-store on each.
+
+Accepted rather than fixed, and the alternatives are both worse at this size. A layout cannot pass
+props to the page it wraps in the App Router, so removing the second read means a profile context
+mounted on all four routes to serve one screen - the shape `AddCategoryButton` already declined for
+one trigger on one route. Threading it any other way would also cost the property the second read
+buys: the form's diff baseline is the *current* profile on every render, which is what makes a
+second press of Save after a successful one send nothing. `/transactions/categories` already fires
+three reads inside a shell that read a fourth, so this is the second instance of a pattern rather
+than a new one. Measure it in the Network panel before deciding it is real.
+
+### Nothing on the Settings form warns that a new address moves the login link
+
+The backend side of this is three entries up, under "Changing an email address leaves three loose
+ends": no re-verification, live links still pointing at the old inbox, and no notification to the
+address that lost the account. PET-46 puts the field on screen, which turns the third of those from
+a latent property into something a user can trigger with a typo, and A39 designs no warning, no
+confirmation step and no re-verification anywhere.
+
+The whole of the frontend mitigation is one standing hint under the field, "Login links will be sent
+here.", which is invented copy joining the A29 list above. What it cannot do is prevent the typo: a
+mistyped-but-valid address is accepted, the account moves to an inbox nobody reads, and the current
+session keeps working until it expires - at which point there is no way back in. A confirmation step
+naming the new address is the cheap fix and contradicts A39 as drawn, which makes it a product
+decision before it is a code one.
 
 ### Saving the last of the budget destroys the control that opened the modal
 
