@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 
 import { readCategoryLabels } from '../../lib/categories';
 import { readDashboard } from '../../lib/dashboard';
+import { requireInsights } from '../../lib/insights';
 import { readTransactionsView } from '../../lib/transactions';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
@@ -35,6 +36,11 @@ jest.mock('../../lib/dashboard', () => ({ readDashboard: jest.fn() }));
 // colour the table draws are joined on from the category list. Same relative specifier, same
 // reason.
 jest.mock('../../lib/categories', () => ({ readCategoryLabels: jest.fn() }));
+
+// AI Insights is not a plain Server Component either, as of PET-42-43-44: it awaits
+// `requireInsights()`, the same shape as the two above. Three of the four routed views fetch
+// now; Settings is the last one that does not.
+jest.mock('../../lib/insights', () => ({ requireInsights: jest.fn() }));
 
 // Two of these screens now hold an "Add transaction" trigger that calls
 // `useAddTransaction`, which throws outside its provider by design - so every render
@@ -133,6 +139,19 @@ beforeEach(() => {
     recentTransactions: [],
     insight: null,
   });
+
+  // A `ready` set rather than an empty one, because this file asserts the header and the
+  // Regenerate button is absent in the empty state by design (INS-1). One card, which is enough
+  // to keep the grid from being the subject here - `InsightsScreen.test.tsx` owns the three
+  // states. Like `readDashboard`, `requireInsights` redirects or throws rather than returning a
+  // wrapper, so there is no `{ ok }` to mock.
+  (requireInsights as jest.Mock).mockResolvedValue({
+    state: 'ready',
+    monthLabel: 'October 2025',
+    summary: { headline: 'On track this month', body: 'Spent $1,240 of $2,000.' },
+    insights: [{ tone: 'warning', title: 'Dining out is over budget', body: '$12 over' }],
+    generatedAt: '2025-10-08T09:00:00.000Z',
+  });
 });
 
 // October 2025 is the month the whole Figma file is drawn in, so pinning the
@@ -149,7 +168,10 @@ afterAll(() => {
 const SCREENS = [
   ['Dashboard', DashboardPage, 'October 2025', 'Dashboard'],
   ['Transactions', TransactionsPage, 'October 2025', 'Transactions'],
-  ['AI Insights', InsightsPage, 'Your money assistant', 'AI Insights'],
+  // The overline is the period rather than INS-1's "Your money assistant", decided at the
+  // 2026-08-08 review so the four routed views read consistently. The Jira ticket carries the
+  // amendment.
+  ['AI Insights', InsightsPage, 'October 2025', 'AI Insights'],
   ['Settings', SettingsPage, 'Manage your account', 'Settings'],
 ] as const;
 
