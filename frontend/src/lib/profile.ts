@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { cache } from 'react';
 
 import { ACCESS_ROUTES } from '@/lib/routes';
 import { authorizedGet } from '@/lib/session';
@@ -53,8 +54,27 @@ export type Profile = components['schemas']['ProfileResponseDto'];
  * module's own: the *policy* over that classification. The no-store matters for a reason
  * specific to this endpoint, which is worth keeping written down: the Settings form can
  * change every field it returns, and a cached footer would keep showing the old name.
+ *
+ * **Wrapped in React's `cache()` since PET-47, and that does not undo the `no-store` above.**
+ * The two are different scopes and it is worth being precise, because they read as contradictory:
+ * `cache()` memoizes on the arguments for the lifetime of **one render pass**, so a second caller
+ * inside the same request gets the first caller's promise, while `no-store` governs whether the
+ * result survives **across** requests, which it still must not. Every render still makes exactly
+ * one `GET /api/profile`.
+ *
+ * It exists because the profile stopped being the shell's private business. `(app)/layout.tsx`
+ * reads it to gate the route and fill the sidebar footer, and PET-47 gives the pages a second
+ * reason to want it: a Server Component needs the currency to format money with, and a layout
+ * cannot pass props to the page it wraps. Without the memo, every page that formatted an amount
+ * would add a guarded HTTP round trip to its own render. `settings/page.tsx` already made that
+ * second read deliberately - see `frontend/src/app/CLAUDE.md` - and this makes it free rather
+ * than merely acceptable.
+ *
+ * Note this is `export const` rather than `export async function`, which is what `cache()`
+ * requires: the identity of the wrapped function is the cache key's owner, so re-wrapping per
+ * call would memoize nothing.
  */
-export async function requireProfile(): Promise<Profile> {
+export const requireProfile = cache(async function requireProfile(): Promise<Profile> {
   const result = await authorizedGet<Profile>('/api/profile');
 
   if (result.ok) {
@@ -66,4 +86,4 @@ export async function requireProfile(): Promise<Profile> {
   }
 
   throw new Error('Could not load the profile: the backend did not answer.');
-}
+});

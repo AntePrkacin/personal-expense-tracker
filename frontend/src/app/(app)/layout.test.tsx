@@ -19,6 +19,7 @@ import { requireProfile } from '../../lib/profile';
 
 import { useEditTransaction } from './EditTransactionProvider';
 import AppLayout from './layout';
+import { useMoney } from './PreferencesProvider';
 
 // The shell layout's two jobs: gate the segment and lay the two columns out. The gate is
 // one line whose deletion no rendering assertion would notice, so it is asserted
@@ -176,6 +177,39 @@ describe('AppLayout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit it' }));
 
     expect(screen.getByRole('dialog', { name: 'Edit transaction' })).toBeInTheDocument();
+  });
+
+  it('mounts PreferencesProvider outside the three modal providers', async () => {
+    // **Nothing else in this file would notice if it moved**, which is the whole reason this
+    // exists. The layout itself consumes nothing from it, so every other assertion here passes
+    // with the provider nested anywhere - or deleted. What breaks is the dialogs the other three
+    // providers mount: `DeleteTransactionDialog` quotes the amount it is about to remove and
+    // `AllocateBudgetModal` is a column of currency fields, so a provider nested any deeper throws
+    // the first time one of them opens, on a path no layout test walks.
+    //
+    // The probe renders inside `children`, which is the innermost position any consumer can hold,
+    // so a resolving hook there proves the provider is outside all three.
+    function Probe() {
+      return <p>{useMoney().formatWhole(1240.5)}</p>;
+    }
+
+    render(await AppLayout({ children: <Probe /> }));
+
+    expect(screen.getByText('$1,241')).toBeInTheDocument();
+  });
+
+  it('binds that provider to the read profile rather than to a default', async () => {
+    // The failure this catches is the quiet one: a provider wired to a literal `'USD'` renders a
+    // euro account's whole dashboard in dollars and looks entirely correct doing it.
+    (requireProfile as jest.Mock).mockResolvedValue({ ...PROFILE, currency: 'EUR' });
+
+    function Probe() {
+      return <p>{useMoney().formatWhole(1240.5)}</p>;
+    }
+
+    render(await AppLayout({ children: <Probe /> }));
+
+    expect(screen.getByText('€1,241')).toBeInTheDocument();
   });
 
   it('renders none of the three dialogs until something opens one', async () => {

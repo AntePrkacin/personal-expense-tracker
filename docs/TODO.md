@@ -2457,6 +2457,20 @@ reaches no generated type, so there is nothing to read it out of.
 
 ### Settings reads the profile twice per view
 
+**Closed 2026-08-09 by PET-47, and by a route nobody predicted here.** Both alternatives this entry
+weighed were about Settings, and neither is what happened: `requireProfile()` is wrapped in React's
+`cache()`, so the two calls collapse to one `GET /api/profile` per render pass and both call sites
+stay exactly as they were. The memo was not built for this - PET-47 needs the profile's currency in
+every Server Component that formats money, which is what made a deduped read worth having at all -
+so the fix arrived as a side effect of a feature rather than as the optimisation this entry declined
+to do on its own. Two things about the closure. The property the entry was defending is intact:
+`cache()` memoizes within a **single render pass**, so `router.refresh()` still re-reads and the
+form's diff baseline is still the current profile. And the "may or may not collapse them" hedge
+below stops mattering, because nothing now depends on what Next's fetch memoisation does with two
+explicit no-stores. What is left is a small correctness gain rather than a saved request: the footer
+and the form provably read one profile, where before they were two reads that could straddle a
+concurrent write - which is the shared-initials rule (SET-6, PET-46 AC5) held by construction.
+
 `(app)/layout.tsx` calls `requireProfile()` for the sidebar footer and `settings/page.tsx` calls it
 again for the form. Both go through `authorizedGet` with `cache: 'no-store'`, so Next's per-request
 fetch memoisation may or may not collapse them - same URL, method and headers, but an explicit

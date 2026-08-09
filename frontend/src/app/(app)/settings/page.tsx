@@ -12,8 +12,17 @@ import { SettingsScreen } from './SettingsScreen';
 // props to the page it wraps in the App Router, and the alternatives are a context (a provider on
 // all four routes to serve one screen) or a second read. The second read is the smaller of the two,
 // and it is what makes the form's own diff baseline the *current* profile after a
-// `router.refresh()` rather than whatever the shell happened to hold. `docs/TODO.md` records the
-// cost.
+// `router.refresh()` rather than whatever the shell happened to hold.
+//
+// **The cost that `docs/TODO.md` recorded is gone as of PET-47, and the reasoning above is not.**
+// `requireProfile()` is wrapped in React's `cache()` now, so this call and the layout's are one
+// `GET /api/profile` per render pass rather than two - the memo arrived because the pages needed
+// the profile's currency to format money with, and this page is the caller that was already paying
+// for it. Two things worth being precise about, because "cached profile" is the wrong summary.
+// `cache()` memoizes within a single render pass only, so `router.refresh()` still re-reads and the
+// diff baseline is still the current profile. And the layout and this page now provably agree,
+// where before they were two reads that could straddle a concurrent write - which is a correctness
+// gain on AC5's shared-initials rule rather than only a saved request.
 //
 // Its failure policy comes with the helper and is not restated here: a 401 redirects to Log in, and
 // an unreachable backend throws to `app/error.tsx` rather than bouncing - the distinction that

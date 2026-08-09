@@ -1,4 +1,5 @@
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
+import { DEFAULT_CURRENCY } from '@/lib/money';
 import type { components } from '@/types/api';
 
 // The onboarding draft: everything screens 02, 03 and 22 collect before there is
@@ -26,8 +27,17 @@ import type { components } from '@/types/api';
  */
 export const SETUP_DRAFT_KEY = 'spendifico.setup.draft';
 
-/** A6: only "USD - $" appears anywhere in the design file. */
-export const DEFAULT_CURRENCY = 'USD';
+/**
+ * What a draft starts with, re-exported from `lib/money.ts` rather than declared here.
+ *
+ * It said "A6: only 'USD - $' appears anywhere in the design file", which was the whole story while
+ * one currency was offered and is now only half of it: PET-47 offers three, taken from the team's
+ * Claude Design system, so this is the **default** rather than the only value. `lib/money.ts` owns
+ * it alongside the list, because a default that lives apart from the options it defaults to is how
+ * the two stop agreeing. Re-exported rather than moved outright so `BudgetForm` and `parseDraft`
+ * keep importing the draft's own vocabulary from the draft.
+ */
+export { DEFAULT_CURRENCY };
 
 export type SetupDraft = {
   /**
