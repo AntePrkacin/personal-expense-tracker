@@ -6,7 +6,7 @@ import { categoryIcon, type IconName } from '@/components/ui/categoryColour';
 import { FieldShell } from '@/components/ui/FieldShell';
 import type { PaletteIcon } from '@/lib/palette';
 
-import { centreChosenRow } from './pickerScroll';
+import { centreChosenRow } from '@/lib/pickerScroll';
 
 // The Icon field's picker: a search box over a six-across grid of every glyph the palette offers.
 //

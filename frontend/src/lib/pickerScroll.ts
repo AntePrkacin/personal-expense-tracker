@@ -1,9 +1,15 @@
 // Putting a picker's chosen row in the middle of its own scroll box when the panel opens.
 //
-// Shared by `ColourSelect` and `IconSelect` rather than copied into both, which is the exception
-// `(app)/useCategoryOptions.ts` already argues for: the rule of three is about markup wrappers, and a
-// second hand-maintained copy of a geometric calculation is how one of them quietly stops matching.
-// Two consumers, one formula.
+// Shared by `ColourSelect`, `IconSelect` and `settings/MonthStartField` rather than copied into each,
+// which is the exception `(app)/useCategoryOptions.ts` already argues for: the rule of three is about
+// markup wrappers, and a second hand-maintained copy of a geometric calculation is how one of them
+// quietly stops matching. Three consumers, one formula.
+//
+// **It moved here from `(app)/transactions/categories/` at PET-47, and the third consumer is why.**
+// Two consumers on one route justified a module beside them; the month-start picker is on `/settings`,
+// and a settings component reaching into the categories folder for a formula would invert the layering
+// rather than share it. `lib/` is where it belongs now, beside `lib/amountField.ts` - the other module
+// in this repo that is a pure helper which happens to touch the DOM.
 
 /**
  * Scrolls `container` so that the row marked `aria-current` sits vertically centred in it.
