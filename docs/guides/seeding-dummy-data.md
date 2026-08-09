@@ -129,23 +129,36 @@ rather than a plain file, which changes what is locked and nothing about the out
 
 - **A profile** with a $5,000 monthly budget and `monthStartDay` 1, rewritten on every run so the
   caps below always add up against the budget actually stored.
-- **Thirteen categories** - every category template plus `Uncategorized` - each with a monthly
-  cap, the caps summing to exactly the $5,000 budget. The templates are read out of central at
-  run time rather than hard-coded, so this count follows whatever an admin has enabled.
-- **30 merchants**: 26 generated names dealt round-robin over the categories so every category has
-  at least two of its own, plus `dm`, `Müller`, `Konzum` and `Lidl` mapped exclusively to
-  Groceries. About 20% of merchants are valid for two categories, the rest for one.
-- **Five subscriptions** - Netflix, Spotify, HBO Max, Strava and iCloud, about $46/mo combined -
-  each billing once a month, on its own day, at the same amount every month. They are deliberately
-  kept out of the random merchant pool: the insights generator recognises a subscription by that
-  behaviour rather than by name, and a second charge in some month would break it.
-- **Roughly 1,100-1,400 transactions** over 18 months - 60 to 80 per month, so the exact total
+- **Thirteen categories** - every category template plus `Uncategorized` - with **uneven** monthly
+  caps that still sum to exactly the $5,000 budget, from $1,500 for `Loans & debt` down to $100 for
+  `Gifts`. Each cap sits roughly 15-25% above what its category typically spends, so going over
+  means something when it happens. The templates are read out of central at run time rather than
+  hard-coded, so this count follows whatever an admin has enabled.
+- **Twelve fixed monthly bills**, about $1,900 combined and roughly 40% of the month: rent $1,450,
+  health insurance $145, electricity about $95, internet $55, mobile $40, gym $39, water $30, and
+  the five streaming subscriptions (Netflix, Spotify, HBO Max, Strava and iCloud, $46 together).
+  Each bills once a month on its own day. The three utility bills move month to month the way real
+  ones do; the rest are flat. All twelve are deliberately kept out of the random merchant pool, so
+  a bill cannot also draw a second charge at an unrelated amount under the same name - a `Fiberlink`
+  at $23.40 beside the real $55 one. The seed fails loudly if an edit puts one of these merchants
+  back into the pool.
+- **About 95 merchants**, hand-written per category rather than generated, with weights that give
+  each category a few regulars and a long tail - the coffee shop turns up about 3 times a month and
+  the main supermarket about 2.5, while a dozen names appear once or twice in the whole 18 months.
+- **Roughly 1,100-1,200 transactions** over 18 months - 55 to 72 per month, so the exact total
   differs on every run. About 5% land on `Uncategorized`.
-- **Six over-budget months**, at about 115% of the budget, with the overspend concentrated in two
-  categories rather than spread evenly - otherwise no category ends up over its cap and the donut,
-  the category cards and the over-cap insight have nothing to show.
+- **Amounts drawn log-normally, per category**, so the spread looks like real spending rather than
+  like arithmetic: a median near $36, about 12% of transactions under $10 and about 2% over $200,
+  with each category's typical size set by its own share of spend against its share of the count.
+  Dining out lands near $27 a time, Groceries near $50, Travel near $270.
+- **Four over-budget months**, each put there by one major and one minor irregular expense - a car
+  repair, a dentist, a holiday - rather than by inflating the whole month 15%. That is both how
+  real months go over and what leaves one or two categories visibly over their caps, which the
+  donut, the category cards and the over-cap insight all need to have anything to show.
+- **Travel, `Education` and `Gifts` do not happen every month.** They fire in roughly 45%, 50% and
+  60% of them, and a category that sits out has its share redistributed over the ones that did not.
 
-Two things about dates. The six over-budget months are drawn from the **17 complete** months only,
+Two things about dates. The four over-budget months are drawn from the **17 complete** months only,
 and the current month is seeded **pro-rata**: transactions stop at today and both the count and the
 target spend are scaled by how much of the month has elapsed. Seeding the current month as if it
 were finished is what would make the dashboard read a full month's spending on the 7th, with
@@ -154,5 +167,9 @@ were finished is what would make the dashboard read a full month's spending on t
 Dates never fall after the 28th, matching the 1-28 range the profile's `monthStartDay` is
 constrained to.
 
-Between them, these make all four insight rules fire on a freshly seeded account: a category over
-its cap, a month-over-month move, an end-of-month projection, and the five subscriptions.
+Between them, these make both content rules fire on a freshly seeded account: a category over its
+cap, and a month-over-month move. The four over-budget months are what the first needs, and the
+month-to-month spread in the table above is what the second reads.
+
+The seed also gives the summary banner all three of its headline states across the history, since
+that is driven by the projected end-of-month pace rather than by a card.
