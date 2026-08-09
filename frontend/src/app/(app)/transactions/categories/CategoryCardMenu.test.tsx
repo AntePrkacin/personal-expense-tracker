@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 
 import type { Category } from '../../../../lib/categories';
 
+import { category, UNCAPPED_CATEGORY } from './categoryFixture';
 import { CategoryCardMenu } from './CategoryCardMenu';
 
 // 18 Categories - Row menu. **jsdom 26.1.0 implements none of the Popover API** and
@@ -21,35 +22,13 @@ jest.mock('./DeleteCategoryProvider', () => ({
   useDeleteCategory: () => ({ open }),
 }));
 
-function category(overrides: Partial<Category> = {}): Category {
-  return {
-    id: '0198c2a1-0000-7000-8000-0000000000a1',
-    name: 'Groceries',
-    color: 'success',
-    icon: 'shopping-basket',
-    note: null,
-    isFallback: false,
-    monthlyCap: 500,
-    spent: 397,
-    transactionCount: 24,
-    percentUsed: 79.4,
-    remaining: 103,
-    over: null,
-    status: 'near',
-    ...overrides,
-  };
-}
-
-/** The account's fallback row, which AC6 protects. Uncapped, as every seeded fallback is. */
-const FALLBACK = category({
-  id: '0198c2a1-0000-7000-8000-0000000000a9',
-  name: 'Uncategorized',
-  isFallback: true,
-  monthlyCap: null,
-  percentUsed: null,
-  remaining: null,
-  status: 'uncapped',
-});
+/**
+ * The account's fallback row, which AC6 protects.
+ *
+ * The shared uncapped shape with an id of its own, so a case rendering it beside `category()` gets
+ * two distinct popover ids rather than a collision.
+ */
+const FALLBACK: Category = { ...UNCAPPED_CATEGORY, id: '0198c2a1-0000-7000-8000-0000000000a9' };
 
 const trigger = (name = 'Groceries') => screen.getByRole('button', { name: `Actions for ${name}` });
 

@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import type { Allocation, Category } from '@/lib/categories';
 import type { Palette } from '@/lib/palette';
 
+import { category } from './categoryFixture';
 import { CategoriesScreen } from './CategoriesScreen';
 
 // The import above is type-only on purpose. Importing any *value* from Storybook breaks the
@@ -61,25 +62,6 @@ const meta: Meta<typeof CategoriesScreen> = {
 export default meta;
 
 type Story = StoryObj<typeof CategoriesScreen>;
-
-function category(overrides: Partial<Category> = {}): Category {
-  return {
-    id: '0198c2a1-0000-7000-8000-0000000000a1',
-    name: 'Groceries',
-    color: 'success',
-    icon: 'shopping-basket',
-    note: null,
-    isFallback: false,
-    monthlyCap: 500,
-    spent: 397,
-    transactionCount: 24,
-    percentUsed: 79.4,
-    remaining: 103,
-    over: null,
-    status: 'near',
-    ...overrides,
-  };
-}
 
 /**
  * The frame's eight categories, with every figure recomputed.

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Allocation, Category } from '../../../../lib/categories';
 import type { Palette } from '../../../../lib/palette';
 
+import { category } from './categoryFixture';
 import { CategoriesScreen } from './CategoriesScreen';
 
 // Frame 13 as a whole (AC1, AC4, AC5's read half).
@@ -13,25 +14,6 @@ import { CategoriesScreen } from './CategoriesScreen';
 // mock's caps sum to $2,970 against a stated allocation of $1,800, so A25 and A44 say to compute
 // every figure rather than to reproduce the mock's. `ALLOCATION` below is therefore internally
 // consistent where the frame is not.
-
-function category(overrides: Partial<Category> = {}): Category {
-  return {
-    id: '0198c2a1-0000-7000-8000-0000000000a1',
-    name: 'Groceries',
-    color: 'success',
-    icon: 'shopping-basket',
-    note: null,
-    isFallback: false,
-    monthlyCap: 500,
-    spent: 397,
-    transactionCount: 24,
-    percentUsed: 79.4,
-    remaining: 103,
-    over: null,
-    status: 'near',
-    ...overrides,
-  };
-}
 
 const CATEGORIES: Category[] = [
   category(),

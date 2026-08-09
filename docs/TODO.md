@@ -2261,6 +2261,22 @@ real action, passed a stub by the story.
 Worth doing with PET-38 rather than on its own, since that ticket adds a third action to the same
 screen and would otherwise ship the third copy of the same gap.
 
+### The two kebab glyphs are toned differently, and nobody decided that
+
+`transactions/TransactionRowMenu.tsx` draws its `EllipsisVertical` with `text-base-content/40` and
+`transactions/categories/CategoryCardMenu.tsx` draws the same glyph with no tone class at all, so
+it takes `btn-ghost`'s own colour. The two kebabs sit one tab apart and read differently.
+
+It surfaced when PET-39's review had the two menus lifted onto a shared `(app)/PopoverMenu.tsx`:
+that component needs a `glyphClassName` prop whose only purpose is to keep this difference, which
+is the smell that says the difference is unowned rather than designed. **The prop is a placeholder
+for a decision, not the decision** - delete it once a designer picks one, and the two call sites
+collapse to none.
+
+Not resolved in that PR on purpose: either value is a visible change to one of the two screens, and
+picking one to match the other is a design call rather than a refactor. Frame 10 and frame 18 are
+what to hold side by side. Worth doing with PET-38, which is already touching that menu.
+
 ### Neither delete dialog's stories are in a Jest story smoke harness
 
 `(app)/shell.stories.test.tsx` lists its story modules by hand, and `DeleteTransactionDialog.stories`

@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
-import type { Category } from '../../../../lib/categories';
-
+import { category, UNCAPPED_CATEGORY } from './categoryFixture';
 import { CategoryCard } from './CategoryCard';
 
 // One card, in every status the contract can hand it (AC2, AC3, AC7).
@@ -23,38 +22,6 @@ import { CategoryCard } from './CategoryCard';
 jest.mock('./DeleteCategoryProvider', () => ({
   useDeleteCategory: () => ({ open: jest.fn() }),
 }));
-
-function category(overrides: Partial<Category> = {}): Category {
-  return {
-    id: '0198c2a1-0000-7000-8000-0000000000a1',
-    name: 'Groceries',
-    color: 'success',
-    icon: 'shopping-basket',
-    note: null,
-    isFallback: false,
-    monthlyCap: 500,
-    spent: 397,
-    transactionCount: 24,
-    percentUsed: 79.4,
-    remaining: 103,
-    over: null,
-    status: 'near',
-    ...overrides,
-  };
-}
-
-/** The uncapped shape: every derived field null, which is what the contract guarantees. */
-const UNCAPPED = category({
-  name: 'Uncategorized',
-  isFallback: true,
-  monthlyCap: null,
-  percentUsed: null,
-  remaining: null,
-  over: null,
-  status: 'uncapped',
-  spent: 148,
-  transactionCount: 6,
-});
 
 const bar = () => screen.getByRole('progressbar');
 
@@ -192,7 +159,7 @@ describe('the transaction count, pluralized (AC2)', () => {
 
 describe('an uncapped category (AC7)', () => {
   it('shows spend and count instead of a cap', () => {
-    render(<CategoryCard category={UNCAPPED} />);
+    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
 
     expect(screen.getByText('$148')).toBeInTheDocument();
     expect(screen.getByText('in 6 transactions')).toBeInTheDocument();
@@ -202,7 +169,7 @@ describe('an uncapped category (AC7)', () => {
     // Not "a chip with no colour" - no chip. The whole reason the card has two shapes is that
     // there is no cap to draw furniture against, and `status: "uncapped"` is the common case
     // rather than the edge: caps are optional and the preselected fallback ships without one.
-    render(<CategoryCard category={UNCAPPED} />);
+    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
 
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByText('On track')).not.toBeInTheDocument();
@@ -213,14 +180,14 @@ describe('an uncapped category (AC7)', () => {
 
   it('never prints a null cap', () => {
     // The failure this shape exists to prevent, stated directly.
-    render(<CategoryCard category={UNCAPPED} />);
+    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
 
     expect(screen.queryByText(/of \$?null/)).not.toBeInTheDocument();
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
   });
 
   it('offers to set a limit, announcing that the control is not live yet', () => {
-    render(<CategoryCard category={UNCAPPED} />);
+    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
 
     const setLimit = screen.getByRole('button', { name: 'Set limit for Uncategorized' });
 
@@ -235,7 +202,7 @@ describe('an uncapped category (AC7)', () => {
     // monthly limit for Uncategorized", which is distinct across eight cards and unusable by
     // speech input: a user saying "click Set limit" - the only words on screen - matched
     // nothing, on the one affordance an uncapped card has.
-    render(<CategoryCard category={UNCAPPED} />);
+    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
 
     const name = screen.getByRole('button', { name: /Set limit/ }).getAttribute('aria-label');
 
@@ -285,7 +252,7 @@ describe('the kebab (AC6)', () => {
   it('is drawn on the uncapped shape too', () => {
     // Both shapes render `CategoryCardHeader`, so this is cheap insurance against a future edit
     // moving the kebab into the capped branch alone.
-    render(<CategoryCard category={UNCAPPED} />);
+    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
 
     expect(screen.getByRole('button', { name: 'Actions for Uncategorized' })).toBeInTheDocument();
   });

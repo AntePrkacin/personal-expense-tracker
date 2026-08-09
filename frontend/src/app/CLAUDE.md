@@ -1449,6 +1449,32 @@ the extra arm is the 409. That is the only interesting thing about it; everythin
 nothing else, the result rather than a throw, the deliberate absence of a `redirect()` - is
 `lib/deleteTransaction.ts`'s and unchanged.
 
+**Two things were lifted out of this feature after a code review, and both broke the rule of three
+on purpose.** `(app)/ConfirmDeleteDialog.tsx` and `(app)/PopoverMenu.tsx` each have exactly two
+consumers, where `frontend/src/components/CLAUDE.md` says to duplicate until a third appears. That
+rule is right about markup and this is not markup: what moved is six behaviours that a code review
+found and fixed **once each**, which PET-39 then duplicated by copy-paste into a second file where
+the next such fix would not have reached them. The `try` around the client-to-Server-Action RPC, the
+404 arm that still refreshes, the refresh-then-close-then-`onDeleted` ordering, Delete disabling
+while Cancel deliberately does not, the `triggerRef.current?.focus()` before a dialog mounts, and
+`aria-expanded` being fed by the popover's own `toggle` event. Two copies of a `<p>` is cheap; two
+copies of a hard-won fix is a divergence waiting for its next reviewer.
+
+**Both keep their wrappers, and that is what stops the shared thing learning what it serves.**
+`ConfirmDeleteDialog` takes a rendered `body` string and a `remove` the caller has already bound to
+its own id, so it never sees a `DeleteTarget` or a `DeleteCategoryTarget` - two shapes that share
+nothing. `PopoverMenu` takes the whole popover id from its caller rather than inventing a prefix,
+so `row-menu-<uuid>` and `category-menu-<uuid>` still say what they are in the DOM and in the two
+suites that assert the pairing. The proof the extraction was behaviour-preserving is that **all 128
+delete tests and all 44 menu tests passed unchanged**, and the browser walk re-ran green on both
+screens.
+
+**`ConfirmDeleteResult` unions `'failed'` in rather than leaving it to the caller's `R`**, which is
+what removes a cast. The component must be able to produce a result itself when the RPC rejects and
+can only name one reason to do it with; `'failed' as R` asserted membership nothing had checked,
+which is the move `categoryForm.ts` refuses to make about colour tokens. Carried in the type, every
+caller's `messages` must supply that line and the compiler says so.
+
 **It takes no `navigates` option, unlike the transaction confirmation, and that is the same call
 PET-33 made about `onDeleted`.** Every entry point this dialog has is on a route that survives the
 delete, so there is no caller for the parameter; `/transactions/[id]` is what made that option
