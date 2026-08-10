@@ -20,28 +20,10 @@ navigation (without navigation, historical correctness would be invisible).
 
 ## User story
 
-Marko starts using Spendifico in January 2025: monthly budget 1,000, period starting on the 1st
-(the default), and a 100 cap on Entertainment. In January 2026 he changes jobs for a better
-salary. He raises his budget to 1,500 and his Entertainment cap to 200, and because the new
-employer pays on the 15th of the month, he moves his period start day to 15. Salaries here are
-paid once a month in arrears, so when he saves the change the app asks one question: "When will
-(or did) your first new paycheck land?", offering the last four months, the current one and the
-next four. Three example answers, one rule:
-
-- **December 2025** - he actually started in November and forgot to update the app; the new
-  1,500 paycheck already arrived on 15 December. November's period stretches from 1 Nov to
-  14 Dec on the old budget, December runs 15 Dec to 14 Jan on the new one, and 2026 continues
-  15th-to-14th. History re-buckets retroactively.
-- **January 2026** - he started in December and the first new paycheck lands 15 January.
-  December stretches from 1 Dec to 14 Jan on the old budget; from 15 January every period is
-  15th-to-14th at 1,500.
-- **March 2026** - he just accepted the offer and starts in February; February's work is paid
-  on 15 March. February stretches from 1 Feb to 14 Mar on the old budget, because no paycheck
-  arrives on 1 March; the new schedule and budget start 15 March.
-
-Whatever he changes, every 2025 month he opens afterwards still shows the 1,000 budget and the
-100 Entertainment cap that were true then. If he only gets a raise and nothing else changes, the
-same month question anchors the new budget to a period and no dates move.
+**Human context only - skip when executing this plan.** The narrative walkthrough (Marko's job
+change and the three paycheck-anchor scenarios) lives in PET-72's Jira description and the PR
+body. Every engineering fact it carries is restated below: the anchoring rule under Decisions,
+and the three concrete period layouts under Verification.
 
 ## Decisions already settled
 
@@ -56,6 +38,36 @@ same month question anchors the new budget to a period and no dates move.
   `transition_start` one boundary later. Out of scope for launch.
 - Currency list restricted to two-decimal currencies, because `src/common/money.ts` assumes
   exponent 2.
+
+## Relationship to the Settings epic (checked 2026-08-10)
+
+PET-7's other children overlap this ticket, and this plan lands **on top of** them, not beside
+them:
+
+- **PET-46 (PR #81, in review)** ships the Profile card (first/last name + email), the
+  page-level single-save `SettingsForm` and `lib/updateProfile.ts`. After it merges, PET-72
+  collapses its two name inputs into one "Display name" field and moves `settingsForm.ts` onto
+  `fullName`.
+- **PET-47 (PR #82, in review, stacked on #81)** ships live currency (USD/EUR/GBP) via
+  `lib/money.ts` `moneyFormatters(currency)` + `PreferencesProvider`, the `BudgetField` pill
+  reused on onboarding step 1, the `MonthStartField` listbox, and frontend
+  `periodOverline`/`periodLabel`. PET-72 **adopts** that currency mechanism (the earlier
+  "currency travels on the response" idea is dropped), widens the list and flips the default to
+  EUR, **moves** the budget and month-start-day writes off the single `PATCH /api/profile` onto
+  the anchored schedule write, and **supersedes** the frontend period labels with the backend's
+  `period.label`, because a variable-start history cannot be labelled by frontend month math.
+- **PET-48 (in progress)** is the read-only categories summary card with a "Manage" link. It
+  reads current-period figures, so it survives with at most renamed fields.
+- **PET-49 (to do)** verifies that one Save propagates everywhere, and its **AC7 codifies the
+  recompute-history behaviour this ticket abolishes**. Amend AC7 to the historical semantics
+  (ACs are amendable) and schedule PET-49 after PET-72, where it becomes the natural home of
+  the propagation re-verification.
+
+**Sequencing.** #81 and #82 (and PET-48's PR when it opens) merge first; this branch then
+merges `main` in as its own bare commit before any frontend work. Backend tasks conflict with
+none of them and may proceed meanwhile, with one exception that must not ship alone: narrowing
+`UpdateProfileDto` breaks PET-47's budget and month-start saves, so the DTO narrowing and the
+Settings rework land together in this one PR (which they do).
 
 ## Design
 
@@ -111,8 +123,10 @@ currency default becomes `'EUR'`; `OnboardingPayload` gains `fullName` and keeps
 - Period parameter: transactions `period` widens to `current|previous|all|YYYY-MM-DD` (inline
   `@Matches`); new `{ period?: YYYY-MM-DD }` query DTOs on `GET /api/categories` and
   `GET /api/dashboard`; unknown start answers 400. `DashboardResponseDto` gains
-  `period { start, end, label }` (closing the docs/TODO.md entry that asks for it) and
-  `currency`; the categories and transactions reads gain `currency` too.
+  `period { start, end, label }` (closing the docs/TODO.md entry that asks for it); the
+  categories and transactions responses gain the same `period` object where their screens
+  need the label. Currency stays on the profile read, threaded by PET-47's
+  `PreferencesProvider`; no response DTO carries a currency field.
 - New `GET /api/periods`: guarded, wrapper DTO, `{ start, end, label, current }` newest first.
 - Registration: `RegisterDto.fullName`; `currency` via `@IsIn(SUPPORTED_CURRENCIES)` (new
   `src/common/currency.ts`, publishes a real enum); EUR default in `AuthService.register`;
@@ -123,20 +137,31 @@ currency default becomes `'EUR'`; `OnboardingPayload` gains `fullName` and keeps
 
 ### Frontend
 
-- **Currency travels on the data**: `formatCurrency`/`formatWhole`/`formatNegative` take a
-  required currency argument over a memoized `Intl.NumberFormat` map (locale stays `en-US`, so
-  the amount-input machinery is untouched); new `currencySymbol(code)`; `ui/Input
-  variant="currency"` gains a `symbol` prop; a small `CurrencyProvider` in `(app)/layout.tsx`
-  feeds the client modals. `npx tsc --noEmit` enumerates every call site.
-- Setup: `CURRENCY_OPTIONS` moves into `draft.ts` typed off the contract enum, EUR default,
-  `parseDraft` falls back on unknown codes; the paycheck-day question is a third field on the
+- **Currency: adopt PET-47's mechanism, do not rebuild it.** `lib/money.ts`
+  `moneyFormatters(currency)` and `PreferencesProvider` already thread currency to every money
+  string (12 Server Components by prop, 4 client ones by hook; locale stays `en-US`). PET-72
+  widens the offered list from USD/EUR/GBP to the full two-decimal allowlist off the contract's
+  new enum, flips the default to EUR, and keeps `BudgetField`'s currency segment as the picker
+  on both Settings and onboarding.
+- Setup: `CURRENCY_OPTIONS` moves into `draft.ts` typed off the contract enum with
+  `DEFAULT_CURRENCY = 'EUR'`, so **the onboarding budget step's currency select preselects EUR
+  on a fresh draft** (via `EMPTY_DRAFT`), `parseDraft` falls back to EUR on unknown stored
+  codes, and the backend's `RegisterDto`/schema defaults are the same EUR safety net for a
+  payload that omits it; the paycheck-day question is a third field on the
   budget step (not a fourth step); `RegisterForm`'s two name inputs collapse to one, label
   "Display name", placeholder "Your name, full name or nickname."; `initials`/`shortName`
   become single-argument.
-- Settings: first real content, a card (Display name, Currency, Monthly budget, Pay day) with
-  one "Change budget & pay day" trigger; no provider (single trigger, single route); the modal
-  carries the budget input, the start-day select and the month question (last 4 / current /
-  next 4; T derived as month + day) for every save; server action to `/api/profile/schedule`.
+- Settings: **rework PET-46/47's shipped form, not greenfield.** ProfileCard's two name inputs
+  collapse to one "Display name" field (`settingsForm.ts` moves onto `fullName`); the budget
+  and month-start writes leave the single `PATCH /api/profile` and go through the anchored
+  schedule write (`lib/changeSchedule.ts` server action to `/api/profile/schedule`), carrying
+  the paycheck month question (last 4 / current / next 4; T derived as month + day).
+  **Decided (2026-08-10): intercept the single Save.** `BudgetField` and `MonthStartField`
+  stay inline in PET-47's form; when Save carries a budget or pay-day change, a confirmation
+  dialog (on `(app)/Modal.tsx`, confirmation shape) asks the paycheck month, then the app
+  sends the schedule write plus the ordinary PATCH for any other changed fields; a Save with
+  neither field changed never shows the dialog. Currency and the profile fields stay on the
+  single-save PATCH.
 - Period navigation: `MonthPill` becomes a real labeled select fed by new `lib/periods.ts`;
   `?period=<start>` absent for the current period; dashboard and categories pages gain
   `searchParams`; transactions `filters.ts` widens period (the `AssertNever` exhaustiveness
