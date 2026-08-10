@@ -1547,6 +1547,40 @@ on top of page 1's reading. Worth a designer's answer alongside the copy A29 alr
 feature, and worth knowing that the desktop path has only the augmenting control at all, since
 the camera is `pointer-fine:hidden`.
 
+### The receipt scan's "Cancel scan" does not cancel anything, and PET-73 builds the mechanism that would
+
+`AddTransactionModal`'s overlay offers "Cancel scan", and what it cancels is the **caller's interest
+in the answer**, not the work. It invalidates a ref-held generation counter so a late result is
+discarded; the request finishes server side, Gemini is still called, and the tokens are still spent.
+`frontend/src/app/CLAUDE.md` says so plainly already ("There is no client-side abort for a scan in
+flight, only a soft one") and gives the reason: calling a Server Action exposes no `AbortController` a
+client component can reach, so `RECEIPT_SCAN_TIMEOUT_MS` on the backend is the only real bound.
+
+That was the right call for PET-59 and it is worth revisiting now for one reason: **PET-73 builds the
+real version for the assistant**, and once that pattern exists here, the scan is the second consumer
+rather than a lone exception. Its three hops are a browser-owned `AbortController`, a route handler
+passing `request.signal` through, and a backend combining a request-close signal with the existing
+timeout via `AbortSignal.any`. The plain-language version of all of that is
+`docs/explainers/cancelling-an-ai-request.md`.
+
+**Two things make the scan a harder retrofit than the assistant was, which is why this is not simply
+"do the same thing".** The send is `authorizedPostFormData` over **multipart** form data rather than
+JSON, so the frontend route handler it would need has to stream a file body through rather than
+forward a parsed object, and `next.config.ts`'s `bodySizeLimit` stops being the relevant bound the
+moment the action becomes a `fetch`. And a scan is genuinely cheap next to a chat turn: one image
+against 40k tokens of spending history, so the money argument that justifies the work for the
+assistant is much weaker here. What survives is the honesty argument, which is real on its own: a
+button labelled "Cancel scan" that does not cancel the scan is a claim the UI cannot keep, and
+`pointer-fine:hidden` means the phone path (where a slow upload is likeliest) is where it matters
+most.
+
+Do it **after** PET-73 has landed and its hop 3 has been verified in a browser, not alongside it.
+Hop 3 is the half with no precedent and a live trap (Express fires `close` on a completed response as
+well as on a dropped connection, so an unguarded listener aborts its own successful reply), and
+proving it once on the feature that needs it is worth more than proving it twice at once. Related:
+the aggregate-quota entry above, since a cancel that reaches Google is the only thing that stops an
+abandoned request counting against the shared free-tier budget.
+
 ### `CardBanner`'s dark theme measures 4.13:1, below the AA floor
 
 PET-38's browser walk measured the accent strip both category cards and the summary card sit on,

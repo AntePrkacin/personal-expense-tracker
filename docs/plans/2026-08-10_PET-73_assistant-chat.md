@@ -581,7 +581,11 @@ three exist for the two reasons this plan previously cited as exhaustive - a GET
 that no longer covers the set.
 
 **The abort travels three hops, each has to be wired, and each is a place it silently does not
-work.** Wire all three, and verify hop 3 in a browser rather than by reading the code.
+work.** **All three are in scope, decided at review** - hop 3 was briefly offered as deferrable and
+is not. Verify it in a browser rather than by reading the code.
+
+The plain-language account of this whole section, for anyone who wants the reasoning without the
+mechanics, is `docs/explainers/cancelling-an-ai-request.md`.
 
 1. **Browser to handler.** The composer owns an `AbortController`, passes `signal` to `fetch`, and
    "Stop" calls `abort()`. The fetch rejects with an `AbortError`, which the caller must
@@ -715,6 +719,9 @@ there is no path that schedules a third from the second. State it that way in th
 ## Tasks
 
 - [ ] Write this plan, commit it alone as the branch's first commit, push, open a draft PR
+- [x] `docs/explainers/cancelling-an-ai-request.md`, the plain-language version of the cancellation
+      section, plus a `docs/TODO.md` entry carrying the same retrofit for the receipt scan, to be
+      done **after** this ticket's hop 3 is verified rather than alongside it
 - [ ] Schema for both tables, then generate the user-scope migration; commit `migration.sql` and
       `snapshot.json`
 - [ ] `assistant.constants.ts` and `assistant-context.builder.ts` with its spec - pure, no DI, no SDK
