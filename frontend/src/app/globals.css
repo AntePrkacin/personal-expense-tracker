@@ -1,13 +1,152 @@
 @import 'tailwindcss';
 
-/* daisyUI's built-in themes, selected automatically from the OS. No custom
-   theme and no manual theme toggle control: PET-57 ships the defaults, and a
-   toggle must not coexist with automatic prefers-dark selection - a browser
-   already in dark mode would make it switch dark to dark. */
+/* The Expensa theme pair (PET-74), replacing the stock light/dark registration
+   PET-57 shipped. That ticket's decision - daisyUI is the component library,
+   semantic colour is the only theme-aware colour - stands unchanged; what PET-74
+   amends is the theme's *values*, which now come from the design tokens instead
+   of daisyUI's defaults. The token authority is the team's Claude Design
+   "Expensa Design System" project (its `components/fig-tokens.css` is generated
+   from the same Figma variables the retired token layer transcribed, and its
+   `tokens/colors.css` composes the dark theme Figma never authored). Do not
+   eyedrop values from the Figma Foundations page - it is still a dead page;
+   these hexes and the derivations below are the source now.
+
+   Still no theme controller, deliberately: `default`/`prefersdark` keep the
+   automatic OS selection, and a toggle must not coexist with it - a browser
+   already in dark mode would make it switch dark to dark.
+
+   Every colour here is measured, not judged: WCAG contrast against the card and
+   pairwise OKLab distance across the 17-token category allowlist, both themes.
+   The measured table lives in `COLOUR_CONTRAST` in
+   `backend/src/database/central/template-tokens.ts`, and the procedure that
+   must pass before any value moves is `frontend/CLAUDE.md`, "Changing or adding
+   a theme: the category palette is the guard". Four sets of values are
+   derivations rather than transcriptions, each constrained by the picker labels
+   the central seed already ships (template-seed.ts):
+
+   - `secondary` is Category/8 Pink deepened (#ce6fb8 to #c1519e) so its Blush
+     content pair clears 3:1 on the tile; the label "Pink" stays truthful.
+   - The dark `-content` values (Pine, Navy, Forest, Umber, Maroon) are dark
+     casts of their base hues, spread far enough apart in OKLab that no new
+     near-identical pair joins the two deliberate ones categoryColour.ts names.
+   - `info`/`accent`/`secondary` take real hues from the Figma category ramp
+     (Sky #3f8ee6, Teal #34b9ae, Pink) because all three are picker colours in
+     their own right and paint no control anywhere - an indigo variant would
+     collide with `primary` in the picker.
+   - Dark `primary` lightens #4f46e5 to #6963ee: Claude Design keeps dark
+     buttons on full indigo and lightens accent *text* to #A79FF6, daisyUI has
+     one token for both roles, and #6963ee is the compromise that keeps
+     `text-primary`/`link-primary` readable on the ink card (3.61:1, above the
+     stock dark theme's 3.40) while staying visibly indigo.
+
+   `--depth: 0` and `--noise: 0` because the design is flat ("a hairline system,
+   not a shadow system" - tokens/elevation.css); the `shadow-*` utilities in
+   markup are a separate follow-up, see docs/TODO.md. The radius scale is
+   Foundations' sm/md/lg (8/12/16px) on daisyUI's three radius slots; the 20px
+   xl step has no slot and is dropped. */
 @plugin 'daisyui' {
-  themes:
-    light --default,
-    dark --prefersdark;
+  themes: false;
+}
+
+@plugin 'daisyui/theme' {
+  name: 'expensa-light';
+  default: true;
+  color-scheme: light;
+
+  /* Surfaces: Surface/Card, Canvas, Muted; ink is Text/Primary. */
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f7f8;
+  --color-base-300: #edeff2;
+  --color-base-content: #131820;
+
+  /* Brand/Accent, with Brand/Accent Soft as its content ("Lavender"). */
+  --color-primary: #4f46e5;
+  --color-primary-content: #ecebfd;
+
+  /* Category ramp hues: Pink/Blush, Teal/Pine, Sky/Navy. */
+  --color-secondary: #c1519e;
+  --color-secondary-content: #f9e8f3;
+  --color-accent: #34b9ae;
+  --color-accent-content: #0d4a41;
+
+  /* Surface/Ink (the sidebar), Text/On Dark Muted ("Silver"). */
+  --color-neutral: #101720;
+  --color-neutral-content: #b4bcc9;
+
+  --color-info: #3f8ee6;
+  --color-info-content: #14356e;
+
+  /* The Status ramp, each content a dark cast of its own hue. */
+  --color-success: #16a34a;
+  --color-success-content: #0b3d20;
+  --color-warning: #e0a020;
+  --color-warning-content: #64490a;
+  --color-error: #dc2626;
+  --color-error-content: #3f0b0b;
+
+  /* Foundations radius sm/md/lg. */
+  --radius-selector: 0.5rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
+
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin 'daisyui/theme' {
+  name: 'expensa-dark';
+  prefersdark: true;
+  color-scheme: dark;
+
+  /* Claude Design's dark composition: the card is Surface/Ink Raised, the
+     canvas Surface/Ink, the muted step Surface/Ink Elevated. */
+  --color-base-100: #18202b;
+  --color-base-200: #101720;
+  --color-base-300: #232c38;
+  --color-base-content: #ffffff;
+
+  /* Lightened per the header note; content stays the light Lavender. */
+  --color-primary: #6963ee;
+  --color-primary-content: #edecfd;
+
+  /* The chromatic tokens keep their light-theme values: every one measures
+     3.4:1 or better against the ink card, where the stock dark theme left
+     most of them near-invisible in one theme or the other. */
+  --color-secondary: #c1519e;
+  --color-secondary-content: #f9e8f3;
+  --color-accent: #34b9ae;
+  --color-accent-content: #0d4a41;
+
+  /* Ink-on-ink: the sidebar merges with the canvas, which is Claude Design's
+     own dark arrangement (its dark canvas *is* Surface/Ink). As a picker
+     swatch this is near-invisible on the dark card (1.10:1), exactly as the
+     stock dark theme's neutral was (1.256:1) - accepted on that precedent,
+     and #101720 is the one dark value that clears OKLab 0.10 from all five
+     dark content colours. */
+  --color-neutral: #101720;
+  --color-neutral-content: #b4bcc9;
+
+  --color-info: #3f8ee6;
+  --color-info-content: #14356e;
+  --color-success: #16a34a;
+  --color-success-content: #0b3d20;
+  --color-warning: #e0a020;
+  --color-warning-content: #64490a;
+  --color-error: #dc2626;
+  --color-error-content: #3f0b0b;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
+
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
 }
 
 /* The two project typefaces, loaded via next/font in src/app/fonts.ts, which

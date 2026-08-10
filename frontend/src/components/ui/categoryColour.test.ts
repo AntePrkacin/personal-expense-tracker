@@ -70,16 +70,19 @@ describe('CATEGORY_TILE', () => {
   });
 });
 
-describe('the three deliberately close colour pairs', () => {
+describe('the deliberately close colour pairs', () => {
   // Measured in OKLab against a ~0.10 floor, and kept rather than re-picked: see
   // the note in categoryColour.ts for why breaking Education / Travel would cost
   // more than it buys. Pinned here so the map cannot silently be "fixed" into
   // something the sign-off artifact never showed - and so that anybody reading a
   // rendered screen and finding two categories the same colour finds this first.
+  // The ΔE figures are PET-74's, against the Expensa themes; Groceries /
+  // Utilities separated past the floor there (0.060 stock) and stays pinned
+  // because the tokens rendering distinctly is still what the row asserts.
   it.each([
-    ['Personal care / Gifts', 0.029, 'accent-content', 'success-content'],
-    ['Education / Travel', 0.037, 'primary-content', 'secondary-content'],
-    ['Groceries / Utilities', 0.06, 'success', 'accent'],
+    ['Education / Travel', 0.02, 'primary-content', 'secondary-content'],
+    ['Personal care / Gifts', 0.06, 'accent-content', 'success-content'],
+    ['Groceries / Utilities', 0.137, 'success', 'accent'],
   ])('keeps %s, ΔE %s', (_label, _delta, first, second) => {
     // They are genuinely different tokens - the point is that they render close,
     // not that they render identically, which is what a reused token would do.
