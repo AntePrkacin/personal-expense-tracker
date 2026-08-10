@@ -753,6 +753,59 @@ no longer available" line, and each of the seven failure arms - and they join wh
 designer. The failure, truncated and unconfigured stories exist to put them in front of one at once,
 which is what the Add category modal's messages story is for.
 
+### Building the assistant screens with the daisyUI Blueprint MCP
+
+**Every new screen in this ticket is built through the Blueprint MCP**, which
+`docs/agents/claude-tooling.md` establishes as this repo's method for frontend UI work and
+`frontend/CLAUDE.md` repeats as a rule rather than a preference. That covers the Chat view, the
+History view, the tab bar, the composer, the message bubbles and the typing indicator. It does **not**
+cover the Dashboard half of this ticket in the same way: moving an existing card and adding a
+`card-actions` footer to it is a localised change to markup that already passed through the MCP once,
+which is the "copy-only or harmless localized fixes" case its own workflow exempts.
+
+**This is the first screen in the app where its middle stages actually earn their keep**, and that is
+worth saying because it changes how much of the tool to use. Every previous screen had a Figma frame,
+and `frontend/CLAUDE.md`'s division of authority gives Figma structure, layout and content while
+daisyUI gets colour, type, radius and shadow - so the MCP's job was mostly translation. The assistant
+has **no frame at all**. There is nothing to translate, so `daisyui_creative_director` and
+`daisyui_page_architect` are answering a real question here rather than restating a frame, and they
+are the stages to actually lean on.
+
+The workflow, in the order the server requires:
+
+1. `daisyui_setup_expert` first, with **one lowercase `workflowId` reused across all of these
+   screens**, since they are one cohesive design rather than unrelated pages.
+2. `daisyui_rules_enforcer`.
+3. `daisyui_creative_director` and `daisyui_page_architect` for the chat layout and the history list,
+   for the reason above.
+4. `daisyui_component_syntax_expert` **before writing any markup**. It returns a bounded batch, so
+   call it again with the same `workflowId` and the remaining snippet ids until it advances.
+5. Implement.
+6. `daisyui_quality_inspector` with `auditIntent: 'fix_changes'`, paths **relative to the project root
+   the setup stage stored**, never absolute.
+
+**Three trust levels, not one**, per `docs/agents/claude-tooling.md`, and they are the reason this is
+a plan item rather than a footnote:
+
+- **Follow the syntax stage verbatim.** Every canonical structure it returned on PET-57 matched the
+  installed daisyUI's own CSS. Double-checking it is wasted effort.
+- **Adjudicate the inspector's findings; never auto-apply its fixes.** On this codebase it produces
+  confident false positives, and two of them are guaranteed to fire here: it cannot see a label
+  association that goes through component composition, which is exactly what `ui/FieldShell` does for
+  the composer's textarea, and it reports the whole-literal-class-strings-in-a-`Record` convention
+  that `frontend/CLAUDE.md` mandates as "dynamic classes", which is exactly what the tab bar's
+  `LABEL_CLASS` and the message bubbles' per-role classes are. Check each finding against source, fix
+  the real ones, and **record the verdict on the rest** rather than leaving a reader to wonder.
+- **Nothing it does replaces opening the app.** Treat the browser walk, not the findings list, as the
+  stage's real output. The one real defect of PET-57's incorporation was invisible to the inspector
+  and to a fully green suite.
+
+Two specific things for the walk on these screens, both of which the inspector cannot see. The
+message list is a scrolling region whose scroll position is written by hand, and
+`frontend/src/lib/pickerScroll.ts` records why it must not be `scrollIntoView`. And the typing
+indicator is a live region that ships empty and fills, where `getByRole('status')` cannot tell a
+working region from a silent one.
+
 ### Storybook and Jest
 
 Stories for both screens under `Screens/`, and **both registered in
@@ -871,7 +924,10 @@ there is no path that schedules a third from the second. State it that way in th
       with their suites
 - [ ] `InsightsTabs.tsx` with its suite, both `page.tsx` files, and the title change
 - [ ] The chat screen, the message list, the composer, the typing indicator, the History screen,
-      their suites, both story modules, **and the `screens.stories.test.tsx` registration**
+      their suites, both story modules, **and the `screens.stories.test.tsx` registration** - built
+      through the **daisyUI Blueprint MCP**, one `workflowId` across all of them, leaning on the
+      creative-director and page-architect stages because there is no frame, and finishing with
+      `daisyui_quality_inspector` at `fix_changes` whose findings are adjudicated rather than applied
 - [ ] Amend `(app)/pages.test.tsx` for the new header action, the new links and the History route
 - [ ] New `backend/src/assistant/CLAUDE.md` with its own `## Not built here` and its
       `### What crosses the wire`; the parent gains a pointer and a `Read before you touch` row
@@ -899,31 +955,35 @@ Gates, in the order they catch things:
 
 Then the checks no gate can make:
 
-7. **A browser walk, headless Chromium over the DevTools protocol.** The Dashboard in both themes:
+7. **`daisyui_quality_inspector` at `auditIntent: 'fix_changes'`** over the new frontend files, with
+   every finding adjudicated against source and the verdict on the rejected ones recorded. Expect
+   false positives on the composer's label association and on the tab bar's and bubbles' class
+   `Record`s; a clean automated pass may simply be unreachable here.
+8. **A browser walk, headless Chromium over the DevTools protocol.** The Dashboard in both themes:
    the banner's contrast in the wide column, the two insight cards in the narrow one, at the designed
    1440px and below `lg` where the grid collapses to one column. Then both assistant screens in both
    themes. Probe the old values in the same run, so each check is seen to fail before it is trusted.
-8. **The poll, end to end.** Save a transaction, land on the Dashboard, and watch the skeletons
+9. **The poll, end to end.** Save a transaction, land on the Dashboard, and watch the skeletons
    resolve with no reload. Then the stalled path, by blocking the poll and waiting past the ceiling.
-9. **Message-list scrolling**, which is a browser check and must **not** use `scrollIntoView`:
+10. **Message-list scrolling**, which is a browser check and must **not** use `scrollIntoView`:
    `frontend/src/lib/pickerScroll.ts` records that it scrolls every scrollable ancestor. One
    `scrollTop` on one element, or that helper if the geometry fits.
-10. **The chat against a real key**, on a seeded showcase account. At a ceiling of 3,000 its 2,249
+11. **The chat against a real key**, on a seeded showcase account. At a ceiling of 3,000 its 2,249
     rows all go, so check that the prompt really carries the account's whole history and that the
     answers agree with the Dashboard's own figures - the totals are the cross-check, since both derive
     from the same fold. Also confirm a keyless backend answers 503 rather than hanging. **The
     truncation path is unreachable here**, so it is covered by its spec alone and the walk cannot see
     it without a hand-built account of more than 3,000 transactions.
-11. **The abort chain, all three hops, in a browser.** Send a question, press Stop, and check three
+12. **The abort chain, all three hops, in a browser.** Send a question, press Stop, and check three
     separate things: the composer comes back with the text in it and **no error line**; the network
     panel shows the request cancelled rather than completed; and the **backend stops** - a log line,
     or the absence of a completion, because hops 1 and 2 alone look identical on screen to all three
     working. Then reload and confirm the cancelled question was **not stored**. Finally, force the
     trap directly: let a turn complete normally and confirm the reply still arrives, since an
     unguarded `close` listener aborts its own successful response.
-12. **Open every new story in Storybook.** `build-storybook` bundles stories without running one, and
+13. **Open every new story in Storybook.** `build-storybook` bundles stories without running one, and
     a story reaching a router hook throws with every gate green.
-13. **Local mode only.** Move `backend/.env` aside before seeding or running, or its `TURSO_*` values
+14. **Local mode only.** Move `backend/.env` aside before seeding or running, or its `TURSO_*` values
     make the seed and the dev server contradict each other.
 
 ## Risks
