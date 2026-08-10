@@ -145,11 +145,12 @@ export const Default: Story = {
 };
 
 /**
- * The same modal opened from a card's "Set limit" banner, which is this ticket's second entry point.
+ * The same modal opened from an uncapped card's "Set limit" pill, which is this ticket's second
+ * entry point (a footer strip until PET-74's third addendum retired it).
  *
  * Two things differ from `Default` and both are worth looking at. The budget field opens **focused**,
- * because the banner it came from reads "No limit set for this category" and that is not an
- * unspecific invitation the way the kebab's "Edit" is. And the field opens **blank** rather than at
+ * because "Set limit" is a request to type a number and not the
+ * unspecific invitation the kebab's "Edit" is. And the field opens **blank** rather than at
  * zero, because an uncapped category has no cap - which is also the state a user returns it to by
  * clearing the field, since a blank budget saves as `null`.
  *

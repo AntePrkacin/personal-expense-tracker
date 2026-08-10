@@ -208,6 +208,17 @@ describe('an uncapped category (AC7)', () => {
     expect(setLimit).toBeEnabled();
   });
 
+  it('carries no footer strip and none of its retired copy', () => {
+    // PET-74's third addendum: Claude Design's uncapped card draws no `CardBanner` - the call to
+    // action is the pill on the spend row - and "No limit set for this category" went with the
+    // strip. The `CardBanner` strip belongs to the summary card alone now.
+    render(<CategoryCard currency="USD" category={UNCAPPED_CATEGORY} />);
+
+    expect(screen.queryByText('No limit set for this category')).not.toBeInTheDocument();
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+    expect(document.querySelector('footer')).toBeNull();
+  });
+
   it('keeps the visible label inside the accessible name (WCAG 2.5.3)', () => {
     // **The name must *contain* "Set limit", not merely identify the control.** It read "Set a
     // monthly limit for Uncategorized", which is distinct across eight cards and unusable by
@@ -288,9 +299,10 @@ describe('the fallback category (AC6, amended)', () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
   });
 
-  it('draws no banner either, because "Set limit" would have nowhere to lead', () => {
-    // The Edit modal is what sets a cap, and this card has no trigger for it. A strip here would be
-    // either a dead control or a second explanation of a rule nobody asked about.
+  it('draws no "Set limit" pill either, because it would have nowhere to lead', () => {
+    // The Edit modal is what sets a cap, and this card has no trigger for it. A pill here would be
+    // either a dead control or a second explanation of a rule nobody asked about. (The queried
+    // copy is the retired strip's, kept as a query so the strip cannot quietly return here.)
     render(<CategoryCard currency="USD" category={FALLBACK_CATEGORY} />);
 
     expect(screen.queryByRole('button', { name: /Set limit/ })).not.toBeInTheDocument();
@@ -307,7 +319,7 @@ describe('the fallback category (AC6, amended)', () => {
     expect(screen.getByText('in 6 transactions')).toBeInTheDocument();
   });
 
-  it('keeps its kebab and its banner when the row is not the fallback', () => {
+  it('keeps its kebab and its "Set limit" pill when the row is not the fallback', () => {
     // The control, so neither absence above can pass for a card that simply draws nothing.
     render(<CategoryCard currency="USD" category={{ ...FALLBACK_CATEGORY, isFallback: false }} />);
 

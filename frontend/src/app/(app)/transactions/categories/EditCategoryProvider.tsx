@@ -22,7 +22,7 @@ import { EditCategoryModal, type EditCategoryFocus } from './EditCategoryModal';
 //
 // What this feature adds is the evidence that file was reasoning ahead of. Its criterion for
 // screen-scoped is "N triggers on one route", and PET-39 had one kind of trigger; this has **two** -
-// a kebab on every non-fallback card, and a "Set limit" banner on every uncapped one - so a category
+// a kebab on every non-fallback card, and a "Set limit" pill on every uncapped one - so a category
 // with no cap draws two ways into the same modal. Neither is `AddCategoryButton`'s case, whose whole
 // argument against a context is that one button on one route makes a consumer count of one.
 //
@@ -152,7 +152,7 @@ export function EditCategoryProvider({
    * every render and hand every consumer a changed context. `children` keeps its identity across
    * this provider's state changes - it is a server-rendered subtree passed straight through - so
    * React would otherwise skip it entirely; the object literal is the one thing that would drag
-   * **every** `CategoryCardMenu` and every `SetLimitBanner` into a re-render on each open, cancel
+   * **every** `CategoryCardMenu` and every `SetLimitButton` into a re-render on each open, cancel
    * and save, and the cost grows with the category count rather than being fixed.
    */
   const value = useMemo(() => ({ open }), [open]);

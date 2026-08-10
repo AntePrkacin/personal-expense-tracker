@@ -94,7 +94,7 @@ export function isNameValid(name: string): boolean {
  * asked for a required budget greater than zero; `CreateCategoryDto` made `monthlyCap` optional and
  * its docstring records why - every onboarding chip and the seeded `Uncategorized` are uncapped, so
  * requiring one would make an uncapped category a state the API could never produce again, and
- * `CategoryCard`'s "No limit set for this category" would be reachable only through onboarding and
+ * `CategoryCard`'s uncapped shape would be reachable only through onboarding and
  * PET-38's "Set limit". Blank means "no limit".
  *
  * **A typed `0` is still rejected, and it is a different thing from blank.** A cap of zero means "I
