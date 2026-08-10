@@ -49,6 +49,14 @@ import type { components } from '@/types/api';
 // relationship - the note that file already carries about the second one applies unchanged to the
 // third. They must not be unified: the fields differ, the rules differ, and the only thing shared is
 // the shape of the idea.
+//
+// **A code review of PR #84 replaced `currentPaycheckMonth` with `defaultPaycheckMonth`, and the
+// reason is worth reading before touching either boundary.** The dialog defaulted to the current
+// *calendar month*, which `toChangeScheduleBody` completes with the form's pay day - so at any pay
+// day above 1, for every day of the month before it, the default was a paycheck that has not happened
+// yet and a budget change silently applied from the *next* period. That function's own docblock
+// carries the account. The rule this file now follows is that a month is never the unit: the dialog
+// asks for a **paycheck date**, and only the pay day plus today can say which one.
 
 /**
  * What the form holds while it is being filled in.
@@ -349,6 +357,27 @@ export function toChangeScheduleBody(
 }
 
 /**
+ * The `YYYY-MM` a shift of whole months lands on, from a 1-12 month.
+ *
+ * Two functions below need it and they must not disagree, which is the whole reason it is a function:
+ * the dialog's option list and the option it opens on are built from one arithmetic, so a default
+ * that fell outside the offered window would be a `<select>` with no matching option and an empty
+ * box. `Math.floor` rather than a truncating divide, so a shift back across January is a month in the
+ * previous year rather than a negative index.
+ */
+function shiftMonth(year: number, month: number, shift: number): { year: number; month: number } {
+  const total = year * 12 + (month - 1) + shift;
+  const shiftedYear = Math.floor(total / 12);
+
+  return { year: shiftedYear, month: total - shiftedYear * 12 + 1 };
+}
+
+/** A month as the `YYYY-MM` the dialog's `<option>` values and `firstPaycheckDate` are built from. */
+function monthValue(year: number, month: number): string {
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+}
+
+/**
  * The nine months the paycheck dialog offers: the four before this one, this one, and the four after.
  *
  * **A window rather than a free date picker**, and the bound is the point twice over. Forward, a
@@ -374,18 +403,15 @@ export function toChangeScheduleBody(
  */
 export function paycheckMonths(today: string): { value: string; label: string }[] {
   const [year, month] = today.split('-').map(Number);
-  const base = (year ?? 0) * 12 + ((month ?? 1) - 1);
 
   return Array.from({ length: 9 }, (_unused, index) => {
-    const total = base + index - 4;
-    const y = Math.floor(total / 12);
-    const m = total - y * 12;
+    const { year: y, month: m } = shiftMonth(year ?? 0, month ?? 1, index - 4);
 
     return {
-      value: `${String(y).padStart(4, '0')}-${String(m + 1).padStart(2, '0')}`,
+      value: monthValue(y, m),
       // `en-US` and `UTC`, matching `lib/format.ts`'s own month names: a local zone would render the
       // 1st of a month as the previous one for anybody west of Greenwich.
-      label: new Date(Date.UTC(y, m, 1)).toLocaleDateString('en-US', {
+      label: new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', {
         month: 'long',
         year: 'numeric',
         timeZone: 'UTC',
@@ -395,11 +421,66 @@ export function paycheckMonths(today: string): { value: string; label: string }[
 }
 
 /**
- * Which month the dialog opens on: the current one.
+ * Which month the dialog opens on, which is **not** the current calendar month.
  *
- * The overwhelmingly common case is a change taking effect now, so the default is the answer that
- * needs no interaction. It is the fifth of the nine `paycheckMonths` returns.
+ * **The paragraph this replaces was wrong for most of the month at any pay day above 1**, and a code
+ * review of PR #84 found it. It said "the overwhelmingly common case is a change taking effect now,
+ * so the default is the answer that needs no interaction" and returned the fifth of the nine
+ * `paycheckMonths` offers - the calendar month. `toChangeScheduleBody` then completes that into
+ * `${anchorMonth}-${monthStartDay}`, so on a pay day of 15 with today the 11th the default was a
+ * paycheck **in the future**: the change applied from the *next* period, the current period kept the
+ * old budget, and the form said "Changes saved" over a figure that had not moved anywhere the user
+ * could see. Making it take effect now meant picking the *previous* month, which nothing on screen
+ * says. Nothing caught it because every account in `backend/test/periods.e2e-spec.ts` is provisioned
+ * on `monthStartDay: 1`, where today is never before pay day.
+ *
+ * A month is the wrong unit to reason in, and the two cases below are why the fix is not simply "one
+ * month back sometimes". What the dialog is asking for is a **paycheck date**, and which paycheck is
+ * the obvious answer depends on whether the pay day itself moved.
+ *
+ * **A budget-only change wants the paycheck the current period opened on**, which is the most recent
+ * occurrence of the pay day at or before today - `mostRecentAnchor(monthStartDay, today)` on the
+ * backend, whose own docblock already named that as "the anchor a schedule change uses". So the
+ * change applies to the period the user is standing in, which is what "from now" means to somebody
+ * looking at this month's figures.
+ *
+ * **A pay-day change wants the first paycheck under the new schedule**, which is the next occurrence
+ * of the *new* day at or after today. The most recent occurrence would be a paycheck that never
+ * arrived under that schedule, and anchoring there removes a boundary inside the period the user is
+ * already living in - re-shaping a span that has transactions in it, by default, which is the silent
+ * rewriting this whole ticket exists to prevent. A future anchor is a first-class case for the
+ * backend: it stretches the current period up to T and leaves it on the old budget.
+ *
+ * Both answers are always inside `paycheckMonths`' window, because each is at most one month either
+ * side of today's.
+ *
+ * @param today `YYYY-MM-DD`.
+ * @param storedMonthStartDay The pay day as the account has it, which is what says whether the day moved.
+ * @param monthStartDay The pay day the form holds, which is the day `toChangeScheduleBody` will build
+ * the date with - so the month has to be chosen against this one, not the stored one.
  */
-export function currentPaycheckMonth(today: string): string {
-  return paycheckMonths(today)[4]!.value;
+export function defaultPaycheckMonth(
+  today: string,
+  storedMonthStartDay: number,
+  monthStartDay: number,
+): string {
+  const [year, month, day] = today.split('-').map(Number);
+  const dayOfMonth = day ?? 1;
+
+  // An `if` chain rather than the ternary this shipped as, because Prettier flattens a ternary whose
+  // arms are ternaries into one four-deep chain, and which comment belongs to which branch stops
+  // being readable at exactly the point the reader needs it.
+  let shift = 0;
+
+  if (monthStartDay === storedMonthStartDay) {
+    // The paycheck the current period opened on: this month's if it has been, last month's if not.
+    if (dayOfMonth < monthStartDay) shift = -1;
+  } else if (dayOfMonth > monthStartDay) {
+    // The first paycheck under the new schedule, and this month's has passed - so the next one.
+    shift = 1;
+  }
+
+  const shifted = shiftMonth(year ?? 0, month ?? 1, shift);
+
+  return monthValue(shifted.year, shifted.month);
 }

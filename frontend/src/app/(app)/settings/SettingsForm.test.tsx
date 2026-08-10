@@ -449,6 +449,72 @@ describe('the Preferences card (PET-47)', () => {
     );
   });
 
+  // **The PR #84 review finding, end to end.** Every account in this suite and in
+  // `backend/test/periods.e2e-spec.ts` is paid on the 1st, where today is never before pay day - so
+  // these three render a profile paid mid-month, which is the only shape that can see the defect.
+  describe('the paycheck the dialog defaults to', () => {
+    /** The same render as `renderForm`, on an account paid on the 15th rather than the 1st. */
+    function renderPaidOnThe15th(save = jest.fn().mockResolvedValue({ ok: true })) {
+      render(
+        <SettingsForm
+          profile={{ ...PROFILE, monthStartDay: 15 }}
+          save={save}
+          saveSchedule={saveSchedule}
+          today={TODAY}
+        />,
+      );
+
+      return save;
+    }
+
+    it('opens on the paycheck the current period started on, not the calendar month', async () => {
+      // `TODAY` is the 10th, so a person paid on the 15th is still spending February's paycheck. The
+      // version this pins preselected March - a paycheck five days away - so the change applied from
+      // the next period and this one kept the old budget under a green "Changes saved".
+      const user = userEvent.setup();
+      renderPaidOnThe15th();
+
+      await user.clear(screen.getByLabelText('Monthly budget'));
+      await user.type(screen.getByLabelText('Monthly budget'), '2500');
+      await user.click(saveButton());
+
+      expect(screen.getByLabelText('First paycheck')).toHaveValue('2026-02');
+    });
+
+    it('sends that paycheck as the anchor', async () => {
+      // The half that matters on the wire: the month is completed with the form's pay day, so what
+      // reaches `POST /api/profile/schedule` is the current period's own start.
+      const user = userEvent.setup();
+      renderPaidOnThe15th();
+
+      await user.clear(screen.getByLabelText('Monthly budget'));
+      await user.type(screen.getByLabelText('Monthly budget'), '2500');
+      await saveThroughDialog(user);
+
+      await waitFor(() => expect(saveSchedule).toHaveBeenCalledTimes(1));
+      expect(saveSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({ firstPaycheckDate: '2026-02-15' }),
+      );
+    });
+
+    it('anchors a pay-day change on the first paycheck under the new schedule', async () => {
+      // The other arm, and deliberately **not** the most recent occurrence: the account is paid on
+      // the 1st and moving to the 15th, so the first 15th under the new schedule is this month's.
+      // Anchoring at a past 15th would assert a paycheck that never arrived and remove a boundary
+      // inside the period the user is already living in.
+      const user = userEvent.setup();
+      renderForm();
+
+      await user.click(screen.getByRole('button', { name: '15th of the month' }));
+      await saveThroughDialog(user);
+
+      await waitFor(() => expect(saveSchedule).toHaveBeenCalledTimes(1));
+      expect(saveSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({ monthStartDay: 15, firstPaycheckDate: '2026-03-15' }),
+      );
+    });
+  });
+
   it('writes nothing when the dialog is dismissed', async () => {
     // Cancel abandons the whole save rather than only the dialog: nothing has been written, and the
     // form is left exactly as the user had it.
@@ -898,6 +964,47 @@ describe('the resync after a save', () => {
     land({ fullName: 'Overwritten' });
 
     expect(screen.getByLabelText('Display name')).toHaveValue('Anax');
+  });
+
+  it('ends a save clean even when the server reports the same values back', async () => {
+    // **The second PR #84 review finding.** A *retroactive* schedule change appends a row older than
+    // the newest, and `GET /api/profile` reports the newest - so this save lands and the profile comes
+    // back byte-identical. The resync compared by value, so it short-circuited: `awaitingSaved` was
+    // never cleared, `values` kept the typed figure against a `syncedProfile` holding the old one, and
+    // the form stayed dirty with Save live - where a second press re-asked the paycheck question and
+    // appended another duplicate row. A save that landed was indistinguishable from one that did not.
+    //
+    // Adopting on identity ends it on the configured value, which reads as a revert and is the truth:
+    // the account's current budget really is unchanged, and what moved is January's row.
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '2500');
+    await saveThroughDialog(user, '2026-01');
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    land({});
+
+    expect(screen.getByLabelText('Monthly budget')).toHaveValue('2,000.00');
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('closes the dialog rather than leaving it open over the finished save', async () => {
+    // The same flow's other half, and the reason the two are one test apart: the dialog unmounting is
+    // what stops a second confirm re-POSTing the schedule, and it has never depended on the resync.
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '2500');
+    await saveThroughDialog(user, '2026-01');
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    land({});
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(saveSchedule).toHaveBeenCalledTimes(1);
   });
 });
 

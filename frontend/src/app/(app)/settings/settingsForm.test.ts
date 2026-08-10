@@ -1,9 +1,11 @@
 import type { Profile } from '@/lib/profile';
 
 import {
+  defaultPaycheckMonth,
   emailProblem,
   invalidFields,
   isNameValid,
+  paycheckMonths,
   sameSettingsValues,
   scheduleChanged,
   toChangeScheduleBody,
@@ -229,8 +231,10 @@ describe("PET-47's three preference fields", () => {
   });
 
   it('notices a preference change in sameSettingsValues', () => {
-    // The resync in `SettingsForm` compares by value, so a field it did not know about would make
-    // an edited form look identical to the server's and be silently reverted.
+    // The Save gate and the submit guard in `SettingsForm` both compare by value, so a field this
+    // did not know about would make an edited form look clean and its press a silent no-op. (This
+    // said "the resync compares by value", which stopped being true when the resync moved to
+    // identity - see that docblock. The comparison it names is still real, it is the other one.)
     expect(sameSettingsValues(VALUES, { ...VALUES, monthStartDay: 15 })).toBe(false);
     expect(sameSettingsValues(VALUES, { ...VALUES, currency: 'EUR' })).toBe(false);
     expect(sameSettingsValues(VALUES, { ...VALUES, monthlyBudget: '3,000.00' })).toBe(false);
@@ -325,5 +329,106 @@ describe('toUpdateProfileBody', () => {
 
     expect(body).not.toHaveProperty('monthlyBudget');
     expect(body).not.toHaveProperty('monthStartDay');
+  });
+});
+
+// **The regression suite for the PR #84 review finding**, and the reason every case here states a pay
+// day: the dialog's default used to be the current calendar month, which at any pay day above 1 is a
+// paycheck in the future for every day of the month before it - so a budget change applied from the
+// *next* period while the form said "Changes saved". Nothing caught it because the backend e2e suite
+// provisions every account on `monthStartDay: 1`, where today is never before pay day.
+describe('defaultPaycheckMonth', () => {
+  describe('a budget-only change, where the pay day did not move', () => {
+    it('opens on this month once the pay day has passed', () => {
+      expect(defaultPaycheckMonth('2026-03-20', 15, 15)).toBe('2026-03');
+    });
+
+    it('opens on this month on the pay day itself', () => {
+      // The boundary: `mostRecentAnchor`'s own rule is "at or before", so today being pay day means
+      // the current period opened today.
+      expect(defaultPaycheckMonth('2026-03-15', 15, 15)).toBe('2026-03');
+    });
+
+    it('opens on last month while the pay day is still to come', () => {
+      // **The defect.** On 11 March a person paid on the 15th is spending February's paycheck, so a
+      // change taking effect now applies from February. The old version answered `2026-03`, five days
+      // away, and the current period kept the old budget.
+      expect(defaultPaycheckMonth('2026-03-11', 15, 15)).toBe('2026-02');
+    });
+
+    it('crosses a year boundary backwards', () => {
+      expect(defaultPaycheckMonth('2026-01-05', 28, 28)).toBe('2025-12');
+    });
+
+    it('is unaffected on a pay day of 1, which is why no suite noticed', () => {
+      // Every day of the month is at or after the 1st, so this arm is the one the fixtures exercise
+      // and the one that was always right.
+      expect(defaultPaycheckMonth('2026-03-01', 1, 1)).toBe('2026-03');
+      expect(defaultPaycheckMonth('2026-03-31', 1, 1)).toBe('2026-03');
+    });
+  });
+
+  describe('a pay-day change, where the first new-schedule paycheck is what is wanted', () => {
+    it('opens on this month while the new pay day is still to come', () => {
+      expect(defaultPaycheckMonth('2026-03-11', 1, 25)).toBe('2026-03');
+    });
+
+    it('opens on this month when the new pay day is today', () => {
+      expect(defaultPaycheckMonth('2026-03-25', 1, 25)).toBe('2026-03');
+    });
+
+    it('opens on next month once the new pay day has passed', () => {
+      // Never the most recent occurrence: that is a paycheck which never arrived under the new
+      // schedule, and anchoring there removes a boundary inside the period the user is already
+      // living in - re-shaping a span with transactions in it, by default.
+      expect(defaultPaycheckMonth('2026-03-20', 1, 15)).toBe('2026-04');
+    });
+
+    it('crosses a year boundary forwards', () => {
+      expect(defaultPaycheckMonth('2026-12-20', 1, 5)).toBe('2027-01');
+    });
+  });
+
+  it('always answers a month the dialog actually offers', () => {
+    // The default and the option list are built from one arithmetic, so a default outside the window
+    // would render as a `<select>` with no matching option and an empty box. Every case above is at
+    // most one month either side of today's, and this is the proof rather than the claim.
+    const cases: [string, number, number][] = [
+      ['2026-03-11', 15, 15],
+      ['2026-03-20', 15, 15],
+      ['2026-01-05', 28, 28],
+      ['2026-12-20', 1, 5],
+      ['2026-03-20', 1, 15],
+    ];
+
+    for (const [today, stored, next] of cases) {
+      const offered = paycheckMonths(today).map((month) => month.value);
+      expect(offered).toContain(defaultPaycheckMonth(today, stored, next));
+    }
+  });
+});
+
+describe('paycheckMonths', () => {
+  it('offers the four months before this one, this one, and the four after', () => {
+    expect(paycheckMonths('2026-03-20').map((month) => month.value)).toEqual([
+      '2025-11',
+      '2025-12',
+      '2026-01',
+      '2026-02',
+      '2026-03',
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+    ]);
+  });
+
+  it('names each month in `en-US` against UTC', () => {
+    // A local zone would render the 1st of a month as the previous one for anybody west of Greenwich,
+    // which is the same call `lib/format.ts` makes about its own month names.
+    const months = paycheckMonths('2026-01-15');
+
+    expect(months[4]!.label).toBe('January 2026');
+    expect(months[0]!.label).toBe('September 2025');
   });
 });

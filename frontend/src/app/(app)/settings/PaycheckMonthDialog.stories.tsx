@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import { PaycheckMonthDialog } from './PaycheckMonthDialog';
-import { currentPaycheckMonth } from './settingsForm';
+import { defaultPaycheckMonth } from './settingsForm';
 
 // The paycheck question PET-72 puts in front of every budget or pay-day save. **No Figma frame
 // behind it**, which makes these stories the only review it gets.
@@ -49,11 +49,19 @@ type Story = StoryObj<typeof PaycheckMonthDialog>;
 const TODAY = '2026-03-20';
 
 /**
+ * An account paid on the 1st, so its periods are calendar months and the default is this one.
+ *
+ * `defaultPaycheckMonth` takes the pay day because the answer depends on it - see the story below,
+ * where the same date defaults to a month back.
+ */
+const PAID_ON_THE_FIRST = 1;
+
+/**
  * The dialog as it opens, on the month the form defaults to.
  *
- * `currentPaycheckMonth` is that default: the month the user is in, which is the answer that needs no
- * thought - a change made today most often applies from the paycheck that is about to arrive. It sits
- * in the middle of the list, with four months behind it and four ahead.
+ * `defaultPaycheckMonth` is that default: the paycheck the period the user is standing in opened on,
+ * which is the answer that needs no thought for a budget change. On a pay day of 1 that is the current
+ * month, so it sits in the middle of the list with four months behind it and four ahead.
  *
  * What to check: the clock glyph in its tinted circle, the centred title, the body, the labelled
  * select, and a split footer whose wider button is the affirmative - `Modal`'s `'center'` shape,
@@ -62,13 +70,30 @@ const TODAY = '2026-03-20';
  */
 export const Open: Story = {
   args: {
-    value: currentPaycheckMonth(TODAY),
+    value: defaultPaycheckMonth(TODAY, PAID_ON_THE_FIRST, PAID_ON_THE_FIRST),
     today: TODAY,
     pending: false,
     onChange: () => {},
     onConfirm: () => {},
     onClose: () => {},
   },
+};
+
+/**
+ * The same date on an account paid on the **25th**, where the default is *last* month.
+ *
+ * **The state a code review of PR #84 found the form getting wrong**, and it is here because it looks
+ * like a mistake and is not: on 20 March a person paid on the 25th is still spending February's
+ * paycheck, so a budget change taking effect now applies from February. The version this story pins
+ * defaulted to March, which is a paycheck five days away - so the change landed on the *next* period
+ * and this period's figures never moved, under a green "Changes saved".
+ *
+ * What to review is whether the dialog says enough for that default to read as deliberate. It is the
+ * one case where the preselected month is not the month on the calendar, and the body says only "from
+ * the paycheck you pick, onward".
+ */
+export const PayDayNotYetReached: Story = {
+  args: { ...Open.args!, value: defaultPaycheckMonth(TODAY, 25, 25) },
 };
 
 /**

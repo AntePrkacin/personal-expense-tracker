@@ -16,7 +16,7 @@ import { PaycheckMonthDialog } from './PaycheckMonthDialog';
 import { PreferencesCard } from './PreferencesCard';
 import { ProfileCard } from './ProfileCard';
 import {
-  currentPaycheckMonth,
+  defaultPaycheckMonth,
   FIELD_ID,
   invalidFields,
   sameSettingsValues,
@@ -254,14 +254,38 @@ export function SettingsForm({
    * must not happen. It also picks up any field another tab changed in the meantime, so the next
    * diff cannot silently revert it.
    *
-   * The comparison is by **value**, never by object identity: `page.tsx` builds a fresh profile
-   * object on every server render, so an identity test would be true after every refresh in the app.
+   * **The comparison is by object identity, and a code review of PR #84 is why it is not by value.**
+   * The version this replaces asked `!sameSettingsValues(fromServer, synced)` - "did the server's
+   * profile actually change" - on the reasoning that `page.tsx` builds a fresh profile object on every
+   * server render, so an identity test would fire after every refresh in the app. That reasoning is
+   * sound about identity alone and it left out `awaitingSaved`, which is what already restricts this
+   * to the one refresh this form caused.
+   *
+   * A save that lands without moving the server's *configured* values is what it got wrong, and PET-72
+   * made that an ordinary case rather than an exotic one. `GET /api/profile` reports the **newest** row
+   * of each history, so a **retroactive** schedule change - an anchor before the newest budget row -
+   * succeeds while the profile comes back byte-identical. The guard then short-circuited forever:
+   * `awaitingSaved` was never cleared, `values` kept the typed figure and `syncedProfile` kept the old
+   * one, so the form stayed `edited` with Save live, a second press re-asked the paycheck question and
+   * appended another duplicate row, and a save that had landed was indistinguishable from one that had
+   * not.
+   *
+   * Adopting on identity means the form always ends a save showing what the account now holds - which,
+   * after a retroactive change, is the *unchanged* configured budget. That reads as a revert and is the
+   * truth: the field is the configured value, and what moved is an earlier period's row. The
+   * alternative was leaving the form permanently dirty, which is the worse of the two.
+   *
+   * The one thing identity gives up is deliberate. A refresh this form did **not** cause, landing
+   * between the save and this form's own refresh, would be adopted - and if that payload predates the
+   * write, the fields revert under a green "Changes saved". Nothing on this route calls
+   * `router.refresh()` but this form, so there is no such caller today; a value comparison could not
+   * distinguish the two either, it could only wait, and waiting is the defect above.
    */
   const fromServer = toSettingsFormValues(profile);
 
   const synced = toSettingsFormValues(syncedProfile);
 
-  if (awaitingSaved && !sameSettingsValues(fromServer, synced)) {
+  if (awaitingSaved && profile !== syncedProfile) {
     setSyncedProfile(profile);
     setValues(fromServer);
     setAwaitingSaved(false);
@@ -446,7 +470,13 @@ export function SettingsForm({
       setFailure(null);
       setExpired(false);
       setSaved(false);
-      setAnchorMonth(currentPaycheckMonth(today));
+      // **The stored day and the form's day, both, and neither is redundant.** The month depends on
+      // which paycheck is the obvious one to start from, and that differs by whether the pay day
+      // itself moved - `defaultPaycheckMonth` owns the argument. Passing only one of them is how the
+      // first version of this line defaulted to a paycheck in the future.
+      setAnchorMonth(
+        defaultPaycheckMonth(today, syncedProfile.monthStartDay, values.monthStartDay),
+      );
       return;
     }
 

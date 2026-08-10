@@ -63,6 +63,35 @@ historical period view stay hidden regardless (the PR #84 review fix): backdatin
 answer to the dialog's question, asked from the current view, not a side effect of which period the
 screen happens to be showing.
 
+### Which paycheck the dialog defaults to (appended 2026-08-11, second review of PR #84)
+
+**Human context only - skip when executing this plan.** Appended because the shipped default
+contradicted a decision this plan already carried: "Budget-only changes get the same month
+question, anchored to **that period's start**", under Decisions below. The dialog defaulted to the
+current *calendar month* instead, and `toChangeScheduleBody` completes a month with the pay day -
+so the two agree only on a pay day of 1.
+
+Marko is paid on the 15th. On 11 March he is nine days into the period that opened on 15 February
+and has EUR 2,000 budgeted. He decides that was too tight, types 2,400 in Settings and saves. The
+dialog asks which paycheck and preselects **February 2026**, because February's paycheck is the one
+he is spending: he keeps the default, confirms, and this period's figures move. The version this
+replaces preselected March - a paycheck four days away - so the row was dated 2026-03-15, the
+period he was looking at kept EUR 2,000, and the only clue was that nothing changed. To make it
+apply now he had to notice that the answer was the month *before* the one the dialog offered.
+
+A pay-day change is the other reading of the same question and gets the other answer. Moving from
+the 15th to the 25th on 11 March anchors at **25 March**, the first paycheck under the new schedule
+- not 25 February, which is a paycheck that never arrived on that schedule and whose rule would
+remove the 15 February boundary and re-shape a period he has already spent nine days of. A future
+anchor is the gentle case by design: the current period stretches up to T and keeps the old budget.
+
+**Engineering consequence, implemented on this branch the same day**: `defaultPaycheckMonth(today,
+storedMonthStartDay, monthStartDay)` replaces `currentPaycheckMonth(today)` - the most recent
+occurrence of the pay day when the day did not move, the next occurrence when it did. Nothing about
+the nine-month window, the dialog or either endpoint changes. Note why no gate could have caught
+it: every account in `backend/test/periods.e2e-spec.ts` is provisioned on `monthStartDay: 1`, the
+one value for which the wrong rule and the right one agree.
+
 ## Decisions already settled
 
 - **Periods are anchored to paychecks.** A schedule change is anchored to T, the first

@@ -2525,3 +2525,44 @@ be thrown away; `frontend/CLAUDE.md` carries what that did to those two function
 reaches onboarding step 3, which asks one name and one new question: the **pay day**, as a third field on
 the budget step rather than a fourth step, because it is the value the account's first `period_rules` row
 is anchored to and an account with no pay schedule has no periods at all.
+
+**A second code review of PR #84 found two defects in that dialog's plumbing, and both are worth
+keeping as corrections rather than edits, because each is a sentence above that was written
+confidently and was wrong.**
+
+**The dialog opened on the current calendar month, which at any pay day above 1 is a paycheck in the
+future.** `toChangeScheduleBody` completes the picked month with the pay day the form holds, so on a
+pay day of 15 with today the 11th the default was five days away: the budget change applied from the
+_next_ period, the current period kept the old budget, and the form said "Changes saved" over figures
+that had not moved anywhere the user could see. Making it take effect now meant picking the _previous_
+month, which nothing on screen says. `defaultPaycheckMonth` replaces `currentPaycheckMonth` and takes
+the pay day, because a month was never the unit the question is asked in - what the dialog collects is
+a **paycheck date**, and only the pay day plus today can say which one. Two arms, and the second is
+not symmetry for its own sake. A **budget-only** change defaults to the paycheck the current period
+opened on, the most recent occurrence at or before today - which is `mostRecentAnchor(monthStartDay,
+today)`, whose own backend docblock already named that as "the anchor a schedule change uses", so this
+was a frontend disagreeing with the backend's stated expectation. A **pay-day** change defaults to the
+first paycheck under the _new_ schedule, the next occurrence at or after today, because the most
+recent one is a paycheck that never arrived under that schedule and anchoring there removes a boundary
+inside the period the user is already living in - re-shaping a span that has transactions in it, by
+default, which is the silent rewriting this whole ticket exists to prevent. Note what let it ship:
+every account in `backend/test/periods.e2e-spec.ts` is provisioned on `monthStartDay: 1`, where today
+is never before pay day, so no suite could reach the case at all. `Shell/Paycheck month`'s
+`PayDayNotYetReached` story is the state, and it is the one where the preselected month is deliberately
+not the month on the calendar.
+
+**And the resync compares by object identity now, not by value.** `SettingsForm`'s own docblock argued
+for value, on the ground that `page.tsx` builds a fresh profile on every server render so an identity
+test would fire after every refresh in the app - sound about identity alone, and it left out
+`awaitingSaved`, which already restricts the adoption to the one refresh this form caused. What it got
+wrong is a save that lands without moving the server's _configured_ values, which PET-72 makes
+ordinary: `GET /api/profile` reports the **newest** row of each history, so a **retroactive** schedule
+change succeeds while the profile comes back byte-identical. The value guard then short-circuited
+forever - `awaitingSaved` never cleared, `values` kept the typed figure against a baseline holding the
+old one, so the form stayed `edited` with Save live, and a second press re-asked the paycheck question
+and appended another duplicate row. A save that had landed was indistinguishable from one that had not.
+On identity the form ends every save showing what the account now holds, which after a retroactive
+change is the _unchanged_ configured budget: that reads as a revert and is the truth, since what moved
+is an earlier period's row. What identity gives up is stated in the code and is deliberate - a refresh
+this form did not cause, landing between the write and this form's own refresh, would be adopted, and
+nothing on this route calls `router.refresh()` but this form.

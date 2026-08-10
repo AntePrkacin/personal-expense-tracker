@@ -233,11 +233,23 @@ export class VerificationService {
   /**
    * The account's first pay schedule, from the pay day onboarding asked for.
    *
-   * **Anchored to the most recent occurrence of that day, not to today.** The
-   * anchor has to be a paycheck date - `period_rules`' invariant is that
-   * `effective_from` falls on its own `month_start_day` - and the most recent one
-   * is the start of the period the user is in right now, so their first period
-   * opens where they would expect rather than a month later.
+   * **The anchor is the caller's, and this docblock used to describe a different
+   * one.** It said "anchored to the most recent occurrence of that day, not to
+   * today ... the most recent one is the start of the period the user is in right
+   * now, so their first period opens where they would expect rather than a month
+   * later" - true of `mostRecentAnchor(monthStartDay, today)`, and false of what
+   * `provisionAccount` passes, which is that call with `SEED_ANCHOR_MONTHS_BACK`:
+   * **twelve months back**. A code review of PR #84 caught it. The reasoning for the
+   * floor is at the call site and at the constant, and it is the opposite of what
+   * was written here - the first rule extends backward without limit either way, so
+   * the periods are identical, and the floor exists so a *retroactive* schedule
+   * change sorts after this rule rather than before it. Reading this comment as
+   * authority would say a retroactive change further back than one period must be
+   * refused, which is exactly what the floor makes legal.
+   *
+   * What this method requires of any anchor is the invariant, and only that: it has
+   * to be a paycheck date, because `period_rules` promises `effective_from` falls
+   * on its own `month_start_day`. `mostRecentAnchor` is what guarantees it.
    *
    * `transition_start` is NULL: the first rule has no predecessor to bridge from,
    * and it extends backward without limit, so an expense backdated to before the

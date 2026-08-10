@@ -28,10 +28,17 @@ import { MemoryMailer } from './memory-mailer';
  * a real database, that the stretched transition period keeps the *old* budget,
  * and that the periods before the change are untouched.
  *
- * **Every account here is provisioned on the 1st and every date is relative to
- * today**, resolved through `todayIn` exactly as the app does. A fixture pinned to
- * a literal month would pass on the day it was written and silently stop covering
- * anything a month later - the trap `transaction-reads.e2e-spec.ts` records.
+ * **Every date here is relative to today**, resolved through `todayIn` exactly as
+ * the app does. A fixture pinned to a literal month would pass on the day it was
+ * written and silently stop covering anything a month later - the trap
+ * `transaction-reads.e2e-spec.ts` records.
+ *
+ * **Every account was provisioned on the 1st until the last describe block**, and
+ * that sentence used to be stated here as though it cost nothing. It cost the one
+ * case the suite could not see: on day 1 the period a user is in always starts in
+ * the current calendar month, so a caller anchoring a change at "the 1st of this
+ * month" instead of at the current period's start passed every assertion in this
+ * file. See `provision`, whose pay day is now a parameter for exactly that reason.
  *
  * One account per scenario, because a schedule change is not reversible through
  * the API: `period_rules` is append-only, so a test that changed the schedule and
@@ -62,8 +69,16 @@ describe('Periods and pay-schedule changes (e2e)', () => {
   let emailCounter = 0;
   const nextEmail = () => `Payday${++emailCounter}@Example.COM`;
 
-  /** A fresh account paid on the 1st, with a 2000 budget. */
-  const provision = async () => {
+  /**
+   * A fresh account with a 2000 budget, paid on the 1st unless told otherwise.
+   *
+   * **The parameter is a review finding rather than a convenience.** Every case in
+   * this file used to provision on day 1, the one pay day for which "the current
+   * period's start" and "the 1st of the current calendar month" are always the same
+   * date - so a caller confusing the two passed the whole suite, which is exactly
+   * what the Settings paycheck dialog was doing when a review of PR #84 found it.
+   */
+  const provision = async (monthStartDay = 1) => {
     const email = nextEmail();
     await request(app.getHttpServer())
       .post('/api/auth/register')
@@ -72,7 +87,7 @@ describe('Periods and pay-schedule changes (e2e)', () => {
         email,
         currency: 'eur',
         monthlyBudget: 2000,
-        monthStartDay: 1,
+        monthStartDay,
         categories: pickedCategoryIds,
       })
       .expect(202);
@@ -441,6 +456,63 @@ describe('Periods and pay-schedule changes (e2e)', () => {
       }).expect(200);
 
       const older = await dashboardFor(token, dayOf(-1, 1)).expect(200);
+      expect((older.body as { monthlyBudget: number }).monthlyBudget).toBe(
+        2000,
+      );
+    });
+  });
+
+  describe('POST /api/profile/schedule on an account paid mid-month', () => {
+    // **The shape no other account in this file has**, and the reason `provision`
+    // takes a pay day at all. On day 1 the period the user is in always starts in
+    // the current calendar month; on day 15 it starts in the *previous* one for
+    // every day before the 15th, which is where the Settings dialog was anchoring
+    // budget changes a period late. Neither case here restates that arithmetic:
+    // both take the anchor from `GET /api/periods`, which is the authority the
+    // frontend now derives its default to agree with.
+    it('re-prices the period the user is in when anchored at its own start', async () => {
+      const { token } = await provision(15);
+      const { periods } = periodsBody(await periodsOf(token).expect(200));
+      const current = periods.find((period) => period.current)!;
+
+      // A paycheck date, so a pay day of 15 means every period opens on a 15th.
+      expect(current.start.endsWith('-15')).toBe(true);
+
+      await changeSchedule(token, {
+        monthlyBudget: 2400,
+        monthStartDay: 15,
+        firstPaycheckDate: current.start,
+      }).expect(200);
+
+      const now = await dashboardFor(token, current.start).expect(200);
+      expect((now.body as { monthlyBudget: number }).monthlyBudget).toBe(2400);
+
+      // And the boundaries did not move: same pay day, so this is a budget change.
+      const after = periodsBody(await periodsOf(token).expect(200));
+      expect(after.periods.map((period) => period.start)).toEqual(
+        periods.map((period) => period.start),
+      );
+    });
+
+    it('leaves the period before that one on the old budget', async () => {
+      const { token } = await provision(15);
+      // Two months back, so it is comfortably inside an earlier period whatever
+      // day of the month the suite runs on - which is what makes the period below
+      // it exist in the list at all, since the list is bounded by the oldest
+      // transaction.
+      await spend(token, dayOf(-2, 15), 60);
+
+      const { periods } = periodsBody(await periodsOf(token).expect(200));
+      const current = periods.find((period) => period.current)!;
+      const previous = periods.find((period) => period.end === current.start)!;
+
+      await changeSchedule(token, {
+        monthlyBudget: 2400,
+        monthStartDay: 15,
+        firstPaycheckDate: current.start,
+      }).expect(200);
+
+      const older = await dashboardFor(token, previous.start).expect(200);
       expect((older.body as { monthlyBudget: number }).monthlyBudget).toBe(
         2000,
       );
