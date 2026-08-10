@@ -25,6 +25,44 @@ change and the three paycheck-anchor scenarios) lives in PET-72's Jira descripti
 body. Every engineering fact it carries is restated below: the anchoring rule under Decisions,
 and the three concrete period layouts under Verification.
 
+### Category cap change (appended 2026-08-10, during review of PR #84)
+
+**Human context only - skip when executing this plan.** Appended because the shipped behaviour
+was an oversight caught in review: a cap write silently anchored itself to the current period,
+with no "from when" question, unlike the budget and pay-day writes. The decided behaviour is the
+one this story tells; the last paragraph records how it was implemented.
+
+Marko is paid on the 1st, so his periods are calendar months. Since July his Groceries category
+has carried a EUR 300 cap - one row in `category_cap_history`. On 18 October he has already
+spent EUR 310 and the card reads "Over". He opens the card's kebab, picks "Edit", types 400 and
+saves. **Saving opens the same kind of question the budget change asks**: a dialog listing
+months to apply the change from, with the current month preselected. He keeps the default and
+confirms. One row is appended - effective from 2025-10-01, cap EUR 400 - and nothing is updated
+or deleted.
+
+- **October (current period)**: cap EUR 400, spent EUR 310, the chip drops from "Over" to
+  "Near". The whole period is re-judged against the new cap, because the row is effective from
+  its start.
+- **September (reached through the period select)**: the newest row at or before 2025-09-01 is
+  still July's, so September keeps its EUR 300 cap and the status it earned against it. History
+  is not rewritten.
+- **November onward**: EUR 400, until a newer row appears.
+
+Had he picked August in the dialog instead, the row would be dated 2025-08-01 and August and
+September would be re-judged against EUR 400 - a deliberate, visible correction of history
+rather than a silent one. Clearing the cap field appends a NULL-cap row the same way, which is
+how a capped category becomes uncapped from the chosen period onward. The Allocate modal asks
+the question once for its whole batch, and its all-or-nothing write is unchanged.
+
+**Engineering consequence, decided 2026-08-10 and implemented on this branch the same day**: every
+cap write - the single `PATCH /api/categories/{id}` via `capFrom`, the bulk `PATCH /api/categories`
+via `capsFrom` (one anchor for the whole batch), and the Edit, Set limit and Allocate flows behind
+them through `CapPeriodDialog` - takes a period anchor chosen in a follow-up dialog listing the
+account's periods, current preselected, absent meaning the current period. Cap controls on a
+historical period view stay hidden regardless (the PR #84 review fix): backdating is a deliberate
+answer to the dialog's question, asked from the current view, not a side effect of which period the
+screen happens to be showing.
+
 ## Decisions already settled
 
 - **Periods are anchored to paychecks.** A schedule change is anchored to T, the first

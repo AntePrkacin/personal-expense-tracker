@@ -405,6 +405,11 @@ describe('the allocate seam', () => {
     await user.type(field, '250');
     await user.click(screen.getByRole('button', { name: 'Save caps' }));
 
+    // The save now passes through the cap-anchor question; confirming on the default (current)
+    // period is what sends the body, with no `capsFrom` - absent means current.
+    const question = screen.getByRole('heading', { name: 'From which period?' }).closest('dialog')!;
+    await user.click(within(question).getByRole('button', { name: 'Save caps' }));
+
     expect(save).toHaveBeenCalledWith({
       categories: [{ id: CATEGORIES[0].id, monthlyCap: 250 }],
     });
@@ -581,5 +586,29 @@ describe('the fallback card on a real grid', () => {
       screen.queryByRole('button', { name: 'Actions for Uncategorized' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Set limit/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('a historical period view', () => {
+  // Finding 2 of PR #84's review, pinned: every cap write drafts from the live configuration and
+  // expresses a backdate through the cap-anchor question, so on a non-current period the mutating
+  // controls are not drawn at all - the fallback card's own rule, applied to the whole screen.
+  const historical = PERIODS[1];
+
+  it('draws no cap-writing control and no kebab', () => {
+    renderScreen({ period: historical });
+
+    expect(screen.queryByRole('button', { name: 'Allocate' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add category' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Set limit/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
+  });
+
+  it('still draws the period’s own figures under its own name', () => {
+    // The figures are that period's record; only the writes are gone.
+    renderScreen({ period: historical });
+
+    expect(screen.getByRole('heading', { name: 'September 2025 spending' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Groceries' })).toBeInTheDocument();
   });
 });

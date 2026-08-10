@@ -200,9 +200,13 @@ export function SettingsForm({
    *
    * **Holding the month here rather than in the dialog is what makes the dialog stateless**, which is
    * the shape every other confirmation in this app has: `(app)/Modal.tsx` renders content and reports
-   * a decision, and the screen owns what the decision is about. It also means reopening the dialog
-   * after a failed save reopens it on the month the user picked, rather than resetting to the default
-   * and quietly changing what a second press would write.
+   * a decision, and the screen owns what the decision is about. A failed save leaves the dialog
+   * **open** on the month the user picked, with the failure rendered inside it, so the retry
+   * re-sends what they actually chose. (This comment used to promise "reopening after a failed save
+   * reopens on the picked month", which the code never did - `onSubmit` seeds a fresh default on
+   * every ask, and a review caught the dialog not closing on success while its failure report
+   * rendered invisibly behind the top layer. Staying open on failure is the behaviour that promise
+   * meant.) A successful save closes it; a cancelled one abandons the save whole.
    */
   const [anchorMonth, setAnchorMonth] = useState<string | null>(null);
 
@@ -492,6 +496,8 @@ export function SettingsForm({
       try {
         schedule = await saveSchedule(toChangeScheduleBody(values, month));
       } catch {
+        // The dialog stays open: `failure` renders inside it, and the picked
+        // month survives for the retry the message invites.
         setPending(false);
         setFailure(MESSAGES.failed);
         return;
@@ -501,6 +507,10 @@ export function SettingsForm({
         setPending(false);
 
         if (schedule.reason === 'unauthenticated') {
+          // The one failure whose report lives outside the dialog - the expired
+          // alert carries the "Log in again" link - so the dialog has to come
+          // down for it to be reachable at all.
+          setAnchorMonth(null);
           setExpired(true);
           return;
         }
@@ -528,6 +538,9 @@ export function SettingsForm({
 
         // The 401 renders its own alert with a way out of it; the other three are bare strings.
         if (result.reason === 'unauthenticated') {
+          // Same reason as the schedule arm: the alert with its link lives
+          // under the dialog's top layer.
+          setAnchorMonth(null);
           setExpired(true);
           return;
         }
@@ -547,6 +560,12 @@ export function SettingsForm({
     // trimmed, and another tab may have changed a field this form did not send. The refresh is
     // asynchronous, so the corrected profile cannot be read on this line - the flag is what makes
     // the resync at the top of this component adopt it when it arrives.
+    // **The dialog comes down on success, and a review is why this line exists.** `commit` used to
+    // leave `anchorMonth` set, so the dialog stayed open over a finished save with its own Save
+    // re-enabled - a second click re-POSTed the schedule, and the only way out ran `onClose`, whose
+    // comment claims it "abandons the whole save". Unmounting here still restores focus, because
+    // `Modal` refocuses on unmount rather than only through `close()`.
+    setAnchorMonth(null);
     router.refresh();
     setAwaitingSaved(true);
     setPending(false);
@@ -677,10 +696,18 @@ export function SettingsForm({
           value={anchorMonth}
           today={today}
           pending={pending}
+          // Inside the dialog as well as in the form's own FormError, because the dialog sits in
+          // the top layer and would otherwise cover the only report of its own failure. On failure
+          // the dialog stays open with the picked month intact, which is what the `anchorMonth`
+          // docblock's reopen-on-picked-month promise actually means in practice.
+          failure={failure}
           onChange={setAnchorMonth}
           onConfirm={() => void commit(anchorMonth)}
-          // Abandons the whole save rather than only the dialog: nothing has been written, and the
-          // form is left exactly as the user had it, so pressing Save again asks again.
+          // Abandons the whole save rather than only the dialog: nothing the user confirmed has
+          // been kept, the form is left exactly as they had it, and pressing Save again asks
+          // again from the default month. (After a *failed* attempt the schedule may already have
+          // landed when the ordinary patch was what failed - retrying converges, so nothing is
+          // lost either way.)
           onClose={() => setAnchorMonth(null)}
         />
       )}

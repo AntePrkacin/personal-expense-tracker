@@ -427,14 +427,33 @@ function labelled(window: MonthWindow): Period {
  * Sorting here rather than trusting the caller makes every function total: the
  * service reads rows ordered, and a walk that silently produced overlapping
  * periods for an unordered array would be a bug nothing would catch.
+ *
+ * **An already-ordered array is returned as-is rather than copied and
+ * re-sorted.** The service reads rows ordered ascending and `periodsBetween`
+ * calls back into `periodFor` once per period, so `GET /api/periods` was paying
+ * an allocation and a sort per period of history for an array that never
+ * changes mid-walk. The order check rides the assertion loop it was already
+ * making. Nothing in this module mutates a rules array, which is what makes
+ * handing the caller's own array back safe.
  */
-function assertRules(rules: readonly PeriodRule[]): PeriodRule[] {
+function assertRules(rules: readonly PeriodRule[]): readonly PeriodRule[] {
   if (rules.length === 0) {
     throw new Error(
       'An account must have at least one period rule; provisioning seeds one.',
     );
   }
-  rules.forEach(assertRule);
+
+  let ordered = true;
+  for (let k = 0; k < rules.length; k += 1) {
+    assertRule(rules[k]);
+    if (k > 0 && rules[k].effectiveFrom < rules[k - 1].effectiveFrom) {
+      ordered = false;
+    }
+  }
+  if (ordered) {
+    return rules;
+  }
+
   return [...rules].sort((a, b) =>
     a.effectiveFrom < b.effectiveFrom
       ? -1

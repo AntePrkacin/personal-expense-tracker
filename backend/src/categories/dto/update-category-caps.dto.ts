@@ -1,13 +1,15 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
+  IsDateString,
   IsNumber,
   IsPositive,
   IsUUID,
+  Matches,
   Max,
   ValidateIf,
   ValidateNested,
@@ -113,4 +115,28 @@ export class UpdateCategoryCapsDto {
   @ValidateNested({ each: true })
   @Type(() => CategoryCapDto)
   categories!: CategoryCapDto[];
+
+  /**
+   * The period every cap in the batch applies from: a period's own `start` from
+   * `GET /api/periods`. Omitted means the current period.
+   *
+   * One anchor for the whole batch rather than one per entry, because the
+   * Allocate modal asks its "from when" question once for the save - a payload
+   * mixing anchors would be several decisions dressed as one, and nothing in
+   * the UI can express it. The same visibility rule as
+   * `UpdateCategoryDto.capFrom`: periods before the anchor are untouched, and a
+   * date that starts none of your periods, or a future one, is a **400**.
+   */
+  // The inline-regex-plus-strict-date pair every date field in this API
+  // carries; see `UpdateCategoryDto.capFrom`.
+  @ApiPropertyOptional({
+    format: 'date',
+    description:
+      'A period `start` from `GET /api/periods` that every cap in the batch applies from. Omit for the current period. Periods before it are untouched.',
+    example: '2025-12-01',
+  })
+  @ValidateIf((_, value) => value !== undefined)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
+  capsFrom?: string;
 }

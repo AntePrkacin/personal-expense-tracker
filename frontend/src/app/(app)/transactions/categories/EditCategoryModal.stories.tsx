@@ -20,7 +20,7 @@ function EditCategoryModal(props: React.ComponentProps<typeof Wrapped>) {
     </PreferencesProvider>
   );
 }
-import { category } from './categoryFixture';
+import { category, CATEGORY_PERIODS } from './categoryFixture';
 
 // Type-only Storybook import, for the reason `Sidebar.stories.tsx` records: importing any *value*
 // from Storybook breaks the Jest story smoke test with an opaque ESM error, because
@@ -134,6 +134,7 @@ const accept = async () => ({ ok: true }) as const;
 export const Default: Story = {
   render: () => (
     <EditCategoryModal
+      periods={CATEGORY_PERIODS}
       category={SUBSCRIPTIONS}
       palette={PALETTE}
       update={accept}
@@ -158,6 +159,7 @@ export const Default: Story = {
 export const SettingALimit: Story = {
   render: () => (
     <EditCategoryModal
+      periods={CATEGORY_PERIODS}
       category={category({
         id: '0198c2a1-0000-7000-8000-0000000000a2',
         name: 'Subscriptions',
@@ -196,6 +198,7 @@ export const SettingALimit: Story = {
 export const PaletteUnavailable: Story = {
   render: () => (
     <EditCategoryModal
+      periods={CATEGORY_PERIODS}
       category={SUBSCRIPTIONS}
       palette={null}
       update={accept}

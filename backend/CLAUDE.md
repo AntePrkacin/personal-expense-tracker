@@ -220,7 +220,8 @@ the card is about.
 
 **Money crosses two decimal places and the currency allowlist is why.** `toCents()` and
 `fromCents()` assume an exponent of 2, so `src/common/currency.ts` publishes
-`SUPPORTED_CURRENCIES` - 29 codes, every one of them exponent-2, with `DEFAULT_CURRENCY = 'EUR'`
+`SUPPORTED_CURRENCIES` - every code on it exponent-2, and the list itself is that file's to count
+rather than a number to restate here - with `DEFAULT_CURRENCY = 'EUR'`
 
 - and `UpdateProfileDto` validates against it rather than against `@IsISO4217CurrencyCode()`.
   That validator accepts `JPY` and `KWD`, whose exponents are 0 and 3, and either one turns every
@@ -602,7 +603,18 @@ version, so it was probed against the real local driver before being written: an
 inserts every row and returns every id, a payload naming one tombstoned category inserts nothing and
 returns `[]`, and a `NULL` cap round-trips.
 
-## Dashboard
+**A cap write is anchored to a period now, and the anchor is asked rather than assumed.** Both cap
+writes dated their rows at the current period unconditionally when PET-72 first shipped, which the
+review of PR #84 flagged from the UI side: the frontend offered the controls on a historical view and
+the write landed somewhere else. The decided behaviour (recorded in the PET-72 plan's user story) is
+the budget change's own shape: `PATCH /categories/{id}` takes an optional `capFrom` and the bulk
+`PATCH /categories` an optional `capsFrom` - a period's own `start` from `GET /api/periods`, resolved
+through `PeriodService.startingAt` so a non-start or a future period is a 400, defaulting to the
+current period when absent. A backdated row re-judges the anchored period onward _except_ periods a
+newer cap row already covers, because resolution prefers the greatest `effective_from` at or before
+each period's start - so backdating is visible and deliberate, never a silent rewrite of a span that
+had its own decision. `capFrom` without a `monthlyCap` is a 400 rather than ignored, and the bulk
+anchor is one value for the whole batch, because the Allocate modal asks its question once per save.
 
 **`GET /api/dashboard` computes nothing itself.** `src/dashboard/` has no imports from
 `categories` or `transactions` tables at all - `DashboardService` composes `CategoriesService`
@@ -1001,9 +1013,12 @@ so a request setting one is incomplete without saying from when: raising the bud
 endpoint silently re-priced every period the account had ever had. They go through
 `POST /api/profile/schedule` instead, and every field of `ChangeScheduleDto` is **required**, which
 is what makes the omission impossible rather than merely discouraged. What `GET /api/profile` returns
-for them is the value **in force for the current period**, resolved from the histories rather than
-read from a column - so mid-transition it reports the day the user is actually being paid on rather
-than the one starting next period.
+for them is the value **as configured** - the newest row of each history, a change scheduled at a
+future paycheck included. This read used to report the values in force for the current period, and a
+review of PET-72 is why it stopped: Settings is a form, and a form must round-trip. Mid-pending-change
+the old semantics loaded the _old_ day, so a faithful budget-only re-submit wrote a rule reverting the
+change the user had just scheduled. What a period was actually lived under stays per-period on the
+dashboard, category and transaction reads.
 
 Five things about the schedule write are easy to get wrong:
 
@@ -1021,7 +1036,17 @@ Five things about the schedule write are easy to get wrong:
 - **A pay-day change moves boundaries and a budget-only change does not.** The service decides which
   it is by comparing the requested day against `ruleInForceAt(anchor)`, not against the profile's
   current day: at a retroactive anchor those are different rules, and comparing against the wrong one
-  writes a boundary move for a change that moved nothing.
+  writes a boundary move for a change that moved nothing. **One exception, found by review**: a body
+  carrying the _newest_ rule's day with an anchor before that rule is a budget-only change reaching
+  back across the last pay-day change - the form always sends the configured day, so the comparison
+  at the anchor misreads exactly that case - and it appends a budget row for the containing period,
+  never a rule.
+
+- **A pay-day change cannot be anchored behind a later pay-day change, and that is a 400.** A rule
+  inserted _between_ two existing ones leaves the later rule's stored `transitionStart` computed
+  against a predecessor that no longer governs the span, so the walk clamps periods at a bridge that
+  lands on no boundary - periods ending on a day nobody was ever paid. Correcting history is in
+  `## Not built here`; until it exists, refusing the anchor is the honest answer.
 - **Sending the identical body twice converges rather than duplicating.** The rule insert is
   `onConflictDoNothing` on `period_rules`' unique `effective_from` index, and a second budget row for
   one date resolves to the newest - which is the same value. That is why the frontend action publishes

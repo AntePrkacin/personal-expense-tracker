@@ -38,6 +38,8 @@ import type { UpdateCategoryDto } from './dto/update-category.dto';
 
 const NO_CATEGORY = 'Category not found.';
 const NOTHING_TO_UPDATE = 'Provide at least one field to update.';
+const CAP_FROM_WITHOUT_CAP =
+  'capFrom dates a cap change, so it needs a monthlyCap in the same body; send both or neither.';
 const NO_DELETE_FALLBACK =
   'The Uncategorized category cannot be deleted: it is where deleting any other category moves its transactions.';
 const NO_RENAME_FALLBACK =
@@ -141,15 +143,22 @@ export class CategoriesService {
    *
    * @throws BadRequestException if `periodStart` is not the start of a real
    * period for this account.
+   *
+   * @param resolvedPeriod A period the caller already resolved. Passed by the
+   * dashboard and the insights generator so one request resolves "current"
+   * exactly once - see `TransactionsService.list` for the midnight skew this
+   * closes. When supplied it wins over `periodStart`.
    */
   async list(
     userId: string,
     periodStart?: string,
+    resolvedPeriod?: Period,
   ): Promise<CategoriesResponseDto> {
     const period =
-      periodStart === undefined
+      resolvedPeriod ??
+      (periodStart === undefined
         ? await this.periods.current(userId)
-        : await this.periods.startingAt(userId, periodStart);
+        : await this.periods.startingAt(userId, periodStart));
 
     const budgetCents = await this.periods.budgetCentsFor(userId, period);
     const db = await this.userDatabases.getUserDb(userId);
@@ -250,6 +259,14 @@ export class CategoriesService {
     const cap = dto.monthlyCap;
     const capChanged = cap !== undefined;
 
+    // A `capFrom` with no cap to date is refused rather than ignored: silently
+    // dropping it would answer 200 to a body that read as a backdate, and the
+    // caller would believe one happened. Ahead of the empty-body 400, so a body
+    // carrying only `capFrom` gets the message that names its actual mistake.
+    if (dto.capFrom !== undefined && !capChanged) {
+      throw new BadRequestException(CAP_FROM_WITHOUT_CAP);
+    }
+
     // Before the database is even opened: a bare UPDATE would still bump
     // `updated_at` through `$onUpdateFn` and record an edit that changed
     // nothing. Same reasoning as UpdateTransactionDto's.
@@ -278,9 +295,16 @@ export class CategoriesService {
     }
 
     if (cap !== undefined) {
-      const period = await this.periods.current(userId);
+      // The anchored period - `capFrom` from the follow-up dialog, the current
+      // period when absent. `startingAt` is what refuses a date that starts no
+      // period, or a future one, so a backdate can only land on a period the
+      // account really has.
+      const period =
+        dto.capFrom === undefined
+          ? await this.periods.current(userId)
+          : await this.periods.startingAt(userId, dto.capFrom);
       // `null` is a real value here, not an absence: it is how a capped category
-      // becomes uncapped from this period onward.
+      // becomes uncapped from the anchored period onward.
       await this.appendCap(
         db,
         id,
@@ -349,11 +373,15 @@ export class CategoriesService {
     const items = dto.categories;
     const ids = items.map((item) => item.id);
 
-    // Every row carries the same `effective_from`, the current period's start:
-    // the Allocate modal is allocating *this* period's budget, and dating the
-    // rows anywhere else would either rewrite a closed period or leave this one
-    // uncapped.
-    const period = await this.periods.current(userId);
+    // Every row carries the same `effective_from`: the anchored period's start -
+    // `capsFrom`, one answer for the whole batch, or the current period when it
+    // is absent. One anchor rather than one per entry, because the Allocate
+    // modal asks its "from when" question once per save; `startingAt` refuses a
+    // date that starts no period of the caller's, or a future one.
+    const period =
+      dto.capsFrom === undefined
+        ? await this.periods.current(userId)
+        : await this.periods.startingAt(userId, dto.capsFrom);
     const db = await this.userDatabases.getUserDb(userId);
 
     // One instant for every row, so a later resolution ordering by `created_at`

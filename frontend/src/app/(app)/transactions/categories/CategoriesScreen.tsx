@@ -154,6 +154,23 @@ export function CategoriesScreen({
   // the two are computed over different windows only if `monthStartDay` changes mid-request.
   const spent = categories.reduce((total, category) => total + category.spent, 0);
 
+  // **A historical period is read-only, and this flag is what makes it so.** Every write this
+  // screen offers - Add category's initial cap, the Edit modal's cap, "Set limit", "Allocate" -
+  // drafts from and validates against the account's live configuration, and a backdate is
+  // expressed through the cap-anchor question those flows ask (`CapPeriodDialog`), never by
+  // navigating to the past first. Left ungated, those controls stayed enabled on a historical
+  // view, prefilled and validated against the *viewed* period's caps and budget while the write
+  // landed elsewhere - a save that looked like a no-op while it silently rewrote the current caps.
+  // A review of PET-72 caught it, and the plan's user story records the decided shape: backdating
+  // is a deliberate answer to a question, so the controls are not drawn at all on a non-current
+  // period - the fallback card's own rule, nothing on this screen is drawn that cannot be acted
+  // on.
+  //
+  // Resolved off the periods list's own `current` flag rather than by comparing dates to a clock,
+  // and defaulting to read-only when the viewed period is somehow not in the list - the safe
+  // direction for a mismatch two reads apart.
+  const isCurrentPeriod = periods.find((entry) => entry.start === period.start)?.current ?? false;
+
   // **The name the delete confirmation says transactions move to, resolved once for the screen.**
   // This is PET-39's amendment to the ticket, which asks for the literal "Other": that role was
   // deliberately split when the backend was built, so "Other" is an ordinary chip anyone can
@@ -177,7 +194,7 @@ export function CategoriesScreen({
     // is a `useDeleteCategory()` call, so the edit provider has to sit inside the delete one - which
     // is also the direction that keeps the confirmation outliving the form it was opened from.
     <DeleteCategoryProvider fallbackName={fallbackName} remove={remove}>
-      <EditCategoryProvider palette={palette} update={update}>
+      <EditCategoryProvider palette={palette} periods={periods} update={update}>
         <PageHeader
           overline={period.label}
           title="Transactions"
@@ -195,7 +212,10 @@ export function CategoriesScreen({
                 selected={period.start}
                 pathname="/transactions/categories"
               />
-              <AddCategoryButton palette={palette} create={create} />
+              {/* Not drawn on a historical period: a new category's cap is dated at the current
+                  period, so offering the modal here would validate against figures it cannot
+                  affect. See `isCurrentPeriod` above. */}
+              {isCurrentPeriod ? <AddCategoryButton palette={palette} create={create} /> : null}
             </>
           }
         />
@@ -216,7 +236,9 @@ export function CategoriesScreen({
             spent={spent}
             allocation={allocation}
             categories={categories}
+            periods={periods}
             save={save}
+            readOnly={!isCurrentPeriod}
           />
 
           {/* **The column count is responsive, and the ladder is chosen against the *content*
@@ -257,7 +279,7 @@ export function CategoriesScreen({
               // is its own <section> with an <h2>, so the list adds structure without competing
               // with the headings inside it.
               <li key={category.id}>
-                <CategoryCard category={category} currency={currency} />
+                <CategoryCard category={category} currency={currency} readOnly={!isCurrentPeriod} />
               </li>
             ))}
           </ul>

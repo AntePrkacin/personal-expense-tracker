@@ -94,7 +94,7 @@ function footerFigure(
 }
 
 /** The tile and the name, identical in both shapes. */
-function CategoryCardHeader({ category }: { category: Category }) {
+function CategoryCardHeader({ category, readOnly }: { category: Category; readOnly: boolean }) {
   // The category's own glyph as of PET-64, where three sites drew a shared `ShoppingBag`
   // placeholder. `null` when the stored icon resolves to nothing, which leaves the tile empty
   // rather than drawing a mark that says something else.
@@ -138,13 +138,31 @@ function CategoryCardHeader({ category }: { category: Category }) {
           items are refused for the fallback row, so the kebab is not drawn there at all rather
           than opening onto nothing operable - see this file's header. Deciding it here rather than
           inside the menu is what let `CategoryCardMenu` drop its own guard: a component that is
-          only mounted for a category with both actions has nothing left to branch on. */}
-      {category.isFallback ? null : <CategoryCardMenu category={category} />}
+          only mounted for a category with both actions has nothing left to branch on.
+
+          A historical period view draws no kebab either, and by the same rule: the Edit modal
+          drafts from the live configuration and expresses a backdate through its cap-anchor
+          question, and a Delete removes the category from every period at once - neither is an
+          action *on* the period being viewed. See `CategoriesScreen`'s `isCurrentPeriod` note. */}
+      {category.isFallback || readOnly ? null : <CategoryCardMenu category={category} />}
     </div>
   );
 }
 
-export function CategoryCard({ category, currency }: { category: Category; currency: string }) {
+export function CategoryCard({
+  category,
+  currency,
+  readOnly = false,
+}: {
+  category: Category;
+  currency: string;
+  /**
+   * True on a historical period view, which draws the card with no kebab and no "Set limit" -
+   * every write those controls reach lands on the current period, not the one on screen. The
+   * figures themselves stay: they are that period's own record. See `CategoriesScreen`.
+   */
+  readOnly?: boolean;
+}) {
   const money = moneyFormatters(currency);
   const { formatWhole } = money;
 
@@ -159,7 +177,7 @@ export function CategoryCard({ category, currency }: { category: Category; curre
     // The uncapped body, identical in both of the two shapes below.
     const body = (
       <div className="card-body gap-4">
-        <CategoryCardHeader category={category} />
+        <CategoryCardHeader category={category} readOnly={readOnly} />
 
         <p className="flex flex-wrap items-baseline gap-1.5">
           <span className="text-base font-semibold">{formatWhole(category.spent)}</span>
@@ -176,7 +194,12 @@ export function CategoryCard({ category, currency }: { category: Category; curre
     // control or a second explanation of a rule nobody asked about. It draws the plain card box
     // instead, which is the same `card bg-base-100 shadow-sm` the capped shape below uses, so the
     // grid stays on one rhythm with one fewer element rather than with an empty one.
-    if (category.isFallback) {
+    //
+    // A historical period takes the same plain box for every uncapped card: "Set limit" edits the
+    // live configuration (backdating goes through its cap-anchor question), so on a closed period
+    // it would be an action on something other than what is on screen. Not drawn rather than
+    // disabled - the fallback card's own rule.
+    if (category.isFallback || readOnly) {
       return <section className="card bg-base-100 shadow-sm">{body}</section>;
     }
 
@@ -204,7 +227,7 @@ export function CategoryCard({ category, currency }: { category: Category; curre
   return (
     <section className="card bg-base-100 shadow-sm">
       <div className="card-body gap-3">
-        <CategoryCardHeader category={category} />
+        <CategoryCardHeader category={category} readOnly={readOnly} />
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex flex-wrap items-baseline gap-1.5">

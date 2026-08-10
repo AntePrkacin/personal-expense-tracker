@@ -9,9 +9,11 @@ import { FormError } from '@/components/FormError';
 import { reformatAmountInput } from '@/lib/amountField';
 import { currencySymbol, type MoneyFormatters } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
+import type { Period } from '@/lib/periods';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
 import { Modal, type ModalHandle } from '../../Modal';
+import { CapPeriodDialog } from './CapPeriodDialog';
 import { useCurrency, useMoney } from '../../PreferencesProvider';
 import {
   applyCap,
@@ -116,6 +118,13 @@ export const cappedMessage = (
 type AllocateBudgetModalProps = {
   categories: Category[];
   allocation: Allocation;
+  /**
+   * Every period the account has, for the cap-anchor question this modal asks **once per save,
+   * for the whole batch** - the PET-72 plan's user story is where that was decided, and the bulk
+   * endpoint's `capsFrom` is one anchor for the payload by the same reasoning. Threaded from the
+   * screen's existing `GET /api/periods` read.
+   */
+  periods: readonly Period[];
   onClose: () => void;
   /**
    * The write, injected rather than imported.
@@ -131,6 +140,7 @@ type AllocateBudgetModalProps = {
 export function AllocateBudgetModal({
   categories,
   allocation,
+  periods,
   onClose,
   save,
 }: AllocateBudgetModalProps) {
@@ -154,6 +164,18 @@ export function AllocateBudgetModal({
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  /**
+   * The period start the cap-anchor question is asking about, or `null` when it is closed.
+   *
+   * `EditCategoryModal.capAnchor`'s shape and `SettingsForm.anchorMonth`'s before it: a failed save
+   * leaves the question open on the period the user picked, success closes everything, and Cancel
+   * abandons only the question while the draft stays put.
+   */
+  const [capAnchor, setCapAnchor] = useState<string | null>(null);
+
+  /** The current period's start: the question's default, and the value that sends no anchor. */
+  const currentStart = periods.find((period) => period.current)?.start;
 
   /**
    * Set once the server has told us this list is out of date, which is the `missing` arm.
@@ -257,6 +279,34 @@ export function AllocateBudgetModal({
       return;
     }
 
+    // **Every save asks "from which period", once for the whole batch** - see `periods`. The
+    // question defaults to the current period, so the ordinary allocation is one extra confirm; the
+    // send happens in `commitCaps`. A periods list somehow lacking a current entry falls through to
+    // the old behaviour, an unanchored send the backend dates at the current period.
+    if (currentStart !== undefined) {
+      setFailure(null);
+      setCapAnchor(currentStart);
+      return;
+    }
+
+    await send(body);
+  }
+
+  /**
+   * The cap-anchor question's confirm: the diffed caps, anchored to the chosen period.
+   *
+   * The body is rebuilt from the draft rather than captured when the question opened -
+   * `EditCategoryModal.commitCap`'s call, made a fact by the dialog being modal. The current period
+   * sends **no** `capsFrom`, because absent-means-current is the contract's own default.
+   */
+  async function commitCaps(anchor: string) {
+    const body = toAllocateBody(original, draft);
+
+    await send(anchor === currentStart ? body : { ...body, capsFrom: anchor });
+  }
+
+  /** The one place the request is sent, whichever path led to it. */
+  async function send(body: ReturnType<typeof toAllocateBody>) {
     setFailure(null);
     setPending(true);
 
@@ -270,12 +320,16 @@ export function AllocateBudgetModal({
       result = await save(body);
     } catch {
       setPending(false);
+      setCapAnchor(null);
       setFailure(MESSAGES.failed);
       return;
     }
 
     if (!result.ok) {
       setPending(false);
+      // The anchor question comes down with any failure, so the message reports once, in the modal
+      // holding the edits - see `CapPeriodDialog`'s note on why it carries no failure line.
+      setCapAnchor(null);
       setFailure(MESSAGES[result.reason]);
 
       // The one arm that marks the list stale, `EditCategoryModal`'s precedent one step further on:
@@ -290,151 +344,154 @@ export function AllocateBudgetModal({
     }
 
     // Refresh before closing, and close through the dialog so the browser hands focus back to the
-    // Allocate banner. The `close` event then calls `onClose`.
+    // Allocate banner. The `close` event then calls `onClose`. The anchor question, if open,
+    // unmounts with the modal.
+    setCapAnchor(null);
     router.refresh();
     modalRef.current?.close();
   }
 
   return (
-    <Modal
-      ref={modalRef}
-      title="Allocate your budget"
-      width="wide"
-      // The stale re-read happens here rather than on the failure arm that set the flag, so it cannot
-      // race the dialog it is meant to be behind. Before `onClose`, so the grid is already being
-      // re-fetched by the time the owner unmounts this.
-      onClose={() => {
-        if (stale) router.refresh();
-        onClose();
-      }}
-      onSubmit={onSubmit}
-      footer={
-        <>
-          {/* Deliberately live while a save is in flight, which is the call both category modals
+    <>
+      <Modal
+        ref={modalRef}
+        title="Allocate your budget"
+        width="wide"
+        // The stale re-read happens here rather than on the failure arm that set the flag, so it cannot
+        // race the dialog it is meant to be behind. Before `onClose`, so the grid is already being
+        // re-fetched by the time the owner unmounts this.
+        onClose={() => {
+          if (stale) router.refresh();
+          onClose();
+        }}
+        onSubmit={onSubmit}
+        footer={
+          <>
+            {/* Deliberately live while a save is in flight, which is the call both category modals
               make about Cancel: no fetch in this app carries a timeout, so a hung request is exactly
               when a way out matters most. */}
-          <Button label="Cancel" variant="secondary" onClick={() => modalRef.current?.close()} />
-          {/* Disabled until something really changed, so the primary action cannot fire a request
+            <Button label="Cancel" variant="secondary" onClick={() => modalRef.current?.close()} />
+            {/* Disabled until something really changed, so the primary action cannot fire a request
               the endpoint would refuse for an empty array. Deliberately **not** disabled by
               `invalidRows` - the per-row messages are what tell the user which fields to fix, and a
               dead button with no explanation beside it is worse than a rejected submit. `stale` is
               the opposite case and does disable it: there the explanation is on screen and no edit
               can make the payload acceptable. */}
-          <Button
-            type="submit"
-            label="Save caps"
-            disabled={pending || stale || !isDirty(original, draft)}
-          />
-        </>
-      }
-    >
-      {/* The summary island: the headline amount, the ledger, and the bar spanning both. */}
-      <section className={ISLAND}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <span className="text-base-content/60 text-xs font-semibold uppercase">
-              Left to assign
-            </span>
-            {/* Never negative and never in a danger tone - `toAllocateTotals` clamps at zero, which
+            <Button
+              type="submit"
+              label="Save caps"
+              disabled={pending || stale || !isDirty(original, draft)}
+            />
+          </>
+        }
+      >
+        {/* The summary island: the headline amount, the ledger, and the bar spanning both. */}
+        <section className={ISLAND}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-base-content/60 text-xs font-semibold uppercase">
+                Left to assign
+              </span>
+              {/* Never negative and never in a danger tone - `toAllocateTotals` clamps at zero, which
                 is the whole of the design's rule. The same figure as the "Unassigned" row below, from
                 the same place, so the headline and the column cannot disagree. */}
-            <span className="font-display text-3xl font-bold">
-              {formatWhole(totals.unassignedWhole)}
-            </span>
-          </div>
+              <span className="font-display text-3xl font-bold">
+                {formatWhole(totals.unassignedWhole)}
+              </span>
+            </div>
 
-          {/* **All three figures come from `toAllocateTotals`, which rounds twice and subtracts
+            {/* **All three figures come from `toAllocateTotals`, which rounds twice and subtracts
               once.** Formatting each independently is what let this column print figures that did not
               add up under a rule drawn to say they do; `dashboard/BudgetCard.tsx` and
               `SpendingSummaryCard.tsx` both carry the same rule for the same reason. */}
-          <dl className="flex min-w-56 flex-col gap-1.5 text-sm">
-            <div className="flex justify-between gap-4">
-              <dt className="text-base-content/60">Monthly budget</dt>
-              <dd className="font-medium">{formatWhole(totals.budgetWhole)}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-base-content/60">Assigned to categories</dt>
-              <dd className="font-medium">{formatWhole(totals.assignedWhole)}</dd>
-            </div>
-            <div className="border-base-300 flex justify-between gap-4 border-t pt-1.5">
-              <dt className="font-medium">Unassigned</dt>
-              <dd className="font-semibold">{formatWhole(totals.unassignedWhole)}</dd>
-            </div>
-          </dl>
-        </div>
+            <dl className="flex min-w-56 flex-col gap-1.5 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-base-content/60">Monthly budget</dt>
+                <dd className="font-medium">{formatWhole(totals.budgetWhole)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-base-content/60">Assigned to categories</dt>
+                <dd className="font-medium">{formatWhole(totals.assignedWhole)}</dd>
+              </div>
+              <div className="border-base-300 flex justify-between gap-4 border-t pt-1.5">
+                <dt className="font-medium">Unassigned</dt>
+                <dd className="font-semibold">{formatWhole(totals.unassignedWhole)}</dd>
+              </div>
+            </dl>
+          </div>
 
-        <AllocationBar draft={draft} ledger={ledger} />
+          <AllocationBar draft={draft} ledger={ledger} />
 
-        <p className="text-base-content/60 text-xs">Your monthly budget is set in Settings.</p>
-      </section>
+          <p className="text-base-content/60 text-xs">Your monthly budget is set in Settings.</p>
+        </section>
 
-      {/* The cap island. **`max-h-93 overflow-y-auto` bounds the list rather than the box**, which
+        {/* The cap island. **`max-h-93 overflow-y-auto` bounds the list rather than the box**, which
           needs nothing from any ancestor - turning `modal-box` into a bounded flex column would drag
           all six of the app's modals through a layout change to serve one. `overscroll-contain`
           stops a scroll at the end of the list chaining out to the box behind it. The negative and
           positive inline padding pair keeps a focus ring on the first or last field from being
           clipped by the scroll container's edge. */}
-      <section className="card bg-base-200 card-body gap-0 p-0">
-        {/* **The column header goes with the rows rather than standing over an empty box.** With no
+        <section className="card bg-base-200 card-body gap-0 p-0">
+          {/* **The column header goes with the rows rather than standing over an empty box.** With no
             allocatable category there is nothing for "Category" and "Monthly cap" to head, and the
             scroll region has no height to give - so the whole island becomes the one sentence
             explaining it. See `ALLOCATE_EMPTY` for how an account reaches this. */}
-        {draft.length === 0 ? (
-          <p className="text-base-content/70 px-5 py-6 text-sm">{ALLOCATE_EMPTY}</p>
-        ) : (
-          <>
-            <div className="text-base-content/60 flex justify-between px-5 py-3 text-xs font-semibold uppercase">
-              <span>Category</span>
-              <span>Monthly cap</span>
-            </div>
+          {draft.length === 0 ? (
+            <p className="text-base-content/70 px-5 py-6 text-sm">{ALLOCATE_EMPTY}</p>
+          ) : (
+            <>
+              <div className="text-base-content/60 flex justify-between px-5 py-3 text-xs font-semibold uppercase">
+                <span>Category</span>
+                <span>Monthly cap</span>
+              </div>
 
-            <ul className="border-base-300 -mx-1 max-h-93 list-none overflow-y-auto overscroll-contain border-t px-1">
-              {draft.map((row, index) => {
-                const Icon = categoryIcon(row.icon);
-                const over = overCents(row);
-                const error = errors[row.id];
-                const fieldId = `allocate-cap-${row.id}`;
+              <ul className="border-base-300 -mx-1 max-h-93 list-none overflow-y-auto overscroll-contain border-t px-1">
+                {draft.map((row, index) => {
+                  const Icon = categoryIcon(row.icon);
+                  const over = overCents(row);
+                  const error = errors[row.id];
+                  const fieldId = `allocate-cap-${row.id}`;
 
-                return (
-                  <li
-                    key={row.id}
-                    className="border-base-300 flex items-center gap-3 px-4 py-3 not-first:border-t"
-                  >
-                    <span
-                      className={`rounded-field flex size-9 shrink-0 items-center justify-center ${categoryTileClass(row.color)}`}
+                  return (
+                    <li
+                      key={row.id}
+                      className="border-base-300 flex items-center gap-3 px-4 py-3 not-first:border-t"
                     >
-                      {/* `createElement` rather than `<Icon />`: `react-hooks/static-components` reads a
+                      <span
+                        className={`rounded-field flex size-9 shrink-0 items-center justify-center ${categoryTileClass(row.color)}`}
+                      >
+                        {/* `createElement` rather than `<Icon />`: `react-hooks/static-components` reads a
                       capitalised local in JSX as a component created during render, and this repo
                       permits no eslint-disable. A `.map` callback escapes the heuristic in the other
                       call sites; this one is inside one too, but the idiom stays identical so the six
                       tiles in this app can be lifted together later. */}
-                      {Icon === null
-                        ? null
-                        : createElement(Icon, {
-                            className: 'size-4.5',
-                            'aria-hidden': 'true',
-                          })}
-                    </span>
+                        {Icon === null
+                          ? null
+                          : createElement(Icon, {
+                              className: 'size-4.5',
+                              'aria-hidden': 'true',
+                            })}
+                      </span>
 
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate text-sm font-semibold">{row.name}</span>
-                      <span
-                        className={`text-xs ${over === null ? 'text-base-content/60' : 'text-error'}`}
-                      >
-                        {/* **The overage carries cents where the spend does not, and that asymmetry is
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate text-sm font-semibold">{row.name}</span>
+                        <span
+                          className={`text-xs ${over === null ? 'text-base-content/60' : 'text-error'}`}
+                        >
+                          {/* **The overage carries cents where the spend does not, and that asymmetry is
                         the fix rather than the inconsistency it looks like.** A spend is an aggregate
                         and `formatWhole` is what this app draws aggregates with; an overage is a
                         *residual*, and rounding one to whole dollars produced "$0 over this cap" in
                         `text-error` for a cap exceeded by a penny - a red warning asserting the row is
                         not over. Same mixed-precision call `cappedMessage` makes, and for the same
                         reason: the figure that has to be exact is. */}
-                        {over === null
-                          ? `${formatWhole(row.spent)} spent`
-                          : `${formatWhole(row.spent)} spent · ${formatCurrency(over / 100)} over this cap`}
-                      </span>
-                    </div>
+                          {over === null
+                            ? `${formatWhole(row.spent)} spent`
+                            : `${formatWhole(row.spent)} spent · ${formatCurrency(over / 100)} over this cap`}
+                        </span>
+                      </div>
 
-                    {/* **The field is local markup rather than `ui/Input`, and that follows this repo's
+                      {/* **The field is local markup rather than `ui/Input`, and that follows this repo's
                     own precedent rather than departing from it.** These rows need the accessible name
                     on the control and nothing drawn beside it - the column header says "Monthly cap"
                     once and the category name is already text on the row - and `ui/Input` renders its
@@ -444,46 +501,46 @@ export function AllocateBudgetModal({
                     this wears daisyUI's own prefix pattern, byte-identical to `ui/Input`'s currency
                     box minus `input-lg`: the box styling on the wrapping label, the `$` aria-hidden
                     inside it, the control bare. */}
-                    <div className="ml-auto w-36 shrink-0">
-                      <label className={error ? 'input input-error w-full' : 'input w-full'}>
-                        <span aria-hidden="true" className="opacity-60">
-                          {currencySymbol(currency)}
-                        </span>
-                        <input
-                          id={fieldId}
-                          className="grow text-right"
-                          inputMode="decimal"
-                          placeholder="No limit"
-                          value={row.cap}
-                          onChange={(event) => onCapChange(index, event)}
-                          // **Disabled while the save is out, unlike Cancel beside it.** The body was
-                          // serialised at press time and the success path closes the dialog, so a
-                          // keystroke landing during the round trip was silently discarded - the user
-                          // watched the modal close on a limit that was never sent. Cancel stays live
-                          // deliberately, because no fetch here carries a timeout.
-                          disabled={pending}
-                          // The row's own name, so eight fields do not all announce as "Monthly cap".
-                          aria-label={`Monthly cap for ${row.name}`}
-                          aria-invalid={error ? true : undefined}
-                          aria-describedby={error ? `${fieldId}-error` : undefined}
-                        />
-                      </label>
-                      {/* `ui/FieldShell`'s treatment, one step smaller to fit the row. */}
-                      {error === undefined ? null : (
-                        <p id={`${fieldId}-error`} className="text-error mt-1 text-xs">
-                          {error}
-                        </p>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-      </section>
+                      <div className="ml-auto w-36 shrink-0">
+                        <label className={error ? 'input input-error w-full' : 'input w-full'}>
+                          <span aria-hidden="true" className="opacity-60">
+                            {currencySymbol(currency)}
+                          </span>
+                          <input
+                            id={fieldId}
+                            className="grow text-right"
+                            inputMode="decimal"
+                            placeholder="No limit"
+                            value={row.cap}
+                            onChange={(event) => onCapChange(index, event)}
+                            // **Disabled while the save is out, unlike Cancel beside it.** The body was
+                            // serialised at press time and the success path closes the dialog, so a
+                            // keystroke landing during the round trip was silently discarded - the user
+                            // watched the modal close on a limit that was never sent. Cancel stays live
+                            // deliberately, because no fetch here carries a timeout.
+                            disabled={pending}
+                            // The row's own name, so eight fields do not all announce as "Monthly cap".
+                            aria-label={`Monthly cap for ${row.name}`}
+                            aria-invalid={error ? true : undefined}
+                            aria-describedby={error ? `${fieldId}-error` : undefined}
+                          />
+                        </label>
+                        {/* `ui/FieldShell`'s treatment, one step smaller to fit the row. */}
+                        {error === undefined ? null : (
+                          <p id={`${fieldId}-error`} className="text-error mt-1 text-xs">
+                            {error}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </section>
 
-      {/* The footer hint, and the snap message that replaces it. **Two nodes rather than one that
+        {/* The footer hint, and the snap message that replaces it. **Two nodes rather than one that
           switches**, which is `FormError`'s own argument: the message is worth announcing because the
           value the user typed was overridden, while the 3.4s revert must be silent - and a removal
           from a live region announces nothing, where a node that emptied itself would announce
@@ -502,16 +559,31 @@ export function AllocateBudgetModal({
 
           The hint is still its own node, and still unmounted while a message is up, so the two never
           stack and the hint is never announced. */}
-      {/* Suppressed with no rows, where it would be advice about fields that are not there. */}
-      {snap === null && draft.length > 0 ? (
-        <p className="text-base-content/60 text-xs">{ALLOCATE_HINT}</p>
-      ) : null}
+        {/* Suppressed with no rows, where it would be advice about fields that are not there. */}
+        {snap === null && draft.length > 0 ? (
+          <p className="text-base-content/60 text-xs">{ALLOCATE_HINT}</p>
+        ) : null}
 
-      <p role="status" className="text-warning text-xs">
-        {snap === null ? '' : cappedMessage(snap.cents, ledger.budgetCents, money)}
-      </p>
+        <p role="status" className="text-warning text-xs">
+          {snap === null ? '' : cappedMessage(snap.cents, ledger.budgetCents, money)}
+        </p>
 
-      <FormError message={failure ?? ''} />
-    </Modal>
+        <FormError message={failure ?? ''} />
+      </Modal>
+
+      {/* The cap-anchor question, over this modal - the same nested-dialog case the edit modal and
+        its delete confirmation already exercise. Mounted only while being asked. */}
+      {capAnchor !== null && (
+        <CapPeriodDialog
+          value={capAnchor}
+          periods={periods}
+          confirmLabel="Save caps"
+          pending={pending}
+          onChange={setCapAnchor}
+          onConfirm={() => void commitCaps(capAnchor)}
+          onClose={() => setCapAnchor(null)}
+        />
+      )}
+    </>
   );
 }

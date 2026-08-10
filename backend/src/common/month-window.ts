@@ -47,10 +47,25 @@ export function parseDate(date: string): {
   if (!match) {
     throw new Error(`Expected a YYYY-MM-DD date, received "${date}".`);
   }
+
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  // A shape check alone let `2026-13-01` through, and `formatDate` pads a
+  // month without carrying it - so the pseudo-date round-tripped and walked as
+  // a period start until a DTO grew a real date validator. This range check is
+  // the backstop for every other caller: a programming error rather than
+  // input, so it throws like the rest of this file. A day the month does not
+  // have (2026-04-31) is still not caught here - the day arithmetic below
+  // carries it - and stays the DTOs' to reject.
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    throw new Error(`Expected a real calendar date, received "${date}".`);
+  }
+
   return {
     year: Number(match[1]),
-    month: Number(match[2]) - 1,
-    day: Number(match[3]),
+    month: month - 1,
+    day,
   };
 }
 

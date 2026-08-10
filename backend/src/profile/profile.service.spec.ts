@@ -14,11 +14,8 @@ describe('ProfileService', () => {
   let insert: jest.Mock;
   let findByEmail: jest.Mock;
   let updateEmail: jest.Mock;
-  let current: jest.Mock;
-  let budgetCentsFor: jest.Mock;
-  let monthStartDayFor: jest.Mock;
-  let ruleInForceAt: jest.Mock;
-  let startingAtOrContaining: jest.Mock;
+  let rules: jest.Mock;
+  let configured: jest.Mock;
 
   const USER_ID = '0190c3f0-0000-7000-8000-000000000001';
   const OTHER_ID = '0190c3f0-0000-7000-8000-000000000002';
@@ -33,13 +30,6 @@ describe('ProfileService', () => {
     createdAt: new Date('2026-08-01T10:00:00.000Z'),
     updatedAt: new Date('2026-08-02T10:00:00.000Z'),
     deletedAt: null,
-  };
-
-  const CURRENT = {
-    start: '2026-08-01',
-    end: '2026-09-01',
-    label: 'August 2026',
-    today: '2026-08-10',
   };
 
   /** The chain the last `update()` produced, for asserting set/where on it. */
@@ -64,28 +54,23 @@ describe('ProfileService', () => {
     findByEmail = jest.fn().mockResolvedValue(null);
     updateEmail = jest.fn().mockResolvedValue(undefined);
 
-    current = jest.fn().mockResolvedValue(CURRENT);
-    budgetCentsFor = jest.fn().mockResolvedValue(200050);
-    monthStartDayFor = jest.fn().mockResolvedValue(1);
     // Anchored a year back on purpose. A rule starting on the boundary a change
     // removes is the clamp case, which has its own test below - using it as the
     // default would quietly make every other case exercise the clamp instead.
-    ruleInForceAt = jest.fn().mockResolvedValue({
-      effectiveFrom: '2025-01-01',
-      monthStartDay: 1,
-      transitionStart: null,
-    });
-    startingAtOrContaining = jest.fn().mockResolvedValue(CURRENT);
+    rules = jest.fn().mockResolvedValue([
+      {
+        effectiveFrom: '2025-01-01',
+        monthStartDay: 1,
+        transitionStart: null,
+      },
+    ]);
+    configured = jest
+      .fn()
+      .mockResolvedValue({ monthStartDay: 1, budgetCents: 200050 });
 
     service = new ProfileService(
       { getUserDb } as unknown as UserDatabaseService,
-      {
-        current,
-        budgetCentsFor,
-        monthStartDayFor,
-        ruleInForceAt,
-        startingAtOrContaining,
-      } as unknown as PeriodService,
+      { rules, configured } as unknown as PeriodService,
       { findByEmail, updateEmail } as unknown as UsersService,
     );
   });
@@ -104,16 +89,16 @@ describe('ProfileService', () => {
     it('resolves the budget and pay day from history, not from the row', async () => {
       // The whole point of PET-72's read: neither is a column any more, so the
       // response has to come from the period service or it would be reporting a
-      // value nothing stores.
-      budgetCentsFor.mockResolvedValue(150000);
-      monthStartDayFor.mockResolvedValue(14);
+      // value nothing stores. `configured` is the newest rows - a pending
+      // future-anchored change included - which is what lets the Settings form
+      // round-trip without silently reverting one.
+      configured.mockResolvedValue({ monthStartDay: 14, budgetCents: 150000 });
 
       await expect(service.get(USER_ID, EMAIL)).resolves.toMatchObject({
         monthlyBudget: 1500,
         monthStartDay: 14,
       });
-      expect(budgetCentsFor).toHaveBeenCalledWith(USER_ID, CURRENT);
-      expect(monthStartDayFor).toHaveBeenCalledWith(USER_ID, CURRENT);
+      expect(configured).toHaveBeenCalledWith(USER_ID);
     });
 
     it('takes the email from the principal, never from the user database', async () => {
@@ -277,7 +262,7 @@ describe('ProfileService', () => {
 
     it('answers the merged profile in major units', async () => {
       update.mockReturnValue(queryChain([{ ...row, fullName: 'Ana' }]));
-      budgetCentsFor.mockResolvedValue(150000);
+      configured.mockResolvedValue({ monthStartDay: 1, budgetCents: 150000 });
 
       await expect(
         service.update(USER_ID, EMAIL, { fullName: 'Ana' }),
@@ -375,12 +360,6 @@ describe('ProfileService', () => {
     });
 
     it('anchors a budget-only change at the containing period’s start', async () => {
-      startingAtOrContaining.mockResolvedValue({
-        start: '2026-07-01',
-        end: '2026-08-01',
-        label: 'July 2026',
-      });
-
       await service.changeSchedule(USER_ID, EMAIL, {
         monthlyBudget: 2500,
         monthStartDay: 1,
@@ -394,24 +373,96 @@ describe('ProfileService', () => {
       // Two changes inside two periods: the boundary a month before the removed
       // one predates this rule entirely, and reaching past its anchor would
       // delete the previous change's own T.
-      ruleInForceAt.mockResolvedValue({
-        effectiveFrom: '2026-01-01',
-        monthStartDay: 1,
-        transitionStart: null,
-      });
+      rules.mockResolvedValue([
+        {
+          effectiveFrom: '2026-01-01',
+          monthStartDay: 1,
+          transitionStart: null,
+        },
+      ]);
 
       await service.changeSchedule(USER_ID, EMAIL, scheduleChange);
 
       expect(insertedAt(0)).toMatchObject({ transitionStart: '2026-01-01' });
     });
 
-    it('judges "changed" against the rule in force at the anchor', async () => {
-      // Not against the newest rule: anchoring a change inside an earlier
-      // schedule has to be judged against the schedule that was really running
-      // then, or a retroactive budget edit would be read as a pay-day change.
-      await service.changeSchedule(USER_ID, EMAIL, scheduleChange);
+    it('400s an anchor earlier than the account’s first rule, writing nothing', async () => {
+      await expect(
+        service.changeSchedule(USER_ID, EMAIL, {
+          monthlyBudget: 2500,
+          monthStartDay: 1,
+          firstPaycheckDate: '2024-06-01',
+        }),
+      ).rejects.toThrow(/first pay schedule/);
 
-      expect(ruleInForceAt).toHaveBeenCalledWith(USER_ID, '2026-01-14');
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('400s a pay-day change anchored behind a later pay-day change', async () => {
+      // Inserting a rule *between* two existing ones would leave the later
+      // rule's stored transitionStart computed against a predecessor that no
+      // longer governs the span - periods ending on a day nobody was paid.
+      rules.mockResolvedValue([
+        {
+          effectiveFrom: '2025-01-01',
+          monthStartDay: 1,
+          transitionStart: null,
+        },
+        {
+          effectiveFrom: '2026-03-14',
+          monthStartDay: 14,
+          transitionStart: '2026-02-01',
+        },
+      ]);
+
+      await expect(
+        service.changeSchedule(USER_ID, EMAIL, {
+          monthlyBudget: 2500,
+          monthStartDay: 20,
+          firstPaycheckDate: '2026-01-20',
+        }),
+      ).rejects.toThrow(
+        /anchored behind a later one|pay-schedule change already anchored/,
+      );
+
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('reads a re-assertion of the newest schedule as a budget-only change', async () => {
+      // The Settings form always sends the *configured* day - the newest
+      // rule's - so a budget edit backdated across a recent pay-day change
+      // arrives carrying a day that differs from the rule in force at the
+      // anchor. That must not be read as a schedule change: nothing here asked
+      // for a boundary move, and writing one would corrupt the later rule's
+      // stored bridge.
+      rules.mockResolvedValue([
+        {
+          effectiveFrom: '2025-01-01',
+          monthStartDay: 1,
+          transitionStart: null,
+        },
+        {
+          effectiveFrom: '2026-03-14',
+          monthStartDay: 14,
+          transitionStart: '2026-02-01',
+        },
+      ]);
+
+      await service.changeSchedule(USER_ID, EMAIL, {
+        monthlyBudget: 2500,
+        monthStartDay: 14,
+        firstPaycheckDate: '2026-01-14',
+      });
+
+      // One insert: the budget row, dated at the start of the period the anchor
+      // falls in under the rules that really governed it - January under the
+      // old day-1 schedule.
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(insertedAt(0)).toMatchObject({
+        effectiveFrom: '2026-01-01',
+        budgetCents: 250000,
+      });
+      expect(insertedAt(0)).not.toHaveProperty('monthStartDay');
     });
 
     it('answers the whole profile', async () => {

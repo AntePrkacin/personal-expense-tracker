@@ -6,7 +6,6 @@ import {
   periodFor,
   periodsBetween,
   previousPeriod,
-  ruleInForceAt,
   type Period,
   type PeriodRule,
 } from '../common/period-rules';
@@ -24,6 +23,8 @@ const NO_BUDGET = (userId: string) =>
   `No budget history for user ${userId}; verification seeds one for every account.`;
 const NOT_A_PERIOD_START = (start: string) =>
   `"${start}" is not the start of any budgeting period for this account.`;
+const FUTURE_PERIOD_START = (start: string) =>
+  `"${start}" starts a period in the future; the newest period you can read is the current one.`;
 
 /**
  * The current period and the `today` it was resolved from.
@@ -83,12 +84,21 @@ export class PeriodService {
     return todayIn(this.config.get<string>('APP_TIMEZONE', 'Europe/Zagreb'));
   }
 
-  /** The period containing today, with the date it was resolved from. */
-  async current(userId: string): Promise<CurrentPeriod> {
-    const rules = await this.rules(userId);
+  /**
+   * The period containing today, with the date it was resolved from.
+   *
+   * @param rules The account's rules when the caller already holds them, so a
+   * request resolving several periods reads the rows once. Read fresh when
+   * omitted.
+   */
+  async current(
+    userId: string,
+    rules?: readonly PeriodRule[],
+  ): Promise<CurrentPeriod> {
+    const loaded = rules ?? (await this.rules(userId));
     const today = this.today();
 
-    return { ...periodFor(rules, today), today };
+    return { ...periodFor(loaded, today), today };
   }
 
   /**
@@ -98,11 +108,16 @@ export class PeriodService {
    * month subtraction: across a schedule change the previous period is a
    * stretched transition longer than a month, and fixed arithmetic would land
    * inside it rather than on its start.
+   *
+   * @param rules Preloaded rules, on `current`'s terms.
    */
-  async previous(userId: string): Promise<Period> {
-    const rules = await this.rules(userId);
+  async previous(
+    userId: string,
+    rules?: readonly PeriodRule[],
+  ): Promise<Period> {
+    const loaded = rules ?? (await this.rules(userId));
 
-    return previousPeriod(rules, periodFor(rules, this.today()));
+    return previousPeriod(loaded, periodFor(loaded, this.today()));
   }
 
   /**
@@ -116,7 +131,16 @@ export class PeriodService {
    * link to sensibly. The frontend only ever sends starts it was given by
    * `GET /api/periods`.
    *
-   * @throws BadRequestException if `start` is not the start of a real period.
+   * **A future period start is a 400 too.** The latest rule tiles forward
+   * without limit, so `2027-03-01` can genuinely start a period of the walk's -
+   * but `all()` never offers one past the current period, and a read for a
+   * period that has not begun would classify it as *finished*: zero days left,
+   * a full complement of days elapsed, an average over days that have not
+   * happened. The guard keeps this method's answers inside the same range the
+   * period list publishes.
+   *
+   * @throws BadRequestException if `start` is not the start of a real period,
+   * or starts one later than the current period.
    */
   async startingAt(userId: string, start: string): Promise<Period> {
     const rules = await this.rules(userId);
@@ -125,21 +149,12 @@ export class PeriodService {
     if (period.start !== start) {
       throw new BadRequestException(NOT_A_PERIOD_START(start));
     }
+    // A period start after today can only be a future period's: the current
+    // period's own start is at or before today by construction.
+    if (start > this.today()) {
+      throw new BadRequestException(FUTURE_PERIOD_START(start));
+    }
     return period;
-  }
-
-  /**
-   * The period **containing** a date, whatever day of it that is.
-   *
-   * The permissive counterpart of `startingAt`, and the two are deliberately
-   * separate rather than one method with a flag. A *read* naming a period must
-   * name it exactly, because answering with the period around an arbitrary date
-   * would let two query strings return one page. A *write* anchoring a budget is
-   * the opposite case: the user picked a month from a list, and the period that
-   * month's paycheck belongs to is the one they meant.
-   */
-  async startingAtOrContaining(userId: string, date: string): Promise<Period> {
-    return periodFor(await this.rules(userId), date);
   }
 
   /**
@@ -242,29 +257,48 @@ export class PeriodService {
   }
 
   /**
-   * The `month_start_day` in force for a period.
+   * The schedule as configured: the newest rule's pay day and the newest budget
+   * row, in one pair of reads.
    *
-   * Only `GET /api/profile` needs this, to keep serving `monthStartDay` as the
-   * account's current setting now that no column holds it. Resolved from the rule
-   * the period falls under rather than from the newest rule, so a profile read
-   * during a stretched transition reports the day the user is actually being paid
-   * on rather than the one that starts next month.
+   * Only `GET /api/profile` needs this, to serve `monthlyBudget` and
+   * `monthStartDay` as the account's settings now that no column holds either.
+   * **The newest rows rather than the ones in force for the current period**,
+   * deliberately: Settings is a form, and a form must round-trip - the value it
+   * loads has to be the value a save would leave unchanged. Reporting the
+   * current period's values instead breaks that exactly when a change is
+   * pending at a future paycheck: the form would load the *old* day, and a
+   * faithful budget-only re-submit of it would write a rule reverting the
+   * change the user had just scheduled. What a period was actually lived under
+   * stays per-period everywhere else, resolved by `budgetCentsFor` and the
+   * walk.
    */
-  async monthStartDayFor(userId: string, period: Period): Promise<number> {
-    const rules = await this.rules(userId);
+  async configured(
+    userId: string,
+  ): Promise<{ monthStartDay: number; budgetCents: number }> {
+    const db = await this.userDatabases.getUserDb(userId);
+    const rules = await this.rulesIn(db, userId);
+    // `rulesIn` orders ascending, so the newest rule is last.
+    const latest = rules[rules.length - 1];
 
-    // Resolved at the period's *start*. A transition period starts under the old
-    // rule, which is what makes this the honest answer: mid-transition the user is
-    // still being paid on the old day.
-    return ruleInForceAt(rules, period.start).monthStartDay;
-  }
+    const [newest] = await db
+      .select({ budgetCents: budgetHistory.budgetCents })
+      .from(budgetHistory)
+      .where(isNull(budgetHistory.deletedAt))
+      .orderBy(
+        desc(budgetHistory.effectiveFrom),
+        desc(budgetHistory.createdAt),
+        desc(budgetHistory.id),
+      )
+      .limit(1);
 
-  /**
-   * The rule governing a date, which the schedule write needs before it can
-   * compute the transition boundary a change removes.
-   */
-  async ruleInForceAt(userId: string, date: string): Promise<PeriodRule> {
-    return ruleInForceAt(await this.rules(userId), date);
+    if (!newest) {
+      throw new Error(NO_BUDGET(userId));
+    }
+
+    return {
+      monthStartDay: latest.monthStartDay,
+      budgetCents: newest.budgetCents,
+    };
   }
 
   /**

@@ -29,17 +29,27 @@ import { MAX_MONTH_START_DAY } from '../../common/period-rules';
  *   immediately before the anchor is removed - that paycheck never arrives - and
  *   one stretched **transition period** runs from the last kept boundary up to the
  *   anchor. That transition keeps the **old** budget; the new one starts at the
- *   anchor.
+ *   anchor. A pay-day change must be anchored at or after the newest existing
+ *   change: anchoring one behind a later change is a **400**, because a rule
+ *   inserted between two others would corrupt the later one's stored transition
+ *   and correcting history is deliberately not built.
  * - `monthStartDay` is **unchanged**: a budget-only change. No period boundary
  *   moves, and the new budget applies from the start of the period the anchor
- *   falls in.
+ *   falls in. "Unchanged" also covers an anchor reaching back across the last
+ *   pay-day change while carrying the **newest** schedule's day - the day
+ *   `GET /api/profile` reports - so a backdated budget edit is never read as a
+ *   request to move boundaries.
  *
  * Either way, **periods before the change are untouched** and keep the budget,
  * the caps and the boundaries they were actually budgeted under.
  *
  * The anchor may be in the past or the future. A retroactive one re-shapes the
- * periods from it onward; a future one stretches the *current* period up to it, so
- * the change is visible immediately rather than in six weeks.
+ * periods from it onward. A future one leaves every period before it unchanged
+ * and stretches the period **immediately before the anchor** up to it - anchored
+ * past the next boundary, the periods in between still open and close on the old
+ * schedule until the transition begins. Either way `GET /api/profile` reports
+ * the new values at once, because it serves the schedule as configured rather
+ * than the current period's.
  */
 export class ChangeScheduleDto {
   /**
@@ -91,7 +101,7 @@ export class ChangeScheduleDto {
   @ApiProperty({
     format: 'date',
     description:
-      'The first paycheck date under the new schedule, `YYYY-MM-DD`. Must be day `monthStartDay` of its month. May be in the past (re-shapes periods from then on) or the future (stretches the current period up to it).',
+      'The first paycheck date under the new schedule, `YYYY-MM-DD`. Must be day `monthStartDay` of its month. May be in the past (re-shapes periods from then on) or the future (stretches the period immediately before it up to the anchor; earlier periods are untouched). A pay-day change anchored before a later pay-day change is a **400**.',
     example: '2026-01-14',
   })
   @Matches(/^\d{4}-\d{2}-\d{2}$/)

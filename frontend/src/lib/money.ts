@@ -78,9 +78,12 @@ export type CurrencyCode = NonNullable<
  * **This list is exhaustive over `CurrencyCode` and is checked to be**, which reverses what the
  * paragraph here used to say. It read "the backend accepts far more than these three", and pointed
  * at a stored `JPY` as the reason `moneyFormatters` takes a bare `string`. That is no longer true in
- * either direction: the API accepts exactly these codes, and the `satisfies` below fails the build
- * if the contract grows one this list does not name. `moneyFormatters` still takes a `string` - see
- * its own note, which is about `Intl` rather than about this list.
+ * either direction: the API accepts exactly these codes, and the pair of checks below fails the
+ * build in both mismatch directions. The `satisfies` rejects an entry the contract does not accept;
+ * `EveryCurrencyCodeIsOffered` is what fails when the contract grows a code this list does not name.
+ * (A first version claimed the `satisfies` alone did both - it checks membership, not coverage, and
+ * a review caught the claim promising a proof nothing performed.) `moneyFormatters` still takes a
+ * `string` - see its own note, which is about `Intl` rather than about this list.
  */
 export const SUPPORTED_CURRENCIES = [
   { code: 'EUR', symbol: '€', name: 'Euro' },
@@ -115,6 +118,19 @@ export const SUPPORTED_CURRENCIES = [
 ] as const satisfies readonly { code: CurrencyCode; symbol: string; name: string }[];
 
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
+
+/**
+ * Compile-time proof that every code the contract accepts is offered.
+ *
+ * `AssertNever` fails to instantiate for anything but `never`, so a thirtieth code added to the
+ * backend's allowlist breaks `npm run build` rather than shipping a currency the picker cannot
+ * offer. The technique and its reasoning are `transactions/filters.ts`'s; this is its fourth user.
+ */
+type AssertNever<T extends never> = T;
+
+export type EveryCurrencyCodeIsOffered = AssertNever<
+  Exclude<CurrencyCode, SupportedCurrency['code']>
+>;
 
 /**
  * What an account gets when it says nothing, and what a fresh onboarding draft preselects.

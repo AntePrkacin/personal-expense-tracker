@@ -342,10 +342,15 @@ describe('Periods and pay-schedule changes (e2e)', () => {
       expect(transition?.label).toContain('/');
     });
 
-    it('reports the pay day in force, which mid-transition is still the old one', async () => {
+    it('reports the schedule as configured, a pending future change included', async () => {
       const { token } = await provision();
 
-      // T next month, so today sits inside the stretched transition period.
+      // T next month, so today sits inside the stretched transition period. This pinned the
+      // opposite - the day in force mid-transition - until a review found what that broke: the
+      // profile is what the Settings form loads, and a form must round-trip, so reporting the old
+      // day made a faithful budget-only re-submit write a rule reverting the pending change. What
+      // a period was actually lived under stays visible per period on the dashboard read, which
+      // the future-T case below pins.
       await changeSchedule(token, {
         monthlyBudget: 2500,
         monthStartDay: 14,
@@ -353,7 +358,8 @@ describe('Periods and pay-schedule changes (e2e)', () => {
       }).expect(200);
 
       const response = await profileOf(token).expect(200);
-      expect((response.body as ProfileResponseDto).monthStartDay).toBe(1);
+      expect((response.body as ProfileResponseDto).monthStartDay).toBe(14);
+      expect((response.body as ProfileResponseDto).monthlyBudget).toBe(2500);
     });
   });
 
@@ -479,6 +485,102 @@ describe('Periods and pay-schedule changes (e2e)', () => {
       }).expect(400);
     });
 
+    it('400s a pay-day change anchored behind a later pay-day change, changing nothing', async () => {
+      const { token } = await provision();
+
+      await changeSchedule(token, {
+        monthlyBudget: 2500,
+        monthStartDay: 14,
+        firstPaycheckDate: dayOf(-1, 14),
+      }).expect(200);
+      const before = periodsBody(await periodsOf(token).expect(200));
+
+      // A rule inserted *between* two existing ones would leave the later one's stored
+      // transition computed against a predecessor that no longer governs the span - periods
+      // ending on a day nobody was ever paid. Correcting history is recorded as not built, so
+      // the anchor is refused.
+      await changeSchedule(token, {
+        monthlyBudget: 2500,
+        monthStartDay: 20,
+        firstPaycheckDate: dayOf(-2, 20),
+      }).expect(400);
+
+      const after = periodsBody(await periodsOf(token).expect(200));
+      expect(after.periods).toEqual(before.periods);
+    });
+
+    it('reads a backdated budget edit across a pay-day change as budget-only', async () => {
+      const { token } = await provision();
+      await spend(token, dayOf(-3, 15), 20);
+
+      // The pay day moved to the 14th last month...
+      await changeSchedule(token, {
+        monthlyBudget: 2500,
+        monthStartDay: 14,
+        firstPaycheckDate: dayOf(-1, 14),
+      }).expect(200);
+      const before = periodsBody(await periodsOf(token).expect(200));
+
+      // ...and a budget edit reaches back across that change carrying the *configured* day,
+      // which is the day the profile reports and the Settings form re-sends. Read literally
+      // against the rule in force at the anchor this was a pay-day change - one the guard above
+      // could only refuse - so it is read as what it is: a budget backdate, dated at the period
+      // containing the anchor under the rules that really governed it, moving no boundary.
+      await changeSchedule(token, {
+        monthlyBudget: 3000,
+        monthStartDay: 14,
+        firstPaycheckDate: dayOf(-3, 14),
+      }).expect(200);
+
+      const after = periodsBody(await periodsOf(token).expect(200));
+      expect(after.periods.map((period) => period.start)).toEqual(
+        before.periods.map((period) => period.start),
+      );
+
+      // The period the anchor falls in is re-priced from its own start...
+      const older = await dashboardFor(token, dayOf(-3, 1)).expect(200);
+      expect((older.body as { monthlyBudget: number }).monthlyBudget).toBe(
+        3000,
+      );
+      // ...while the periods after the pay-day change keep the budget dated at T.
+      const current = await dashboardFor(token).expect(200);
+      expect((current.body as { monthlyBudget: number }).monthlyBudget).toBe(
+        2500,
+      );
+    });
+
+    it('400s the DTO matrix the old profile validation suite used to pin', async () => {
+      // `PATCH /api/profile` lost its budget and pay-day validation cases when both fields moved
+      // to this endpoint; re-pinned here on `ChangeScheduleDto` so the bounds cannot rot unseen.
+      const { token } = await provision();
+
+      // A zero budget, and one with a third decimal place.
+      await changeSchedule(token, {
+        monthlyBudget: 0,
+        monthStartDay: 1,
+        firstPaycheckDate: dayOf(0, 1),
+      }).expect(400);
+      await changeSchedule(token, {
+        monthlyBudget: 2500.123,
+        monthStartDay: 1,
+        firstPaycheckDate: dayOf(0, 1),
+      }).expect(400);
+
+      // A pay day of zero, below the 1-28 range.
+      await changeSchedule(token, {
+        monthlyBudget: 2500,
+        monthStartDay: 0,
+        firstPaycheckDate: dayOf(0, 1),
+      }).expect(400);
+
+      // An impossible calendar date, which the shape regex alone cannot know is not a day.
+      await changeSchedule(token, {
+        monthlyBudget: 2500,
+        monthStartDay: 28,
+        firstPaycheckDate: '2026-02-30',
+      }).expect(400);
+    });
+
     it('converges rather than duplicating when the identical body is sent twice', async () => {
       const { token } = await provision();
       const payload = {
@@ -504,6 +606,16 @@ describe('Periods and pay-schedule changes (e2e)', () => {
   });
 
   describe('the period query parameter', () => {
+    it('400s a future period start, which the walk can produce and the list never offers', async () => {
+      const { token } = await provision();
+
+      // Next month's boundary really does start a period of the latest rule's tiling, but
+      // `GET /api/periods` stops at the current one - and a read for a period that has not begun
+      // would classify it as *finished*: zero days left, every day elapsed, an average over days
+      // that have not happened.
+      await dashboardFor(token, dayOf(1, 1)).expect(400);
+    });
+
     it('400s a date that starts none of your periods', async () => {
       const { token } = await provision();
 

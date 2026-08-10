@@ -1,12 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
+  IsDateString,
   IsIn,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 
 /**
@@ -121,20 +123,28 @@ export class ListTransactionsQueryDto {
   // open date, which no enum can express. The regex is written out inline because
   // the swagger plugin lifts only an inline literal into `pattern` and silently
   // drops a named constant - the same trap the transaction write DTOs' `date`
-  // documents. There is no `@IsDateString` beside it, unlike `PeriodQueryDto`:
-  // this field's alternation already prevents a plain `@IsDateString`, and an
-  // impossible day like `2026-02-30` is caught one step later by
-  // `PeriodService.startingAt`, which rejects anything that is not a real period
-  // start - a superset of what a date validator would catch.
+  // documents. `@IsDateString({ strict: true })` sits behind a `@ValidateIf`
+  // that exempts the three named values, because a keyword is not a date and
+  // `@ValidateIf` gates every validator on the property - which is safe here,
+  // since a named value has nothing left for `@Matches` to reject. A first
+  // version shipped without the date check, claiming `PeriodService.startingAt`
+  // was "a superset of what a date validator would catch"; it is not -
+  // `month-window.ts` round-trips a month 13 without carrying, so
+  // `?period=2026-13-01` answered 200 with an overlapping window and a literal
+  // `undefined 2026` label. The review of PET-72 is where that came out.
   @ApiPropertyOptional({
     default: DEFAULT_PERIOD,
     pattern: '^(current|previous|all|\\d{4}-\\d{2}-\\d{2})$',
     description:
-      'One of `current`, `previous`, `all`, or a period `start` in `YYYY-MM-DD` from `GET /api/periods`. Resolved server-side from your pay-schedule history, so the boundary is your budgeting period rather than the calendar month - and periods before a pay-day change keep the boundaries they had. `previous` is the period before the current one. `all` applies no date filter. A date that starts none of your periods is a **400**.',
+      'One of `current`, `previous`, `all`, or a period `start` in `YYYY-MM-DD` from `GET /api/periods`. Resolved server-side from your pay-schedule history, so the boundary is your budgeting period rather than the calendar month - and periods before a pay-day change keep the boundaries they had. `previous` is the period before the current one. `all` applies no date filter. A date that is not a real calendar date, or that starts none of your periods, is a **400**.',
     example: 'current',
   })
   @IsOptional()
+  @ValidateIf(
+    (_, value) => !TRANSACTION_PERIODS.includes(value as TransactionPeriod),
+  )
   @Matches(/^(current|previous|all|\d{4}-\d{2}-\d{2})$/)
+  @IsDateString({ strict: true })
   period?: string;
 
   /** Defaults to `date_desc`, which is AC1's "Newest first". */

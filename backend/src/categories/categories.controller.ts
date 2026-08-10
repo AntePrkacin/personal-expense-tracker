@@ -92,7 +92,7 @@ export class CategoriesController {
   @ApiOperation({
     summary: 'Set the cap on several categories at once.',
     description:
-      'What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. Every cap applies **from the current period onward**, never to periods already budgeted. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen for the current period, exactly as `GET /categories` does.',
+      'What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. Every cap applies **from the period `capsFrom` names onward** - the current one when it is absent - and never further back: periods before the anchor keep the caps they were budgeted under. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen for the current period, exactly as `GET /categories` does.',
   })
   @ApiOkResponse({ type: CategoriesResponseDto })
   // No 409: the fallback's cap is editable and no rename is in play, so this is
@@ -113,7 +113,7 @@ export class CategoriesController {
   @ApiOperation({
     summary: 'Change a category.',
     description:
-      'Send only the fields to change. An absent field is left alone; `monthlyCap` and `description` also accept `null`, which clears them - clearing a cap makes the category uncapped. A cap change applies **from the current period onward**: periods already budgeted keep the cap they were budgeted under. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and description are all editable.',
+      'Send only the fields to change. An absent field is left alone; `monthlyCap` and `description` also accept `null`, which clears them - clearing a cap makes the category uncapped. A cap change applies **from the period `capFrom` names onward** - the current one when it is absent - and never further back: periods before the anchor keep the cap they were budgeted under. `capFrom` without `monthlyCap` is a **400**. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and description are all editable.',
   })
   @ApiOkResponse({ type: CategoryResponseDto })
   @ApiErrorResponse(

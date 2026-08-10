@@ -1,4 +1,5 @@
 import { SIDEBAR_HREFS } from '@/components/ui/Sidebar';
+import { partsFromIso } from '@/lib/date';
 import { toQuery } from '@/lib/transactionQuery';
 import type { TransactionFilters } from '@/lib/transactions';
 
@@ -184,6 +185,16 @@ export function parseTransactionFilters(params: TransactionSearchParams): Transa
 
   const period = one(params.period);
   if (isPeriod(period)) {
+    filters.period = period;
+  } else if (period !== undefined && partsFromIso(period) !== null) {
+    // **The date form the contract grew at PET-72, which a first version silently dropped.** A
+    // period `start` from `GET /api/periods` is a value the API accepts, and the sibling screens'
+    // period select links with it - so a URL carrying one has to keep meaning that period here
+    // too, or the detail page's round trip and any shared link quietly show the current period
+    // instead. `partsFromIso` is the same strict calendar check `lib/periodParams.ts` applies:
+    // an impossible date is malformed and dropped, while a real date that starts no period is
+    // forwarded and 400s - the honest answer to a link naming a period the account does not have,
+    // exactly as that module argues.
     filters.period = period;
   }
 

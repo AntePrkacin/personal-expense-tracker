@@ -163,13 +163,25 @@ export class TransactionsService {
    * is no pagination (A11, TRN-6), so no second query counts anything; it is
    * returned as its own field so a future page size cannot silently turn TRN-2's
    * badge into a page count.
+   *
+   * @param resolvedPeriod A period the caller already resolved, `null` for no
+   * date filter. Passed by the dashboard and the insights generator so one
+   * request resolves "current" exactly once - two independent resolutions can
+   * land either side of midnight and describe two different periods, which is
+   * the skew `PeriodService.current`'s own docblock exists to close. When
+   * supplied it wins over `query.period`, which those callers still send so the
+   * query object stays honest about what was asked.
    */
   async list(
     userId: string,
     query: ListTransactionsQueryDto,
+    resolvedPeriod?: Period | null,
   ): Promise<TransactionsResponseDto> {
     const db = await this.userDatabases.getUserDb(userId);
-    const period = await this.resolvePeriod(userId, query.period);
+    const period =
+      resolvedPeriod !== undefined
+        ? resolvedPeriod
+        : await this.resolvePeriod(userId, query.period);
 
     const rows = await db
       .select()

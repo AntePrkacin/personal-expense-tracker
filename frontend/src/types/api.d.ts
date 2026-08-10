@@ -150,7 +150,7 @@ export interface paths {
         };
         /**
          * The signed-in person and their preferences.
-         * @description `email` comes from the central directory, everything else from your own database. `monthlyBudget` is in major units (2000.50, not 200050) and `monthStartDay` is the day of the month your budgeting period starts on - your pay day. Both are the values **in force for the current period**, resolved from your budget and pay-schedule history rather than stored as single settings; change either through `POST /api/profile/schedule`, which asks from which paycheck the change applies.
+         * @description `email` comes from the central directory, everything else from your own database. `monthlyBudget` is in major units (2000.50, not 200050) and `monthStartDay` is the day of the month your budgeting period starts on - your pay day. Both are the values **as configured** - the newest entries of your budget and pay-schedule history, a change scheduled at a future paycheck included - so what a settings form loads is exactly what a save would leave unchanged. What any given period was actually lived under is answered per period by the dashboard, category and transaction reads. Change either value through `POST /api/profile/schedule`, which asks from which paycheck the change applies.
          */
         get: operations["ProfileController_get"];
         put?: never;
@@ -176,7 +176,7 @@ export interface paths {
         put?: never;
         /**
          * Change your budget or pay day, from a given paycheck.
-         * @description Sets your monthly budget and pay day **from `firstPaycheckDate` onward**, leaving every earlier period exactly as it was. If the pay day changes, that paycheck opens a new period and the one before it is **stretched** to meet it - salaries are paid in arrears, so the old schedule’s last paycheck never arrives, and the stretched period keeps the **old** budget. If the pay day is unchanged this is a budget-only change and no period boundary moves. The date may be in the **past**, which re-shapes periods from then on, or in the **future**, which stretches the current period up to it. A **400** means `firstPaycheckDate` is not day `monthStartDay` of its month. Sending the identical body twice is safe: it converges rather than duplicating. Answers the whole profile, exactly as `GET /api/profile` does.
+         * @description Sets your monthly budget and pay day **from `firstPaycheckDate` onward**, leaving every earlier period exactly as it was. If the pay day changes, that paycheck opens a new period and the one before it is **stretched** to meet it - salaries are paid in arrears, so the old schedule’s last paycheck never arrives, and the stretched period keeps the **old** budget. If the pay day is unchanged this is a budget-only change and no period boundary moves. The date may be in the **past**, which re-shapes periods from then on, or in the **future**, which stretches the period immediately before it up to the anchor and leaves everything earlier untouched. A **400** means `firstPaycheckDate` is not day `monthStartDay` of its month, predates the account’s first pay schedule, or anchors a pay-day change behind a later pay-day change. Sending the identical body twice is safe: it converges rather than duplicating. Answers the whole profile, exactly as `GET /api/profile` does.
          */
         post: operations["ProfileController_changeSchedule"];
         delete?: never;
@@ -300,7 +300,7 @@ export interface paths {
         head?: never;
         /**
          * Set the cap on several categories at once.
-         * @description What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. Every cap applies **from the current period onward**, never to periods already budgeted. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen for the current period, exactly as `GET /categories` does.
+         * @description What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. Every cap applies **from the period `capsFrom` names onward** - the current one when it is absent - and never further back: periods before the anchor keep the caps they were budgeted under. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen for the current period, exactly as `GET /categories` does.
          */
         patch: operations["CategoriesController_setCaps"];
         trace?: never;
@@ -324,7 +324,7 @@ export interface paths {
         head?: never;
         /**
          * Change a category.
-         * @description Send only the fields to change. An absent field is left alone; `monthlyCap` and `description` also accept `null`, which clears them - clearing a cap makes the category uncapped. A cap change applies **from the current period onward**: periods already budgeted keep the cap they were budgeted under. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and description are all editable.
+         * @description Send only the fields to change. An absent field is left alone; `monthlyCap` and `description` also accept `null`, which clears them - clearing a cap makes the category uncapped. A cap change applies **from the period `capFrom` names onward** - the current one when it is absent - and never further back: periods before the anchor keep the cap they were budgeted under. `capFrom` without `monthlyCap` is a **400**. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and description are all editable.
          */
         patch: operations["CategoriesController_update"];
         trace?: never;
@@ -553,9 +553,12 @@ export interface components {
              *     `POST /api/profile/schedule` with the first new paycheck date, and only the
              *     periods from that date onward move.
              *
-             *     The value here is the day in force for the **current** period, so
-             *     mid-transition it reports the day you are actually being paid on rather than
-             *     the one starting next period.
+             *     The value here is the day **as configured** - the newest rule's, a change
+             *     scheduled at a future paycheck included - for `monthlyBudget`'s reason: a
+             *     settings form has to load the value a save would leave unchanged, or a
+             *     faithful re-submit mid-pending-change would silently revert the change.
+             *     Which day any given period actually ran on is visible in that period's own
+             *     boundaries, via `GET /api/periods`.
              */
             monthStartDay: number;
             /**
@@ -571,11 +574,14 @@ export interface components {
             /**
              * @description Major units (e.g. 2000.5).
              *
-             *     **The budget in force right now, resolved from history rather than stored as
-             *     a column.** A client cannot tell the difference on the read, but the write is
-             *     `POST /api/profile/schedule` rather than `PATCH /api/profile`: setting a budget
-             *     requires saying from which paycheck it applies, so that earlier periods keep
-             *     the budget they were actually spent against.
+             *     **The budget as configured - the newest entry of the budget history, a
+             *     change scheduled at a future paycheck included - resolved rather than stored
+             *     as a column.** The value a settings form loads is exactly the value a save
+             *     would leave unchanged; what a given period was actually lived under is
+             *     answered per period by the dashboard, category and transaction reads. The
+             *     write is `POST /api/profile/schedule` rather than `PATCH /api/profile`:
+             *     setting a budget requires saying from which paycheck it applies, so that
+             *     earlier periods keep the budget they were actually spent against.
              */
             monthlyBudget: number;
         };
@@ -621,7 +627,7 @@ export interface components {
             monthStartDay: number;
             /**
              * Format: date
-             * @description The first paycheck date under the new schedule, `YYYY-MM-DD`. Must be day `monthStartDay` of its month. May be in the past (re-shapes periods from then on) or the future (stretches the current period up to it).
+             * @description The first paycheck date under the new schedule, `YYYY-MM-DD`. Must be day `monthStartDay` of its month. May be in the past (re-shapes periods from then on) or the future (stretches the period immediately before it up to the anchor; earlier periods are untouched). A pay-day change anchored before a later pay-day change is a **400**.
              * @example 2026-01-14
              */
             firstPaycheckDate: string;
@@ -896,6 +902,12 @@ export interface components {
         UpdateCategoryCapsDto: {
             /** @description One entry per category, at least one. A repeated `id` is a 400. Either every entry is applied or none is. */
             categories: components["schemas"]["CategoryCapDto"][];
+            /**
+             * Format: date
+             * @description A period `start` from `GET /api/periods` that every cap in the batch applies from. Omit for the current period. Periods before it are untouched.
+             * @example 2025-12-01
+             */
+            capsFrom?: string;
         };
         UpdateCategoryDto: {
             /**
@@ -907,11 +919,18 @@ export interface components {
             /**
              * @description Major units. `null` clears the cap, leaving the category uncapped.
              *
-             *     Applies **from the current period onward**, never backward: the change is a
-             *     new row in this category's cap history, so a period that has already been
-             *     budgeted and spent keeps the cap it was budgeted under.
+             *     Applies from the period `capFrom` names onward - the current one when it is
+             *     absent - never further back: the change is a new row in this category's cap
+             *     history, so every period before the anchor keeps the cap it was budgeted
+             *     under.
              */
             monthlyCap?: number | null;
+            /**
+             * Format: date
+             * @description A period `start` from `GET /api/periods` that the cap applies from. Omit for the current period. Requires `monthlyCap` in the same body. Periods before it are untouched; periods from it onward use the new cap unless a later cap row already covers them.
+             * @example 2025-12-01
+             */
+            capFrom?: string;
             /**
              * @description A lucide icon name. Not clearable - see the class comment.
              * @example shopping-basket
@@ -1432,7 +1451,7 @@ export interface operations {
                  *     404ing - it is a filter, not a resource being addressed.
                  */
                 categoryId?: string;
-                /** @description One of `current`, `previous`, `all`, or a period `start` in `YYYY-MM-DD` from `GET /api/periods`. Resolved server-side from your pay-schedule history, so the boundary is your budgeting period rather than the calendar month - and periods before a pay-day change keep the boundaries they had. `previous` is the period before the current one. `all` applies no date filter. A date that starts none of your periods is a **400**. */
+                /** @description One of `current`, `previous`, `all`, or a period `start` in `YYYY-MM-DD` from `GET /api/periods`. Resolved server-side from your pay-schedule history, so the boundary is your budgeting period rather than the calendar month - and periods before a pay-day change keep the boundaries they had. `previous` is the period before the current one. `all` applies no date filter. A date that is not a real calendar date, or that starts none of your periods, is a **400**. */
                 period?: string;
                 /** @description Ties on `date` break on `createdAt` descending, then `id`, so the order is stable across requests rather than reshuffling for no visible reason. */
                 sort?: "date_desc" | "date_asc";

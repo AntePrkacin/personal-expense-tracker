@@ -125,6 +125,15 @@ describe('RuleBasedInsightGenerator', () => {
       {
         current: currentPeriod,
         previous: previousPeriod,
+        // Read once and threaded into the two resolutions above, which both
+        // ignore it here - the mocks answer fixed periods either way.
+        rules: jest.fn().mockResolvedValue([
+          {
+            effectiveFrom: '2024-10-01',
+            monthStartDay: 1,
+            transitionStart: null,
+          },
+        ]),
       } as unknown as PeriodService,
       { list: transactionsList } as unknown as TransactionsService,
       userDatabases,

@@ -41,6 +41,15 @@ const RECENT_LIMIT = 3;
  * `PeriodService.current` returns the period **and** the `today` it was resolved
  * from, so the two cannot disagree and nothing here reads a clock.
  *
+ * **That claim shipped half true, and a review of PET-72 is where the other half
+ * landed.** The period and `today` came from one resolution, but the composed
+ * `transactions.list` and `categories.list` each re-resolved "current" for
+ * themselves - so at the same midnight boundary the echoed `period` could
+ * describe the closing period while every figure inside it described the new
+ * empty one. Both calls now take the already-resolved period as an argument,
+ * which also removes two redundant `period_rules` reads from the app's most
+ * expensive request.
+ *
  * **No `Promise.all` anywhere below**, the same reason `TransactionsService`
  * avoids it: the embedded driver is happier with sequential statements on one
  * connection than with several arriving at once.
@@ -89,8 +98,12 @@ export class DashboardService {
     const isCurrent = period.start <= today && today < period.end;
 
     // The period is passed explicitly to both, rather than letting either resolve
-    // its own default: they would each resolve the *current* period, which is the
-    // right answer only when that is what was asked for.
+    // its own default: they would each resolve the *current* period again, and
+    // two independent resolutions of "current" can land either side of midnight -
+    // so the figures would describe a different period than the `period` this
+    // response echoes back. Passing the one resolved object is what makes the
+    // comment above ("the two cannot disagree") actually true; the selector
+    // still travels so the query object says what was asked.
     const selector = periodStart ?? 'current';
 
     // Explicit rather than relying on TransactionsService's own default: two
@@ -100,10 +113,12 @@ export class DashboardService {
     const { transactions: periodTransactions } = await this.transactions.list(
       userId,
       { period: selector, sort: 'date_desc' },
+      period,
     );
     const { categories: categoryRows, allocation } = await this.categories.list(
       userId,
       periodStart,
+      period,
     );
 
     // The teaser summary from the latest ready insight set, or null when none

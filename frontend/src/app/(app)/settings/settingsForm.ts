@@ -356,7 +356,11 @@ export function toChangeScheduleBody(
  * stretch are ones the user has not lived yet. Backward, the backend refuses an anchor earlier than
  * the account's first pay schedule - seeded a year before provisioning - so four months is
  * comfortably inside what it will accept, and the 400 that bound produces is one this list cannot
- * reach.
+ * reach. One backend 400 **is** reachable from here, deliberately: a pay-day change backdated
+ * behind a *later* pay-day change (two changes within the four-month window, the second anchored
+ * before the first) is refused rather than corrupting the later rule's stored transition, and it
+ * surfaces as the form's `invalid` line inside the dialog. A budget-only backdate across such a
+ * change is fine - the server reads the re-asserted current day as "unchanged".
  *
  * `value` is `YYYY-MM`, which `toChangeScheduleBody` completes into a date with the pay day the form
  * holds. It is deliberately **not** a full date here: the day depends on a field the user may be

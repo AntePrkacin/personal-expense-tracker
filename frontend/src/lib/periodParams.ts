@@ -1,3 +1,4 @@
+import { partsFromIso } from '@/lib/date';
 import type { Period } from '@/lib/periods';
 
 // The `?period=` half of period navigation: how a period becomes a URL, and how a URL becomes a
@@ -48,15 +49,20 @@ export function periodHref(pathname: string, period: Period): string {
  * dates are period starts without asking, and the 400 is the honest answer to a link that names a
  * period the account does not have.
  *
- * The shape check is the same `YYYY-MM-DD` the backend's own DTO requires. A repeated key arrives as
- * an array, which is dropped rather than resolved - the same call `parseTransactionFilters` makes.
+ * The check is `lib/date.ts`'s `partsFromIso` rather than the bare `YYYY-MM-DD` regex it used to
+ * be, and the difference is which failures are *malformed*. `2026-02-30` matches the shape and is
+ * not a date: the backend's DTO rejects it with the same strict calendar check, so forwarding it
+ * bought a guaranteed 400 - a full error-boundary screen over a typo - where "which dates start a
+ * period" is the only question this module genuinely cannot answer itself. A repeated key arrives
+ * as an array, which is dropped rather than resolved - the same call `parseTransactionFilters`
+ * makes.
  */
 export function parsePeriodParam(
   searchParams: Record<string, string | string[] | undefined>,
 ): string | undefined {
   const raw = searchParams['period'];
 
-  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+  if (typeof raw !== 'string' || partsFromIso(raw) === null) {
     return undefined;
   }
 

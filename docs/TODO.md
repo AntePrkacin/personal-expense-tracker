@@ -1548,7 +1548,7 @@ answer locally. The same gap exists in `IconSelect`.
 ### PET-72's own five deferrals, each recorded on the ticket
 
 **A wider currency list needs a per-currency exponent first.** `toCents`/`fromCents` assume an
-exponent of 2, so `SUPPORTED_CURRENCIES` is 29 exponent-2 codes and `UpdateProfileDto` validates
+exponent of 2, so `SUPPORTED_CURRENCIES` is an allowlist of exponent-2 codes and `UpdateProfileDto` validates
 against that list rather than against `@IsISO4217CurrencyCode()` - which accepts `JPY` (exponent 0)
 and `KWD` (exponent 3) and would turn every figure in the app into a silent factor of 100 or 1000.
 Supporting them is a real feature and it is not a longer list: it is an exponent per code, threaded

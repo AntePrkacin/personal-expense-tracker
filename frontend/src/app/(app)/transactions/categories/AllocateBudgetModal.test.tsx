@@ -15,7 +15,12 @@ import {
   cappedMessage,
 } from './AllocateBudgetModal';
 import { MAX_CAP_ROWS, type toAllocateBody } from './allocateForm';
-import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixture';
+import {
+  category,
+  CATEGORY_PERIODS,
+  FALLBACK_CATEGORY,
+  UNCAPPED_CATEGORY,
+} from './categoryFixture';
 
 /** The formatters the shell's provider would hand the modal; see `PreferencesProvider`. */
 const USD = moneyFormatters('USD');
@@ -65,6 +70,7 @@ const CATEGORIES: Category[] = [
 const renderModal = (overrides: Partial<Parameters<typeof AllocateBudgetModal>[0]> = {}) =>
   render(
     <AllocateBudgetModal
+      periods={CATEGORY_PERIODS}
       categories={CATEGORIES}
       allocation={ALLOCATION}
       save={save}
@@ -76,6 +82,20 @@ const renderModal = (overrides: Partial<Parameters<typeof AllocateBudgetModal>[0
 const capField = (name: string) => screen.getByLabelText(`Monthly cap for ${name}`);
 const saveButton = () => screen.getByRole('button', { name: 'Save caps' });
 const cancelButton = () => screen.getByRole('button', { name: 'Cancel' });
+
+/**
+ * The cap-anchor question, mounted only once a save was pressed.
+ *
+ * Scoped by its heading because its confirm is deliberately named like the button that opened it,
+ * so a bare "Save caps" query is ambiguous while the question is up - the nested-dialog case the
+ * edit modal's delete confirmation already set the precedent for.
+ */
+const anchorDialog = () =>
+  screen.getByRole('heading', { name: 'From which period?' }).closest('dialog') as HTMLElement;
+
+/** Confirms the question on whatever period its select is showing - the current one by default. */
+const confirmAnchor = () =>
+  user().click(within(anchorDialog()).getByRole('button', { name: 'Save caps' }));
 
 /**
  * The snap region's text, which is not the same question as whether the region exists.
@@ -364,6 +384,9 @@ describe('AC9-AC10: the save', () => {
     await user().clear(capField('Transport'));
     await user().type(capField('Transport'), '250');
     await user().click(saveButton());
+    // Every save passes through the cap-anchor question now; confirming on the default (current)
+    // period sends the body with no `capsFrom`, because absent means current.
+    await confirmAnchor();
 
     expect(save).toHaveBeenCalledWith({
       categories: [{ id: CATEGORIES[2].id, monthlyCap: 250 }],
@@ -375,10 +398,40 @@ describe('AC9-AC10: the save', () => {
 
     await user().clear(capField('Groceries'));
     await user().click(saveButton());
+    await confirmAnchor();
 
     expect(save).toHaveBeenCalledWith({
       categories: [{ id: CATEGORIES[0].id, monthlyCap: null }],
     });
+  });
+
+  it('sends capsFrom when a past period is picked, one anchor for the whole batch', async () => {
+    renderModal();
+
+    await user().clear(capField('Transport'));
+    await user().type(capField('Transport'), '250');
+    await user().click(saveButton());
+
+    await user().selectOptions(within(anchorDialog()).getByLabelText('Applies from'), '2025-09-01');
+    await confirmAnchor();
+
+    expect(save).toHaveBeenCalledWith({
+      categories: [{ id: CATEGORIES[2].id, monthlyCap: 250 }],
+      capsFrom: '2025-09-01',
+    });
+  });
+
+  it('cancelling the question sends nothing and keeps the draft', async () => {
+    renderModal();
+
+    await user().clear(capField('Transport'));
+    await user().type(capField('Transport'), '250');
+    await user().click(saveButton());
+    await user().click(within(anchorDialog()).getByRole('button', { name: 'Cancel' }));
+
+    expect(save).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(capField('Transport')).toHaveValue('250');
   });
 
   it('refreshes and closes on success', async () => {
@@ -387,6 +440,7 @@ describe('AC9-AC10: the save', () => {
     await user().clear(capField('Transport'));
     await user().type(capField('Transport'), '250');
     await user().click(saveButton());
+    await confirmAnchor();
 
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalled();
@@ -413,17 +467,26 @@ describe('AC9-AC10: the save', () => {
     expect(saveButton()).toBeDisabled();
   });
 
-  it('leaves Cancel live while a save is in flight', async () => {
+  it('leaves the modal’s Cancel live while a save is in flight', async () => {
     // No fetch in this app carries a timeout, so a hung request is exactly when a way out matters.
+    // The anchor question is still up and locked while the write is out - its own controls disable
+    // with the dismissals - so the queries have to say which dialog they mean.
     renderModal();
     save.mockReturnValue(new Promise(() => {}));
 
     await user().clear(capField('Transport'));
     await user().type(capField('Transport'), '250');
     await user().click(saveButton());
+    await confirmAnchor();
 
-    expect(saveButton()).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    const question = anchorDialog();
+    expect(within(question).getByRole('button', { name: 'Save caps' })).toBeDisabled();
+    expect(within(question).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+
+    const modalCancel = screen
+      .getAllByRole('button', { name: 'Cancel' })
+      .find((button) => !question.contains(button))!;
+    expect(modalCancel).toBeEnabled();
   });
 });
 
@@ -470,6 +533,9 @@ describe('the four failures', () => {
     await user().clear(capField('Transport'));
     await user().type(capField('Transport'), '250');
     await user().click(saveButton());
+    // Through the anchor question, which comes down with any failure so the message reports once,
+    // in the modal holding the edits.
+    await confirmAnchor();
   };
 
   it.each([
@@ -574,8 +640,13 @@ describe('the four failures', () => {
 
     expect(capField('Groceries')).toBeDisabled();
     expect(capField('Transport')).toBeDisabled();
-    // Cancel deliberately stays live: no fetch in this app carries a timeout.
-    expect(cancelButton()).toBeEnabled();
+    // The modal's Cancel deliberately stays live: no fetch in this app carries a timeout. The
+    // anchor question is still up mid-flight, so the query has to skip its own locked Cancel.
+    const question = anchorDialog();
+    const modalCancel = screen
+      .getAllByRole('button', { name: 'Cancel' })
+      .find((button) => !question.contains(button))!;
+    expect(modalCancel).toBeEnabled();
   });
 
   it('recovers from a Server Action that never resolves at all', async () => {

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 
 import type { Category } from '@/lib/categories';
 import type { Palette } from '@/lib/palette';
+import type { Period } from '@/lib/periods';
 import { updateCategory, type UpdateCategoryResult } from '@/lib/updateCategory';
 import type { components } from '@/types/api';
 
@@ -92,6 +93,13 @@ type EditCategoryProviderProps = {
    */
   palette: Palette | null;
   /**
+   * Every period the account has, for the modal's cap-anchor question.
+   *
+   * Threaded from the screen's own `GET /api/periods` read, exactly as `palette` is, so asking
+   * "from which period" costs no request.
+   */
+  periods: readonly Period[];
+  /**
    * The update action, defaulting to the real one. Overridden only by Storybook.
    *
    * **This exists because a story would otherwise be one click from running a Server Action in the
@@ -116,6 +124,7 @@ type EditCategoryProviderProps = {
 export function EditCategoryProvider({
   children,
   palette,
+  periods,
   update = updateCategory,
 }: EditCategoryProviderProps) {
   const { open: openDelete } = useDeleteCategory();
@@ -161,6 +170,7 @@ export function EditCategoryProvider({
         <EditCategoryModal
           category={request.category}
           palette={palette}
+          periods={periods}
           update={update}
           focus={request.focus}
           onDelete={() =>

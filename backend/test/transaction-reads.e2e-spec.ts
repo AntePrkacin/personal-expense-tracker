@@ -440,6 +440,15 @@ describe('Transaction reads (e2e)', () => {
       expect(errorBody(response).statusCode).toBe(400);
     });
 
+    it('rejects a pseudo-date period with a 400, never an overlapping window', async () => {
+      // The shape regex alone accepted these, and `month-window.ts` round-trips a thirteenth
+      // month without carrying - so `?period=2026-13-01` answered 200 with a window overlapping
+      // January 2027's and a literal "undefined 2026" label. The review of PET-72 is where that
+      // came out; `@IsDateString({ strict: true })` behind the keyword exemption is the fix.
+      await list('?period=2026-13-01').expect(400);
+      await list('?period=2026-02-30').expect(400);
+    });
+
     it('rejects an unknown query parameter, not just an unknown body field', async () => {
       // `forbidNonWhitelisted` reaches query strings too, which is what stops a
       // frontend believing `?limit=10` did something.

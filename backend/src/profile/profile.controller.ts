@@ -51,7 +51,7 @@ export class ProfileController {
   @ApiOperation({
     summary: 'The signed-in person and their preferences.',
     description:
-      '`email` comes from the central directory, everything else from your own database. `monthlyBudget` is in major units (2000.50, not 200050) and `monthStartDay` is the day of the month your budgeting period starts on - your pay day. Both are the values **in force for the current period**, resolved from your budget and pay-schedule history rather than stored as single settings; change either through `POST /api/profile/schedule`, which asks from which paycheck the change applies.',
+      '`email` comes from the central directory, everything else from your own database. `monthlyBudget` is in major units (2000.50, not 200050) and `monthStartDay` is the day of the month your budgeting period starts on - your pay day. Both are the values **as configured** - the newest entries of your budget and pay-schedule history, a change scheduled at a future paycheck included - so what a settings form loads is exactly what a save would leave unchanged. What any given period was actually lived under is answered per period by the dashboard, category and transaction reads. Change either value through `POST /api/profile/schedule`, which asks from which paycheck the change applies.',
   })
   @ApiOkResponse({ type: ProfileResponseDto })
   @ApiErrorResponse(HttpStatus.UNAUTHORIZED)
@@ -93,7 +93,7 @@ export class ProfileController {
   @ApiOperation({
     summary: 'Change your budget or pay day, from a given paycheck.',
     description:
-      'Sets your monthly budget and pay day **from `firstPaycheckDate` onward**, leaving every earlier period exactly as it was. If the pay day changes, that paycheck opens a new period and the one before it is **stretched** to meet it - salaries are paid in arrears, so the old schedule’s last paycheck never arrives, and the stretched period keeps the **old** budget. If the pay day is unchanged this is a budget-only change and no period boundary moves. The date may be in the **past**, which re-shapes periods from then on, or in the **future**, which stretches the current period up to it. A **400** means `firstPaycheckDate` is not day `monthStartDay` of its month. Sending the identical body twice is safe: it converges rather than duplicating. Answers the whole profile, exactly as `GET /api/profile` does.',
+      'Sets your monthly budget and pay day **from `firstPaycheckDate` onward**, leaving every earlier period exactly as it was. If the pay day changes, that paycheck opens a new period and the one before it is **stretched** to meet it - salaries are paid in arrears, so the old schedule’s last paycheck never arrives, and the stretched period keeps the **old** budget. If the pay day is unchanged this is a budget-only change and no period boundary moves. The date may be in the **past**, which re-shapes periods from then on, or in the **future**, which stretches the period immediately before it up to the anchor and leaves everything earlier untouched. A **400** means `firstPaycheckDate` is not day `monthStartDay` of its month, predates the account’s first pay schedule, or anchors a pay-day change behind a later pay-day change. Sending the identical body twice is safe: it converges rather than duplicating. Answers the whole profile, exactly as `GET /api/profile` does.',
   })
   @ApiOkResponse({ type: ProfileResponseDto })
   // No 409: nothing here can conflict with another account, and a repeat of the

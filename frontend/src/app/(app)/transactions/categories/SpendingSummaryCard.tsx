@@ -1,5 +1,6 @@
 import { moneyFormatters } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
+import type { Period } from '@/lib/periods';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
 import { AllocateBanner } from './AllocateBanner';
@@ -67,6 +68,8 @@ type SpendingSummaryCardProps = {
   allocation: Allocation;
   /** Every category, for the banner's modal. Not rendered here - see the note above. */
   categories: Category[];
+  /** Every period, for the modal's cap-anchor question. Threaded like `categories`. */
+  periods: readonly Period[];
   /** The bulk cap write, threaded through for the same reason. `AllocateBanner` defaults it. */
   save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
   /**
@@ -90,15 +93,27 @@ type SpendingSummaryCardProps = {
    * that derivation had one more way to produce.
    */
   periodLabel: string;
+  /**
+   * True on a historical period view, where the Allocate banner is not drawn.
+   *
+   * The modal drafts from and validates against the live configuration, and its backdating path is
+   * the cap-anchor question it asks on save - so a banner over December's figures would open a
+   * modal editing something other than what is on screen. `CategoriesScreen`'s `isCurrentPeriod`
+   * note carries the full account. Not drawn rather than disabled, per the fallback card's rule:
+   * nothing on this screen is drawn that cannot be acted on.
+   */
+  readOnly?: boolean;
 };
 
 export function SpendingSummaryCard({
   spent,
   allocation,
   categories,
+  periods,
   save,
   currency,
   periodLabel,
+  readOnly = false,
 }: SpendingSummaryCardProps) {
   const { formatWhole } = moneyFormatters(currency);
 
@@ -129,8 +144,10 @@ export function SpendingSummaryCard({
   // outright it can be negative: nothing stops caps summing past the budget (A43), and no
   // over-allocation state is designed. A truthy check would show the banner to someone who has
   // over-allocated, telling them an amount is unassigned when the opposite is true. Zero draws
-  // nothing because there is nothing to report.
-  const hasUnassigned = unallocated > 0;
+  // nothing because there is nothing to report. And nothing is drawn on a historical period,
+  // whose unassigned budget is a fact about a closed month that no write can change - see
+  // `readOnly` above.
+  const hasUnassigned = !readOnly && unallocated > 0;
 
   return (
     // A column wrapper rather than the card itself, because the banner is a **sibling** of the
@@ -185,7 +202,12 @@ export function SpendingSummaryCard({
         // whitespace that contains a newline next to an expression, so the readable two-line
         // version renders "$850of your budget" with no space - which a suite caught here and
         // which no typecheck or lint could.
-        <AllocateBanner categories={categories} allocation={allocation} save={save}>
+        <AllocateBanner
+          categories={categories}
+          allocation={allocation}
+          periods={periods}
+          save={save}
+        >
           {`${formatWhole(unallocated)} of your budget isn’t assigned to a category.`}
         </AllocateBanner>
       ) : null}

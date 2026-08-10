@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import type { Allocation, Category } from '@/lib/categories';
+import type { Period } from '@/lib/periods';
 import { updateCategoryCaps, type UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
 import { AllocateBudgetModal } from './AllocateBudgetModal';
@@ -33,6 +34,7 @@ import type { toAllocateBody } from './allocateForm';
 export function AllocateBanner({
   categories,
   allocation,
+  periods,
   // Defaulted here rather than at the call site, which is `DeleteCategoryProvider`'s shape: the
   // screen and the card both thread the prop through without knowing what the real action is, and
   // only Storybook ever overrides it.
@@ -41,6 +43,8 @@ export function AllocateBanner({
 }: {
   categories: Category[];
   allocation: Allocation;
+  /** For the modal's cap-anchor question; threaded like everything else here. */
+  periods: readonly Period[];
   save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
   /** The banner's sentence, composed by the card that knows the unassigned figure. */
   children: React.ReactNode;
@@ -64,6 +68,7 @@ export function AllocateBanner({
         <AllocateBudgetModal
           categories={categories}
           allocation={allocation}
+          periods={periods}
           save={save}
           onClose={() => setOpen(false)}
         />

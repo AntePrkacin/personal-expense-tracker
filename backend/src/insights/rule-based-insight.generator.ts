@@ -66,18 +66,31 @@ export class RuleBasedInsightGenerator implements InsightGenerator {
     }
 
     // The period and the date it was resolved from arrive together, so the
-    // day-count figures below cannot straddle a midnight boundary.
-    const period = await this.periods.current(userId);
-    const previousPeriod = await this.periods.previous(userId);
+    // day-count figures below cannot straddle a midnight boundary. The rules
+    // are read once and threaded through both resolutions, then the resolved
+    // periods are passed into the list reads - `PeriodService.rules`' own
+    // docblock asks exactly this of a caller resolving several periods, and
+    // before it this method read `period_rules` five times per transaction
+    // write.
+    const rules = await this.periods.rules(userId);
+    const period = await this.periods.current(userId, rules);
+    const previousPeriod = await this.periods.previous(userId, rules);
     const today = period.today;
 
-    const { categories: categoryRows, allocation } =
-      await this.categories.list(userId);
+    const { categories: categoryRows, allocation } = await this.categories.list(
+      userId,
+      undefined,
+      period,
+    );
     const currentTransactions = (
-      await this.transactions.list(userId, { period: 'current' })
+      await this.transactions.list(userId, { period: 'current' }, period)
     ).transactions;
     const previousTransactions = (
-      await this.transactions.list(userId, { period: 'previous' })
+      await this.transactions.list(
+        userId,
+        { period: 'previous' },
+        previousPeriod,
+      )
     ).transactions;
     const currency = await this.currencyOf(userId);
 

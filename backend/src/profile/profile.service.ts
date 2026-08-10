@@ -8,7 +8,11 @@ import { newId } from '../common/ids';
 import { fromCents, toCents } from '../common/money';
 import { normalizeEmail } from '../common/normalize-email';
 import { parseDate } from '../common/month-window';
-import { transitionStartFor } from '../common/period-rules';
+import {
+  periodFor,
+  ruleInForceAt,
+  transitionStartFor,
+} from '../common/period-rules';
 import { PeriodService } from '../periods/period.service';
 import type { UserDatabase } from '../database/database.types';
 import { UserDatabaseService } from '../database/user-database.service';
@@ -29,6 +33,8 @@ const PAYCHECK_OFF_DAY = (date: string, day: number) =>
   `firstPaycheckDate ${date} is not day ${day} of its month; a pay schedule's first paycheck must fall on its own pay day.`;
 const PAYCHECK_TOO_EARLY = (date: string, earliest: string) =>
   `firstPaycheckDate ${date} is earlier than this account's first pay schedule (${earliest}); a schedule change cannot predate the schedule it amends.`;
+const PAYCHECK_BEHIND_LATER_RULE = (date: string, latest: string) =>
+  `firstPaycheckDate ${date} is earlier than a pay-schedule change already anchored at ${latest}; a pay-day change cannot be anchored behind a later one. Pick a paycheck on or after ${latest}, or make another change from it.`;
 
 /**
  * The sparse column set an UPDATE applies. Never includes `updatedAt`.
@@ -119,7 +125,9 @@ export class ProfileService {
    * @throws BadRequestException if `firstPaycheckDate` is not day
    * `monthStartDay` of its own month. A period starts on every paycheck, so an
    * anchor off its own pay day would describe a first period beginning on a day no
-   * later period ever begins on.
+   * later period ever begins on. Also thrown for an anchor earlier than the
+   * account's first rule, and for a pay-day change anchored behind a later
+   * pay-day change - see the two guards below.
    */
   async changeSchedule(
     userId: string,
@@ -134,7 +142,12 @@ export class ProfileService {
       );
     }
 
-    const active = await this.periods.ruleInForceAt(userId, anchor);
+    // One read of the rules serves every decision below: the rule in force at
+    // the anchor, the newest rule, and the budget-only period resolution.
+    const rules = await this.periods.rules(userId);
+    const active = ruleInForceAt(rules, anchor);
+    // `rules` is ordered ascending, so the newest rule is last.
+    const latest = rules[rules.length - 1];
 
     // **A retroactive anchor must land at or after the rule it is amending.**
     // Provisioning anchors the first rule a year back precisely so this is
@@ -149,14 +162,41 @@ export class ProfileService {
       );
     }
 
+    // **A body re-asserting the newest schedule with an earlier anchor is a
+    // budget-only change, not a request to re-anchor the last pay-day change.**
+    // The Settings form always sends the *configured* day - GET /api/profile
+    // reports the newest rule's - so a user backdating only their budget across
+    // a recent pay-day change sends a day that differs from the rule in force at
+    // the anchor. Reading that as a schedule change wrote a boundary move the
+    // user never asked for; and read literally it could only be refused anyway,
+    // by the guard below.
+    const reassertsLatest =
+      dto.monthStartDay === latest.monthStartDay &&
+      anchor < latest.effectiveFrom;
+
     // **Only a genuine pay-day change writes a rule**, and this branch is the
     // whole of "a budget-only change gets the same question". Writing a rule for
     // an unchanged pay day would still remove a boundary - arrears applies to
     // every rule insert - so a user who only raised their budget would silently
     // lose a period. Compared against the rule in force *at the anchor* rather
     // than the newest rule, so anchoring a change inside an earlier schedule is
-    // judged against the schedule that was actually running then.
-    const scheduleChanged = dto.monthStartDay !== active.monthStartDay;
+    // judged against the schedule that was actually running then - except for
+    // the re-assertion case above, which no comparison at the anchor can see.
+    const scheduleChanged =
+      !reassertsLatest && dto.monthStartDay !== active.monthStartDay;
+
+    // **A pay-day change cannot be anchored behind a later pay-day change.**
+    // Inserting a rule *between* two existing ones would leave the later rule's
+    // stored `transitionStart` computed against a predecessor that no longer
+    // governs that span - a bridge landing on no boundary of the new rule's, and
+    // periods that end on a day nobody was ever paid. Correcting history is
+    // recorded as not built (`backend/CLAUDE.md`, Not built here); until it is,
+    // the honest answer is a 400 naming the rule in the way.
+    if (scheduleChanged && anchor < latest.effectiveFrom) {
+      throw new BadRequestException(
+        PAYCHECK_BEHIND_LATER_RULE(anchor, latest.effectiveFrom),
+      );
+    }
 
     const db = await this.userDatabases.getUserDb(userId);
 
@@ -175,10 +215,11 @@ export class ProfileService {
     // A schedule change dates the budget at T, because T opens a period by
     // construction. A budget-only change dates it at the start of the period the
     // anchor falls in - the anchor is a paycheck date the user picked from a
-    // month list, and the period it belongs to is the one they meant.
+    // month list, and the period it belongs to is the one they meant. The walk
+    // runs over the rules already in hand rather than a second read.
     const effectiveFrom = scheduleChanged
       ? anchor
-      : (await this.periods.startingAtOrContaining(userId, anchor)).start;
+      : periodFor(rules, anchor).start;
 
     await db.insert(budgetHistory).values({
       id: newId(),
@@ -263,25 +304,29 @@ export class ProfileService {
    *
    * A method rather than the free function it used to be, because two of the six
    * fields now need a database read of their own. `monthlyBudget` and
-   * `monthStartDay` are resolved for the **current** period: that is what "your
-   * current setting" means once both are histories, and it is also what keeps the
-   * Settings form round-tripping - the value the form loads is the value a save
-   * would leave unchanged.
+   * `monthStartDay` are the **configured** values - the newest rows of their
+   * histories, a future-anchored change included - because this response is what
+   * the Settings form loads and a form must round-trip: the value it loads has to
+   * be the value a save would leave unchanged. This read used to report the
+   * values in force for the *current* period instead, and that broke exactly
+   * when a change was pending at a future paycheck - the form loaded the old
+   * day, and a faithful budget-only re-submit wrote a rule reverting the change
+   * the user had just scheduled. `PeriodService.configured` carries the rest of
+   * the argument; what a period was actually lived under stays per-period on
+   * every other read.
    */
   private async toResponse(
     row: ProfileRow,
     email: string,
   ): Promise<ProfileResponseDto> {
-    const period = await this.periods.current(row.id);
+    const configured = await this.periods.configured(row.id);
 
     return {
       fullName: row.fullName,
       email,
       currency: row.currency,
-      monthlyBudget: fromCents(
-        await this.periods.budgetCentsFor(row.id, period),
-      ),
-      monthStartDay: await this.periods.monthStartDayFor(row.id, period),
+      monthlyBudget: fromCents(configured.budgetCents),
+      monthStartDay: configured.monthStartDay,
     };
   }
 

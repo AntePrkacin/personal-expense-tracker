@@ -1,11 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsDateString,
   IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
+  Matches,
   Max,
   MaxLength,
   ValidateIf,
@@ -36,8 +38,9 @@ import {
  * Clearing `monthlyCap` back to null is deliberate and supported - deciding a
  * category no longer needs a limit is an ordinary thing to want, and the stats
  * read already defines what an uncapped category looks like. **It is an append,
- * not a clear**: a cap row with a null `cap_cents` effective from the current
- * period, so the periods that were capped stay capped.
+ * not a clear**: a cap row with a null `cap_cents` effective from the anchored
+ * period - `capFrom`, or the current period when it is absent - so the periods
+ * before the anchor stay exactly as they were.
  *
  * `name` is rejected with a **409** for the `Uncategorized` fallback, whose name
  * is a system invariant. Its cap, color, icon and description are all editable.
@@ -58,9 +61,10 @@ export class UpdateCategoryDto {
   /**
    * Major units. `null` clears the cap, leaving the category uncapped.
    *
-   * Applies **from the current period onward**, never backward: the change is a
-   * new row in this category's cap history, so a period that has already been
-   * budgeted and spent keeps the cap it was budgeted under.
+   * Applies from the period `capFrom` names onward - the current one when it is
+   * absent - never further back: the change is a new row in this category's cap
+   * history, so every period before the anchor keeps the cap it was budgeted
+   * under.
    */
   @ApiPropertyOptional({
     minimum: 0,
@@ -73,6 +77,33 @@ export class UpdateCategoryDto {
   @IsPositive()
   @Max(1_000_000_000)
   monthlyCap?: number | null;
+
+  /**
+   * The period the cap change applies from: a period's own `start` from
+   * `GET /api/periods`. Omitted means the current period.
+   *
+   * Meaningful only beside `monthlyCap` - sent without one it is a **400**,
+   * because there is nothing for it to date and silently ignoring it would
+   * read as a backdate that happened. Backdating is deliberate and visible:
+   * every period from the anchor onward is re-judged against the new cap,
+   * unless a newer cap row already covers it, and every period before the
+   * anchor keeps its own. A date that is not one of your period starts, or
+   * starts a future period, is a **400**.
+   */
+  // The regex must stay an inline literal - the swagger plugin lifts only an
+  // inline literal into `pattern` - and `@IsDateString({ strict: true })`
+  // beside it is what rejects `2026-02-30`, the same pair every date field in
+  // this API carries.
+  @ApiPropertyOptional({
+    format: 'date',
+    description:
+      'A period `start` from `GET /api/periods` that the cap applies from. Omit for the current period. Requires `monthlyCap` in the same body. Periods before it are untouched; periods from it onward use the new cap unless a later cap row already covers them.',
+    example: '2025-12-01',
+  })
+  @ValidateIf((_, value) => value !== undefined)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
+  capFrom?: string;
 
   /** A lucide icon name. Not clearable - see the class comment. */
   @ApiPropertyOptional({ enum: ICON_NAMES, example: 'shopping-basket' })

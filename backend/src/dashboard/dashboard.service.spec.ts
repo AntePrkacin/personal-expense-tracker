@@ -356,10 +356,20 @@ describe('DashboardService', () => {
 
     await service.get(USER_ID);
 
-    expect(transactionsList).toHaveBeenCalledWith(USER_ID, {
-      period: 'current',
-      sort: 'date_desc',
-    });
+    // The third argument is the already-resolved period, passed so one request
+    // resolves "current" exactly once - the midnight skew the class docblock
+    // records. The selector still travels so the query object says what was
+    // asked. Asserted against the mock's own answer rather than a matcher, so
+    // this also pins that the *same* resolution is what travels.
+    const resolved: unknown = await currentPeriod.mock.results[0].value;
+    expect(transactionsList).toHaveBeenCalledWith(
+      USER_ID,
+      {
+        period: 'current',
+        sort: 'date_desc',
+      },
+      resolved,
+    );
   });
 
   it('passes the insight summary through from the composed InsightsService', async () => {

@@ -463,7 +463,7 @@ reach for it would have got a wrong one with every gate green. The provider is c
 contract.** The paragraph above is right that `moneyFormatters` takes a `string` and must render
 whatever a profile holds; what changed is what a profile _can_ hold. `@IsISO4217CurrencyCode()`
 accepted `JPY` and `KWD`, whose exponents are 0 and 3, while `toCents`/`fromCents` assume 2 - so the
-backend now validates against 29 exponent-2 codes with `EUR` as the default, and `CurrencyCode` here
+backend now validates against an allowlist of exponent-2 codes with `EUR` as the default, and `CurrencyCode` here
 is `NonNullable<components['schemas']['UpdateProfileDto']['currency']>` rather than a hand-written
 union. The picker's list `satisfies readonly { code: CurrencyCode; ... }[]`, so a code the backend
 stops accepting fails `npm run build` instead of shipping an option that 400s. `docs/TODO.md` carries

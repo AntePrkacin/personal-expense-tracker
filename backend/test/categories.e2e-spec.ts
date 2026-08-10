@@ -491,6 +491,59 @@ describe('Category endpoints (e2e)', () => {
       });
     });
 
+    it('backdates a cap with capFrom, leaving a period with its own newer row alone', async () => {
+      const category = await cappedCategory(400, 'Backdate me');
+
+      // Anchored at the previous period's start: that period is re-judged from then on, while
+      // the current one keeps the newer row it got at creation - resolution prefers the greatest
+      // effective_from at or before each period's start, which is what makes a backdate visible
+      // and deliberate rather than a silent rewrite of a span that had its own decision.
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: lastMonth.start,
+      }).expect(200);
+
+      const previous = listBody(
+        await list().query({ period: lastMonth.start }).expect(200),
+      );
+      expect(
+        previous.categories.find((row) => row.id === category.id)?.monthlyCap,
+      ).toBe(250);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === category.id)?.monthlyCap,
+      ).toBe(400);
+    });
+
+    it('400s the capFrom misuses, writing nothing', async () => {
+      const category = await cappedCategory(400, 'Anchor rules');
+
+      // A capFrom with no cap to date is refused rather than ignored: silently dropping it would
+      // answer 200 to a body that read as a backdate, and the caller would believe one happened.
+      await patch(category.id, { capFrom: lastMonth.start }).expect(400);
+      await patch(category.id, {
+        name: 'Renamed anyway',
+        capFrom: lastMonth.start,
+      }).expect(400);
+
+      // Mid-month starts nobody's period on this account, and a future period start is refused
+      // like every other future read.
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: `${window.start.slice(0, 8)}15`,
+      }).expect(400);
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: window.end,
+      }).expect(400);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === category.id),
+      ).toMatchObject({ name: 'Anchor rules', monthlyCap: 400 });
+    });
+
     it('rejects an empty body before touching the database', async () => {
       const category = await cappedCategory(400, 'Empty patch');
       const response = await patch(category.id, {}).expect(400);
@@ -770,6 +823,56 @@ describe('Category endpoints (e2e)', () => {
       await allocate({
         categories: [{ id: category.id, monthlyCap: 400 }],
       }).expect(200);
+    });
+
+    it('anchors the whole batch with capsFrom, one answer for every row', async () => {
+      const first = await cappedCategory(400, 'Bulk backdate A');
+      const second = await cappedCategory(300, 'Bulk backdate B');
+
+      await allocate({
+        categories: [
+          { id: first.id, monthlyCap: 100 },
+          { id: second.id, monthlyCap: 50 },
+        ],
+        capsFrom: lastMonth.start,
+      }).expect(200);
+
+      const previous = listBody(
+        await list().query({ period: lastMonth.start }).expect(200),
+      );
+      expect(
+        previous.categories.find((row) => row.id === first.id)?.monthlyCap,
+      ).toBe(100);
+      expect(
+        previous.categories.find((row) => row.id === second.id)?.monthlyCap,
+      ).toBe(50);
+
+      // The current period keeps the rows it got at creation: a newer row wins, so the backdate
+      // re-judges only the span with no later decision of its own.
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === first.id)?.monthlyCap,
+      ).toBe(400);
+    });
+
+    it('400s a capsFrom that starts no period, writing nothing', async () => {
+      const target = await cappedCategory(400, 'Bulk anchor guard');
+
+      // The 15th starts nobody's period on this account, whatever the year.
+      await allocate({
+        categories: [{ id: target.id, monthlyCap: 100 }],
+        capsFrom: '2020-01-15',
+      }).expect(400);
+      // And a future period start is refused like every other future read.
+      await allocate({
+        categories: [{ id: target.id, monthlyCap: 100 }],
+        capsFrom: window.end,
+      }).expect(400);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === target.id)?.monthlyCap,
+      ).toBe(400);
     });
 
     it('rejects the malformed bodies', async () => {

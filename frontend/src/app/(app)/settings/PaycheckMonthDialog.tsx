@@ -2,6 +2,7 @@
 
 import { CalendarClock } from 'lucide-react';
 
+import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
 
 import { Modal } from '../Modal';
@@ -48,8 +49,23 @@ type PaycheckMonthDialogProps = {
   value: string;
   /** Today, as `YYYY-MM-DD`. Only the nine-month window is derived from it. */
   today: string;
-  /** True while a write is out, which disables every control including the dismissals. */
+  /**
+   * True while a write is out, which disables every control including the dismissals.
+   *
+   * The second half of that sentence is `Modal`'s `locked`, and a review is why it exists: the
+   * footer buttons were `disabled` while Escape and a backdrop click sailed past them, unmounting
+   * the dialog with its POST still landing and re-seeding the month on the next open.
+   */
   pending: boolean;
+  /**
+   * The failed save's message, or `null`.
+   *
+   * Rendered **inside** the dialog, because the form's own `FormError` sits under the `<dialog>`
+   * top layer - a failure reported only there reads as a Save button that does nothing. The dialog
+   * stays open on failure with the picked month intact, so the retry the message invites re-sends
+   * what the user actually chose.
+   */
+  failure: string | null;
   onChange: (month: string) => void;
   onConfirm: () => void;
   onClose: () => void;
@@ -59,6 +75,7 @@ export function PaycheckMonthDialog({
   value,
   today,
   pending,
+  failure,
   onChange,
   onConfirm,
   onClose,
@@ -69,6 +86,8 @@ export function PaycheckMonthDialog({
     <Modal
       title={TITLE}
       align="center"
+      // What makes `pending`'s "including the dismissals" true - see that prop.
+      locked={pending}
       // A clock over a calendar: the question is *when a change starts*, not which date something
       // happened on - `(app)/DateField.tsx` owns the second meaning and draws a plain calendar for it.
       icon={<CalendarClock aria-hidden="true" className="text-primary size-6" />}
@@ -121,6 +140,11 @@ export function PaycheckMonthDialog({
             ))}
           </select>
         </label>
+
+        {/* Inside the dialog, or a failed save's only report renders behind the top layer and the
+            Save button reads as doing nothing - see `failure` above. `FormError` renders nothing
+            for null, so the happy path costs no element. */}
+        <FormError message={failure} />
       </div>
     </Modal>
   );

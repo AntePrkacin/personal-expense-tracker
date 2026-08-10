@@ -64,10 +64,13 @@ export class PeriodResponseDto extends PeriodSummaryDto {
  * `ValidationPipe` skips a body whose reflected metatype is `Array`, and a
  * top-level array leaves no room to add a field later without breaking clients.
  *
- * **The list is bounded by the account's own history, not by a fixed number of
- * months**: it runs from the earlier of the account's first pay schedule and its
- * oldest transaction (including deleted ones) up to the current period, and never
- * into the future.
+ * **The list is bounded by the account's spending, not by a fixed number of
+ * months or by its pay-schedule rules**: it runs from the account's oldest
+ * transaction (deleted ones included) - or the current period alone when
+ * nothing has ever been logged - up to the current period, and never into the
+ * future. The earliest pay-schedule rule is deliberately not a bound: it is
+ * anchored a year before the account existed, and listing that year of empty
+ * periods would serve nobody.
  */
 export class PeriodsResponseDto {
   @ApiProperty({

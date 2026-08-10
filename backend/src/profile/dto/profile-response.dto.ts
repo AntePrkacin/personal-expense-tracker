@@ -39,11 +39,14 @@ export class ProfileResponseDto {
   /**
    * Major units (e.g. 2000.5).
    *
-   * **The budget in force right now, resolved from history rather than stored as
-   * a column.** A client cannot tell the difference on the read, but the write is
-   * `POST /api/profile/schedule` rather than `PATCH /api/profile`: setting a budget
-   * requires saying from which paycheck it applies, so that earlier periods keep
-   * the budget they were actually spent against.
+   * **The budget as configured - the newest entry of the budget history, a
+   * change scheduled at a future paycheck included - resolved rather than stored
+   * as a column.** The value a settings form loads is exactly the value a save
+   * would leave unchanged; what a given period was actually lived under is
+   * answered per period by the dashboard, category and transaction reads. The
+   * write is `POST /api/profile/schedule` rather than `PATCH /api/profile`:
+   * setting a budget requires saying from which paycheck it applies, so that
+   * earlier periods keep the budget they were actually spent against.
    */
   monthlyBudget!: number;
 
@@ -59,9 +62,12 @@ export class ProfileResponseDto {
    * `POST /api/profile/schedule` with the first new paycheck date, and only the
    * periods from that date onward move.
    *
-   * The value here is the day in force for the **current** period, so
-   * mid-transition it reports the day you are actually being paid on rather than
-   * the one starting next period.
+   * The value here is the day **as configured** - the newest rule's, a change
+   * scheduled at a future paycheck included - for `monthlyBudget`'s reason: a
+   * settings form has to load the value a save would leave unchanged, or a
+   * faithful re-submit mid-pending-change would silently revert the change.
+   * Which day any given period actually ran on is visible in that period's own
+   * boundaries, via `GET /api/periods`.
    */
   @ApiProperty({ type: 'integer' })
   monthStartDay!: number;
