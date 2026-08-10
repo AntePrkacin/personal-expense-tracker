@@ -129,8 +129,16 @@ export function TransactionsTable({
                 `sr-only` rather than visible: the frame draws no fifth heading, and the other
                 four are the design's own. Still no `aria-hidden`, for the reason it never had
                 one - hiding the header while every row renders a cell would leave a table whose
-                two halves disagree about how many columns it has. */}
-            <th scope="col">
+                two halves disagree about how many columns it has.
+
+                `w-0` pins the column to its content (PET-74's fifth addendum). The table is
+                daisyUI's full-width auto layout, so the browser spreads the leftover slack
+                across every column - this one included, whose lone kebab then sat at the left
+                edge of an over-wide cell with a visible gap between it and the table's border.
+                Claude Design draws the dots flush at the row's right padding; declaring the
+                column zero-width makes the browser shrink it to the button plus the cell's own
+                padding and hand the slack to the content columns instead. */}
+            <th scope="col" className="w-0">
               <span className="sr-only">Actions</span>
             </th>
           </tr>

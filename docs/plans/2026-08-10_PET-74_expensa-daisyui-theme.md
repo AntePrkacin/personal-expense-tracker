@@ -318,3 +318,19 @@ invalid field's ring indigo.
       blocks and the fonts
 - [ ] Gates, plus a headless focus walk: ring single and primary on focus in both themes, error
       field's ring stays error, the offset outline gone
+
+## Fifth addendum: the kebab column hugs the table's edge (2026-08-10)
+
+Reported by the product owner: a visible gap to the right of every transactions-table row, the
+kebab floating short of the edge where Claude Design draws the dots flush at the row's padding.
+The cause is layout arithmetic rather than a style: daisyUI's `table` is full-width with auto
+layout, so the browser spreads the leftover slack across every column - the actions column
+included, whose lone kebab then sat at the left edge of an over-wide cell. `w-0` on that column's
+header pins it to its content, the slack moves to the content columns, and the kebab lands one
+cell-padding from the border, measured headlessly at 16px with a 64px cell around a 32px button.
+
+### Fifth addendum tasks
+
+- [ ] `w-0` on the actions column header in `TransactionsTable.tsx`, with the comment carrying
+      the arithmetic
+- [ ] Gates, plus the headless measurement of the button-to-border gap
