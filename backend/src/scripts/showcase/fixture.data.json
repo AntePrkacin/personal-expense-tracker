@@ -1,7 +1,7 @@
 {
   "seed": 20260809,
   "months": 36,
-  "profile": {"firstName":"Showcase","lastName":"User","currency":"USD","monthlyBudgetCents":500000,"monthStartDay":1},
+  "profile": {"fullName":"Showcase User","currency":"EUR","monthlyBudgetCents":500000,"monthStartDay":1},
   "categories": [{"name":"Groceries","capCents":73000},{"name":"Dining out","capCents":50000},{"name":"Transportation","capCents":42000},{"name":"Family & pets","capCents":24500},{"name":"Travel","capCents":20000},{"name":"Entertainment","capCents":24500},{"name":"Personal care","capCents":19500},{"name":"Healthcare","capCents":31000},{"name":"Gifts","capCents":12000},{"name":"Education","capCents":10000},{"name":"Utilities","capCents":28500},{"name":"Loans & debt","capCents":150000},{"name":"Uncategorized","capCents":15000}],
   "transactions": [
     {"month":0,"occurrence":2,"day":1,"merchant":"Cogito Coffee","category":"Dining out","amountCents":892},
