@@ -4,6 +4,9 @@ import { useEffect, useRef } from 'react';
 import type { Profile } from '@/lib/profile';
 import type { UpdateProfileResult } from '@/lib/updateProfile';
 
+import { PreferencesProvider } from '../PreferencesProvider';
+
+import type { CategoriesSummary } from './categoriesSummary';
 import { SettingsScreen } from './SettingsScreen';
 
 // The import above is type-only on purpose. Importing any *value* from Storybook breaks the story
@@ -30,15 +33,24 @@ import { SettingsScreen } from './SettingsScreen';
 // **The sidebar is deliberately absent.** These stories are the content column, so diff them
 // against node `40:676` (frame 17's right-hand column) rather than against the whole 1440px frame.
 //
-// **Two of the frame's three cards are here as of PET-47**, so read the sentence this replaces -
-// "Only the Profile card is here" - as dated. The Preferences card renders below Profile with its
-// real controls, and a diff against the frame is expected to stop after **it** and the Save row,
-// because the **Categories summary** with its "Manage" is still PET-47's and still not drawn.
+// **All three of the frame's cards are here as of PET-48**, so read the two sentences this replaces
+// - "Only the Profile card is here", then "Two of the frame's three cards are here" - as dated. A
+// diff against the frame now runs the whole column: Profile, Preferences, the Categories summary,
+// and the Save row.
 //
-// Two deliberate differences from the frame in that second card, both recorded where they are
+// Two deliberate differences from the frame in the second card, both recorded where they are
 // decided: currency is the budget field's left segment rather than a row of its own
 // (`components/BudgetField.tsx`), and there is no "On track" status chip in the header, because
-// Settings fetches no dashboard data to put behind one (`settings/PreferencesCard.tsx`).
+// Settings fetches no dashboard data to put behind one (`settings/PreferencesCard.tsx`). One in the
+// third: its "Manage" is inert by product decision, so the story's button navigates nowhere
+// (`settings/CategoriesSummaryCard.tsx`).
+//
+// **Every story goes through `Frame` and none may render `SettingsScreen` directly.** The Categories
+// card calls `useMoney()`, which throws outside `PreferencesProvider` - and the provider cannot live
+// in a `decorators` array, because the story smoke tests build each story from `render` or
+// `meta.component` and never apply a meta's decorators, so a decorator would work in the browser and
+// throw under Jest. `shellRender.tsx` records that split; `CategoriesScreen.stories.tsx` solves it
+// the same way.
 
 /** Frame 17's own values, so `Default` is a literal diff target. */
 const PROFILE: Profile = {
@@ -49,21 +61,51 @@ const PROFILE: Profile = {
   monthStartDay: 1,
 };
 
+/** Frame `40:722`'s own figures, with the fallback already excluded from the count. */
+const SUMMARY: CategoriesSummary = { count: 8, allocated: 1800, monthlyBudget: 2000 };
+
 const accept = async (): Promise<UpdateProfileResult> => ({ ok: true });
+
+/**
+ * The screen inside the one piece of the shell it cannot do without.
+ *
+ * The provider's currency is read off the story's own profile rather than pinned to `USD`, so a
+ * story changing one changes both - which is what `(app)/layout.tsx` does with the same profile, and
+ * what stops a `EUR` story drawing euros in the budget field over dollars on the Categories card.
+ */
+function Frame(args: React.ComponentProps<typeof SettingsScreen>) {
+  return (
+    <PreferencesProvider currency={args.profile.currency}>
+      <SettingsScreen {...args} />
+    </PreferencesProvider>
+  );
+}
 
 const meta: Meta<typeof SettingsScreen> = {
   title: 'Screens/17 Settings',
   component: SettingsScreen,
   tags: ['autodocs'],
   parameters: { layout: 'fullscreen', nextjs: { appDirectory: true } },
-  args: { profile: PROFILE, save: accept, themePref: 'system' },
+  args: { profile: PROFILE, summary: SUMMARY, save: accept, themePref: 'system' },
+  // On `meta` for the browser, and repeated on every story below because the smoke harness reads
+  // `story.render` or `meta.component` and never `meta.render`. Both are needed: without this one
+  // Storybook's own docs page would render the bare component, and without the per-story ones the
+  // Jest harness would.
+  render: (args) => <Frame {...args} />,
 };
 
 export default meta;
 type Story = StoryObj<typeof SettingsScreen>;
 
-/** The frame as drawn: the Profile card prefilled, initials "MK", and the page's single Save. */
-export const Default: Story = {};
+/**
+ * The frame as drawn: three cards prefilled, initials "MK", and the page's single Save.
+ *
+ * The literal diff target for node `40:676`, and as of PET-48 it is the whole column rather than the
+ * top of it.
+ */
+export const Default: Story = {
+  render: (args) => <Frame {...args} />,
+};
 
 /**
  * A stored last name of nothing, which is the state `initials` and `shortName` both degrade for.
@@ -75,6 +117,7 @@ export const Default: Story = {};
  */
 export const SingleName: Story = {
   args: { profile: { ...PROFILE, fullName: 'Marko' } },
+  render: (args) => <Frame {...args} />,
 };
 
 /** A long hyphenated name and a long address, against the two-column row and the `max-w-205` ceiling. */
@@ -86,6 +129,56 @@ export const LongValues: Story = {
       email: 'marija.magdalena.kovacevic@example-company-mail.com',
     },
   },
+  render: (args) => <Frame {...args} />,
+};
+
+/**
+ * One category, which is AC2's singular (PET-48).
+ *
+ * Reachable rather than contrived: an account that has deleted everything it did not want is left
+ * with one row plus the fallback this card does not count.
+ */
+export const SingleCategory: Story = {
+  args: { summary: { count: 1, allocated: 200, monthlyBudget: 2000 } },
+  render: (args) => <Frame {...args} />,
+};
+
+/**
+ * No categories at all, and the state neither design draws (PET-48).
+ *
+ * The card excludes the `Uncategorized` fallback, so an account holding only that row reads "0
+ * categories · $0 allocated of $2,000" - every word of it true, and none of it designed. This story
+ * is what to put in front of a designer for it, alongside the unavailable line below.
+ */
+export const NoCategories: Story = {
+  args: { summary: { count: 0, allocated: 0, monthlyBudget: 2000 } },
+  render: (args) => <Frame {...args} />,
+};
+
+/**
+ * The categories read having failed, which is the fourth state on this page with no frame behind it
+ * (PET-48).
+ *
+ * The card keeps its heading and its button and says what is missing; the two cards above it stay
+ * editable and still save, which is the whole reason `page.tsx` degrades this read rather than
+ * throwing. Its one sentence is invented copy and owes A29 a sign-off with the rest.
+ */
+export const CategoriesUnavailable: Story = {
+  args: { summary: null },
+  render: (args) => <Frame {...args} />,
+};
+
+/**
+ * A euro account, and the one story that proves money follows the profile across *both* new cards
+ * (PET-47's budget field and PET-48's summary line).
+ *
+ * PET-47 made the switch re-denominate rather than convert - the amounts are integer cents with no
+ * currency attached and there is no rate source - so `€2,000` here is the same stored number the
+ * dollar stories draw.
+ */
+export const EuroAccount: Story = {
+  args: { profile: { ...PROFILE, currency: 'EUR' } },
+  render: (args) => <Frame {...args} />,
 };
 
 /**
@@ -128,7 +221,7 @@ export const WithMessages: Story = {
 
       return (
         <div ref={host}>
-          <SettingsScreen {...args} />
+          <Frame {...args} />
         </div>
       );
     }
@@ -170,7 +263,7 @@ export const EmailTaken: Story = {
 
       return (
         <div ref={host}>
-          <SettingsScreen {...args} />
+          <Frame {...args} />
         </div>
       );
     }
@@ -219,7 +312,7 @@ export const SessionExpired: Story = {
 
       return (
         <div ref={host}>
-          <SettingsScreen {...args} />
+          <Frame {...args} />
         </div>
       );
     }
@@ -260,7 +353,7 @@ export const Saved: Story = {
 
       return (
         <div ref={host}>
-          <SettingsScreen {...args} />
+          <Frame {...args} />
         </div>
       );
     }

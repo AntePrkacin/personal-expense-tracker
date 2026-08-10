@@ -2743,3 +2743,62 @@ draws - would promise a keyboard contract nothing implemented, the refusal this 
 made four times. `settings/page.tsx` reads the cookie a second time so the control's checked
 state agrees with the server HTML at hydration; `(app)/pages.test.tsx` mocks `next/headers` for
 exactly that read.
+
+**PET-48 built frame 17's third card, so "the Categories summary is still not drawn" above is
+history - and it was PET-48's, not PET-47's, which two sentences in this file and two in
+`frontend/CLAUDE.md` got wrong.** Settings is a complete screen: three cards over one "Save
+changes", and `SettingsScreen.test.tsx` now pins exactly three `h2`s so a fourth cannot arrive
+without somebody deciding it belongs.
+
+**It is the first card on this page that reads rather than writes, and every difference from its two
+siblings follows from that.** It takes one `summary` object instead of the shared `values` /
+`errors` / `disabled` / `onChange`, because it has no field to carry a message or to freeze; it
+touches `settingsForm.ts` nowhere, so `SettingsFormValues`, `invalidFields`, `sameSettingsValues`
+and `toUpdateProfileBody` are all untouched by it; and it takes no `disabled`, so a save in flight
+leaves it alone. It still sits **inside** the `<form>`, because the frame puts it above the Save row
+and Save is inside the form - and it is a prop rather than a `React.ReactNode` slot on
+`SettingsScreen` for the reason both siblings cite, that a slot with one possible occupant expresses
+no choice. `settings/categoriesSummary.ts` is the React-free half, the same split `settingsForm.ts`
+makes beside it.
+
+**Settings is the second route in this app to read two guarded endpoints, and it copies
+`transactions/categories/page.tsx`'s division of labour exactly.** `requireProfile()` decides
+whether the session is alive; `readCategoriesView()` never does, **including on its own 401**, which
+is the half worth stating - two opinions about the session on one page is the shape the `/dashboard`
+to `/login` loop PET-52 had to unpick came out of. The other half is the opposite call that page
+makes for its own list: there the response _is_ the screen, so a failure throws; here it is one
+sentence on the third of three cards, so every failure degrades to `summary: null` and the card
+draws an invented line saying the totals are unavailable while the two cards above it stay editable
+and still save. `lib/palette.ts` is the precedent for that policy, and `(app)/pages.test.tsx` pins
+both arms rather than `SettingsForm.test.tsx`, because what they pin is the decision `page.tsx`
+makes.
+
+**The card reads the _saved_ currency, not the one the Preferences card above it may be mid-edit.**
+`useMoney()` comes from `(app)/PreferencesProvider`, which the layout builds from the profile it
+already read - so typing `EUR` into the picker above changes that field and leaves this card in
+dollars until a save lands. That is correct rather than a lag: every figure on this card is a saved
+figure, and a symbol from an unsaved edit would be the one lie the card could tell. It is also why
+the card can stay a plain module with no `'use client'` of its own, exactly like both siblings.
+
+**Two things about it are product decisions that depart from what this file otherwise prescribes,
+and both are on the ticket.** The count **excludes the `Uncategorized` fallback**, so Settings reads
+one lower than the Transactions tab badge on the same account - measured in a browser walk at 13
+against 14. Accepted, because this card is about the categories a user manages and the fallback is
+the one they cannot; the seam it leaves is that `allocation.allocated` is used verbatim and would
+include a cap on that row if one were ever set through the API, which no screen offers.
+And **"Manage" is inert with no `disabled` and no `aria-disabled`**, though
+`/transactions/categories` exists and `<Button href={TAB_HREFS.categories}>` is the whole change.
+That amends AC3 and it is the one place this app now ships a control that looks operable and is not
+
+- the exact failure every `aria-disabled` on the Categories tab was added to avoid, and which PET-70
+  had finished clearing. `type="button"` is what keeps it out of the form's submit path, and both the
+  suite and the browser walk pin that pressing it sends nothing; `docs/TODO.md` carries the rest.
+
+**Two suites and the story file changed shape for it, and the reason is `useMoney()`.**
+`SettingsForm.test.tsx` and `SettingsScreen.test.tsx` import `render` from `(app)/shellRender`
+rather than from Testing Library, because that hook throws outside `PreferencesProvider` by design.
+`SettingsScreen.stories.tsx` could not do the same - `shellRender` says so itself - so every story
+renders through a local `Frame` that mounts the provider **inside `render`**, never in a
+`decorators` array, since the story smoke harness builds each story from `render` or
+`meta.component` and never applies a meta's decorators. A decorator there works in the browser and
+throws under Jest.

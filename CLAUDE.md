@@ -80,6 +80,21 @@ currency allowlist, `categories.note` becomes `description`, and onboarding asks
 Settings save is unchanged in shape and different in effect - one "Save changes", intercepted by a
 dialog asking which paycheck a budget or pay-day change applies from.
 
+**PET-48 is the seventeenth thing that works, and it closes the one gap the first paragraph above
+still names.** The **Categories** summary is frame 17's third and last card: one read-only line
+reading "{n} categories · {allocated} allocated of {budget}", every figure real, over a secondary
+"Manage" - so "what remains unbuilt is that one Settings card" is closed, Settings is a complete
+screen, and no card on any of the four routed views is missing. Two things about it are decisions
+rather than shape, and both were the product owner's. The count **excludes the `Uncategorized`
+fallback**, so this card reads one lower than the Transactions tab badge on the same account -
+deliberate, because the card is about the categories a user manages and the fallback is the one they
+cannot. And **"Manage" is inert**, with no `disabled` and no `aria-disabled`, though the Categories
+tab it would open exists and is complete: the ticket's AC3 is amended and `docs/TODO.md` carries the
+gap. That makes it the app's only silently inert control, so **PET-72's "the app has no inert
+control anywhere" above is true of everything except this one button** - read that clause as narrowed
+rather than as still holding. Worth knowing before copying it, because every other drawn-but-unbuilt
+control here announces its state, and PET-70 had cleared the last of them.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and

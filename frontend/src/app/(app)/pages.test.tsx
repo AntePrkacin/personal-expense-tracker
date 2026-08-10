@@ -4,7 +4,7 @@ import { screen, within } from '@testing-library/react';
 // production, so the cards below reach `PreferencesProvider` there. See `shellRender.tsx`.
 import { render } from './shellRender';
 
-import { readCategoryLabels } from '../../lib/categories';
+import { readCategoriesView, readCategoryLabels } from '../../lib/categories';
 import { readDashboard } from '../../lib/dashboard';
 import { requireInsights } from '../../lib/insights';
 import { readPeriods } from '../../lib/periods';
@@ -40,7 +40,14 @@ jest.mock('../../lib/dashboard', () => ({ readDashboard: jest.fn() }));
 // PET-29 gives that page a second read: a row carries only a `categoryId`, so the name and
 // colour the table draws are joined on from the category list. Same relative specifier, same
 // reason.
-jest.mock('../../lib/categories', () => ({ readCategoryLabels: jest.fn() }));
+//
+// PET-48 gives Settings a read out of this same module, so the factory grows a second key rather
+// than a second `jest.mock` - a module may only be mocked once, and a factory omitting a name any
+// page imports fails with "is not a function" at render rather than at mock time.
+jest.mock('../../lib/categories', () => ({
+  readCategoryLabels: jest.fn(),
+  readCategoriesView: jest.fn(),
+}));
 
 // AI Insights is not a plain Server Component either, as of PET-42-43-44: it awaits
 // `requireInsights()`, the same shape as the two above.
@@ -199,6 +206,19 @@ beforeEach(() => {
     monthlyBudget: 2000,
     monthStartDay: 1,
   });
+
+  // Settings' second read, as of PET-48. An empty list with a real `allocation` is enough: the
+  // card's own sentence is `SettingsForm.test.tsx`'s subject, and this file asserts the header
+  // above it. Unlike every read beside it this one **cannot** make the page fail, because
+  // `page.tsx` degrades a failure to `null` rather than throwing - so a case wanting the degraded
+  // card overrides it and nothing else has to change.
+  (readCategoriesView as jest.Mock).mockResolvedValue({
+    ok: true,
+    data: {
+      categories: [],
+      allocation: { monthlyBudget: 2000, allocated: 0, unallocated: 2000 },
+    },
+  });
 });
 
 /**
@@ -340,6 +360,35 @@ describe('the header action, which differs on every screen', () => {
     expect(header).not.toBeNull();
     expect(within(header!).queryAllByRole('button')).toHaveLength(0);
     expect(within(header!).queryAllByRole('link')).toHaveLength(0);
+  });
+
+  // **PET-48's failure policy, which is the page's rather than the card's.** Every other read in
+  // this file throws or redirects when it fails; this one must not, because it feeds the third of
+  // three cards and the two above it are still editable and still saveable. The case lives here
+  // rather than in `SettingsForm.test.tsx` because what it pins is the decision `page.tsx` makes,
+  // and that file only ever sees the `null` this produces.
+  it('Settings still renders when the categories read fails', async () => {
+    (readCategoriesView as jest.Mock).mockResolvedValue({ ok: false, reason: 'unavailable' });
+
+    await renderScreen(SettingsPage);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+  });
+
+  // The same for a 401, which is the half worth its own case: `requireProfile()` is the read that
+  // decides whether the session is alive, and a second opinion here is the shape the `/dashboard`
+  // to `/login` loop came out of. `redirect` is mocked as throwing in this file, so a page that
+  // redirected on this would fail rather than pass quietly.
+  it('Settings does not redirect when the categories read answers 401', async () => {
+    (readCategoriesView as jest.Mock).mockResolvedValue({
+      ok: false,
+      reason: 'unauthenticated',
+    });
+
+    await renderScreen(SettingsPage);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
   });
 });
 

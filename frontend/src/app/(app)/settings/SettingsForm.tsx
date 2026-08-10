@@ -13,6 +13,8 @@ import type { ThemePref } from '@/lib/theme';
 import type { components } from '@/types/api';
 import { updateProfile, type UpdateProfileResult } from '@/lib/updateProfile';
 
+import type { CategoriesSummary } from './categoriesSummary';
+import { CategoriesSummaryCard } from './CategoriesSummaryCard';
 import { PaycheckMonthDialog } from './PaycheckMonthDialog';
 import { PreferencesCard } from './PreferencesCard';
 import { ProfileCard } from './ProfileCard';
@@ -76,6 +78,16 @@ function todayIso(): string {
 // the moment of saving also puts the question where the answer is knowable: the user has just decided
 // what the budget should be, so "from which paycheck" is the natural next sentence rather than a
 // field they had to fill in before they knew they were changing anything.
+//
+// **PET-47 shipped one of those two cards and PET-48 shipped the other, and the second cost this
+// file one prop and one line.** The PET-47 prediction two paragraphs up was written for a card that
+// *writes*; the Categories summary reads, so it touches none of the five things listed there - not
+// `SettingsFormValues`, not `invalidFields`, not `toUpdateProfileBody`, not `MESSAGES` - and none of
+// what PET-72 added either, since it carries nothing into the patch and nothing into the schedule
+// write. It takes `summary` straight from the props and renders it. Worth saying plainly, because
+// "the third card is like the second" is the wrong summary: the second is a sibling of
+// `ProfileCard` and the third is a sibling of nothing, which is why its props are one object rather
+// than the shared four.
 
 /**
  * Every string this form can show, in one place.
@@ -154,6 +166,19 @@ type SettingsFormProps = {
    */
   profile: Profile;
   /**
+   * The Categories card's three figures, or `null` when that read failed.
+   *
+   * **Threaded through this form rather than rendered beside it**, because the frame puts the card
+   * between the Preferences card and the "Save changes" row - and Save is inside the `<form>`, so
+   * the card has to be too. It is a prop rather than a `React.ReactNode` slot on `SettingsScreen`
+   * for `CategoriesScreen`'s reason, the same one `ProfileCard` and `PreferencesCard` cite: a slot
+   * with one possible occupant expresses no choice.
+   *
+   * It is deliberately **not** derived from `values`. `CategoriesSummaryCard` documents why the
+   * budget on it is the saved one rather than the one being typed above it.
+   */
+  summary: CategoriesSummary | null;
+  /**
    * Injected with a default, which is `AddCategoryButton`'s rule and not a testing convenience.
    * Storybook's Vite build has no notion of `'use server'`, so it bundles the action as an ordinary
    * module and a press in a story would reach `cookies()` from `next/headers` in the browser. It
@@ -188,6 +213,7 @@ type SettingsFormProps = {
 
 export function SettingsForm({
   profile,
+  summary,
   save = updateProfile,
   saveSchedule = changeSchedule,
   today = todayIso(),
@@ -620,9 +646,7 @@ export function SettingsForm({
       {/* **A literal sibling, sharing the form's state and its one Save**, which is exactly what
           this file's own header predicted PET-47 would be. AC6 falls out of that rather than being
           implemented: both cards write into `values`, `toUpdateProfileBody` diffs the whole profile
-          at once, and one press sends one PATCH carrying whatever changed on either.
-
-          `<CategoriesSummaryCard />` is still PET-47's third card and is still not drawn. */}
+          at once, and one press sends one PATCH carrying whatever changed on either. */}
       <PreferencesCard
         values={values}
         errors={errors}
@@ -630,6 +654,17 @@ export function SettingsForm({
         themePref={themePref}
         onChange={change}
       />
+
+
+      {/* **The third card, and the one that carries nothing into the save.** It sits inside the
+          `<form>` because the frame puts it above "Save changes", not because it has anything to
+          submit - so it takes no `disabled`, and a save in flight leaves it alone. Its one control
+          is inert by product decision and `type="button"`, which is what keeps it out of this
+          form's submit path; `CategoriesSummaryCard.tsx` carries both arguments.
+
+          This replaces the placeholder comment PET-46 left here, which named PET-47 as the ticket
+          that would fill it. It was PET-48's. */}
+      <CategoriesSummaryCard summary={summary} />
 
       {/* **The 401 is the one failure that carries a control, so it does not go through
           `FormError`.** That component renders a bare string by design, and this arm needs a link

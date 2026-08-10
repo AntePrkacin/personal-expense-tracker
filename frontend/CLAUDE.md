@@ -688,6 +688,27 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   than inert. The prediction that the second card would be "a structurally identical sibling taking
   the same four props" held exactly, with one widening - `PreferencesCard`'s `onChange` is generic
   over the field, because two of its three values are a number and an ISO code rather than typed text.
+  **PET-48 built the third, and it was PET-48's rather than PET-47's** - two sentences above say
+  otherwise and both are wrong rather than dated, which is worth correcting in place because a reader
+  chasing the wrong ticket learns nothing. `settings/CategoriesSummaryCard.tsx` draws the count, the
+  sum of the caps and the monthly budget over a secondary "Manage", from a second guarded read in
+  `settings/page.tsx`. So **every card on frame 17 exists and this bullet's Settings half is
+  closed**; what keeps the bullet alive is two inert controls, which is what to read the paragraphs
+  above for. The prediction that the third card would be another sibling of `ProfileCard` did **not**
+  hold: it reads rather than writes, so it takes one `summary` object instead of the shared four
+  props, touches `settingsForm.ts` nowhere, and carries no `disabled` - a save in flight freezes
+  every field on the page and deliberately not this card.
+  **The second inert control is that card's own "Manage", and it is a different kind from every
+  other entry on this list.** The Dashboard's month select is inert because A8 wants a designed
+  control first; the Categories tab's dead controls were inert because their tickets had not landed,
+  and every one of them announced `aria-disabled` so a reader was told rather than left pressing.
+  This one is inert **by product decision** with the destination already built: `TAB_HREFS.categories`
+  exists, `/transactions/categories` is complete, and `<Button href>` is the whole change. It ships
+  with no `disabled` and no `aria-disabled`, which makes it the only control in this app that looks
+  operable and is not - the exact failure `frontend/src/app/CLAUDE.md`'s inert-control doctrine was
+  written against. Recorded here rather than argued: PET-48's AC3 is amended on the ticket and
+  `docs/TODO.md` carries the reasoning and the fix. Do not copy the pattern; copy the doctrine it
+  departs from.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session

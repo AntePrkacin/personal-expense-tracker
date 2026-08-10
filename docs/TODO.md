@@ -2803,6 +2803,57 @@ why it wants the notification system under HIGH IMPORTANCE above rather than a f
 `role="status"` line on one screen. Until then the honest summary is that the feature is correct
 and unobservable, and A29 owes the copy along with everything else invented on this screen.
 
+### The Settings "Manage" button is inert on purpose, and it is the app's only silent dead control
+
+PET-48 built the Categories summary card and shipped its "Manage" doing nothing, on the product
+owner's instruction, and deliberately **without** `disabled` or `aria-disabled`. PET-48's AC3 says
+the button opens the Categories tab of the Transactions page; that is amended on the ticket.
+
+Worth recording rather than leaving as a curiosity, because it reverses a line this repo spent
+several tickets drawing. Every other drawn-but-unbuilt control here announces `aria-disabled` so a
+reader is told rather than left pressing - the Categories tab's kebab, "Set limit", "Allocate", the
+edit menu item - and PET-70 removed the last of them, at which point that screen was described as
+the first in the app with no inert control on it. This one is a control that looks operable, is
+focusable, announces as available, and does nothing.
+
+The fix is one line and needs no new declaration: `TAB_HREFS.categories` already exists in
+`app/(app)/transactions/TransactionTabs.tsx`, the route behind it is complete, and `ui/Button`'s
+`href` arm renders the `next/link`. Whoever takes it should also delete the amendment note from
+PET-48 and the paragraph in `frontend/CLAUDE.md`'s gap list.
+
+The one thing not to lose in the meantime: the button is `type="button"`, and that is load-bearing
+rather than tidy. It sits inside the page's `<form>`, where HTML defaults a bare `<button>` to
+`submit` - so replacing it with a plain element makes "Manage" save the profile, silently.
+`SettingsForm.test.tsx` and the browser walk both pin the press sending nothing.
+
+### Settings counts categories one lower than the Transactions tab badge, by decision
+
+The Categories summary card excludes the `Uncategorized` fallback from its count; the tab badge in
+`TransactionTabs` counts every live category and documents itself as never 0 for that reason. So one
+account reads "13 categories" on Settings and "14" on the Categories tab, which was measured in
+PET-48's browser walk rather than reasoned about. The product owner chose it: the card is about the
+categories a user manages, and the fallback is the one they cannot - it draws no kebab and no banner,
+and the entry above about it being neither renamable nor cappable from the UI is the same fact from
+another side.
+
+The seam it leaves is small and real. `allocation.allocated` is passed through verbatim rather than
+re-summed - it is the same figure the Categories tab's summary card and the Allocate modal read, and
+a private `reduce` here would be a second authority on one number - and that figure **includes** a
+cap on the fallback if one were ever set. No screen offers that, `PATCH /api/categories` accepts it,
+and `allocateForm.ts`'s `reservedCents` is what recovering it looks like when a caller genuinely
+needs to. Until then the count and the sum disagree about one row that contributes zero.
+
+### Two more invented states on Settings, both PET-48's
+
+A29 designs neither, and both are collected by `Screens/17 Settings` stories rather than left to be
+described:
+
+- **"We couldn't load your category totals just now."**, the card's degraded line, shown when the
+  categories read fails. It claims nothing about why, because the read collapses a dead session, a
+  dead backend and a 500 into one answer on purpose. Story: `CategoriesUnavailable`.
+- **"0 categories · $0 allocated of $2,000"**, which an account holding only the fallback reaches.
+  Every word of it true and none of it drawn. Story: `NoCategories`.
+
 ---
 
 ## Scaling, when it is actually needed

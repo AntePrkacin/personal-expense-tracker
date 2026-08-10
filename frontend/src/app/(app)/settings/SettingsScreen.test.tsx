@@ -1,7 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 
 import type { Profile } from '@/lib/profile';
 
+// `shellRender`'s `render` as of PET-48, because the Categories card calls `useMoney()`. Same swap
+// `SettingsForm.test.tsx` made, for the same reason.
+import { render } from '../shellRender';
+
+import type { CategoriesSummary } from './categoriesSummary';
 import { SettingsScreen } from './SettingsScreen';
 
 // Thin on purpose. The form's behaviour is `SettingsForm.test.tsx`'s and the diff is
@@ -19,8 +24,12 @@ const PROFILE: Profile = {
   monthStartDay: 1,
 };
 
+const SUMMARY: CategoriesSummary = { count: 8, allocated: 1800, monthlyBudget: 2000 };
+
 function renderScreen() {
-  return render(<SettingsScreen profile={PROFILE} save={jest.fn()} themePref="system" />);
+  return render(
+    <SettingsScreen profile={PROFILE} summary={SUMMARY} save={jest.fn()} themePref="system" />,
+  );
 }
 
 describe('SettingsScreen', () => {
@@ -31,13 +40,23 @@ describe('SettingsScreen', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
   });
 
-  it('renders exactly one page-level heading, with the card title below it', () => {
-    // The card is an `h2`, because `PageHeader` owns the page's `h1` - which is what keeps
+  it('renders exactly one page-level heading, with the card titles below it', () => {
+    // Every card is an `h2`, because `PageHeader` owns the page's `h1` - which is what keeps
     // `pages.test.tsx`'s one-h1 case passing now that this screen has content.
     renderScreen();
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 2, name: 'Profile' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Preferences' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Categories' })).toBeInTheDocument();
+  });
+
+  it('draws frame 17 whole: three cards over one Save', () => {
+    // The assertion PET-46 and PET-47 could not make, because the frame's third card did not exist.
+    // A fourth `h2` appearing here means a card was added without anybody deciding it belonged.
+    renderScreen();
+
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3);
   });
 
   it('keeps the header free of controls, which is SET-1 AC2', () => {

@@ -4,6 +4,7 @@ import type { updateProfile, UpdateProfileResult } from '@/lib/updateProfile';
 
 import { PageHeader } from '../PageHeader';
 
+import type { CategoriesSummary } from './categoriesSummary';
 import { SettingsForm } from './SettingsForm';
 
 // 17 Settings (frame `40:630`), the fourth and last routed view to get content under its header.
@@ -18,9 +19,22 @@ import { SettingsForm } from './SettingsForm';
 // **No `action` on `PageHeader`, which is SET-1's AC2**: this is the only one of the four routed
 // views with no header control at all, because "Save changes" lives at the foot of the form. An
 // omitted prop is what makes the header render nothing on the right rather than an empty box.
+//
+// **Two props rather than one as of PET-48**, and the second is not a second profile. `summary` is
+// the Categories card's three figures, which come from a different endpoint and a different failure
+// policy - `page.tsx` is where both of those are decided. This screen only threads it.
 
 type SettingsScreenProps = {
   profile: Profile;
+  /**
+   * The Categories card's figures, or `null` when that read failed - passed straight through to the
+   * form, which is where the reasoning lives.
+   *
+   * Required rather than defaulted to `null`, for the reason `TransactionsScreen`'s `filters` is:
+   * `npm run build` never typechecks `*.test.tsx`, so a default would let a call site quietly test
+   * a screen whose third card is permanently in its failure state.
+   */
+  summary: CategoriesSummary | null;
   /**
    * Threaded through to the form, which is where the reasoning lives: Storybook bundles a
    * `'use server'` module as an ordinary one, so a story pressing Save would reach `cookies()` in
@@ -37,12 +51,12 @@ type SettingsScreenProps = {
   themePref: ThemePref;
 };
 
-export function SettingsScreen({ profile, save, themePref }: SettingsScreenProps) {
+export function SettingsScreen({ profile, summary, save, themePref }: SettingsScreenProps) {
   return (
     <>
       <PageHeader overline="Manage your account" title="Settings" />
       <main className="flex-1 pb-10">
-        <SettingsForm profile={profile} save={save} themePref={themePref} />
+        <SettingsForm profile={profile} summary={summary} save={save} themePref={themePref} />
       </main>
     </>
   );

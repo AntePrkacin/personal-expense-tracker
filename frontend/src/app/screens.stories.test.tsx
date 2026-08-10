@@ -138,9 +138,12 @@ const MODULES: [name: string, module: StoryModule][] = [
   // Frame 17, PET-46's own, and the last of the four routed views to reach this list. Three of its
   // five stories are states the frame draws nothing for - all three inline messages at once, the
   // 409, and the success confirmation - which makes this module the review surface A29 owes a
-  // sign-off on rather than only a diff against the design. The diff itself stops after the
-  // **second** card and the Save row as of PET-47, which built Preferences; the Categories summary
-  // below it is still that ticket's and still not drawn.
+  // sign-off on rather than only a diff against the design. **The diff runs the whole column as of
+  // PET-48**, which built the Categories summary - so the sentences this replaces, first stopping
+  // after the Profile card and then after Preferences, are both dated, and the card was PET-48's
+  // rather than PET-47's as they claimed. Every story in that module renders through its own
+  // `Frame`, because the new card calls `useMoney()` and this harness never applies a meta's
+  // decorators.
   ['SettingsScreen', SettingsScreen as StoryModule],
   // The Month starts on picker, added because a review found it in no smoke suite. Its title is
   // `Screens/17 Settings/MonthStartField`, so the `Screens/` assertion below covers it. Worth having
