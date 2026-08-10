@@ -141,7 +141,25 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
   // **The server's values `values` was last seeded from, and the flag that says a save is waiting
   // for its refresh.** Together these are the resync below; both exist because `router.refresh()`
   // resolves asynchronously, so the new `profile` is not readable at the moment the save succeeds.
-  const [synced, setSynced] = useState<SettingsFormValues>(() => toSettingsFormValues(profile));
+  /**
+   * The profile as this form last adopted it, and the **single** baseline for both questions this
+   * component asks: "has the user changed anything" and "what should the body carry".
+   *
+   * **It holds the `Profile` rather than the form values, and a code review is why.** It was
+   * `SettingsFormValues`, while the Save gate and the submit diff both went through
+   * `toUpdateProfileBody(profile, ...)` - the *live* prop. Those two baselines come apart whenever a
+   * `router.refresh()` lands with `awaitingSaved` false, which a single keystroke during the round
+   * trip is enough to cause: the resync below is abandoned, so this state stays pre-save while
+   * `profile` becomes the new server state. A field another device changed in the meantime is then
+   * in `profile` but not in `values`, so the next diff reads the untouched local value as an edit
+   * and **sends it**, silently reverting the other device under a green "Changes saved" - the exact
+   * loss the resync docblock below says it exists to prevent.
+   *
+   * Storing the profile makes both derivations read one object, so they cannot disagree. The cost is
+   * a staleness rather than a loss: with the resync abandoned, another device's change is not picked
+   * up until a refresh lands cleanly, and until then it is simply absent from the diff.
+   */
+  const [syncedProfile, setSyncedProfile] = useState<Profile>(profile);
   const [awaitingSaved, setAwaitingSaved] = useState(false);
 
   /**
@@ -169,8 +187,10 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
    */
   const fromServer = toSettingsFormValues(profile);
 
+  const synced = toSettingsFormValues(syncedProfile);
+
   if (awaitingSaved && !sameSettingsValues(fromServer, synced)) {
-    setSynced(fromServer);
+    setSyncedProfile(profile);
     setValues(fromServer);
     setAwaitingSaved(false);
   }
@@ -220,7 +240,7 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
   const edited = !sameSettingsValues(values, synced);
   const hasProblems = invalidFields(values).length > 0;
   const hasChangesToSave =
-    edited && (hasProblems || Object.keys(toUpdateProfileBody(profile, values)).length > 0);
+    edited && (hasProblems || Object.keys(toUpdateProfileBody(syncedProfile, values)).length > 0);
 
   useEffect(() => {
     if (pending) return;
@@ -333,7 +353,7 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
     // Both guards outlive the disabled button rather than being replaced by it: a control that is
     // not offered is not an enforcement, which is the rule this repo applies to its two unreachable
     // 409s, and this handler is reachable by other routes than a press.
-    const body = toUpdateProfileBody(profile, values);
+    const body = toUpdateProfileBody(syncedProfile, values);
 
     if (Object.keys(body).length === 0) return;
 

@@ -8,11 +8,14 @@
 // per-currency formatter affordable, and `lib/format.ts` is otherwise strings-in-strings-out with
 // no cache in it at all.
 //
-// **`lib/format.ts` still exports `formatCurrency`, `formatWhole` and `formatNegative`**, bound to
-// `DEFAULT_CURRENCY`, and that is deliberate rather than a leftover. One consumer must never read
-// a profile - `app/DecorativePanel.tsx` renders on the access screens, before anybody is signed in,
-// and every figure in it is fabricated - and the rest of the app migrates onto the threaded
-// version file by file rather than in one commit.
+// **`lib/format.ts` exports no money formatters at all, and this paragraph used to say it did.**
+// The claim was written while the thread was mid-flight, when the plan expected
+// `app/DecorativePanel.tsx` to keep needing a USD-bound trio; that file turned out to draw its
+// figures as literal strings and only *mention* `formatCurrency` in a comment saying why, so the
+// re-exports were deleted with nothing left importing them. A review caught the two files asserting
+// opposite facts about one export, which is exactly the failure `docs/agents/conventions.md`'s
+// single-home rule exists to prevent. There is no default-bound formatter anywhere: every caller
+// supplies a currency, from a prop server-side or from `useMoney()` on the client.
 //
 // What is **not** here is the amount field. `formatAmountInput`, `parseAmountInput` and
 // `amountCaret` stay in `lib/format.ts` and stay currency-blind, because they format a value
@@ -159,7 +162,17 @@ function numberFormat(currency: string, maximumFractionDigits: number): Intl.Num
 
   try {
     return new Intl.NumberFormat(LOCALE, options);
-  } catch {
+  } catch (error) {
+    // **The catch is for an unrecognised-but-well-formed ISO code, and it must not swallow more than
+    // that.** A review found it hiding a programming error: four Storybook modules omitted the
+    // required `currency` prop, `Intl` threw `TypeError: Currency code is required with currency
+    // style`, and this fell back to the default - so the stories silently rendered USD and neither
+    // `tsc` nor any suite could see it, because `StoryObj` typing does not reject a missing arg.
+    //
+    // A missing or malformed code is a bug in the caller, so it is rethrown; a `RangeError` from a
+    // code the runtime does not know is the case this exists for and still degrades quietly.
+    if (!(error instanceof RangeError)) throw error;
+
     return new Intl.NumberFormat(LOCALE, { ...options, currency: DEFAULT_CURRENCY });
   }
 }

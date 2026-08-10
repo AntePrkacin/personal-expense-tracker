@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/Button';
 import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
 import { FormError } from '@/components/FormError';
 import { reformatAmountInput } from '@/lib/amountField';
-import type { MoneyFormatters } from '@/lib/money';
+import { currencySymbol, type MoneyFormatters } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
 import { Modal, type ModalHandle } from '../../Modal';
-import { useMoney } from '../../PreferencesProvider';
+import { useCurrency, useMoney } from '../../PreferencesProvider';
 import {
   applyCap,
   invalidRows,
@@ -137,6 +137,9 @@ export function AllocateBudgetModal({
   const router = useRouter();
   const modalRef = useRef<ModalHandle>(null);
   const money = useMoney();
+  // The cap inputs' prefix glyph, which was a literal `$` until PET-47's review - so a GBP account
+  // read "£1,350 spent of £3,000" above a column of fields prefixed with dollars.
+  const currency = useCurrency();
   const { formatCurrency, formatWhole } = money;
 
   // **Read once on open and deliberately not resynced.** A refresh behind the open dialog would
@@ -444,7 +447,7 @@ export function AllocateBudgetModal({
                     <div className="ml-auto w-36 shrink-0">
                       <label className={error ? 'input input-error w-full' : 'input w-full'}>
                         <span aria-hidden="true" className="opacity-60">
-                          $
+                          {currencySymbol(currency)}
                         </span>
                         <input
                           id={fieldId}

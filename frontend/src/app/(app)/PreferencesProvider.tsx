@@ -40,7 +40,18 @@ type Preferences = {
   monthStartDay: number;
 };
 
-const PreferencesContext = createContext<(Preferences & { money: MoneyFormatters }) | null>(null);
+/**
+ * Exported for one reason: so `PreferencesProvider.test.tsx` can assert the `useMemo` below.
+ *
+ * Nothing in the app reads it directly - `useMoney`, `usePeriod` and `useCurrency` are the seams,
+ * and they throw outside the provider where a bare `useContext` returns `null`. It is exported
+ * because the memo protects the *context value*, and a probe on `useMoney()` cannot see that:
+ * those formatters are memoized per code in a module-scope `Map`, so their identity is stable
+ * however this component behaves. The first version of that test made exactly that mistake.
+ */
+export const PreferencesContext = createContext<(Preferences & { money: MoneyFormatters }) | null>(
+  null,
+);
 
 export function PreferencesProvider({
   currency,
@@ -83,6 +94,19 @@ function usePreferences() {
  */
 export function useMoney(): MoneyFormatters {
   return usePreferences().money;
+}
+
+/**
+ * The profile's ISO 4217 code, for the one thing a formatter cannot answer: a bare symbol.
+ *
+ * `ui/Input`'s `variant="currency"` draws a prefix glyph rather than a formatted amount, and it drew
+ * a literal `$` until a code review caught it - so a EUR account was asked to type pounds into a
+ * field labelled with dollars while every figure around it had already followed the profile. Callers
+ * pass `currencySymbol(useCurrency())` into that prop rather than this component reading a context,
+ * which keeps `ui/` primitives on props the way the rest of that folder is.
+ */
+export function useCurrency(): string {
+  return usePreferences().currency;
 }
 
 /**

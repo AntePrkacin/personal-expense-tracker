@@ -45,6 +45,12 @@ const meta: Meta<typeof TrendCard> = {
   title: 'Shell/Spending trend',
   component: TrendCard,
   tags: ['autodocs'],
+  // **Supplied at the meta so every story inherits it, and it is not optional.** `currency` became a
+  // required prop at PET-47, but Storybook's `StoryObj` typing does not reject a missing required
+  // arg and `tsc` stays clean - so these stories passed `undefined`, `Intl` threw, and
+  // `lib/money.ts`'s catch swallowed it and rendered USD. That catch is narrowed to a `RangeError`
+  // now, so a story that omits this throws visibly instead of lying quietly.
+  args: { currency: 'USD' },
 };
 
 export default meta;

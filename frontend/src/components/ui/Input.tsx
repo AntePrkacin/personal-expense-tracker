@@ -39,6 +39,18 @@ type InputProps = {
   /** The Figma "Label" property, e.g. "Merchant". */
   label: string;
   variant?: InputVariant;
+  /**
+   * The glyph the `currency` variant prefixes, e.g. `'$'` or `'€'`.
+   *
+   * **A prop rather than the literal `$` this drew until PET-47's review.** The profile's currency
+   * is user-selectable now, so a hard-coded glyph made a GBP account read "£1,350 spent" above cap
+   * inputs prefixed `$`. It stays a prop rather than a `useCurrency()` call because `ui/`
+   * primitives take props - and because a pre-auth screen could legitimately want a fixed glyph.
+   *
+   * Ignored by every other variant. It has no default on purpose: a fallback here is what let the
+   * defect survive, so a caller that forgets it renders no prefix rather than a wrong one.
+   */
+  currencySymbol?: string;
   /** Defaults to `id`, which is what every form on the design needs. */
   name?: string;
   /**
@@ -71,6 +83,7 @@ export function Input({
   id,
   label,
   variant = 'default',
+  currencySymbol,
   name,
   type = 'text',
   inputMode,
@@ -115,7 +128,7 @@ export function Input({
         // accessible name still comes only from the visible label above.
         <label className={CURRENCY_BOX[error ? 'invalid' : 'valid']}>
           <span aria-hidden="true" className="opacity-60">
-            $
+            {currencySymbol}
           </span>
           {control}
         </label>

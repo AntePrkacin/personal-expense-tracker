@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/categoryColour';
 import { Input } from '@/components/ui/Input';
 import { reformatAmountInput } from '@/lib/amountField';
+import { currencySymbol } from '@/lib/money';
 import type { Category } from '@/lib/categories';
 import type { Palette } from '@/lib/palette';
 import type { UpdateCategoryResult } from '@/lib/updateCategory';
@@ -22,6 +23,7 @@ import type { components } from '@/types/api';
 import { Modal, type ModalHandle } from '../../Modal';
 import { ColourSelect } from './ColourSelect';
 import { IconSelect } from './IconSelect';
+import { useCurrency } from '../../PreferencesProvider';
 import {
   invalidFields,
   toCategoryFormValues,
@@ -215,6 +217,9 @@ export function EditCategoryModal({
   onClose,
 }: EditCategoryModalProps) {
   const router = useRouter();
+  // The prefix glyph for `ui/Input`'s currency variant, which drew a literal `$` until PET-47's
+  // review. See `useCurrency` for why the symbol is a prop rather than read inside the primitive.
+  const currency = useCurrency();
   const modalRef = useRef<ModalHandle>(null);
 
   /**
@@ -432,6 +437,7 @@ export function EditCategoryModal({
         id={CAP_ID}
         label="Monthly budget (optional)"
         variant="currency"
+        currencySymbol={currencySymbol(currency)}
         value={values.monthlyCap}
         onChange={onCapChange}
         error={errors.monthlyCap}

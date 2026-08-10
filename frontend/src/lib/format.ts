@@ -313,9 +313,13 @@ export function formatRelativeDate(iso: string, today: string = todayIsoDate()):
 // caret. So none of this touches `Number` on the way out, and the `$` belongs to
 // `Input variant="currency"` rather than to the string.
 //
-// The group separator is hard-coded, matching CURRENCY and the two DateTimeFormats
-// above. When the onboarding currency is finally stored and threaded through,
-// this follows it along with them.
+// The group separator is hard-coded, matching the two DateTimeFormats above - **and it must not
+// follow the stored currency**, which is the opposite of what this comment promised until PET-47.
+// It named a `CURRENCY` constant that no longer exists in this file, and it predicted the separator
+// would follow the currency once one was stored. One is stored now, and both `lib/money.ts` and
+// `frontend/CLAUDE.md` record the decision that these three functions stay `en-US`: they format a
+// value mid-keystroke, so a locale-derived separator would desynchronise the field being typed into
+// from the figure rendered beside it.
 
 /** Digits and the decimal point: the characters a caret can meaningfully sit between. */
 const SIGNIFICANT = /[0-9.]/;

@@ -1,5 +1,6 @@
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
 import { isFilled, isPositiveAmount } from '@/lib/amount';
+import { SUPPORTED_CURRENCIES } from '@/lib/money';
 import { DEFAULT_CURRENCY } from '@/lib/money';
 import type { components } from '@/types/api';
 
@@ -124,6 +125,12 @@ export function serializeDraft(draft: SetupDraft): string {
   return JSON.stringify(draft);
 }
 
+/** The stored currency when it is one the picker offers, or the default. */
+function readCurrency(source: Record<string, unknown>): string {
+  const stored = readString(source, 'currency', DEFAULT_CURRENCY);
+  return SUPPORTED_CURRENCIES.some((entry) => entry.code === stored) ? stored : DEFAULT_CURRENCY;
+}
+
 /** A string field, or the fallback when the stored value is not one. */
 function readString(source: Record<string, unknown>, key: string, fallback: string): string {
   const value = source[key];
@@ -220,7 +227,13 @@ export function parseDraft(raw: string | null): SetupDraft {
 
   const source = parsed as Record<string, unknown>;
   return {
-    currency: readString(source, 'currency', DEFAULT_CURRENCY),
+    // **Checked against the offered list, not merely type-checked**, which is the fix `docs/TODO.md`
+    // said was owed the moment a second currency was offered - and PET-47 offered three. A stored
+    // code outside the list rendered in `BudgetField`'s trigger with no matching panel row and no
+    // `aria-current`, and step 3 posted it straight through: `@IsISO4217CurrencyCode()` accepts it,
+    // so the account was created in a currency the user never picked. The same canonicalise-on-read
+    // rule the budget and the categories already follow.
+    currency: readCurrency(source),
     budget: formatAmountInput(readString(source, 'budget', '')),
     categories: readCategories(source),
     firstName: readString(source, 'firstName', ''),

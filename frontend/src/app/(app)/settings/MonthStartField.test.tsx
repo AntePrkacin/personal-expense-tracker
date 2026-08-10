@@ -129,6 +129,27 @@ describe('MonthStartField', () => {
     expect(trigger()).toBeDisabled();
   });
 
+  it('associates the hint with the trigger, not merely renders it', () => {
+    // **A review found the hint rendered and never announced.** `FieldShell` draws it as a `<p>` with
+    // an id precisely so the control can name it, and this trigger set only `aria-labelledby` - so a
+    // screen-reader user heard the label and the value and never the one warning that this setting
+    // retroactively re-buckets every figure in the app. Asserting the accessible *description* rather
+    // than the paragraph's presence is what makes this able to fail.
+    render(
+      <MonthStartField
+        id="settings-month-start"
+        label="Month starts on"
+        value={1}
+        onChange={jest.fn()}
+        hint="Every budget figure in the app is measured from this day."
+      />,
+    );
+
+    expect(trigger()).toHaveAccessibleDescription(
+      'Every budget figure in the app is measured from this day.',
+    );
+  });
+
   it('describes the field with its hint when one is given', () => {
     render(
       <MonthStartField

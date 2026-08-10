@@ -1,3 +1,10 @@
+// **`PreferencesProvider` is mounted because the dialogs behind these providers call `useMoney()`.**
+// A review caught it missing: the dialogs mount only while open, so every story rendered green under
+// Jest and threw `usePreferences must be used inside PreferencesProvider` the moment a reviewer
+// pressed Delete - on the only surface that flow can be reviewed at all. Mounted here rather than in
+// `decorators`, for the reason `frontend/src/app/CLAUDE.md` records: the story smoke tests never
+// apply a meta's decorators.
+
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { CategoryLabel } from '@/lib/categories';
@@ -9,6 +16,7 @@ import { EditTransactionProvider } from '../EditTransactionProvider';
 import { TransactionFilterBar } from './TransactionFilterBar';
 import { TransactionsScreen } from './TransactionsScreen';
 import { TransactionsTable } from './TransactionsTable';
+import { PreferencesProvider } from '../PreferencesProvider';
 
 // 06 Transactions — List (node 26:90), the populated frame.
 //
@@ -97,36 +105,38 @@ function Frame({ filters }: { filters: TransactionFilters }) {
           `next/headers` in the page instead of an RPC. The story text below invites exactly that
           click. Resolving `ok` lets the whole flow be walked; nothing is deleted, and the list
           does not change because no server answered. */}
-      <DeleteTransactionProvider remove={async () => ({ ok: true })}>
-        {/* PET-32's, inside the delete provider because it consumes that context, and with a stub
+      <PreferencesProvider currency="USD" monthStartDay={1}>
+        <DeleteTransactionProvider remove={async () => ({ ok: true })}>
+          {/* PET-32's, inside the delete provider because it consumes that context, and with a stub
             action for the identical reason: the real `updateTransaction` is `'use server'`, and
             Storybook would bundle it as a browser module and reach `cookies()` on Save changes.
             Resolving `ok` lets the whole edit flow be walked here - which is the only review it
             gets, since `build-storybook` never runs a story and the four `(app)` screens sit
             behind the session gate. Nothing is saved, and the row does not change because no
             server answered. */}
-        <EditTransactionProvider update={async () => ({ ok: true })}>
-          {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
+          <EditTransactionProvider update={async () => ({ ok: true })}>
+            {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
               gutter the `(app)` shell owns, since neither wraps a story. */}
-          <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-            <TransactionsScreen
-              monthStartDay={1}
-              view={view}
-              filters={filters}
-              categoryCount={CATEGORIES.length}
-              filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
-              table={
-                <TransactionsTable
-                  currency="USD"
-                  transactions={TRANSACTIONS}
-                  categories={CATEGORIES}
-                  filters={filters}
-                />
-              }
-            />
-          </div>
-        </EditTransactionProvider>
-      </DeleteTransactionProvider>
+            <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+              <TransactionsScreen
+                monthStartDay={1}
+                view={view}
+                filters={filters}
+                categoryCount={CATEGORIES.length}
+                filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
+                table={
+                  <TransactionsTable
+                    currency="USD"
+                    transactions={TRANSACTIONS}
+                    categories={CATEGORIES}
+                    filters={filters}
+                  />
+                }
+              />
+            </div>
+          </EditTransactionProvider>
+        </DeleteTransactionProvider>
+      </PreferencesProvider>
     </AddTransactionProvider>
   );
 }

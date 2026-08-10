@@ -1,6 +1,13 @@
 import { render, screen } from '@testing-library/react';
 
-import { PreferencesProvider, useMoney, usePeriod } from './PreferencesProvider';
+import { useContext } from 'react';
+
+import {
+  PreferencesContext,
+  PreferencesProvider,
+  useMoney,
+  usePeriod,
+} from './PreferencesProvider';
 
 // The shell's currency and month-start context. Its whole job is being correct about which
 // profile it is reporting, so the tests are about the two failure modes that look like success:
@@ -65,10 +72,16 @@ describe('PreferencesProvider', () => {
     // equal profile must not hand every consumer in the shell a new context value. `page.tsx`
     // builds a fresh profile object on every server render, which is the case that makes an
     // identity-keyed memo fire constantly - the same trap `SettingsForm`'s resync records.
+    // **The probe reads the context value, not `useMoney()`, and a review is why.** `useMoney()`
+    // returns `usePreferences().money`, which is `moneyFormatters(currency)` - itself memoized per
+    // code in a module-scope `Map` - so its identity is stable whether or not this provider
+    // memoizes. Verified: with the probe on `useMoney()`, replacing the `useMemo` with a bare object
+    // literal left this test passing, so the case named a regression it could not detect. The
+    // context value is the thing the memo actually protects.
     const seen: unknown[] = [];
 
     function Probe() {
-      seen.push(useMoney());
+      seen.push(useContext(PreferencesContext));
       return null;
     }
 

@@ -328,6 +328,38 @@ describe('the Preferences card (PET-47)', () => {
     expect(save).toHaveBeenCalledWith({ firstName: 'Ana', monthStartDay: 15 });
   });
 
+  it('groups and truncates the budget as it is typed, like every other amount field', async () => {
+    // **The regression this pins is a review finding, and it was silent.** This card adapted
+    // `BudgetField` without the `reformatAmountInput` its contract requires, so nothing sanitised a
+    // keystroke: `parseAmountInput` is `Number()` over the raw string, so `1234.567` passed
+    // validation and 400d at the DTO with no message under the field, and `0x10` passed validation
+    // and saved a monthly budget of 16. Typing rather than setting the value, because the defect
+    // lived in the change handler.
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '1234.567');
+
+    expect(screen.getByLabelText('Monthly budget')).toHaveValue('1,234.56');
+  });
+
+  it('cannot be made to save a hex or exponent literal', async () => {
+    // `Number('0x10')` is 16 and `Number('1e5')` is 100000, so an unsanitised field could save a
+    // budget the user never typed. The formatter strips both to digits, which is what makes this a
+    // property of the field rather than of the validator.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '0x10');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith({ monthlyBudget: 10 });
+  });
+
   it('sends a picked currency as its ISO code', async () => {
     const user = userEvent.setup();
     const save = jest.fn().mockResolvedValue({ ok: true });
@@ -383,6 +415,46 @@ describe('the Preferences card (PET-47)', () => {
 
     release({ ok: true });
     await waitFor(() => expect(screen.getByLabelText('Monthly budget')).not.toBeDisabled());
+  });
+});
+
+describe('the baseline the diff is taken against', () => {
+  it('never reverts a field another device changed and this form did not touch', async () => {
+    // **The revert this pins is a review finding, and the resync docblock claimed it was closed.**
+    // `edited` compared against `synced` while the gate and the submit diff compared against the
+    // live `profile` prop. Those two baselines come apart whenever a refresh lands with
+    // `awaitingSaved` false - one keystroke during a save's round trip is enough - and then a field
+    // present in `profile` but not in `values` reads as a local edit and gets **sent**, silently
+    // reverting the other device under a green "Changes saved".
+    //
+    // Both now read one `syncedProfile`, so an untouched field contributes no key whatever the
+    // server says. The cost is a staleness rather than a loss, which is the right trade.
+    const user = userEvent.setup();
+    const { save, land } = renderWithRefresh();
+
+    // The user edits one field, which is what clears `awaitingSaved` in the real defect.
+    await user.clear(screen.getByLabelText('First name'));
+    await user.type(screen.getByLabelText('First name'), 'Ana');
+
+    // Another device changes the month start, and a refresh delivers it as a new prop.
+    land({ monthStartDay: 15 });
+
+    await user.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith({ firstName: 'Ana' });
+    expect(save.mock.calls[0][0]).not.toHaveProperty('monthStartDay');
+  });
+
+  it('still sends a preference the user did change', async () => {
+    // The other half: one baseline must not make a real edit invisible.
+    const user = userEvent.setup();
+    const { save } = renderWithRefresh();
+
+    await user.click(screen.getByRole('button', { name: '15th of the month' }));
+    await user.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ monthStartDay: 15 }));
   });
 });
 

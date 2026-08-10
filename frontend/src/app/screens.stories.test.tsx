@@ -11,6 +11,7 @@ import * as AllocateBudgetModal from './(app)/transactions/categories/AllocateBu
 import * as CategoriesScreen from './(app)/transactions/categories/CategoriesScreen.stories';
 import * as EditCategoryModal from './(app)/transactions/categories/EditCategoryModal.stories';
 import * as SettingsScreen from './(app)/settings/SettingsScreen.stories';
+import * as MonthStartField from './(app)/settings/MonthStartField.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
@@ -138,6 +139,11 @@ const MODULES: [name: string, module: StoryModule][] = [
   // **second** card and the Save row as of PET-47, which built Preferences; the Categories summary
   // below it is still that ticket's and still not drawn.
   ['SettingsScreen', SettingsScreen as StoryModule],
+  // The Month starts on picker, added because a review found it in no smoke suite. Its title is
+  // `Screens/17 Settings/MonthStartField`, so the `Screens/` assertion below covers it. Worth having
+  // its own entry rather than leaning on the screen story: the panel's 28 rows and its scroll cap
+  // render only in this module, and `build-storybook` executes no story.
+  ['MonthStartField', MonthStartField as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

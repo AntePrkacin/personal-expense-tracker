@@ -17,9 +17,11 @@ import userEvent from '@testing-library/user-event';
 // resolved path, so this still intercepts layout.tsx's own aliased import.
 import { requireProfile } from '../../lib/profile';
 
+import { useDeleteTransaction } from './DeleteTransactionProvider';
+import { DELETE_TRANSACTION_TITLE } from './DeleteTransactionDialog';
 import { useEditTransaction } from './EditTransactionProvider';
-import AppLayout from './layout';
 import { useMoney } from './PreferencesProvider';
+import AppLayout from './layout';
 
 // The shell layout's two jobs: gate the segment and lay the two columns out. The gate is
 // one line whose deletion no rendering assertion would notice, so it is asserted
@@ -62,6 +64,33 @@ const TRANSACTION = {
   createdAt: '2025-10-08T09:30:00.000Z',
   updatedAt: '2025-10-08T09:30:00.000Z',
 };
+
+/**
+ * A child that opens the **delete confirmation**, for the provider-ordering test.
+ *
+ * That dialog formats the amount it is about to remove, so it is the one place a `useMoney()` call
+ * renders in a *dialog's* position rather than in `children`'s - which is what makes the ordering
+ * assertable at all.
+ */
+function OpenDeleteDialog() {
+  const { open } = useDeleteTransaction();
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        open({
+          id: TRANSACTION.id,
+          merchant: TRANSACTION.merchant,
+          amount: TRANSACTION.amount,
+          date: TRANSACTION.date,
+        })
+      }
+    >
+      Delete it
+    </button>
+  );
+}
 
 /** A page-shaped child that opens the edit modal, standing in for the row menu's kebab. */
 function OpenEditModal() {
@@ -180,22 +209,22 @@ describe('AppLayout', () => {
   });
 
   it('mounts PreferencesProvider outside the three modal providers', async () => {
-    // **Nothing else in this file would notice if it moved**, which is the whole reason this
-    // exists. The layout itself consumes nothing from it, so every other assertion here passes
-    // with the provider nested anywhere - or deleted. What breaks is the dialogs the other three
-    // providers mount: `DeleteTransactionDialog` quotes the amount it is about to remove and
-    // `AllocateBudgetModal` is a column of currency fields, so a provider nested any deeper throws
-    // the first time one of them opens, on a path no layout test walks.
+    // **The probe has to render where a *dialog* renders, not where `children` does**, and the first
+    // version of this test got that wrong. The three dialogs are conditional siblings of `children`
+    // inside their own providers, so a hook probe placed in `children` resolves however deep
+    // `PreferencesProvider` sits - verified: with the provider moved to wrap only `{children}`, all
+    // of this file passed while the first Delete click threw.
     //
-    // The probe renders inside `children`, which is the innermost position any consumer can hold,
-    // so a resolving hook there proves the provider is outside all three.
-    function Probe() {
-      return <p>{useMoney().formatWhole(1240.5)}</p>;
-    }
+    // Opening the delete confirmation is what puts a `useMoney()` call in the dialog's own position:
+    // `DeleteTransactionDialog` formats the amount it is about to remove. If the provider is nested
+    // inside `DeleteTransactionProvider`, this render throws instead of showing the dialog.
+    render(await AppLayout({ children: <OpenDeleteDialog /> }));
 
-    render(await AppLayout({ children: <Probe /> }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete it' }));
 
-    expect(screen.getByText('$1,241')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: DELETE_TRANSACTION_TITLE })).toBeInTheDocument();
+    // The formatted amount is the proof the dialog reached the provider rather than merely mounting.
+    expect(screen.getByText(/\$24\.00/)).toBeInTheDocument();
   });
 
   it('binds that provider to the read profile rather than to a default', async () => {

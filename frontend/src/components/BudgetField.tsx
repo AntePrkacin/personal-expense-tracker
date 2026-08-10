@@ -133,6 +133,7 @@ export function BudgetField({
   const [open, setOpen] = useState(false);
 
   const state = error ? 'invalid' : 'valid';
+  const symbol = currencySymbol(currency);
   const panelId = `${id}-currency`;
 
   // A dashed-ident derived from the field id, so two budget fields on one page cannot anchor to
@@ -168,9 +169,17 @@ export function BudgetField({
           style={{ anchorName: anchor } as React.CSSProperties}
         >
           <span className="sr-only">Currency</span>
-          <span aria-hidden="true" className="font-semibold">
-            {currencySymbol(currency)}
-          </span>
+          {/* **Rendered only when it is a real glyph.** `currencySymbol` falls back to the code
+              itself for anything outside `SUPPORTED_CURRENCIES`, and this span used to sit
+              unconditionally beside `{currency}` - so a profile holding `CHF`, which the backend
+              accepts because it validates only `@IsISO4217CurrencyCode()`, drew "CHF CHF". The
+              symbol is decoration duplicating the code, so the honest fallback is to draw no
+              symbol at all rather than the code twice. */}
+          {symbol === currency ? null : (
+            <span aria-hidden="true" className="font-semibold">
+              {symbol}
+            </span>
+          )}
           <span>{currency}</span>
           <ChevronDown className="size-4" aria-hidden="true" />
         </button>

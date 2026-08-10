@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/categoryColour';
 import { Input } from '@/components/ui/Input';
 import type { CreateCategoryResult } from '@/lib/createCategory';
+import { currencySymbol } from '@/lib/money';
 import { reformatAmountInput } from '@/lib/amountField';
 import type { Palette } from '@/lib/palette';
 import type { components } from '@/types/api';
@@ -20,6 +21,7 @@ import type { components } from '@/types/api';
 import { Modal, type ModalHandle } from '../../Modal';
 import { ColourSelect } from './ColourSelect';
 import { IconSelect } from './IconSelect';
+import { useCurrency } from '../../PreferencesProvider';
 import {
   hasChosenMarks,
   invalidFields,
@@ -147,6 +149,9 @@ type AddCategoryModalProps = {
 
 export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalProps) {
   const router = useRouter();
+  // The prefix glyph for `ui/Input`'s currency variant, which drew a literal `$` until PET-47's
+  // review. See `useCurrency` for why the symbol is a prop rather than read inside the primitive.
+  const currency = useCurrency();
   const modalRef = useRef<ModalHandle>(null);
 
   /**
@@ -359,6 +364,7 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
         id={CAP_ID}
         label="Monthly budget (optional)"
         variant="currency"
+        currencySymbol={currencySymbol(currency)}
         value={values.monthlyCap}
         onChange={onCapChange}
         error={errors.monthlyCap}

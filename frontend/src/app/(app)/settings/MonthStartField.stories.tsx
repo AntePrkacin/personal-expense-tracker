@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { useState } from 'react';
 
 import { MonthStartField } from './MonthStartField';
+import { MONTH_START_HINT } from './PreferencesCard';
 
 // **Open these rather than reading them.** Everything this control exists for is invisible under
 // Jest: jsdom implements no Popover API, so the panel is permanently open in the suite and nothing
@@ -72,7 +73,7 @@ export const TwentyEighth: Story = {
  * and total. `docs/TODO.md` carries the copy alongside A29's other undesigned states.
  */
 export const WithHint: Story = {
-  render: () => <Controlled day={15} hint="Every budget figure in the app follows this day." />,
+  render: () => <Controlled day={15} hint={MONTH_START_HINT} />,
 };
 
 /** Frozen, which is what the Settings form does to every control while its save is in flight. */

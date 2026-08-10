@@ -64,6 +64,17 @@ describe('BudgetField', () => {
       expect(trigger()).toHaveAccessibleName('Currency GBP');
     });
 
+    it('never prints the code twice for a currency with no offered symbol', () => {
+      // **A review found "CHF CHF".** `currencySymbol` falls back to the code itself, and that span
+      // sat unconditionally beside the code - so a profile the backend accepts (it validates only
+      // `@IsISO4217CurrencyCode()`) rendered its code in both. Drawing no symbol is the honest
+      // fallback; the symbol is decoration duplicating the code.
+      render(<Harness currency="CHF" />);
+
+      expect(trigger()).toHaveAccessibleName('Currency CHF');
+      expect(trigger().textContent).toBe('CurrencyCHF');
+    });
+
     it('shows the code for a currency the picker cannot offer', () => {
       // The backend accepts every ISO 4217 code, so a profile can hold one this app never lists.
       // The trigger says what is stored rather than guessing a glyph.

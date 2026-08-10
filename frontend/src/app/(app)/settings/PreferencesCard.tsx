@@ -1,4 +1,5 @@
 import { BudgetField } from '@/components/BudgetField';
+import { reformatAmountInput } from '@/lib/amountField';
 
 import { MonthStartField } from './MonthStartField';
 import { FIELD_ID, type SettingsFormField, type SettingsFormValues } from './settingsForm';
@@ -26,6 +27,17 @@ import { FIELD_ID, type SettingsFormField, type SettingsFormValues } from './set
 // one the product owner chose over Figma's. AC1 still holds - currency, budget and month start all
 // show their stored values - and AC2 is amended, since three currencies are offered where it said
 // one. `components/BudgetField.tsx` carries the whole account.
+
+/**
+ * The standing hint under "Month starts on", exported so no story or test restates a shipped string.
+ *
+ * **A review caught the `WithHint` story rendering a different sentence** - "follows this day" where
+ * the card ships "is measured from this day" - which mattered more than a usual copy drift, because
+ * that story is the surface built to collect A29's sign-off on this exact invented line. A sign-off
+ * obtained there would have approved a sentence the user never sees. Same rule `monthStartLabel` and
+ * `ALLOCATE_HINT` already follow.
+ */
+export const MONTH_START_HINT = 'Every budget figure in the app is measured from this day.';
 
 type PreferencesCardProps = {
   values: SettingsFormValues;
@@ -70,7 +82,17 @@ export function PreferencesCard({ values, errors, disabled, onChange }: Preferen
             currency={values.currency}
             onCurrencyChange={(currency) => onChange('currency', currency)}
             value={values.monthlyBudget}
-            onValueChange={(event) => onChange('monthlyBudget', event.currentTarget.value)}
+            // **`reformatAmountInput`, which `BudgetField`'s own contract requires and this call
+            // site shipped without.** That helper writes the grouped value onto the input and
+            // restores the caret, and it has to stay at the call site because it touches the DOM -
+            // `app/setup/BudgetForm.tsx` does the same thing with the same field. Without it
+            // nothing sanitises a keystroke, and `parseAmountInput` is `Number()` over the raw
+            // string: `1234.567` reached the DTO's `@IsNumber({ maxDecimalPlaces: 2 })` as a 400
+            // with no message under the field, and `0x10` validated and silently saved a monthly
+            // budget of 16.
+            onValueChange={(event) =>
+              onChange('monthlyBudget', reformatAmountInput(event.currentTarget))
+            }
             error={errors.monthlyBudget}
             disabled={disabled}
             required
@@ -92,7 +114,7 @@ export function PreferencesCard({ values, errors, disabled, onChange }: Preferen
             label="Month starts on"
             value={values.monthStartDay}
             onChange={(day) => onChange('monthStartDay', day)}
-            hint="Every budget figure in the app is measured from this day."
+            hint={MONTH_START_HINT}
             disabled={disabled}
           />
         </div>

@@ -1,3 +1,10 @@
+// **`PreferencesProvider` is mounted because the dialogs behind these providers call `useMoney()`.**
+// A review caught it missing: the dialogs mount only while open, so every story rendered green under
+// Jest and threw `usePreferences must be used inside PreferencesProvider` the moment a reviewer
+// pressed Delete - on the only surface that flow can be reviewed at all. Mounted here rather than in
+// `decorators`, for the reason `frontend/src/app/CLAUDE.md` records: the story smoke tests never
+// apply a meta's decorators.
+
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { CategoryContext, TransactionDetail } from '@/lib/transactionDetail';
@@ -7,6 +14,7 @@ import { DeleteTransactionProvider } from '../../DeleteTransactionProvider';
 import { EditTransactionProvider } from '../../EditTransactionProvider';
 import { TransactionDetailActions } from './TransactionDetailActions';
 import { TransactionDetailScreen } from './TransactionDetailScreen';
+import { PreferencesProvider } from '../../PreferencesProvider';
 
 // 08 Transaction detail (node 34:349).
 //
@@ -113,26 +121,28 @@ type Story = StoryObj<typeof TransactionDetailScreen>;
 function Frame({ detail }: { detail: TransactionDetail }) {
   return (
     <AddTransactionProvider>
-      <DeleteTransactionProvider remove={async () => ({ ok: true })}>
-        <EditTransactionProvider update={async () => ({ ok: true })}>
-          {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for
+      <PreferencesProvider currency="USD" monthStartDay={1}>
+        <DeleteTransactionProvider remove={async () => ({ ok: true })}>
+          <EditTransactionProvider update={async () => ({ ok: true })}>
+            {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for
               the gutter the `(app)` shell owns, since neither wraps a story. */}
-          <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-            <TransactionDetailScreen
-              currency="USD"
-              detail={detail}
-              backHref="/transactions"
-              query=""
-              actions={
-                <TransactionDetailActions
-                  transaction={detail.transaction}
-                  backHref="/transactions"
-                />
-              }
-            />
-          </div>
-        </EditTransactionProvider>
-      </DeleteTransactionProvider>
+            <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+              <TransactionDetailScreen
+                currency="USD"
+                detail={detail}
+                backHref="/transactions"
+                query=""
+                actions={
+                  <TransactionDetailActions
+                    transaction={detail.transaction}
+                    backHref="/transactions"
+                  />
+                }
+              />
+            </div>
+          </EditTransactionProvider>
+        </DeleteTransactionProvider>
+      </PreferencesProvider>
     </AddTransactionProvider>
   );
 }

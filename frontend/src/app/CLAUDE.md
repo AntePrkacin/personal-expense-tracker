@@ -1356,7 +1356,7 @@ fixed cells fit the panel until the vertical scrollbar takes 15px, and `overflow
 `overflow-x` compute to `auto`, so the panel grew a second scrollbar along the bottom. The search box
 itself and its empty state are invented, and `docs/TODO.md` records that they owe a designer.
 
-**Both pickers centre their chosen row when the panel opens, through `categories/pickerScroll.ts`, and
+**Both pickers centre their chosen row when the panel opens, through `lib/pickerScroll.ts`, and
 the one thing not to simplify is that it is not `scrollIntoView`.** That method scrolls _every_
 scrollable ancestor, and a panel is a DOM descendant of daisyUI's `modal-box`, which is itself
 `overflow-y: auto` - so centring a cell would also jog the modal behind the popover, which reads as the
@@ -1366,6 +1366,12 @@ source of truth about which row is chosen. Lifted to one module at two consumers
 which is `(app)/useCategoryOptions.ts`'s exception to the rule of three: a second hand-maintained copy
 of a geometric formula is how one of them quietly stops matching. jsdom runs no layout, so its suite
 pins the arithmetic against stubbed rects and the real behaviour is a browser check.
+**It moved out of `transactions/categories/` to `lib/` at PET-47, and "two consumers" is now three.**
+`settings/MonthStartField.tsx` is the third, and it is on another route - a settings component
+reaching into the categories folder for a geometric formula would invert the layering rather than
+share it. The path above is corrected in place rather than left dated, because a reader sent to a
+file that does not exist learns nothing; `npm run docs:check` could not catch it, since it verifies
+single-source assertions rather than that a backticked path resolves.
 
 **The Note field exists in the markup and is not drawn, behind a `SHOWS_NOTE` flag.** Frame 19 draws
 it and CED-4 specifies it; A42 is why it is hidden, because a note surfaces on no screen once saved,

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 
-import { FieldShell } from '@/components/ui/FieldShell';
+import { fieldDescribedBy, FieldShell } from '@/components/ui/FieldShell';
 import { centreChosenRow } from '@/lib/pickerScroll';
 
 // The "Month starts on" field (SET-3): which day of the month the user's budgeting period opens on.
@@ -135,6 +135,14 @@ export function MonthStartField({
         disabled={disabled}
         aria-expanded={open}
         aria-labelledby={`${id}-label ${id}-value`}
+        // **Without this the hint is rendered and never announced**, which a code review caught.
+        // `FieldShell` draws it as a `<p id="…-hint">` precisely so the control can name it - its
+        // own docblock says an unassociated caption is one a screen reader reaches only by
+        // wandering past the field - and this control's hint is the single warning that the setting
+        // retroactively re-buckets every figure in the app. `(app)/DateField.tsx`, the trigger this
+        // file is modelled on, wires the same attribute. There is no `error` half to pass: this
+        // field cannot carry a message, for the reason `TRIGGER` above records.
+        aria-describedby={fieldDescribedBy(id, hint, undefined)}
         className={TRIGGER}
         style={{ anchorName: anchor } as React.CSSProperties}
       >

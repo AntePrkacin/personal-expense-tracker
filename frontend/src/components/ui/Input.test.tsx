@@ -24,8 +24,8 @@ describe('Input', () => {
     expect(screen.queryByText('$')).toBeNull();
   });
 
-  it('renders the "$" prefix inside the currency field box', () => {
-    renderInput({ variant: 'currency', label: 'Amount' });
+  it('renders the given prefix inside the currency field box', () => {
+    renderInput({ variant: 'currency', label: 'Amount', currencySymbol: '$' });
 
     const prefix = screen.getByText('$');
     // Hidden: the label already says "Amount", and a screen reader announcing a
@@ -36,6 +36,24 @@ describe('Input', () => {
     // the control instead of doing nothing.
     expect(prefix.parentElement).toBe(screen.getByRole('textbox').parentElement);
     expect(prefix.parentElement?.tagName).toBe('LABEL');
+  });
+
+  it('prefixes the symbol it is given, not a hard-coded dollar', () => {
+    // **The glyph was a literal `$` until PET-47's review.** The profile's currency is
+    // user-selectable, so a GBP account read "£1,350 spent" above cap inputs prefixed with dollars.
+    // Asserting a non-dollar symbol is what makes this able to fail.
+    renderInput({ variant: 'currency', label: 'Amount', currencySymbol: '£' });
+
+    expect(screen.getByText('£')).toBeInTheDocument();
+    expect(screen.queryByText('$')).not.toBeInTheDocument();
+  });
+
+  it('draws no prefix when the caller supplies none, rather than guessing one', () => {
+    // No default on purpose: a fallback is what let the hard-coded glyph survive, so a caller that
+    // forgets the prop renders nothing rather than the wrong currency.
+    renderInput({ variant: 'currency', label: 'Amount' });
+
+    expect(screen.queryByText('$')).not.toBeInTheDocument();
   });
 
   it('refuses input when disabled', () => {
