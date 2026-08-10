@@ -1,7 +1,9 @@
 import { BudgetField } from '@/components/BudgetField';
 import { reformatAmountInput } from '@/lib/amountField';
+import type { ThemePref } from '@/lib/theme';
 
 import { MonthStartField } from './MonthStartField';
+import { ThemeField } from './ThemeField';
 import { FIELD_ID, type SettingsFormField, type SettingsFormValues } from './settingsForm';
 
 // The "Preferences" card on 17 Settings (SET-3): the monthly budget with its currency, and the day
@@ -43,8 +45,18 @@ type PreferencesCardProps = {
   values: SettingsFormValues;
   /** One message per field, keyed by the field it belongs under. Absent means valid. */
   errors: Partial<Record<SettingsFormField, string>>;
-  /** True while a save is in flight, which freezes every field on the page at once. */
+  /**
+   * True while a save is in flight, which freezes every field on the page at once - except the
+   * Theme row, deliberately, because its choice never travels in the PATCH. `ThemeField.tsx`
+   * carries the reasoning.
+   */
   disabled: boolean;
+  /**
+   * The theme preference the server rendered with, threaded from `settings/page.tsx`'s cookie
+   * read. Not part of `SettingsFormValues`: it is not a profile field, joins no diff, and
+   * applies instantly rather than on Save.
+   */
+  themePref: ThemePref;
   /**
    * Reports a change to one field.
    *
@@ -59,7 +71,13 @@ type PreferencesCardProps = {
   ) => void;
 };
 
-export function PreferencesCard({ values, errors, disabled, onChange }: PreferencesCardProps) {
+export function PreferencesCard({
+  values,
+  errors,
+  disabled,
+  themePref,
+  onChange,
+}: PreferencesCardProps) {
   return (
     // `card bg-base-100 shadow-sm`, `AccessCard`'s own box and `ProfileCard`'s. The two cards on
     // this page must not drift apart.
@@ -121,6 +139,15 @@ export function PreferencesCard({ values, errors, disabled, onChange }: Preferen
             disabled={disabled}
           />
         </div>
+
+        {/* The design source's second inset rule, ahead of its Theme row. Same `div`-not-`<hr>`
+            call as the one under the heading. */}
+        <div className="border-base-300 border-t" />
+
+        {/* Outside the `max-w-105` column above: the design draws this row spanning the card,
+            its control flush right. It takes no `disabled` and reads nothing from `values` -
+            `ThemeField.tsx` owns why. */}
+        <ThemeField initial={themePref} />
       </div>
     </section>
   );

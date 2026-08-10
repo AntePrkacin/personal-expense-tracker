@@ -11,9 +11,15 @@
    eyedrop values from the Figma Foundations page - it is still a dead page;
    these hexes and the derivations below are the source now.
 
-   Still no theme controller, deliberately: `default`/`prefersdark` keep the
-   automatic OS selection, and a toggle must not coexist with it - a browser
-   already in dark mode would make it switch dark to dark.
+   The Settings Preferences card carries the app's one theme control (PET-74's
+   addendum): three-way, System / Light / Dark, where an explicit choice stamps
+   `data-theme` on `<html>` and `system` removes it. That closes the old rule
+   that a controller must not coexist with automatic prefers-dark - a two-way
+   toggle could not, and the `system` arm is the coexistence, because
+   `--prefersdark` below emits under `:root:not([data-theme])` and so yields to
+   any stamped choice by construction. `frontend/src/lib/theme.ts` owns the
+   cookie and the mapping; the names in these two blocks are one half of that
+   contract.
 
    Every colour here is measured, not judged: WCAG contrast against the card and
    pairwise OKLab distance across the 17-token category allowlist, both themes.

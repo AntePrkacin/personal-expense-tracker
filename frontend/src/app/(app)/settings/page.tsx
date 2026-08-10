@@ -1,4 +1,7 @@
+import { cookies } from 'next/headers';
+
 import { requireProfile } from '@/lib/profile';
+import { parseThemePref, THEME_COOKIE } from '@/lib/theme';
 
 import { SettingsScreen } from './SettingsScreen';
 
@@ -33,6 +36,12 @@ import { SettingsScreen } from './SettingsScreen';
 
 export default async function SettingsPage() {
   const profile = await requireProfile();
+  // The same cookie the root layout stamps `<html data-theme>` from, read again here so the
+  // Theme control's checked state agrees with the server HTML at hydration. A layout cannot
+  // pass props to the page it wraps - the identical constraint that makes this page re-read
+  // the profile above - and `cookies()` is memoized within a render pass, so the second read
+  // costs nothing.
+  const themePref = parseThemePref((await cookies()).get(THEME_COOKIE)?.value);
 
-  return <SettingsScreen profile={profile} />;
+  return <SettingsScreen profile={profile} themePref={themePref} />;
 }

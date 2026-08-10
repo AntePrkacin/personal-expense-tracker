@@ -1,4 +1,5 @@
 import type { Profile } from '@/lib/profile';
+import type { ThemePref } from '@/lib/theme';
 import type { updateProfile, UpdateProfileResult } from '@/lib/updateProfile';
 
 import { PageHeader } from '../PageHeader';
@@ -26,14 +27,22 @@ type SettingsScreenProps = {
    * the browser. The default is the real action, so `page.tsx` passes nothing.
    */
   save?: (body: Parameters<typeof updateProfile>[0]) => Promise<UpdateProfileResult>;
+  /**
+   * The theme preference the server rendered `<html>` with, read off the `spendifico.theme`
+   * cookie by `page.tsx` and threaded through the form into the Preferences card. Required
+   * rather than defaulted, `TransactionsScreen`'s reasoning about `filters`: `npm run build`
+   * never reads `*.test.tsx`, so a default would let a call site quietly render the control
+   * disagreeing with the server HTML.
+   */
+  themePref: ThemePref;
 };
 
-export function SettingsScreen({ profile, save }: SettingsScreenProps) {
+export function SettingsScreen({ profile, save, themePref }: SettingsScreenProps) {
   return (
     <>
       <PageHeader overline="Manage your account" title="Settings" />
       <main className="flex-1 pb-10">
-        <SettingsForm profile={profile} save={save} />
+        <SettingsForm profile={profile} save={save} themePref={themePref} />
       </main>
     </>
   );

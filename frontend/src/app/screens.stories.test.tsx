@@ -12,6 +12,7 @@ import * as CategoriesScreen from './(app)/transactions/categories/CategoriesScr
 import * as EditCategoryModal from './(app)/transactions/categories/EditCategoryModal.stories';
 import * as SettingsScreen from './(app)/settings/SettingsScreen.stories';
 import * as MonthStartField from './(app)/settings/MonthStartField.stories';
+import * as ThemeField from './(app)/settings/ThemeField.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
@@ -144,6 +145,10 @@ const MODULES: [name: string, module: StoryModule][] = [
   // its own entry rather than leaning on the screen story: the panel's 28 rows and its scroll cap
   // render only in this module, and `build-storybook` executes no story.
   ['MonthStartField', MonthStartField as StoryModule],
+  // The Theme segmented control (PET-74's addendum), the same reasoning as the row above: its
+  // three states render only in this module, and rendering one under Jest really writes the
+  // document attribute and the cookie - which is fine, because jsdom's document is per-suite.
+  ['ThemeField', ThemeField as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {
