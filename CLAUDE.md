@@ -30,66 +30,10 @@ as the first step toward a super-admin panel; `backend/src/database/CLAUDE.md` i
 for why that is not a breach of "central holds only an email and a pointer". The repo is also a Decode Academy final project, which is why
 the team tooling is real rather than illustrative.
 
-The two halves are each substantially built and **the access flow now runs end to end between
-them**. The backend has the whole access flow, the transaction endpoints in full, the profile read
-and update, the category endpoints with their month stats, and the dashboard summary; the frontend
-has the design system, the app shell with its four routed views, all six access screens, and
-PET-52's verify handler at `/auth/verify` with the httpOnly `spendifico.session` cookie behind it.
-So a person can register, click the emailed link, and land signed in on a Dashboard that knows who
-they are - the sidebar footer reads a real `GET /api/profile`. Thirteen things beyond access work
-now: `/transactions` reads and renders its own list state, the table under it draws the rows with
-their filters live in the URL, every "Add transaction" button opens a modal that really
-writes, and as of PET-33 each row's kebab opens a menu whose "Delete" really removes the
-transaction behind a confirmation dialog. The fifth is PET-32's: that menu's "Edit" opens the same
-form prefilled from the row and saves the fields the user actually changed, so a logged expense can
-now be corrected as well as removed. PET-34 adds a sixth and the app's first dynamic route: a
-row's merchant links to `/transactions/[id]`, which shows one expense in full beside how its
-category is doing against that month's cap, and carries the list's filters there and back. The
-seventh is PET-21's: `/dashboard` reads the dashboard summary and renders its first card, the
-monthly budget, joined by PET-22's second, the weekly spending trend chart, PET-23's third, the
-spending-by-category donut, PET-24's fourth, the recent transactions list, and PET-25's fifth and
-last, the AI insight teaser card - so the Dashboard is a complete screen. The eighth is
-PET-42-43-44's: `/insights` reads `GET /api/insights` and renders all three designed states, and
-the same branch moves generation onto the write path, so every transaction create, edit and
-delete regenerates the set and the screen is a pure read plus a Regenerate button rather than the
-thing that has to decide when a first run happens. PET-59 adds a ninth: the Add transaction modal
-can scan a photo or PDF of a receipt and fill Merchant, Amount, Category, Date and Note from it,
-on `gemini-3.6-flash` via `POST /api/transactions/scan`, with nothing about the image ever
-stored. The tenth is PET-36's:
-`/transactions/categories` is a real route behind a tab bar that finally navigates, drawing a card
-per category with its cap, its month's spend and its status, over a summary of the period's
-spending against the monthly budget. The eleventh is PET-37's, and it is the first write anywhere
-outside transactions: that tab's "Add category" opens a modal that really creates one, with its
-colour and icon offered from the admin-managed template tables rather than from a list the frontend
-keeps, and a monthly budget that may be left blank because an uncapped category is a first-class
-choice. The twelfth is PET-39's, and it makes that tab's card kebab real: each one opens a menu
-whose "Delete" removes the category behind a confirmation, and the transactions filed under it move
-to the `Uncategorized` fallback rather than disappearing - which is why the dialog names that row
-rather than the "Other" the ticket asked for. The thirteenth is PET-70's, and it is the one that
-finally clears the tab: the summary card's "Allocate" opens a modal that sets every category's cap
-in one atomic write, so the Categories tab is the first screen in the app with no inert control on
-it. That write is the app's first **bulk** one and the contract's first array body - `PATCH
-/api/categories`, all-or-nothing, refusing the whole payload rather than half-applying it. The
-sentence this replaces said that menu's "Edit", every uncapped card's "Set limit" and that
-"Allocate" were all still unavailable and all three were PET-38's; PET-38 made two of them live and
-left this one, so the claim was stale by two before it was stale by three. What is still missing is
-what the one remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
-
-**That last sentence is stale twice over, and both halves are worth naming.** PET-46 filled the
-Settings `<main>` with the Profile card and the page-level "Save changes", so no routed view renders
-an empty one and all four fetch. PET-47 is the fourteenth thing that works and it finishes two of
-frame 17's three cards: the **Preferences** card is real and really writes, holding the monthly
-budget with its currency and the day the budgeting period starts on. Three things about it reach
-past that screen. **Money follows the profile's currency now** - `USD`, `EUR` or `GBP` - where every
-figure in the app was formatted as dollars by a module-scope formatter with the code written into
-it; switching **re-denominates rather than converts**, because amounts are integer cents with no
-currency attached and there is no rate source. **Every page header names the budgeting period rather
-than the calendar month**, so a `monthStartDay` of 15 reads "September / October 2025" instead of
-claiming a boundary the figures below it do not have - the `docs/TODO.md` entry open since PET-19.
-And the app's fifth custom picker arrived with it: a 28-row "Month starts on" list, capped and
-scrolling, because a native `<select>`'s popup height cannot be set in CSS in Firefox or Safari.
-What is still missing on that screen is frame 17's **third** card, the Categories summary with its
-"Manage" - PET-47's, drawn in Figma and deliberately not built here.
+Current feature status is deliberately not summarized here. The code, `docs/plans/` and each
+scoped file's `## Not built here` section carry what is and is not built, and git history carries
+how it got there; a running ledger of it kept in this section went stale twice before it was
+removed.
 
 **PET-72 is the fifteenth thing that works, and it is the one that changes what the other fourteen
 *mean*.** Budget, category caps and the day a period starts on were single settings, so changing any
