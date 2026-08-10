@@ -75,6 +75,43 @@ that page. The Transactions search is a real `<input>` now (`TransactionSearch` 
 The access screens' sibling section below), so the old "both stay empty" pin narrowed to the
 page that still means it.
 
+**PET-72 makes it a real control, so the paragraph above is history and the pin inverted.** A8 was
+waiting for month navigation to be designed; this is that ticket. `(app)/PeriodSelect.tsx` replaces
+`dashboard/MonthPill.tsx`, which is **deleted** - that file's own TODO predicted the diff exactly ("the
+ticket that designs month navigation turns this into a real Select and gives it the surrounding period
+state; nothing else has to move"), and the prediction held: the state is `?period=` in the URL, and the
+two screens' headers each changed by one line. Five things about it are decisions.
+
+It is a **native `<select>`**, not a sixth custom picker. The five this app draws exist because a
+designed popup could not be reproduced with a native control - swatches in `ColourSelect`, a 64-glyph
+grid in `IconSelect`, a 28-row capped list in `MonthStartField`; a period is a line of text, the list is
+as long as the account's own history, and `TransactionFilterBar`'s navigating pills are the same control
+doing the same job on the sibling screen. It lives at the **`(app)` root** rather than under
+`dashboard/`, because two routes draw it - the same reason `PageHeader` sits there. It **replaces**
+rather than pushes, `TransactionFilterBar`'s recorded call for the identical reason: twelve periods
+browsed should not be twelve entries to back out of. Its `selected` comes from the **response** rather
+than the URL, which is what makes it show a value on a bare `/dashboard` instead of an empty box - the
+sparse-URL trap `transactions/filters.ts` records for its own pills. And every option's text is the
+**backend's own label**, never derived here: a period a pay-day change stretched spans two calendar
+months, so month arithmetic on this side would print the wrong thing exactly when it matters.
+
+**The `?period=` state is the absent key for the current period**, which is `filters.ts`'s rule again:
+one view has one URL, and a dashboard linking to `?period=2026-03-01` would go stale the moment that
+period rolled over. `lib/periodParams.ts` owns `periodParam`, `periodHref` and `parsePeriodParam` -
+separate from `lib/periods.ts`'s read because a Client Component importing anything from a module that
+reaches `next/headers` is something `next build` refuses. `parsePeriodParam` **validates and does not
+canonicalise**, so a malformed value is dropped here while a well-formed but unknown one is still
+forwarded: this app cannot know which dates start a period without asking, and the backend's 400 is the
+honest answer to a link naming a period the account does not have.
+
+**Two of the four headers now read their period off the screen's own response, and two do not read a
+clock at all.** `/dashboard` and `/transactions/categories` take `period` and `periods` as props and
+draw the select; `/transactions` takes its label off the list read, printing "All time" for the one
+filter whose response carries no period; `/insights` asks `GET /api/periods` and takes the entry flagged
+current, because `GET /api/insights` publishes no period and its `monthLabel` names the period a set was
+generated _in_. `lib/format.ts`'s `periodOverline` and `periodLabel` are deleted with the derivation
+they were - `frontend/CLAUDE.md` carries that argument in full.
+
 **`export const dynamic = 'force-dynamic'` was on the layout and is deliberately gone.** It
 existed because the pages read `new Date()` for the overline, and without it Next prerendered
 them and every screen showed whatever month the build ran in - a bug that only appears a month
@@ -2436,3 +2473,55 @@ card failed on it before it was found, which is the argument for writing the ref
 on this page. Neither authority draws a warning there, and this is the one setting on the card whose
 effect is retroactive: the backend derives month attribution from the transaction date at read time,
 so every figure in the app re-buckets the moment it saves. `docs/TODO.md` carries it.
+
+**PET-72 rewrites the second half of that card, and the last paragraph above is the thing it
+contradicts.** That note said the month-start setting's effect is retroactive - "every figure in the app
+re-buckets the moment it saves" - and treated the missing warning as copy owed to A29. The mechanism was
+right and the desirability was backwards: re-bucketing _all_ history is precisely the rewriting a budget
+history exists to prevent, and no warning makes it correct. A new pay day is a fact about the periods
+after it. So the budget and the pay day **leave `PATCH /api/profile` entirely** - the endpoint refuses
+both now - and go through `lib/changeSchedule.ts` to `POST /api/profile/schedule`, which requires the
+paycheck the change applies from.
+
+**The single Save is intercepted rather than split**, which is the decision to read before touching this
+form. `BudgetField` and `MonthStartField` stay inline in PET-47's card and AC6's one "Save changes"
+stays one button; what changed is what a press does when either field moved. `SettingsForm` opens
+`settings/PaycheckMonthDialog.tsx`, asks which paycheck, and only then sends - the **schedule write
+first, the ordinary patch second**, because there is no transaction across two endpoints and the one the
+user was asked a question about is the one that must not be skipped because an unrelated name change
+failed. A press with neither field changed never shows the dialog, because a dialog over a name change
+would be asking about a write that is not happening.
+
+Four things about the dialog are decisions rather than shape. It is a **confirmation with a control in
+it**, a shape this app had not drawn: `Modal`'s `'center'` frame asks a yes-or-no, and this asks a
+yes-or-no _and_ a which-one, because the answer is what the write is anchored to. The select sits in
+`children`, which that component has never had an opinion about. Its value is **owned by
+`SettingsForm`**, every other dialog's shape, so reopening after a failed save reopens on the month the
+user picked rather than silently resetting what a second press would write. Focus opens on the
+**select** rather than the affirmative, because the user's first act is to read nine options.
+`initialFocusId` is what `Modal` grew for it. And **Cancel disables while pending**, unlike
+`ConfirmDeleteDialog`'s: there, Cancel does not claim to abort a delete already sent, where here the
+affirmative is the only thing that writes, so a press during the round trip could only unmount the
+dialog whose write is still landing.
+
+**Nothing about it is designed**, so `Shell/Paycheck month`'s stories are the only review it gets - the
+title, the body, the field label and the glyph are all ours and join what A29 owes. The two stories to
+look at hardest are `Retroactive` and `Future`, which are the two readings of one sentence: a past
+paycheck re-shapes periods that already have transactions in them, where a future one only stretches the
+period the user is in.
+
+**The window is nine months, four back and four forward around the current one**, and the shape of that
+list is what makes two backend guards unreachable from here. `toChangeScheduleBody` assembles
+`firstPaycheckDate` from the pay day the form already holds, so the 400 for a date not falling on
+`monthStartDay` cannot be produced by this caller; and provisioning anchors the account's first rule
+twelve months back, so the 400 for an anchor earlier than the earliest rule cannot be either. Both arms
+are still classified, on this repo's standing rule that a control which cannot produce a state is not an
+enforcement of it.
+
+**The Profile card's two name inputs collapsed into one**, labelled "Display name" with the placeholder
+"Your name, full name or nickname." - `settingsForm.ts` moves onto `fullName`, and `initials`/`shortName`
+become single-argument. Nothing in the app ever used the two apart, so the second was data collected to
+be thrown away; `frontend/CLAUDE.md` carries what that did to those two functions. The same collapse
+reaches onboarding step 3, which asks one name and one new question: the **pay day**, as a third field on
+the budget step rather than a fourth step, because it is the value the account's first `period_rules` row
+is anchored to and an account with no pay schedule has no periods at all.

@@ -91,6 +91,24 @@ scrolling, because a native `<select>`'s popup height cannot be set in CSS in Fi
 What is still missing on that screen is frame 17's **third** card, the Categories summary with its
 "Manage" - PET-47's, drawn in Figma and deliberately not built here.
 
+**PET-72 is the fifteenth thing that works, and it is the one that changes what the other fourteen
+*mean*.** Budget, category caps and the day a period starts on were single settings, so changing any
+of them silently rewrote every period the account had ever had: raising the budget in 2026 re-priced
+every month of 2025. All three are **append-only, effective-dated histories resolved on read** now,
+so a change applies from a date and never backwards. Periods are anchored to **paychecks** rather
+than to a day of the month: a schedule change is anchored to the first paycheck under the new
+schedule, arrears removes the boundary immediately before it, and one stretched **transition period**
+runs from the last kept boundary up to it keeping the **old** budget. That date may be retroactive or
+in the future. `GET /api/periods` publishes the account's whole history with a **label** per period,
+because a period is no longer one calendar month and no arithmetic over a start day can name one that
+spans three month names - so the Dashboard's month select, inert since PET-19 because A8 wanted a
+designed control first, is a real one and the app has no inert control anywhere. Four things were
+bundled into it because it lands with the pre-launch database reset and they were each a migration on
+their own: `fullName` replaces two name fields, EUR becomes the default of a real two-decimal
+currency allowlist, `categories.note` becomes `description`, and onboarding asks the pay day. The
+Settings save is unchanged in shape and different in effect - one "Save changes", intercepted by a
+dialog asking which paycheck a budget or pay-day change applies from.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and
@@ -188,6 +206,9 @@ read the file before you write the change, not after.
 | add or change the insights endpoint                                 | `backend/CLAUDE.md`, Insights    |
 | touch a category template, a colour token or an icon name           | `backend/CLAUDE.md`, Templates   |
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
+| resolve a period, or touch a budget, cap or pay-schedule history    | `backend/CLAUDE.md`, Backend conventions |
+| add or change the periods endpoint, or the schedule write           | `backend/CLAUDE.md`, Profile and preferences |
+| name a period on a screen, or add a `?period=` to a read            | `frontend/src/app/CLAUDE.md`, The app shell |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
 | add or change a daisyUI theme, or re-map a `--color-*`              | `frontend/CLAUDE.md`, Changing or adding a theme |

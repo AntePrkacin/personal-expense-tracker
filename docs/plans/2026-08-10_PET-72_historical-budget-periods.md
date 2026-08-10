@@ -170,32 +170,32 @@ currency default becomes `'EUR'`; `OnboardingPayload` gains `fullName` and keeps
 
 ## Checklist
 
-- [ ] 0. Ticket, worktree branch `feat/PET-72-historical-budget-periods`, this plan committed
+- [x] 0. Ticket, worktree branch `feat/PET-72-historical-budget-periods`, this plan committed
       alone, draft PR opened
-- [ ] 1. Schemas (user + central): three history tables, drops, fullName, description, icon
+- [x] 1. Schemas (user + central): three history tables, drops, fullName, description, icon
       NOT NULL, EUR default
-- [ ] 2. `period-rules.ts` pure walk + exhaustive specs; trim `month-window.ts`; `currency.ts`
-- [ ] 3. `PeriodService`/`PeriodModule`; rewire Categories/Transactions/Dashboard/Insights/
+- [x] 2. `period-rules.ts` pure walk + exhaustive specs; trim `month-window.ts`; `currency.ts`
+- [x] 3. `PeriodService`/`PeriodModule`; rewire Categories/Transactions/Dashboard/Insights/
       Profile off `CategoriesService.period()`
-- [ ] 4. Regenerate baseline migrations (both scopes); delete legacy-colour-backfill
-- [ ] 5. `CategoriesService`: cap subquery in `withSpend`, period param on `list`, `setCaps` as
+- [x] 4. Regenerate baseline migrations (both scopes); delete legacy-colour-backfill
+- [x] 5. `CategoriesService`: cap subquery in `withSpend`, period param on `list`, `setCaps` as
       conditional `INSERT ... SELECT`, create/update cap-row handling
-- [ ] 6. Transactions period widening; Dashboard query DTO + `period`/`currency` fields;
+- [x] 6. Transactions period widening; Dashboard query DTO + `period`/`currency` fields;
       `GET /api/periods` module
-- [ ] 7. Profile: `fullName`, narrowed `UpdateProfileDto`, `POST /api/profile/schedule`
-- [ ] 8. Auth/provisioning: `RegisterDto`, EUR default, history seeding at verification
-- [ ] 9. Root `npm run api:sync`; commit both artifacts
-- [ ] 10. Backend tests: re-pin `openapi.e2e-spec.ts`; sweep name fixtures across the e2e
+- [x] 7. Profile: `fullName`, narrowed `UpdateProfileDto`, `POST /api/profile/schedule`
+- [x] 8. Auth/provisioning: `RegisterDto`, EUR default, history seeding at verification
+- [x] 9. Root `npm run api:sync`; commit both artifacts
+- [x] 10. Backend tests: re-pin `openapi.e2e-spec.ts`; sweep name fixtures across the e2e
       suites; rework `categories.e2e-spec.ts`; new periods + schedule-change e2e covering the
       three user-story scenarios, retroactive T and setCaps all-or-nothing
-- [ ] 11. Frontend: currency threading + formatters; setup changes; Settings screen + modal;
+- [x] 11. Frontend: currency threading + formatters; setup changes; Settings screen + modal;
       period select + threading; note to description; update pinned tests; stories for new
       surfaces
-- [ ] 12. Fixture/seed: `showcase/generate.ts` + `seed-showcase.ts` history writes;
+- [x] 12. Fixture/seed: `showcase/generate.ts` + `seed-showcase.ts` history writes;
       `mise run seed:fixture` (own commit)
-- [ ] 13. Docs sweep: root/backend/frontend CLAUDE.md claims, guides' curl payloads,
+- [x] 13. Docs sweep: root/backend/frontend CLAUDE.md claims, guides' curl payloads,
       docs/TODO.md resolved entries deleted
-- [ ] 14. Verification: builds, suites, `docs:check`, seeded browser walk of the three
+- [x] 14. Verification: builds, suites, `docs:check`, seeded browser walk of the three
       scenarios
 
 ## Verification

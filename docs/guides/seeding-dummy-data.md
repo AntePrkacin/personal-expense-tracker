@@ -149,21 +149,29 @@ rather than a plain file, which changes what is locked and nothing about the out
 
 ## What gets generated
 
-- **A profile** with a $5,000 monthly budget and `monthStartDay` 1, rewritten on every run so the
-  caps below always add up against the budget actually stored.
+- **A profile** in **EUR** with a €5,000 monthly budget and a pay day of 1, rewritten on every run so
+  the caps below always add up against the budget actually stored. The budget, the pay schedule and every cap
+  are **effective-dated rows** rather than settings, so all three are written at an anchor at or
+  before the oldest transaction - which is what makes every period the demo can navigate back to show
+  the same budget and the same caps rather than thirteen uncapped categories. The account keeps one
+  pay schedule for the whole of its history on purpose: a mid-fixture schedule change would make its
+  months incomparable, which is a different demo from the one the caps and the trend chart are for. The
+  currency was USD until PET-72 made EUR the app's default and the fixture followed, which is why every
+  figure below is in euros - `mise run seed:fixture` regenerates it and the profile block is the only
+  part that changed.
 - **Thirteen categories** - every category template plus `Uncategorized` - with **uneven** monthly
-  caps that still sum to exactly the $5,000 budget, from $1,500 for `Loans & debt` down to $100 for
+  caps that still sum to exactly the €5,000 budget, from €1,500 for `Loans & debt` down to €100 for
   `Education`. The templates are read out of central at run time rather than hard-coded, so this
   count follows whatever an admin has enabled; the caps themselves come from the fixture, so a
   template rename or removal is refused rather than silently seeded against a stale cap - see
   "When the fixture must be rebuilt" below.
-- **Twelve fixed monthly bills**, about $1,900 combined and roughly 38% of the month: rent $1,450,
-  health insurance $145, electricity about $95, internet $55, mobile $40, gym $39, water $30, and
-  the five streaming subscriptions (Netflix, Spotify, HBO Max, Strava and iCloud, $46 together).
+- **Twelve fixed monthly bills**, about €1,900 combined and roughly 38% of the month: rent €1,450,
+  health insurance €145, electricity about €95, internet €55, mobile €40, gym €39, water €30, and
+  the five streaming subscriptions (Netflix, Spotify, HBO Max, Strava and iCloud, €46 together).
   Each bills once a month on its own day. The three utility bills move month to month the way real
   ones do; the rest are flat. All twelve are deliberately kept out of the random merchant pool, so
   a bill cannot also draw a second charge at an unrelated amount under the same name - a `Fiberlink`
-  at $23.40 beside the real $55 one. The seed fails loudly if an edit puts one of these merchants
+  at €23.40 beside the real €55 one. The seed fails loudly if an edit puts one of these merchants
   back into the pool.
 - **Merchants are hand-written per category** rather than generated, with weights that give each
   category a few regulars and a long tail - the coffee shop turns up about 3 times a month and the
@@ -171,9 +179,9 @@ rather than a plain file, which changes what is locked and nothing about the out
 - **55 to 72 transactions a month** over 36 months, so the exact total differs by seed. Roughly 3%
   land on `Uncategorized`. `mise run seed:fixture` prints the total it wrote.
 - **Amounts drawn log-normally, per category**, so the spread looks like real spending rather than
-  like arithmetic: a median near $35, roughly 9% of transactions under $10 and roughly 3% over
-  $200, with each category's typical size set by its own share of spend against its share of the
-  count. Dining out lands near $31 a time, Groceries near $56, Travel near $225.
+  like arithmetic: a median near €35, roughly 9% of transactions under €10 and roughly 3% over
+  €200, with each category's typical size set by its own share of spend against its share of the
+  count. Dining out lands near €31 a time, Groceries near €56, Travel near €225.
 
 ### Every month has a band, and the year has a shape
 
@@ -211,7 +219,7 @@ budget every time it recurs - the month somebody *just* made it.
   sit in a 4-11%-of-months-over-cap range, mostly from being the occasional target of one of the
   irregular expenses above. `Groceries`, `Dining out`, `Family & pets`, `Personal care`,
   `Uncategorized`, `Travel` and `Gifts` run higher than that even after two rounds of rebalancing
-  the caps - a property of a $5,000 budget with a $1,450 rent payment in it, not an unturned
+  the caps - a property of a €5,000 budget with a €1,450 rent payment in it, not an unturned
   number. `Loans & debt` sits at essentially 0%: it is 30% of the whole budget and dominated by
   that same near-fixed rent, so it has almost no room to go over on ordinary variance at all. Run
   `mise run seed:check --trials=200` for the exact current figures - they are the tuning input

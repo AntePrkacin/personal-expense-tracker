@@ -355,7 +355,11 @@ the real total as one dollar allows. Names: `initials()`
 and `shortName()` derive the sidebar footer's "MK" and "Marko K." from the two stored name
 fields. Both are derived and never stored (SET-2), and SET-6 requires the sidebar footer and
 the Settings avatar to agree, which is why one shared function is the point rather than a
-convenience. Both take the first character with `Array.from(name)[0]` rather than
+convenience. **They take one argument as of PET-72**, which collapsed the two stored name fields
+into `fullName`: nothing in the app ever used them apart - the sidebar wants initials and a short
+name, both derivable from one string - so the second was data collected to be thrown away. Both now
+split on `/\s+/` and read the first character of the first and last piece, so a single-word name is
+still initialled and a three-word one still shortens. Both take the first character with `Array.from(name)[0]` rather than
 `charAt(0)`, which would split an astral-plane character into a lone surrogate. Period:
 `monthOverline()` and `monthLabel()` give the page header its "October 2025" and "October",
 shared because Dashboard and Transactions draw the identical overline. Both use the calendar
@@ -427,6 +431,43 @@ label over six rows of real weeks would be nonsense. The split is calendar-month
 budgeting-period, not old versus new. Their `today` still defaults to the frontend host's zone while
 the backend resolves against `APP_TIMEZONE`, which is the pre-existing skew `docs/TODO.md` tracks
 rather than a new one.
+
+**PET-72 deleted that pair, and the deletion is the prediction above being carried out rather than a
+reversal of it.** Read the paragraph as history: `periodOverline` and `periodLabel` are gone from
+`lib/format.ts`, with their tests and their private month arithmetic. Their own docblock had named the
+condition - "if a period ever stops being derivable from one number, this is the thing that has to
+become an API field rather than the thing to extend" - and that is what happened. A period is anchored
+to a paycheck now and a pay-day change **stretches** one across the gap, so a period can read
+"December 2025 / January 2026", and no arithmetic over a start day and today produces that: the fact
+that makes it span three month names is a `period_rules` row this app cannot see. The two functions
+were not imprecise, they were unable in principle to be right.
+
+**So a period's name is published per period and arrives beside the figures it describes.**
+`lib/periods.ts` reads `GET /api/periods` for the header's select, and the categories, dashboard and
+transactions reads each echo back the period they resolved - `period.label` is what four page headers
+print. The zone skew the old pair carried goes with them: label and figures now come from one
+resolution against `APP_TIMEZONE`, where the label used to come from the frontend host's clock. Two
+consequences worth knowing. `monthOverline` and `monthLabel` are down to **one caller each**, both
+`(app)/DateField.tsx`'s, which is exactly the split the paragraph above describes and the reason they
+survived. And the one overline in the app that is still not the backend's is `/transactions` under
+`?period=all`, where the contract publishes `period: null` because a list spanning every period has no
+single label - `TransactionsScreen` prints the same "All time" the filter pill offers.
+
+**`(app)/PreferencesProvider.tsx` lost its second field in the same change.** It carried
+`monthStartDay` and a `usePeriod()` seam for one job, letting a Client Component name the period
+through the pair above; nothing read the seam by the time it went. It was removed rather than left as
+dead code, because a day is still enough to _compute_ a plausible label with, so the next screen to
+reach for it would have got a wrong one with every gate green. The provider is currency-only now.
+
+**The currency list is a real allowlist as of PET-72, and `lib/money.ts` reads it out of the
+contract.** The paragraph above is right that `moneyFormatters` takes a `string` and must render
+whatever a profile holds; what changed is what a profile _can_ hold. `@IsISO4217CurrencyCode()`
+accepted `JPY` and `KWD`, whose exponents are 0 and 3, while `toCents`/`fromCents` assume 2 - so the
+backend now validates against 29 exponent-2 codes with `EUR` as the default, and `CurrencyCode` here
+is `NonNullable<components['schemas']['UpdateProfileDto']['currency']>` rather than a hand-written
+union. The picker's list `satisfies readonly { code: CurrencyCode; ... }[]`, so a code the backend
+stops accepting fails `npm run build` instead of shipping an option that 400s. `docs/TODO.md` carries
+what a wider list needs, which is a per-currency exponent.
 
 **`lib/amount.ts` is the fourth module in that family**, and it exists because `docs/TODO.md`
 predicted it and named the trigger: a third _form_ validating an amount without going through
@@ -746,3 +787,21 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   makes sense. It also publishes **no `missing` arm**, which is a decision rather than an omission:
   the endpoint carries no id at all, so there is no resource to fail to find, and an absent profile
   row is a broken invariant the backend answers 500 for.
+  **PET-72 added a ninth, `lib/changeSchedule.ts`, and it is the first write with a _date_ attached to
+  what it changes.** It publishes **three** reasons - `invalid`, `unauthenticated`, `failed` - and the
+  interesting one is the absence: there is no conflict arm, because nothing here can collide with
+  another account and sending the identical body twice converges rather than colliding (the rule
+  insert is `onConflictDoNothing` and a duplicate budget row for one date resolves to the same value).
+  It is also the one write whose body is **complete rather than diffed**: every field of
+  `ChangeScheduleDto` is required, because a request setting a budget or a pay day is incomplete
+  without saying from when. `PATCH /api/profile` could not express it and refuses both fields now, so
+  a Settings save that moves either one sends this **first** and the ordinary patch second - the order
+  is chosen for failure semantics, since the schedule write is the one the user was asked a question
+  about.
+  **And PET-72 added a sixth read, `lib/periods.ts`**, whose `readPeriods()` backs the period select on
+  two screens and the AI Insights overline. Its failure policy is the throwing one rather than a
+  degrading one, deliberately against `lib/categoryTemplates.ts`'s: an empty list would render a header
+  naming no period over figures that are all scoped to one, which is a screen that lies rather than a
+  screen with a gap. Its `?period=` half lives in **`lib/periodParams.ts`**, and that split is a build
+  constraint rather than a preference - `periodHref` is called from a Client Component, and importing it
+  from a module that reaches `next/headers` is something `next build` refuses.
