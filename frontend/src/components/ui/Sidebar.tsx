@@ -5,14 +5,23 @@ import { initials, shortName } from '@/lib/format';
 
 // Sidebar (Figma "Components", node 18:252), on daisyUI `menu` (PET-57).
 //
-// The dark navigation panel on all four app frames - 04/05 Dashboard, 06/07
+// The navigation panel on all four app frames - 04/05 Dashboard, 06/07
 // Transactions, 14/15/16 AI Insights and 17 Settings. It renders inside the
 // `drawer` the (app) layout owns, which is where its small-screen collapse
 // comes from: this component is only ever the panel's content.
 //
-// `bg-neutral` rather than a fixed dark colour: neutral is daisyUI's
-// "always-dark, not-saturated UI" slot, so the panel stays dark in both themes
-// the way the design draws it, without a single `dark:` variant.
+// **A card-coloured panel with a hairline border, not the dark one, and the
+// product owner decided it during PET-74's addendum.** The Figma frames draw
+// an ink sidebar and this shipped as `bg-neutral` to match them; the Claude
+// Design system's own Sidebar (`components/navigation/Sidebar.jsx` in the
+// Expensa Design System project) draws `--bg-card` with a 1px `--line-default`
+// right border instead, in both themes - and the ink version dissolved into
+// the dark theme's canvas outright, because the Expensa dark canvas *is* ink.
+// So this is `bg-base-100 border-base-300 border-r`: white on the light
+// canvas, raised ink on the dark one, separated by the hairline either way,
+// with the active item on a muted pill and an accent glyph exactly as that
+// file draws them. Claude Design wins over the frames on colour, the same
+// ruling `components/BudgetField.tsx` and `settings/ThemeField.tsx` carry.
 
 /**
  * The four routed views, matching the Figma variant property exactly.
@@ -105,39 +114,46 @@ const NAV_SECTIONS = [
  * How an item looks per state, complete literal strings per the repo's Record
  * convention.
  *
- * These overrides exist because daisyUI's menu defaults assume a menu on a base
- * surface, and this one sits on `bg-neutral`. Three of those defaults fail here,
- * verified against `daisyui/components/menu.css` (5.7.16):
+ * The values are Claude Design's Sidebar states mapped to semantic classes: the
+ * active item on the muted pill (`--bg-muted`, our `base-300`) in heading ink,
+ * the idle one in body ink with a lighter hover wash. Two daisyUI menu defaults
+ * still need overriding on this panel, verified against
+ * `daisyui/components/menu.css` (5.7.16):
  *
- *   - `.menu` sets `--menu-active-bg` to `neutral` itself, so the active fill
- *     was the exact colour of the panel behind it - in both themes, whose
- *     `neutral` is the same near-black. Four pixel-identical items.
- *   - The focus rule recolours the label `base-content` (near-black in the
- *     light theme) behind a `base-content` wash that is equally dark-on-dark.
+ *   - `menu-active` fills with `neutral` and recolours `neutral-content`, which
+ *     is the dark pill the design does not draw - so the muted pill is spelled
+ *     out beside it. `menu-active` itself stays: it is the state daisyUI names
+ *     and the visible half of aria-current that the tests pin, and the
+ *     utilities beside it win because Tailwind emits them unlayered inside
+ *     `utilities` while daisyUI's rules sit in a nested sub-layer.
  *   - The focus rule and `menu-active` both set `outline-style: none` and
  *     `--tw-outline-style: none`, which is why `outline-solid` is spelled out
  *     below: `outline-2` only reads that variable, so without the style
  *     utility the restored ring computes to no outline at all.
  *
- * Everything is therefore stated in `neutral-content` terms, which contrasts
- * with `neutral` by definition in both themes. `menu-active` stays on the
- * active item: it is the state daisyUI names and the visible half of
- * aria-current that the tests pin; the utilities beside it are what make it
- * visible on this panel, and they win because Tailwind emits them unlayered
- * inside `utilities` while daisyUI's rules sit in a nested sub-layer.
- *
- * **The idle wash is deliberately lighter than the active one.** Both were
- * `neutral-content/10`, which made a hovered item pixel-identical to the open one -
- * so a mouse user pointing at Transactions from the Dashboard saw two items in the
- * same state and neither said which page they were on. The fill that marks "you are
- * here" has to outweigh the one that marks "you could click this", and /5 against
- * /10 is that with no third colour introduced. Invisible to the suite, which asserts
- * `menu-active` and `aria-current` rather than hover weights.
+ * **The idle wash is deliberately lighter than the active one** - `base-200`
+ * against the active `base-300` - so a hovered item never reads as the open
+ * one. The doctrine survives from the dark panel, where both washes were once
+ * the same `/10` and a mouse user could not tell "you are here" from "you
+ * could click this"; only the colours moved. Invisible to the suite, which
+ * asserts `menu-active` and `aria-current` rather than hover weights.
  */
 const LINK_STATE: Record<'active' | 'idle', string> = {
   active:
-    'menu-active bg-neutral-content/10 text-neutral-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-content',
-  idle: 'hover:bg-neutral-content/5 focus-visible:bg-neutral-content/5 focus-visible:text-neutral-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-content',
+    'menu-active bg-base-300 text-base-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+  idle: 'text-base-content/70 hover:bg-base-200 focus-visible:bg-base-200 focus-visible:text-base-content focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+};
+
+/**
+ * The glyph's own colour per state, separate from the label's because Claude
+ * Design separates them: the active icon is `--brand-accent` (our `primary`)
+ * while its label stays ink, and the idle icon is a step more muted than its
+ * label. A second Record rather than `currentColor` inheritance, complete
+ * literals for the scanner as always.
+ */
+const GLYPH_STATE: Record<'active' | 'idle', string> = {
+  active: 'text-primary',
+  idle: 'text-base-content/50',
 };
 
 type SidebarProps = {
@@ -178,7 +194,7 @@ export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
     // column is what constrains it; justify-between pins the footer to the
     // bottom of whatever height that gives. w-64 is the designed 260px column
     // on Tailwind's scale.
-    <aside className="bg-neutral text-neutral-content flex min-h-full w-64 flex-col justify-between px-4 pt-6 pb-5">
+    <aside className="bg-base-100 text-base-content border-base-300 flex min-h-full w-64 flex-col justify-between border-r px-4 pt-6 pb-5">
       <div className="flex flex-col gap-5">
         {/* Not a link. Figma draws no affordance on the wordmark, and picking a
             destination for it is a routing decision. */}
@@ -214,7 +230,7 @@ export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
               <div key={heading} className="flex flex-col gap-1">
                 <p
                   id={headingId}
-                  className="text-neutral-content/50 pb-0.5 pl-3 text-xs font-medium tracking-widest"
+                  className="text-base-content/50 pb-0.5 pl-3 text-xs font-medium tracking-widest"
                 >
                   {heading}
                 </p>
@@ -232,7 +248,10 @@ export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
                           onClick={onNavigate}
                           className={LINK_STATE[isActive ? 'active' : 'idle']}
                         >
-                          <Glyph className="size-5 shrink-0" aria-hidden="true" />
+                          <Glyph
+                            className={`size-5 shrink-0 ${GLYPH_STATE[isActive ? 'active' : 'idle']}`}
+                            aria-hidden="true"
+                          />
                           {label}
                         </Link>
                       </li>
@@ -249,7 +268,11 @@ export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
         {/* Hidden rather than described: the initials repeat the name that is
             read out immediately after. */}
         <div aria-hidden="true" className="avatar avatar-placeholder">
-          <div className="bg-base-100/10 text-neutral-content w-9 rounded-full">
+          {/* The muted tile with body-ink initials, Claude Design's footer avatar.
+              It was `bg-base-100/10` - a faint light wash that only read on the
+              dark panel - and would have been invisible on the panel that now
+              *is* base-100. */}
+          <div className="bg-base-300 text-base-content/70 w-9 rounded-full">
             <span className="text-xs font-semibold">{initials(fullName)}</span>
           </div>
         </div>
@@ -259,7 +282,7 @@ export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
             it only ever draws the short sample address. */}
         <div className="flex min-w-0 flex-1 flex-col gap-px">
           <p className="truncate text-sm font-semibold">{shortName(fullName)}</p>
-          <p className="text-neutral-content/60 truncate text-xs">{email}</p>
+          <p className="text-base-content/60 truncate text-xs">{email}</p>
         </div>
 
         {/* No sign-out control, deliberately. No frame in the file draws one,

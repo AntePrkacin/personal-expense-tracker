@@ -235,3 +235,31 @@ silently, since the panel simply follows the page theme instead. It becomes
 - [ ] ThemeField suite and story; update the Settings suites and stories for the new prop
 - [ ] Close the toggle deferral across the docs; update the Jira ticket and the PR body
 - [ ] Gates, plus a headless check that the attribute really flips the painted theme
+
+## Second addendum: the sidebar is Claude Design's card panel (2026-08-10)
+
+Reported by the product owner from a dark-mode walk: the sidebar and the app background painted
+identically. The diagnosis overturned an assumption this plan restated - the mapping table's
+"Surface/Ink (the sidebar)" and the dark theme block's ink-on-ink comment both took the Figma
+frames' dark sidebar as the design, and the Expensa dark canvas *is* ink, so the panel dissolved
+into it. The design project's own `components/navigation/Sidebar.jsx` draws the opposite:
+`--bg-card` with a 1px `--line-default` right border **in both themes**, the active item on a
+`--bg-muted` pill with a `--brand-accent` glyph. Asked rather than assumed, the product owner
+chose to match it fully - which changes light mode visibly too, retiring the dark ink sidebar.
+
+So `ui/Sidebar.tsx` is `bg-base-100 border-base-300 border-r` now: white on the light canvas,
+raised ink on the dark one, the hairline separating it either way; the active pill is `base-300`
+in heading ink, the glyph's colour splits from the label's (`GLYPH_STATE`, accent when active),
+the footer avatar sits on the muted tile, and the focus rings moved to `outline-primary`, since
+a `neutral-content` ring is invisible on a card. **No theme value moved**, which is the part
+worth noticing: the fix retires the shell's use of `bg-neutral` rather than re-picking dark
+`neutral`, so the 17-token guard is untouched and `neutral` stays the picker's "Ink" and the
+Welcome panel's ground.
+
+### Second addendum tasks
+
+- [ ] Restyle `ui/Sidebar.tsx` to the Claude Design panel (container, item states, glyphs,
+      footer)
+- [ ] Amend the docs that called the sidebar dark (`components/CLAUDE.md`,
+      `frontend/src/app/CLAUDE.md`, the `globals.css` neutral comments)
+- [ ] Gates, plus a headless measure of panel-against-canvas separation in both themes

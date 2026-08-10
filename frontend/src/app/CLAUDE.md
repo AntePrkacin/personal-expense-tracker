@@ -16,9 +16,11 @@ only when the work is actually in a route.
 
 ## The app shell
 
-`frontend/src/app/(app)/` is the shell every signed-in screen renders inside: the fixed dark
+`frontend/src/app/(app)/` is the shell every signed-in screen renders inside: the fixed
 sidebar beside a content column, with the four routed views `/dashboard`, `/transactions`,
-`/insights` and `/settings` under it. A **route group**, so the paths stay exactly the hrefs
+`/insights` and `/settings` under it. (The sidebar was the Figma frames' dark ink panel until
+PET-74's addendum restyled it to Claude Design's card-coloured one; `ui/Sidebar.tsx` carries
+the account.) A **route group**, so the paths stay exactly the hrefs
 `ui/Sidebar` declares while sharing one layout; the access screens (01, 02, 03, 22, 23, 24)
 sit outside it and inherit none of it.
 

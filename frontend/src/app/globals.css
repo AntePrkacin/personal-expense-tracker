@@ -75,7 +75,10 @@
   --color-accent: #34b9ae;
   --color-accent-content: #0d4a41;
 
-  /* Surface/Ink (the sidebar), Text/On Dark Muted ("Silver"). */
+  /* Surface/Ink and Text/On Dark Muted ("Ink" and "Silver" in the picker).
+     Nothing in the shell paints bg-neutral any more - the sidebar moved to
+     the card panel Claude Design draws (ui/Sidebar.tsx) - so this pair now
+     serves the category picker and the Welcome panel's ground. */
   --color-neutral: #101720;
   --color-neutral-content: #b4bcc9;
 
@@ -126,12 +129,14 @@
   --color-accent: #34b9ae;
   --color-accent-content: #0d4a41;
 
-  /* Ink-on-ink: the sidebar merges with the canvas, which is Claude Design's
-     own dark arrangement (its dark canvas *is* Surface/Ink). As a picker
-     swatch this is near-invisible on the dark card (1.10:1), exactly as the
-     stock dark theme's neutral was (1.256:1) - accepted on that precedent,
-     and #101720 is the one dark value that clears OKLab 0.10 from all five
-     dark content colours. */
+  /* As a picker swatch this is near-invisible on the dark card (1.10:1),
+     exactly as the stock dark theme's neutral was (1.256:1) - accepted on
+     that precedent, and #101720 is the one dark value that clears OKLab 0.10
+     from all five dark content colours. An earlier comment here defended it
+     as the sidebar's colour too, claiming ink-on-ink was "Claude Design's own
+     dark arrangement"; the design project's Sidebar.jsx disproved that (its
+     sidebar is --bg-card with a hairline border, both themes), and the shell's
+     sidebar no longer reads this token at all. */
   --color-neutral: #101720;
   --color-neutral-content: #b4bcc9;
 
