@@ -1,14 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { CategoriesService } from '../categories/categories.service';
 import { InsightsService } from '../insights/insights.service';
 import { fromCents, toCents } from '../common/money';
-import {
-  addDays,
-  daysBetween,
-  daysLeftInWindow,
-  todayIn,
-} from '../common/month-window';
+import { addDays, daysBetween, daysLeftInWindow } from '../common/month-window';
+import type { Period } from '../common/period-rules';
+import { PeriodService } from '../periods/period.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import type { TransactionResponseDto } from '../transactions/dto/transaction-response.dto';
 import type {
@@ -25,20 +21,25 @@ const RECENT_LIMIT = 3;
  * Every figure the dashboard draws, composed from `CategoriesService` and
  * `TransactionsService` rather than queried here.
  *
- * **This is why the branch is third in a three-branch stack.** `monthWindow()`
- * and the per-category aggregation are `CategoriesService`'s; the
+ * **This is why the branch is third in a three-branch stack.** The period is
+ * `PeriodService`'s and the per-category aggregation is `CategoriesService`'s; the
  * recent-transactions shape is `TransactionsService`'s. A window resolved or a
  * month summed in this file would be a fourth place doing what
  * `backend/CLAUDE.md`'s money note already calls a bug once a third one existed.
  *
- * **This costs more profile reads than any other endpoint in the app**, and
- * that is accepted rather than optimised away: `currentWindow`, `list` and
- * `list` each resolve the period independently, so one dashboard request reads
- * the profile row up to three times. All three land on one cached connection
- * (`UserDatabaseService` caches per user), the database is the caller's own and
- * small, and the alternative is a shared `PeriodService` that would edit code
- * two branches below this one just to save a read nothing has measured as slow.
- * That trade is recorded in `docs/TODO.md`.
+ * **The shared `PeriodService` this comment used to argue against now exists, and
+ * the edge it warned about is closed.** It described the cost - `currentWindow`,
+ * `list` and `list` each resolving the period independently, so one request read
+ * the profile row up to three times - as accepted rather than optimised away, on
+ * the grounds that the fix would edit code two branches below this one to save a
+ * read nothing had measured as slow. PET-72 had to build that service anyway,
+ * because a period is a walk over pay-schedule history now rather than one column.
+ *
+ * The visible symptom of resolving it independently was at the midnight boundary:
+ * the window and this method's own `today` could land on either side of it, so
+ * `daysLeft` could momentarily read 0 where its DTO promises at least 1.
+ * `PeriodService.current` returns the period **and** the `today` it was resolved
+ * from, so the two cannot disagree and nothing here reads a clock.
  *
  * **No `Promise.all` anywhere below**, the same reason `TransactionsService`
  * avoids it: the embedded driver is happier with sequential statements on one
@@ -48,16 +49,49 @@ const RECENT_LIMIT = 3;
 export class DashboardService {
   constructor(
     private readonly categories: CategoriesService,
+    private readonly periods: PeriodService,
     private readonly transactions: TransactionsService,
     private readonly insights: InsightsService,
-    private readonly config: ConfigService,
   ) {}
 
-  async get(userId: string): Promise<DashboardResponseDto> {
-    const window = await this.categories.currentWindow(userId);
-    const today = todayIn(
-      this.config.get<string>('APP_TIMEZONE', 'Europe/Zagreb'),
-    );
+  /**
+   * @param periodStart A period's own `start`, from `GET /api/periods`. Omitted
+   * means the current period. Every figure below is for that one period, and the
+   * response echoes it back so the screen can label what it is showing.
+   *
+   * @throws BadRequestException if `periodStart` names no period of this account's.
+   */
+  async get(
+    userId: string,
+    periodStart?: string,
+  ): Promise<DashboardResponseDto> {
+    // Two paths rather than one, because only the current period has a "today"
+    // inside it. The default path takes the period and the date from **one**
+    // resolution, which is what closes the midnight edge described above - two
+    // separate clock reads could still land either side of a boundary.
+    let period: Period;
+    let today: string;
+
+    if (periodStart === undefined) {
+      const current = await this.periods.current(userId);
+      period = current;
+      today = current.today;
+    } else {
+      period = await this.periods.startingAt(userId, periodStart);
+      today = this.periods.today();
+    }
+
+    // A period the user is navigating back to is finished, so the rate-of-spend
+    // figures have to measure it whole rather than against a `today` that sits
+    // outside it. Decided by containment rather than by whether `?period=` was
+    // sent: sending the current period's own start explicitly must answer
+    // identically to omitting it.
+    const isCurrent = period.start <= today && today < period.end;
+
+    // The period is passed explicitly to both, rather than letting either resolve
+    // its own default: they would each resolve the *current* period, which is the
+    // right answer only when that is what was asked for.
+    const selector = periodStart ?? 'current';
 
     // Explicit rather than relying on TransactionsService's own default: two
     // things below (the recent card, the weekly buckets' input order) depend
@@ -65,10 +99,12 @@ export class DashboardService {
     // that nobody has changed the other service's default yet.
     const { transactions: periodTransactions } = await this.transactions.list(
       userId,
-      { period: 'current', sort: 'date_desc' },
+      { period: selector, sort: 'date_desc' },
     );
-    const { categories: categoryRows, allocation } =
-      await this.categories.list(userId);
+    const { categories: categoryRows, allocation } = await this.categories.list(
+      userId,
+      periodStart,
+    );
 
     // The teaser summary from the latest ready insight set, or null when none
     // has been generated. Composed like everything else here rather than read
@@ -97,9 +133,18 @@ export class DashboardService {
 
     // Counts today, so this is never zero and there is no division to guard -
     // decision 2: the rate that answers "am I burning too fast", not one that
-    // looks better the earlier in the month it is read.
-    const daysElapsed = daysBetween(window.start, today) + 1;
-    const daysLeft = daysLeftInWindow(window, today);
+    // looks better the earlier in the month it is read. A finished period is
+    // measured whole instead, which is the same rule applied to a period whose
+    // days have all elapsed; `daysBetween` on the half-open bounds *is* its
+    // length, so there is no `+ 1` on that branch.
+    const daysElapsed = isCurrent
+      ? daysBetween(period.start, today) + 1
+      : daysBetween(period.start, period.end);
+
+    // Zero for a finished period rather than a negative count of days since it
+    // closed, which is what `daysLeftInWindow` would report against a `today`
+    // outside the window.
+    const daysLeft = isCurrent ? daysLeftInWindow(period, today) : 0;
     const averagePerDay = spent / daysElapsed;
 
     return {
@@ -110,10 +155,11 @@ export class DashboardService {
       transactionCount: periodTransactions.length,
       averagePerDay,
       topCategory: topCategoryOf(categoryRows),
-      weeklyBuckets: weeklyBucketsOf(window, periodTransactions),
+      weeklyBuckets: weeklyBucketsOf(period, periodTransactions),
       categories: categoriesOf(categoryRows, totalCents),
       recentTransactions: periodTransactions.slice(0, RECENT_LIMIT),
       insight,
+      period: { start: period.start, end: period.end, label: period.label },
     };
   }
 }

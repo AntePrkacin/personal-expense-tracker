@@ -2,17 +2,13 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsEmail,
-  IsInt,
-  IsISO4217CurrencyCode,
+  IsIn,
   IsNotEmpty,
-  IsNumber,
-  IsPositive,
   IsString,
-  Max,
   MaxLength,
-  Min,
   ValidateIf,
 } from 'class-validator';
+import { SUPPORTED_CURRENCIES } from '../../common/currency';
 import { normalizeEmail } from '../../common/normalize-email';
 
 /**
@@ -24,16 +20,25 @@ import { normalizeEmail } from '../../common/normalize-email';
  *
  * That is why this is hand-written rather than `PartialType(RegisterDto)` with
  * `@IsOptional()` on everything. `@IsOptional()` skips validation for null as
- * well as undefined, so `{"firstName": null}` would pass every check and reach
+ * well as undefined, so `{"fullName": null}` would pass every check and reach
  * a NOT NULL column, turning a bad request into a 500. `@ValidateIf` keyed on
  * `undefined` alone is the fix: absent fields skip validation, and an explicit
  * null is validated and refused.
  *
- * The validator stacks mirror `RegisterDto` field for field on purpose - the
- * Settings form edits exactly what onboarding collected, so a value accepted at
- * registration must stay acceptable here. `categories` is deliberately absent:
- * the starter set is seeded once at verification and the categories feature owns
- * it from there.
+ * **Three fields, down from six, and the two that left did not move sideways.**
+ * PET-72 removed `monthlyBudget` and `monthStartDay` from this body because
+ * neither is a property of the account any more: a budget applies **from a date**,
+ * and a pay day change reshapes the periods after it. Accepting them here would
+ * mean choosing that date silently, which is the retroactive rewriting the whole
+ * ticket exists to remove. They are `POST /api/profile/schedule`, which requires
+ * the anchor and therefore cannot be sent by accident. `firstName` and `lastName`
+ * became one `fullName` on the same branch.
+ *
+ * The validator stacks still mirror `RegisterDto` field for field, for the
+ * original reason: the Settings form edits what onboarding collected, so a value
+ * accepted at registration must stay acceptable here. `categories` is deliberately
+ * absent - the starter set is seeded once at verification and the categories
+ * feature owns it from there.
  */
 
 /** Absent means "unchanged", so skip validation. An explicit null is validated. */
@@ -41,17 +46,19 @@ const provided = (_object: unknown, value: unknown): boolean =>
   value !== undefined;
 
 export class UpdateProfileDto {
+  /**
+   * What the sidebar and greeting show. One field, not a first and last name.
+   *
+   * The app never used the two apart - the sidebar wants initials and a short
+   * name, both derivable from one string - so asking for a surname was asking for
+   * data to throw away. The label on the form is "Display name", and a nickname is
+   * a legitimate answer.
+   */
   @ValidateIf(provided)
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  firstName?: string;
-
-  @ValidateIf(provided)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  lastName?: string;
+  fullName?: string;
 
   /**
    * The login identifier. Changing it changes where future login links are sent
@@ -66,40 +73,19 @@ export class UpdateProfileDto {
   email?: string;
 
   // The same uppercase-then-validate pair as RegisterDto, and the same published
-  // metadata: @IsISO4217CurrencyCode() derives nothing, so without it this is a
-  // bare string in the contract. Keep the two byte-identical - they describe one
-  // field, written twice.
-  @ApiPropertyOptional({
-    pattern: '^[A-Za-z]{3}$',
-    description:
-      'ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.',
-    example: 'EUR',
-  })
+  // enum. Keep the two byte-identical - they describe one field, written twice.
+  //
+  // `@IsIn(SUPPORTED_CURRENCIES)` since PET-72, replacing
+  // `@IsISO4217CurrencyCode()` and the hand-written `pattern` that went with it.
+  // The standard's full list includes zero- and three-decimal currencies, which
+  // `src/common/money.ts` would scale by a factor of a hundred or ten; see
+  // `src/common/currency.ts`. The allowlist also publishes a real enum, so the
+  // frontend's picker is typed off the contract instead of restating a list.
+  @ApiPropertyOptional({ enum: SUPPORTED_CURRENCIES, example: 'EUR' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.toUpperCase() : value,
   )
   @ValidateIf(provided)
-  @IsISO4217CurrencyCode()
+  @IsIn(SUPPORTED_CURRENCIES)
   currency?: string;
-
-  /** Major units (e.g. 2000.50), as at registration. Stored as integer cents. */
-  // The bound is spelled out because the plugin renders @IsPositive() as
-  // `minimum: 1`, which is right for an integer and wrong for money: 0.50 is a
-  // valid budget.
-  @ApiPropertyOptional({ minimum: 0, exclusiveMinimum: true })
-  @ValidateIf(provided)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
-  @Max(1_000_000_000)
-  monthlyBudget?: number;
-
-  /** Capped at 28 so the day exists in every month. */
-  // Explicit integer type for RegisterDto's reason: every TS `number` publishes
-  // as `type: 'number'`, which would advertise 3.5 as a valid day.
-  @ApiPropertyOptional({ type: 'integer' })
-  @ValidateIf(provided)
-  @IsInt()
-  @Min(1)
-  @Max(28)
-  monthStartDay?: number;
 }

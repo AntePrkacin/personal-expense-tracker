@@ -1,2 +1,0 @@
-ALTER TABLE `categories` ADD `is_fallback` integer DEFAULT false NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX `categories_fallback_idx` ON `categories` (`is_fallback`) WHERE "categories"."is_fallback" = 1;

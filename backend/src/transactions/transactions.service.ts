@@ -21,7 +21,8 @@ import { CategoriesService } from '../categories/categories.service';
 import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
 import { newId } from '../common/ids';
 import { fromCents, toCents } from '../common/money';
-import type { MonthWindow } from '../common/month-window';
+import type { Period } from '../common/period-rules';
+import { PeriodService } from '../periods/period.service';
 import type { UserDatabase } from '../database/database.types';
 import { UserDatabaseService } from '../database/user-database.service';
 import {
@@ -111,6 +112,7 @@ export class TransactionsService {
   constructor(
     private readonly userDatabases: UserDatabaseService,
     private readonly categories: CategoriesService,
+    private readonly periods: PeriodService,
     private readonly events: EventEmitter2,
   ) {}
 
@@ -167,17 +169,27 @@ export class TransactionsService {
     query: ListTransactionsQueryDto,
   ): Promise<TransactionsResponseDto> {
     const db = await this.userDatabases.getUserDb(userId);
-    const window = await this.resolveWindow(userId, query.period);
+    const period = await this.resolvePeriod(userId, query.period);
 
     const rows = await db
       .select()
       .from(transactions)
-      .where(and(...this.predicates(query, window)))
+      .where(and(...this.predicates(query, period)))
       .orderBy(...orderFor(query.sort ?? DEFAULT_SORT));
 
     const list = rows.map(toResponse);
 
-    return { transactions: list, total: list.length };
+    return {
+      transactions: list,
+      total: list.length,
+      // Null for `period=all`, which covers every period and can therefore be
+      // labelled by none of them. The screen's overline has to fall back to its
+      // own "All transactions" copy for that case, which is why this is nullable
+      // rather than optional.
+      period: period
+        ? { start: period.start, end: period.end, label: period.label }
+        : null,
+    };
   }
 
   /**
@@ -324,25 +336,32 @@ export class TransactionsService {
   }
 
   /**
-   * The date window a `period` names, or null for `all`.
+   * The period a `period` value names, or null for `all`.
    *
-   * Both windows come from `CategoriesService`, so `monthStartDay` and
+   * Every window comes from `PeriodService`, so the pay-schedule history and
    * `APP_TIMEZONE` are read in exactly one place in the app. `all` resolves to
-   * null rather than to an enormous window, so it costs no profile read and adds
+   * null rather than to an enormous window, so it costs no read at all and adds
    * no predicate.
+   *
+   * The three named values are checked first and anything else is treated as a
+   * period start, which the DTO's regex has already constrained to
+   * `YYYY-MM-DD`. Not a `switch` with a `default`, because the fourth case is not
+   * a member of a union: it is an open date, and `PeriodService.startingAt` is
+   * what decides whether it names a real period.
+   *
+   * @throws BadRequestException if a date names no period of this account's.
    */
-  private async resolveWindow(
+  private async resolvePeriod(
     userId: string,
     period: ListTransactionsQueryDto['period'],
-  ): Promise<MonthWindow | null> {
-    switch (period ?? DEFAULT_PERIOD) {
-      case 'current':
-        return this.categories.currentWindow(userId);
-      case 'previous':
-        return this.categories.previousWindow(userId);
-      case 'all':
-        return null;
-    }
+  ): Promise<Period | null> {
+    const selector = period ?? DEFAULT_PERIOD;
+
+    if (selector === 'all') return null;
+    if (selector === 'current') return this.periods.current(userId);
+    if (selector === 'previous') return this.periods.previous(userId);
+
+    return this.periods.startingAt(userId, selector);
   }
 
   /**
@@ -354,16 +373,16 @@ export class TransactionsService {
    */
   private predicates(
     query: ListTransactionsQueryDto,
-    window: MonthWindow | null,
+    period: Period | null,
   ): SQL[] {
     const where: SQL[] = [isNull(transactions.deletedAt)];
 
-    if (window) {
+    if (period) {
       // Half-open, matching the window's own contract: text compared against the
       // text column, served as a range scan by `transactions_date_idx`, and no
       // last-day-of-month arithmetic anywhere.
-      where.push(gte(transactions.date, window.start));
-      where.push(lt(transactions.date, window.end));
+      where.push(gte(transactions.date, period.start));
+      where.push(lt(transactions.date, period.end));
     }
 
     if (query.categoryId) {

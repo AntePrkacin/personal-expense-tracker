@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CategoriesModule } from '../categories/categories.module';
+import { PeriodsModule } from '../periods/periods.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { INSIGHT_GENERATOR } from './insight-generator';
 import { InsightsController } from './insights.controller';
@@ -10,11 +11,11 @@ import { TransactionChangedListener } from './transaction-changed.listener';
 /**
  * Insight set storage, the read, and asynchronous generation.
  *
- * Two imports, for the generator's composition surface: `CategoriesModule` for
- * the windows, per-category stats and budget, `TransactionsModule` for the
- * period's transactions and the cross-month history. `DatabaseModule` is
- * `@Global` so `UserDatabaseService` injects without one, and `SessionGuard` is
- * registered globally in `AppModule`.
+ * Three imports, for the generator's composition surface: `PeriodsModule` for the
+ * current and previous periods, `CategoriesModule` for the per-category stats and
+ * the budget, `TransactionsModule` for the period's transactions and the
+ * cross-period history. `DatabaseModule` is `@Global` so `UserDatabaseService`
+ * injects without one, and `SessionGuard` is registered globally in `AppModule`.
  *
  * **The generator is bound behind `INSIGHT_GENERATOR`, not by class.** That is
  * the LLM-ready seam: swapping `RuleBasedInsightGenerator` for a future
@@ -33,7 +34,7 @@ import { TransactionChangedListener } from './transaction-changed.listener';
  * only coupling.
  */
 @Module({
-  imports: [CategoriesModule, TransactionsModule],
+  imports: [CategoriesModule, PeriodsModule, TransactionsModule],
   controllers: [InsightsController],
   providers: [
     InsightsService,

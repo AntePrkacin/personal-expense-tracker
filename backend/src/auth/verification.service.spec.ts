@@ -3,10 +3,16 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
 import { argsOf, queryChain, type QueryChain } from '../../test/query-chain';
 import type { OnboardingPayload } from '../database/central/schema';
 import type { UserDatabaseService } from '../database/user-database.service';
-import { categories, profile } from '../database/user/schema';
+import {
+  budgetHistory,
+  categories,
+  periodRules,
+  profile,
+} from '../database/user/schema';
 import type {
   ResolvedCategoryTemplate,
   TemplatesService,
@@ -38,8 +44,7 @@ const TRANSPORT: ResolvedCategoryTemplate = {
 };
 
 const payload: OnboardingPayload = {
-  firstName: 'Marko',
-  lastName: 'Kovac',
+  fullName: 'Marko Kovac',
   currency: 'EUR',
   monthlyBudget: 2000.5,
   monthStartDay: 15,
@@ -120,6 +125,12 @@ describe('VerificationService', () => {
       } as unknown as UserDatabaseService,
       { issue } as unknown as SessionService,
       { resolve: resolveTemplates } as unknown as TemplatesService,
+      // Read directly rather than through `PeriodService`, because this is the
+      // code that writes an account's first period rule - see the note on the
+      // constructor. A fixed zone keeps the seeded anchor deterministic.
+      {
+        get: (_key: string, fallback?: string) => fallback ?? 'Europe/Zagreb',
+      } as unknown as ConfigService,
     );
   });
 
@@ -190,17 +201,57 @@ describe('VerificationService', () => {
       expect(issue).toHaveBeenCalledWith('user-id');
     });
 
-    it('converts the budget to cents at the profile boundary', async () => {
+    it('writes the profile with only the fields that are still columns', async () => {
       await service.verify('raw-token');
 
+      // The budget and the pay day left this row at PET-72; they are seeded as
+      // history rows instead, which the cases below pin.
       expect(argsOf(inserted.get(profile)!, 'values')[0]).toEqual({
         id: 'user-id',
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         currency: 'EUR',
-        // 2000.50 major units. Nothing upstream of here stores cents.
-        monthlyBudgetCents: 200050,
+      });
+    });
+
+    it('seeds the pay schedule anchored to the most recent pay day', async () => {
+      await service.verify('raw-token');
+
+      // Not today, and not the *next* pay day: the anchor has to be a paycheck
+      // date, and the most recent one is the start of the period the user is
+      // standing in - so their first period opens where they expect.
+      const rule = argsOf(inserted.get(periodRules)!, 'values')[0] as Record<
+        string,
+        unknown
+      >;
+      expect(rule).toMatchObject({
         monthStartDay: 15,
+        // The first rule has no predecessor to bridge from.
+        transitionStart: null,
+      });
+      expect(rule.effectiveFrom).toMatch(/^\d{4}-\d{2}-15$/);
+    });
+
+    it('converts the budget to cents at the history boundary', async () => {
+      await service.verify('raw-token');
+
+      // The conversion the schema promises happens exactly here: the payload
+      // holds major units as submitted.
+      expect(argsOf(inserted.get(budgetHistory)!, 'values')[0]).toMatchObject({
+        budgetCents: 200050,
+      });
+    });
+
+    it('dates the first budget at the seed rule’s own anchor', async () => {
+      await service.verify('raw-token');
+
+      // So the period the user is currently in is budgeted rather than starting
+      // at zero, and every earlier period falls back to this one row.
+      const rule = argsOf(inserted.get(periodRules)!, 'values')[0] as Record<
+        string,
+        unknown
+      >;
+      expect(argsOf(inserted.get(budgetHistory)!, 'values')[0]).toMatchObject({
+        effectiveFrom: rule.effectiveFrom,
       });
     });
 
@@ -230,7 +281,7 @@ describe('VerificationService', () => {
     });
 
     it('copies the template’s colour, icon and description into each row', async () => {
-      // The description becoming the user's own `note` is what keeps this whole
+      // The template's description becoming the user's own is what kept this
       // change free of a user-scope migration: no new column, and the copy is
       // theirs from the moment it is written.
       await service.verify('raw-token');
@@ -238,8 +289,8 @@ describe('VerificationService', () => {
       const rows = argsOf(inserted.get(categories)!, 'values')[0] as {
         name: string;
         color: string;
-        icon: string | null;
-        note: string | null;
+        icon: string;
+        description: string | null;
       }[];
 
       expect(rows).toContainEqual(
@@ -247,12 +298,14 @@ describe('VerificationService', () => {
           name: 'Groceries',
           color: 'success',
           icon: 'shopping-basket',
-          note: GROCERIES.description,
+          // The template's `description` lands on a column of the same name as
+          // of PET-72; it was `note` before the rename.
+          description: GROCERIES.description,
         }),
       );
     });
 
-    it('gives the fallback a real theme token and its own note', async () => {
+    it('gives the fallback a real theme token and its own description', async () => {
       // Its colour used to be `#98A0AE`, the retired token layer's
       // --color-text-tertiary. There is no off-palette neutral to reach for now.
       //
@@ -270,12 +323,12 @@ describe('VerificationService', () => {
       const [fallback] = argsOf(inserted.get(categories)!, 'values')[0] as {
         color: string;
         icon: string | null;
-        note: string | null;
+        description: string | null;
       }[];
 
       expect(fallback.color).toBe('base-content/50');
       expect(fallback.icon).toBe('circle-question-mark');
-      expect(fallback.note).not.toBeNull();
+      expect(fallback.description).not.toBeNull();
     });
 
     it('seeds the fallback even when no categories were picked', async () => {

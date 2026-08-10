@@ -49,8 +49,7 @@ describe('Template endpoints (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email,
         monthlyBudget: 2000,
         // Empty rather than a picked set: this suite is about the templates
@@ -262,8 +261,7 @@ describe('Template endpoints (e2e)', () => {
       await request(app.getHttpServer())
         .post('/api/auth/register')
         .send({
-          firstName: 'Marko',
-          lastName: 'Kovac',
+          fullName: 'Marko Kovac',
           email: 'orphaned-colour@example.com',
           monthlyBudget: 2000,
           categories: [orphanedId],
@@ -277,8 +275,7 @@ describe('Template endpoints (e2e)', () => {
       await request(app.getHttpServer())
         .post('/api/auth/register')
         .send({
-          firstName: 'Marko',
-          lastName: 'Kovac',
+          fullName: 'Marko Kovac',
           email: 'unknown-template@example.com',
           monthlyBudget: 2000,
           categories: ['0198f2b0-0000-7000-8000-0000000000ff'],

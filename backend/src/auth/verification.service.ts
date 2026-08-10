@@ -4,12 +4,24 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { newId } from '../common/ids';
 import { toCents } from '../common/money';
+import { todayIn } from '../common/month-window';
+import {
+  mostRecentAnchor,
+  SEED_ANCHOR_MONTHS_BACK,
+} from '../common/period-rules';
 import type { OnboardingPayload } from '../database/central/schema';
 import { userDbName } from '../database/database.constants';
 import type { UserDatabase } from '../database/database.types';
 import { UserDatabaseService } from '../database/user-database.service';
-import { categories, profile } from '../database/user/schema';
+import {
+  budgetHistory,
+  categories,
+  periodRules,
+  profile,
+} from '../database/user/schema';
 import { seedStarterCategories } from '../database/user/starter-categories';
 import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
@@ -59,6 +71,11 @@ export class VerificationService {
     private readonly userDatabases: UserDatabaseService,
     private readonly sessions: SessionService,
     private readonly templates: TemplatesService,
+    // Read directly rather than through `PeriodService`, deliberately: that
+    // service resolves periods for an account that already *has* a rule, and this
+    // is the code that writes the first one. Injecting it here would make
+    // provisioning depend on the invariant it is establishing.
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -102,8 +119,14 @@ export class VerificationService {
 
   /**
    * Everything registration deferred until the address was proven: the user's
-   * own database, the profile the onboarding form becomes, and the starter
-   * categories they picked.
+   * own database, the profile the onboarding form becomes, the pay schedule and
+   * budget it opens with, and the starter categories they picked.
+   *
+   * **Every step is written to resume**, because a mid-flight failure answers 500
+   * with the login link already burned and "Resend link" (VER-2, A36) is the
+   * designed recovery. The two history seeds added by PET-72 follow the same rule
+   * as the rest: each is skipped when its table already holds a row, so a resend
+   * completes a half-provisioned account rather than duplicating it.
    */
   private async provisionAccount(
     userId: string,
@@ -119,6 +142,25 @@ export class VerificationService {
     const userDb = await this.userDatabases.getUserDb(userId);
 
     await this.insertProfile(userDb, userId, payload);
+
+    // One anchor, computed once and handed to both seeds. The budget used to
+    // read the rule back to find it, which was a round trip for a value already
+    // in hand - and made the two seeds order-dependent in a way neither needed.
+    //
+    // **Anchored a year back, not at today's boundary**, which is `mostRecentAnchor`
+    // and `SEED_ANCHOR_MONTHS_BACK`'s whole subject: the earliest rule extends
+    // backward without limit either way, so the periods are identical, but a floor
+    // is what lets a *retroactive* schedule change land after it rather than before
+    // it. Anchored at the current period, every retroactive change produced two
+    // rules claiming one stretch.
+    const anchor = mostRecentAnchor(
+      payload.monthStartDay,
+      todayIn(this.config.get<string>('APP_TIMEZONE', 'Europe/Zagreb')),
+      SEED_ANCHOR_MONTHS_BACK,
+    );
+
+    await this.seedPeriodRule(userDb, payload, anchor);
+    await this.seedBudget(userDb, payload, anchor);
     await this.seedCategories(userDb, payload);
 
     // Strictly last. While it is set, the payload is both the profile's source
@@ -182,13 +224,82 @@ export class VerificationService {
       .values({
         // The central id, not a second one for the same person.
         id: userId,
-        firstName: payload.firstName,
-        lastName: payload.lastName,
+        fullName: payload.fullName,
         currency: payload.currency,
-        monthlyBudgetCents: toCents(payload.monthlyBudget),
-        monthStartDay: payload.monthStartDay,
       })
       .onConflictDoNothing();
+  }
+
+  /**
+   * The account's first pay schedule, from the pay day onboarding asked for.
+   *
+   * **Anchored to the most recent occurrence of that day, not to today.** The
+   * anchor has to be a paycheck date - `period_rules`' invariant is that
+   * `effective_from` falls on its own `month_start_day` - and the most recent one
+   * is the start of the period the user is in right now, so their first period
+   * opens where they would expect rather than a month later.
+   *
+   * `transition_start` is NULL: the first rule has no predecessor to bridge from,
+   * and it extends backward without limit, so an expense backdated to before the
+   * account existed still lands in a period.
+   *
+   * Skipped when any rule already exists, the `seedCategories` shape: one row, so
+   * a previous attempt either wrote it or did not, and the data is its own record
+   * of having run.
+   */
+  private async seedPeriodRule(
+    userDb: UserDatabase,
+    payload: OnboardingPayload,
+    anchor: string,
+  ): Promise<void> {
+    const [existing] = await userDb
+      .select({ id: periodRules.id })
+      .from(periodRules)
+      .limit(1);
+
+    if (existing) {
+      return;
+    }
+
+    await userDb.insert(periodRules).values({
+      id: newId(),
+      effectiveFrom: anchor,
+      monthStartDay: payload.monthStartDay,
+      transitionStart: null,
+    });
+  }
+
+  /**
+   * The account's first budget, effective from its first period.
+   *
+   * Dated at the same anchor as the seed rule rather than at today, so the period
+   * the user is currently in is budgeted rather than starting at zero. Any period
+   * older than this row resolves back to it - see `PeriodService.budgetCentsFor` -
+   * so a backdated expense is measured against the only budget the account has
+   * ever had, which is the honest answer.
+   *
+   * The `toCents` conversion happens here, at the service boundary the schema
+   * promises: the payload holds major units exactly as submitted.
+   */
+  private async seedBudget(
+    userDb: UserDatabase,
+    payload: OnboardingPayload,
+    anchor: string,
+  ): Promise<void> {
+    const [existing] = await userDb
+      .select({ id: budgetHistory.id })
+      .from(budgetHistory)
+      .limit(1);
+
+    if (existing) {
+      return;
+    }
+
+    await userDb.insert(budgetHistory).values({
+      id: newId(),
+      effectiveFrom: anchor,
+      budgetCents: toCents(payload.monthlyBudget),
+    });
   }
 
   /**

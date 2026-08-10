@@ -8,7 +8,8 @@ import { AppModule } from './../src/app.module';
 import { categoryTemplateIds } from './category-templates';
 import { LoginTokenService } from './../src/auth/login-token.service';
 import { newId } from './../src/common/ids';
-import { monthWindow, todayIn } from './../src/common/month-window';
+import { todayIn } from './../src/common/month-window';
+import { calendarMonthPeriods } from './periods';
 import type { DashboardResponseDto } from './../src/dashboard/dto/dashboard-response.dto';
 import type { InsightSetResponseDto } from './../src/insights/dto/insight-set-response.dto';
 import {
@@ -112,7 +113,7 @@ describe('Insight endpoints (e2e)', () => {
   const DECLARED_TONES = ['warning', 'positive', 'neutral'];
 
   /** The current period, since registration leaves `monthStartDay` at 1. */
-  const window = monthWindow(1, todayIn('Europe/Zagreb'));
+  const { current: window } = calendarMonthPeriods(todayIn('Europe/Zagreb'));
 
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -219,8 +220,7 @@ describe('Insight endpoints (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email,
         currency: 'eur',
         monthlyBudget: 2000,

@@ -10,16 +10,17 @@ import { LoginTokenService } from './../src/auth/login-token.service';
 import type { CategoriesResponseDto } from './../src/categories/dto/categories-response.dto';
 import type { CategoryResponseDto } from './../src/categories/dto/category-response.dto';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
-import {
-  monthWindow,
-  previousMonthWindow,
-  todayIn,
-} from './../src/common/month-window';
+import { todayIn } from './../src/common/month-window';
+import { calendarMonthPeriods } from './periods';
 import { users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
 import { UserDatabaseService } from './../src/database/user-database.service';
-import { categories, transactions } from './../src/database/user/schema';
+import {
+  categories,
+  categoryCapHistory,
+  transactions,
+} from './../src/database/user/schema';
 import { MAILER } from './../src/mail/mailer';
 import { MemoryMailer } from './memory-mailer';
 
@@ -49,8 +50,9 @@ describe('Category endpoints (e2e)', () => {
 
   // Registration leaves monthStartDay at its default of 1, so the period is the
   // calendar month.
-  const window = monthWindow(1, todayIn('Europe/Zagreb'));
-  const lastMonth = previousMonthWindow(1, todayIn('Europe/Zagreb'));
+  const { current: window, previous: lastMonth } = calendarMonthPeriods(
+    todayIn('Europe/Zagreb'),
+  );
 
   const errorBody = (response: request.Response) =>
     response.body as ErrorResponseDto;
@@ -130,8 +132,7 @@ describe('Category endpoints (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email,
         currency: 'eur',
         monthlyBudget: 2000,
@@ -364,7 +365,7 @@ describe('Category endpoints (e2e)', () => {
           color: 'error',
           monthlyCap: 40.55,
           icon: 'utensils',
-          note: 'Too much',
+          description: 'Too much',
         }).expect(201),
       );
 
@@ -373,19 +374,23 @@ describe('Category endpoints (e2e)', () => {
         color: 'error',
         monthlyCap: 40.55,
         icon: 'utensils',
-        note: 'Too much',
+        description: 'Too much',
         isFallback: false,
         spent: 0,
         transactionCount: 0,
         status: 'on_track',
       });
 
+      // Stored as this category's first cap-history row, effective from the
+      // current period - not as a column on the category, which is what a cap
+      // stopped being at PET-72.
       const userDb = await userDatabases.getUserDb(userId);
       const [row] = await userDb
         .select()
-        .from(categories)
-        .where(eq(categories.id, created.id));
-      expect(row.monthlyCapCents).toBe(4055);
+        .from(categoryCapHistory)
+        .where(eq(categoryCapHistory.categoryId, created.id));
+      expect(row.capCents).toBe(4055);
+      expect(row.effectiveFrom).toBe(window.start);
     });
 
     it('creates an uncapped category when the cap is omitted', async () => {
@@ -540,15 +545,37 @@ describe('Category endpoints (e2e)', () => {
    * other cap exactly where it was.
    */
   describe('PATCH /api/categories', () => {
-    /** Reads caps straight off the rows, so a claim about "unchanged" is real. */
+    /**
+     * The cap each id resolves to for the current period, read from history.
+     *
+     * **Resolved rather than selected, because a cap is no longer a column.**
+     * PET-72 made caps append-only `category_cap_history` rows, so "the cap" is
+     * the greatest `effective_from` at or before the period start with ties broken
+     * by the newest write - exactly what `CategoriesService.withSpend` does. A
+     * claim about a cap being "unchanged" therefore has to resolve the same way
+     * the app does, or it would pass on a table full of stale appends.
+     */
     const capsOf = async (ids: string[]) => {
       const userDb = await userDatabases.getUserDb(userId);
       const rows = await userDb
         .select()
-        .from(categories)
-        .where(inArray(categories.id, ids));
+        .from(categoryCapHistory)
+        .where(inArray(categoryCapHistory.categoryId, ids))
+        .orderBy(
+          asc(categoryCapHistory.effectiveFrom),
+          asc(categoryCapHistory.createdAt),
+          asc(categoryCapHistory.id),
+        );
 
-      return new Map(rows.map((row) => [row.id, row.monthlyCapCents]));
+      // Ascending, so the last write for each id wins - the same order the
+      // service's DESC-with-LIMIT-1 subquery picks out.
+      const resolved = new Map<string, number | null>();
+      for (const row of rows) {
+        if (row.effectiveFrom <= window.start) {
+          resolved.set(row.categoryId, row.capCents);
+        }
+      }
+      return resolved;
     };
 
     it('sets several caps in one request and recomputes the screen', async () => {

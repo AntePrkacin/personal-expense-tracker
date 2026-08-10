@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { eq } from 'drizzle-orm';
 import { CategoriesService } from '../categories/categories.service';
 import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
 import { fromCents, toCents } from '../common/money';
-import { daysBetween, daysLeftInWindow, todayIn } from '../common/month-window';
+import { daysBetween, daysLeftInWindow } from '../common/month-window';
+import { PeriodService } from '../periods/period.service';
 import { UserDatabaseService } from '../database/user-database.service';
 import { profile } from '../database/user/schema';
 import type { TransactionResponseDto } from '../transactions/dto/transaction-response.dto';
@@ -14,21 +14,6 @@ import type {
   GeneratedSet,
   InsightGenerator,
 } from './insight-generator';
-
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
 
 /**
  * The deterministic generator: the two content rules over the user's real data,
@@ -62,9 +47,9 @@ const MONTHS = [
 export class RuleBasedInsightGenerator implements InsightGenerator {
   constructor(
     private readonly categories: CategoriesService,
+    private readonly periods: PeriodService,
     private readonly transactions: TransactionsService,
     private readonly userDatabases: UserDatabaseService,
-    private readonly config: ConfigService,
   ) {}
 
   async generate(userId: string): Promise<GeneratedSet | null> {
@@ -80,11 +65,11 @@ export class RuleBasedInsightGenerator implements InsightGenerator {
       return null;
     }
 
-    const window = await this.categories.currentWindow(userId);
-    const previousWindow = await this.categories.previousWindow(userId);
-    const today = todayIn(
-      this.config.get<string>('APP_TIMEZONE', 'Europe/Zagreb'),
-    );
+    // The period and the date it was resolved from arrive together, so the
+    // day-count figures below cannot straddle a midnight boundary.
+    const period = await this.periods.current(userId);
+    const previousPeriod = await this.periods.previous(userId);
+    const today = period.today;
 
     const { categories: categoryRows, allocation } =
       await this.categories.list(userId);
@@ -98,9 +83,13 @@ export class RuleBasedInsightGenerator implements InsightGenerator {
 
     const spentCents = sumCents(currentTransactions);
     const budget = allocation.monthlyBudget;
-    const daysElapsed = daysBetween(window.start, today) + 1;
-    const totalDays = daysBetween(window.start, window.end);
-    const daysLeft = daysLeftInWindow(window, today);
+    const daysElapsed = daysBetween(period.start, today) + 1;
+    // The period's real length, which is **not** "about a month" during a
+    // stretched transition: a December running to 14 January is 44 days, and the
+    // projection has to divide by that or it would forecast the whole spend of a
+    // six-week period against a four-week rate.
+    const totalDays = daysBetween(period.start, period.end);
+    const daysLeft = daysLeftInWindow(period, today);
     // No card reads this any more, but `summaryOf` picks between three headlines
     // on it. Deleting it with `projectionCard` would silently collapse the banner
     // to two states.
@@ -111,17 +100,21 @@ export class RuleBasedInsightGenerator implements InsightGenerator {
 
     const cards = [
       overCapCard(categoryRows, money),
-      monthOverMonthCard(
+      periodOverPeriodCard(
         categoryRows,
         currentTransactions,
         previousTransactions,
-        previousWindow.start,
+        previousPeriod.label,
         money,
       ),
     ].filter((card): card is GeneratedCard => card !== null);
 
     return {
-      monthLabel: monthLabelOf(window.start),
+      // The period's own label rather than a month name derived from its start.
+      // A stretched transition period has two month names and no single one is
+      // right, so deriving it here would print "December 2025" over a set that
+      // covers half of January too.
+      monthLabel: period.label,
       summary: summaryOf(
         fromCents(spentCents),
         fromCents(projectedCents),
@@ -180,16 +173,25 @@ function overCapCard(
 }
 
 /**
- * The category whose spend moved most against last month, reporting direction
- * and size. Positive tone for a decrease, neutral for an increase. Needs a
- * nonzero previous figure for the percentage, and is omitted when no category
- * qualifies.
+ * The category whose spend moved most against the previous period, reporting
+ * direction and size. Positive tone for a decrease, neutral for an increase.
+ * Needs a nonzero previous figure for the percentage, and is omitted when no
+ * category qualifies.
+ *
+ * **The comparison is period-over-period, not month-over-month**, and across a
+ * pay-schedule change the two periods can be different lengths - a 44-day
+ * transition against a 31-day month. The card reports the change honestly and
+ * does not normalise for that: it says what was spent, and the period it names is
+ * the previous period's own label rather than a month name, so a reader can see
+ * that the comparison spans an unusual window. Normalising to a daily rate would
+ * be a different card with a different claim, and inventing one here would make
+ * the number disagree with every other figure on the screen.
  */
-function monthOverMonthCard(
+function periodOverPeriodCard(
   categories: CategoryResponseDto[],
   currentTransactions: TransactionResponseDto[],
   previousTransactions: TransactionResponseDto[],
-  previousWindowStart: string,
+  previousPeriodLabel: string,
   money: (major: number) => string,
 ): GeneratedCard | null {
   const currentByCategory = sumCentsByCategory(currentTransactions);
@@ -229,7 +231,7 @@ function monthOverMonthCard(
   return {
     tone: decreased ? 'positive' : 'neutral',
     title: `${winner.name} is ${decreased ? 'down' : 'up'} ${percent}%`,
-    body: `You spent ${magnitude} ${decreased ? 'less' : 'more'} than ${monthNameOf(previousWindowStart)}`,
+    body: `You spent ${magnitude} ${decreased ? 'less' : 'more'} than ${previousPeriodLabel}`,
   };
 }
 
@@ -283,13 +285,9 @@ function formatMoney(major: number, currency: string): string {
   }).format(major);
 }
 
-/** `2025-10-15` -> `October 2025`, without constructing a Date. */
-function monthLabelOf(date: string): string {
-  const [year, month] = date.split('-');
-  return `${MONTHS[Number(month) - 1]} ${year}`;
-}
-
-/** `2025-09-15` -> `September`, without constructing a Date. */
-function monthNameOf(date: string): string {
-  return MONTHS[Number(date.split('-')[1]) - 1];
-}
+// `monthLabelOf` and `monthNameOf` lived here and PET-72 deleted both. Neither
+// could be right once a period stopped being a calendar month: a stretched
+// transition period has two month names, and picking the one its start falls in
+// prints "December 2025" over a set that covers half of January. `Period.label`
+// from `common/period-rules.ts` is the single answer now, and it is the same
+// string every screen prints for that period.

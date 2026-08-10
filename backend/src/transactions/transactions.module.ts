@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CategoriesModule } from '../categories/categories.module';
+import { PeriodsModule } from '../periods/periods.module';
 import { ReceiptExtractionService } from './receipt-extraction.service';
 import { ReceiptScanService } from './receipt-scan.service';
 import { TransactionsController } from './transactions.controller';
@@ -8,11 +9,13 @@ import { TransactionsService } from './transactions.service';
 /**
  * Transaction writes and reads.
  *
- * **One import, and it is the reads' whole reason for existing here.**
- * `CategoriesModule` exports `CategoriesService`, which owns the app's only month
- * aggregation: the list read gets its `period` windows from it and the detail read
- * gets one category's month stats. Computing either here instead would put a
- * second copy of the same arithmetic behind a second screen.
+ * **Two imports, and both exist for the reads.** `CategoriesModule` exports
+ * `CategoriesService`, which owns the per-category aggregation the detail read
+ * needs for one category's month stats; `PeriodsModule` exports `PeriodService`,
+ * which resolves the list's `period` filter. Those were one import until PET-72,
+ * when the period stopped being something the categories feature owned - the list
+ * read never wanted a category, it wanted a window. Computing either here instead
+ * would put a second copy of the same arithmetic behind a second screen.
  *
  * Nothing else needs importing: `DatabaseModule` is @Global so
  * `UserDatabaseService` injects without one, `SessionGuard` is registered
@@ -29,7 +32,7 @@ import { TransactionsService } from './transactions.service';
  * touching the database reads.
  */
 @Module({
-  imports: [CategoriesModule],
+  imports: [CategoriesModule, PeriodsModule],
   controllers: [TransactionsController],
   providers: [
     TransactionsService,

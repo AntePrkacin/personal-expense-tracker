@@ -4,6 +4,7 @@ import {
   ICON_NAMES,
 } from '../../database/central/template-tokens';
 import { InsightSummaryDto } from '../../insights/dto/insight-set-response.dto';
+import { PeriodSummaryDto } from '../../periods/dto/period-response.dto';
 import { TransactionResponseDto } from '../../transactions/dto/transaction-response.dto';
 
 /** One 7-day slice of the trend chart. */
@@ -103,7 +104,8 @@ export class DashboardResponseDto {
   spent!: number;
 
   @ApiProperty({
-    description: 'Major units, the monthly budget from your profile.',
+    description:
+      'Major units, the monthly budget **in force for this period**. Not necessarily the budget set today: raising it applies from the period you anchor the change to, and earlier periods keep the budget they were spent against.',
   })
   monthlyBudget!: number;
 
@@ -115,16 +117,16 @@ export class DashboardResponseDto {
 
   @ApiProperty({
     description:
-      'Whole days from today to the end of the period, counting today. 1 on the last day of the period, never 0 - the day is not over.',
+      'Whole days from today to the end of the period, counting today. 1 on the last day of the period, never 0 - the day is not over. **0 for a period you have navigated back to**, which is finished rather than nearly over.',
   })
   daysLeft!: number;
 
-  @ApiProperty({ description: 'Live transactions in the current period.' })
+  @ApiProperty({ description: 'Live transactions in this period.' })
   transactionCount!: number;
 
   @ApiProperty({
     description:
-      '`spent` divided by days elapsed so far (counting today), not by the days in the whole period - the rate that answers "am I burning too fast", not one that looks better the earlier in the month it is read.',
+      '`spent` divided by days elapsed so far (counting today), not by the days in the whole period - the rate that answers "am I burning too fast", not one that looks better the earlier in the month it is read. For a **finished** period every day has elapsed, so it divides by the period’s full length; note that a period is not always a month long.',
   })
   averagePerDay!: number;
 
@@ -161,7 +163,23 @@ export class DashboardResponseDto {
     type: InsightSummaryDto,
     nullable: true,
     description:
-      'The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight).',
+      'The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). **Always the latest set**, not one for the period being viewed: insights are generated for the current period only.',
   })
   insight!: InsightSummaryDto | null;
+
+  /**
+   * Which period every figure above is for.
+   *
+   * The field `docs/TODO.md` has asked for since PET-20, and PET-72 is what makes
+   * it necessary rather than merely convenient: with `?period=` navigation the
+   * frontend can no longer assume the response is about the current month, and
+   * with variable-length periods it cannot derive the label by month arithmetic
+   * either.
+   */
+  @ApiProperty({
+    type: PeriodSummaryDto,
+    description:
+      'The period every figure here covers - the current one unless `?period=` asked for another. Use `label` for the screen’s overline rather than deriving a month name from `start`.',
+  })
+  period!: PeriodSummaryDto;
 }

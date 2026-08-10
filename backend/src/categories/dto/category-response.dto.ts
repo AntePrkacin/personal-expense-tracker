@@ -37,15 +37,24 @@ export class CategoryResponseDto {
   color!: string;
 
   /**
-   * Nullable because the column is, not because a new category may omit one:
-   * `CreateCategoryDto.icon` is required as of PET-64 and `UpdateCategoryDto`
-   * cannot clear it, so only a row predating that can be null.
+   * Always present as of PET-72, when the column became NOT NULL.
+   *
+   * It was nullable "because the column is, not because a new category may omit
+   * one" - `CreateCategoryDto.icon` has been required since PET-64 and no PATCH
+   * can clear it, so the null was only ever reachable by a row predating that.
+   * The database reset removed those rows and the column now agrees with the DTO.
    */
-  @ApiProperty({ enum: ICON_NAMES, nullable: true, type: String })
-  icon!: string | null;
+  @ApiProperty({ enum: ICON_NAMES })
+  icon!: string;
 
+  /**
+   * Free text the user owns. Called `note` before PET-72, renamed to match both
+   * the column and the `category_templates.description` a starter category
+   * copies it from - and to stop it reading like `transactions.note`, which is a
+   * different field on a different table and keeps its own name.
+   */
   @ApiProperty({ nullable: true, type: String })
-  note!: string | null;
+  description!: string | null;
 
   @ApiProperty({
     description:
@@ -56,7 +65,8 @@ export class CategoryResponseDto {
   @ApiProperty({
     nullable: true,
     type: Number,
-    description: 'Major units. Null means uncapped, which is not a cap of 0.',
+    description:
+      'Major units. Null means uncapped, which is not a cap of 0. **The cap in force for the period being reported**, not necessarily the one set today: changing a cap applies from the current period onward and leaves earlier periods reporting the cap they were budgeted under.',
   })
   monthlyCap!: number | null;
 

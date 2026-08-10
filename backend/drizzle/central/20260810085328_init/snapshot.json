@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "34f6b237-260b-42df-9430-bb88f343d830",
-  "prevIds": ["a0b2ddb3-3be5-414e-9e32-34e71d13a1c0"],
+  "id": "bb3eaee5-e829-4fd9-a271-79babf421e04",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "category_templates",

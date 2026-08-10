@@ -1,15 +1,25 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { PeriodSummaryDto } from '../../periods/dto/period-response.dto';
 import { CategoryResponseDto } from './category-response.dto';
 
 /**
  * Caps against the monthly budget, for the header of the Categories screen.
  *
- * Time-independent, unlike everything else on that screen: caps are monthly by
- * definition, so no period enters into this and it reads the same on the 1st as
- * on the 28th.
+ * **Period-scoped as of PET-72, and this comment used to say the opposite.** It
+ * read "time-independent, unlike everything else on that screen: caps are monthly
+ * by definition, so no period enters into this and it reads the same on the 1st
+ * as on the 28th". That was true while a cap and a budget were each one current
+ * column. Both are effective-dated history now, so this summary answers for the
+ * period being reported - reading last December against today's budget and
+ * today's caps is exactly the retroactive rewriting the ticket removed. It still
+ * reads the same on the 1st as on the 28th *of one period*, which is the part of
+ * the old claim that survives.
  */
 export class AllocationResponseDto {
-  @ApiProperty({ description: 'Major units, from your profile.' })
+  @ApiProperty({
+    description:
+      'Major units. The budget in force for the period being reported, not necessarily the one set today.',
+  })
   monthlyBudget!: number;
 
   @ApiProperty({
@@ -39,6 +49,13 @@ export class CategoriesResponseDto {
     description: 'Live categories, ordered by name.',
   })
   categories!: CategoryResponseDto[];
+
+  @ApiProperty({
+    type: PeriodSummaryDto,
+    description:
+      'Which period every figure above is for - the current one unless `?period=` asked for another. Print `label` above the screen rather than deriving a month name from `start`: a period is not always a calendar month.',
+  })
+  period!: PeriodSummaryDto;
 
   @ApiProperty({ type: AllocationResponseDto })
   allocation!: AllocationResponseDto;

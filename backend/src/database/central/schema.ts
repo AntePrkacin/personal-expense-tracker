@@ -13,13 +13,18 @@ import {
  * NULL - see the `onboardingPayload` column.
  */
 export interface OnboardingPayload {
-  firstName: string;
-  lastName: string;
-  /** ISO 4217, already uppercased and defaulted by the DTO. */
+  /** One field since PET-72; see `profile.full_name` for why. */
+  fullName: string;
+  /** ISO 4217 from `SUPPORTED_CURRENCIES`, already uppercased by the DTO. */
   currency: string;
   /** MAJOR units, exactly as submitted. Converted to cents at the profile. */
   monthlyBudget: number;
-  /** 1-28, already defaulted by the DTO. */
+  /**
+   * 1-28, already defaulted by the DTO. Still here, and now the day of the
+   * user's first paycheck rather than a standing profile column: verification
+   * turns it into the account's seed `period_rules` row, anchored to the most
+   * recent occurrence of that day.
+   */
   monthStartDay: number;
   /**
    * `category_templates.id` values the user picked; may be empty (A4 enforces
@@ -77,7 +82,7 @@ export const users = sqliteTable(
     // profile it becomes lives in a database that does not exist yet.
     //
     // Transient. Written at registration with the DTO's defaults already
-    // applied (currency 'USD', monthStartDay 1) and `monthlyBudget` in MAJOR
+    // applied (currency 'EUR' since PET-72, monthStartDay 1) and `monthlyBudget` in MAJOR
     // units exactly as submitted; read once when the login link is verified,
     // which inserts the profile (converting to cents there) and sets this back
     // to NULL. A non-NULL value therefore means "registered, never verified",
@@ -364,10 +369,12 @@ export const categoryTemplates = sqliteTable(
     colourId: text('colour_id').notNull(),
     iconId: text('icon_id').notNull(),
 
-    // Copied into the user's own `categories.note` at provisioning, per the
-    // decision that the user scope needs no new column: `note` already exists,
-    // is editable through both DTOs and is returned by CategoryResponseDto, so
-    // a second free-text column would need a stated difference and has none.
+    // Copied into the user's own `categories.description` at provisioning, per
+    // the decision that the user scope needs no new column: that column already
+    // exists, is editable through both DTOs and is returned by
+    // CategoryResponseDto, so a second free-text column would need a stated
+    // difference and has none. It was called `note` there until PET-72 renamed
+    // it to match this one, the reset having made the rename free.
     // It lives here so an admin can edit the wording centrally; each user gets
     // their own copy the moment they are provisioned, and owns it from then on.
     description: text('description').notNull(),

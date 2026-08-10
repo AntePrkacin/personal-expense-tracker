@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { argsOf, paramsOf, queryChain, toSql } from '../../test/query-chain';
 import type { UserDatabaseService } from '../database/user-database.service';
 import type { ProfileRow } from '../database/user/schema';
+import type { PeriodService } from '../periods/period.service';
 import type { UsersService } from '../users/users.service';
 import { ProfileService } from './profile.service';
 
@@ -10,53 +11,109 @@ describe('ProfileService', () => {
   let getUserDb: jest.Mock;
   let select: jest.Mock;
   let update: jest.Mock;
+  let insert: jest.Mock;
   let findByEmail: jest.Mock;
   let updateEmail: jest.Mock;
+  let current: jest.Mock;
+  let budgetCentsFor: jest.Mock;
+  let monthStartDayFor: jest.Mock;
+  let ruleInForceAt: jest.Mock;
+  let startingAtOrContaining: jest.Mock;
 
   const USER_ID = '0190c3f0-0000-7000-8000-000000000001';
   const OTHER_ID = '0190c3f0-0000-7000-8000-000000000002';
   const EMAIL = 'marko@email.com';
 
+  // Two fields now, plus the instants: the budget and the pay day left this row
+  // at PET-72 and are resolved through `PeriodService` instead.
   const row: ProfileRow = {
     id: USER_ID,
-    firstName: 'Marko',
-    lastName: 'Kovac',
+    fullName: 'Marko Kovac',
     currency: 'EUR',
-    monthlyBudgetCents: 200050,
-    monthStartDay: 1,
     createdAt: new Date('2026-08-01T10:00:00.000Z'),
     updatedAt: new Date('2026-08-02T10:00:00.000Z'),
     deletedAt: null,
   };
 
+  const CURRENT = {
+    start: '2026-08-01',
+    end: '2026-09-01',
+    label: 'August 2026',
+    today: '2026-08-10',
+  };
+
   /** The chain the last `update()` produced, for asserting set/where on it. */
   const lastUpdate = () => update.mock.results.at(-1)!.value as never;
   const lastSelect = () => select.mock.results.at(-1)!.value as never;
+  /** The values of the nth insert, for the schedule write's two appends. */
+  const insertedAt = (n: number) =>
+    argsOf(insert.mock.results[n].value as never, 'values')[0] as Record<
+      string,
+      unknown
+    >;
 
   beforeEach(() => {
     select = jest.fn().mockReturnValue(queryChain([row]));
     update = jest.fn().mockReturnValue(queryChain([row]));
-    getUserDb = jest.fn().mockResolvedValue({ select, update });
+    // A fresh chain per call, not one shared object: the schedule write inserts
+    // twice, and a single shared chain would report the second call's arguments
+    // for both.
+    insert = jest.fn().mockImplementation(() => queryChain([]));
+    getUserDb = jest.fn().mockResolvedValue({ select, update, insert });
 
     findByEmail = jest.fn().mockResolvedValue(null);
     updateEmail = jest.fn().mockResolvedValue(undefined);
 
+    current = jest.fn().mockResolvedValue(CURRENT);
+    budgetCentsFor = jest.fn().mockResolvedValue(200050);
+    monthStartDayFor = jest.fn().mockResolvedValue(1);
+    // Anchored a year back on purpose. A rule starting on the boundary a change
+    // removes is the clamp case, which has its own test below - using it as the
+    // default would quietly make every other case exercise the clamp instead.
+    ruleInForceAt = jest.fn().mockResolvedValue({
+      effectiveFrom: '2025-01-01',
+      monthStartDay: 1,
+      transitionStart: null,
+    });
+    startingAtOrContaining = jest.fn().mockResolvedValue(CURRENT);
+
     service = new ProfileService(
       { getUserDb } as unknown as UserDatabaseService,
+      {
+        current,
+        budgetCentsFor,
+        monthStartDayFor,
+        ruleInForceAt,
+        startingAtOrContaining,
+      } as unknown as PeriodService,
       { findByEmail, updateEmail } as unknown as UsersService,
     );
   });
 
   describe('get', () => {
-    it('answers the six fields, with the budget in major units', async () => {
+    it('answers the five fields, with the budget in major units', async () => {
       await expect(service.get(USER_ID, EMAIL)).resolves.toEqual({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email: EMAIL,
         currency: 'EUR',
         monthlyBudget: 2000.5,
         monthStartDay: 1,
       });
+    });
+
+    it('resolves the budget and pay day from history, not from the row', async () => {
+      // The whole point of PET-72's read: neither is a column any more, so the
+      // response has to come from the period service or it would be reporting a
+      // value nothing stores.
+      budgetCentsFor.mockResolvedValue(150000);
+      monthStartDayFor.mockResolvedValue(14);
+
+      await expect(service.get(USER_ID, EMAIL)).resolves.toMatchObject({
+        monthlyBudget: 1500,
+        monthStartDay: 14,
+      });
+      expect(budgetCentsFor).toHaveBeenCalledWith(USER_ID, CURRENT);
+      expect(monthStartDayFor).toHaveBeenCalledWith(USER_ID, CURRENT);
     });
 
     it('takes the email from the principal, never from the user database', async () => {
@@ -107,30 +164,33 @@ describe('ProfileService', () => {
     });
 
     it('sets exactly the fields provided, and nothing else', async () => {
-      await service.update(USER_ID, EMAIL, { firstName: 'Ana' });
+      await service.update(USER_ID, EMAIL, { fullName: 'Ana' });
 
-      expect(argsOf(lastUpdate(), 'set')[0]).toEqual({ firstName: 'Ana' });
+      expect(argsOf(lastUpdate(), 'set')[0]).toEqual({ fullName: 'Ana' });
     });
 
     it('never sets updatedAt by hand', async () => {
-      await service.update(USER_ID, EMAIL, { firstName: 'Ana' });
+      await service.update(USER_ID, EMAIL, { fullName: 'Ana' });
 
       // drizzle's buildUpdateSet applies $onUpdateFn columns itself on every
       // UPDATE. Setting it here too would be a second source for one timestamp.
       expect(argsOf(lastUpdate(), 'set')[0]).not.toHaveProperty('updatedAt');
     });
 
-    it('converts the budget to cents rather than passing majors through', async () => {
-      await service.update(USER_ID, EMAIL, { monthlyBudget: 4.02 });
+    it('carries no budget field at all, because the PATCH no longer takes one', async () => {
+      // PET-72 moved the budget onto the schedule write. A `monthlyBudget` here
+      // is rejected by the DTO before the service is reached, so what this pins
+      // is the service half: `buildUpdate` has no branch that could put a cents
+      // column back into the SET.
+      await service.update(USER_ID, EMAIL, { fullName: 'Ana' });
 
-      // 4.02 * 100 is 401.99999999999994 in binary floating point.
       const set = argsOf(lastUpdate(), 'set')[0];
-      expect(set).toEqual({ monthlyBudgetCents: 402 });
-      expect(set).not.toHaveProperty('monthlyBudget');
+      expect(set).not.toHaveProperty('monthlyBudgetCents');
+      expect(set).not.toHaveProperty('monthStartDay');
     });
 
     it('excludes tombstoned rows from the WHERE', async () => {
-      await service.update(USER_ID, EMAIL, { firstName: 'Ana' });
+      await service.update(USER_ID, EMAIL, { fullName: 'Ana' });
 
       const where = argsOf(lastUpdate(), 'where')[0];
       expect(toSql(where)).toContain('is null');
@@ -139,7 +199,7 @@ describe('ProfileService', () => {
 
     it('leaves the central directory alone when the email is unchanged', async () => {
       await service.update(USER_ID, EMAIL, {
-        firstName: 'Ana',
+        fullName: 'Ana',
         email: EMAIL,
       });
 
@@ -163,7 +223,7 @@ describe('ProfileService', () => {
 
       await expect(
         service.update(USER_ID, EMAIL, {
-          firstName: 'Ana',
+          fullName: 'Ana',
           email: 'zauzeto@email.com',
         }),
       ).rejects.toThrow(ConflictException);
@@ -185,7 +245,7 @@ describe('ProfileService', () => {
 
     it('writes the profile before it moves the login identifier', async () => {
       await service.update(USER_ID, EMAIL, {
-        firstName: 'Ana',
+        fullName: 'Ana',
         email: 'novi@email.com',
       });
 
@@ -207,8 +267,7 @@ describe('ProfileService', () => {
       expect(update).not.toHaveBeenCalled();
       expect(select).toHaveBeenCalledTimes(1);
       expect(response).toEqual({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email: 'novi@email.com',
         currency: 'EUR',
         monthlyBudget: 2000.5,
@@ -217,20 +276,17 @@ describe('ProfileService', () => {
     });
 
     it('answers the merged profile in major units', async () => {
-      update.mockReturnValue(
-        queryChain([{ ...row, firstName: 'Ana', monthlyBudgetCents: 150000 }]),
-      );
+      update.mockReturnValue(queryChain([{ ...row, fullName: 'Ana' }]));
+      budgetCentsFor.mockResolvedValue(150000);
 
       await expect(
-        service.update(USER_ID, EMAIL, {
-          firstName: 'Ana',
-          monthlyBudget: 1500,
-        }),
+        service.update(USER_ID, EMAIL, { fullName: 'Ana' }),
       ).resolves.toEqual({
-        firstName: 'Ana',
-        lastName: 'Kovac',
+        fullName: 'Ana',
         email: EMAIL,
         currency: 'EUR',
+        // Resolved through the period service, so an updated row still reports
+        // the budget in force rather than one read off the row it just wrote.
         monthlyBudget: 1500,
         monthStartDay: 1,
       });
@@ -241,13 +297,133 @@ describe('ProfileService', () => {
 
       await expect(
         service.update(USER_ID, EMAIL, {
-          firstName: 'Ana',
+          fullName: 'Ana',
           email: 'novi@email.com',
         }),
       ).rejects.toThrow(/Profile row missing/);
       // The whole reason central is written last: a failed profile write must
       // not leave the account answering to an address its data never saw.
       expect(updateEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changeSchedule', () => {
+    const scheduleChange = {
+      monthlyBudget: 2500,
+      monthStartDay: 14,
+      firstPaycheckDate: '2026-01-14',
+    };
+
+    it('400s an anchor that is not its own pay day, before any write', async () => {
+      await expect(
+        service.changeSchedule(USER_ID, EMAIL, {
+          ...scheduleChange,
+          firstPaycheckDate: '2026-01-05',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      // A period starts on every paycheck, so an anchor off its own pay day would
+      // describe a first period beginning on a day no later period begins on.
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('writes the rule then the budget, both anchored at T', async () => {
+      await service.changeSchedule(USER_ID, EMAIL, scheduleChange);
+
+      expect(insert).toHaveBeenCalledTimes(2);
+      expect(insertedAt(0)).toMatchObject({
+        effectiveFrom: '2026-01-14',
+        monthStartDay: 14,
+      });
+      expect(insertedAt(1)).toMatchObject({
+        effectiveFrom: '2026-01-14',
+        budgetCents: 250000,
+      });
+    });
+
+    it('stores the transition boundary rather than leaving it to be re-derived', async () => {
+      await service.changeSchedule(USER_ID, EMAIL, scheduleChange);
+
+      // Arrears removes the 1 January boundary, so December stretches to the
+      // 14th. Stored on the rule, because deciding it is a write-time question.
+      expect(insertedAt(0)).toMatchObject({ transitionStart: '2025-12-01' });
+    });
+
+    it('converts the budget to cents rather than passing majors through', async () => {
+      await service.changeSchedule(USER_ID, EMAIL, {
+        ...scheduleChange,
+        monthlyBudget: 4.02,
+      });
+
+      // 4.02 * 100 is 401.99999999999994 in binary floating point.
+      expect(insertedAt(1)).toMatchObject({ budgetCents: 402 });
+    });
+
+    it('writes no rule when only the budget changed', async () => {
+      // The pay day already in force at the anchor. Writing a rule here would
+      // still remove a boundary - arrears applies to every rule insert - so a
+      // user who only raised their budget would silently lose a period.
+      await service.changeSchedule(USER_ID, EMAIL, {
+        monthlyBudget: 2500,
+        monthStartDay: 1,
+        firstPaycheckDate: '2026-08-01',
+      });
+
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(insertedAt(0)).toMatchObject({ budgetCents: 250000 });
+      expect(insertedAt(0)).not.toHaveProperty('monthStartDay');
+    });
+
+    it('anchors a budget-only change at the containing period’s start', async () => {
+      startingAtOrContaining.mockResolvedValue({
+        start: '2026-07-01',
+        end: '2026-08-01',
+        label: 'July 2026',
+      });
+
+      await service.changeSchedule(USER_ID, EMAIL, {
+        monthlyBudget: 2500,
+        monthStartDay: 1,
+        firstPaycheckDate: '2026-07-01',
+      });
+
+      expect(insertedAt(0)).toMatchObject({ effectiveFrom: '2026-07-01' });
+    });
+
+    it('clamps the transition at the active rule’s own anchor', async () => {
+      // Two changes inside two periods: the boundary a month before the removed
+      // one predates this rule entirely, and reaching past its anchor would
+      // delete the previous change's own T.
+      ruleInForceAt.mockResolvedValue({
+        effectiveFrom: '2026-01-01',
+        monthStartDay: 1,
+        transitionStart: null,
+      });
+
+      await service.changeSchedule(USER_ID, EMAIL, scheduleChange);
+
+      expect(insertedAt(0)).toMatchObject({ transitionStart: '2026-01-01' });
+    });
+
+    it('judges "changed" against the rule in force at the anchor', async () => {
+      // Not against the newest rule: anchoring a change inside an earlier
+      // schedule has to be judged against the schedule that was really running
+      // then, or a retroactive budget edit would be read as a pay-day change.
+      await service.changeSchedule(USER_ID, EMAIL, scheduleChange);
+
+      expect(ruleInForceAt).toHaveBeenCalledWith(USER_ID, '2026-01-14');
+    });
+
+    it('answers the whole profile', async () => {
+      await expect(
+        service.changeSchedule(USER_ID, EMAIL, scheduleChange),
+      ).resolves.toEqual({
+        fullName: 'Marko Kovac',
+        email: EMAIL,
+        currency: 'EUR',
+        monthlyBudget: 2000.5,
+        monthStartDay: 1,
+      });
     });
   });
 });

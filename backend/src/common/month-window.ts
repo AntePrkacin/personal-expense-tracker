@@ -1,15 +1,28 @@
 /**
- * The budgeting period, resolved from the profile's `monthStartDay`.
+ * Calendar arithmetic on `YYYY-MM-DD` strings, and the clock read that produces
+ * one.
  *
- * Every month-scoped figure in the app goes through here: per-category month
- * stats, the transaction list's period filter, and every dashboard aggregate.
- * There is deliberately no month column anywhere in the schema - month
- * attribution is `transactions.date` read against this window at query time,
- * which is what makes a backdated transaction land in its own month and a
- * changed `monthStartDay` re-bucket history correctly.
+ * **This file used to resolve the budgeting period itself, and PET-72 took that
+ * job away from it.** `monthWindow` and `previousMonthWindow` lived here and
+ * derived a window from one current `profile.monthStartDay`; a period is now the
+ * output of a walk over effective-dated `period_rules`, so the tiling moved into
+ * `common/period-rules.ts` and the reads compose `PeriodService`. What is left
+ * here is the layer underneath: integer date arithmetic with no notion of a
+ * budgeting period at all, plus `todayIn`.
+ *
+ * Nothing in this file constructs a `Date` except `todayIn`, which needs one to
+ * ask what day it is. Round-tripping a calendar date through a `Date` shifts it
+ * across timezones - the same reason `transactions.date` is text rather than a
+ * timestamp.
  */
 
-/** A half-open period. `start` is included, `end` is not. */
+/**
+ * A half-open period. `start` is included, `end` is not.
+ *
+ * Named for the month window it originally described; it is now the structural
+ * shape of any period, which `period-rules.ts`' `Period` extends with a label.
+ * Kept here because the two functions below take one and know nothing else.
+ */
 export interface MonthWindow {
   /** `YYYY-MM-DD`, inclusive. */
   start: string;
@@ -17,8 +30,19 @@ export interface MonthWindow {
   end: string;
 }
 
-/** `{ year, month (0-11), day }` out of a `YYYY-MM-DD` string. */
-function parseDate(date: string): { year: number; month: number; day: number } {
+/**
+ * `{ year, month (0-11), day }` out of a `YYYY-MM-DD` string.
+ *
+ * Exported for `period-rules.ts` alone. These three primitives stay here rather
+ * than moving with the tiling so that the walk and the day arithmetic cannot
+ * drift into two parsers of the same format; nothing outside `common/` should
+ * need them.
+ */
+export function parseDate(date: string): {
+  year: number;
+  month: number;
+  day: number;
+} {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) {
     throw new Error(`Expected a YYYY-MM-DD date, received "${date}".`);
@@ -30,15 +54,19 @@ function parseDate(date: string): { year: number; month: number; day: number } {
   };
 }
 
-function formatDate(year: number, month: number, day: number): string {
+/** `YYYY-MM-DD` from date parts. Exported for `period-rules.ts` alone. */
+export function formatDate(year: number, month: number, day: number): string {
   const yyyy = String(year).padStart(4, '0');
   const mm = String(month + 1).padStart(2, '0');
   const dd = String(day).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/** Adds `delta` months to a year/month pair, carrying across the year. */
-function addMonths(
+/**
+ * Adds `delta` months to a year/month pair, carrying across the year. Exported
+ * for `period-rules.ts` alone.
+ */
+export function addMonths(
   year: number,
   month: number,
   delta: number,
@@ -47,71 +75,6 @@ function addMonths(
   return {
     year: Math.floor(total / 12),
     month: total - Math.floor(total / 12) * 12,
-  };
-}
-
-/**
- * The budgeting period containing `today`.
- *
- * Both bounds are `YYYY-MM-DD` strings, `start` inclusive and `end` exclusive,
- * so a query reads `date >= start and date < end`. That shape is deliberate
- * three times over: it compares text against the `text` column the schema
- * actually stores, it lets `transactions_date_idx` serve the range as a scan,
- * and an exclusive upper bound needs no "last day of the month" arithmetic.
- *
- * All arithmetic is on the date parts as integers. Nothing here constructs a
- * `Date`, because round-tripping a calendar date through one shifts it across
- * timezones - the same reason `transactions.date` is text rather than a
- * timestamp.
- *
- * @param monthStartDay Day of month the period begins on. The profile
- * constrains this to 1-28 precisely so every month has the day and there is no
- * clamping case; anything outside that range is a programming error and throws.
- * @param today `YYYY-MM-DD` for "now", formatted in the configured zone by
- * `todayIn` rather than taken from a `Date` here, so specs can pin behaviour
- * across month boundaries without faking timers.
- */
-export function monthWindow(monthStartDay: number, today: string): MonthWindow {
-  if (
-    !Number.isInteger(monthStartDay) ||
-    monthStartDay < 1 ||
-    monthStartDay > 28
-  ) {
-    throw new Error(
-      `monthStartDay must be an integer between 1 and 28, received ${monthStartDay}.`,
-    );
-  }
-
-  const { year, month, day } = parseDate(today);
-
-  // Before the start day, the current period began in the previous month.
-  const start =
-    day >= monthStartDay ? { year, month } : addMonths(year, month, -1);
-  const end = addMonths(start.year, start.month, 1);
-
-  return {
-    start: formatDate(start.year, start.month, monthStartDay),
-    end: formatDate(end.year, end.month, monthStartDay),
-  };
-}
-
-/**
- * The window immediately before the one containing `today`.
- *
- * "One month earlier", never "30 days earlier": periods are month-length, so
- * subtracting a fixed day count drifts and would eventually skip or repeat one.
- */
-export function previousMonthWindow(
-  monthStartDay: number,
-  today: string,
-): MonthWindow {
-  const current = monthWindow(monthStartDay, today);
-  const { year, month } = parseDate(current.start);
-  const start = addMonths(year, month, -1);
-
-  return {
-    start: formatDate(start.year, start.month, monthStartDay),
-    end: current.start,
   };
 }
 

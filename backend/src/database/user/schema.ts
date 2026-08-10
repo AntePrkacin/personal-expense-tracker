@@ -12,7 +12,8 @@ import {
  * this schema is instantiated once per person and its migrations run on first
  * open of each file (see UserDatabaseService).
  *
- * `profile`, `categories`, `transactions` and the insights tables live here.
+ * `profile`, `categories`, `transactions`, the insights tables and PET-72's
+ * three append-only history tables live here.
  * Adding a migration upgrades every existing user database the next time it
  * opens, so a user-scope migration must be safe to apply to live data.
  */
@@ -24,19 +25,29 @@ export const profile = sqliteTable('profile', {
   // currently emits no NOT NULL for it either - see docs/TODO.md.
   id: text('id').primaryKey().notNull(),
 
-  firstName: text('first_name').notNull(),
-  lastName: text('last_name').notNull(),
+  // One name field, not two. PET-72 collapsed `first_name`/`last_name`: the app
+  // never used them apart - the sidebar wants initials and a short name, both
+  // derivable from one string - and asking for a surname to render "M. Kovač"
+  // is asking for data to throw away. What the form now says it wants is a
+  // display name, which may be a full name or a nickname.
+  fullName: text('full_name').notNull(),
 
   // ISO 4217 code. Display concern only: amounts are stored in minor units.
-  currency: text('currency').notNull().default('USD'),
+  // The closed set is `SUPPORTED_CURRENCIES` in `src/common/currency.ts`,
+  // restricted to two-decimal currencies because `src/common/money.ts` assumes
+  // exponent 2. Defaulted here as well as in the DTO, so a row written by
+  // anything that bypasses validation still lands on a real code.
+  currency: text('currency').notNull().default('EUR'),
 
-  // Money is always integer minor units (cents) - never a float. The API
-  // speaks major units and the service converts at the boundary.
-  monthlyBudgetCents: integer('monthly_budget_cents').notNull(),
-
-  // Day of month the budgeting period starts on, 1-28 (28 so every month has
-  // the day).
-  monthStartDay: integer('month_start_day').notNull().default(1),
+  // NOTE: `monthly_budget_cents` and `month_start_day` used to live here, as
+  // single current values, and PET-72 removed them. A budget and a period start
+  // day are not facts about the account, they are facts about a span of time:
+  // stored as one current value, raising the budget in 2026 silently re-priced
+  // every month of 2025, and changing the start day re-bucketed all history.
+  // They are now `budget_history` and `period_rules` below, append-only and
+  // resolved against the window being asked about. The current values the API
+  // still serves on `GET /api/profile` are the newest rows, resolved on read by
+  // `PeriodService`.
 
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
@@ -50,6 +61,130 @@ export const profile = sqliteTable('profile', {
 
 export type ProfileRow = typeof profile.$inferSelect;
 export type NewProfileRow = typeof profile.$inferInsert;
+
+/**
+ * PET-72's three history tables are **append-only**, and that is the whole
+ * design rather than an implementation detail of it.
+ *
+ * Nothing updates a row and nothing deletes one. A correction is another row
+ * with the same `effective_from`, and resolution takes the greatest
+ * `effective_from <= window.start`, breaking ties by `created_at DESC, id DESC`
+ * so the newest write wins. That is why they carry `created_at` but no
+ * `updated_at` - the `insights` shape further down, for the same reason: a row
+ * that is never rewritten has no update to stamp. `deleted_at` is present
+ * because every table here carries it for the future sync, and reads filter it,
+ * but no code path sets it.
+ *
+ * Dates are text `YYYY-MM-DD` like `transactions.date`, compared as text against
+ * the window bounds, so no `Date` is constructed anywhere near them.
+ */
+
+/**
+ * One period-shaping rule, in force from `effective_from` until the next rule.
+ *
+ * `effective_from` is **T**, the first paycheck date under the new schedule, and
+ * is always day-`month_start_day` of its own month. A rule tiles plain month
+ * arithmetic forward from there; the earliest rule also extends backward, so an
+ * account has a period for any date it can hold a transaction on.
+ *
+ * `transition_start` is the start of the single stretched **transition period**
+ * that joins the previous rule's last kept boundary to this rule's T. It is
+ * **stored rather than derived**, which is the one non-obvious choice here and
+ * is what keeps the period walk dumb: the walk reads a boundary instead of
+ * re-deciding, at read time and forever, which of the old rule's boundaries
+ * survived a schedule change. It also leaves room for the deferred
+ * same-employer pay-date shift, which is the identical schema with the
+ * transition anchored one boundary later. NULL on the seed rule, which has no
+ * predecessor to bridge from.
+ *
+ * Why a boundary disappears at all: salaries are paid in arrears, so the old
+ * schedule's paycheck immediately before T never arrives. Keeping its boundary
+ * would open a period no money was ever paid into. See `common/period-rules.ts`
+ * for the walk and `PeriodService` for the read.
+ */
+export const periodRules = sqliteTable(
+  'period_rules',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // T: the first paycheck date this rule is anchored to, `YYYY-MM-DD`. Always
+    // day-`month_start_day` of its own month, which the service asserts rather
+    // than the schema - see the note on closed sets in TypeScript.
+    effectiveFrom: text('effective_from').notNull(),
+
+    // Day of month each period starts on under this rule, 1-28 (28 so every
+    // month has the day and there is no clamping case).
+    monthStartDay: integer('month_start_day').notNull(),
+
+    // Start of the stretched transition period leading into `effective_from`,
+    // `YYYY-MM-DD`. NULL on the earliest rule only.
+    transitionStart: text('transition_start'),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object. Unique rather than
+  // a plain index, unlike the other two history tables: two rules anchored to
+  // one date would make the walk ambiguous about where a period *starts*, which
+  // is structural, where two budgets for one date merely means the newer wins.
+  // It is what lets the schedule write be an `onConflictDoNothing` insert and
+  // therefore convergent under a retry.
+  (table) => [
+    uniqueIndex('period_rules_effective_from_unique').on(table.effectiveFrom),
+  ],
+);
+
+export type PeriodRuleRow = typeof periodRules.$inferSelect;
+export type NewPeriodRuleRow = typeof periodRules.$inferInsert;
+
+/**
+ * The monthly budget, effective-dated. Replaces `profile.monthly_budget_cents`.
+ *
+ * `effective_from` is a period start, so a budget change never splits a period
+ * in half. A period older than the account's earliest row resolves to that
+ * earliest row rather than to nothing: a transaction backdated before the first
+ * budget was ever set still has to be shown against *some* budget, and the
+ * first one the user ever chose is the only honest answer available.
+ *
+ * A schedule change writes a budget row at T, and the stretched transition
+ * period before it therefore still resolves to the **old** budget - the money
+ * that had to last through it was paid under the old schedule.
+ */
+export const budgetHistory = sqliteTable(
+  'budget_history',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // Period start this budget applies from, `YYYY-MM-DD`.
+    effectiveFrom: text('effective_from').notNull(),
+
+    // Money is always integer minor units (cents) - never a float. The API
+    // speaks major units and the service converts at the boundary.
+    budgetCents: integer('budget_cents').notNull(),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object. Deliberately not
+  // unique: a correction is an append with the same date, resolved by
+  // `created_at DESC, id DESC`.
+  (table) => [
+    index('budget_history_effective_from_idx').on(table.effectiveFrom),
+  ],
+);
+
+export type BudgetHistoryRow = typeof budgetHistory.$inferSelect;
+export type NewBudgetHistoryRow = typeof budgetHistory.$inferInsert;
 
 /**
  * Spending categories, one row per category per user.
@@ -79,26 +214,28 @@ export const categories = sqliteTable(
     // OpenAPI enum the frontend's class map is keyed on.
     color: text('color').notNull(),
 
-    // Optional per-category spending cap, in minor units like every other money
-    // column. NULL means uncapped, which is not the same as a cap of zero: the
-    // API accepts a category with no cap and rejects a cap of zero, and an
-    // uncapped category reports `status: "uncapped"` with no percentage.
-    monthlyCapCents: integer('monthly_cap_cents'),
+    // NOTE: `monthly_cap_cents` used to live here and PET-72 removed it, for the
+    // same reason as `profile.monthly_budget_cents`: a cap read as a single
+    // current value rewrote every past month the moment it changed. Caps are
+    // `category_cap_history` below now, resolved per window.
 
     // A lucide icon name in lucide's own kebab-case, from `ICON_NAMES` in
     // `database/central/template-tokens.ts` - **not** "the frontend's own set",
     // which is what this said until PET-64 moved the allowlist here. The
     // backend still never resolves it to an asset.
     //
-    // Nullable, though nothing writes a null any more: `CreateCategoryDto`
-    // requires an icon and no PATCH can clear one, so only a row predating
-    // PET-64 has one - and `user/legacy-colour-backfill.ts` fills those in on
-    // the next open. The column stays nullable anyway, because tightening it to
-    // NOT NULL is a schema migration that would have to run against live data
-    // the backfill has not necessarily reached yet, and the two must not race.
-    icon: text('icon'),
+    // NOT NULL since PET-72. It was nullable only so PET-64's icon backfill
+    // could not race a tightening migration against live data; the pre-launch
+    // database reset removed both the legacy rows and the backfill, so the
+    // column now says what `CreateCategoryDto` has always required.
+    icon: text('icon').notNull(),
 
-    note: text('note'),
+    // Free text the user owns. Named `description` since PET-72, matching the
+    // `category_templates.description` it is copied from at provisioning - the
+    // rename that column's comment said was avoidable is no longer worth
+    // avoiding now that the databases are reset. `transactions.note` is a
+    // different field on a different table and keeps its own name.
+    description: text('description'),
 
     // The undeletable reassignment target. A marker column rather than a match
     // on `name = 'Uncategorized'`, because the name would be a reserved word
@@ -132,17 +269,81 @@ export type CategoryRow = typeof categories.$inferSelect;
 export type NewCategoryRow = typeof categories.$inferInsert;
 
 /**
+ * One category's cap, effective-dated. Replaces `categories.monthly_cap_cents`.
+ *
+ * **The history is sparse, and every reader has to expect that.** Provisioning
+ * writes no cap rows at all, because starter categories and the fallback are
+ * uncapped, and a category created without a cap writes none either. So a
+ * category with no row for a window is uncapped for that window - which is the
+ * same answer as a row whose `cap_cents` is NULL, and the two are deliberately
+ * not distinguished anywhere. `CategoriesService.withSpend` resolves the cap as a
+ * correlated scalar subquery, where "no row" and "NULL" both arrive as NULL and
+ * both mean uncapped; there is no third state to write a branch for.
+ *
+ * NULL is how a cap is *removed*, since nothing here is ever deleted: setting a
+ * category back to uncapped from a given period appends a row with a NULL
+ * `cap_cents`. A cap of exactly `0` is still a 400 at the API - it means "spend
+ * nothing here" and is almost always an empty form field coerced to a number -
+ * so a zero can never reach this column through a DTO.
+ */
+export const categoryCapHistory = sqliteTable(
+  'category_cap_history',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // No .references(): the schema is FK-less throughout, exactly like
+    // `transactions.category_id`. A cap row outliving its category is harmless -
+    // every read joins from `categories`, so an orphan is simply never resolved.
+    categoryId: text('category_id').notNull(),
+
+    // Period start this cap applies from, `YYYY-MM-DD`.
+    effectiveFrom: text('effective_from').notNull(),
+
+    // Minor units like every other money column. NULL means uncapped; see the
+    // class comment on why that is indistinguishable from having no row.
+    capCents: integer('cap_cents'),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object. Composite and in
+  // this order: every read resolves one category's cap for one window, so the
+  // category is the equality predicate and the date the range scan. Not unique,
+  // for the same reason `budget_history` is not.
+  (table) => [
+    index('category_cap_history_category_effective_idx').on(
+      table.categoryId,
+      table.effectiveFrom,
+    ),
+  ],
+);
+
+export type CategoryCapHistoryRow = typeof categoryCapHistory.$inferSelect;
+export type NewCategoryCapHistoryRow = typeof categoryCapHistory.$inferInsert;
+
+/**
  * A single spend, the only thing this app really records. Everything the UI
  * shows on top of it - dashboard cards, trend buckets, the donut, per-category
  * totals, the allocation summary - is computed on read from these rows and
  * never stored, so this table is the whole write surface of the feature.
  *
  * That "never stored" rule is why there is no month column, and why there must
- * not be one. Month attribution is `date` read against the profile's
- * `monthStartDay` at query time, which means a backdated transaction lands in
- * the month it belongs to and a later change to `monthStartDay` re-buckets
- * history correctly. A stored month would be a second source of truth that goes
- * stale on both counts.
+ * not be one. Month attribution is `date` read against the period rules in
+ * force at query time, which means a backdated transaction lands in the period
+ * it belongs to. A stored month would be a second source of truth that goes
+ * stale.
+ *
+ * PET-72 changed what that re-buckets. This comment used to promise that a later
+ * change to `monthStartDay` re-buckets *all* history "correctly", which was the
+ * feature it turned out to be a bug: a new pay day is a fact about the months
+ * after it, not a correction to the months before. `period_rules` is now
+ * effective-dated, so a change re-buckets only the periods from its anchor date
+ * onward and every earlier period keeps the boundaries it was budgeted under.
  */
 export const transactions = sqliteTable(
   'transactions',

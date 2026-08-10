@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CategoryResponseDto } from '../../categories/dto/category-response.dto';
+import { PeriodSummaryDto } from '../../periods/dto/period-response.dto';
 import { TransactionResponseDto } from './transaction-response.dto';
 
 /**
@@ -30,6 +31,23 @@ export class TransactionsResponseDto {
       'Matches after every filter, not the account total. Equal to `transactions.length` while there is no pagination; read this rather than the array length, so a future page size cannot silently turn the badge into a page count.',
   })
   total!: number;
+
+  /**
+   * Which period the list covers, or null for `period=all`.
+   *
+   * **Null is not an error case**, it is what "every period" means: a list
+   * spanning all of them can be labelled by none of them, and the screen falls
+   * back to its own copy. That is also why this is nullable rather than optional -
+   * an absent field would read as "the server did not say", where null says
+   * "there is no single period here".
+   */
+  @ApiProperty({
+    type: PeriodSummaryDto,
+    nullable: true,
+    description:
+      'The period this list covers, echoing back what `?period=` resolved to - use `label` for the screen’s overline. **Null when `period=all`**, which spans every period and so has no single label.',
+  })
+  period!: PeriodSummaryDto | null;
 }
 
 /**
