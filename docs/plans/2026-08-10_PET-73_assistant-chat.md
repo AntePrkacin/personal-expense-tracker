@@ -271,7 +271,7 @@ a spec can trip the limit without waiting out a real window.
 
 State the same honesty paragraph the scan limiter already carries, plus what is new here: the store
 is in-memory and the key is per user, so this buys fairness and blast radius rather than a cap on
-the project's shared free-tier quota - and because one turn costs roughly 36k input tokens, a single
+the project's shared free-tier quota - and because one turn costs roughly 40k input tokens, a single
 account can now reach the free tier's tokens-per-minute ceiling in a way scanning never made
 possible. That is the argument for a low limit, and it **extends** the existing aggregate-cap TODO
 entry rather than opening a second one.
@@ -367,21 +367,25 @@ pathological name and nothing else.
 
 **Measured on that fixture in exactly this format: 2,249 rows, 80,679 bytes, 35.9 bytes per row.**
 Tokens are the number that matters and bytes-over-four understates it, because a pipe-delimited row
-splits on digits and delimiters - expect roughly 12 to 18 tokens per row, so 24k to 36k for 2,000
-rows against a naive estimate of 20k. Per turn, with no caching: about 30k of data, plus the prior
-conversation, plus roughly 0.5k of instruction, so **about 36k input tokens every message**, and
-twenty turns in one session is about 700k. **Re-measure with the SDK's own token count against a
-real built prompt before freezing the constant** - that call is one round trip and costs nothing.
+splits on digits and delimiters - expect roughly 12 to 18 tokens per row. Per turn, with no caching:
+the showcase account's own history is about 27k to 40k tokens of data, a full 3,000-row prompt is
+36k to 54k, and on top of either sits the prior conversation plus roughly 0.5k of instruction. So
+**call it 40k input tokens every message on a real account, and 55k at the ceiling** - twenty turns
+in one session is comfortably past 800k. **Re-measure with the SDK's own token count against a real
+built prompt before freezing the constant** - that call is one round trip and costs nothing.
 
 Three ceilings, all in `assistant.constants.ts`, and the first two must be **told to the model**
 rather than applied silently, because a model that does not know its data was cut will confidently
 answer "you never shopped there":
 
-- **`MAX_PROMPT_TRANSACTIONS`.** At 2,000 this is roughly 32 months of the showcase account's rate
-  and about 72KB - and it **truncates the repo's own showcase account by 249 rows**. That is worth
-  deciding knowingly rather than discovering: it means the truncation path is exercised by the demo
-  rather than only hypothetically, and it also means a showcase will hear the assistant say the
-  oldest year is missing. 2,500 buys a clean demo and 18k more tokens a turn.
+- **`MAX_PROMPT_TRANSACTIONS` is 3,000**, decided at review. That sits above the showcase account's
+  2,249 rows with headroom, so **the demo is never truncated** and the assistant answers over that
+  account's whole history. The cost is paid in the worst case rather than the common one: a full
+  3,000-row prompt is roughly 108KB and 36k to 54k tokens, where the showcase's own 2,249 rows are
+  about 80KB and 27k to 40k. The consequence for testing is the one to carry: **the truncation path
+  is now unreachable on every account this project has**, so its spec has to construct the case
+  directly rather than relying on the seed to exercise it, and the browser walk cannot check it at
+  all without a hand-built account.
 - **`MAX_HISTORY_MESSAGES`**, because sessions are resumable and every turn re-sends the whole
   conversation. Twenty turns is roughly 6k tokens on top of the data.
 - **`MAX_MESSAGE_CHARS`** on the DTO, so a pasted novel cannot be what blows the context. The
@@ -473,10 +477,13 @@ Insights lit on the History route for free.
   asserts with `fs` that both hrefs have a `page.tsx` behind them, the check
   `TransactionTabs.test.tsx`, `SidebarNav.test.tsx` and `lib/routes.test.ts` all run for their own
   sets.
-- **The chat screen is a client component rendering `<main>` only**, and its Server Action is
-  **injected as a prop rather than imported** - the precedent both transaction modals set for
-  `create` and `scan`. That is what lets the suite pass a `jest.fn()`, keeps the `@/` alias trap out
-  of it entirely, and stops Storybook's Vite build from bundling `next/headers`.
+- **The chat screen is a client component rendering `<main>` only**, and its send is **injected as a
+  prop rather than imported** - the precedent both transaction modals set for `create` and `scan`.
+  That is what lets the suite pass a `jest.fn()` and keeps the `@/` alias trap out of it entirely.
+  Note one reason for injection has **gone away** now the send is a `fetch` rather than an action:
+  there is no `next/headers` for Storybook's Vite build to trip over. The remaining reasons are
+  enough on their own, and injection matters slightly more than before, because what is behind the
+  prop is a real network call.
 - **The message list is `role="log"` with `aria-live="polite"`**, and each turn is labelled in
   **text** rather than by colour or side alone - the rule the trend chart's `sr-only` list settled.
 - **The composer is a real `<form noValidate onSubmit>`** with `preventDefault()` and a
@@ -484,6 +491,10 @@ Insights lit on the History route for free.
   `<textarea>`, so Enter submits and Shift+Enter inserts a newline, which needs an explicit keydown
   handler - the mirror image of `IconSelect`, where `Modal` wraps its body in a real form so Enter
   submitting is the default and had to be *stopped*. Here it is wanted, and its absence is silent.
+  **While a turn is in flight the submit button becomes "Stop"** and calls `abort()` rather than
+  being merely disabled, which is the visible half of the cancellation section above. Escape does
+  **not** cancel: this screen is not in a dialog, and a key with no affordance naming it is not
+  discoverable.
 - **The typing indicator is mounted from the first render and only its text changes.** A polite live
   region created in the same commit as its content is generally not announced at all, and
   `getByRole('status')` cannot tell that apart from a working one - which is why its suite asserts
@@ -494,28 +505,49 @@ Insights lit on the History route for free.
   replacing the content, which is exactly what the dashboard's in-card empty treatments are not.
 
 **How a turn lands on screen.** Append the user's message optimistically, set pending, await the
-action **inside a `try`**, then append the reply and adopt the returned session id and title. On any
+send **inside a `try`**, then append the reply and adopt the returned session id and title. On any
 failure, **remove the optimistic message, put the text back in the composer, and render one line.**
 That removal is not fussiness: the backend persists nothing unless the reply arrives, so leaving the
 question on screen asserts a stored turn that does not exist and a reload would make it vanish. It
 is the same class of dishonesty the transactions no-results copy and the teaser's third state each
 paid for separately.
 
-**`lib/assistant.ts`** holds the two reads over `authorizedGet`, each redirecting on an
-unauthenticated answer and throwing otherwise - `lib/dashboard.ts`'s policy. Do **not** copy
-`lib/insights.ts`'s two-export shape: that exists because a route handler and a Server Component
-answer a dead session differently, and there is no poll here, so a second export with one caller
-would express no choice.
+**A cancel takes the same path minus the message.** The optimistic message is removed and the text
+restored exactly as on a failure, and nothing is rendered - so the screen returns to precisely the
+state it was in before the user pressed send. The `try` must therefore branch on the error being an
+`AbortError` before it reaches the taxonomy, not after.
 
-**`lib/sendAssistantMessage.ts`** is the write, in its own module because `'use server'` makes every
-export an action. **`lib/scanReceipt.ts` is the file to copy**, not one of the category writes: it
-already publishes 429, 503 and 504. This one publishes **seven** reasons, and each earns its place
-because each needs different copy - a success; an invalid message; an unauthenticated session, which
-must **not** `redirect()` from inside the action; a missing session, where the id is dropped and the
-text kept; a rate limit, whose copy says wait rather than retry; an unconfigured key, where nothing
-the user does fixes it so the copy must not blame the message; a timeout, where retrying the
-identical question **is** the right next move, which is why it cannot fold into the generic arm; and
-that generic arm for everything else including a request that never completed.
+**`lib/assistant.ts`** holds the two reads over `authorizedGet`, each redirecting on an
+unauthenticated answer and throwing otherwise - `lib/dashboard.ts`'s policy, because both are read
+from a `page.tsx`.
+
+**It also holds the non-redirecting POST the route handler calls, so `lib/insights.ts`'s two-export
+shape does apply here after all.** An earlier draft said not to copy it, on the grounds that the
+split exists for a poll this feature does not have. That reasoning was about the wrong half: the
+split exists because a **route handler** and a Server Component answer a dead session differently,
+and a `redirect()` reached from inside a handler answers the browser's `fetch` with an HTML login
+page carrying a 200 - which the composer would try to render as a reply. The send therefore returns
+an `AuthorizedResult` and the handler maps a dead session to a bare 401, exactly as
+`app/api/insights/route.ts` already does for the read.
+
+**`lib/sendAssistantMessage.ts`** is the write, and it is **a plain async function taking
+`(body, signal)` rather than a `'use server'` action** - see the cancellation section above for why.
+It runs in the browser and calls the same-origin handler, so it touches neither `next/headers` nor
+`BACKEND_URL`; the handler does both on its behalf.
+
+**`lib/scanReceipt.ts` is still the file to copy for its taxonomy**, not one of the category writes:
+it already publishes 429, 503 and 504. This one publishes **seven** reported reasons, each earning
+its place because each needs different copy - a success; an invalid message; an unauthenticated
+session; a missing session, where the id is dropped and the text kept; a rate limit, whose copy says
+wait rather than retry; an unconfigured key, where nothing the user does fixes it so the copy must
+not blame the message; a timeout, where retrying the identical question **is** the right next move,
+which is why it cannot fold into the generic arm; and that generic arm for everything else including
+a request that never completed.
+
+**Cancellation is an eighth outcome and deliberately not a reported reason.** An `AbortError` means
+the user chose to stop, so it carries no copy at all - it restores the composer and renders nothing.
+Folding it into the generic arm would show a failure message for a deliberate act, which is the same
+mistake as the no-results copy claiming an account is empty.
 
 **A sixth verb in `lib/session.ts`.** `authorizedPost` deliberately discards the response body, and
 the reply **is** the body here. The precedent already exists: the form-data verb is "the fifth verb,
@@ -524,13 +556,62 @@ JSON-body-returning post beside it. The friction is the result type, which is th
 name that now describes only one of its two callers - **rename it in its own commit** so the diff
 reads as a rename, and have both verbs share it.
 
-**No frontend route handler, and the gap-list bullet is resolved rather than renamed.** A route
-handler exists in this app for one of two reasons: a GET navigation the browser performs
-(`app/auth/verify/route.ts`), or something a browser timer must poll (`app/api/insights/route.ts`,
-`app/api/categories/route.ts`). A one-shot message is neither - it is a write through a Server
-Action - and both reads happen in a `page.tsx`. So `frontend/CLAUDE.md`'s reserved `/api/chat`
-bullet is **rewritten as landed without a handler**, with the one condition that would bring it back
-stated: a client-side send, or a History view that has to refresh without navigating.
+**That verb also takes an optional `signal`**, which no existing verb does, and it is the second hop
+of the abort chain. Thread it into the underlying `fetch` and nothing else; the handler supplies
+`request.signal` and every other caller omits it, so the widening costs the other five nothing.
+
+### Cancelling a turn, and why the send is a route handler
+
+**The send is `app/api/assistant/messages/route.ts`, not a Server Action, and cancellation is the
+whole reason.** An earlier draft of this plan made it an action and accepted a soft cancel - a
+generation-counter ref that discards a late result while the request runs to completion server-side.
+That was the wrong trade here, and it was reversed at review.
+
+A client component calling a Server Action has **no `AbortController` to reach**: the RPC is opaque,
+there is no `signal` parameter, and `AddTransactionModal` settled for the counter trick precisely
+because the platform offers nothing better. A route handler makes the send an ordinary `fetch`, and
+an ordinary `fetch` takes a `signal`. Given that a turn costs 40k input tokens and runs for tens of
+seconds on a free tier, being able to actually stop one is worth a file.
+
+That makes it the app's **fourth** route handler and the **first the browser POSTs to**. The other
+three exist for the two reasons this plan previously cited as exhaustive - a GET navigation
+(`app/auth/verify/route.ts`) and a browser timer's poll (`app/api/insights/route.ts`,
+`app/api/categories/route.ts`) - so **a cancellable long write is a third reason**, and
+`docs/agents/api-contract.md` should say so rather than leaving the next reader with a two-item list
+that no longer covers the set.
+
+**The abort travels three hops, each has to be wired, and each is a place it silently does not
+work.** Wire all three, and verify hop 3 in a browser rather than by reading the code.
+
+1. **Browser to handler.** The composer owns an `AbortController`, passes `signal` to `fetch`, and
+   "Stop" calls `abort()`. The fetch rejects with an `AbortError`, which the caller must
+   **distinguish from a real failure** - a cancel renders no error line, it just restores the
+   composer. Getting this wrong shows the user a failure message for something they chose.
+2. **Handler to backend.** A Next route handler receives `request.signal`, which aborts when the
+   client disconnects. Pass it through to the `fetch` at the backend. This is what makes hop 1 more
+   than cosmetic: without it the handler keeps waiting on a backend nobody is listening to.
+3. **Backend to Gemini.** `@google/genai` already accepts an `abortSignal`, which is how
+   `ASSISTANT_TIMEOUT_MS` is enforced. Combine it with a signal derived from the request closing, so
+   an abandoned turn stops spending quota: `AbortSignal.any([timeout, disconnect])`. That is safe on
+   this project - Node is pinned to 26 and the engines floor is 22.12, well past where
+   `AbortSignal.any` landed.
+
+**Hop 3 has no precedent in this repo and one trap that will bite.** There is no `@Req()`, no
+`@Res()` and no `request.signal` anywhere in `backend/src` today, so this is the first. The platform
+adapter is Express, where **`close` fires on a normally completed response as well as on a dropped
+connection** - so the disconnect signal must be guarded on the response not having finished
+(`res.writableEnded`), or the backend aborts its own successful reply. That failure is
+indistinguishable from a flaky model call in a log, which is why it is a browser check and not a
+unit test.
+
+**Do not persist an aborted turn.** The single completion transaction already runs only after the
+model answers, so an abort throws before any write - which means "nothing is persisted unless the
+reply arrives" now covers cancellation too, at no extra cost. Verify it: cancel a turn, reload, and
+the question must be gone rather than stored without an answer.
+
+**The gap-list bullet is therefore filled rather than resolved-without.** `frontend/CLAUDE.md`
+reserves `/api/chat`; this ticket builds it under the name `/api/assistant/messages`, so that bullet
+is **deleted** and the shell's-content bullet gains the route.
 
 **The header's action becomes "New chat"** - `ui/Button`'s `href` variant pointing at the bare chat
 route, still secondary, on the Chat tab only; History carries none, which `PageHeader`'s optional
@@ -650,14 +731,19 @@ there is no path that schedules a third from the second. State it that way in th
 - [ ] Remove `DashboardResponseDto.insight`, `InsightSummaryDto`, `latestReadySummary` and
       `DashboardModule`'s `InsightsModule` import; invert the OpenAPI assertion; fix the dashboard
       e2e suite; `api:sync` again
-- [ ] `lib/session.ts`: rename the shared body-carrying result type and add the JSON post verb, alone
+- [ ] Backend: hop 3 of the abort chain - a request-close signal combined with the timeout through
+      `AbortSignal.any`, guarded on the response not having finished
+- [ ] `lib/session.ts`: rename the shared body-carrying result type and add the JSON post verb with
+      its optional `signal`, alone
 - [ ] `SummaryBanner` gains an `action` slot and the teaser's three copy states; delete
       `InsightTeaserCard`, its test and its stories
 - [ ] One client owner for the poll, two new `DashboardScreen` slots, and `dashboard/page.tsx`
       reading both endpoints in one `Promise.all`
 - [ ] Move `SummaryBanner`, `InsightCard`, `insightTone.ts` and the poll's test coverage under
       `dashboard/`; delete `InsightsScreen.tsx` and `InsightsEmpty.tsx`
-- [ ] `lib/assistant.ts` and `lib/sendAssistantMessage.ts` with their suites
+- [ ] `lib/assistant.ts` (two reads plus the non-redirecting send), `app/api/assistant/messages/route.ts`
+      passing `request.signal` through, and `lib/sendAssistantMessage.ts` taking `(body, signal)`,
+      with their suites
 - [ ] `InsightsTabs.tsx` with its suite, both `page.tsx` files, and the title change
 - [ ] The chat screen, the message list, the composer, the typing indicator, the History screen,
       their suites, both story modules, **and the `screens.stories.test.tsx` registration**
@@ -666,7 +752,9 @@ there is no path that schedules a third from the second. State it that way in th
       `### What crosses the wire`; the parent gains a pointer and a `Read before you touch` row
       rather than a new section
 - [ ] Docs: root `CLAUDE.md`, `backend/CLAUDE.md`, `backend/src/database/CLAUDE.md`,
-      `frontend/CLAUDE.md`, `frontend/src/app/CLAUDE.md`, `docs/agents/api-contract.md`,
+      `frontend/CLAUDE.md` (delete the `/api/chat` bullet - it is built now),
+      `frontend/src/app/CLAUDE.md`, `docs/agents/api-contract.md` (a **third** reason a route handler
+      exists: a cancellable long write, alongside the GET navigation and the polled read),
       `docs/TODO.md`
 - [ ] Fix the stale comments this branch touches in `(app)/pages.test.tsx`,
       `(app)/AddTransactionButton.tsx` and `backend/src/database/CLAUDE.md`
@@ -695,12 +783,22 @@ Then the checks no gate can make:
 9. **Message-list scrolling**, which is a browser check and must **not** use `scrollIntoView`:
    `frontend/src/lib/pickerScroll.ts` records that it scrolls every scrollable ancestor. One
    `scrollTop` on one element, or that helper if the geometry fits.
-10. **The chat against a real key**, on a seeded showcase account - 2,249 transactions, so the
-    truncation path fires. Check what the request actually carries, that the truncation notice reaches
-    both the model and the UI, and that a keyless backend answers 503 rather than hanging.
-11. **Open every new story in Storybook.** `build-storybook` bundles stories without running one, and
+10. **The chat against a real key**, on a seeded showcase account. At a ceiling of 3,000 its 2,249
+    rows all go, so check that the prompt really carries the account's whole history and that the
+    answers agree with the Dashboard's own figures - the totals are the cross-check, since both derive
+    from the same fold. Also confirm a keyless backend answers 503 rather than hanging. **The
+    truncation path is unreachable here**, so it is covered by its spec alone and the walk cannot see
+    it without a hand-built account of more than 3,000 transactions.
+11. **The abort chain, all three hops, in a browser.** Send a question, press Stop, and check three
+    separate things: the composer comes back with the text in it and **no error line**; the network
+    panel shows the request cancelled rather than completed; and the **backend stops** - a log line,
+    or the absence of a completion, because hops 1 and 2 alone look identical on screen to all three
+    working. Then reload and confirm the cancelled question was **not stored**. Finally, force the
+    trap directly: let a turn complete normally and confirm the reply still arrives, since an
+    unguarded `close` listener aborts its own successful response.
+12. **Open every new story in Storybook.** `build-storybook` bundles stories without running one, and
     a story reaching a router hook throws with every gate green.
-12. **Local mode only.** Move `backend/.env` aside before seeding or running, or its `TURSO_*` values
+13. **Local mode only.** Move `backend/.env` aside before seeding or running, or its `TURSO_*` values
     make the seed and the dev server contradict each other.
 
 ## Risks
@@ -717,14 +815,20 @@ Then the checks no gate can make:
 - **Decided: this branch lands first**, composing `CategoriesService.currentWindow` as the generator
   does today. PET-72 inherits one extra call site in files it was already rewiring, plus the
   `CATEGORY_CHANGED` emit in four methods.
-- **A twenty-to-sixty-second Server Action, which nothing in this app has ever had.** Three
-  consequences. There is **no `AbortController` reachable from a client component calling a Server
-  Action**, so copy the generation-counter ref the Add transaction modal already settled on rather
-  than inventing a second soft cancel. The backend's own timeout is the only real bound on the call.
-  And a Server Action can **reject** rather than resolve - a dropped connection, a body over the
-  configured limit, a platform function timeout - which, uncaught, leaves the pending state up
-  forever with the composer disabled. That is the exact review finding the scan handler produced, so
-  the `try` goes in from the first commit rather than after.
+- **A twenty-to-sixty-second request, which nothing in this app has ever had.** The
+  cancellation section answers the largest part of this - the send is a route handler precisely so
+  the client owns a signal - but three things survive that change. **Hop 3 is unverified**: nothing
+  in `backend/src` reads `@Req()` or a request signal today, and Express's `close` firing on a
+  completed response is a trap that aborts your own successful reply while looking correct in the
+  diff. **The frontend host's own function-duration ceiling still applies** to the route handler, so
+  check it rather than assuming a sixty-second POST completes. And **the `try` still goes in from the
+  first commit**: a `fetch` rejects on a dropped connection as readily as an action did, and
+  uncaught it leaves the pending state up forever with the composer stuck on "Stop" - the exact
+  review finding the scan handler produced, arrived at through a different mechanism.
+- **A cancel that only reaches hop 1 looks identical to one that reaches all three.** The UI returns
+  to its previous state either way; the difference is invisible on screen and shows up only as
+  spent quota. So the walk has to observe the backend actually stopping - a log line, or the absence
+  of a completion - rather than trusting that the button worked because the screen looked right.
 - **`backend/CLAUDE.md` is past 1,000 lines** and `docs/agents/conventions.md` nominates the next
   ticket touching `backend/src/categories/` to split it. Decided: the assistant gets its own scoped
   file, Insights and Categories stay in the parent, and that nomination stays open for a smaller
