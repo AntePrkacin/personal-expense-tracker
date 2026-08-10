@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import type { CategoryOption } from '@/lib/categories';
+import { currencySymbol } from '@/lib/money';
 import { reformatAmountInput } from '@/lib/amountField';
 import type { Transaction } from '@/lib/transactions';
 import type { UpdateTransactionResult } from '@/lib/updateTransaction';
@@ -16,6 +17,7 @@ import type { components } from '@/types/api';
 
 import { DateField } from './DateField';
 import { Modal, type ModalHandle } from './Modal';
+import { useCurrency } from './PreferencesProvider';
 import {
   invalidFields,
   toTransactionFormValues,
@@ -145,6 +147,9 @@ export function EditTransactionModal({
   onClose,
 }: EditTransactionModalProps) {
   const router = useRouter();
+  // The prefix glyph for `ui/Input`'s currency variant, which drew a literal `$` until PET-47's
+  // review. See `useCurrency` for why the symbol is a prop rather than read inside the primitive.
+  const currency = useCurrency();
   const modalRef = useRef<ModalHandle>(null);
 
   /**
@@ -303,6 +308,7 @@ export function EditTransactionModal({
         id={AMOUNT_ID}
         label="Amount"
         variant="currency"
+        currencySymbol={currencySymbol(currency)}
         value={values.amount}
         onChange={onAmountChange}
         error={errors.amount}

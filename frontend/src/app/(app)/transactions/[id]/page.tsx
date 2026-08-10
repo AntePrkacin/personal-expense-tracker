@@ -1,3 +1,4 @@
+import { requireProfile } from '@/lib/profile';
 import { readTransactionDetail } from '@/lib/transactionDetail';
 import { toQuery } from '@/lib/transactionQuery';
 
@@ -39,8 +40,12 @@ export default async function TransactionDetailPage({
   const filters = parseTransactionFilters(rawSearchParams);
   const detail = await readTransactionDetail(id);
 
+  // Free, for the reason `transactions/page.tsx` records: the shell's gate already read it.
+  const { currency } = await requireProfile();
+
   return (
     <TransactionDetailScreen
+      currency={currency}
       detail={detail}
       backHref={filterHref(filters)}
       // The query alone, for the sibling links. Built from the parsed filters rather than

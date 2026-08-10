@@ -32,14 +32,14 @@ afterEach(() => {
 
 describe('the header', () => {
   it('shows the designed overline and title', () => {
-    renderScreen(<DashboardScreen {...SLOTS} />);
+    renderScreen(<DashboardScreen monthStartDay={1} {...SLOTS} />);
 
     expect(screen.getByText('October 2025')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument();
   });
 
   it('shows the inert month pill and the Add transaction button', () => {
-    renderScreen(<DashboardScreen {...SLOTS} />);
+    renderScreen(<DashboardScreen monthStartDay={1} {...SLOTS} />);
 
     expect(screen.getByText('October').tagName).toBe('DIV');
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
@@ -48,7 +48,7 @@ describe('the header', () => {
 
 describe('the five card slots', () => {
   it('renders every one of them', () => {
-    renderScreen(<DashboardScreen {...SLOTS} />);
+    renderScreen(<DashboardScreen monthStartDay={1} {...SLOTS} />);
 
     expect(screen.getByTestId('budget-card')).toBeInTheDocument();
     expect(screen.getByTestId('trend-card')).toBeInTheDocument();
@@ -58,7 +58,7 @@ describe('the five card slots', () => {
   });
 
   it('puts all five inside main, below the header', () => {
-    const { container } = renderScreen(<DashboardScreen {...SLOTS} />);
+    const { container } = renderScreen(<DashboardScreen monthStartDay={1} {...SLOTS} />);
     const main = container.querySelector('main');
 
     for (const testId of [
@@ -73,7 +73,7 @@ describe('the five card slots', () => {
   });
 
   it('keeps the budget, trend and recent cards in the left column, in order', () => {
-    renderScreen(<DashboardScreen {...SLOTS} />);
+    renderScreen(<DashboardScreen monthStartDay={1} {...SLOTS} />);
     const left = screen.getByTestId('budget-card').parentElement;
 
     expect(left?.children[0]).toBe(screen.getByTestId('budget-card'));
@@ -82,7 +82,7 @@ describe('the five card slots', () => {
   });
 
   it('keeps the donut and insight cards in the right column, in order', () => {
-    renderScreen(<DashboardScreen {...SLOTS} />);
+    renderScreen(<DashboardScreen monthStartDay={1} {...SLOTS} />);
     const right = screen.getByTestId('donut-card').parentElement;
 
     expect(right?.children[0]).toBe(screen.getByTestId('donut-card'));

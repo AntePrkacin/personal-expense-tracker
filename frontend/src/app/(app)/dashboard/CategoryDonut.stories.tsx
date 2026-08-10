@@ -1,6 +1,23 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
-import { CategoryDonut } from './CategoryDonut';
+import { PreferencesProvider } from '../PreferencesProvider';
+import { CategoryDonut as Donut } from './CategoryDonut';
+
+/**
+ * The card inside the shell's preferences.
+ *
+ * The donut's ring is a Client Component and its hover tooltip calls `useMoney()`, so without this
+ * the story renders and then throws the first time a slice is hovered - which Jest cannot see,
+ * because it dispatches no hover. A wrapper rather than a `decorators` entry, for the reason
+ * `frontend/src/app/CLAUDE.md` records: the story smoke tests never apply a meta's decorators.
+ */
+function CategoryDonut(props: React.ComponentProps<typeof Donut>) {
+  return (
+    <PreferencesProvider currency="USD" monthStartDay={1}>
+      <Donut {...props} />
+    </PreferencesProvider>
+  );
+}
 
 // The card itself (Figma node 21:4's donut area, DSH-8), filed under Shell rather than Screens
 // for the reason `Shell/Spending trend` is: a card is one band of the dashboard rather than a
@@ -59,6 +76,12 @@ const meta: Meta<typeof CategoryDonut> = {
   title: 'Shell/Spending by category',
   component: CategoryDonut,
   tags: ['autodocs'],
+  // **Supplied at the meta so every story inherits it, and it is not optional.** `currency` became a
+  // required prop at PET-47, but Storybook's `StoryObj` typing does not reject a missing required
+  // arg and `tsc` stays clean - so these stories passed `undefined`, `Intl` threw, and
+  // `lib/money.ts`'s catch swallowed it and rendered USD. That catch is narrowed to a `RangeError`
+  // now, so a story that omits this throws visibly instead of lying quietly.
+  args: { currency: 'USD' },
 };
 
 export default meta;

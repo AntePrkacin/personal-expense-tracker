@@ -20,6 +20,35 @@ export function fieldErrorId(id: string, error: string | undefined): string | un
   return error ? `${id}-error` : undefined;
 }
 
+/**
+ * The hint line's id, the same shape as `fieldErrorId` and for the same reason: the control's
+ * `aria-describedby` has to name it, and deriving both halves in one place is what stops them
+ * drifting. `undefined` without a hint, so the attribute never points at nothing.
+ *
+ * **A field can carry both**, which is the case worth knowing about: `describedBy` below joins
+ * them, and a control that named only the error would silently drop the hint the moment the
+ * field went invalid.
+ */
+export function fieldHintId(id: string, hint: string | undefined): string | undefined {
+  return hint ? `${id}-hint` : undefined;
+}
+
+/**
+ * What a control passes to `aria-describedby`: the hint, the error, both, or neither.
+ *
+ * Space-separated because that is what the attribute takes - it is an ID *list*, unlike
+ * `aria-labelledby`'s single-name habit elsewhere in this app - and `undefined` rather than an
+ * empty string when there is nothing to name, so React drops the attribute entirely.
+ */
+export function fieldDescribedBy(
+  id: string,
+  hint: string | undefined,
+  error: string | undefined,
+): string | undefined {
+  const ids = [fieldHintId(id, hint), fieldErrorId(id, error)].filter(Boolean);
+  return ids.length > 0 ? ids.join(' ') : undefined;
+}
+
 type FieldShellProps = {
   /**
    * Wired to the label and the error message. Required at compile time rather
@@ -29,13 +58,26 @@ type FieldShellProps = {
   id: string;
   /** The Figma "Label" property, e.g. "Merchant". */
   label: string;
+  /**
+   * One line of standing guidance, rendered beneath the control and above any error.
+   *
+   * **Not a placeholder and not an error.** It states something permanently true of the field
+   * that the label has no room for, which is why it survives while the field is valid: Settings'
+   * Email field carries "Login links will be sent here.", because editing it silently moves where
+   * every future login link goes and A39 designs no other warning anywhere.
+   *
+   * It is a prop rather than a `<p>` a caller drops in beside the field precisely so the control
+   * can name it in `aria-describedby` - an unassociated caption is one a screen reader reaches
+   * only by wandering past the field, which is not the same thing as describing it.
+   */
+  hint?: string;
   /** One line of validation copy, rendered beneath the control. */
   error?: string;
   /** The control itself, carrying the aria wiring described above. */
   children: React.ReactNode;
 };
 
-export function FieldShell({ id, label, error, children }: FieldShellProps) {
+export function FieldShell({ id, label, hint, error, children }: FieldShellProps) {
   return (
     // **A `div` wearing daisyUI's `fieldset` class, not a `<fieldset>` element.** The class is
     // pure CSS - a one-column grid with a row gap - and works on any element, while the element
@@ -71,6 +113,15 @@ export function FieldShell({ id, label, error, children }: FieldShellProps) {
         {label}
       </label>
       {children}
+      {/* The hint sits above the error rather than below it, so a field that carries both reads
+          in the order the two were written for: what is always true of this field, then what is
+          wrong with it right now. `text-base-content/60` is the muted treatment the captions on
+          the dashboard cards already use, deliberately not `text-error`'s. */}
+      {hint ? (
+        <p id={fieldHintId(id, hint)} className="text-base-content/60 text-sm">
+          {hint}
+        </p>
+      ) : null}
       {error ? (
         <p id={fieldErrorId(id, error)} className="text-error text-sm">
           {error}

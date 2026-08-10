@@ -1,4 +1,5 @@
-import { monthOverline } from '@/lib/format';
+import { todayIsoDate } from '@/lib/date';
+import { periodOverline } from '@/lib/format';
 import type { Allocation, Category } from '@/lib/categories';
 import type { CreateCategoryResult } from '@/lib/createCategory';
 import type { DeleteCategoryResult } from '@/lib/deleteCategory';
@@ -108,6 +109,22 @@ type CategoriesScreenProps = {
    * convenience.
    */
   save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
+  /**
+   * The profile's month start day, for the header's period label.
+   *
+   * Threaded from the page rather than read here, the same split the currency takes: a Server
+   * Component cannot reach `PreferencesProvider`. It labels the period and resolves no window -
+   * every figure below is scoped to the one the backend resolved. See `periodOverline`.
+   */
+  monthStartDay: number;
 };
 
 export function CategoriesScreen({
@@ -119,6 +136,8 @@ export function CategoriesScreen({
   update,
   create,
   save,
+  currency,
+  monthStartDay,
 }: CategoriesScreenProps) {
   // **Summed here rather than read from a field, and the sum is sound rather than approximate.**
   // `GET /api/categories` publishes no period total of its own, but every transaction in the
@@ -157,7 +176,7 @@ export function CategoriesScreen({
     <DeleteCategoryProvider fallbackName={fallbackName} remove={remove}>
       <EditCategoryProvider palette={palette} update={update}>
         <PageHeader
-          overline={monthOverline(new Date())}
+          overline={periodOverline(monthStartDay, todayIsoDate())}
           title="Transactions"
           // **No search field, which is CTG-1 and the visible difference from the sibling tab.**
           // `TransactionsScreen` keeps its field in the header specifically so React reconciles
@@ -177,6 +196,8 @@ export function CategoriesScreen({
           />
 
           <SpendingSummaryCard
+            currency={currency}
+            monthStartDay={monthStartDay}
             spent={spent}
             allocation={allocation}
             categories={categories}
@@ -221,7 +242,7 @@ export function CategoriesScreen({
               // is its own <section> with an <h2>, so the list adds structure without competing
               // with the headings inside it.
               <li key={category.id}>
-                <CategoryCard category={category} />
+                <CategoryCard category={category} currency={currency} />
               </li>
             ))}
           </ul>

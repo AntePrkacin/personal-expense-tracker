@@ -1,4 +1,7 @@
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
+import { isFilled, isPositiveAmount } from '@/lib/amount';
+import { SUPPORTED_CURRENCIES } from '@/lib/money';
+import { DEFAULT_CURRENCY } from '@/lib/money';
 import type { components } from '@/types/api';
 
 // The onboarding draft: everything screens 02, 03 and 22 collect before there is
@@ -26,8 +29,17 @@ import type { components } from '@/types/api';
  */
 export const SETUP_DRAFT_KEY = 'spendifico.setup.draft';
 
-/** A6: only "USD - $" appears anywhere in the design file. */
-export const DEFAULT_CURRENCY = 'USD';
+/**
+ * What a draft starts with, re-exported from `lib/money.ts` rather than declared here.
+ *
+ * It said "A6: only 'USD - $' appears anywhere in the design file", which was the whole story while
+ * one currency was offered and is now only half of it: PET-47 offers three, taken from the team's
+ * Claude Design system, so this is the **default** rather than the only value. `lib/money.ts` owns
+ * it alongside the list, because a default that lives apart from the options it defaults to is how
+ * the two stop agreeing. Re-exported rather than moved outright so `BudgetForm` and `parseDraft`
+ * keep importing the draft's own vocabulary from the draft.
+ */
+export { DEFAULT_CURRENCY };
 
 export type SetupDraft = {
   /**
@@ -111,6 +123,12 @@ function emptyDraft(): SetupDraft {
 
 export function serializeDraft(draft: SetupDraft): string {
   return JSON.stringify(draft);
+}
+
+/** The stored currency when it is one the picker offers, or the default. */
+function readCurrency(source: Record<string, unknown>): string {
+  const stored = readString(source, 'currency', DEFAULT_CURRENCY);
+  return SUPPORTED_CURRENCIES.some((entry) => entry.code === stored) ? stored : DEFAULT_CURRENCY;
 }
 
 /** A string field, or the fallback when the stored value is not one. */
@@ -209,7 +227,13 @@ export function parseDraft(raw: string | null): SetupDraft {
 
   const source = parsed as Record<string, unknown>;
   return {
-    currency: readString(source, 'currency', DEFAULT_CURRENCY),
+    // **Checked against the offered list, not merely type-checked**, which is the fix `docs/TODO.md`
+    // said was owed the moment a second currency was offered - and PET-47 offered three. A stored
+    // code outside the list rendered in `BudgetField`'s trigger with no matching panel row and no
+    // `aria-current`, and step 3 posted it straight through: `@IsISO4217CurrencyCode()` accepts it,
+    // so the account was created in a currency the user never picked. The same canonicalise-on-read
+    // rule the budget and the categories already follow.
+    currency: readCurrency(source),
     budget: formatAmountInput(readString(source, 'budget', '')),
     categories: readCategories(source),
     firstName: readString(source, 'firstName', ''),
@@ -230,12 +254,12 @@ export function parseDraft(raw: string | null): SetupDraft {
  * A5 designs none, and the backend's own cap is its business to enforce.
  */
 export function isBudgetValid(budget: string): boolean {
-  return parseAmountInput(budget) > 0;
+  return isPositiveAmount(budget);
 }
 
 /** Whether a name field is filled (REG-2), matching the DTO's `@IsNotEmpty()`. */
 export function isNameValid(name: string): boolean {
-  return name.trim() !== '';
+  return isFilled(name);
 }
 
 // `isEmailValid` used to sit here, beside the other two rules, and moved to

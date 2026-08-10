@@ -4,6 +4,7 @@ import { addDays } from '@/lib/calendar';
 import { todayIsoDate } from '@/lib/date';
 
 import { AddTransactionProvider } from '../AddTransactionProvider';
+import { PreferencesProvider } from '../PreferencesProvider';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
@@ -158,48 +159,57 @@ type Story = StoryObj<typeof DashboardScreen>;
 
 export const Default: Story = {
   render: () => (
-    <AddTransactionProvider>
-      {/* `bg-base-200` is what the root layout paints `<body>`; `px-*` stands in for the
+    // `PreferencesProvider` is what `(app)/layout.tsx` wraps the shell in, and the cards below
+    // format money through it. Mounted here rather than in `decorators` for the reason
+    // `frontend/src/app/CLAUDE.md` records: the story smoke test never applies a meta's
+    // decorators, so a decorator works in the browser and throws under Jest.
+    <PreferencesProvider currency="USD" monthStartDay={1}>
+      <AddTransactionProvider>
+        {/* `bg-base-200` is what the root layout paints `<body>`; `px-*` stands in for the
           `(app)` shell's own gutter, since neither wraps a story. */}
-      <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-        <DashboardScreen
-          budgetCard={<BudgetCard {...BUDGET} isEmpty={false} />}
-          trendCard={
-            <TrendCard
-              weeklyBuckets={[
-                { startDate: '2025-10-01', endDate: '2025-10-08', total: 280 },
-                { startDate: '2025-10-08', endDate: '2025-10-15', total: 410 },
-                { startDate: '2025-10-15', endDate: '2025-10-22', total: 250 },
-                { startDate: '2025-10-22', endDate: '2025-10-29', total: 300 },
-              ]}
-              daysLeft={BUDGET.daysLeft}
-              isEmpty={false}
-            />
-          }
-          donutCard={
-            // Summing to `BUDGET.spent` so the donut's centre and the budget card's readout are
-            // the same figure on one screen, which is AC2 and is what the real response
-            // guarantees.
-            <CategoryDonut categories={CATEGORIES} spent={BUDGET.spent} />
-          }
-          recentTransactionsCard={
-            <RecentTransactionsCard
-              recentTransactions={RECENT_TRANSACTIONS}
-              categories={CATEGORIES}
-              isEmpty={false}
-            />
-          }
-          insightCard={
-            <InsightTeaserCard
-              insight={{
-                headline: 'You are on track this month',
-                body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
-              }}
-              isEmpty={false}
-            />
-          }
-        />
-      </div>
-    </AddTransactionProvider>
+        <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+          <DashboardScreen
+            monthStartDay={1}
+            budgetCard={<BudgetCard currency="USD" {...BUDGET} isEmpty={false} />}
+            trendCard={
+              <TrendCard
+                currency="USD"
+                weeklyBuckets={[
+                  { startDate: '2025-10-01', endDate: '2025-10-08', total: 280 },
+                  { startDate: '2025-10-08', endDate: '2025-10-15', total: 410 },
+                  { startDate: '2025-10-15', endDate: '2025-10-22', total: 250 },
+                  { startDate: '2025-10-22', endDate: '2025-10-29', total: 300 },
+                ]}
+                daysLeft={BUDGET.daysLeft}
+                isEmpty={false}
+              />
+            }
+            donutCard={
+              // Summing to `BUDGET.spent` so the donut's centre and the budget card's readout are
+              // the same figure on one screen, which is AC2 and is what the real response
+              // guarantees.
+              <CategoryDonut currency="USD" categories={CATEGORIES} spent={BUDGET.spent} />
+            }
+            recentTransactionsCard={
+              <RecentTransactionsCard
+                currency="USD"
+                recentTransactions={RECENT_TRANSACTIONS}
+                categories={CATEGORIES}
+                isEmpty={false}
+              />
+            }
+            insightCard={
+              <InsightTeaserCard
+                insight={{
+                  headline: 'You are on track this month',
+                  body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
+                }}
+                isEmpty={false}
+              />
+            }
+          />
+        </div>
+      </AddTransactionProvider>
+    </PreferencesProvider>
   ),
 };

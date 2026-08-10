@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 
 import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
-import { formatWhole } from '@/lib/format';
+import { moneyFormatters, type MoneyFormatters } from '@/lib/money';
 import type { Category } from '@/lib/categories';
 
 import { BannerCardBody } from './CardBanner';
@@ -75,7 +75,10 @@ function transactionCountLabel(count: number): string {
  * figure - and that is the frame's own pairing rather than an accident here: the chip reports
  * the band, the figure reports that the cap has been reached.
  */
-function footerFigure(category: Category): { label: string; className: string } {
+function footerFigure(
+  category: Category,
+  { formatWhole }: MoneyFormatters,
+): { label: string; className: string } {
   if (category.status === 'over') {
     return {
       label: `${formatWhole(category.over ?? 0)} over`,
@@ -141,7 +144,10 @@ function CategoryCardHeader({ category }: { category: Category }) {
   );
 }
 
-export function CategoryCard({ category }: { category: Category }) {
+export function CategoryCard({ category, currency }: { category: Category; currency: string }) {
+  const money = moneyFormatters(currency);
+  const { formatWhole } = money;
+
   // `card bg-base-100 shadow-sm` is `AccessCard`'s box, which `frontend/src/app/CLAUDE.md`
   // names as what a second card should match, and which `BudgetCard` already matched.
   //
@@ -193,7 +199,7 @@ export function CategoryCard({ category }: { category: Category }) {
   }
 
   const chip = chipFor(category.status);
-  const figure = footerFigure(category);
+  const figure = footerFigure(category, money);
 
   return (
     <section className="card bg-base-100 shadow-sm">

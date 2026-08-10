@@ -2,8 +2,26 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { Allocation, Category } from '@/lib/categories';
 
-import { AllocateBudgetModal } from './AllocateBudgetModal';
+import { PreferencesProvider } from '../../PreferencesProvider';
+import { AllocateBudgetModal as Modal } from './AllocateBudgetModal';
 import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixture';
+
+/**
+ * The modal inside the shell's preferences, which is what gives it a currency to format with.
+ *
+ * **A wrapper rather than a `decorators` entry, and that is not a style choice.** The story smoke
+ * tests build each story from `render` or `meta.component` and never apply a meta's decorators, so
+ * a decorator would work in the browser and throw under Jest - the trap
+ * `frontend/src/app/CLAUDE.md` records under Storybook. Wrapping the component itself keeps all
+ * seven story bodies below unchanged and keeps both gates honest.
+ */
+function AllocateBudgetModal(props: React.ComponentProps<typeof Modal>) {
+  return (
+    <PreferencesProvider currency="USD" monthStartDay={1}>
+      <Modal {...props} />
+    </PreferencesProvider>
+  );
+}
 
 // Type-only Storybook import, for the reason `Sidebar.stories.tsx` records: importing any *value*
 // from Storybook breaks the Jest story smoke test with an opaque ESM error, because

@@ -1,4 +1,6 @@
-import { monthOverline } from '@/lib/format';
+import { todayIsoDate } from '@/lib/date';
+import { periodOverline } from '@/lib/format';
+import { requireProfile } from '@/lib/profile';
 import { requireInsights } from '@/lib/insights';
 
 import { InsightsScreen } from './InsightsScreen';
@@ -18,13 +20,19 @@ import { InsightsScreen } from './InsightsScreen';
 export default async function InsightsPage() {
   const set = await requireInsights();
 
-  // Read here rather than inside the screen, so the client component takes a string and a
-  // suite can pin the month without faking a timer - the same reason `lib/date.ts`'s helpers
-  // all take `today` as a parameter. Note this is the frontend host's own zone, while the set's
-  // own `monthLabel` is the backend's; `docs/TODO.md` records that gap for every figure on the
-  // dashboard already, and here the two are labels for different things - the calendar month
-  // over the page, the period the analysis covers inside the banner.
-  const now = new Date();
+  // The overline is built here rather than inside the screen, so the client component takes a
+  // string and a suite can pin the period without faking a timer - the same reason `lib/date.ts`'s
+  // helpers all take `today` as a parameter.
+  //
+  // **It is the budgeting period as of PET-47, not the calendar month**, so it now agrees with the
+  // banner beneath it about what a month is: the set's own `monthLabel` is the backend's, resolved
+  // against `monthStartDay` through `month-window.ts`, and this used to be the calendar month
+  // regardless - two labels for different windows, one above the other. The remaining gap is the
+  // zone rather than the boundary: `todayIsoDate()` is the frontend host's and the backend's is
+  // `APP_TIMEZONE`, which `docs/TODO.md` already tracks for every figure on the dashboard.
+  //
+  // The read is free - the shell's gate already made it, and `requireProfile` is `cache()`-memoized.
+  const { monthStartDay } = await requireProfile();
 
-  return <InsightsScreen set={set} overline={monthOverline(now)} />;
+  return <InsightsScreen set={set} overline={periodOverline(monthStartDay, todayIsoDate())} />;
 }

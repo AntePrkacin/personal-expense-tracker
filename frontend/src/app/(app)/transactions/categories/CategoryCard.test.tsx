@@ -32,7 +32,7 @@ const bar = () => screen.getByRole('progressbar');
 
 describe('a capped category (AC2)', () => {
   it('shows spent of cap, the chip, the bar and the footer', () => {
-    render(<CategoryCard category={category()} />);
+    render(<CategoryCard currency="USD" category={category()} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'Groceries' })).toBeInTheDocument();
     expect(screen.getByText('$397')).toBeInTheDocument();
@@ -45,7 +45,7 @@ describe('a capped category (AC2)', () => {
   it('gives the bar a real accessible name and a floored value', () => {
     // Floored rather than rounded, which is the rule `categoryCardStatus.ts` exists to hold:
     // 79.4 must not become 80 and cross a band the status did not.
-    render(<CategoryCard category={category()} />);
+    render(<CategoryCard currency="USD" category={category()} />);
 
     expect(bar()).toHaveAttribute('aria-label', 'Groceries budget used');
     expect(bar()).toHaveValue(79);
@@ -56,6 +56,7 @@ describe('a capped category (AC2)', () => {
     // assistive technology, so the clamp is an accessibility fix rather than a cosmetic one.
     render(
       <CategoryCard
+        currency="USD"
         category={category({
           name: 'Dining out',
           monthlyCap: 300,
@@ -76,6 +77,7 @@ describe('the status chip and the footer figure (AC3)', () => {
   it('reads "On track" below 75%', () => {
     render(
       <CategoryCard
+        currency="USD"
         category={category({ percentUsed: 63.7, remaining: 127, status: 'on_track' })}
       />,
     );
@@ -85,7 +87,7 @@ describe('the status chip and the footer figure (AC3)', () => {
   });
 
   it('reads "Near" between 75 and 99%', () => {
-    render(<CategoryCard category={category()} />);
+    render(<CategoryCard currency="USD" category={category()} />);
 
     expect(screen.getByText('Near')).toBeInTheDocument();
     expect(screen.getByText('$103 left')).toBeInTheDocument();
@@ -97,6 +99,7 @@ describe('the status chip and the footer figure (AC3)', () => {
     // true sentence the design deliberately does not use. Housing on the frame is this case.
     render(
       <CategoryCard
+        currency="USD"
         category={category({
           name: 'Housing',
           monthlyCap: 1100,
@@ -117,6 +120,7 @@ describe('the status chip and the footer figure (AC3)', () => {
   it('reads "Over" with the over amount above the cap', () => {
     render(
       <CategoryCard
+        currency="USD"
         category={category({
           name: 'Dining out',
           monthlyCap: 300,
@@ -137,11 +141,13 @@ describe('the status chip and the footer figure (AC3)', () => {
     // `near` and `full` share `warning`, so the label is the only thing separating them. Both
     // are real text in the badge, which is what keeps that legitimate - this asserts the two
     // words differ rather than asserting a class, per the standing rule about class strings.
-    const { unmount } = render(<CategoryCard category={category({ status: 'near' })} />);
+    const { unmount } = render(
+      <CategoryCard currency="USD" category={category({ status: 'near' })} />,
+    );
     expect(screen.getByText('Near')).toBeInTheDocument();
     unmount();
 
-    render(<CategoryCard category={category({ status: 'full', over: null })} />);
+    render(<CategoryCard currency="USD" category={category({ status: 'full', over: null })} />);
     expect(screen.getByText('Full')).toBeInTheDocument();
   });
 });
@@ -150,13 +156,13 @@ describe('the transaction count, pluralized (AC2)', () => {
   it('says "1 transaction" for one', () => {
     // Frame 13's Housing card reads "1 transactions", which CTG-6 records as a typo. This is
     // the assertion that keeps the fix from being "corrected" back toward the mock.
-    render(<CategoryCard category={category({ transactionCount: 1 })} />);
+    render(<CategoryCard currency="USD" category={category({ transactionCount: 1 })} />);
 
     expect(screen.getByText('1 transaction')).toBeInTheDocument();
   });
 
   it('says "0 transactions" for none', () => {
-    render(<CategoryCard category={category({ transactionCount: 0 })} />);
+    render(<CategoryCard currency="USD" category={category({ transactionCount: 0 })} />);
 
     expect(screen.getByText('0 transactions')).toBeInTheDocument();
   });
@@ -164,7 +170,7 @@ describe('the transaction count, pluralized (AC2)', () => {
 
 describe('an uncapped category (AC7)', () => {
   it('shows spend and count instead of a cap', () => {
-    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={UNCAPPED_CATEGORY} />);
 
     expect(screen.getByText('$148')).toBeInTheDocument();
     expect(screen.getByText('in 6 transactions')).toBeInTheDocument();
@@ -174,7 +180,7 @@ describe('an uncapped category (AC7)', () => {
     // Not "a chip with no colour" - no chip. The whole reason the card has two shapes is that
     // there is no cap to draw furniture against, and `status: "uncapped"` is the common case
     // rather than the edge: caps are optional and the preselected fallback ships without one.
-    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={UNCAPPED_CATEGORY} />);
 
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByText('On track')).not.toBeInTheDocument();
@@ -185,7 +191,7 @@ describe('an uncapped category (AC7)', () => {
 
   it('never prints a null cap', () => {
     // The failure this shape exists to prevent, stated directly.
-    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={UNCAPPED_CATEGORY} />);
 
     expect(screen.queryByText(/of \$?null/)).not.toBeInTheDocument();
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
@@ -194,7 +200,7 @@ describe('an uncapped category (AC7)', () => {
   it('offers a live "Set limit", which PET-38 is what made true', () => {
     // It shipped `aria-disabled`, with a note saying this ticket would make it live. Asserting the
     // absence is what stops the attribute coming back.
-    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={UNCAPPED_CATEGORY} />);
 
     const setLimit = screen.getByRole('button', { name: 'Set limit for Subscriptions' });
 
@@ -207,7 +213,7 @@ describe('an uncapped category (AC7)', () => {
     // monthly limit for Uncategorized", which is distinct across eight cards and unusable by
     // speech input: a user saying "click Set limit" - the only words on screen - matched
     // nothing, on the one affordance an uncapped card has.
-    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={UNCAPPED_CATEGORY} />);
 
     const name = screen.getByRole('button', { name: /Set limit/ }).getAttribute('aria-label');
 
@@ -219,7 +225,9 @@ describe('an uncapped category (AC7)', () => {
     // Defensive, and the contract is why: every derived field is nullable independently of
     // `status`, so a row claiming `near` with a null `monthlyCap` is representable. The card
     // must not then print "of null" - `isCapped` tests both.
-    render(<CategoryCard category={category({ monthlyCap: null, status: 'near' })} />);
+    render(
+      <CategoryCard currency="USD" category={category({ monthlyCap: null, status: 'near' })} />,
+    );
 
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByText(/of \$?null/)).not.toBeInTheDocument();
@@ -233,13 +241,13 @@ describe('the kebab (AC6)', () => {
   // both shapes. Everything behind it is `CategoryCardMenu.test.tsx`'s.
 
   it('is present and named per card', () => {
-    render(<CategoryCard category={category()} />);
+    render(<CategoryCard currency="USD" category={category()} />);
 
     expect(screen.getByRole('button', { name: 'Actions for Groceries' })).toBeInTheDocument();
   });
 
   it('no longer announces itself as unavailable', () => {
-    render(<CategoryCard category={category()} />);
+    render(<CategoryCard currency="USD" category={category()} />);
 
     const kebab = screen.getByRole('button', { name: 'Actions for Groceries' });
 
@@ -248,7 +256,7 @@ describe('the kebab (AC6)', () => {
   });
 
   it('opens a menu offering Edit and Delete', () => {
-    render(<CategoryCard category={category()} />);
+    render(<CategoryCard currency="USD" category={category()} />);
 
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
@@ -257,7 +265,7 @@ describe('the kebab (AC6)', () => {
   it('is drawn on the uncapped shape too', () => {
     // Both shapes render `CategoryCardHeader`, so this is cheap insurance against a future edit
     // moving the kebab into the capped branch alone.
-    render(<CategoryCard category={UNCAPPED_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={UNCAPPED_CATEGORY} />);
 
     expect(screen.getByRole('button', { name: 'Actions for Subscriptions' })).toBeInTheDocument();
   });
@@ -271,7 +279,7 @@ describe('the fallback category (AC6, amended)', () => {
   // nothing on that card is drawn rather than drawn and refused.
 
   it('draws no kebab at all, where PET-39 drew one holding a single disabled Edit', () => {
-    render(<CategoryCard category={FALLBACK_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={FALLBACK_CATEGORY} />);
 
     expect(
       screen.queryByRole('button', { name: 'Actions for Uncategorized' }),
@@ -283,7 +291,7 @@ describe('the fallback category (AC6, amended)', () => {
   it('draws no banner either, because "Set limit" would have nowhere to lead', () => {
     // The Edit modal is what sets a cap, and this card has no trigger for it. A strip here would be
     // either a dead control or a second explanation of a rule nobody asked about.
-    render(<CategoryCard category={FALLBACK_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={FALLBACK_CATEGORY} />);
 
     expect(screen.queryByRole('button', { name: /Set limit/ })).not.toBeInTheDocument();
     expect(screen.queryByText('No limit set for this category')).not.toBeInTheDocument();
@@ -292,7 +300,7 @@ describe('the fallback category (AC6, amended)', () => {
   it('still draws the card, its spend and its count', () => {
     // The category is one the user really has, so hiding it would leave the grid unable to account
     // for spend the dashboard donut does show. Only its controls go.
-    render(<CategoryCard category={FALLBACK_CATEGORY} />);
+    render(<CategoryCard currency="USD" category={FALLBACK_CATEGORY} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'Uncategorized' })).toBeInTheDocument();
     expect(screen.getByText('$148')).toBeInTheDocument();
@@ -301,7 +309,7 @@ describe('the fallback category (AC6, amended)', () => {
 
   it('keeps its kebab and its banner when the row is not the fallback', () => {
     // The control, so neither absence above can pass for a card that simply draws nothing.
-    render(<CategoryCard category={{ ...FALLBACK_CATEGORY, isFallback: false }} />);
+    render(<CategoryCard currency="USD" category={{ ...FALLBACK_CATEGORY, isFallback: false }} />);
 
     expect(screen.getByRole('button', { name: 'Actions for Uncategorized' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Set limit/ })).toBeInTheDocument();

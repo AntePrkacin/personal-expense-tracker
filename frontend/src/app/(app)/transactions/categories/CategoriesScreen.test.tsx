@@ -1,4 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+
+import { render } from '../../shellRender';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 
@@ -82,6 +84,8 @@ const summaryCard = () =>
 function renderScreen(props: Partial<React.ComponentProps<typeof CategoriesScreen>> = {}) {
   return render(
     <CategoriesScreen
+      monthStartDay={1}
+      currency="USD"
       categories={CATEGORIES}
       allocation={ALLOCATION}
       transactionCount={128}

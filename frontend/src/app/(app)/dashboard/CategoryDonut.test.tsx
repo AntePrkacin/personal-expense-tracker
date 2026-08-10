@@ -1,4 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+
+import { render } from '../shellRender';
 
 import { CategoryDonut } from './CategoryDonut';
 
@@ -73,7 +75,9 @@ const percentsFromLegend = () =>
 
 describe('the ring (AC1)', () => {
   it('draws one slice per category', () => {
-    const { container } = render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    const { container } = render(
+      <CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />,
+    );
 
     expect(container.querySelectorAll('.recharts-pie-sector')).toHaveLength(5);
   });
@@ -81,7 +85,9 @@ describe('the ring (AC1)', () => {
   it('gives every slice its category colour as a CSS variable, never a class', () => {
     // A Tailwind class in an SVG `fill` resolves to nothing at all: the slice simply never
     // paints, with no error anywhere. That is the failure `CATEGORY_FILL` exists to prevent.
-    const { container } = render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    const { container } = render(
+      <CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />,
+    );
     const fills = Array.from(container.querySelectorAll('.recharts-pie-sector path')).map((s) =>
       s.getAttribute('fill'),
     );
@@ -107,6 +113,7 @@ describe('the ring (AC1)', () => {
     // contract's union and this deliberately violates it.
     const { container } = render(
       <CategoryDonut
+        currency="USD"
         categories={[
           {
             id: 'c1',
@@ -143,6 +150,7 @@ describe('the ring (AC1)', () => {
     // browser measurement rather than a string.
     const { container } = render(
       <CategoryDonut
+        currency="USD"
         categories={[
           {
             id: 'c1',
@@ -171,6 +179,7 @@ describe('the ring (AC1)', () => {
     // ring shows one arc where the legend lists two.
     const { container } = render(
       <CategoryDonut
+        currency="USD"
         categories={[
           {
             id: 'c1',
@@ -206,7 +215,7 @@ describe('the ring (AC1)', () => {
 
 describe('the legend (AC3, AC4)', () => {
   it('runs largest first with a name, an amount and a percentage on every row', () => {
-    render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    render(<CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />);
     const rows = legendRows();
 
     expect(rows).toHaveLength(5);
@@ -223,14 +232,16 @@ describe('the legend (AC3, AC4)', () => {
 
   it('sorts by spend even when the response arrives in another order', () => {
     // The contract publishes no order, so this card must not read one off the response.
-    render(<CategoryDonut categories={[...FIVE_CATEGORIES].reverse()} spent={TOTAL} />);
+    render(
+      <CategoryDonut currency="USD" categories={[...FIVE_CATEGORIES].reverse()} spent={TOTAL} />,
+    );
 
     expect(legendRows()[0]?.textContent).toContain('Groceries');
   });
 
   // The requirement, stated directly.
   it('shows percentages that sum to exactly 100', () => {
-    render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    render(<CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />);
 
     expect(percentsFromLegend().reduce((sum, value) => sum + value, 0)).toBe(100);
   });
@@ -238,6 +249,7 @@ describe('the legend (AC3, AC4)', () => {
   it('sums to 100 for a set that would naively round to 101 too', () => {
     render(
       <CategoryDonut
+        currency="USD"
         categories={[
           {
             id: 'a',
@@ -282,6 +294,7 @@ describe('the legend (AC3, AC4)', () => {
   it('gives a single category the whole circle', () => {
     render(
       <CategoryDonut
+        currency="USD"
         categories={[
           {
             id: 'c1',
@@ -302,7 +315,7 @@ describe('the legend (AC3, AC4)', () => {
 
 describe('the centre readout (AC2)', () => {
   it('shows the period total over its caption', () => {
-    render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    render(<CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />);
 
     expect(screen.getByText('$1,240')).toBeInTheDocument();
     expect(screen.getByText('Total spent')).toBeInTheDocument();
@@ -312,7 +325,7 @@ describe('the centre readout (AC2)', () => {
   // same field off the same response through the same formatter. If a later ticket ever gives
   // this card its own read, this is the assertion that notices.
   it('formats it exactly as BudgetCard formats the same field', () => {
-    render(<CategoryDonut categories={FIVE_CATEGORIES} spent={1240.5} />);
+    render(<CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={1240.5} />);
 
     expect(screen.getByText('$1,241')).toBeInTheDocument();
   });
@@ -324,7 +337,7 @@ describe('the centre readout (AC2)', () => {
     //
     // RTL queries read through `aria-hidden`, so both assertions above pass with this defect
     // present. Only the containment says which.
-    render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    render(<CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />);
 
     expect(screen.getByText('$1,240').closest('[aria-hidden="true"]')).toBeNull();
     expect(screen.getByText('Total spent').closest('[aria-hidden="true"]')).toBeNull();
@@ -333,7 +346,9 @@ describe('the centre readout (AC2)', () => {
 
 describe('display only', () => {
   it('has no interactive role and nothing in the tab order', () => {
-    const { container } = render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    const { container } = render(
+      <CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />,
+    );
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
@@ -342,7 +357,9 @@ describe('display only', () => {
   });
 
   it('hides the ring from assistive technology, since the legend already carries every fact', () => {
-    const { container } = render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    const { container } = render(
+      <CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />,
+    );
 
     const chart = container.querySelector('.recharts-responsive-container');
     expect(chart?.closest('[aria-hidden="true"]')).not.toBeNull();
@@ -351,7 +368,7 @@ describe('display only', () => {
   it('leaves the legend outside that hidden subtree', () => {
     // The whole reason hiding the ring is acceptable. If the legend went with it the card would
     // announce nothing at all.
-    render(<CategoryDonut categories={FIVE_CATEGORIES} spent={TOTAL} />);
+    render(<CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />);
 
     for (const row of legendRows()) {
       expect(row.closest('[aria-hidden="true"]')).toBeNull();
@@ -361,7 +378,7 @@ describe('display only', () => {
 
 describe('the empty state (AC4, PET-26)', () => {
   it('draws the gray ring and the $0 centre for a genuinely empty account', () => {
-    render(<CategoryDonut categories={[]} spent={0} />);
+    render(<CategoryDonut currency="USD" categories={[]} spent={0} />);
 
     expect(screen.getByRole('img', { name: /no spending recorded/i })).toBeInTheDocument();
     expect(screen.getByText('$0')).toBeInTheDocument();
@@ -375,7 +392,7 @@ describe('the empty state (AC4, PET-26)', () => {
   it('is named rather than hidden, unlike the populated ring', () => {
     // There is no legend below to act as this ring's accessible equivalent, so it needs a real
     // name of its own instead of `aria-hidden`.
-    const { container } = render(<CategoryDonut categories={[]} spent={0} />);
+    const { container } = render(<CategoryDonut currency="USD" categories={[]} spent={0} />);
 
     expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
   });
@@ -384,7 +401,7 @@ describe('the empty state (AC4, PET-26)', () => {
     // `categories.length === 0` is a strict superset of the screen-wide empty state: an account
     // whose transactions' categories are all gone reaches this guard with `spent` still nonzero,
     // and the centre must say so rather than falsely reading "$0".
-    render(<CategoryDonut categories={[]} spent={124} />);
+    render(<CategoryDonut currency="USD" categories={[]} spent={124} />);
 
     expect(screen.getByText('$124')).toBeInTheDocument();
     expect(screen.queryByText('$0')).not.toBeInTheDocument();
@@ -395,7 +412,7 @@ describe('the empty state (AC4, PET-26)', () => {
     // strings around it did not, so this exact input rendered "$124 / Total spent" beside a
     // caption saying spending had not started - and the ring's name, which is the whole of what
     // that region announces, carried only the false half.
-    render(<CategoryDonut categories={[]} spent={124} />);
+    render(<CategoryDonut currency="USD" categories={[]} spent={124} />);
 
     expect(
       screen.getByRole('img', { name: 'No category breakdown available' }),
@@ -409,7 +426,7 @@ describe('the empty state (AC4, PET-26)', () => {
   it("keeps frame 05's own copy for the account that really has spent nothing", () => {
     // The branch above must not swallow the designed state: `spent: 0` is the true empty
     // account and still reads exactly as the frame draws it.
-    render(<CategoryDonut categories={[]} spent={0} />);
+    render(<CategoryDonut currency="USD" categories={[]} spent={0} />);
 
     expect(
       screen.getByRole('img', { name: 'No spending recorded this period' }),

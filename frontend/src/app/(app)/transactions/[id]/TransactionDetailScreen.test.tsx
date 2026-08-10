@@ -39,6 +39,7 @@ const DETAIL: TransactionDetail = {
 function renderScreen(detail: TransactionDetail = DETAIL, backHref = '/transactions', query = '') {
   return render(
     <TransactionDetailScreen
+      currency="USD"
       detail={detail}
       backHref={backHref}
       query={query}

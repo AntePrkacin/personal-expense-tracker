@@ -1,4 +1,6 @@
-import { formatWhole, monthLabel } from '@/lib/format';
+import { todayIsoDate } from '@/lib/date';
+import { periodLabel } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
@@ -69,6 +71,22 @@ type SpendingSummaryCardProps = {
   categories: Category[];
   /** The bulk cap write, threaded through for the same reason. `AllocateBanner` defaults it. */
   save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
+  /**
+   * The profile's month start day, for the header's period label.
+   *
+   * Threaded from the page rather than read here, the same split the currency takes: a Server
+   * Component cannot reach `PreferencesProvider`. It labels the period and resolves no window -
+   * every figure below is scoped to the one the backend resolved. See `periodOverline`.
+   */
+  monthStartDay: number;
 };
 
 export function SpendingSummaryCard({
@@ -76,7 +94,11 @@ export function SpendingSummaryCard({
   allocation,
   categories,
   save,
+  currency,
+  monthStartDay,
 }: SpendingSummaryCardProps) {
+  const { formatWhole } = moneyFormatters(currency);
+
   const { monthlyBudget, unallocated } = allocation;
 
   // Rounded once and the pair derived from the rounded figures, which is `BudgetCard`'s rule
@@ -123,7 +145,9 @@ export function SpendingSummaryCard({
               and `TrendCard`'s read only "Weekly". Kept here by product decision, because it is
               correct at the default start day of 1; `docs/TODO.md` carries the backend field
               that would let it be correct at every start day. */}
-            <h2 className="text-base font-semibold">{monthLabel(new Date())} spending</h2>
+            <h2 className="text-base font-semibold">
+              {periodLabel(monthStartDay, todayIsoDate())} spending
+            </h2>
 
             <span className={tone.badge}>
               {/* aria-hidden: the badge's text already carries the state. */}

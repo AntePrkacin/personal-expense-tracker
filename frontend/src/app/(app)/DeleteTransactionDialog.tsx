@@ -1,9 +1,11 @@
 'use client';
 
 import type { DeleteTransactionResult } from '@/lib/deleteTransaction';
-import { formatCurrency, formatIsoDayMonth } from '@/lib/format';
+import { formatIsoDayMonth } from '@/lib/format';
+import type { MoneyFormatters } from '@/lib/money';
 
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
+import { useMoney } from './PreferencesProvider';
 
 // 12 Delete confirmation (node 31:302): the warning, and the one request it makes.
 //
@@ -110,8 +112,17 @@ type DeleteTransactionDialogProps = {
  *
  * Exported so no test or story restates a shipped string, which is `TransactionsEmpty.tsx`'s
  * rule.
+ *
+ * **The formatters are a parameter rather than a module import, because this is not a component.**
+ * PET-47 made money formatting follow the profile's currency, which the shell publishes through a
+ * context - and a context is only reachable from a hook. Passing `MoneyFormatters` in keeps this
+ * function pure and keeps its suite free of a provider, which is the same property that made it
+ * worth exporting in the first place. The caller below reads it once with `useMoney()`.
  */
-export function deleteTransactionBody({ merchant, amount, date }: DeleteTarget): string {
+export function deleteTransactionBody(
+  { merchant, amount, date }: DeleteTarget,
+  { formatCurrency }: MoneyFormatters,
+): string {
   return `This permanently removes "${merchant} - ${formatCurrency(amount)}" (${formatIsoDayMonth(date)}) from your records. This can't be undone.`;
 }
 
@@ -124,6 +135,8 @@ export function DeleteTransactionDialog({
   onDeleted,
   navigates = false,
 }: DeleteTransactionDialogProps) {
+  const money = useMoney();
+
   // **The box, the request and every behaviour around it are `(app)/ConfirmDeleteDialog.tsx`'s
   // now.** That file records why it was lifted at the second consumer rather than the third: what
   // moved is four behaviours a code review found and fixed once each - the `try` around the RPC,
@@ -138,7 +151,7 @@ export function DeleteTransactionDialog({
   return (
     <ConfirmDeleteDialog
       title={DELETE_TRANSACTION_TITLE}
-      body={deleteTransactionBody(target)}
+      body={deleteTransactionBody(target, money)}
       messages={MESSAGES}
       // Bound here, so the shared component never learns what a transaction is.
       remove={() => remove(target.id)}

@@ -1,4 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+
+import { render } from '../shellRender';
 
 import { TrendCard } from './TrendCard';
 import { RANGE_DASH } from './weeks';
@@ -51,7 +53,12 @@ const MUTED = 'var(--color-base-content)';
 describe('the populated chart (AC1, AC3)', () => {
   it('draws one bar per week', () => {
     const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
     );
 
     expect(barFills(container)).toHaveLength(4);
@@ -59,7 +66,12 @@ describe('the populated chart (AC1, AC3)', () => {
 
   it('renders every value and every week caption', () => {
     const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
     );
     const text = container.textContent ?? '';
 
@@ -73,7 +85,12 @@ describe('the populated chart (AC1, AC3)', () => {
 
   it('accents exactly one week, the one `daysLeft` counts back to', () => {
     const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
     );
     const fills = barFills(container);
 
@@ -90,7 +107,12 @@ describe('the populated chart (AC1, AC3)', () => {
 
     try {
       const { container } = render(
-        <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />,
+        <TrendCard
+          currency="USD"
+          weeklyBuckets={FOUR_WEEKS}
+          daysLeft={DAYS_LEFT_TO_WEEK_2}
+          isEmpty={false}
+        />,
       );
 
       expect(barFills(container)[1]?.fill).toBe(ACCENT);
@@ -104,7 +126,12 @@ describe('weeks that have not started (a review finding, no frame behind it)', (
   it('mutes every bucket after the current one, so it cannot read as a spend-free week', () => {
     // Week 2 current, so Weeks 3 and 4 are still to come.
     const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
     );
     const fills = barFills(container);
 
@@ -118,7 +145,12 @@ describe('weeks that have not started (a review finding, no frame behind it)', (
     // itself. Whether the composited result is *visible* is a browser check and is recorded as
     // one; that it is translucent at all is assertable here.
     const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
     );
 
     expect(barFills(container)[3]).toEqual({ fill: MUTED, opacity: '0.2' });
@@ -129,7 +161,7 @@ describe('weeks that have not started (a review finding, no frame behind it)', (
     // belongs to no bucket. Dimming from a window we could not locate would be the guessing
     // this card stopped doing.
     const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={0} isEmpty={false} />,
+      <TrendCard currency="USD" weeklyBuckets={FOUR_WEEKS} daysLeft={0} isEmpty={false} />,
     );
     const fills = barFills(container);
 
@@ -141,7 +173,14 @@ describe('weeks that have not started (a review finding, no frame behind it)', (
 
 describe('the screen-reader list, which is the chart for anyone not using a pointer', () => {
   it('names every week with its date range, its amount and its state', () => {
-    render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />);
+    render(
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
+    );
 
     expect(
       screen.getByText(`Week 2, Oct 8 ${RANGE_DASH} Oct 14: $410, current week`),
@@ -155,7 +194,12 @@ describe('the screen-reader list, which is the chart for anyone not using a poin
 
   it('hides the plot from assistive technology, so nothing is announced twice', () => {
     const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
     );
 
     const chart = container.querySelector('.recharts-responsive-container');
@@ -163,7 +207,7 @@ describe('the screen-reader list, which is the chart for anyone not using a poin
   });
 
   it('describes no state when no week is current', () => {
-    render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={0} isEmpty={false} />);
+    render(<TrendCard currency="USD" weeklyBuckets={FOUR_WEEKS} daysLeft={0} isEmpty={false} />);
 
     expect(screen.queryByText(/current week/)).not.toBeInTheDocument();
     expect(screen.queryByText(/upcoming week/)).not.toBeInTheDocument();
@@ -175,7 +219,14 @@ describe('display only (AC4, as amended)', () => {
   // role. `accessibilityLayer` is deliberately not enabled on the chart, which is what would
   // have added one.
   it('has no interactive role anywhere on the card', () => {
-    render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />);
+    render(
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
+    );
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
@@ -192,7 +243,12 @@ describe('display only (AC4, as amended)', () => {
   // handles none.
   it('puts nothing in the tab order and claims no application role', () => {
     const { container } = render(
-      <TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
     );
 
     expect(container.querySelectorAll('[tabindex]:not([tabindex="-1"])')).toHaveLength(0);
@@ -213,7 +269,12 @@ describe('a week with no spending (AC5)', () => {
 
   it('still draws a bar and still says $0, rather than being dropped from the axis', () => {
     const { container } = render(
-      <TrendCard weeklyBuckets={WITH_A_ZERO_WEEK} daysLeft={DAYS_LEFT} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={WITH_A_ZERO_WEEK}
+        daysLeft={DAYS_LEFT}
+        isEmpty={false}
+      />,
     );
 
     expect(barFills(container)).toHaveLength(3);
@@ -223,7 +284,12 @@ describe('a week with no spending (AC5)', () => {
 
   it('draws it in the ordinary tone, not the muted one an unstarted week gets', () => {
     const { container } = render(
-      <TrendCard weeklyBuckets={WITH_A_ZERO_WEEK} daysLeft={DAYS_LEFT} isEmpty={false} />,
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={WITH_A_ZERO_WEEK}
+        daysLeft={DAYS_LEFT}
+        isEmpty={false}
+      />,
     );
 
     expect(barFills(container)[1]?.fill).toBe(PRIMARY);
@@ -236,7 +302,14 @@ describe('the caption', () => {
     // Node 22:55 draws "Weekly · October", but the buckets are anchored to the profile's
     // monthStartDay window exactly like BudgetCard's daysLeft, which already dropped its month
     // name for the same reason.
-    render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={false} />);
+    render(
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={false}
+      />,
+    );
 
     expect(screen.getByText('Weekly')).toBeInTheDocument();
     expect(screen.queryByText(/Weekly.*October/)).not.toBeInTheDocument();
@@ -245,7 +318,7 @@ describe('the caption', () => {
 
 describe('the empty state (AC3, PET-26)', () => {
   it('draws the bar glyph and its caption rather than the chart', () => {
-    render(<TrendCard weeklyBuckets={[]} daysLeft={8} isEmpty={true} />);
+    render(<TrendCard currency="USD" weeklyBuckets={[]} daysLeft={8} isEmpty={true} />);
 
     expect(screen.getByText('No spending to chart yet')).toBeInTheDocument();
     expect(document.querySelector('.recharts-responsive-container')).not.toBeInTheDocument();
@@ -255,14 +328,21 @@ describe('the empty state (AC3, PET-26)', () => {
     // The two are documented as identical on a real response, but this card must not re-derive
     // its own opinion from the array - `page.tsx`'s shared flag is what decides, which this
     // proves by handing it a populated array alongside `isEmpty: true`.
-    render(<TrendCard weeklyBuckets={FOUR_WEEKS} daysLeft={DAYS_LEFT_TO_WEEK_2} isEmpty={true} />);
+    render(
+      <TrendCard
+        currency="USD"
+        weeklyBuckets={FOUR_WEEKS}
+        daysLeft={DAYS_LEFT_TO_WEEK_2}
+        isEmpty={true}
+      />,
+    );
 
     expect(screen.getByText('No spending to chart yet')).toBeInTheDocument();
     expect(screen.queryByText('Week 1')).not.toBeInTheDocument();
   });
 
   it('still names the card and keeps the "Weekly" overline', () => {
-    render(<TrendCard weeklyBuckets={[]} daysLeft={8} isEmpty={true} />);
+    render(<TrendCard currency="USD" weeklyBuckets={[]} daysLeft={8} isEmpty={true} />);
 
     expect(screen.getByText('Spending trend')).toBeInTheDocument();
     expect(screen.getByText('Weekly')).toBeInTheDocument();

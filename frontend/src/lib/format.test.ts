@@ -1,27 +1,23 @@
 import {
   amountCaret,
   formatAmountInput,
-  formatCurrency,
   formatIsoDate,
   formatIsoDayMonth,
-  formatNegative,
   formatRelativeDate,
-  formatWhole,
   initials,
   monthLabel,
   monthOverline,
+  periodLabel,
+  periodOverline,
   parseAmountInput,
   shortName,
 } from './format';
 
-// The point of these tests is the sign glyph.
-//
-// Every assertion below writes the expected minus as the escape − rather
-// than a pasted character, because U+2212 MINUS SIGN and U+002D HYPHEN-MINUS
-// are visually near-identical in most editors and terminals. Pasting the glyph
-// works right up until someone retypes it, and then the diff is unreadable.
-
-const MINUS = '−';
+// **The sign-glyph note this file opened on moved to `money.test.ts` with the assertions it was
+// about.** It said every expected minus is written as the escape − rather than as a pasted
+// character, because U+2212 MINUS SIGN and U+002D HYPHEN-MINUS are near-identical in most editors
+// and terminals - and nothing left here formats a signed amount, so the constant it introduced had
+// no remaining reader. The rule still holds wherever a minus is asserted.
 
 /**
  * Runs `body` with the process pinned to `zone`, restoring whatever `TZ` held before it.
@@ -46,82 +42,12 @@ function inZone(zone: string, body: () => void) {
   }
 }
 
-describe('formatCurrency', () => {
-  it('formats a whole amount with cents', () => {
-    expect(formatCurrency(24)).toBe('$24.00');
-  });
-
-  it('separates thousands', () => {
-    expect(formatCurrency(1240)).toBe('$1,240.00');
-  });
-
-  it('keeps two decimal places', () => {
-    expect(formatCurrency(18.5)).toBe('$18.50');
-    expect(formatCurrency(15.99)).toBe('$15.99');
-  });
-
-  it('formats zero unsigned', () => {
-    expect(formatCurrency(0)).toBe('$0.00');
-  });
-
-  it('uses U+2212 for a negative input rather than the hyphen Intl emits', () => {
-    // Intl.NumberFormat returns "-$24.00" with U+002D. The replacement in
-    // formatCurrency is what makes this pass, so this test is what stops the
-    // replacement being dropped as redundant.
-    expect(formatCurrency(-24)).toBe(`${MINUS}$24.00`);
-    expect(formatCurrency(-24)).not.toContain('-');
-  });
-});
-
-describe('formatNegative', () => {
-  it('renders a stored positive amount as a negative one', () => {
-    // Transactions are stored as magnitudes; the sign is presentation.
-    expect(formatNegative(24)).toBe(`${MINUS}$24.00`);
-    expect(formatNegative(1240)).toBe(`${MINUS}$1,240.00`);
-  });
-
-  it('ignores the sign of the input', () => {
-    // Defensive: an API that starts returning signed amounts must not produce
-    // a double negative or flip back to positive.
-    expect(formatNegative(-24)).toBe(`${MINUS}$24.00`);
-  });
-
-  it('leaves zero unsigned', () => {
-    expect(formatNegative(0)).toBe('$0.00');
-    expect(formatNegative(-0)).toBe('$0.00');
-  });
-});
-
-describe('formatWhole', () => {
-  it('drops the cents, e.g. the dashboard budget readout', () => {
-    // The design draws "$1,240", never "$1,240.00" - node 21:4's real budget card and frame
-    // 01's sample card both. formatCurrency keeps the cents for a per-transaction amount.
-    expect(formatWhole(1240)).toBe('$1,240');
-  });
-
-  it('separates thousands, matching formatCurrency', () => {
-    expect(formatWhole(12400)).toBe('$12,400');
-  });
-
-  it('formats zero unsigned', () => {
-    expect(formatWhole(0)).toBe('$0');
-  });
-
-  it('rounds rather than truncating', () => {
-    // Rounding keeps a whole-dollar aggregate as close to the real total as one dollar
-    // allows; truncating would bias every figure on the dashboard downwards.
-    expect(formatWhole(54.4)).toBe('$54');
-    expect(formatWhole(54.6)).toBe('$55');
-  });
-
-  it('uses U+2212 for a negative input rather than the hyphen Intl emits', () => {
-    // Defensive, matching formatCurrency's own case: nothing in this epic hands formatWhole a
-    // negative figure, but a caller that started would get the design's glyph rather than
-    // Intl's hyphen.
-    expect(formatWhole(-1240)).toBe(`${MINUS}$1,240`);
-    expect(formatWhole(-1240)).not.toContain('-');
-  });
-});
+// **The three money formatters moved to `lib/money.ts` at PET-47**, where they take the profile's
+// currency, and their suite moved with them to `money.test.ts` - including the cases this file used
+// to own: the two-decimal-place pinning, the unsigned zero on all three, and the U+2212
+// substitution that is the whole point of the comment at the top of this file. Nothing re-exports
+// them from here any more, because after the thread landed the last consumer turned out to be a
+// comment in `app/DecorativePanel.tsx` explaining why that file uses literal strings instead.
 
 describe('initials', () => {
   it('takes the first letter of each name', () => {
@@ -205,6 +131,81 @@ describe('monthLabel', () => {
   it('spells the month out rather than abbreviating it', () => {
     // 'short' would give "Sep", which is not what the frame draws.
     expect(monthLabel(new Date(2025, 8, 8))).toBe('September');
+  });
+});
+
+describe('periodOverline', () => {
+  // The budgeting period's own label, and the answer to the `docs/TODO.md` entry open since
+  // PET-19. `today` is passed explicitly throughout rather than faked with timers, which is
+  // exactly what the parameter exists for.
+
+  it('names one month at the default start day, matching the old behaviour', () => {
+    // At 1 the period *is* the calendar month, so this has to be byte-identical to what the four
+    // headers drew before PET-47 - otherwise the fix is a visible change for every account that
+    // never touched the setting, which is almost all of them.
+    expect(periodOverline(1, '2025-10-08')).toBe('October 2025');
+    expect(periodOverline(1, '2025-10-08')).toBe(monthOverline(new Date(2025, 9, 8)));
+  });
+
+  it('names both months above the default, with the year once', () => {
+    // 20 October at a start day of 15 is inside the period running 15 Oct - 15 Nov.
+    expect(periodOverline(15, '2025-10-20')).toBe('October / November 2025');
+  });
+
+  it('names the period the day belongs to, not the month it is in', () => {
+    // The whole defect: 10 October at a start day of 15 is in the period that opened on
+    // 15 September, so a header saying "October" names a window the figures below are not from.
+    expect(periodOverline(15, '2025-10-10')).toBe('September / October 2025');
+  });
+
+  it('puts the boundary day in the period it opens, matching the backend', () => {
+    // `>=`, the same comparison `src/common/month-window.ts` makes. The day before belongs to the
+    // previous period, and getting this backwards is a one-character error that is wrong for
+    // exactly one day a month.
+    expect(periodOverline(15, '2025-10-15')).toBe('October / November 2025');
+    expect(periodOverline(15, '2025-10-14')).toBe('September / October 2025');
+  });
+
+  it('carries both years across a year boundary', () => {
+    // The one case a single trailing year would be actively wrong about rather than merely terse:
+    // "December / January 2026" claims December 2026.
+    expect(periodOverline(15, '2025-12-20')).toBe('December 2025 / January 2026');
+    expect(periodOverline(15, '2026-01-10')).toBe('December 2025 / January 2026');
+  });
+
+  it('handles the last day a period may start on', () => {
+    // 28 is the backend's cap, chosen so every month has the day and there is no clamping case.
+    expect(periodOverline(28, '2025-02-28')).toBe('February / March 2025');
+    expect(periodOverline(28, '2025-02-27')).toBe('January / February 2025');
+  });
+
+  it('falls back to the calendar month for a start day the DTO cannot produce', () => {
+    // `@IsInt @Min(1) @Max(28)` makes these unreachable. A fallback rather than a throw because
+    // this is a page heading, and taking the screen out through the error boundary over a label
+    // is the worse of the two failures.
+    expect(periodOverline(0, '2025-10-20')).toBe('October 2025');
+    expect(periodOverline(31, '2025-10-20')).toBe('October 2025');
+  });
+});
+
+describe('periodLabel', () => {
+  it('names one month at the default start day', () => {
+    expect(periodLabel(1, '2025-10-08')).toBe('October');
+  });
+
+  it('names both months above it, and never a year', () => {
+    // The month pill and the Categories tab's "{period} spending" heading both draw this, and
+    // neither has room for a year - which is what makes it a second function rather than a slice
+    // off the overline.
+    expect(periodLabel(15, '2025-10-20')).toBe('October / November');
+    expect(periodLabel(15, '2025-12-20')).toBe('December / January');
+  });
+
+  it('agrees with periodOverline about which period today is in', () => {
+    // The two must never disagree: they appear on the same screen, one in the overline and one in
+    // the pill beneath it.
+    expect(periodLabel(15, '2025-10-14')).toBe('September / October');
+    expect(periodOverline(15, '2025-10-14')).toBe('September / October 2025');
   });
 });
 

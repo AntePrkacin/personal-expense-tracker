@@ -359,8 +359,12 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
 
   const grid = monthMatrix(view.year, view.month);
 
-  // `monthOverline` is the same formatter the page header uses for "October 2025", rather than
-  // a sixth Intl instance. Built with the local parts constructor, never `new Date(string)` -
+  // **`monthOverline` rather than `periodOverline`, and that is the distinction PET-47 added the
+  // second pair for.** This heading names the calendar month the grid below is *of*, so a
+  // budgeting-period label ("September / October 2025") over six rows of real weeks would be
+  // nonsense. The page headers moved to the period pair; this deliberately did not, which is why
+  // `lib/format.ts` keeps both and calls neither deprecated. Still one shared Intl instance rather
+  // than a sixth of its own. Built with the local parts constructor, never `new Date(string)` -
   // see lib/date.ts on why the latter shifts the day in any zone behind UTC.
   const monthLabel = monthOverline(new Date(view.year, view.month - 1, 1));
 
@@ -424,8 +428,8 @@ export function DateField({ id, label, value, onChange, error }: DateFieldProps)
             </button>
 
             {/* aria-live so paging announces the new month to a screen reader; without it the
-                grid changes silently under the reader's cursor. monthOverline is the same
-                formatter the page header uses, rather than a sixth Intl instance. */}
+                grid changes silently under the reader's cursor. The string is the calendar
+                month, not the budgeting period - see where it is built for why. */}
             <span aria-live="polite" className="text-sm font-semibold">
               {monthLabel}
             </span>

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
+import { requireProfile } from '../../../../lib/profile';
 import { readTransactionDetail } from '../../../../lib/transactionDetail';
 import type { TransactionDetail } from '../../../../lib/transactionDetail';
 
@@ -12,6 +13,13 @@ import TransactionNotFound, { NOT_FOUND_COPY } from './not-found';
 //
 // Relative specifiers throughout - the `@/` alias is unresolvable to `jest.mock` from
 // anywhere, which is the trap `frontend/src/app/CLAUDE.md` records.
+
+// The page reads the profile for its currency. `requireProfile()` is `cache()`-memoized and free
+// in production, where the shell's gate has already called it; under Jest there is no gate above
+// this page, so the real one would reach `authorizedGet` and a network call.
+jest.mock('../../../../lib/profile', () => ({
+  requireProfile: jest.fn(),
+}));
 
 jest.mock('../../../../lib/transactionDetail', () => ({
   readTransactionDetail: jest.fn(),
@@ -59,6 +67,7 @@ const DETAIL: TransactionDetail = {
 beforeEach(() => {
   jest.clearAllMocks();
   (readTransactionDetail as jest.Mock).mockResolvedValue(DETAIL);
+  (requireProfile as jest.Mock).mockResolvedValue({ currency: 'USD', monthStartDay: 1 });
 });
 
 async function renderPage(id = DETAIL.transaction.id, search = {}) {

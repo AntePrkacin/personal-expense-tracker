@@ -68,6 +68,21 @@ describe('EMPTY_DRAFT', () => {
 });
 
 describe('parseDraft', () => {
+  it('falls back to the default for a currency the picker does not offer', () => {
+    // The fix `docs/TODO.md` prescribed once a second currency was offered. Without it a stored code
+    // outside the list rendered in the trigger with no matching panel row, and step 3 posted it
+    // straight through - `@IsISO4217CurrencyCode()` accepts it, so the account was created in a
+    // currency the user never picked.
+    expect(parseDraft(JSON.stringify({ ...EMPTY_DRAFT, currency: 'JPY' })).currency).toBe('USD');
+    expect(parseDraft(JSON.stringify({ ...EMPTY_DRAFT, currency: 'nonsense' })).currency).toBe(
+      'USD',
+    );
+  });
+
+  it('keeps a currency the picker does offer', () => {
+    expect(parseDraft(JSON.stringify({ ...EMPTY_DRAFT, currency: 'EUR' })).currency).toBe('EUR');
+  });
+
   it('reads a draft it wrote', () => {
     const draft: SetupDraft = {
       currency: 'USD',

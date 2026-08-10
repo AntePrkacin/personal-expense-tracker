@@ -75,6 +75,22 @@ sentence this replaces said that menu's "Edit", every uncapped card's "Set limit
 left this one, so the claim was stale by two before it was stale by three. What is still missing is
 what the one remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
 
+**That last sentence is stale twice over, and both halves are worth naming.** PET-46 filled the
+Settings `<main>` with the Profile card and the page-level "Save changes", so no routed view renders
+an empty one and all four fetch. PET-47 is the fourteenth thing that works and it finishes two of
+frame 17's three cards: the **Preferences** card is real and really writes, holding the monthly
+budget with its currency and the day the budgeting period starts on. Three things about it reach
+past that screen. **Money follows the profile's currency now** - `USD`, `EUR` or `GBP` - where every
+figure in the app was formatted as dollars by a module-scope formatter with the code written into
+it; switching **re-denominates rather than converts**, because amounts are integer cents with no
+currency attached and there is no rate source. **Every page header names the budgeting period rather
+than the calendar month**, so a `monthStartDay` of 15 reads "September / October 2025" instead of
+claiming a boundary the figures below it do not have - the `docs/TODO.md` entry open since PET-19.
+And the app's fifth custom picker arrived with it: a 28-row "Month starts on" list, capped and
+scrolling, because a native `<select>`'s popup height cannot be set in CSS in Firefox or Safari.
+What is still missing on that screen is frame 17's **third** card, the Categories summary with its
+"Manage" - PET-47's, drawn in Figma and deliberately not built here.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and

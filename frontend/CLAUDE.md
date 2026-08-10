@@ -398,6 +398,44 @@ All seven parts hard-code `en-US` and its separators, "Today" and "Yesterday" in
 is finally stored, the locale follows it through all of them together; `docs/TODO.md` tracks
 that. The one thing that must **not** follow it is `lib/date.ts`, for the reason above.
 
+**PET-47 answered the currency half of that and deliberately refused the locale half, so read the
+paragraph above as amended twice.** Money is **not** in `lib/format.ts` any more: `lib/money.ts`
+owns `formatCurrency`, `formatWhole` and `formatNegative`, and they take the profile's currency
+rather than closing over `USD` at module scope. A Server Component calls
+`moneyFormatters(currency)` with a currency threaded from its `page.tsx`; a Client Component calls
+`useMoney()` from `(app)/PreferencesProvider.tsx`. The split exists because React context does not
+cross into Server Components and twelve of the sixteen money consumers are ones - so neither half
+is the "real" way. `moneyFormatters` is memoized per code, which is what makes a per-currency
+formatter no dearer than the two singletons it replaced, and it takes a `string` rather than a
+union of the three offered codes: the backend validates `@IsISO4217CurrencyCode()`, so a profile
+can hold `JPY`, and it has to render as money rather than throw.
+
+**The locale stays `en-US` by product decision, which is a decision rather than the deferral above.**
+`EUR` renders as `€3,200.00`, never `3.200,00 €`. That is not only copy: `formatAmountInput`,
+`reformatAmountInput` and `amountCaret` build the budget field's live grouping by hand with a comma
+and a dot written into them, so a locale that followed the currency would desynchronise the field
+being typed into from the figure rendered beside it.
+
+**And `lib/format.ts` grew a second pair of period formatters rather than changing the first.**
+`periodOverline(monthStartDay, today)` and `periodLabel(...)` name the **budgeting period**, which
+is what four page headers and the Categories tab's "{period} spending" want; above a `monthStartDay`
+of 1 they read "September / October 2025", because a period spanning two calendar months has no
+single name and inventing one is what `docs/TODO.md`'s header-period entry was open about since
+PET-19. `monthOverline` and `monthLabel` survive and are **not** deprecated: `(app)/DateField.tsx`
+draws a real calendar grid and its popover header names the month that grid is _of_, where a period
+label over six rows of real weeks would be nonsense. The split is calendar-month versus
+budgeting-period, not old versus new. Their `today` still defaults to the frontend host's zone while
+the backend resolves against `APP_TIMEZONE`, which is the pre-existing skew `docs/TODO.md` tracks
+rather than a new one.
+
+**`lib/amount.ts` is the fourth module in that family**, and it exists because `docs/TODO.md`
+predicted it and named the trigger: a third _form_ validating an amount without going through
+`(app)/transactionForm.ts`. The Settings Preferences card is that form. It holds `isPositiveAmount`
+and `isFilled`, the two rules that had twins in three modules; every existing export
+(`isBudgetValid`, `isNameValid`, `isAmountValid`, `isMerchantValid`) keeps its own name and
+delegates, so what the lift buys is one copy of each rule to fix and deliberately not one
+vocabulary.
+
 **`components/EmptyState.tsx` is the fifth direct child, and it arrived before its second
 consumer rather than after.** `AccessCard` above records the usual sequence: chrome lives beside
 one route until a second screen turns out to draw the identical box, then moves. This one skipped
@@ -553,6 +591,29 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   `Uncategorized` sentence **survives unchanged and is the one to cite**: this modal excludes that row
   too, so a limitation the fallback card already had is extended rather than resolved, and the API is
   still the only way to cap it.
+  **PET-46 filled the Settings `<main>`, so the "one of the four" this bullet opens on is none of
+  them and every sentence above naming Settings as the empty one is dated.** All four routed views
+  now render content below their header and all four fetch. What this ticket adds to _this_ list is
+  narrower than the bullet it closes and is worth stating precisely, because "Settings is built" is
+  the wrong summary: the frame draws **three** cards over one "Save changes", and only the first is
+  here. The Profile card is real and really writes; the **Preferences card** (Currency, Monthly
+  budget, Month starts on) and the **Categories summary** with its "Manage" are PET-47's and are not
+  drawn at all - so unlike every other gap on this list they are not inert controls with
+  `aria-disabled` on them, they are simply absent, which is the honest shape for a card whose fields
+  would otherwise submit through a form that does not carry them. The Save button beneath is
+  page-level rather than card-level for exactly that reason, and `settings/SettingsForm.tsx` records
+  what PET-47 has to touch to join it.
+  **PET-47 built the second of those three, so read "only the first is here" as dated.** The
+  **Preferences card** is real and really writes: `components/BudgetField.tsx` (the monthly budget
+  joined to a live `USD`/`EUR`/`GBP` picker) over `settings/MonthStartField.tsx` (28 days, capped
+  and scrolling), both writing into the same `values` the Profile card does - so AC6's single PATCH
+  carrying both cards falls out of the page-level form rather than being implemented. What is left
+  of this bullet is the **Categories summary** with its "Manage", which is still PET-47's and still
+  **not drawn at all**, for the reason the paragraph above gives: a card whose controls would submit
+  through a form that does not carry them is a promise the form cannot keep, so it is absent rather
+  than inert. The prediction that the second card would be "a structurally identical sibling taking
+  the same four props" held exactly, with one widening - `PreferencesCard`'s `onChange` is generic
+  over the field, because two of its three values are a number and an ISO code rather than typed text.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session
@@ -667,3 +728,21 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   carrying: **a blank cap sends `null`**, which is the only way a capped category becomes uncapped,
   where `toCreateCategoryBody` _omits_ a blank cap because `CreateCategoryDto` reads absent as "no
   cap" and takes no `null` at all.
+  **PET-46 added the eighth, `lib/updateProfile.ts`, so this bullet's lead-in is exhausted: there is
+  no unbuilt write left in this app.** It publishes **four** reasons, the shortest classification
+  since `generateInsights`, and two things about it are worth carrying rather than re-deriving.
+  **`taken` is the first 409 anywhere here that the UI can actually reach.** `updateCategory`'s
+  `fallback` and `deleteCategory`'s are both classified-but-unreachable, sitting behind controls that
+  are deliberately not drawn, and both carry a note saying a hidden control is not an enforcement;
+  this one is the ordinary case of two accounts wanting one address, so its copy **names the cause**
+  where those two hedge. The disclosure is the backend's deliberate choice - an authenticated form
+  cannot tell a typo from a taken address unless it is told, where the public auth routes answer
+  identical 202s to defeat enumeration - and the copy still must not imply the holder can be
+  identified. And its diffed body, `settings/settingsForm.ts`'s `toUpdateProfileBody`, is
+  `toUpdateCategoryBody`'s exact mirror on the one point that file flags: **it never sends `null`**,
+  because `UpdateProfileDto` accepts none and every column behind it is NOT NULL, where a blank cap
+  next door _must_ send `null` because that is the only way a capped category becomes uncapped. The
+  two look inconsistent and are one rule stated against two DTOs; read them together or neither
+  makes sense. It also publishes **no `missing` arm**, which is a decision rather than an omission:
+  the endpoint carries no id at all, so there is no resource to fail to find, and an absent profile
+  row is a broken invariant the backend answers 500 for.

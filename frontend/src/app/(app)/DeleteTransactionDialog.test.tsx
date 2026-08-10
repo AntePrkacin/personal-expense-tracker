@@ -1,12 +1,19 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+
+import { render } from './shellRender';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
+
+import { moneyFormatters } from '@/lib/money';
 
 import {
   DeleteTransactionDialog,
   deleteTransactionBody,
   type DeleteTarget,
 } from './DeleteTransactionDialog';
+
+/** The formatters the shell's provider would hand the dialog; see `PreferencesProvider`. */
+const USD = moneyFormatters('USD');
 
 // 12 Delete confirmation. What this suite can and cannot see is `Modal.test.tsx`'s note: jsdom
 // fakes `showModal()` and `close()` and nothing else, so Escape and the focus trap are Storybook
@@ -111,12 +118,15 @@ describe('deleteTransactionBody', () => {
 
   it('interpolates a different target', () => {
     expect(
-      deleteTransactionBody({
-        id: 'x',
-        merchant: 'Rent — October',
-        amount: 1100,
-        date: '2025-10-05',
-      }),
+      deleteTransactionBody(
+        {
+          id: 'x',
+          merchant: 'Rent — October',
+          amount: 1100,
+          date: '2025-10-05',
+        },
+        USD,
+      ),
     ).toBe(
       'This permanently removes "Rent — October - $1,100.00" (Oct 5) from your records. This can\'t be undone.',
     );
@@ -125,7 +135,7 @@ describe('deleteTransactionBody', () => {
   it('is the string the dialog renders', () => {
     renderDialog();
 
-    expect(screen.getByText(deleteTransactionBody(TARGET))).toBeInTheDocument();
+    expect(screen.getByText(deleteTransactionBody(TARGET, USD))).toBeInTheDocument();
   });
 });
 

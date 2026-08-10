@@ -5,6 +5,7 @@ import type { Palette } from '@/lib/palette';
 
 import { category } from './categoryFixture';
 import { CategoriesScreen } from './CategoriesScreen';
+import { PreferencesProvider } from '../../PreferencesProvider';
 
 // The import above is type-only on purpose. Importing any *value* from Storybook breaks the
 // story smoke tests with an opaque ESM error, because @storybook/nextjs-vite will not load under
@@ -229,23 +230,36 @@ function Frame({
   update = async () => ({ ok: true }),
   create = async () => ({ ok: true }),
   save = async () => ({ ok: true }),
+  // Defaulted here rather than per story for the same reason the four actions are: a story that
+  // forgot it would render a screen with no currency to format with, and the shared default is
+  // what makes that unreachable.
+  currency = 'USD',
+  monthStartDay = 1,
   ...props
-}: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette'> & {
+}: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette' | 'currency' | 'monthStartDay'> & {
   palette?: Palette | null;
+  currency?: string;
+  monthStartDay?: number;
 }) {
   return (
     // `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the gutter
     // the `(app)` shell owns, since neither wraps a story.
-    <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-      <CategoriesScreen
-        {...props}
-        palette={palette}
-        remove={remove}
-        update={update}
-        create={create}
-        save={save}
-      />
-    </div>
+    // The Allocate banner's modal calls `useMoney()`; a review found this provider missing, so
+    // pressing "Allocate" in this story threw rather than opening the dialog.
+    <PreferencesProvider currency="USD" monthStartDay={1}>
+      <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+        <CategoriesScreen
+          {...props}
+          currency={currency}
+          monthStartDay={monthStartDay}
+          palette={palette}
+          remove={remove}
+          update={update}
+          create={create}
+          save={save}
+        />
+      </div>
+    </PreferencesProvider>
   );
 }
 

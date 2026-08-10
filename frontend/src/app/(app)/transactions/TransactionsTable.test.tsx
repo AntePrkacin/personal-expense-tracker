@@ -59,7 +59,12 @@ function renderTable(
   return render(
     <DeleteTransactionProvider>
       <EditTransactionProvider>
-        <TransactionsTable transactions={transactions} categories={CATEGORIES} filters={filters} />
+        <TransactionsTable
+          currency="USD"
+          transactions={transactions}
+          categories={CATEGORIES}
+          filters={filters}
+        />
       </EditTransactionProvider>
     </DeleteTransactionProvider>,
   );

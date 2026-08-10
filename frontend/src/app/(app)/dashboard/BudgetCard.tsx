@@ -1,4 +1,4 @@
-import { formatWhole } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { DashboardSummary } from '@/lib/dashboard';
 
 // Monthly budget card with stats row (Figma node 22:55, DSH-3 to DSH-6).
@@ -58,6 +58,14 @@ type BudgetCardProps = Pick<
    * read "Full month ahead" - see the caption itself for why `daysLeft` gets a say too.
    */
   isEmpty: boolean;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
 export function BudgetCard({
@@ -69,7 +77,10 @@ export function BudgetCard({
   averagePerDay,
   topCategory,
   isEmpty,
+  currency,
 }: BudgetCardProps) {
+  const { formatWhole } = moneyFormatters(currency);
+
   const overBudget = remaining < 0;
   const tone = overBudget ? CHIP.overBudget : CHIP.onTrack;
 
