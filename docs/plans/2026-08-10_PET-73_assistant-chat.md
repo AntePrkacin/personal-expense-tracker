@@ -3,7 +3,81 @@
 **One branch, both halves.** Splitting them would leave a merged state where the cards are gone
 from `/insights` and the chat has not landed, regressing a complete screen to an empty one.
 
-Written against `7563ccf` (`main`, after PET-46 and PET-47 merged in #82).
+## What this is written against, and the branch that lands first
+
+Written against `7563ccf` (`main`, after PET-46 and PET-47 merged in #82), **and adjusted for
+PET-72 (#84), which is implemented, in review, and lands before this branch.** An earlier draft of
+this plan described PET-72 as "two commits and both are docs" and assumed this branch went first.
+Both are wrong: #84 is 192 files, +9,726/-5,864, and the ordering is reversed. Everything below is
+adjusted for it, so **cut this branch from a `main` that already has #84** and re-read every path
+named here at that commit.
+
+Six things it changes that this plan depends on:
+
+- **`PeriodService` exists** (`backend/src/periods/`), and `RuleBasedInsightGenerator` already
+  composes it. **`CategoriesService.currentWindow` and `previousWindow` are gone**, so anything
+  wanting a window calls `periods.current(userId)` / `periods.previous(userId)`. Its public surface
+  is `today()`, `current()`, `previous()`, `startingAt()`, `startingAtOrContaining()`, `all()`,
+  `budgetCentsFor(userId, period)`, `monthStartDayFor()`, `ruleInForceAt()` and `rules()`.
+- **The user-scope migrations are collapsed into one `20260810085329_init` baseline.** The three that
+  existed, `add_category_fallback`, `add_insights` and `add_insights_generating_guard`, are gone as
+  files; their tables live in the baseline. So the assistant's tables are a **new migration on top of
+  it**, and the instruction below to "copy the `insight_sets`/`insights` migration" no longer points
+  at anything - copy the **table definitions in `schema.ts`** instead.
+- **The budget and the caps are effective-dated and no longer columns.**
+  `profile.monthly_budget_cents` and `profile.month_start_day` are gone, replaced by `budgetHistory`
+  and `periodRules`; `categories.monthly_cap_cents` is gone, replaced by `categoryCapHistory`. Read
+  all three through the services, never off a column. `profile.currency` survives unchanged, which is
+  the one field the generator reads directly.
+- **`categories.note` is renamed `description`**, matching the template column it is copied from.
+  `transactions.note` is untouched.
+- **`profile.first_name` and `last_name` are now `full_name`.** Nothing in this plan sends a name, so
+  this is a note rather than a dependency.
+- **The Dashboard is period-navigable**, and that is the change with real consequences for Half 1.
+  See the next section.
+
+## The Dashboard can now show a past period, and the insight cards must not lie about it
+
+**This is the one genuinely new problem #84 creates for this plan, and it was not in the earlier
+draft at all.**
+
+`dashboard/page.tsx` now parses a `?period=` parameter (`lib/periodParams.ts`), passes it to
+`readDashboard(period)`, and `DashboardResponseDto` carries a `period` object with `start`, `end` and
+`label`. `daysLeft` is documented as `0` for a period navigated back to, which is finished rather
+than nearly over. `MonthPill.tsx` is deleted; the header draws a real select built from
+`readPeriods()`.
+
+**Insights are generated for the current period only, and the contract says so.**
+`DashboardResponseDto.insight`'s own description on #84 reads "**Always the latest set**, not one for
+the period being viewed: insights are generated for the current period only." `GET /api/insights`
+publishes no `period` at all, which is precisely why `insights/page.tsx` on #84 takes its overline
+from `GET /api/periods` rather than from the set's `monthLabel` - that file records the reason: a
+set's label "is stale in the ready one the moment a period rolls over".
+
+So moving the banner to the top of the left column and two insight cards under the donut would, on a
+past-period view, put **October's analysis above September's figures** with nothing on screen saying
+which is which. That is the failure this repo has already paid for three times: the no-results copy
+claiming an account was empty, the teaser claiming insights unlock after a first expense, and the
+donut caption saying "once you start spending" over real money. An empty or stale state has to be
+honest about which thing it is describing.
+
+**The decision: the insight block renders only for the current period.** On any other period the
+banner and both cards are absent, and nothing stands in for them.
+
+Two things about how that is expressed, because the obvious spelling breaks a documented rule.
+
+**The slots stay required.** `DashboardScreen.tsx` says outright that every slot is required rather
+than optional, because "there is no state in which one is absent, so an optional prop would let a
+call site quietly test a dashboard with a card missing". Making these two optional would break that,
+so the **component** decides to render nothing, exactly as `CategoryDonut` guards on its own input
+rather than on the screen's shared flag. The call site always passes them.
+
+**The condition is resolved once, in `page.tsx`, and threaded as a boolean.** That is PET-26's rule
+for `isEmpty` and the reason the Dashboard has two conditions rather than five. So an
+`isCurrentPeriod` (comparing `summary.period.start` against `currentPeriod(periods)`) sits beside
+`isEmpty` and travels to the insight component as a prop. Do not have the component re-derive it from
+a date, and do not read a clock: the frontend host's zone is not the backend's, which is the gap
+`BudgetCard` and `TrendCard` each have a paragraph about.
 
 ## Why
 
@@ -64,6 +138,13 @@ this change:
 - **Left column:** the summary banner, then `budgetCard`, `trendCard`, `recentTransactionsCard`.
 - **Right column:** `donutCard`, then the over-cap card, then the month-over-month card.
 - **`InsightTeaserCard` is deleted**, and the banner absorbs its `card-actions` footer.
+- **Both new slots render nothing on a non-current period**, per the section above.
+
+Two things about that file changed on #84 and have to be worked with rather than around. It now takes
+`period` and `periods` props of its own for the header's period select, so this is no longer a screen
+with five props and nothing else. And **`MonthPill.tsx` is deleted** - the inert month pill that A8
+kept unbuilt is a real control now, which is worth knowing because several paragraphs elsewhere in
+the repo still describe the Dashboard as having one inert control.
 
 The two components are already the same box - `card bg-neutral text-neutral-content shadow-sm` plus
 `card-body gap-4`, an uppercase `text-neutral-content/60` `Sparkle` eyebrow, a
@@ -127,25 +208,39 @@ disagree about which set is current.
 
 ### Reads and the contract
 
-`dashboard/page.tsx` becomes a `Promise.all` over `readDashboard()` and `requireInsights()`. That is
-two backend requests where there was one, and it reverses PET-25's stated reasoning that "PET-20's
-endpoint exists so that one call serves the whole screen".
+**`requireInsights()` becomes a third entry in a `Promise.all` that #84 already built.**
+`dashboard/page.tsx` on that branch reads `readDashboard(period)` and `readPeriods()` already, so
+this is one more concurrent read rather than a restructure - three backend requests where #84 makes
+two, and where `main` before it made one.
 
-**Why reverse it.** The dashboard summary is a snapshot with no way to update itself, so an
-`insight` field on it would go stale exactly where the poll's entire purpose is to not be. Record
-the reversal in `docs/TODO.md` beside the generate-on-write one rather than deleting PET-25's
-argument - the repo's own convention for an argument that turned out to be wrong.
+**It still reverses PET-25's reasoning, and the reversal is still worth recording.** That ticket
+argued "PET-20's endpoint exists so that one call serves the whole screen" and rejected a second
+read on those grounds. Two things answer it now. The dashboard summary is a snapshot with no way to
+update itself, so an `insight` field on it goes stale exactly where the poll's whole purpose is to
+not be. And #84 has already spent that argument itself, by adding `readPeriods()` beside
+`readDashboard()` for the header's select. Record it in `docs/TODO.md` beside the generate-on-write
+reversal rather than deleting PET-25's argument, which is this repo's convention for an argument that
+turned out to be wrong.
 
-`transactions/categories/page.tsx` is the existing `Promise.all` to copy, **including its rule that
-only one read decides whether the session is alive**. Two opinions about a dead cookie on one page
-is the shape the `/dashboard` to `/login` redirect loop came out of.
+**Only one read decides whether the session is alive**, the rule
+`transactions/categories/page.tsx` states and #84's own three-read page already follows. Two opinions
+about a dead cookie on one page is the shape the `/dashboard` to `/login` redirect loop came out of,
+so `requireInsights()` joins as a read that redirects and the others keep their existing policies -
+do not give a second one a redirect.
 
 **`DashboardResponseDto.insight` is removed**, along with `InsightSummaryDto`,
 `InsightsService.latestReadySummary` and `DashboardModule`'s `InsightsModule` import. Nothing
 consumes it once the teaser is gone, and leaving it publishes a set that nothing reads. That is a
 response-body change, so `npm run api:sync` from the repo root; `test/openapi.e2e-spec.ts` pins
-`insight` as a nullable `$ref` and that assertion inverts, and `test/dashboard.e2e-spec.ts` polls
-for a non-null teaser in one place and asserts null in another.
+`insight` as a nullable `$ref` and that assertion inverts, and `test/dashboard.e2e-spec.ts` polls for
+a non-null teaser in one place and asserts null in another.
+
+**Note #84 has just sharpened that field's own documentation** rather than removing it, so this
+deletes prose written one branch earlier. That is fine and it is the point: the sentence #84 added -
+"always the latest set, not one for the period being viewed" - exists because the field is read by a
+card that cannot say which period it describes. Deleting the field deletes the need for the caveat,
+and the caveat's substance moves to the `isCurrentPeriod` guard above. Do not read the overlap as a
+conflict to be avoided by keeping the field.
 
 ### File moves
 
@@ -171,7 +266,7 @@ level further in, so the pure parts need neither a database nor the SDK to test:
 
 | File                               | Role                                                                          |
 | ---------------------------------- | ----------------------------------------------------------------------------- |
-| `assistant.module.ts`              | `imports: [CategoriesModule]`, no exports                                     |
+| `assistant.module.ts`              | `imports: [CategoriesModule, PeriodsModule]`, no exports                       |
 | `assistant.controller.ts`          | three routes; `ThrottlerGuard` on the **method**, not the class               |
 | `assistant.service.ts`             | the orchestrator - the 503 check, resolve-or-create, the reads, the one write |
 | `assistant-completion.service.ts`  | **the only file importing `@google/genai`**                                   |
@@ -184,12 +279,24 @@ level further in, so the pure parts need neither a database nor the SDK to test:
 **must not** be registered here - see the throttler section. Register `AssistantModule` in
 `app.module.ts` after `InsightsModule`.
 
-**Compose, do not compute.** Take `currentWindow(userId)` from `CategoriesService` and never resolve
-a window locally, per `## Backend conventions`. Take every amount through `fromCents()` in
-`src/common/money.ts` - this becomes its fifth caller, and "a fifth place doing its own arithmetic
-is a bug" means it must not do its own division. Read `profile.currency` directly, which
-`RuleBasedInsightGenerator` already does and `## Insights` sanctions as "the one static field
-neither surfaces".
+**Compose, do not compute, and the thing to compose is `PeriodService`.** An earlier draft said to
+take `currentWindow(userId)` from `CategoriesService`; **that method no longer exists** on #84. Call
+`periods.current(userId)` for the window and `periods.today()` for the date, which is exactly what
+`RuleBasedInsightGenerator` does on that branch, and never resolve a window locally. Take every
+amount through `fromCents()` in `src/common/money.ts` - this becomes its fifth caller, and "a fifth
+place doing its own arithmetic is a bug" means it must not do its own division. Read
+`profile.currency` directly, which the generator already does and `## Insights` sanctions as "the one
+static field neither surfaces".
+
+**The budget and the caps are effective-dated now, so the prompt has to name a period rather than a
+number.** `periods.budgetCentsFor(userId, period)` resolves the budget in force; the caps come off
+`categories.list(userId)`, resolved the same way. Two consequences worth stating rather than
+discovering. The prompt header must say **which period's** budget and caps it is quoting, or the
+model will answer a question about last March with this month's limits and sound certain. And **the
+budget and cap history is deliberately not sent**: the transaction rows carry no period attribution
+of their own, so history would be a second dataset with a join the model has to perform in prose,
+and the questions it unlocks ("what was my budget in March") are worth a `docs/TODO.md` entry rather
+than a doubling of the prompt.
 
 ### Endpoints
 
@@ -315,6 +422,14 @@ The migration is generated, never hand-written: the user-scope generate command 
 user database is migrated on first open, so every existing account upgrades the next time it is
 touched. Both tables are **new**, so the constraint that an unattended user-scope migration may only
 add nullable or defaulted columns does not bite.
+
+**It sits on top of #84's single `20260810085329_init` baseline**, which is the only user-scope
+migration on that branch - the three that used to exist, `add_insights` among them, were collapsed
+into it. Two things follow. The generated diff is computed against that baseline's snapshot, so
+**generate after cutting from a `main` that has #84**, never before, or the migration describes tables
+the baseline already holds. And the assistant's tables are deliberately **not** folded into the
+baseline: #84 could collapse the history because `chore/PET-71-reset-databases` reset every database,
+and adding to a shipped baseline after that is how a migration silently stops being reproducible.
 
 ### The digest and its ceilings
 
@@ -719,6 +834,8 @@ there is no path that schedules a third from the second. State it that way in th
 ## Tasks
 
 - [ ] Write this plan, commit it alone as the branch's first commit, push, open a draft PR
+- [ ] **Wait for #84 to merge, then rebase this branch onto the post-#84 `main`** and re-read every
+      path this plan names before writing code
 - [x] `docs/explainers/cancelling-an-ai-request.md`, the plain-language version of the cancellation
       section, plus a `docs/TODO.md` entry carrying the same retrofit for the receipt scan, to be
       done **after** this ticket's hop 3 is verified rather than alongside it
@@ -744,8 +861,9 @@ there is no path that schedules a third from the second. State it that way in th
       its optional `signal`, alone
 - [ ] `SummaryBanner` gains an `action` slot and the teaser's three copy states; delete
       `InsightTeaserCard`, its test and its stories
-- [ ] One client owner for the poll, two new `DashboardScreen` slots, and `dashboard/page.tsx`
-      reading both endpoints in one `Promise.all`
+- [ ] One client owner for the poll, two new `DashboardScreen` slots, `requireInsights()` as a third
+      entry in `dashboard/page.tsx`'s existing `Promise.all`, and the **`isCurrentPeriod` guard** that
+      renders neither slot on a period navigated back to, with its Jest case in the same commit
 - [ ] Move `SummaryBanner`, `InsightCard`, `insightTone.ts` and the poll's test coverage under
       `dashboard/`; delete `InsightsScreen.tsx` and `InsightsEmpty.tsx`
 - [ ] `lib/assistant.ts` (two reads plus the non-redirecting send), `app/api/assistant/messages/route.ts`
@@ -810,18 +928,22 @@ Then the checks no gate can make:
 
 ## Risks
 
-- **PET-72 is two commits and both are docs, but its plan collides in four places and one is
-  serious.** It regenerates both migration scopes as one baseline migration each, so whichever branch
-  lands second regenerates on top of the other - and if PET-72 lands second, this branch's two tables
-  have to appear inside its baseline rather than as their own migration. That is a coordination
-  decision between two authors rather than something a tool resolves. It also drops the profile's
-  budget and month-start columns and the category cap column, and renames the category note.
-  **The insulation is free and already required by this repo's own rules**: read the budget, the month
-  start day and the caps through `CategoriesService` and `ProfileService`, never off the columns. Its
-  `PeriodService` then replaces one import rather than a query.
-- **Decided: this branch lands first**, composing `CategoriesService.currentWindow` as the generator
-  does today. PET-72 inherits one extra call site in files it was already rewiring, plus the
-  `CATEGORY_CHANGED` emit in four methods.
+- **PET-72 (#84) lands first, and this plan is written for that.** Both facts reverse an earlier
+  draft, which called it "two commits and both are docs" and assumed the opposite order. What that
+  settles: the migration-baseline collision is gone (this branch generates on top of #84's `init`),
+  `PeriodService` is a dependency rather than a forecast, and the effective-dated budget and caps are
+  a fact to read through services rather than a risk to insulate against. What it costs: **this
+  branch cannot start against `main` as it stands**, and every path in this plan wants re-reading at
+  the post-#84 commit.
+- **The period-navigation interaction is new and is the piece most likely to be got wrong**, because
+  it is invisible until somebody navigates. Nothing fails if the `isCurrentPeriod` guard is missing:
+  the Dashboard simply shows October's analysis over September's numbers, on a screen where every
+  other figure is correct. Its Jest case and its browser step both belong in the first commit that
+  moves a card, not in a later one.
+- **The `CATEGORY_CHANGED` emit now lands in a file #84 has just rewritten.** The four category write
+  methods are all still there (`list`, `create`, `update`, `setCaps`, `remove`, `monthStatsFor`), but
+  caps write through `categoryCapHistory` rather than a column, so read `setCaps` on the post-#84 code
+  before adding the emit rather than assuming the shape this plan describes.
 - **A twenty-to-sixty-second request, which nothing in this app has ever had.** The
   cancellation section answers the largest part of this - the send is a route handler precisely so
   the client owns a signal - but three things survive that change. **Hop 3 is unverified**: nothing
