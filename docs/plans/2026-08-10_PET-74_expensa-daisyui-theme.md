@@ -181,5 +181,57 @@ Consequences the guard forces:
   central database (`COLOUR_SEED`); this ticket changes what the 17 semantic tokens resolve to,
   and touches the seed only if the guard forces it.
 - **No theme toggle.** The `--default` / `--prefersdark` pair preserves the automatic selection;
-  the toggle stays on `docs/TODO.md`'s list with its reasoning intact.
+  the toggle stays on `docs/TODO.md`'s list with its reasoning intact. **Amended by the addendum
+  below**, which the product owner folded in after this plan shipped: a three-way
+  System / Light / Dark control whose `system` arm keeps the automatic selection.
 - **No `api:sync`.** Nothing a request or response body is made of changes.
+
+## Addendum: the theme switcher (2026-08-10, same branch by the product owner's decision)
+
+The product owner folded a second deliverable into PET-74 rather than opening a ticket: the
+Settings Preferences card gains a **Theme** control - System / Light / Dark - built the way the
+Claude Design system's `SettingsScreen.jsx` draws it (`ThemeSegmented`): a row below the card's
+inset rule, "Theme" over a per-selection hint line on the left ("Follows your device setting." /
+"Always the light palette." / "Always the dark palette."), and a pill segmented control on the
+right whose selected segment lifts on a card-coloured pill. Three decisions were the product
+owner's, asked rather than assumed:
+
+- **Persistence is a cookie**, `spendifico.theme`, readable by the server so the page arrives
+  already themed with no flash; per-browser rather than per-account, and no backend or contract
+  change. Not httpOnly, because the control writes it client-side.
+- **It applies instantly on click**, as the design draws. The page-level "Save changes" keeps
+  governing only the profile fields, and the control deliberately does not freeze while a save
+  is in flight, because no part of it travels in the PATCH.
+- **Same branch and same ticket**, because the control sets `data-theme` to the Expensa theme
+  names and PR #87 is where those exist.
+
+The mechanism: `lib/theme.ts` owns the pref union, the cookie name and the pref-to-theme-name
+mapping, React-free so server and client both import it. The root layout reads the cookie and
+stamps `data-theme` on `<html>` when the pref is not `system`; daisyUI's own emission does the
+rest, because `expensa-dark`'s prefers-dark media selector is `:root:not([data-theme])`, so an
+explicit choice suppresses the automatic one by construction and `system` restores it by removing
+the attribute. The control is native radios (arrow keys and a single tab stop for free, the same
+native-first argument `Modal` and the popovers make), visually the design's segmented pill mapped
+to semantic classes.
+
+**This closes the "no theme controller" doctrine rather than violating it.** The rule existed
+because a two-way toggle and automatic prefers-dark cannot coexist; the three-way control's
+`system` arm is the coexistence. The `## Not built here` bullet, the `docs/TODO.md` entry and the
+no-controller sentences in `globals.css` and `docs/agents/claude-tooling.md` all close together.
+
+**One regression this addendum catches and fixes**: `app/DecorativePanel.tsx` pins its art with
+`data-theme="light"`, which stopped matching any registered theme the moment the stock pair went -
+silently, since the panel simply follows the page theme instead. It becomes
+`data-theme="expensa-light"`.
+
+### Addendum tasks
+
+- [ ] `lib/theme.ts`: the `ThemePref` union, `parseThemePref`, `THEME_COOKIE`, `themeAttribute`
+- [ ] The root layout reads the cookie and stamps `data-theme` on `<html>`
+- [ ] `settings/ThemeField.tsx`: the segmented radiogroup, applying instantly (attribute plus
+      cookie)
+- [ ] Thread `themePref` from `settings/page.tsx` through the screen and form into the card
+- [ ] Fix `DecorativePanel`'s dead `data-theme="light"` pin
+- [ ] ThemeField suite and story; update the Settings suites and stories for the new prop
+- [ ] Close the toggle deferral across the docs; update the Jira ticket and the PR body
+- [ ] Gates, plus a headless check that the attribute really flips the painted theme

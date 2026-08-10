@@ -736,14 +736,6 @@ zero week keeps its caption over a floored bar and is drawn in the ordinary tone
 muted one, and the short bucket's tooltip reads its true range, which for a bucket ending
 `2026-09-01` is `Aug 29 – Aug 31` and never `Sep 1`, since `endDate` is exclusive.
 
-### A visible theme toggle is deferred, and adding one costs the automatic behaviour
-
-PET-57 ships daisyUI's built-in `light` / `dark` pair selected by `prefers-color-scheme`, with
-no manual toggle anywhere. That is not an oversight: daisyUI's own rule is that a toggle and
-automatic prefers-dark selection must not coexist, because a browser already in dark mode makes
-the control switch dark to dark. Whoever adds a toggle removes `--prefersdark` from
-`frontend/src/app/globals.css` in the same change and decides where the preference is stored.
-
 ### The onboarding draft is per tab, and four things follow from that
 
 PET-9 holds the draft in sessionStorage under one key, read through `useSyncExternalStore`.

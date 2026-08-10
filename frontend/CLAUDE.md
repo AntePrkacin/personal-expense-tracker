@@ -94,10 +94,16 @@ preflight reads as the default body family; `font-display` (Plus Jakarta Sans) i
 and wordmark face. Type sizes are Tailwind's own scale (`text-sm`, `text-2xl`); the 19 named
 Figma type styles are gone.
 
-**Light and dark both ship**, selected by `prefers-color-scheme` with no theme controller,
-deliberately: a controller and automatic prefers-dark must not coexist, or a browser already in
-dark mode makes the control switch dark to dark. A visible toggle is deferred and trades away
-the automatic behaviour when it lands.
+**Light and dark both ship, and the Settings Preferences card carries the app's one theme
+control as of PET-74's addendum**: a three-way System / Light / Dark segmented radio group,
+persisting in the `spendifico.theme` cookie the root layout stamps `<html data-theme>` from.
+This closes rather than violates the old "no controller" rule, which existed because a two-way
+toggle and automatic prefers-dark cannot coexist - the `system` arm is the coexistence, meaning
+"no `data-theme` attribute at all", which is exactly the state daisyUI's prefers-dark selector
+(`:root:not([data-theme])`) requires. `lib/theme.ts` owns the mechanism and
+`settings/ThemeField.tsx` the control; do not add a second controller elsewhere, and note a
+`data-theme` value must be a **registered theme's name** - `app/DecorativePanel.tsx` records how
+an unregistered one fails silently.
 
 ### Changing or adding a theme: the category palette is the guard
 
@@ -554,10 +560,6 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **A visible theme toggle.** There is no `theme-controller` anywhere, so nothing in markup may
-  assume one: adding it trades the automatic `prefers-color-scheme` selection away rather than
-  sitting beside it. `docs/TODO.md` carries why, per the conventions table's rule that a gap list
-  holds the warning and points at the reasoning.
 - **The `/api/chat` route handler.** The env template deliberately declares no model-provider
   key. Add whichever variable your provider needs when you build the route, server-side only and
   never behind `NEXT_PUBLIC_`. Note this is not the repo's _first_ route handler -

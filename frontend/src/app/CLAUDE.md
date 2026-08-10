@@ -245,10 +245,12 @@ track" as if it described their finances. (PET-57 inlined daisyUI `progress` and
 does **not** remove focusable descendants from the tab order, so the screen's test pins that
 the subtree contains none; and it is a plain `div`, never an `<aside>`, because an
 `aria-hidden` landmark is self-contradictory.
-The panel also pins `data-theme="light"` on itself, daisyUI's own mechanism for a subtree that
-must not follow the page: the art is a bright `base-100` card on a `neutral` panel, a pairing
+The panel also pins `data-theme="expensa-light"` on itself, daisyUI's own mechanism for a subtree
+that must not follow the page: the art is a bright `base-100` card on a `neutral` panel, a pairing
 only the light theme's values keep legible, and every figure in it is fabricated, so there is
-nothing for the reader's theme to adapt.
+nothing for the reader's theme to adapt. The value has to be a **registered** theme's name: it said
+`light`, and when PET-74 replaced the stock pair the pin silently stopped matching anything and the
+panel followed the page theme, with every gate green - the file's own comment carries the account.
 
 **Onboarding is three nested routes under one layout**: `/setup` (02, step 1),
 `/setup/categories` (03, step 2) and `/setup/register` (22, step 3, PET-11). PET-9
@@ -2579,3 +2581,20 @@ from a save that did nothing. What closes them is one sentence naming the period
 on, off the `label` the backend already publishes, which makes it the first success message in this
 app carrying a variable - so it is filed against the notification system that entry marks HIGH
 IMPORTANCE rather than as a fifth hand-rolled `role="status"` line on one screen.
+
+**PET-74's addendum gives the Preferences card a third row, the Theme control, and it is
+deliberately not a form field.** `settings/ThemeField.tsx` is the Claude Design system's
+`ThemeSegmented` (System / Light / Dark) translated to semantic classes, and it applies
+**instantly**: an explicit choice stamps `data-theme` on `<html>` and writes the
+`spendifico.theme` cookie, `system` removes the attribute (which is what re-arms the automatic OS
+selection - `lib/theme.ts` owns why that cannot fight the explicit choice), and the root layout
+re-stamps the attribute from the cookie on every server render, so a reload arrives already
+themed. Because the choice never travels in the PATCH, it joins no `SettingsFormValues`, no diff
+and no `invalidFields`, and it is the one control on the page that takes no `disabled` while a
+save is in flight - the Categories-summary reasoning applied to a control instead of a card.
+Under the segmented skin are visually-hidden **native radios**, one tab stop with platform arrow
+keys, because `role="radio"` on styled buttons - which is what the design source literally
+draws - would promise a keyboard contract nothing implemented, the refusal this app has already
+made four times. `settings/page.tsx` reads the cookie a second time so the control's checked
+state agrees with the server HTML at hydration; `(app)/pages.test.tsx` mocks `next/headers` for
+exactly that read.
