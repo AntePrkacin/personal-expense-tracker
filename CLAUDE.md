@@ -23,8 +23,8 @@ went against a monthly budget. Access is passwordless, by emailed single-use log
 password field anywhere. A **NestJS 11** API serves `/api` on port **3000**; a **Next.js 16**
 App Router frontend runs on **4200** and is the only thing that calls it. One HTTP contract is
 generated from the backend and committed, Drizzle ORM over Turso's SQLite engine gives **every
-user their own database**, and the interface is built on a stock daisyUI design system you can
-browse in Storybook on **6006**. As of PET-64 the central database also holds **template** data -
+user their own database**, and the interface is built on a daisyUI design system carrying the
+custom Expensa theme pair (PET-74), browsable in Storybook on **6006**. As of PET-64 the central database also holds **template** data -
 which starter categories onboarding offers, and which colours and icons a category may carry -
 as the first step toward a super-admin panel; `backend/src/database/CLAUDE.md` is the authority
 for why that is not a breach of "central holds only an email and a pointer". The repo is also a Decode Academy final project, which is why

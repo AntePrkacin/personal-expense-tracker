@@ -8,10 +8,11 @@ in `docs/guides/configuration.md`.
 ## Design tokens
 
 **daisyUI 5 on Tailwind v4 is the design system as of PET-57**, which retired the hand-rolled
-Figma-token layer. `frontend/src/app/globals.css` is now small enough to read in one breath: the
-Tailwind import, the daisyUI plugin registering the built-in `light` / `dark` themes selected
-automatically from the OS, and the two font tokens. There is no `tailwind.config`; Tailwind v4
-is configured CSS-first.
+Figma-token layer. `frontend/src/app/globals.css` holds the Tailwind import, the daisyUI plugin
+registration, the two **Expensa theme blocks** PET-74 authored from the design tokens -
+`expensa-light` the default, `expensa-dark` selected automatically from the OS - and the two font
+tokens. Its header comment is the authority for where every value came from and which four are
+derivations. There is no `tailwind.config`; Tailwind v4 is configured CSS-first.
 
 ### Figma against daisyUI: the division of authority
 
@@ -41,12 +42,16 @@ violated once by somebody working from the design file in good faith.
    gone. See the icon-library rule under Shared components below.
 
 2. **On the Screens page the split is exact.** Figma governs **structure, layout and content** -
-   what is on the screen, in what order, grouped how, with which words. Stock daisyUI governs
-   **colour, type, radius and shadow**. **Never re-theme daisyUI toward Figma's values.**
-   Concretely: `globals.css` registers the built-in `light` / `dark` pair and declares two font
-   variables, and that is the whole of what it may ever contain - no theme block, no overridden
-   `--color-*`, no custom radius or shadow scale. The colour rule below is the same prohibition
-   from the other end, because a raw `text-red-600` is re-theming by hand, one element at a time.
+   what is on the screen, in what order, grouped how, with which words. The theme governs
+   **colour, type, radius and shadow** - and as of PET-74 the theme is the custom **Expensa
+   pair** in `globals.css`, authored from the design tokens with the Claude Design project as
+   the token authority, which supersedes PET-57's stock registration and the "never re-theme"
+   sentence that stood here. What that rule forbade narrowed rather than died: **never re-theme
+   at a call site, and never eyedrop a value from the dead Figma pages** - a colour changes by
+   editing the theme blocks and re-running the guard below, nowhere else. `globals.css` holds
+   the two `@plugin 'daisyui/theme'` blocks and the two font variables, and that is still the
+   whole of what it may ever contain. The colour rule below is the same prohibition from the
+   other end, because a raw `text-red-600` is re-theming by hand, one element at a time.
 
 3. **Match the frame as closely as those boundaries allow, and build it with the daisyUI
    Blueprint MCP.** Closeness is measured in structure, layout and content; it is never measured
@@ -108,11 +113,15 @@ change that moves what a `--color-*` resolves to.
   categories, which is what a real account actually shows.
 
 Both are stock HTML pinned to the installed daisyUI, Tailwind and lucide, so opening one in a
-browser is the whole procedure. **Open both under the new theme and satisfy three conditions
+browser is the whole procedure. As of PET-74 each explainer also embeds the Expensa theme values
+in its own `<style>` block, because the CDN `daisyui.css` carries only the stock themes - so a
+theme edit is not done until every explainer's block matches `globals.css`, and nothing checks
+that they do. **Open both under the new theme and satisfy three conditions
 before the theme lands.** First, every one of the seventeen tokens has to stay **distinguishable
 from every other**, because a picker offering two colours that paint the same is a picker with
-sixteen entries and a lie in it - three pairs are already deliberately close (`categoryColour.ts`
-names them with their measured ΔE), so a theme that collapses a fourth pair is spending margin
+sixteen entries and a lie in it - two pairs are already deliberately close (`categoryColour.ts`
+names them with their measured ΔE, beside the third pair PET-74's hues separated), so a theme
+that collapses a third pair is spending margin
 that was already spent. Second, every colour has to stay **visible against `bg-base-100`** as an
 8px dot, not merely as a 36px tile: that is the mark a theme change breaks first, and the whole
 reason both files draw the small marks at all. Third, every tile's glyph has to stay legible on
@@ -127,8 +136,8 @@ guard exists for, and it is the same failure `backend/CLAUDE.md` records for `wa
 the claim "a semantic token is theme-aware and therefore safe" is false, was written down anyway,
 and was caught by measuring rather than by reasoning.
 
-**Re-measure rather than reuse the numbers.** Both files carry figures from headless Chromium
-against the installed daisyUI, and a new theme invalidates every one of them - `COLOUR_CONTRAST`
+**Re-measure rather than reuse the numbers.** Both files carry measured figures, and a new theme
+invalidates every one of them - `COLOUR_CONTRAST`
 in `backend/src/database/central/template-tokens.ts` is where the table lives and where a
 re-measurement belongs. Compositing matters: a token carrying an alpha means nothing until it is
 painted over the card and the pixel is read, so a check that stops at `getComputedStyle` has not

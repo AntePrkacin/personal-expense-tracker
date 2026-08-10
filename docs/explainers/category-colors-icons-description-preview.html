@@ -11,12 +11,76 @@
       where the four *-content tokens all resolve to pure black: three tiles rendered identically
       and none of them matched the app.
 
-      daisyui.css already carries the light and dark themes, which is the pair globals.css
-      registers, so themes.css (all 35) is deliberately not loaded.
+      daisyui.css supplies the component CSS; its stock theme *values* are overridden by the
+      style block below, because as of PET-74 globals.css registers the custom Expensa pair
+      rather than the stock one. themes.css (all 35) is still deliberately not loaded.
     -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
     <script src="https://unpkg.com/lucide@1.29.0"></script>
+
+    <!--
+      PET-74's Expensa theme values, re-declared with the same selectors daisyui.css emits, because
+      globals.css registers the custom Expensa pair rather than the stock one. This block and the
+      two @plugin 'daisyui/theme' blocks in frontend/src/app/globals.css must carry the same
+      values, or this page stops painting what the app paints - edit them together.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --color-base-100: #ffffff;
+        --color-base-200: #f5f7f8;
+        --color-base-300: #edeff2;
+        --color-base-content: #131820;
+        --color-primary: #4f46e5;
+        --color-primary-content: #ecebfd;
+        --color-secondary: #c1519e;
+        --color-secondary-content: #f9e8f3;
+        --color-accent: #34b9ae;
+        --color-accent-content: #0d4a41;
+        --color-neutral: #101720;
+        --color-neutral-content: #b4bcc9;
+        --color-info: #3f8ee6;
+        --color-info-content: #14356e;
+        --color-success: #16a34a;
+        --color-success-content: #0b3d20;
+        --color-warning: #e0a020;
+        --color-warning-content: #64490a;
+        --color-error: #dc2626;
+        --color-error-content: #3f0b0b;
+        --radius-selector: 0.5rem;
+        --radius-field: 0.75rem;
+        --radius-box: 1rem;
+        --size-selector: 0.25rem;
+        --size-field: 0.25rem;
+        --border: 1px;
+        --depth: 0;
+        --noise: 0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) {
+          color-scheme: dark;
+          --color-base-100: #18202b;
+          --color-base-200: #101720;
+          --color-base-300: #232c38;
+          --color-base-content: #ffffff;
+          --color-primary: #6963ee;
+          --color-primary-content: #edecfd;
+          --color-neutral: #101720;
+        }
+      }
+      :root:has(input.theme-controller[value='dark']:checked),
+      [data-theme='dark'] {
+        color-scheme: dark;
+        --color-base-100: #18202b;
+        --color-base-200: #101720;
+        --color-base-300: #232c38;
+        --color-base-content: #ffffff;
+        --color-primary: #6963ee;
+        --color-primary-content: #edecfd;
+        --color-neutral: #101720;
+      }
+    </style>
 </head>
 
 <!--

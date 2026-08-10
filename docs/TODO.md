@@ -1548,7 +1548,8 @@ PET-38's browser walk measured the accent strip both category cards and the summ
 compositing the text over the background and reading the pixel back rather than trusting
 `getComputedStyle`. Light measures **6.75:1** and passes. **Dark measures 4.13:1**, where AA wants
 4.5:1 for text this size - the strip is `bg-primary` and everything on it is `text-primary-content`,
-which is stock daisyUI, so nothing in this repo chose those two values.
+which was stock daisyUI when this was measured, so at the time nothing in this repo had chosen
+those two values.
 
 **The action and the sentence beside it measure identically, on both cards**, which is what says the
 finding belongs to the strip rather than to any one control. It has been there since PET-36 built
@@ -1556,11 +1557,19 @@ finding belongs to the strip rather than to any one control. It has been there s
 dropping the `opacity-60` the inert state carried.
 
 Not fixed there because both available fixes are decisions rather than refactors. Re-theming
-`primary-content` is exactly what `frontend/CLAUDE.md` forbids - it would repaint every category
-colour and both preview artifacts would need re-measuring. Changing the strip's colour pair is a
+`primary-content` was forbidden outright when this was written; PET-74 made the theme this repo's
+own, so that fix is available now at the price the guard sets - it repaints a category colour and
+re-triggers the palette re-measurement. Changing the strip's colour pair is a
 design call on a component the team's Claude Design system supplied, whose own note says the tinted
 variant "was too quiet to notice". The numbers are recorded here so whoever picks one starts from a
 measurement instead of an impression, and so a theme change is seen to move them.
+
+PET-74 is that theme change, and it moved them exactly as predicted: under the Expensa pair the
+strip computes to **5.35:1 light** (passing) and **3.90:1 dark** - marginally below the stock
+dark's 4.13:1, the same class of failure, and the entry stays open. The fix now lives in
+`globals.css`'s theme blocks rather than upstream, and it was not taken unilaterally because a
+lighter dark `primary-content` spends the Lavender/Blush closeness margin the picker already
+runs on.
 
 ### `Uncategorized` cannot be renamed or capped from the UI
 
@@ -1637,6 +1646,35 @@ nothing failing. It has now been missed twice, both times found by opening the a
 picker was short an entry. The fix is a real one-shot mechanism - a seed-version row the boot path
 compares against, or an admin endpoint - and until it exists, **a seed change needs a manual step
 against every environment**, which is the thing to write into the ticket that makes one.
+### The hairline cards, the type/spacing pass and component behaviours still drift from Claude Design
+
+PET-74 closed the colour-and-radius half of the design drift with the Expensa theme pair and
+deliberately stopped there, so three gaps remain, each a candidate ticket rather than a queue item.
+The `shadow-*` utilities in markup (roughly forty call sites; `rg -o 'shadow-[a-z0-9]+' frontend/src`
+for the current set) keep daisyUI shadows where Claude Design is "a hairline system, not a shadow
+system" - cards carry a 1px inset ring and only menus and modals get drop shadows, per the design
+project's `tokens/elevation.css`. Per-element type sizes and spacing stay Tailwind's own scale. And
+how components open and animate is daisyUI component CSS that no theme variable reaches, so matching
+Claude Design there means fighting the plugin's cascade per component - judged not worth doing at
+all, where the first gap is mechanical-but-wide and the second is a design pass.
+
+### Three theme slots are invented values owing a designer sign-off
+
+The design sources define no `info`, `secondary` or `accent`, and all three are category-picker
+colours in their own right, so PET-74 filled them from the Figma category ramp: Sky `#3f8ee6`,
+Teal `#34b9ae`, and the ramp's pink deepened to `#c1519e` so its Blush tile pairing clears 3:1.
+The five dark `-content` casts (Pine, Navy, Forest, Umber, Maroon) are derivations too - Figma
+drew none of them. Every value is measured (`COLOUR_CONTRAST`, both explainers) but none is
+designed; they join what A29 already owes a designer.
+
+### The explainer theme blocks restate `globals.css` and nothing checks the copies
+
+Five files under `docs/explainers/` embed the Expensa theme values in a `<style>` block, because
+the pinned CDN `daisyui.css` carries only the stock themes and the pages exist to paint what the
+app paints. That is six hand-held copies of the palette - `globals.css` plus five - kept in step
+by a comment in each file and by nothing else; `npm run docs:check` verifies single-source prose,
+not CSS blocks. A small script diffing each block against the theme blocks in `globals.css` would
+close it, and belongs with the next theme edit if not sooner.
 
 ## Operational
 

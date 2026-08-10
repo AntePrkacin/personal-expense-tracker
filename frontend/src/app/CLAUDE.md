@@ -1870,6 +1870,9 @@ so the walk measured it again instead of inheriting the old numbers: **1.527:1 i
 in dark**, and `base-300` still measures **1.115:1** through the identical harness. That last
 number is the point of re-running it - a check that has never been seen to fail is not evidence,
 and this one is now on record failing for the token it rejected.
+**PET-74's Expensa themes re-measured both again**, because a theme change voids every recorded
+figure: `base-content/20` composites to **1.532:1 light / 1.909:1 dark**, and `base-300` still
+fails at **1.152:1 / 1.163:1** - the tone keeps its job and the rejected token stays rejected.
 
 **PET-23 filled the third slot, `CategoryDonut`, and the requirement it was built to is stronger
 than the one its plan was written to.** That plan designed a ring **deliberately allowed not to
@@ -1943,7 +1946,9 @@ rejected for the trend chart's muted bars - **1.157:1** in light and **1.115:1**
 this card - and it mattered more here than there, because the backend's orphan fold routes real
 money into that one slice, so drawing it invisible is the ring failing to close by another route.
 It is `base-content/50` now: **3.401:1** light, **4.769:1** dark, composited and measured through
-the same harness, which probed the old token in the same run and watched it fail. And the arcs
+the same harness, which probed the old token in the same run and watched it fail. Under PET-74's
+Expensa themes the same composite reads **3.395:1** light and **5.076:1** dark and `base-300`
+still fails, so both findings survive the re-theme. And the arcs
 carry a `stroke` of `base-100` where they carried none, because `CATEGORY_FILL` is lossy on
 purpose - `orange` and `yellow` both resolve to `var(--color-warning)` - so two same-coloured
 slices landing next to each other in the `spent`-descending sort merged into one arc, showing four
