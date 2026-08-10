@@ -1,4 +1,6 @@
 import { readDashboard } from '@/lib/dashboard';
+import { parsePeriodParam } from '@/lib/periodParams';
+import { readPeriods } from '@/lib/periods';
 import { requireProfile } from '@/lib/profile';
 
 import { BudgetCard } from './BudgetCard';
@@ -30,22 +32,39 @@ import { TrendCard } from './TrendCard';
 // input is `categories.length === 0`, a strict superset of this flag rather than a sixth
 // spelling of it, and `CategoryDonut.tsx` carries the reasoning.
 //
+// **PET-72 gives this route a `?period=` and a third read.** The dashboard answers one period, and
+// until now that was always the current one; `lib/periods.ts` owns both the list the header's select
+// is built from and the parse of the parameter. The read is unconditional rather than only for a
+// non-current period, because the select is drawn in every state and an account with one period still
+// has to see which one it is looking at.
+//
 // No `export const dynamic`: the cookie read behind `readDashboard()` opts this route out of
 // static rendering on its own, exactly as it does everywhere else in the app.
 
-export default async function DashboardPage() {
-  // **Two reads, one request each, and the profile one is free.** `requireProfile()` is
-  // `cache()`-memoized per render pass and `(app)/layout.tsx` has already called it to gate this
-  // route, so this resolves against that same promise rather than issuing a second
-  // `GET /api/profile`. The two are deliberately not awaited together: `Promise.all` would start
-  // the dashboard read before the gate had a chance to redirect a dead session.
-  const summary = await readDashboard();
-  const { currency, monthStartDay } = await requireProfile();
+export default async function DashboardPage({
+  searchParams,
+}: {
+  // Awaited, which Next 15 onward requires: `searchParams` is a promise, and destructuring it
+  // synchronously is the mistake that reads as an empty object rather than as an error.
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Dropped rather than trusted if malformed, and forwarded verbatim if well-formed but unknown -
+  // `lib/periods.ts` records why those two cases differ.
+  const period = parsePeriodParam(await searchParams);
+
+  // **Three reads, and the profile one is free.** `requireProfile()` is `cache()`-memoized per render
+  // pass and `(app)/layout.tsx` has already called it to gate this route, so it resolves against that
+  // same promise rather than issuing a second `GET /api/profile`. None of them is awaited together:
+  // `Promise.all` would start the others before the gate had a chance to redirect a dead session.
+  const summary = await readDashboard(period);
+  const { periods } = await readPeriods();
+  const { currency } = await requireProfile();
   const isEmpty = summary.transactionCount === 0;
 
   return (
     <DashboardScreen
-      monthStartDay={monthStartDay}
+      period={summary.period}
+      periods={periods}
       budgetCard={<BudgetCard {...summary} isEmpty={isEmpty} currency={currency} />}
       trendCard={
         <TrendCard

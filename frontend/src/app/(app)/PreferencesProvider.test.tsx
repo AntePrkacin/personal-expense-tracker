@@ -2,16 +2,11 @@ import { render, screen } from '@testing-library/react';
 
 import { useContext } from 'react';
 
-import {
-  PreferencesContext,
-  PreferencesProvider,
-  useMoney,
-  usePeriod,
-} from './PreferencesProvider';
+import { PreferencesContext, PreferencesProvider, useMoney } from './PreferencesProvider';
 
-// The shell's currency and month-start context. Its whole job is being correct about which
-// profile it is reporting, so the tests are about the two failure modes that look like success:
-// formatting a euro account in dollars, and resolving outside the provider at all.
+// The shell's currency context. Its whole job is being correct about which profile it is reporting,
+// so the tests are about the two failure modes that look like success: formatting a euro account in
+// dollars, and resolving outside the provider at all.
 
 function Money() {
   const { formatCurrency, formatWhole, formatNegative } = useMoney();
@@ -25,14 +20,10 @@ function Money() {
   );
 }
 
-function Period() {
-  return <p>{usePeriod().monthStartDay}</p>;
-}
-
 describe('PreferencesProvider', () => {
   it('binds the money formatters to the profile currency', () => {
     render(
-      <PreferencesProvider currency="EUR" monthStartDay={1}>
+      <PreferencesProvider currency="EUR">
         <Money />
       </PreferencesProvider>,
     );
@@ -40,16 +31,6 @@ describe('PreferencesProvider', () => {
     expect(screen.getByText('€1,240.50')).toBeInTheDocument();
     expect(screen.getByText('€1,241')).toBeInTheDocument();
     expect(screen.getByText('−€24.00')).toBeInTheDocument();
-  });
-
-  it('reports the profile month start day', () => {
-    render(
-      <PreferencesProvider currency="USD" monthStartDay={15}>
-        <Period />
-      </PreferencesProvider>,
-    );
-
-    expect(screen.getByText('15')).toBeInTheDocument();
   });
 
   describe('outside the provider', () => {
@@ -61,15 +42,11 @@ describe('PreferencesProvider', () => {
       // provider, which is this one.
       expect(() => render(<Money />)).toThrow(/PreferencesProvider/);
     });
-
-    it('throws from usePeriod too', () => {
-      expect(() => render(<Period />)).toThrow(/PreferencesProvider/);
-    });
   });
 
   it('hands consumers a stable value across a re-render with equal preferences', () => {
-    // The memo is on the two primitives rather than on an object, so a layout re-render with an
-    // equal profile must not hand every consumer in the shell a new context value. `page.tsx`
+    // The memo is on the currency rather than on an object, so a layout re-render with an equal
+    // profile must not hand every consumer in the shell a new context value. `page.tsx`
     // builds a fresh profile object on every server render, which is the case that makes an
     // identity-keyed memo fire constantly - the same trap `SettingsForm`'s resync records.
     // **The probe reads the context value, not `useMoney()`, and a review is why.** `useMoney()`
@@ -86,13 +63,13 @@ describe('PreferencesProvider', () => {
     }
 
     const { rerender } = render(
-      <PreferencesProvider currency="USD" monthStartDay={1}>
+      <PreferencesProvider currency="USD">
         <Probe />
       </PreferencesProvider>,
     );
 
     rerender(
-      <PreferencesProvider currency="USD" monthStartDay={1}>
+      <PreferencesProvider currency="USD">
         <Probe />
       </PreferencesProvider>,
     );
@@ -103,7 +80,7 @@ describe('PreferencesProvider', () => {
 
   it('rebinds when the currency changes', () => {
     const { rerender } = render(
-      <PreferencesProvider currency="USD" monthStartDay={1}>
+      <PreferencesProvider currency="USD">
         <Money />
       </PreferencesProvider>,
     );
@@ -111,7 +88,7 @@ describe('PreferencesProvider', () => {
     expect(screen.getByText('$1,240.50')).toBeInTheDocument();
 
     rerender(
-      <PreferencesProvider currency="GBP" monthStartDay={1}>
+      <PreferencesProvider currency="GBP">
         <Money />
       </PreferencesProvider>,
     );

@@ -55,7 +55,7 @@ export default async function TransactionsPage({
 
   // Free: `requireProfile()` is `cache()`-memoized per render pass and the shell's layout has
   // already called it to gate this route, so this resolves against that same promise.
-  const { currency, monthStartDay } = await requireProfile();
+  const { currency } = await requireProfile();
 
   const [view, categories] = await Promise.all([
     readTransactionsView(filters),
@@ -85,7 +85,6 @@ export default async function TransactionsPage({
 
   return (
     <TransactionsScreen
-      monthStartDay={monthStartDay}
       view={view}
       filters={filters}
       // The Categories tab's badge, free here: this page already holds the category list for

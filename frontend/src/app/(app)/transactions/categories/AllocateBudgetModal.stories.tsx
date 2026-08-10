@@ -17,7 +17,7 @@ import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixtur
  */
 function AllocateBudgetModal(props: React.ComponentProps<typeof Modal>) {
   return (
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <Modal {...props} />
     </PreferencesProvider>
   );

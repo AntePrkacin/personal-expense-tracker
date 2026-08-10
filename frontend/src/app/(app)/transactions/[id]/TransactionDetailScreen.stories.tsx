@@ -121,7 +121,7 @@ type Story = StoryObj<typeof TransactionDetailScreen>;
 function Frame({ detail }: { detail: TransactionDetail }) {
   return (
     <AddTransactionProvider>
-      <PreferencesProvider currency="USD" monthStartDay={1}>
+      <PreferencesProvider currency="USD">
         <DeleteTransactionProvider remove={async () => ({ ok: true })}>
           <EditTransactionProvider update={async () => ({ ok: true })}>
             {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for

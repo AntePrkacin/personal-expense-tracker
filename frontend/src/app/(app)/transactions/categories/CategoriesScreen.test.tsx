@@ -81,10 +81,24 @@ const SPENT_TOTAL = '$932';
 const summaryCard = () =>
   screen.getByRole('heading', { name: /spending$/ }).closest('section') as HTMLElement;
 
+/**
+ * The period the header names and the list its select offers, both off the response as of PET-72.
+ *
+ * The label is the backend's, so the heading below it - "{period} spending" - is pinned to a fixture
+ * rather than to whatever month the suite is run in.
+ */
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true };
+
+const PERIODS = [
+  PERIOD,
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+];
+
 function renderScreen(props: Partial<React.ComponentProps<typeof CategoriesScreen>> = {}) {
   return render(
     <CategoriesScreen
-      monthStartDay={1}
+      period={PERIOD}
+      periods={PERIODS}
       currency="USD"
       categories={CATEGORIES}
       allocation={ALLOCATION}
@@ -115,7 +129,9 @@ describe('the screen chrome (AC1)', () => {
     renderScreen();
 
     expect(screen.getByRole('heading', { level: 1, name: 'Transactions' })).toBeInTheDocument();
-    expect(screen.getByText('October 2025')).toBeInTheDocument();
+    // Scoped to the header's own paragraph: as of PET-72 the period select beside it offers an
+    // option carrying the identical label, so a page-wide query matches twice.
+    expect(screen.getByText('October 2025', { selector: 'p' })).toBeInTheDocument();
   });
 
   // **This assertion is the inverse of the one PET-36 shipped**, which pinned `aria-disabled="true"`
@@ -168,12 +184,19 @@ describe('the screen chrome (AC1)', () => {
     );
   });
 
-  it('offers no filter controls of its own', () => {
-    // The frame draws none, and there is nothing on this screen to filter. A combobox here
-    // would be a control nobody designed.
+  it('offers the period select and no other control of its own', () => {
+    // **Narrowed rather than inverted, and the distinction matters.** This used to assert no
+    // combobox at all, because the frame draws no filters and there is nothing here to filter.
+    // PET-72 adds one control that is not a filter: the period select, which chooses *which*
+    // period every figure on the screen is for rather than narrowing the set within one. So the
+    // criterion is still "no filters of its own", stated against the one combobox that is now
+    // designed - which is why this asserts the count as well as the name.
     renderScreen();
 
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    const comboboxes = screen.getAllByRole('combobox');
+
+    expect(comboboxes).toHaveLength(1);
+    expect(comboboxes[0]).toHaveAccessibleName('Budgeting period');
   });
 });
 
@@ -236,10 +259,18 @@ describe('the spending summary (AC4)', () => {
     expect(screen.getByText('spent of $2,000 monthly budget')).toBeInTheDocument();
   });
 
-  it('names the month, at the default start day', () => {
+  it('names the period the figures are for, from the response', () => {
+    // **The heading carries the year now, and that is the label rather than a formatting choice.**
+    // It read "October spending" while the frontend composed period names itself; PET-72 publishes
+    // exactly one label per period, and a shorter form for this heading would mean deriving a month
+    // name from a period again - the thing that cannot be done correctly once a pay-day change can
+    // stretch a period across two months. So the card, the overline and the select all print the
+    // same string.
     renderScreen();
 
-    expect(screen.getByRole('heading', { level: 2, name: 'October spending' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'October 2025 spending' }),
+    ).toBeInTheDocument();
   });
 
   it('reports the unassigned budget in a banner', () => {

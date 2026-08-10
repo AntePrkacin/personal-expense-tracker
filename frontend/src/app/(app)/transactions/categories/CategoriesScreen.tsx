@@ -1,5 +1,4 @@
-import { todayIsoDate } from '@/lib/date';
-import { periodOverline } from '@/lib/format';
+import type { Period } from '@/lib/periods';
 import type { Allocation, Category } from '@/lib/categories';
 import type { CreateCategoryResult } from '@/lib/createCategory';
 import type { DeleteCategoryResult } from '@/lib/deleteCategory';
@@ -11,6 +10,7 @@ import type { components } from '@/types/api';
 import type { toAllocateBody } from './allocateForm';
 
 import { PageHeader } from '../../PageHeader';
+import { PeriodSelect } from '../../PeriodSelect';
 import { TransactionTabs } from '../TransactionTabs';
 import { AddCategoryButton } from './AddCategoryButton';
 import { CategoryCard } from './CategoryCard';
@@ -118,13 +118,15 @@ type CategoriesScreenProps = {
    */
   currency: string;
   /**
-   * The profile's month start day, for the header's period label.
+   * The period every figure on this screen belongs to, from the categories response's own `period`.
    *
-   * Threaded from the page rather than read here, the same split the currency takes: a Server
-   * Component cannot reach `PreferencesProvider`. It labels the period and resolves no window -
-   * every figure below is scoped to the one the backend resolved. See `periodOverline`.
+   * **This replaces `monthStartDay`, for `DashboardScreen`'s reason.** The label of a period that a
+   * pay-day change stretched across two months is not derivable from a start day, so it arrives beside
+   * the figures it describes rather than being computed alongside them.
    */
-  monthStartDay: number;
+  period: { start: string; end: string; label: string };
+  /** Every period the account has, newest first, for the header's select. */
+  periods: readonly Period[];
 };
 
 export function CategoriesScreen({
@@ -137,7 +139,8 @@ export function CategoriesScreen({
   create,
   save,
   currency,
-  monthStartDay,
+  period,
+  periods,
 }: CategoriesScreenProps) {
   // **Summed here rather than read from a field, and the sum is sound rather than approximate.**
   // `GET /api/categories` publishes no period total of its own, but every transaction in the
@@ -176,13 +179,25 @@ export function CategoriesScreen({
     <DeleteCategoryProvider fallbackName={fallbackName} remove={remove}>
       <EditCategoryProvider palette={palette} update={update}>
         <PageHeader
-          overline={periodOverline(monthStartDay, todayIsoDate())}
+          overline={period.label}
           title="Transactions"
           // **No search field, which is CTG-1 and the visible difference from the sibling tab.**
           // `TransactionsScreen` keeps its field in the header specifically so React reconciles
           // it across filter changes; that reasoning is about a screen with a filter bar, and
           // this one has neither.
-          action={<AddCategoryButton palette={palette} create={create} />}
+          //
+          // The period select joins it as of PET-72, so this tab can be read for a past period the
+          // same way the Dashboard can - which is what makes a historical cap visible at all.
+          action={
+            <>
+              <PeriodSelect
+                periods={periods}
+                selected={period.start}
+                pathname="/transactions/categories"
+              />
+              <AddCategoryButton palette={palette} create={create} />
+            </>
+          }
         />
 
         {/* gap-5 is the designed 20px between the tabs and what follows, matching the sibling
@@ -197,7 +212,7 @@ export function CategoriesScreen({
 
           <SpendingSummaryCard
             currency={currency}
-            monthStartDay={monthStartDay}
+            periodLabel={period.label}
             spent={spent}
             allocation={allocation}
             categories={categories}

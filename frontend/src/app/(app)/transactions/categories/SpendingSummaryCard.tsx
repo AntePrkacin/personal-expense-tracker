@@ -1,5 +1,3 @@
-import { todayIsoDate } from '@/lib/date';
-import { periodLabel } from '@/lib/format';
 import { moneyFormatters } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
@@ -80,13 +78,18 @@ type SpendingSummaryCardProps = {
    */
   currency: string;
   /**
-   * The profile's month start day, for the header's period label.
+   * The period's own label, from the response.
    *
    * Threaded from the page rather than read here, the same split the currency takes: a Server
    * Component cannot reach `PreferencesProvider`. It labels the period and resolves no window -
-   * every figure below is scoped to the one the backend resolved. See `periodOverline`.
+   * every figure below is scoped to the one the backend resolved.
+   *
+   * **A label rather than a `monthStartDay` since PET-72.** This card derived "October spending" from
+   * a start day and today, which cannot name a period a pay-day change stretched across two months -
+   * and the paragraph below, about the heading and the figures disagreeing, is exactly the failure
+   * that derivation had one more way to produce.
    */
-  monthStartDay: number;
+  periodLabel: string;
 };
 
 export function SpendingSummaryCard({
@@ -95,7 +98,7 @@ export function SpendingSummaryCard({
   categories,
   save,
   currency,
-  monthStartDay,
+  periodLabel,
 }: SpendingSummaryCardProps) {
   const { formatWhole } = moneyFormatters(currency);
 
@@ -137,17 +140,14 @@ export function SpendingSummaryCard({
       <BannerCardBody>
         <div className="card-body gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* **The heading names the calendar month, and that is a knowing trade rather than an
-              oversight.** The figures below it are scoped to the profile's `monthStartDay`
-              period, while a month name in the frontend can only be the host's calendar month -
-              so at `monthStartDay: 15` this reads "October spending" over Oct 15 to Nov 15
-              figures. It is the same mismatch that made `BudgetCard`'s caption drop "in October"
-              and `TrendCard`'s read only "Weekly". Kept here by product decision, because it is
-              correct at the default start day of 1; `docs/TODO.md` carries the backend field
-              that would let it be correct at every start day. */}
-            <h2 className="text-base font-semibold">
-              {periodLabel(monthStartDay, todayIsoDate())} spending
-            </h2>
+            {/* **The heading names the period the figures are from, and PET-72 is what made that
+              possible.** It used to name the host's calendar month while the figures below were
+              scoped to the profile's own period - so at a start day of 15 it read "October
+              spending" over Oct 15 to Nov 15 figures, the same mismatch that made `BudgetCard`'s
+              caption drop "in October" and `TrendCard`'s read only "Weekly". The label is the
+              backend's now, resolved from the same period the figures were summed over, so the
+              heading and the numbers under it cannot disagree. */}
+            <h2 className="text-base font-semibold">{periodLabel} spending</h2>
 
             <span className={tone.badge}>
               {/* aria-hidden: the badge's text already carries the state. */}

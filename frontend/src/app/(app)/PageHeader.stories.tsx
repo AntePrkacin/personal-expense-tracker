@@ -3,8 +3,8 @@ import Link from 'next/link';
 
 import { Button } from '@/components/ui/Button';
 
-import { MonthPill } from './dashboard/MonthPill';
 import { PageHeader } from './PageHeader';
+import { PeriodSelect } from './PeriodSelect';
 import { SearchPill } from './transactions/SearchPill';
 
 // Type-only Storybook import, for the reason Sidebar.stories.tsx records:
@@ -23,6 +23,12 @@ const meta: Meta<typeof PageHeader> = {
   title: 'Shell/Page header',
   component: PageHeader,
   tags: ['autodocs'],
+  // Mandatory as of PET-72 and no gate will say so: the Dashboard story's `PeriodSelect` calls
+  // `useRouter`, which throws `invariant expected app router to be mounted` outside one.
+  // `build-storybook` bundles a story without running it, and `shell.stories.test.tsx` renders this
+  // module with `next/navigation` already mocked - so the story would have thrown in the browser
+  // alone, which is the trap `frontend/src/app/CLAUDE.md` records under Storybook.
+  parameters: { nextjs: { appDirectory: true } },
   decorators: [
     // The header is a full-width band with no background of its own; it sits on
     // the body's canvas. The decorator supplies that, since Storybook's own
@@ -39,14 +45,28 @@ export default meta;
 
 type Story = StoryObj<typeof PageHeader>;
 
-/** 04 Dashboard (node 21:56). The only screen with the month select. */
+/** The Dashboard select's own options, matching the sample overline above it. */
+const HEADER_PERIODS = [
+  { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true },
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+];
+
+/**
+ * 04 Dashboard (node 21:56). The only screen with the period select.
+ *
+ * **That control is real as of PET-72**, where this story drew `MonthPill`, an inert `<div>` A8 asked
+ * for until month navigation was designed. `PeriodSelect` needs a router, which is what the meta's
+ * `nextjs: { appDirectory: true }` mounts - and the header's own stories are the only place the four
+ * right-hand controls are compared side by side, which is why it is the real component rather than a
+ * stand-in.
+ */
 export const Dashboard: Story = {
   args: {
     overline: 'October 2025',
     title: 'Dashboard',
     action: (
       <>
-        <MonthPill label="October" />
+        <PeriodSelect periods={HEADER_PERIODS} selected="2025-10-01" pathname="/dashboard" />
         <Button label="Add transaction" />
       </>
     ),

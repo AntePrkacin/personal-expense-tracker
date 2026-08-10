@@ -7,6 +7,7 @@ import { render } from './shellRender';
 import { readCategoryLabels } from '../../lib/categories';
 import { readDashboard } from '../../lib/dashboard';
 import { requireInsights } from '../../lib/insights';
+import { readPeriods } from '../../lib/periods';
 import { requireProfile } from '../../lib/profile';
 import { readTransactionsView } from '../../lib/transactions';
 
@@ -49,6 +50,17 @@ jest.mock('../../lib/insights', () => ({ requireInsights: jest.fn() }));
 // which reaches `cookies()` and would throw outside a request scope. Note this is the same read
 // `(app)/layout.tsx` makes, which is not exercised here.
 jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
+
+// PET-72 adds a fifth read, and it is the one module here that is **partially** mocked. Dashboard
+// and AI Insights both await `readPeriods()` for the header's select and its overline, so that one
+// has to be a `jest.fn()`; the rest of the module is pure - `parsePeriodParam` is what a page turns
+// its `searchParams` into, and `periodHref` is what the select navigates with - and stubbing those
+// would replace the seam under test with a fake. So the actual module is spread and one export
+// replaced, which is the only mock in this file that is not wholesale.
+jest.mock('../../lib/periods', () => ({
+  ...jest.requireActual('../../lib/periods'),
+  readPeriods: jest.fn(),
+}));
 
 // Two of these screens now hold an "Add transaction" trigger that calls
 // `useAddTransaction`, which throws outside its provider by design - so every render
@@ -120,7 +132,14 @@ beforeEach(() => {
     state: 'populated',
     transactions: [],
     total: 128,
+    // The header's overline as of PET-72, and no longer derived from the profile: the list read
+    // echoes back the period it resolved, so the label and the figures come from one resolution.
+    period: PERIOD,
   });
+
+  // Dashboard's and AI Insights' select, and the second's overline too. Two entries, so the control
+  // has something to offer - `PeriodSelect.test.tsx` owns what it does with them.
+  (readPeriods as jest.Mock).mockResolvedValue({ periods: PERIODS });
 
   // An empty list is enough: the rows are `TransactionsTable.test.tsx`'s subject, and this
   // file asserts the header. The read still has to succeed, because the page throws on an
@@ -146,6 +165,7 @@ beforeEach(() => {
     categories: [],
     recentTransactions: [],
     insight: null,
+    period: PERIOD,
   });
 
   // A `ready` set rather than an empty one, because this file asserts the header and the
@@ -174,9 +194,24 @@ beforeEach(() => {
   });
 });
 
-// October 2025 is the month the whole Figma file is drawn in, so pinning the
-// clock lets these assert the designed strings literally rather than recomputing
-// them, which would pass against a broken derivation.
+/**
+ * The period every read here answers with, and the list the select offers.
+ *
+ * October 2025 is the month the whole Figma file is drawn in. **It is a fixture rather than a
+ * derivation as of PET-72**, which is what the frozen clock below used to be for on the headers:
+ * three of them composed their overline from the profile's start day and today, so the month they
+ * named was this file's to set. Now the label is the backend's and arrives on the response.
+ */
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true };
+
+const PERIODS = [
+  PERIOD,
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+];
+
+// The clock is still pinned to a day inside that period: the cards below it read one -
+// `RecentTransactionsCard`'s relative caption is the clearest - so an unpinned run would drift the
+// content under assertions about the header.
 beforeAll(() => {
   jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8));
 });
@@ -202,7 +237,10 @@ describe('the four routed views', () => {
       // AC1.
       await renderScreen(Page);
 
-      expect(screen.getByText(overline)).toBeInTheDocument();
+      // Scoped to the header's own paragraph: Dashboard's period select carries an `<option>` with
+      // the identical label as of PET-72, so a bare `getByText` matches twice there and nowhere else
+      // - which would make this shared case fail on one screen for a reason about a different one.
+      expect(screen.getByText(overline, { selector: 'p' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument();
     },
   );
@@ -217,22 +255,27 @@ describe('the four routed views', () => {
 });
 
 describe('the header action, which differs on every screen', () => {
-  it('Dashboard offers the month select and Add transaction', async () => {
-    // AC2 and AC3. The month select is Dashboard's alone.
+  it('Dashboard offers the period select and Add transaction', async () => {
+    // AC2 and AC3. The period select is Dashboard's alone among the four.
     await renderScreen(DashboardPage);
 
-    expect(screen.getByText('October')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Budgeting period' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
   });
 
-  it('Dashboard shows the month without the year in the select', async () => {
-    // Two near-identical strings sit in this header. getByText is exact by
-    // default, so "October" would not match "October 2025" - this asserts the
-    // select really carries the shorter form rather than the overline twice.
+  it('Dashboard offers one option per period the account has', async () => {
+    // **This asserted the opposite shape until PET-72**, and the old version is worth recording: it
+    // pinned that the pill read "October" while the overline read "October 2025", because the design
+    // draws a shorter label in the control than above it. There is one label per period now, so the
+    // two deliberately match - a period a pay-day change stretched has no short form that is not
+    // month arithmetic. What is worth pinning instead is that the list is the account's own history
+    // rather than the one period being viewed.
     await renderScreen(DashboardPage);
 
-    const select = screen.getByText('October');
-    expect(select).not.toHaveTextContent('2025');
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'October 2025',
+      'September 2025',
+    ]);
   });
 
   it('Transactions offers the search field and Add transaction, and no month select', async () => {
@@ -245,7 +288,12 @@ describe('the header action, which differs on every screen', () => {
 
     expect(screen.getByRole('textbox', { name: 'Search transactions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
-    expect(screen.queryByText('October')).not.toBeInTheDocument();
+    // No period select either, which PET-72 makes worth stating by role rather than by text: this
+    // screen chooses its period through the filter bar's own pill under `<main>`, so the assertion
+    // is scoped to the header rather than sweeping a page that really does hold three comboboxes.
+    const header = screen.getByRole('banner');
+
+    expect(within(header).queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('AI Insights offers Regenerate', async () => {
@@ -274,14 +322,19 @@ describe('the header action, which differs on every screen', () => {
 });
 
 describe('the inert header controls', () => {
-  it('does not expose the month select as an operable control', async () => {
-    // A8: only October exists, so it renders the current period and does
-    // nothing. It is a <div> rather than a <select> or a <button> so it never
-    // announces itself as operable.
+  it('does expose the period select as an operable control, which reverses A8', async () => {
+    // **The last of the drawn-but-dead header controls, and PET-72 is the ticket A8 was waiting
+    // for.** That assumption said the pill renders the current period and does nothing "until month
+    // navigation is designed", so it shipped as a `<div>` rather than as a control announcing itself
+    // as operable - and this case pinned exactly that, with `queryByRole('combobox')` empty. The
+    // assertion inverts rather than being deleted: a `<div>` creeping back here would be a
+    // regression now, the same way it is for the search field below.
     await renderScreen(DashboardPage);
 
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.getByText('October').tagName).toBe('DIV');
+    const select = screen.getByRole('combobox', { name: 'Budgeting period' });
+
+    expect(select.tagName).toBe('SELECT');
+    expect(select).toHaveValue(PERIOD.start);
   });
 
   it('does expose the search field as a text box, which reverses PET-30', async () => {
@@ -399,6 +452,7 @@ describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
         },
       ],
       insight: null,
+      period: PERIOD,
     });
 
     await renderScreen(DashboardPage);
@@ -441,6 +495,7 @@ describe("the profile's currency reaches the figures (PET-47)", () => {
       categories: [],
       recentTransactions: [],
       insight: null,
+      period: PERIOD,
     });
 
     await renderScreen(DashboardPage);
@@ -483,48 +538,89 @@ describe("the profile's currency reaches the figures (PET-47)", () => {
   });
 });
 
-describe("the profile's month start day reaches the header (PET-47)", () => {
-  // The other half of the thread, and the closing of a `docs/TODO.md` entry open since PET-19.
-  // The clock is pinned to 8 October 2025 for the whole file, so at a start day of 15 today falls
-  // in the period that opened on 15 September - which is exactly the case the old header got
-  // wrong, naming "October" over figures drawn from 15 Sep to 15 Oct.
+describe("the period's label reaches the header, from the read rather than the profile (PET-72)", () => {
+  // **This block replaces PET-47's, and the replacement is the point of the ticket on these three
+  // screens.** That one proved the profile's `monthStartDay` reached the header, by setting it to 15
+  // against a clock pinned to 8 October and asserting the overline read "September / October 2025" -
+  // the period the day actually falls in. The thread it proved is gone: a period is anchored to a
+  // paycheck now, a pay-schedule change stretches one across the gap, and no arithmetic over a start
+  // day can name the result. So the label rides on the response, and what is worth proving is that
+  // each page renders the label it was *given* rather than one it composed.
   //
-  // Asserted at the page level for the same reason the currency tests above are: every screen
-  // suite passes `monthStartDay={1}` by hand, so a page that stopped reading the profile would
-  // leave all of them green.
+  // Asserted at the page level for the reason the currency cases above are: every screen suite hands
+  // in a period fixture by hand, so a page that dropped the field would leave all of them green.
 
-  function withMonthStartDay(monthStartDay: number) {
-    (requireProfile as jest.Mock).mockResolvedValue({
-      fullName: 'Marko Kovač',
-      email: 'marko@email.com',
-      currency: 'USD',
+  /** A period no month arithmetic could name: the stretched one a pay-day change produces. */
+  const STRETCHED = {
+    start: '2025-12-15',
+    end: '2026-01-14',
+    label: 'December 2025 / January 2026',
+    current: true,
+  };
+
+  it('Dashboard names the period the dashboard read answered with', async () => {
+    (readDashboard as jest.Mock).mockResolvedValue({
+      spent: 0,
       monthlyBudget: 2000,
-      monthStartDay,
+      remaining: 2000,
+      daysLeft: 8,
+      transactionCount: 0,
+      averagePerDay: 0,
+      topCategory: null,
+      weeklyBuckets: [],
+      categories: [],
+      recentTransactions: [],
+      insight: null,
+      period: STRETCHED,
     });
-  }
-
-  it.each([
-    ['Dashboard', DashboardPage],
-    ['Transactions', TransactionsPage],
-    ['AI Insights', InsightsPage],
-  ])('%s names both months of the period when the start day is not the 1st', async (_n, Page) => {
-    withMonthStartDay(15);
-
-    await renderScreen(Page);
-
-    expect(screen.getByText('September / October 2025')).toBeInTheDocument();
-    expect(screen.queryByText('October 2025')).not.toBeInTheDocument();
-  });
-
-  it('still names one month at the default, so no untouched account sees a change', async () => {
-    // The regression that matters most: almost every account is on the default, and this fix must
-    // be invisible to all of them.
-    withMonthStartDay(1);
 
     await renderScreen(DashboardPage);
 
-    expect(screen.getByText('October 2025')).toBeInTheDocument();
-    expect(screen.queryByText('September / October 2025')).not.toBeInTheDocument();
+    expect(screen.getByText(STRETCHED.label, { selector: 'p' })).toBeInTheDocument();
+  });
+
+  it('Transactions names the period the list read answered with', async () => {
+    (readTransactionsView as jest.Mock).mockResolvedValue({
+      state: 'populated',
+      transactions: [],
+      total: 3,
+      period: STRETCHED,
+    });
+
+    await renderScreen(TransactionsPage);
+
+    expect(screen.getByText(STRETCHED.label)).toBeInTheDocument();
+  });
+
+  it('Transactions names every period when the list spans all of them', async () => {
+    // `period=all` is the one filter whose response carries **no** period, which the contract states
+    // in as many words: a list covering every period has no single label. So this is the one overline
+    // in the app that is not the backend's, and it is the same string the filter pill offers.
+    (readTransactionsView as jest.Mock).mockResolvedValue({
+      state: 'populated',
+      transactions: [],
+      total: 3,
+      period: null,
+    });
+
+    await renderScreen(TransactionsPage);
+
+    expect(screen.getByText('All time', { selector: 'p' })).toBeInTheDocument();
+  });
+
+  it('AI Insights names the current period, which is the one its set is for', async () => {
+    // The one header of the four whose label does not ride on its own screen's read.
+    // `GET /api/insights` publishes no period - a set is generated for the current period only, and
+    // its `monthLabel` names the period it was generated *in* - so this page asks `/api/periods` and
+    // takes the entry flagged current.
+    (readPeriods as jest.Mock).mockResolvedValue({
+      periods: [{ ...PERIOD, current: false }, STRETCHED],
+    });
+
+    await renderScreen(InsightsPage);
+
+    expect(screen.getByText(STRETCHED.label)).toBeInTheDocument();
+    expect(screen.queryByText(PERIOD.label)).not.toBeInTheDocument();
   });
 });
 

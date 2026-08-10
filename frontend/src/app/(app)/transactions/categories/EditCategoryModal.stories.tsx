@@ -15,7 +15,7 @@ import { EditCategoryModal as Wrapped } from './EditCategoryModal';
  */
 function EditCategoryModal(props: React.ComponentProps<typeof Wrapped>) {
   return (
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <Wrapped {...props} />
     </PreferencesProvider>
   );

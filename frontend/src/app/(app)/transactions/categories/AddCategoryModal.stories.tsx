@@ -16,7 +16,7 @@ import { AddCategoryModal as Wrapped } from './AddCategoryModal';
  */
 function AddCategoryModal(props: React.ComponentProps<typeof Wrapped>) {
   return (
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <Wrapped {...props} />
     </PreferencesProvider>
   );

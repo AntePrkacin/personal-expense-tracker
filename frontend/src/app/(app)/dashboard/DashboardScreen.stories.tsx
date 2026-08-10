@@ -146,6 +146,18 @@ const RECENT_TRANSACTIONS = [
   },
 ];
 
+// The period the header names and the list its select offers, both straight off the response as of
+// PET-72 - so the frame's own "October 2025" is drawn whatever month this story is opened in, where
+// the old `monthStartDay` prop derived it from the clock. The second entry is what makes the control
+// worth opening in Storybook at all: a select with one option cannot be reviewed.
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true };
+
+const PERIODS = [
+  PERIOD,
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+  { start: '2025-08-01', end: '2025-09-01', label: 'August 2025', current: false },
+];
+
 const meta: Meta<typeof DashboardScreen> = {
   title: 'Screens/04 Dashboard',
   component: DashboardScreen,
@@ -163,13 +175,14 @@ export const Default: Story = {
     // format money through it. Mounted here rather than in `decorators` for the reason
     // `frontend/src/app/CLAUDE.md` records: the story smoke test never applies a meta's
     // decorators, so a decorator works in the browser and throws under Jest.
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <AddTransactionProvider>
         {/* `bg-base-200` is what the root layout paints `<body>`; `px-*` stands in for the
           `(app)` shell's own gutter, since neither wraps a story. */}
         <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
           <DashboardScreen
-            monthStartDay={1}
+            period={PERIOD}
+            periods={PERIODS}
             budgetCard={<BudgetCard currency="USD" {...BUDGET} isEmpty={false} />}
             trendCard={
               <TrendCard

@@ -1,4 +1,3 @@
-import { addMonths } from './calendar';
 import { dateFromIso, partsFromIso, todayIsoDate } from './date';
 
 // Display formatting: money, the two forms a stored name takes on screen, the
@@ -85,15 +84,13 @@ export function shortName(fullName: string): string {
 //
 // Two limits worth knowing. The locale is hard-coded to en-US; `docs/TODO.md` carries that
 // deviation. And **these two format a calendar month, which is not the same thing as the
-// budgeting period** - `periodOverline` and `periodLabel` below are what a screen showing a
-// period wants. The paragraph that used to sit here said the period "is the calendar month,
-// ignoring the profile's `monthStartDay`" and named PET-45 as the ticket that would fix it;
-// PET-47 is the one that did, by adding the pair below rather than by changing these.
+// budgeting period** - a screen naming a period reads its label off the response that carries the
+// period's figures, which the note below records in full.
 //
-// **They are not deprecated, and the distinction is the whole point.** `(app)/DateField.tsx`
-// draws a real calendar grid and its popover header names the month that grid is *of* - a period
-// label over six rows of real weeks would be nonsense. So a caller wanting the month keeps these,
-// and a caller wanting the user's budgeting period takes the pair below.
+// **They survive PET-72's deletion of that pair, and the distinction is the whole point.**
+// `(app)/DateField.tsx` draws a real calendar grid and its popover header names the month that grid
+// is *of* - a period label over six rows of real weeks would be nonsense. So these two remain, with
+// exactly one caller each, and the period's own name is never computed here.
 
 const MONTH_AND_YEAR = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
 
@@ -109,96 +106,23 @@ export function monthLabel(date: Date): string {
   return MONTH_ONLY.format(date);
 }
 
-// The **budgeting period** the page header shows, in the same two lengths, and the answer to the
-// `docs/TODO.md` entry that had been open since PET-19: "The header period ignores the profile's
-// month start day".
+// **The budgeting-period pair that used to sit here is gone, and PET-72 deleted it rather than
+// widened it.** `periodOverline(monthStartDay, today)` and `periodLabel(...)` named the period four
+// page headers draw, composing one or two month names from the profile's start day - PET-47's answer
+// to a `docs/TODO.md` entry open since PET-19, and correct for exactly as long as every period was
+// one calendar month offset by a fixed day.
 //
-// A9 makes `monthStartDay` define the period every "This month" filter and every days-left figure
-// is scoped to, so a header formatting the calendar month is only correct at the default of 1.
-// PET-30 gave that a visible symptom rather than only a wrong label: with `monthStartDay: 15` the
-// list read resolves `period=current` to 15 Oct - 15 Nov while the overline said "October", so a
-// transaction inside the calendar month but outside the period was absent from a page whose title
-// named that month, and if it was the only one the screen reported no transactions under a heading
-// saying otherwise.
+// PET-72 ended that. A period is anchored to a paycheck now, a pay-schedule change stretches one
+// period across the gap between the old boundary and the new, and the fact that makes such a period
+// span three month names is a `period_rules` row this app cannot see. **So there is no arithmetic
+// over a start day that produces "December 2025 / January 2026"**, and the two functions were not
+// merely imprecise, they were unable in principle to be right. The label is published per period by
+// `GET /api/periods` and echoed beside the figures it describes by the categories, dashboard and
+// transactions reads; `lib/periods.ts` is the frontend's home for all of it.
 //
-// **The fix is the one that TODO entry proposed: name both months.** A period spanning 15 October
-// to 15 November has no single month name, and inventing one is what produced the defect. So above
-// a `monthStartDay` of 1 the label is "October / November", and the header stops claiming a
-// boundary the data does not have.
-//
-// **These do not resolve a window, and must not start.** Every *figure* on every screen is scoped
-// to a period the backend resolved through `src/common/month-window.ts` against `APP_TIMEZONE`;
-// this is the label for that period and nothing else. The month arithmetic below mirrors that
-// module's rule - a period runs day N to day N, so today at or after N is in the period starting
-// this month - and it is a deliberate second copy of a rule bounded to two branches, because the
-// alternative is a field on four separate responses. If a period ever stops being derivable from
-// one number, this is the thing that has to become an API field rather than the thing to extend.
-//
-// **`today` defaults to the frontend host's zone, which is the skew this app already has.**
-// `formatRelativeDate` below carries the same default and the same caveat, and `TrendCard` records
-// what it costs: the frontend's idea of today and the backend's can differ by the full zone offset,
-// so on the boundary day this can name the neighbouring period until the two agree. That is the
-// pre-existing gap `docs/TODO.md` tracks rather than a new one - the old code read `new Date()` at
-// four call sites for the same purpose - and it is a parameter rather than a bare clock read for
-// `todayIsoDate`'s own reason: it is what lets the boundary cases be tested at all.
-
-/** The two calendar months a period touches, as `Date`s on the 1st, in order. */
-function periodMonths(monthStartDay: number, today: string): { start: Date; end: Date } | null {
-  const parts = partsFromIso(today);
-  if (parts === null) return null;
-
-  // `>=` rather than `>`, matching the backend: the boundary day belongs to the period it opens.
-  const startsThisMonth = parts.day >= monthStartDay;
-  const start = startsThisMonth ? parts : addMonths(parts.year, parts.month, -1);
-  const end = startsThisMonth ? addMonths(parts.year, parts.month, 1) : parts;
-
-  // Built from parts on the 1st rather than parsed from a string, which is `lib/date.ts`'s rule:
-  // a date-only string parses as UTC midnight and formats as the previous day anywhere behind UTC.
-  return {
-    start: new Date(start.year, start.month - 1, 1),
-    end: new Date(end.year, end.month - 1, 1),
-  };
-}
-
-/**
- * The header overline for the user's budgeting period, e.g. `"October 2025"` at a
- * `monthStartDay` of 1 and `"October / November 2025"` above it.
- *
- * The year appears **once** when the period stays inside one, and on both halves when it does not
- * ("December 2025 / January 2026"), because that is the one case where a single trailing year
- * would be wrong about the first month rather than merely terse.
- *
- * Falls back to the calendar month for a `monthStartDay` outside 1-28, which
- * `UpdateProfileDto` makes unreachable - `@IsInt @Min(1) @Max(28)` - and which is a fallback
- * rather than a throw because this is a page heading: taking the screen out through the error
- * boundary over a label is the worse of the two failures.
- */
-export function periodOverline(monthStartDay: number, today: string = todayIsoDate()): string {
-  const months = periodMonths(monthStartDay, today);
-  if (months === null || monthStartDay <= 1 || monthStartDay > 28) {
-    return monthOverline(dateFromIso(today) ?? new Date());
-  }
-
-  const sameYear = months.start.getFullYear() === months.end.getFullYear();
-  const first = sameYear ? monthLabel(months.start) : monthOverline(months.start);
-
-  return `${first} / ${monthOverline(months.end)}`;
-}
-
-/**
- * The same period without its year, e.g. `"October"` or `"October / November"`.
- *
- * What the Dashboard's month pill and the Categories tab's "{period} spending" heading draw. Every
- * note on `periodOverline` applies unchanged.
- */
-export function periodLabel(monthStartDay: number, today: string = todayIsoDate()): string {
-  const months = periodMonths(monthStartDay, today);
-  if (months === null || monthStartDay <= 1 || monthStartDay > 28) {
-    return monthLabel(dateFromIso(today) ?? new Date());
-  }
-
-  return `${monthLabel(months.start)} / ${monthLabel(months.end)}`;
-}
+// The old pair's own docblock said which thing would have to change: "If a period ever stops being
+// derivable from one number, this is the thing that has to become an API field rather than the thing
+// to extend." That is what happened, so the deletion is the prediction being carried out.
 
 // A single calendar date, in the two lengths the design draws it. Long is the Date
 // field's closed trigger, "Oct 8, 2025" (09 node 28:402, and the same string on 11).
