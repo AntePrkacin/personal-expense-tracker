@@ -263,3 +263,29 @@ Welcome panel's ground.
 - [ ] Amend the docs that called the sidebar dark (`components/CLAUDE.md`,
       `frontend/src/app/CLAUDE.md`, the `globals.css` neutral comments)
 - [ ] Gates, plus a headless measure of panel-against-canvas separation in both themes
+
+## Third addendum: the uncapped card loses its strip (2026-08-10)
+
+The product owner's third fold-in: the `CardBanner` strip under every uncapped category card
+("No limit set for this category" over a "Set limit" action) is removed, and the summary card
+keeps its "Allocate" strip. Claude Design's `CategoriesTab.jsx` is the reference and settles the
+nuance the request left open - its uncapped card draws no footer banner at all, but the call to
+action survives "as a chip on the spend row", a solid-accent "Set limit" pill beside the spend
+figure. Asked rather than assumed, the product owner chose to match that fully rather than remove
+the action outright.
+
+So `SetLimitBanner.tsx` is deleted and `SetLimitButton.tsx` replaces it: the same smallest client
+wrapper, the same `useEditCategory().open(category, { focus: 'monthlyCap' })`, the same composed
+accessible name ("Set limit for Groceries", the WCAG 2.5.3 lesson `CardBanner` records), rendered
+as a `btn btn-primary btn-sm` on the spend row. The uncapped card becomes one plain
+`card bg-base-100 shadow-sm` box like its capped sibling, the fallback card gets no pill for the
+reason it got no strip, and `AllocateBanner` becomes `CardBanner`'s only caller - which is also
+what the design system uses the strip for.
+
+### Third addendum tasks
+
+- [ ] Delete `SetLimitBanner.tsx`; build `SetLimitButton.tsx`; rework `CategoryCard`'s uncapped
+      shape onto the plain box with the pill on the spend row
+- [ ] Correct every comment and doc that cites the strip or its copy; note the narrowed scope on
+      the CardBanner contrast entry in `docs/TODO.md`
+- [ ] Gates, plus a look at the Categories screen story under both themes

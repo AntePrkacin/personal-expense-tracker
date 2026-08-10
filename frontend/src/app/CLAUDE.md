@@ -1602,6 +1602,17 @@ than left as archaeology about a state nothing can reach. **The Categories tab i
 this app with no inert control on it.** Four things about the modal behind it are decisions rather
 than shape.
 
+**PET-74's third addendum broke that symmetry the other way, and the uncapped card's strip is
+gone.** Claude Design's own `CategoriesTab.jsx` draws no footer banner on an uncapped card - its
+comment says the call to action "rides as a chip on the spend row" - and reserves the `CardBanner`
+strip for the summary card's "Allocate", which is now the app's arrangement too, by the product
+owner's decision. `SetLimitBanner.tsx` is deleted; `SetLimitButton.tsx` is the same smallest client
+wrapper rendering the accent pill on the spend row, same `useEditCategory().open(category,
+{ focus: 'monthlyCap' })`, same composed accessible name ("Set limit for Groceries"), and the
+"No limit set for this category" sentence is retired copy. `AllocateBanner` is `CardBanner`'s only
+caller now, and the uncapped card is one plain `card bg-base-100 shadow-sm` box like its capped
+sibling.
+
 **It owns its open state and takes no provider**, which is `AddCategoryButton`'s criterion applied
 unchanged: one trigger on one route, where `EditCategoryProvider` exists because the edit modal has a
 kebab per card _and_ a "Set limit" per uncapped card. Being a large modal changes nothing about that.

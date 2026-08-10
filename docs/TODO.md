@@ -1541,7 +1541,10 @@ compositing the text over the background and reading the pixel back rather than 
 `getComputedStyle`. Light measures **6.75:1** and passes. **Dark measures 4.13:1**, where AA wants
 4.5:1 for text this size - the strip is `bg-primary` and everything on it is `text-primary-content`,
 which was stock daisyUI when this was measured, so at the time nothing in this repo had chosen
-those two values.
+those two values. (PET-74's third addendum narrowed where the strip appears: the uncapped category
+cards carry an in-row `btn-primary` "Set limit" pill instead, which is the same colour pairing at
+button size, so the summary card's "Allocate" strip is the only remaining instance of the strip
+itself.)
 
 **The action and the sentence beside it measure identically, on both cards**, which is what says the
 finding belongs to the strip rather than to any one control. It has been there since PET-36 built
