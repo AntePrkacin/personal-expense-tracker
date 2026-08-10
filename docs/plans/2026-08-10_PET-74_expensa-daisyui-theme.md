@@ -289,3 +289,32 @@ what the design system uses the strip for.
 - [ ] Correct every comment and doc that cites the strip or its copy; note the narrowed scope on
       the CardBanner contrast entry in `docs/TODO.md`
 - [ ] Gates, plus a look at the Categories screen story under both themes
+
+## Fourth addendum: the field focus ring (2026-08-10)
+
+Reported by the product owner with screenshots: every input and select grows a "double border"
+when clicked or opened. Diagnosed as pure daisyUI default - `.input`/`.select`/`.textarea` on
+`:focus`, `:focus-within` and `:open` recolour the field's own border to full `base-content`
+**and** draw a second 2px outline of the same colour offset 2px outside it, and because the
+selector is `:focus` rather than `:focus-visible` it fires on every mouse click. In the dark
+theme that is a white ring floating around a white border.
+
+Asked rather than assumed, the product owner chose **Claude Design's treatment** over removal:
+its fields focus as a single thin accent ring hugging the field (the pickers'
+`inset 0 0 0 1.5px var(--bg-accent)`), and no hover wash. So `globals.css` gains unlayered rules
+that recolour the focused border to `primary` and thicken it with a 1px inset shadow, mouse and
+keyboard alike - the WCAG 2.4.7 indicator never disappears, it stops doubling. Three details are
+load-bearing: the rules are **unlayered** because daisyUI's sit in nested `@layer` blocks and
+unlayered author CSS outranks them at any specificity; the outline is **transparent rather than
+removed** so Windows High Contrast, which ignores box-shadow, repaints it in system colours
+(daisyUI's own forced-colors trick); and the **error rules are restated**, because the unlayered
+primary rule would otherwise beat daisyUI's layered `.input-error:focus` and paint a focused
+invalid field's ring indigo.
+
+### Fourth addendum tasks
+
+- [ ] The field-focus rules in `globals.css`, with the error-state restatement
+- [ ] Amend the two `frontend/CLAUDE.md` sentences that promise `globals.css` holds only the
+      blocks and the fonts
+- [ ] Gates, plus a headless focus walk: ring single and primary on focus in both themes, error
+      field's ring stays error, the offset outline gone

@@ -10,9 +10,10 @@ in `docs/guides/configuration.md`.
 **daisyUI 5 on Tailwind v4 is the design system as of PET-57**, which retired the hand-rolled
 Figma-token layer. `frontend/src/app/globals.css` holds the Tailwind import, the daisyUI plugin
 registration, the two **Expensa theme blocks** PET-74 authored from the design tokens -
-`expensa-light` the default, `expensa-dark` selected automatically from the OS - and the two font
-tokens. Its header comment is the authority for where every value came from and which four are
-derivations. There is no `tailwind.config`; Tailwind v4 is configured CSS-first.
+`expensa-light` the default, `expensa-dark` selected automatically from the OS - the two font
+tokens, and the field-focus rules that swap daisyUI's double focus ring for Claude Design's
+single accent one. Its comments are the authority for where every value came from and which four
+are derivations. There is no `tailwind.config`; Tailwind v4 is configured CSS-first.
 
 ### Figma against daisyUI: the division of authority
 
@@ -49,7 +50,10 @@ violated once by somebody working from the design file in good faith.
    sentence that stood here. What that rule forbade narrowed rather than died: **never re-theme
    at a call site, and never eyedrop a value from the dead Figma pages** - a colour changes by
    editing the theme blocks and re-running the guard below, nowhere else. `globals.css` holds
-   the two `@plugin 'daisyui/theme'` blocks and the two font variables, and that is still the
+   the two `@plugin 'daisyui/theme'` blocks, the two font variables and the field-focus rules
+   (PET-74's fourth addendum: daisyUI's border-plus-offset-outline focus read as a double
+   border, and Claude Design's single accent ring replaces it - the file's own comment carries
+   the account, including why an error field's ring stays error-coloured), and that is still the
    whole of what it may ever contain. The colour rule below is the same prohibition from the
    other end, because a raw `text-red-600` is re-theming by hand, one element at a time.
 

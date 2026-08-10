@@ -173,3 +173,47 @@
   --font-display: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
+
+/* The field focus treatment (PET-74's fourth addendum, the product owner's
+   decision). daisyUI's default recolours a focused field's border to full
+   base-content AND draws a second 2px outline of the same colour offset 2px
+   outside it - in dark mode a white ring floating around a white border, which
+   reads as a double border on every click, since the trigger is :focus rather
+   than :focus-visible. Claude Design's fields focus as a single thin accent
+   ring hugging the field (its pickers use `inset 0 0 0 1.5px var(--bg-accent)`
+   when open), and that is what these rules paint instead: the border recolours
+   to primary and a 1px inset shadow thickens it, mouse and keyboard alike, so
+   the indicator WCAG 2.4.7 wants never disappears - it just stops doubling.
+
+   Deliberately unlayered, which is what makes them win: daisyUI's component
+   rules sit inside nested @layer blocks, and unlayered author CSS outranks any
+   layered rule at any specificity. The outline is transparent rather than
+   `none` so Windows High Contrast (forced-colors), which ignores box-shadow
+   and repaints transparent outlines in system colours, keeps a visible ring -
+   daisyUI's own forced-colors fallback uses the same trick.
+
+   The error rules restate what daisyUI's `.input-error:focus` already says,
+   because these unlayered rules would otherwise beat it and paint a focused
+   invalid field's ring primary: an error field's ring stays error-coloured,
+   focused or not. */
+.input:focus,
+.input:focus-within,
+.select:focus,
+.select:focus-within,
+.select:open,
+.textarea:focus,
+.textarea:focus-within {
+  --input-color: var(--color-primary);
+  outline: 2px solid #0000;
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.input-error:focus,
+.input-error:focus-within,
+.select-error:focus,
+.select-error:focus-within,
+.select-error:open {
+  --input-color: var(--color-error);
+  box-shadow: inset 0 0 0 1px var(--color-error);
+}
