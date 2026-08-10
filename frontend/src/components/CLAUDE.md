@@ -143,7 +143,9 @@ their markup.
 
 ## The direct children
 
-`components/` has six direct children. Four belong to the access screens: `LogoLockup.tsx`
+`components/` has seven direct children as of PET-47, whose `BudgetField.tsx` is documented at the
+end of this section. Six of them, and the count this paragraph opens on, predate it. Four belong to
+the access screens: `LogoLockup.tsx`
 (the accent tile and wordmark), `AccessCard.tsx` (the centred column and `card` box, with an
 `aboveCard` slot the onboarding step indicator drops into), and `ResendLink.tsx` with
 `LogInAgain.tsx`, the recovery controls. The fifth is `EmptyState.tsx` and the sixth
@@ -177,6 +179,33 @@ earns it a file is arithmetic rather than taste: the identical five tokens stood
 three-copy trigger. `components/ResendLink.tsx` deliberately does **not** use it: that one
 switches between `role="alert"` and `role="status"` over three treatments, and a component with
 a politeness prop would be a worse answer than two files.
+
+**The seventh is `components/BudgetField.tsx` (PET-47), and it earns its file on both halves of
+the bar at the top of this page.** It carries real logic - a controlled amount, a currency picker
+over the platform popover, and the aria wiring for both - and it is genuinely shared: `app/setup/`
+collects a budget before an account exists and `app/(app)/settings/` edits one afterwards, which
+is `AccessCard`'s criterion of spanning route segments in **different** trees rather than the rule
+of three. It is the first direct child that is a form control, and it is deliberately not in
+`ui/`: that folder mirrors the Figma Components page and is complete, and this is not one of its
+tiles.
+
+Three things about it are decisions rather than shape, and all three are in the file. Its box is
+daisyUI's **`join`**, which is what makes the currency segment and the amount one pill with no
+authored CSS - measured in Chrome at 40px on both halves with the radius split across them. It
+takes `currency` and `value` as **props and reads no context**, because onboarding runs pre-auth
+where `(app)/PreferencesProvider` does not exist, so a field that called `useMoney()` would have
+been unusable on one of the two screens it is for. And it is the one place in this repo that
+carries **`'use client'` while `frontend/src/components/CLAUDE.md`'s conventions say components
+stay Server Components** - `ResendLink` was the only exception before it. The reason is the same:
+it holds the one piece of state a platform popover cannot avoid, the boolean `aria-expanded`
+reports.
+
+**Its one deviation from the design system is the focus ring**, and it is worth knowing before
+somebody "fixes" it. The team's Claude Design version moves the ring onto the _container_, so the
+whole pill lights up; daisyUI gives each `join-item` its own, and that is what ships, because
+reproducing the container ring means authoring a selector - which `frontend/CLAUDE.md` forbids
+outright. The per-item ring is also the more accurate signal, since it says which half of the
+control has the caret. `docs/TODO.md` records it as owed a designer.
 
 ## Conventions
 

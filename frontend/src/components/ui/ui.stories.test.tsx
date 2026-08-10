@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
+import * as BudgetField from '../BudgetField.stories';
 import * as Button from './Button.stories';
 import * as Input from './Input.stories';
 import * as Select from './Select.stories';
@@ -29,6 +30,13 @@ type Meta = { title?: string; component?: React.ElementType; args?: Args };
 type StoryModule = Record<string, unknown> & { default: Meta };
 
 const MODULES: [name: string, module: StoryModule][] = [
+  // **`components/BudgetField` is not in `ui/`, and it is registered here anyway.** A review found
+  // it in no smoke suite at all: this file covered `ui/` only, `screens.stories.test.tsx` asserts a
+  // `Screens/` prefix, and `build-storybook` bundles a module without executing a story - so a
+  // runtime throw in it would have shipped through green CI and surfaced only when somebody opened
+  // Storybook. Its title *is* `Components/…`, which is the one thing this suite asserts, so it fits
+  // here rather than wanting a fourth suite for a single file.
+  ['BudgetField', BudgetField as StoryModule],
   ['Button', Button as StoryModule],
   ['Input', Input as StoryModule],
   ['Select', Select as StoryModule],

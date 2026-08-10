@@ -55,8 +55,10 @@ export const Empty: Story = {
           `(app)` shell's own gutter, since neither wraps a story. */}
       <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
         <DashboardScreen
+          monthStartDay={1}
           budgetCard={
             <BudgetCard
+              currency="USD"
               spent={0}
               monthlyBudget={2000}
               remaining={2000}
@@ -67,10 +69,15 @@ export const Empty: Story = {
               isEmpty={true}
             />
           }
-          trendCard={<TrendCard weeklyBuckets={[]} daysLeft={31} isEmpty={true} />}
-          donutCard={<CategoryDonut categories={[]} spent={0} />}
+          trendCard={<TrendCard currency="USD" weeklyBuckets={[]} daysLeft={31} isEmpty={true} />}
+          donutCard={<CategoryDonut currency="USD" categories={[]} spent={0} />}
           recentTransactionsCard={
-            <RecentTransactionsCard recentTransactions={[]} categories={[]} isEmpty={true} />
+            <RecentTransactionsCard
+              currency="USD"
+              recentTransactions={[]}
+              categories={[]}
+              isEmpty={true}
+            />
           }
           insightCard={<InsightTeaserCard insight={null} isEmpty={true} />}
         />

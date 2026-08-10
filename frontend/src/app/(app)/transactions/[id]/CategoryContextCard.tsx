@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
 import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
-import { formatCurrency, formatIsoDayMonth, formatNegative } from '@/lib/format';
+import { formatIsoDayMonth } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { CategoryContext, TransactionDetail } from '@/lib/transactionDetail';
 
 import { barPercent, chipFor } from './categoryStatus';
@@ -30,13 +31,24 @@ type CategoryContextCardProps = {
   recentInCategory: TransactionDetail['recentInCategory'];
   /** Appended to each sibling's href so the breadcrumb chain keeps the list's filters. */
   query: string;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
 export function CategoryContextCard({
   category,
   recentInCategory,
   query,
+  currency,
 }: CategoryContextCardProps) {
+  const { formatCurrency, formatNegative } = moneyFormatters(currency);
+
   const chip = chipFor(category);
   const tileClass = categoryTileClass(category.color);
 

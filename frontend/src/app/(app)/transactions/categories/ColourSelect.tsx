@@ -7,7 +7,7 @@ import { categoryDotClass, type CategoryColour } from '@/components/ui/categoryC
 import { FieldShell } from '@/components/ui/FieldShell';
 import type { PaletteColour } from '@/lib/palette';
 
-import { centreChosenRow } from './pickerScroll';
+import { centreChosenRow } from '@/lib/pickerScroll';
 
 // The Color field's picker: a swatch and a name per row, with a tick on the chosen one.
 //

@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/Button';
 import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
 import { FormError } from '@/components/FormError';
 import { reformatAmountInput } from '@/lib/amountField';
-import { formatCurrency, formatWhole } from '@/lib/format';
+import { currencySymbol, type MoneyFormatters } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
 import { Modal, type ModalHandle } from '../../Modal';
+import { useCurrency, useMoney } from '../../PreferencesProvider';
 import {
   applyCap,
   invalidRows,
@@ -98,8 +99,16 @@ export const ALLOCATE_EMPTY =
  * know is that there is nothing left to give this category. Reached whenever the budget is fully
  * assigned, which is an ordinary state rather than an edge - it is where the modal's own snap leaves
  * you.
+ *
+ * **The formatters are a parameter for `deleteTransactionBody`'s reason**: PET-47 made money follow
+ * the profile's currency through a context, which only a hook can reach, and this is a plain
+ * function so its suite needs no provider around it.
  */
-export const cappedMessage = (capCents: number, budgetCents: number): string =>
+export const cappedMessage = (
+  capCents: number,
+  budgetCents: number,
+  { formatCurrency, formatWhole }: MoneyFormatters,
+): string =>
   capCents === 0
     ? `Nothing left to assign. Free up budget from another category first.`
     : `Capped at ${formatCurrency(capCents / 100)} - the rest of your ${formatWhole(budgetCents / 100)} is assigned elsewhere.`;
@@ -127,6 +136,11 @@ export function AllocateBudgetModal({
 }: AllocateBudgetModalProps) {
   const router = useRouter();
   const modalRef = useRef<ModalHandle>(null);
+  const money = useMoney();
+  // The cap inputs' prefix glyph, which was a literal `$` until PET-47's review - so a GBP account
+  // read "£1,350 spent of £3,000" above a column of fields prefixed with dollars.
+  const currency = useCurrency();
+  const { formatCurrency, formatWhole } = money;
 
   // **Read once on open and deliberately not resynced.** A refresh behind the open dialog would
   // otherwise rewrite the fields under the user's hands mid-edit. The cost is that a budget or a cap
@@ -433,7 +447,7 @@ export function AllocateBudgetModal({
                     <div className="ml-auto w-36 shrink-0">
                       <label className={error ? 'input input-error w-full' : 'input w-full'}>
                         <span aria-hidden="true" className="opacity-60">
-                          $
+                          {currencySymbol(currency)}
                         </span>
                         <input
                           id={fieldId}
@@ -494,7 +508,7 @@ export function AllocateBudgetModal({
       ) : null}
 
       <p role="status" className="text-warning text-xs">
-        {snap === null ? '' : cappedMessage(snap.cents, ledger.budgetCents)}
+        {snap === null ? '' : cappedMessage(snap.cents, ledger.budgetCents, money)}
       </p>
 
       <FormError message={failure ?? ''} />

@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 
-import { formatWhole } from '@/lib/format';
+import { useMoney } from '../PreferencesProvider';
 
 // The weekly trend chart's plot, and the only client boundary on the card.
 //
@@ -101,6 +101,11 @@ function toNumber(value: string | number | undefined): number {
 }
 
 export function TrendChart({ rows, max }: { rows: TrendRow[]; max: number }) {
+  // `renderValue` below is passed to `LabelList` as a plain render function rather than mounted as
+  // a component, so it cannot hold a hook of its own and reads this one out of the closure.
+  // `TrendTooltip` is a real element and calls `useMoney()` itself.
+  const { formatWhole } = useMoney();
+
   // Recharts positions this from the bar's own box, so it needs the row back to know whether the
   // week has started. A plain function rather than a component, so nothing here looks like a
   // component defined inside a render.
@@ -185,6 +190,8 @@ export function TrendChart({ rows, max }: { rows: TrendRow[]; max: number }) {
 }
 
 function TrendTooltip({ active, payload }: TooltipContentProps) {
+  const { formatWhole } = useMoney();
+
   const row = payload?.[0]?.payload;
   if (active !== true || row === undefined) return null;
 

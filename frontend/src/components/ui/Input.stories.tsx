@@ -85,3 +85,34 @@ export const WithError: Story = {
     </div>
   ),
 };
+
+/**
+ * The standing hint, PET-46's addition, and the case worth reviewing is the second one.
+ *
+ * A hint is not an error: it states something permanently true of the field that the label has no
+ * room for, so it keeps the muted treatment and never borrows `aria-invalid`. When a field carries
+ * both, the hint renders above the message and the control names **both** ids in
+ * `aria-describedby` - a control naming only the error would stop describing its own hint at
+ * exactly the moment the reader most needs the whole picture.
+ *
+ * Undesigned like every other state here, so it owes A29 a sign-off with the rest.
+ */
+export const WithHint: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4">
+      <Input
+        id="story-hint-email"
+        label="Email"
+        defaultValue="marko@email.com"
+        hint="Login links will be sent here."
+      />
+      <Input
+        id="story-hint-invalid"
+        label="Email"
+        defaultValue="marko@"
+        hint="Login links will be sent here."
+        error="Enter a valid email address."
+      />
+    </div>
+  ),
+};

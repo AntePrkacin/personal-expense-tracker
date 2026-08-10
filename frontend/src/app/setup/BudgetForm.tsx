@@ -3,13 +3,12 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { BudgetField } from '@/components/BudgetField';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { reformatAmountInput } from '@/lib/amountField';
 import { ACCESS_ROUTES } from '@/lib/routes';
 
-import { DEFAULT_CURRENCY, isBudgetValid } from './draft';
+import { isBudgetValid } from './draft';
 import { useSetupDraft } from './SetupDraftProvider';
 
 // The interactive half of 02 Setup: the currency select, the monthly budget field
@@ -18,19 +17,14 @@ import { useSetupDraft } from './SetupDraftProvider';
 // This is the repo's first stateful form, so a few of the decisions below are
 // conventions rather than local choices. They are written out for that reason.
 
-/**
- * The only currency the design ever shows (A6, BUD-2).
- *
- * One option rather than a disabled control: Figma draws an ordinary enabled
- * select with its chevron, and no frame draws a disabled field at all. The label
- * carries the symbol because the frame does.
- *
- * A hyphen, not the em dash Figma types. The repo normalised that in
- * `Input.stories.tsx` and PET-9's own ticket text, and the two glyphs are
- * indistinguishable in a diff - which is why the test asserts against an em-dash
- * escape rather than eyeballing the string.
- */
-const CURRENCY_OPTIONS = [{ value: DEFAULT_CURRENCY, label: 'USD - $' }];
+// **The separate "Currency" select is gone as of PET-47**, and with it `CURRENCY_OPTIONS`, which
+// held the single `USD - $` entry A6 and BUD-2 called for. Both are absorbed into
+// `components/BudgetField`, whose left segment is the currency picker - the shape the team's
+// Claude Design system draws and the one the product owner chose over Figma's two-control row.
+// Three currencies are offered now rather than one, which amends A6 and PET-47's AC2.
+//
+// The draft's shape did not move: it still holds `currency` and a display-string `budget`, so
+// `parseDraft`, `toRegisterBody` and step 3's validation are all untouched.
 
 /**
  * The one validation message (A5, BUD-6).
@@ -43,8 +37,7 @@ const CURRENCY_OPTIONS = [{ value: DEFAULT_CURRENCY, label: 'USD - $' }];
  */
 const BUDGET_REQUIRED = 'Enter an amount greater than 0.';
 
-/** Field ids, which `ui/Input` and `ui/Select` require rather than generating. */
-const CURRENCY_ID = 'setup-currency';
+/** The field id, which `ui/FieldShell` requires as a literal rather than generating. */
 const BUDGET_ID = 'setup-budget';
 
 export function BudgetForm() {
@@ -94,25 +87,16 @@ export function BudgetForm() {
     // gap-5 matches the card's own 20px rhythm, so the three rows below sit on the
     // same grid as the copy block above them.
     <form noValidate onSubmit={onSubmit} className="flex w-full flex-col gap-5">
-      <Select
-        id={CURRENCY_ID}
-        label="Currency"
-        options={CURRENCY_OPTIONS}
-        value={draft.currency}
-        onChange={(event) => patchDraft({ currency: event.currentTarget.value })}
-        required
-      />
-
-      {/* The currency variant is what draws the `$` prefix and the larger value;
-          `ui/Input` documents it against this very node (42:721). The box, its
-          border and its focus ring are daisyUI's `input`, so nothing here
-          restates them. */}
-      <Input
+      {/* One control where the frame draws two rows. The `$` prefix `ui/Input`'s currency variant
+          used to draw is the picker's own symbol now, and the box, its border and its focus ring
+          are daisyUI's `join` and `input`, so nothing here restates them. */}
+      <BudgetField
         id={BUDGET_ID}
         label="Monthly budget"
-        variant="currency"
+        currency={draft.currency}
+        onCurrencyChange={(currency) => patchDraft({ currency })}
         value={draft.budget}
-        onChange={onBudgetChange}
+        onValueChange={onBudgetChange}
         error={error}
         required
       />

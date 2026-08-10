@@ -2,7 +2,7 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
-import { formatWhole } from '@/lib/format';
+import { useMoney } from '../PreferencesProvider';
 
 // The donut's ring, and the card's only client boundary. `CategoryDonut` stays a Server
 // Component and everything on the card that is text - the heading, the centre total, the whole
@@ -87,6 +87,12 @@ export function CategoryRing({ slices }: { slices: RingSlice[] }) {
 }
 
 function SliceTooltip({ active, payload }: TooltipContentProps) {
+  // Recharts renders `content` as a real element rather than calling it, so this is an ordinary
+  // component inside the shell's provider and the hook resolves. It has to be read before the
+  // early return below, which is the ordinary rules-of-hooks constraint and the reason the
+  // destructure sits above a guard it does not need.
+  const { formatWhole } = useMoney();
+
   const slice = payload?.[0]?.payload;
   if (active !== true || slice === undefined) return null;
 

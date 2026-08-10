@@ -1,3 +1,4 @@
+import { isFilled, isPositiveAmount } from '@/lib/amount';
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
 import { partsFromIso } from '@/lib/date';
 import type { Transaction } from '@/lib/transactions';
@@ -85,7 +86,7 @@ export type TransactionFormField = 'amount' | 'categoryId' | 'date' | 'merchant'
  * and a value over it comes back as the `invalid` reason.
  */
 export function isAmountValid(amount: string): boolean {
-  return parseAmountInput(amount) > 0;
+  return isPositiveAmount(amount);
 }
 
 /**
@@ -118,7 +119,7 @@ export function isDateValid(date: string): boolean {
 
 /** Whether the merchant is filled (ADD-5), matching the DTO's `@IsNotEmpty()`. */
 export function isMerchantValid(merchant: string): boolean {
-  return merchant.trim() !== '';
+  return isFilled(merchant);
 }
 
 /**

@@ -471,6 +471,33 @@ reads together rather than only this one.
 
 ### The header period ignores the profile's month start day
 
+**Closed 2026-08-09 by PET-47, taking the proposed fix below exactly as written.** `periodOverline`
+and `periodLabel` in `lib/format.ts` name both months above a `monthStartDay` of 1 - "September /
+October 2025" - and the five period-scoped consumers moved onto them: the Dashboard's overline and
+month pill, the Transactions overline, the Categories tab's overline and its "{period} spending"
+heading, and the Insights overline. At the default of 1 the output is byte-identical to what those
+five drew before, which `format.test.ts` pins directly, because almost every account is on the
+default and this fix has to be invisible to all of them.
+
+Three things about the closure are worth having written down. **`monthOverline` and `monthLabel`
+survive and are not deprecated**: `(app)/DateField.tsx` draws a real calendar grid and its popover
+header names the month that grid is *of*, where a period label over six rows of real weeks would be
+nonsense - so the split is calendar-month versus budgeting-period rather than old versus new.
+**The month arithmetic is a deliberate second copy** of `backend/src/common/month-window.ts`'s rule,
+bounded to two branches and used for a *label* only; every figure on every screen is still scoped to
+the window the backend resolved. The alternative was a period-name field on four separate responses.
+And **the PET-30 symptom below is gone with it**: the transactions header and `period=current` now
+agree about which window the page is showing, so a transaction inside the calendar month but outside
+the period is no longer absent from a page whose overline names that month.
+
+What does **not** close here is the zone. `todayIsoDate()` is the frontend host's and the backend
+resolves against `APP_TIMEZONE`, so on the boundary day the label can name the neighbouring period
+until the two agree - the same gap the `TrendCard` and `formatRelativeDate` entries already track,
+inherited rather than introduced, since the old code read `new Date()` at those same call sites.
+The `en-US` paragraph at the end of this entry also still stands and is now PET-47's second
+deviation rather than its first: money follows the profile's currency and keeps en-US grouping, by
+product decision.
+
 `monthOverline()` and `monthLabel()` in `lib/format.ts` format the **calendar** month, and
 A9 says the profile's `monthStartDay` is what defines the period used by "This month" filters
 and "days left" math. The display is correct for the default of 1 and wrong for any other
@@ -737,7 +764,9 @@ specific period:
   buckets whose last is three days.
 - Reaching either deliberately means setting `monthStartDay`, and **no screen can**: the Settings
   preferences card is PET-47 and is not built, so today it is a `PATCH /api/profile` by hand or a
-  direct write to the user database.
+  direct write to the user database. PET-46 built the Settings page's form and its Profile card but
+  deliberately not that card, so this stays true and its blocker narrowed from "Settings does not
+  exist" to "PET-47".
 
 **Deferred until there is a dummy-content script, and it should be built on that script rather
 than beside it.** Seeding a believable account is wanted for far more than this - every empty
@@ -1250,6 +1279,16 @@ was lifted. The count is still two. The trigger to watch for is now a third *for
 amount without going through that module, and the prediction above is left standing rather than
 deleted because the reasoning for the lift is unchanged when it does arrive.
 
+**Closed 2026-08-09 by PET-47, on exactly the trigger written above.** The Settings Preferences card
+validates a monthly budget, is not a transaction, and cannot reach `app/setup/draft.ts` without
+pointing the signed-in shell at onboarding - the layering inversion `lib/resend.ts` was moved out of
+`app/check-email/` to remove. `frontend/src/lib/amount.ts` now holds `isPositiveAmount` and
+`isFilled`, and the instruction above to "take `isMerchantValid` and `isNameValid` with it" was
+followed. **Every existing export keeps its own name and delegates**: `isBudgetValid` reads
+correctly in a draft, `isMerchantValid` on a transaction, and renaming four predicates across five
+forms would have been churn in service of nothing - so what the lift buys is one copy of each rule
+to fix, and deliberately not one vocabulary. No call site changed.
+
 ### Screen 24's no-address arrival is new copy and a reworded AC
 
 `/check-email` shows the address the user submitted, and PET-12 carries it in a fifteen-minute
@@ -1524,6 +1563,11 @@ exist while Settings' `<main>` is empty. Migrating the whole project to the paid
 *only* mechanism that actually turns training off; a $10 prepay to buy that for a portfolio
 app's seeded test data was judged not worth it. Revisit both the toggle and the tier once
 Settings has a `<main>` and once this app has a real user.
+**PET-46 gave it that `<main>`, so the last clause of the paragraph above is satisfied and the
+blocker is now the other three items on its own list.** There is a real `<form>` on `/settings` to
+host a toggle, and adding one is a profile column, a migration and an `api:sync` - the screen is no
+longer among the missing pieces. The tier question is untouched, and it is still the only mechanism
+that turns training off.
 
 **A shared-store aggregate cap on the Gemini quota.** The `scan` throttler is per-user and its
 store is in-memory (see "The auth throttler is in-memory" below, which the same store serves),
@@ -2093,6 +2137,15 @@ have to rediscover why a screen with no transactions on it reads the transaction
 
 ### `text-error` is 2.86:1 in the light theme, and PET-36 is where it became measurable
 
+**PET-46 adds a link to that list rather than a second failing colour, and the choice was measured
+rather than reasoned.** The Settings form's expired-session line carries a "Log in again" anchor
+inside its own `role="alert"`, and the obvious `link link-primary` composites to **3.40:1** against
+the dark card - a *new* failure, on the one line a reader in trouble has to follow. A bare `link`
+inherits the paragraph's `text-error` instead and is distinguished by daisyUI's underline, so it
+measures 5.53:1 in dark and rides on the 2.86:1 above in light: exactly as legible as the sentence
+around it, and one problem to fix here rather than two. Whatever replaces `text-error` fixes the
+link with it.
+
 Frame 13 draws the over-budget figure in red and CTG-4 says so in as many words, so
 `CategoryCard`'s footer takes `text-error` when a category is at or past its cap. PET-36's browser
 walk measured it: composited over `bg-base-100` it is **2.864:1 in light** and **5.53:1 in dark**,
@@ -2389,6 +2442,101 @@ because it pushes the widths past 100% and flex then shrinks the *large* segment
 the bar would stop being accurate everywhere to make one invisible segment visible.
 `Screens/Allocate budget`'s `TinySegments` is that case.
 
+### The Settings profile card invents five strings and three states, and A29 owes all of them
+
+SET-5 draws no success, no error and no unsaved-changes visual anywhere on frame 17, so PET-46's
+pending, failure and confirmation treatments are ours. Four of the strings are the failure lines -
+`invalid` ("check the values", never "try again", because a body the DTO rejects loops forever),
+`taken` ("That email address already belongs to another account."), `unauthenticated` and `failed` -
+and the fifth is the success line, "Changes saved". The four *field* messages are not on this list:
+they are copied byte for byte from `app/setup/register/RegisterForm.tsx`, which collects the
+identical three fields under the identical three rules, so they are already whatever A29 makes them
+there.
+
+`Screens/17 Settings` carries three stories that exist to collect the answer rather than to diff
+against the design: `WithMessages` puts all three inline messages up at once, `EmailTaken` shows the
+409 line, and `Saved` shows the confirmation. Two of them are states an untouched form cannot reach.
+
+### The Settings page has no unsaved-changes guard, by design
+
+Navigating away from a half-edited Profile card discards it silently: no prompt, no dirty marker, no
+"you have unsaved changes" anywhere. SET-5 designs none, and A29 designs no state that could carry
+one, so inventing a `beforeunload` prompt would be a larger deviation than the three states PET-46
+already invented. Recorded because it looks like an omission and is a decision, and because the
+cheapest honest fix - marking the form dirty in the Save row - is one more undesigned state rather
+than none.
+
+The related choice **was** that Save stays enabled on a clean form, where `AllocateBudgetModal`
+disables its own on `!isDirty` - on the reasoning that this modal has a designed disabled state and
+this frame does not. **That was reversed by the product owner, and the reversal is the better call
+for a reason the original missed.** The guards in the submit handler already made a clean press do
+nothing, so the button was live, pressable and silently inert: a control that looks actionable and
+is not, which is the exact failure every drawn-but-unbuilt control on the Categories tab was given
+`aria-disabled` to avoid. Deviating from the frame by grey-ing a button is the smaller lie.
+
+It is `disabled` rather than that screen's `aria-disabled`, and the difference is what the state
+means: those controls are unbuilt and must stay focusable to announce why, while this one is built
+and momentarily has nothing to do, which is the ordinary meaning of a disabled submit. It
+re-enables on the next keystroke, so nothing is stranded, and it suppresses implicit submission so
+Enter cannot do what the button will not. What still owes A29 a sign-off is the disabled treatment
+itself, since the frame draws none - it is daisyUI's stock `btn` disabled state.
+
+### The Settings form does not mirror `@MaxLength(100)`, so an over-long name gets generic copy
+
+`settings/settingsForm.ts`'s `isNameValid` checks non-blankness and nothing else, which is
+`categoryForm.isNameValid`'s recorded call about `@MaxLength(60)` applied to a second DTO: a bound
+restated in the frontend is one that can drift from the backend's with every gate green. The cost is
+that a name past 100 characters is rejected by the DTO and surfaces as the form-level `invalid`
+line - "check the values" - rather than as an inline message naming the field and the limit. Closing
+it wants the bound published somewhere both apps read, which is the same wish `CategoryPicker`'s
+`@ArrayMaxSize` literal and `AllocateBudgetModal`'s `MAX_CAP_ROWS` already record: `maxLength`
+reaches no generated type, so there is nothing to read it out of.
+
+### Settings reads the profile twice per view
+
+**Closed 2026-08-09 by PET-47, and by a route nobody predicted here.** Both alternatives this entry
+weighed were about Settings, and neither is what happened: `requireProfile()` is wrapped in React's
+`cache()`, so the two calls collapse to one `GET /api/profile` per render pass and both call sites
+stay exactly as they were. The memo was not built for this - PET-47 needs the profile's currency in
+every Server Component that formats money, which is what made a deduped read worth having at all -
+so the fix arrived as a side effect of a feature rather than as the optimisation this entry declined
+to do on its own. Two things about the closure. The property the entry was defending is intact:
+`cache()` memoizes within a **single render pass**, so `router.refresh()` still re-reads and the
+form's diff baseline is still the current profile. And the "may or may not collapse them" hedge
+below stops mattering, because nothing now depends on what Next's fetch memoisation does with two
+explicit no-stores. What is left is a small correctness gain rather than a saved request: the footer
+and the form provably read one profile, where before they were two reads that could straddle a
+concurrent write - which is the shared-initials rule (SET-6, PET-46 AC5) held by construction.
+
+`(app)/layout.tsx` calls `requireProfile()` for the sidebar footer and `settings/page.tsx` calls it
+again for the form. Both go through `authorizedGet` with `cache: 'no-store'`, so Next's per-request
+fetch memoisation may or may not collapse them - same URL, method and headers, but an explicit
+no-store on each.
+
+Accepted rather than fixed, and the alternatives are both worse at this size. A layout cannot pass
+props to the page it wraps in the App Router, so removing the second read means a profile context
+mounted on all four routes to serve one screen - the shape `AddCategoryButton` already declined for
+one trigger on one route. Threading it any other way would also cost the property the second read
+buys: the form's diff baseline is the *current* profile on every render, which is what makes a
+second press of Save after a successful one send nothing. `/transactions/categories` already fires
+three reads inside a shell that read a fourth, so this is the second instance of a pattern rather
+than a new one. Measure it in the Network panel before deciding it is real.
+
+### Nothing on the Settings form warns that a new address moves the login link
+
+The backend side of this is three entries up, under "Changing an email address leaves three loose
+ends": no re-verification, live links still pointing at the old inbox, and no notification to the
+address that lost the account. PET-46 puts the field on screen, which turns the third of those from
+a latent property into something a user can trigger with a typo, and A39 designs no warning, no
+confirmation step and no re-verification anywhere.
+
+The whole of the frontend mitigation is one standing hint under the field, "Login links will be sent
+here.", which is invented copy joining the A29 list above. What it cannot do is prevent the typo: a
+mistyped-but-valid address is accepted, the account moves to an inbox nobody reads, and the current
+session keeps working until it expires - at which point there is no way back in. A confirmation step
+naming the new address is the cheap fix and contradicts A39 as drawn, which makes it a product
+decision before it is a code one.
+
 ### Saving the last of the budget destroys the control that opened the modal
 
 A third route to the focus-restore gap this file already carries for saving from an empty state and
@@ -2397,6 +2545,67 @@ that assigns the remainder removes the banner during `router.refresh()`, and `Mo
 aims at an element no longer connected. Focus lands on `<body>`, so the next Tab starts from the top
 of the page. Walked in Chrome on PET-70. It joins the existing entry rather than opening a second
 one, and the fix is the same one: a fallback target when the captured element has gone.
+
+### Switching currency re-denominates silently, and nothing on screen says so
+
+PET-47 made the profile's currency live (`USD`, `EUR`, `GBP`). Amounts are stored as integer cents
+with no currency attached, so switching **re-labels rather than converts**: a 2,000 budget stays
+2,000 and becomes €2,000, and every historical transaction re-labels with it, so a $12.40 coffee
+logged last month renders as €12.40.
+
+**This is the product owner's explicit decision, twice over** - re-denominate rather than convert,
+and ship no warning copy for it. Recorded here rather than on screen because a decision nobody can
+see is the kind this repo has learned to write down. Converting instead would need an FX rate
+source, a backend endpoint, a pass over every transaction and category cap, and an answer to what
+happens to historical accuracy - and is arguably wrong anyway, since it would rewrite what the user
+actually spent.
+
+What would close it without any of that is one line under the picker. It belongs with the other
+copy A29 owes a designer.
+
+### The budget field's focus ring is per-segment, where the design system lights the whole pill
+
+`components/BudgetField.tsx` is daisyUI's `join`, so each `join-item` draws its own focus ring. The
+team's Claude Design version moves the ring onto the **container**, so the whole control lights up
+whichever half has the caret.
+
+Not reproduced, and the reason is a rule rather than effort: a container-wide ring means authoring a
+selector, which `frontend/CLAUDE.md` forbids outright for components. The shipped behaviour is also
+arguably the better signal, because it says *which* half is focused. Owed a designer's sign-off with
+the rest of A29's list; if they want the container ring, the honest options are a daisyUI feature
+request or an explicit carve-out from the no-authored-CSS rule, not a quiet exception.
+
+### A fifth picker with no arrow keys, and the count is now the argument
+
+`settings/MonthStartField.tsx` joins `ColourSelect`, `IconSelect`, `TransactionRowMenu` and
+`CategoryCardMenu` in declining `role="listbox"`/`role="option"`/`role="menu"`: those roles promise
+arrow keys, Home/End, type-ahead and `aria-activedescendant`, and none of the five implements them.
+Each is a list of ordinary buttons with `aria-current` naming the chosen row - Tab reaches every one,
+Enter and Space pick.
+
+**PET-47's own plan specified a real listbox here and the implementation deliberately did not**, so
+this entry is where that reversal lives. Building the contract for one control would have given a
+single picker in this app a keyboard model the other four lack, and the next person copying a picker
+would have copied the wrong one. `IconSelect` already ships **64** rows on this pattern, so 28 is not
+the case that breaks it.
+
+What changed with this ticket is the arithmetic: five controls is past the point where "we have not
+implemented it" is a smaller job than "we have implemented it inconsistently". When it is built it
+should be built once - a shared roving-focus hook adopted by all five in one change - rather than per
+control. The two costs stay as `ColourSelect` first recorded them: no arrow keys, and no native
+mobile wheel picker.
+
+### Three more invented states on Settings, and one of them is retroactive
+
+A29 designs no copy for any of these, and PET-47 added them:
+
+- **"Enter an amount greater than 0."** under the monthly budget - the same string
+  `app/setup/BudgetForm.tsx` shows for the same rule, copied rather than shared.
+- **"Every budget figure in the app is measured from this day."** under "Month starts on". This is
+  the one worth a designer's attention rather than a rubber stamp: changing that value is
+  **retroactive**, because the backend derives month attribution from each transaction's date at
+  read time, so every figure in the app re-buckets the moment it saves. The hint understates that.
+- **The currency picker's panel rows** - symbol, full name, code - which no frame draws at all.
 
 ---
 

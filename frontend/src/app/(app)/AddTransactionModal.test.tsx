@@ -1,4 +1,8 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+
+// `render` comes from the shell wrapper: the modal below prefixes the profile's currency symbol as
+// of PET-47, so it reaches `useMoney()`/`useCurrency()`. See `shellRender.tsx`.
+import { render } from './shellRender';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 
@@ -612,7 +616,10 @@ describe('the scan controls', () => {
   const pdf = (size?: number) => file('receipt.pdf', 'application/pdf', size);
 
   /** A shape-valid success carrying only the fields a case cares about. */
-  function found(fields: Partial<ScannedTransactionFields>, missing: string[] = []): ScanReceiptResult {
+  function found(
+    fields: Partial<ScannedTransactionFields>,
+    missing: string[] = [],
+  ): ScanReceiptResult {
     return {
       ok: true,
       data: {
@@ -820,7 +827,9 @@ describe('the scan controls', () => {
     });
 
     it('fills only the gaps a first scan left, so a second page cannot overwrite page one', async () => {
-      scan.mockResolvedValueOnce(found({ merchant: 'Whole Foods', date: '2025-10-06' }, ['amount']));
+      scan.mockResolvedValueOnce(
+        found({ merchant: 'Whole Foods', date: '2025-10-06' }, ['amount']),
+      );
       scan.mockResolvedValueOnce(found({ merchant: 'WHOLEFDS #1234', amount: '31.50' }));
 
       const u = user();
@@ -882,7 +891,9 @@ describe('the scan controls', () => {
       await u.upload(upload(), photo());
 
       expect(
-        await screen.findByText('Nothing readable in that photo. Try again with the whole receipt in frame.'),
+        await screen.findByText(
+          'Nothing readable in that photo. Try again with the whole receipt in frame.',
+        ),
       ).toBeInTheDocument();
     });
   });

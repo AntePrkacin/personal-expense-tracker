@@ -1,8 +1,11 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
+
+import { render } from '../../shellRender';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 
 import type { Allocation, Category } from '@/lib/categories';
+import { moneyFormatters } from '@/lib/money';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
 import {
@@ -13,6 +16,9 @@ import {
 } from './AllocateBudgetModal';
 import { MAX_CAP_ROWS, type toAllocateBody } from './allocateForm';
 import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixture';
+
+/** The formatters the shell's provider would hand the modal; see `PreferencesProvider`. */
+const USD = moneyFormatters('USD');
 
 // The Allocate budget modal. The arithmetic is `allocateForm.test.ts`'s, driven with no DOM at all;
 // what is here is the wiring - the fields, the messages, the save and its five arms.
@@ -198,7 +204,7 @@ describe('AC5-AC7: the caps can never sum above the monthly budget', () => {
     await user().type(capField('Groceries'), '4000');
 
     expect(capField('Groceries')).toHaveValue('1,350.00');
-    expect(snapMessage()).toBe(cappedMessage(135000, 200000));
+    expect(snapMessage()).toBe(cappedMessage(135000, 200000, USD));
   });
 
   it('never lets the remainder go negative or turn red', async () => {

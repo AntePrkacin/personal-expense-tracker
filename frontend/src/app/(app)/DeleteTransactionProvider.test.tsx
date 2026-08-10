@@ -1,4 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+
+import { render } from './shellRender';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 

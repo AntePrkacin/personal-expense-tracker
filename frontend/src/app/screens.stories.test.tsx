@@ -10,6 +10,8 @@ import * as AddCategoryModal from './(app)/transactions/categories/AddCategoryMo
 import * as AllocateBudgetModal from './(app)/transactions/categories/AllocateBudgetModal.stories';
 import * as CategoriesScreen from './(app)/transactions/categories/CategoriesScreen.stories';
 import * as EditCategoryModal from './(app)/transactions/categories/EditCategoryModal.stories';
+import * as SettingsScreen from './(app)/settings/SettingsScreen.stories';
+import * as MonthStartField from './(app)/settings/MonthStartField.stories';
 import * as TransactionsList from './(app)/transactions/TransactionsList.stories';
 import * as TransactionsScreen from './(app)/transactions/TransactionsScreen.stories';
 import * as VerifyFailedScreen from './auth/verify/failed/VerifyFailedScreen.stories';
@@ -130,6 +132,18 @@ const MODULES: [name: string, module: StoryModule][] = [
   // and `ErrorScreen` - so these stories are not a diff against a design, they are the only place
   // this modal can be reviewed. Four of its six exist to collect a specific designer answer.
   ['AllocateBudgetModal', AllocateBudgetModal as StoryModule],
+  // Frame 17, PET-46's own, and the last of the four routed views to reach this list. Three of its
+  // five stories are states the frame draws nothing for - all three inline messages at once, the
+  // 409, and the success confirmation - which makes this module the review surface A29 owes a
+  // sign-off on rather than only a diff against the design. The diff itself stops after the
+  // **second** card and the Save row as of PET-47, which built Preferences; the Categories summary
+  // below it is still that ticket's and still not drawn.
+  ['SettingsScreen', SettingsScreen as StoryModule],
+  // The Month starts on picker, added because a review found it in no smoke suite. Its title is
+  // `Screens/17 Settings/MonthStartField`, so the `Screens/` assertion below covers it. Worth having
+  // its own entry rather than leaning on the screen story: the panel's 28 rows and its scroll cap
+  // render only in this module, and `build-storybook` executes no story.
+  ['MonthStartField', MonthStartField as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

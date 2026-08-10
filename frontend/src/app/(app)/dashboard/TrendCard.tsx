@@ -1,6 +1,6 @@
 import { ChartNoAxesColumnIncreasing } from 'lucide-react';
 
-import { formatWhole } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { DashboardSummary } from '@/lib/dashboard';
 
 import { TrendChart, type TrendRow } from './TrendChart';
@@ -55,6 +55,14 @@ import { bucketRangeLabel, currentWeekIndex, todayFromDaysLeft } from './weeks';
 export type TrendCardProps = Pick<DashboardSummary, 'weeklyBuckets' | 'daysLeft'> & {
   /** The screen's shared PET-26 condition. */
   isEmpty: boolean;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
 /**
@@ -122,7 +130,9 @@ const TONE_DESCRIPTION: Record<TrendRow['tone'], string> = {
   past: '',
 };
 
-export function TrendCard({ weeklyBuckets, daysLeft, isEmpty }: TrendCardProps) {
+export function TrendCard({ weeklyBuckets, daysLeft, isEmpty, currency }: TrendCardProps) {
+  const { formatWhole } = moneyFormatters(currency);
+
   if (isEmpty) {
     return (
       <section className="card bg-base-100 shadow-sm">
