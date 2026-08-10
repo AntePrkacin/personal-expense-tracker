@@ -1,6 +1,7 @@
 import { isFilled, isPositiveAmount } from '@/lib/amount';
 import { isEmailValid } from '@/lib/email';
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
+import type { CurrencyCode } from '@/lib/money';
 import type { Profile } from '@/lib/profile';
 import type { components } from '@/types/api';
 
@@ -32,6 +33,17 @@ import type { components } from '@/types/api';
 // resync in `SettingsForm` compares by value, so a field it did not know about would let an edited
 // form look identical to the server's and be silently reverted.
 //
+// **PET-72 splits this file's one boundary into two, and that is its whole change here.** The
+// budget and the pay day left `UpdateProfileDto`: both apply *from a date*, so setting either now
+// goes through `POST /api/profile/schedule` with the first paycheck it applies from. So
+// `toUpdateProfileBody` narrows to the three fields that are still properties of the account, and
+// `toChangeScheduleBody` is the second boundary, taking the anchor the dialog collected. The
+// prediction above - that one DTO covering every field is what let PET-47 extend rather than
+// restructure - held right up until a field needed a date attached to it.
+//
+// **`firstName` and `lastName` became one `fullName` on the same branch.** The app never used them
+// apart; the sidebar wants initials and a short name, both derivable from one string.
+//
 // **Note this exports its own `invalidFields` and `isNameValid`**, which `categoryForm.ts` and
 // `(app)/transactionForm.ts` also export. Three modules, three different value types, no
 // relationship - the note that file already carries about the second one applies unchanged to the
@@ -51,11 +63,21 @@ import type { components } from '@/types/api';
  * where `ProfileCard`'s takes a bare `string`.
  */
 export type SettingsFormValues = {
-  firstName: string;
-  lastName: string;
+  /**
+   * The display name. One field since PET-72, labelled "Display name", and a
+   * nickname is a legitimate value - which is why `isNameValid` checks only that
+   * it is not blank.
+   */
+  fullName: string;
   email: string;
-  /** An ISO 4217 code, never the display name. `BudgetField` hands back the code itself. */
-  currency: string;
+  /**
+   * An ISO 4217 code, never the display name. `BudgetField` hands back the code itself.
+   *
+   * Typed off the contract since PET-72, where it was a bare `string`: the backend's currency
+   * allowlist publishes a real enum now, so a code the API would refuse cannot reach this field and
+   * `toUpdateProfileBody` needs no cast to put it on the wire.
+   */
+  currency: CurrencyCode;
   /**
    * The **display** string, grouped, e.g. `'2,000'`. Not a number.
    *
@@ -83,8 +105,7 @@ export type SettingsFormField = keyof SettingsFormValues;
  * copy is how that focus call quietly starts finding nothing.
  */
 export const FIELD_ID: Record<SettingsFormField, string> = {
-  firstName: 'settings-first-name',
-  lastName: 'settings-last-name',
+  fullName: 'settings-full-name',
   email: 'settings-email',
   // `currency` has no control of its own: it is the left segment of the budget field, which carries
   // `monthlyBudget`'s id. The entry exists because `Record<SettingsFormField, _>` is an
@@ -107,8 +128,7 @@ export const FIELD_ID: Record<SettingsFormField, string> = {
  */
 export function sameSettingsValues(a: SettingsFormValues, b: SettingsFormValues): boolean {
   return (
-    a.firstName === b.firstName &&
-    a.lastName === b.lastName &&
+    a.fullName === b.fullName &&
     a.email === b.email &&
     a.currency === b.currency &&
     a.monthlyBudget === b.monthlyBudget &&
@@ -147,8 +167,7 @@ export type SettingsFieldProblem = {
  */
 export function toSettingsFormValues(profile: Profile): SettingsFormValues {
   return {
-    firstName: profile.firstName,
-    lastName: profile.lastName,
+    fullName: profile.fullName,
     email: profile.email,
     currency: profile.currency,
     monthlyBudget: formatAmountInput(profile.monthlyBudget.toFixed(2)),
@@ -159,7 +178,7 @@ export function toSettingsFormValues(profile: Profile): SettingsFormValues {
 /**
  * A name is anything that is not blank.
  *
- * Mirrors `@IsNotEmpty()` on both name fields and **deliberately not `@MaxLength(100)`**, which is
+ * Mirrors `@IsNotEmpty()` on the name field and **deliberately not `@MaxLength(100)`**, which is
  * the call `categoryForm.isNameValid` already makes about `@MaxLength(60)`: restating a bound here
  * puts it in two places that can drift, and an over-long name is caught by the DTO and surfaces as
  * the form-level `invalid` line. The trade is that the message for it is generic; the alternative is
@@ -197,13 +216,12 @@ export function emailProblem(email: string): 'required' | 'format' | null {
 export function invalidFields(values: SettingsFormValues): SettingsFieldProblem[] {
   const problems: SettingsFieldProblem[] = [];
 
-  if (!isNameValid(values.firstName)) problems.push({ field: 'firstName', reason: 'required' });
-  if (!isNameValid(values.lastName)) problems.push({ field: 'lastName', reason: 'required' });
+  if (!isNameValid(values.fullName)) problems.push({ field: 'fullName', reason: 'required' });
 
   const email = emailProblem(values.email);
   if (email !== null) problems.push({ field: 'email', reason: email });
 
-  // **Three of the six fields can never appear here, and that is a property of the controls rather
+  // **Two of the five fields can never appear here, and that is a property of the controls rather
   // than an omission.** `currency` and `monthStartDay` are picked from closed lists of valid values,
   // so no interaction can put either in a state the DTO would refuse; a message for them would be
   // one nothing could reach, the shape `TransactionsTable`'s `pending` prop shipped as once.
@@ -259,11 +277,8 @@ export function toUpdateProfileBody(
 ): components['schemas']['UpdateProfileDto'] {
   const body: components['schemas']['UpdateProfileDto'] = {};
 
-  const firstName = values.firstName.trim();
-  if (firstName !== original.firstName) body.firstName = firstName;
-
-  const lastName = values.lastName.trim();
-  if (lastName !== original.lastName) body.lastName = lastName;
+  const fullName = values.fullName.trim();
+  if (fullName !== original.fullName) body.fullName = fullName;
 
   // Both sides lowered for the comparison only. The value that goes on the wire keeps the casing
   // the user typed, so the backend's normaliser stays the single authority on what "the same
@@ -273,22 +288,114 @@ export function toUpdateProfileBody(
 
   if (values.currency !== original.currency) body.currency = values.currency;
 
-  // **Compared as a number, never as a string**, which is `toUpdateTransactionBody`'s call about
-  // its own amount: the field rewrites its display value on every keystroke, so retyping `2,000`
-  // over a stored `2000` is not an edit and `'2,000.00' !== '2000'` would say it was - firing a
-  // PATCH on a form nobody changed, which the endpoint answers 400 to when it is the only key.
-  //
-  // Guarded on validity rather than sent regardless: `parseAmountInput('')` is `NaN`, and
-  // `JSON.stringify` writes that as `null`, which `UpdateProfileDto` rejects for a field that
-  // accepts no nulls at all. `SettingsForm` validates before it diffs, so this is unreachable
-  // through the UI - it is here because the two orderings are one refactor apart and only one of
-  // them is safe.
-  const monthlyBudget = parseAmountInput(values.monthlyBudget);
-  if (isPositiveAmount(values.monthlyBudget) && monthlyBudget !== original.monthlyBudget) {
-    body.monthlyBudget = monthlyBudget;
-  }
-
-  if (values.monthStartDay !== original.monthStartDay) body.monthStartDay = values.monthStartDay;
+  // **The budget and the pay day are deliberately absent, and sending either would be a 400.**
+  // `UpdateProfileDto` dropped both at PET-72 and `forbidNonWhitelisted` rejects them, because
+  // neither can be set without saying from which paycheck it applies. `toChangeScheduleBody` below
+  // is where they go.
 
   return body;
+}
+
+/**
+ * Whether Save has to ask the paycheck question before it can write.
+ *
+ * **This is the whole trigger for the dialog**, and it is deliberately a comparison rather than a
+ * flag the controls set: a user who types over the budget and types the original back has changed
+ * nothing, and asking them which paycheck it applies from would be asking about a write that is not
+ * going to happen. The same reasoning `toUpdateProfileBody` applies to every other field.
+ *
+ * The budget is compared as a **number** for `toUpdateProfileBody`'s own reason: the field rewrites
+ * its display value on every keystroke, so retyping `2,000` over a stored `2000` is not an edit and
+ * `'2,000.00' !== '2000'` would say it was.
+ *
+ * An invalid budget counts as unchanged. `SettingsForm` validates before it gets here, so that is
+ * unreachable through the UI; it matters because the two orderings are one refactor apart and only
+ * one of them avoids asking the question about a value that cannot be saved.
+ */
+export function scheduleChanged(original: Profile, values: SettingsFormValues): boolean {
+  const budgetMoved =
+    isPositiveAmount(values.monthlyBudget) &&
+    parseAmountInput(values.monthlyBudget) !== original.monthlyBudget;
+
+  return budgetMoved || values.monthStartDay !== original.monthStartDay;
+}
+
+/**
+ * The request body for `POST /api/profile/schedule`.
+ *
+ * **Every field is required, unlike the PATCH's diff**, and that is the endpoint's own rule rather
+ * than a simplification here: a schedule is a complete statement, so the body always carries the
+ * budget *and* the pay day *and* the paycheck they apply from. Sending only what changed would mean
+ * the server resolving the other half, which is the same write with a hidden read in front of it.
+ *
+ * `firstPaycheckDate` is assembled from the month the dialog collected and the pay day **the form
+ * holds**, never the stored one: on a save that changes both, the anchor has to fall on the *new*
+ * pay day or the backend answers 400. That coupling is why this takes a month rather than a date -
+ * a caller passing a date could pass one that contradicts `monthStartDay`, and there would be no
+ * reason for it to.
+ *
+ * @param anchorMonth The first month the change applies to, as `YYYY-MM`. The dialog offers the four
+ * before this one, this one, and the four after - see `paycheckMonths`.
+ */
+export function toChangeScheduleBody(
+  values: SettingsFormValues,
+  anchorMonth: string,
+): components['schemas']['ChangeScheduleDto'] {
+  return {
+    monthlyBudget: parseAmountInput(values.monthlyBudget),
+    monthStartDay: values.monthStartDay,
+    firstPaycheckDate: `${anchorMonth}-${String(values.monthStartDay).padStart(2, '0')}`,
+  };
+}
+
+/**
+ * The nine months the paycheck dialog offers: the four before this one, this one, and the four after.
+ *
+ * **A window rather than a free date picker**, and the bound is the point twice over. Forward, a
+ * schedule change more than four months out is a plan rather than a fact, and the periods it would
+ * stretch are ones the user has not lived yet. Backward, the backend refuses an anchor earlier than
+ * the account's first pay schedule - seeded a year before provisioning - so four months is
+ * comfortably inside what it will accept, and the 400 that bound produces is one this list cannot
+ * reach.
+ *
+ * `value` is `YYYY-MM`, which `toChangeScheduleBody` completes into a date with the pay day the form
+ * holds. It is deliberately **not** a full date here: the day depends on a field the user may be
+ * editing in the same save, so binding one in would let the two disagree.
+ *
+ * Pure, and `today` is a parameter rather than a clock read - the rule `month-window.ts` follows on
+ * the backend for the same reason: it is what lets the suite pin the list across a year boundary
+ * without faking timers.
+ *
+ * @param today `YYYY-MM-DD`. Only its year and month are read.
+ */
+export function paycheckMonths(today: string): { value: string; label: string }[] {
+  const [year, month] = today.split('-').map(Number);
+  const base = (year ?? 0) * 12 + ((month ?? 1) - 1);
+
+  return Array.from({ length: 9 }, (_unused, index) => {
+    const total = base + index - 4;
+    const y = Math.floor(total / 12);
+    const m = total - y * 12;
+
+    return {
+      value: `${String(y).padStart(4, '0')}-${String(m + 1).padStart(2, '0')}`,
+      // `en-US` and `UTC`, matching `lib/format.ts`'s own month names: a local zone would render the
+      // 1st of a month as the previous one for anybody west of Greenwich.
+      label: new Date(Date.UTC(y, m, 1)).toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }),
+    };
+  });
+}
+
+/**
+ * Which month the dialog opens on: the current one.
+ *
+ * The overwhelmingly common case is a change taking effect now, so the default is the answer that
+ * needs no interaction. It is the fifth of the nine `paycheckMonths` returns.
+ */
+export function currentPaycheckMonth(today: string): string {
+  return paycheckMonths(today)[4]!.value;
 }

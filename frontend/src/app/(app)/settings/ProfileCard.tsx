@@ -58,7 +58,7 @@ export function ProfileCard({ values, errors, disabled, onChange }: ProfileCardP
                     names SET-6 and this card as the reason it is shared: the sidebar footer and this
                     avatar have to agree, which is exactly AC5. It reads `values` rather than the
                     stored profile, which is AC3 - the initials follow what is being typed. */}
-                {initials(values.firstName, values.lastName)}
+                {initials(values.fullName)}
               </span>
             </div>
           </div>
@@ -77,30 +77,22 @@ export function ProfileCard({ values, errors, disabled, onChange }: ProfileCardP
               stored, so there is nothing here to replace them with. */}
         </div>
 
-        {/* `grid grid-cols-2`, not a flex row, and `setup/register/RegisterForm.tsx` already
-            settled it for this exact pair of fields: the field components are `w-full`, which
-            spans a grid cell correctly and overflows a flex row. The frame's 14px gutter inside
-            an 820px card reads as `gap-3`. */}
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            id={FIELD_ID.firstName}
-            label="First name"
-            value={values.firstName}
-            onChange={(event) => onChange('firstName', event.target.value)}
-            required
-            disabled={disabled}
-            error={errors.firstName}
-          />
-          <Input
-            id={FIELD_ID.lastName}
-            label="Last name"
-            value={values.lastName}
-            onChange={(event) => onChange('lastName', event.target.value)}
-            required
-            disabled={disabled}
-            error={errors.lastName}
-          />
-        </div>
+        {/* **One full-width field, where the frame draws two in a `grid grid-cols-2`.** PET-72
+            collapsed the profile's two name columns into one: the app only ever used them together,
+            deriving initials and a short name, so the second was data collected to be thrown away.
+            The grid went with it - a single field in a two-column grid would sit in the left half
+            with a hole beside it. Labelled "Display name" rather than "Name", and the placeholder
+            says a nickname is fine, because that is what one free-text field honestly offers. */}
+        <Input
+          id={FIELD_ID.fullName}
+          label="Display name"
+          placeholder="Your name, full name or nickname."
+          value={values.fullName}
+          onChange={(event) => onChange('fullName', event.target.value)}
+          required
+          disabled={disabled}
+          error={errors.fullName}
+        />
 
         {/* A sibling of the grid rather than a third cell, which is what makes it full width -
             frame `40:700` draws it spanning both columns. */}

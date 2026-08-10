@@ -49,7 +49,7 @@ describe('the request', () => {
   it('PATCHes the profile endpoint', async () => {
     const fetchMock = respondWith(200);
 
-    await updateProfile({ firstName: 'Ana' });
+    await updateProfile({ fullName: 'Ana Anic' });
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://backend.test/api/profile',
@@ -60,7 +60,7 @@ describe('the request', () => {
   it('sends the session as a bearer token', async () => {
     const fetchMock = respondWith(200);
 
-    await updateProfile({ firstName: 'Ana' });
+    await updateProfile({ fullName: 'Ana Anic' });
 
     const init = fetchMock.mock.calls[0]![1] as RequestInit;
     expect(init.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
@@ -82,10 +82,10 @@ describe('the request', () => {
     // the user never opened, and `PATCH /api/profile` would answer 200 while doing it.
     const fetchMock = respondWith(200);
 
-    await updateProfile({ firstName: 'Ana' });
+    await updateProfile({ fullName: 'Ana Anic' });
 
     const init = fetchMock.mock.calls[0]![1] as RequestInit;
-    expect(Object.keys(JSON.parse(init.body as string))).toEqual(['firstName']);
+    expect(Object.keys(JSON.parse(init.body as string))).toEqual(['fullName']);
   });
 
   it('takes a body and nothing else - no id, no token', async () => {
@@ -101,7 +101,7 @@ describe('success', () => {
   it('reports ok on the 200 the endpoint answers', async () => {
     respondWith(200);
 
-    await expect(updateProfile({ firstName: 'Ana' })).resolves.toEqual({ ok: true });
+    await expect(updateProfile({ fullName: 'Ana Anic' })).resolves.toEqual({ ok: true });
   });
 
   it('does not read the response body', async () => {
@@ -118,7 +118,7 @@ describe('success', () => {
     });
     global.fetch = fetchMock as unknown as typeof fetch;
 
-    await expect(updateProfile({ firstName: 'Ana' })).resolves.toEqual({ ok: true });
+    await expect(updateProfile({ fullName: 'Ana Anic' })).resolves.toEqual({ ok: true });
   });
 });
 
@@ -129,7 +129,7 @@ describe('the four failures', () => {
     // the DTO rejects is rejected again forever, so the advice has to be "check the values".
     respondWith(400);
 
-    await expect(updateProfile({ firstName: 'x'.repeat(101) })).resolves.toEqual({
+    await expect(updateProfile({ fullName: 'x'.repeat(101) })).resolves.toEqual({
       ok: false,
       reason: 'invalid',
     });
@@ -151,7 +151,7 @@ describe('the four failures', () => {
   it('maps 401 to unauthenticated', async () => {
     respondWith(401);
 
-    await expect(updateProfile({ firstName: 'Ana' })).resolves.toEqual({
+    await expect(updateProfile({ fullName: 'Ana Anic' })).resolves.toEqual({
       ok: false,
       reason: 'unauthenticated',
     });
@@ -161,7 +161,7 @@ describe('the four failures', () => {
     const fetchMock = respondWith(200);
     store(undefined);
 
-    await expect(updateProfile({ firstName: 'Ana' })).resolves.toEqual({
+    await expect(updateProfile({ fullName: 'Ana Anic' })).resolves.toEqual({
       ok: false,
       reason: 'unauthenticated',
     });
@@ -175,7 +175,7 @@ describe('the four failures', () => {
     // form could say something useful about.
     respondWith(404);
 
-    await expect(updateProfile({ firstName: 'Ana' })).resolves.toEqual({
+    await expect(updateProfile({ fullName: 'Ana Anic' })).resolves.toEqual({
       ok: false,
       reason: 'failed',
     });
@@ -184,7 +184,7 @@ describe('the four failures', () => {
   it.each([403, 429, 500, 502, 503])('maps %d to failed', async (status) => {
     respondWith(status);
 
-    await expect(updateProfile({ firstName: 'Ana' })).resolves.toEqual({
+    await expect(updateProfile({ fullName: 'Ana Anic' })).resolves.toEqual({
       ok: false,
       reason: 'failed',
     });
@@ -195,7 +195,7 @@ describe('the four failures', () => {
       .fn()
       .mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch;
 
-    await expect(updateProfile({ firstName: 'Ana' })).resolves.toEqual({
+    await expect(updateProfile({ fullName: 'Ana Anic' })).resolves.toEqual({
       ok: false,
       reason: 'failed',
     });
@@ -216,7 +216,7 @@ describe('the contract with the form', () => {
       },
     ]) {
       arrange();
-      await expect(updateProfile({ firstName: 'Ana' })).resolves.toBeDefined();
+      await expect(updateProfile({ fullName: 'Ana Anic' })).resolves.toBeDefined();
     }
   });
 
@@ -225,7 +225,7 @@ describe('the contract with the form', () => {
 
     for (const status of [200, 400, 401, 409, 500]) {
       respondWith(status);
-      const result = await updateProfile({ firstName: 'Ana' });
+      const result = await updateProfile({ fullName: 'Ana Anic' });
       reasons.add(result.ok ? 'ok' : result.reason);
     }
 

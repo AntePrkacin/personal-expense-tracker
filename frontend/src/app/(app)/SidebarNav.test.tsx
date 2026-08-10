@@ -16,7 +16,7 @@ const mockPathname = (pathname: string) => {
   (usePathname as jest.Mock).mockReturnValue(pathname);
 };
 
-const PROFILE = { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' };
+const PROFILE = { fullName: 'Ada Lovelace', email: 'ada@example.com' };
 
 // The labels are the only thing this file states for itself. The keys come from
 // SIDEBAR_ITEMS and the paths from SIDEBAR_HREFS, both Sidebar's own, so no

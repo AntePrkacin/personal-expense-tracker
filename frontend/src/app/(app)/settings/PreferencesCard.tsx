@@ -80,6 +80,9 @@ export function PreferencesCard({ values, errors, disabled, onChange }: Preferen
             id={FIELD_ID.monthlyBudget}
             label="Monthly budget"
             currency={values.currency}
+            // Cast-free because `BudgetField.onCurrencyChange` is typed on the contract's own
+            // currency enum since PET-72; it handed back a bare `string` before, which is what this
+            // call site would otherwise have had to narrow.
             onCurrencyChange={(currency) => onChange('currency', currency)}
             value={values.monthlyBudget}
             // **`reformatAmountInput`, which `BudgetField`'s own contract requires and this call

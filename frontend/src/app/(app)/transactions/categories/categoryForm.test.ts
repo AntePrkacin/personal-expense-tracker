@@ -28,7 +28,7 @@ const FILLED: ChosenCategoryValues = {
   monthlyCap: '250.00',
   color: 'primary',
   icon: 'tv',
-  note: 'Streaming, apps & memberships',
+  description: 'Streaming, apps & memberships',
 };
 
 /** The same form before anything is typed, with the palette's first entries preselected. */
@@ -37,7 +37,7 @@ const EMPTY: CategoryFormValues = {
   monthlyCap: '',
   color: 'success',
   icon: 'shopping-basket',
-  note: '',
+  description: '',
 };
 
 describe('isNameValid', () => {
@@ -126,10 +126,10 @@ describe('invalidFields', () => {
     expect(invalidFields({ ...FILLED, monthlyCap: '0' })).toEqual(['monthlyCap']);
   });
 
-  it('never names the note, the colour or the icon, none of which can carry a message', () => {
-    const invalid = invalidFields({ ...EMPTY, note: '', color: '', icon: '' });
+  it('never names the description, the colour or the icon, none of which can carry a message', () => {
+    const invalid = invalidFields({ ...EMPTY, description: '', color: '', icon: '' });
 
-    expect(invalid).not.toContain('note');
+    expect(invalid).not.toContain('description');
     expect(invalid).not.toContain('color');
     expect(invalid).not.toContain('icon');
   });
@@ -142,7 +142,7 @@ describe('toCreateCategoryBody', () => {
       color: 'primary',
       icon: 'tv',
       monthlyCap: 250,
-      note: 'Streaming, apps & memberships',
+      description: 'Streaming, apps & memberships',
     });
   });
 
@@ -158,9 +158,9 @@ describe('toCreateCategoryBody', () => {
     });
   });
 
-  it('trims the note', () => {
-    expect(toCreateCategoryBody({ ...FILLED, note: '  Streaming  ' })).toMatchObject({
-      note: 'Streaming',
+  it('trims the description', () => {
+    expect(toCreateCategoryBody({ ...FILLED, description: '  Streaming  ' })).toMatchObject({
+      description: 'Streaming',
     });
   });
 
@@ -169,27 +169,27 @@ describe('toCreateCategoryBody', () => {
     const body = toCreateCategoryBody({ ...FILLED, monthlyCap: '' });
 
     expect(body).not.toHaveProperty('monthlyCap');
-    expect(Object.keys(body).sort()).toEqual(['color', 'icon', 'name', 'note']);
+    expect(Object.keys(body).sort()).toEqual(['color', 'description', 'icon', 'name']);
   });
 
-  it('omits a note of nothing but spaces, so “no note” never becomes an empty string', () => {
-    const body = toCreateCategoryBody({ ...FILLED, note: '   ' });
+  it('omits a description of nothing but spaces, so “no description” never becomes an empty string', () => {
+    const body = toCreateCategoryBody({ ...FILLED, description: '   ' });
 
-    expect(body).not.toHaveProperty('note');
+    expect(body).not.toHaveProperty('description');
   });
 
   it('sends exactly the five contract keys and nothing else', () => {
     expect(Object.keys(toCreateCategoryBody(FILLED)).sort()).toEqual([
       'color',
+      'description',
       'icon',
       'monthlyCap',
       'name',
-      'note',
     ]);
   });
 
   it('sends exactly three keys for the minimal category, which is name, colour and icon', () => {
-    const body = toCreateCategoryBody({ ...FILLED, monthlyCap: '', note: '' });
+    const body = toCreateCategoryBody({ ...FILLED, monthlyCap: '', description: '' });
 
     expect(Object.keys(body).sort()).toEqual(['color', 'icon', 'name']);
   });
@@ -205,7 +205,7 @@ describe('toCategoryFormValues', () => {
           monthlyCap: 250,
           color: 'primary',
           icon: 'tv',
-          note: 'Streaming, apps & memberships',
+          description: 'Streaming, apps & memberships',
         }),
       ),
     ).toEqual({
@@ -213,7 +213,7 @@ describe('toCategoryFormValues', () => {
       monthlyCap: '250.00',
       color: 'primary',
       icon: 'tv',
-      note: 'Streaming, apps & memberships',
+      description: 'Streaming, apps & memberships',
     });
   });
 
@@ -230,10 +230,10 @@ describe('toCategoryFormValues', () => {
     expect(toCategoryFormValues(category({ monthlyCap: null })).monthlyCap).toBe('');
   });
 
-  it('prefills a blank note for a category with none', () => {
+  it('prefills a blank description for a category with none', () => {
     // A controlled input's value cannot be `undefined` without React warning about it. The
     // distinction comes back at the boundary below.
-    expect(toCategoryFormValues(category({ note: null })).note).toBe('');
+    expect(toCategoryFormValues(category({ description: null })).description).toBe('');
   });
 
   it('does not trim the name, so the diff reports no change the user did not make', () => {
@@ -244,7 +244,7 @@ describe('toCategoryFormValues', () => {
     for (const stored of [
       category(),
       category({ monthlyCap: null }),
-      category({ note: 'Weekly shop' }),
+      category({ description: 'Weekly shop' }),
     ]) {
       expect(invalidFields(toCategoryFormValues(stored))).toEqual([]);
     }
@@ -257,7 +257,7 @@ describe('toUpdateCategoryBody', () => {
     monthlyCap: 250,
     color: 'primary',
     icon: 'tv',
-    note: 'Streaming, apps & memberships',
+    description: 'Streaming, apps & memberships',
   });
 
   const PREFILLED = toCategoryFormValues(STORED);
@@ -338,51 +338,55 @@ describe('toUpdateCategoryBody', () => {
     expect(toUpdateCategoryBody(STORED, { ...PREFILLED, color: '', icon: '' })).toEqual({});
   });
 
-  it('sends null for a cleared note, and the note itself for a changed one', () => {
-    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, note: '' })).toEqual({ note: null });
-    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, note: 'Monthly' })).toEqual({
-      note: 'Monthly',
+  it('sends null for a cleared description, and the description itself for a changed one', () => {
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, description: '' })).toEqual({
+      description: null,
+    });
+    expect(toUpdateCategoryBody(STORED, { ...PREFILLED, description: 'Monthly' })).toEqual({
+      description: 'Monthly',
     });
   });
 
-  it('reports no change when a stored note carries surrounding whitespace', () => {
+  it('reports no change when a stored description carries surrounding whitespace', () => {
     // **The defect a code review caught.** The field is hidden behind `SHOWS_NOTE`, so the user can
     // neither see nor touch it - and comparing a trimmed value against an untrimmed stored one made
-    // it differ from itself, so a rename quietly carried a rewritten note along with it.
-    const stored = category({ note: '  weekly shop  ' });
+    // it differ from itself, so a rename quietly carried a rewritten description along with it.
+    const stored = category({ description: '  weekly shop  ' });
 
     expect(toUpdateCategoryBody(stored, toCategoryFormValues(stored))).toEqual({});
   });
 
-  it('does not delete a stored note that is nothing but spaces', () => {
+  it('does not delete a stored description that is nothing but spaces', () => {
     // The sharper half of the same bug: the trim made it `''`, which this function turns into
-    // `null`, so a save that never mentioned the note removed it.
-    const stored = category({ note: '   ' });
+    // `null`, so a save that never mentioned the description removed it.
+    const stored = category({ description: '   ' });
 
     expect(toUpdateCategoryBody(stored, toCategoryFormValues(stored))).toEqual({});
   });
 
-  it('still clears a real note when the field is emptied', () => {
+  it('still clears a real description when the field is emptied', () => {
     // The control for the two above: trimming both sides must not cost the one thing the
     // comparison is for.
-    const stored = category({ note: 'Weekly shop' });
+    const stored = category({ description: 'Weekly shop' });
 
-    expect(toUpdateCategoryBody(stored, { ...toCategoryFormValues(stored), note: '' })).toEqual({
-      note: null,
+    expect(
+      toUpdateCategoryBody(stored, { ...toCategoryFormValues(stored), description: '' }),
+    ).toEqual({
+      description: null,
     });
   });
 
-  it('sends nothing at all for an untouched form whose stored note has whitespace', () => {
+  it('sends nothing at all for an untouched form whose stored description has whitespace', () => {
     // The caller closes without a request when the body is empty, so this is what stopped Save on
     // an untouched form from firing a PATCH the endpoint would have accepted.
-    const stored = category({ name: 'Groceries', monthlyCap: 500, note: ' a note ' });
+    const stored = category({ name: 'Groceries', monthlyCap: 500, description: ' a description ' });
 
     expect(Object.keys(toUpdateCategoryBody(stored, toCategoryFormValues(stored)))).toEqual([]);
   });
 
-  it('normalises a stored name’s whitespace, which is deliberate and not the note rule', () => {
+  it('normalises a stored name’s whitespace, which is deliberate and not the description rule', () => {
     // `toUpdateTransactionBody` makes the same call about `merchant`, for the reason that still
-    // holds: the alternative is never being able to trim it. It is safe here and not for `note`
+    // holds: the alternative is never being able to trim it. It is safe here and not for `description`
     // because the Name field is on screen with its value in it.
     const stored = category({ name: '  Groceries  ' });
 
@@ -391,10 +395,10 @@ describe('toUpdateCategoryBody', () => {
     });
   });
 
-  it('reports no change for a blank note over a stored null', () => {
-    // The comparison is against `original.note ?? ''`, which is what keeps the hidden Note field
+  it('reports no change for a blank description over a stored null', () => {
+    // The comparison is against `original.description ?? ''`, which is what keeps the hidden Note field
     // from contributing a key to every patch.
-    const stored = category({ note: null });
+    const stored = category({ description: null });
 
     expect(toUpdateCategoryBody(stored, toCategoryFormValues(stored))).toEqual({});
   });
@@ -407,9 +411,9 @@ describe('toUpdateCategoryBody', () => {
           monthlyCap: '300.00',
           color: 'accent',
           icon: 'music',
-          note: 'Monthly',
+          description: 'Monthly',
         }),
       ).sort(),
-    ).toEqual(['color', 'icon', 'monthlyCap', 'name', 'note']);
+    ).toEqual(['color', 'description', 'icon', 'monthlyCap', 'name']);
   });
 });

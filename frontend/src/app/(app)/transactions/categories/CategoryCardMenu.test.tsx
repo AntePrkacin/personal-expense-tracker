@@ -155,9 +155,9 @@ describe('Edit', () => {
   });
 
   it('opens the modal with the whole category, which Delete deliberately does not get', async () => {
-    // A prefilled form cannot do without the cap, the colour and the note; a confirmation has no
+    // A prefilled form cannot do without the cap, the colour and the description; a confirmation has no
     // business rendering any of them. The same asymmetry the transaction menu already has.
-    const target = category({ note: 'Weekly shop' });
+    const target = category({ description: 'Weekly shop' });
     render(<CategoryCardMenu category={target} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
@@ -224,8 +224,8 @@ describe('Delete', () => {
 
   it('hands nothing the confirmation has no business rendering', async () => {
     // Three fields, where Edit above hands over the whole category. A dialog quoting a cap, a
-    // colour or a note would be rendering things it does not need.
-    render(<CategoryCardMenu category={category({ note: 'a private note' })} />);
+    // colour or a description would be rendering things it does not need.
+    render(<CategoryCardMenu category={category({ description: 'a private description' })} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 

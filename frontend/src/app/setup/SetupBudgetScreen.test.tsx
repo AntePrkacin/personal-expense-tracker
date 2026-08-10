@@ -119,7 +119,7 @@ describe('the currency segment', () => {
     // subtree and lose the code at exactly the moment a reader needs it. The subtree carries both.
     renderScreen();
 
-    expect(currencyTrigger()).toHaveAccessibleName('Currency USD');
+    expect(currencyTrigger()).toHaveAccessibleName('Currency EUR');
   });
 
   it('offers the three the design draws', () => {
@@ -137,11 +137,9 @@ describe('the currency segment', () => {
   it('marks the stored code as current', () => {
     renderScreen();
 
-    expect(screen.getByRole('button', { name: /US Dollar/ })).toHaveAttribute(
-      'aria-current',
-      'true',
-    );
-    expect(screen.getByRole('button', { name: /Euro/ })).not.toHaveAttribute('aria-current');
+    // EUR is the default since PET-72, so it is the row a fresh draft marks.
+    expect(screen.getByRole('button', { name: /Euro/ })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: /US Dollar/ })).not.toHaveAttribute('aria-current');
   });
 
   it('stores the ISO code the register body posts, not the label', async () => {
@@ -369,11 +367,11 @@ describe('AC5: the draft survives leaving and coming back', () => {
     // clobbering this budget and vice versa. Asserted exactly, rather than on the
     // budget alone, because that merge is the property under test.
     expect(storedDraft()).toEqual({
-      currency: 'USD',
+      currency: 'EUR',
       budget: '2,000',
       categories: [],
-      firstName: '',
-      lastName: '',
+      fullName: '',
+      monthStartDay: 1,
       email: '',
     });
   });
@@ -397,7 +395,7 @@ describe('AC5: the draft survives leaving and coming back', () => {
   it('reads a draft that was already in storage before the first render', async () => {
     sessionStorage.setItem(
       SETUP_DRAFT_KEY,
-      JSON.stringify({ currency: 'USD', budget: '1,500.25' }),
+      JSON.stringify({ currency: 'EUR', budget: '1,500.25' }),
     );
 
     renderScreen();

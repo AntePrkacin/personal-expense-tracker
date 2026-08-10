@@ -33,7 +33,7 @@ export function category(overrides: Partial<Category> = {}): Category {
     name: 'Groceries',
     color: 'success',
     icon: 'shopping-basket',
-    note: null,
+    description: null,
     isFallback: false,
     monthlyCap: 500,
     spent: 397,

@@ -104,20 +104,45 @@ describe('moneyFormatters', () => {
       // should be unreachable behind the backend's validation, which is why it falls back quietly
       // rather than reporting anything.
       expect(() => moneyFormatters('NOPE')).not.toThrow();
-      expect(moneyFormatters('NOPE').formatCurrency(1240.5)).toBe('$1,240.50');
+      expect(moneyFormatters('NOPE').formatCurrency(1240.5)).toBe('€1,240.50');
     });
   });
 });
 
 describe('SUPPORTED_CURRENCIES', () => {
-  it('offers the three the design draws, in its order', () => {
-    // Read off `ui_kits/expensa-app/OnboardingScreen.jsx`'s `ONBOARDING_CURRENCIES`. The names are
-    // design copy rather than `Intl.DisplayNames` output, so they are pinned here.
-    expect(SUPPORTED_CURRENCIES).toEqual([
-      { code: 'USD', symbol: '$', name: 'US Dollar' },
+  it('leads with the three the design draws, in EUR-first order', () => {
+    // Read off `ui_kits/expensa-app/OnboardingScreen.jsx`'s `ONBOARDING_CURRENCIES`, with EUR
+    // promoted to the front because it is the default since PET-72. The names are design copy
+    // rather than `Intl.DisplayNames` output, so they are pinned here.
+    expect(SUPPORTED_CURRENCIES.slice(0, 3)).toEqual([
       { code: 'EUR', symbol: '€', name: 'Euro' },
+      { code: 'USD', symbol: '$', name: 'US Dollar' },
       { code: 'GBP', symbol: '£', name: 'British Pound' },
     ]);
+  });
+
+  it('offers only two-decimal currencies, which is the whole selection rule', () => {
+    // `lib/money.ts` and its backend twin both assume an exponent of 2, so a zero- or three-decimal
+    // currency would scale every amount wrongly by a factor of a hundred or ten. These are real ISO
+    // 4217 codes and must never appear.
+    const codes = SUPPORTED_CURRENCIES.map((entry) => entry.code);
+
+    for (const excluded of ['JPY', 'KRW', 'ISK', 'KWD', 'BHD', 'TND']) {
+      expect(codes).not.toContain(excluded);
+    }
+  });
+
+  it('names and symbols every offered code exactly once', () => {
+    // The list is the picker's, so a duplicate would draw two identical rows and a blank name or
+    // symbol would draw an unlabelled one.
+    const codes = SUPPORTED_CURRENCIES.map((entry) => entry.code);
+
+    expect(new Set(codes).size).toBe(codes.length);
+    // Asserted on `length` rather than against `''`: the list is `as const`, so the literal types
+    // already prove non-emptiness and TypeScript rejects the comparison as dead. Keeping the runtime
+    // check anyway is what would catch a future entry added without `as const`.
+    expect(SUPPORTED_CURRENCIES.every((entry) => entry.name.length > 0)).toBe(true);
+    expect(SUPPORTED_CURRENCIES.every((entry) => entry.symbol.length > 0)).toBe(true);
   });
 
   it('starts on the default, which is what a new account gets', () => {

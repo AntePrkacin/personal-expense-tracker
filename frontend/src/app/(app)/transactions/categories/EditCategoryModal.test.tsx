@@ -31,14 +31,14 @@ const onClose = jest.fn();
 const onDelete = jest.fn();
 const update = jest.fn<Promise<UpdateCategoryResult>, [string, unknown]>();
 
-/** Frame 21's own category: "Subscriptions", $250.00, with a note it does not draw. */
+/** Frame 21's own category: "Subscriptions", $250.00, with a description it does not draw. */
 const SUBSCRIPTIONS = category({
   id: '0198c2a1-0000-7000-8000-0000000000b7',
   name: 'Subscriptions',
   monthlyCap: 250,
   color: 'primary',
   icon: 'tv',
-  note: 'Streaming, apps & memberships',
+  description: 'Streaming, apps & memberships',
 });
 
 /**
@@ -88,7 +88,7 @@ const save = () => screen.getByRole('button', { name: 'Save changes' });
 const remove = () => screen.getByRole('button', { name: 'Delete category' });
 
 /** The Note field, which is **not rendered** while `SHOWS_NOTE` is false. */
-const note = () => screen.queryByLabelText('Note (optional)');
+const description = () => screen.queryByLabelText('Note (optional)');
 
 const colourTrigger = () => screen.getByRole('button', { name: /^Color/ });
 const colourPanel = () => document.querySelector('#edit-category-color-picker') as HTMLElement;
@@ -123,9 +123,9 @@ describe('AC1: the modal opens prefilled from the card', () => {
   });
 
   it('draws no Note field, which amends AC1 for A42’s reason', () => {
-    // The note is prefilled into state regardless, which the save case below pins: a hidden field
+    // The description is prefilled into state regardless, which the save case below pins: a hidden field
     // must not clear a value the user cannot see.
-    expect(note()).toBeNull();
+    expect(description()).toBeNull();
   });
 });
 
@@ -169,7 +169,7 @@ describe('the save', () => {
     );
   });
 
-  it('keeps the hidden note out of every body', async () => {
+  it('keeps the hidden description out of every body', async () => {
     // The field is not drawn, so its value cannot diverge from the prefill - and the diff compares
     // against the stored value rather than against `''`, which is what stops a hidden field
     // contributing a key to every patch.
@@ -180,7 +180,7 @@ describe('the save', () => {
     await user().click(save());
 
     await waitFor(() => expect(update).toHaveBeenCalled());
-    expect(update.mock.calls[0]![1]).not.toHaveProperty('note');
+    expect(update.mock.calls[0]![1]).not.toHaveProperty('description');
   });
 
   it('sends a null cap when the budget is cleared, which is how a category is uncapped', async () => {

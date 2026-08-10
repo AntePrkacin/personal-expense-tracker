@@ -171,7 +171,7 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
     monthlyCap: '',
     color: palette?.colors[0]?.token ?? '',
     icon: palette?.icons[0]?.name ?? '',
-    note: '',
+    description: '',
   }));
 
   /**
@@ -470,7 +470,7 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
         <Input
           id={NOTE_ID}
           label="Note (optional)"
-          value={values.note}
+          value={values.description}
           onChange={(event) => setText('note', event.currentTarget.value)}
         />
       ) : null}

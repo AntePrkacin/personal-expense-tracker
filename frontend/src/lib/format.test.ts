@@ -50,56 +50,80 @@ function inZone(zone: string, body: () => void) {
 // comment in `app/DecorativePanel.tsx` explaining why that file uses literal strings instead.
 
 describe('initials', () => {
-  it('takes the first letter of each name', () => {
+  it('takes the first letter of each of the first two words', () => {
     // The designed value on 04 Dashboard and 17 Settings, from the designed
-    // names: "Marko" + "Kovač".
-    expect(initials('Marko', 'Kovač')).toBe('MK');
+    // name: "Marko Kovač".
+    expect(initials('Marko Kovač')).toBe('MK');
   });
 
   it('uppercases a lowercase name', () => {
-    expect(initials('marko', 'kovač')).toBe('MK');
+    expect(initials('marko kovač')).toBe('MK');
   });
 
   it('takes the first letter of a diacritic name from the name, not the ASCII fold', () => {
     // Ž, not Z. Nothing normalises here, and nothing should: the initial is the
     // user's own letter.
-    expect(initials('Žan', 'Šimić')).toBe('ŽŠ');
+    expect(initials('Žan Šimić')).toBe('ŽŠ');
   });
 
   it('keeps an astral-plane character whole', () => {
     // The reason firstLetter uses Array.from rather than charAt. With charAt
     // this returns two lone surrogates, which render as replacement glyphs.
-    expect(initials('𝔐arko', '𝔎ovač')).toBe('𝔐𝔎');
+    expect(initials('𝔐arko 𝔎ovač')).toBe('𝔐𝔎');
   });
 
-  it('skips a name it has nothing to take', () => {
-    // RegisterDto marks both names @IsNotEmpty, so this is defensive. It must
+  it('takes one letter from a single-word name', () => {
+    // **Ordinary rather than defensive since PET-72**, which collapsed the two
+    // name fields into one whose placeholder invites a nickname - so "Marko"
+    // with no surname is a value the form actively offers.
+    expect(initials('Marko')).toBe('M');
+  });
+
+  it('ignores surrounding and repeated whitespace', () => {
+    // The stored name is untrimmed by design, so a value with stray spaces
+    // reaches here - and splitting on a single space would take an empty first
+    // word and produce nothing at all.
+    expect(initials('  Marko   Kovač  ')).toBe('MK');
+  });
+
+  it('produces nothing for a blank name rather than throwing', () => {
+    // `RegisterDto` marks the name @IsNotEmpty, so this is defensive. It must
     // not produce "undefined" or throw.
-    expect(initials('Marko', '')).toBe('M');
-    expect(initials('', '')).toBe('');
+    expect(initials('')).toBe('');
+    expect(initials('   ')).toBe('');
+  });
+
+  it('ignores a third word', () => {
+    // Two letters is what the 36px disc holds, and what the frame draws.
+    expect(initials('Ana Marija Kovač')).toBe('AM');
   });
 });
 
 describe('shortName', () => {
-  it('abbreviates the last name', () => {
-    expect(shortName('Marko', 'Kovač')).toBe('Marko K.');
+  it('abbreviates the second word', () => {
+    expect(shortName('Marko Kovač')).toBe('Marko K.');
   });
 
   it('uppercases the abbreviated initial', () => {
-    expect(shortName('Marko', 'kovač')).toBe('Marko K.');
+    expect(shortName('Marko kovač')).toBe('Marko K.');
   });
 
-  it('drops the abbreviation mark when there is no last name', () => {
+  it('drops the abbreviation mark for a single-word name', () => {
     // Not "Marko .": a full stop with nothing before it reads as a defect, and
-    // the sidebar footer shows this on every screen.
-    expect(shortName('Marko', '')).toBe('Marko');
-    expect(shortName('Marko', '')).not.toContain('.');
+    // the sidebar footer shows this on every screen. Ordinary rather than
+    // defensive since PET-72 - see `initials` above.
+    expect(shortName('Marko')).toBe('Marko');
+    expect(shortName('Marko')).not.toContain('.');
   });
 
-  it('leaves the first name unabbreviated', () => {
-    // Only the last name is shortened. A first-name initial would make the
+  it('leaves the first word unabbreviated', () => {
+    // Only the second is shortened. A first-name initial would make the
     // footer unreadable, and the design shows the full first name.
-    expect(shortName('Marko', 'Kovač')).toContain('Marko');
+    expect(shortName('Marko Kovač')).toContain('Marko');
+  });
+
+  it('ignores a third word', () => {
+    expect(shortName('Ana Marija Kovač')).toBe('Ana M.');
   });
 });
 

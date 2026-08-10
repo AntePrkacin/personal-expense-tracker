@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { MonthStartField } from '@/app/(app)/settings/MonthStartField';
 import { BudgetField } from '@/components/BudgetField';
 import { Button } from '@/components/ui/Button';
 import { reformatAmountInput } from '@/lib/amountField';
@@ -38,6 +39,7 @@ import { useSetupDraft } from './SetupDraftProvider';
 const BUDGET_REQUIRED = 'Enter an amount greater than 0.';
 
 /** The field id, which `ui/FieldShell` requires as a literal rather than generating. */
+const MONTH_START_ID = 'setup-month-start';
 const BUDGET_ID = 'setup-budget';
 
 export function BudgetForm() {
@@ -99,6 +101,23 @@ export function BudgetForm() {
         onValueChange={onBudgetChange}
         error={error}
         required
+      />
+
+      {/* **The third field, and PET-72 added it here rather than as a fourth step.** The pay day is
+          one number that belongs with the budget it shapes: a step of its own for a single control
+          would be a screen the design does not draw, and asking for it later - on Settings - would
+          mean every account's first months were bucketed to the 1st and then re-bucketed once the
+          user corrected it.
+
+          The same control the Settings Preferences card uses, so the two screens cannot disagree
+          about what days are offered or how the list scrolls. Not designed: frame 02 draws two rows,
+          so this row's label and hint are invented and owe A29 a sign-off with the rest. */}
+      <MonthStartField
+        id={MONTH_START_ID}
+        label="Pay day"
+        hint="Your budget period starts on this day each month."
+        value={draft.monthStartDay}
+        onChange={(monthStartDay) => patchDraft({ monthStartDay })}
       />
 
       {/* pt-1.5 is the designed 6px the frame puts above this row (node 42:724). */}

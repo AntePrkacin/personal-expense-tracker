@@ -45,7 +45,7 @@ import type { components } from '@/types/api';
  * was a cast at the select's `onChange`, which would have typechecked while promising something no
  * `<select>` can guarantee.
  *
- * `note` is a plain string rather than `string | undefined`, because a controlled input's value
+ * `description` is a plain string rather than `string | undefined`, because a controlled input's value
  * cannot be `undefined` without React warning about it. Blank becomes *absent* at the boundary
  * below, which is where the distinction belongs.
  */
@@ -54,7 +54,7 @@ export type CategoryFormValues = {
   monthlyCap: string;
   color: CategoryColour | '';
   icon: IconName | '';
-  note: string;
+  description: string;
 };
 
 /**
@@ -143,7 +143,7 @@ export function invalidFields(values: CategoryFormValues): CategoryFormField[] {
   return invalid;
 }
 
-/** The two fields that can carry a message. `color`, `icon` and `note` cannot - see above. */
+/** The two fields that can carry a message. `color`, `icon` and `description` cannot - see above. */
 export type CategoryFormField = 'name' | 'monthlyCap';
 
 /**
@@ -164,10 +164,10 @@ export type CategoryFormField = 'name' | 'monthlyCap';
  * - **`monthlyCap` goes through `parseAmountInput`**, not `Number()`, which answers `NaN` for the
  *   `'1,250.50'` the field actually holds. Callers must check `invalidFields` first, exactly as they
  *   must for `toCreateTransactionBody`.
- * - **`note` is omitted when blank, never sent as `''`.** `forbidNonWhitelisted` means the body must
+ * - **`description` is omitted when blank, never sent as `''`.** `forbidNonWhitelisted` means the body must
  *   carry these five keys and nothing else, and an empty string would *pass* `@IsOptional()
- *   @IsString() @MaxLength(500)` and be stored - inventing a third state between "no note" and "a
- *   note" for every later reader of `CategoryResponseDto.note`.
+ *   @IsString() @MaxLength(500)` and be stored - inventing a third state between "no description" and "a
+ *   description" for every later reader of `CategoryResponseDto.description`.
  *
  * The conditional spreads rather than `monthlyCap: cap || undefined` are what make the object's own
  * keys match the wire's. Both serialise identically, because `JSON.stringify` drops `undefined`, but
@@ -178,14 +178,14 @@ export function toCreateCategoryBody(
 ): components['schemas']['CreateCategoryDto'] {
   // Both trimmed for the same reason: a value of nothing but spaces is a blank value.
   const cap = values.monthlyCap.trim();
-  const note = values.note.trim();
+  const description = values.description.trim();
 
   return {
     name: values.name.trim(),
     color: values.color,
     icon: values.icon,
     ...(cap === '' ? {} : { monthlyCap: parseAmountInput(cap) }),
-    ...(note === '' ? {} : { note }),
+    ...(description === '' ? {} : { description }),
   };
 }
 
@@ -211,7 +211,7 @@ export function toCreateCategoryBody(
  *   chosen" the picker already models: the trigger reads "Select…", picking one sends it, and
  *   leaving it alone contributes no key. The alternative, substituting some default glyph, would
  *   silently write a mark the user never chose onto the first save of any other field.
- * - **`note` becomes `''` when null**, because a controlled input's value cannot be `undefined`
+ * - **`description` becomes `''` when null**, because a controlled input's value cannot be `undefined`
  *   without React warning about it. It becomes `null` again at the boundary below.
  *
  * **`name` is not trimmed on the way in**, which is `toTransactionFormValues`'s call about `merchant`:
@@ -225,7 +225,7 @@ export function toCategoryFormValues(category: Category): CategoryFormValues {
       category.monthlyCap === null ? '' : formatAmountInput(category.monthlyCap.toFixed(2)),
     color: category.color,
     icon: category.icon ?? '',
-    note: category.note ?? '',
+    description: category.description ?? '',
   };
 }
 
@@ -259,13 +259,13 @@ export function toCategoryFormValues(category: Category): CategoryFormValues {
  * no value this DTO would accept for it anyway - and it narrows the type as a side effect, which is
  * the cheaper of the two ways to satisfy the compiler.
  *
- * **`note` is compared trimmed against the *trimmed* stored value, and that is a fix rather than a
- * style.** A blank field over a stored `null` is no change, and a blank field over a stored note
+ * **`description` is compared trimmed against the *trimmed* stored value, and that is a fix rather than a
+ * style.** A blank field over a stored `null` is no change, and a blank field over a stored description
  * sends `null` to clear it - both inherited from the transaction rule. What is not inherited is the
  * trim on the right-hand side, and leaving it off was a real defect: this file shipped comparing the
- * trimmed field against the raw `original.note ?? ''`, which made a stored `"  weekly shop  "`
+ * trimmed field against the raw `original.description ?? ''`, which made a stored `"  weekly shop  "`
  * differ from itself. Since `SHOWS_NOTE` is false the user cannot see or touch that field, so a
- * rename would quietly carry `note: "weekly shop"` with it, and a stored note of nothing but spaces
+ * rename would quietly carry `description: "weekly shop"` with it, and a stored description of nothing but spaces
  * would be **deleted** by a save that never mentioned it. It also defeated the caller's
  * nothing-changed short circuit, so Save on an untouched form fired a PATCH.
  *
@@ -303,9 +303,10 @@ export function toUpdateCategoryBody(
 
   if (values.icon !== '' && values.icon !== original.icon) body.icon = values.icon;
 
-  // Both sides trimmed, so a stored note the user never saw cannot differ from itself. See above.
-  const note = values.note.trim();
-  if (note !== (original.note ?? '').trim()) body.note = note === '' ? null : note;
+  // Both sides trimmed, so a stored description the user never saw cannot differ from itself. See above.
+  const description = values.description.trim();
+  if (description !== (original.description ?? '').trim())
+    body.description = description === '' ? null : description;
 
   return body;
 }

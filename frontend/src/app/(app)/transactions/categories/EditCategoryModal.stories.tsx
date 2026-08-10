@@ -91,20 +91,20 @@ const PALETTE: Palette = {
     { name: 'gift', label: 'Gift' },
     { name: 'house', label: 'House' },
     { name: 'wifi', label: 'Wi-Fi' },
-    { name: 'music', label: 'Music note' },
+    { name: 'music', label: 'Music description' },
     { name: 'credit-card', label: 'Credit card' },
     { name: 'camera', label: 'Camera' },
   ],
 };
 
-/** Frame 21's own category: "Subscriptions", $250.00, with the note the frame draws and this does not. */
+/** Frame 21's own category: "Subscriptions", $250.00, with the description the frame draws and this does not. */
 const SUBSCRIPTIONS = category({
   id: '0198c2a1-0000-7000-8000-0000000000b7',
   name: 'Subscriptions',
   monthlyCap: 250,
   color: 'primary',
   icon: 'tv',
-  note: 'Streaming, apps & memberships',
+  description: 'Streaming, apps & memberships',
 });
 
 /** Accepts everything, so the happy path closes. */
@@ -120,9 +120,9 @@ const accept = async () => ({ ok: true }) as const;
  * the theme's as of PET-57.
  *
  * **Three departures from the frame, and all three are recorded on the ticket.** The Note field is
- * not drawn, behind the same `SHOWS_NOTE` flag frame 19's modal uses, because a note surfaces on no
+ * not drawn, behind the same `SHOWS_NOTE` flag frame 19's modal uses, because a description surfaces on no
  * screen once saved (A42) - its value is prefilled into state regardless, so saving never clears a
- * note the user cannot see. The budget label carries "(optional)", because the cap really is
+ * description the user cannot see. The budget label carries "(optional)", because the cap really is
  * optional and A12 makes that word the only marker of a required field. And focus opens on **Name**
  * rather than on the budget field the frame rings, since that frame draws every field already filled
  * and is a mid-fill snapshot rather than an on-open state.

@@ -36,7 +36,7 @@ const CATEGORY: CategoryContext = {
   // required and no PATCH can clear one - so a sign-off story showing an empty
   // tile would be diffing the design against a state no new account can be in.
   icon: 'shopping-basket',
-  note: null,
+  description: null,
   isFallback: false,
   monthlyCap: 500,
   spent: 397,

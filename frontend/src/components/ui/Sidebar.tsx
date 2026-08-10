@@ -153,9 +153,12 @@ type SidebarProps = {
    * renders stories under Jest with no router in context.
    */
   active: SidebarItem;
-  /** Both names, from the stored profile. The footer derives "MK" and "Marko K.". */
-  firstName: string;
-  lastName: string;
+  /**
+   * The display name, from the stored profile. The footer derives "MK" and
+   * "Marko K." from it - one field since PET-72, which collapsed the profile's
+   * two name columns into one.
+   */
+  fullName: string;
   email: string;
   /**
    * Called when any nav link is clicked, before the navigation.
@@ -169,7 +172,7 @@ type SidebarProps = {
   onNavigate?: () => void;
 };
 
-export function Sidebar({ active, firstName, lastName, email, onNavigate }: SidebarProps) {
+export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
   return (
     // min-h-full rather than a height of its own, because the drawer's side
     // column is what constrains it; justify-between pins the footer to the
@@ -247,7 +250,7 @@ export function Sidebar({ active, firstName, lastName, email, onNavigate }: Side
             read out immediately after. */}
         <div aria-hidden="true" className="avatar avatar-placeholder">
           <div className="bg-base-100/10 text-neutral-content w-9 rounded-full">
-            <span className="text-xs font-semibold">{initials(firstName, lastName)}</span>
+            <span className="text-xs font-semibold">{initials(fullName)}</span>
           </div>
         </div>
 
@@ -255,7 +258,7 @@ export function Sidebar({ active, firstName, lastName, email, onNavigate }: Side
             the flex item and overflows the panel. Figma clips instead, because
             it only ever draws the short sample address. */}
         <div className="flex min-w-0 flex-1 flex-col gap-px">
-          <p className="truncate text-sm font-semibold">{shortName(firstName, lastName)}</p>
+          <p className="truncate text-sm font-semibold">{shortName(fullName)}</p>
           <p className="text-neutral-content/60 truncate text-xs">{email}</p>
         </div>
 

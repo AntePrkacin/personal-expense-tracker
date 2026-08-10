@@ -166,8 +166,7 @@ beforeEach(() => {
   // asserts the header above it. `requireProfile` redirects or throws rather than returning a
   // wrapper, so there is no `{ ok }` to mock - the same shape as `readDashboard` above.
   (requireProfile as jest.Mock).mockResolvedValue({
-    firstName: 'Marko',
-    lastName: 'Kovač',
+    fullName: 'Marko Kovač',
     email: 'marko@email.com',
     currency: 'USD',
     monthlyBudget: 2000,
@@ -424,8 +423,7 @@ describe("the profile's currency reaches the figures (PET-47)", () => {
   // the default is what a broken thread falls back to, so asserting dollars proves nothing.
   it('renders the dashboard in the profile currency', async () => {
     (requireProfile as jest.Mock).mockResolvedValue({
-      firstName: 'Marko',
-      lastName: 'Kovač',
+      fullName: 'Marko Kovač',
       email: 'marko@email.com',
       currency: 'EUR',
       monthlyBudget: 2000,
@@ -456,8 +454,7 @@ describe("the profile's currency reaches the figures (PET-47)", () => {
 
   it('renders the transactions table in the profile currency', async () => {
     (requireProfile as jest.Mock).mockResolvedValue({
-      firstName: 'Marko',
-      lastName: 'Kovač',
+      fullName: 'Marko Kovač',
       email: 'marko@email.com',
       currency: 'GBP',
       monthlyBudget: 2000,
@@ -498,8 +495,7 @@ describe("the profile's month start day reaches the header (PET-47)", () => {
 
   function withMonthStartDay(monthStartDay: number) {
     (requireProfile as jest.Mock).mockResolvedValue({
-      firstName: 'Marko',
-      lastName: 'Kovač',
+      fullName: 'Marko Kovač',
       email: 'marko@email.com',
       currency: 'USD',
       monthlyBudget: 2000,

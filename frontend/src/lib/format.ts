@@ -40,31 +40,39 @@ function firstLetter(name: string): string {
 }
 
 /**
- * Avatar initials, e.g. `('Marko', 'Kovač')` -> `"MK"`.
+ * Avatar initials, e.g. `'Marko Kovač'` -> `"MK"`.
  *
  * Derived, never stored: SET-2 says the initials come from the name and that no
  * upload exists, and the tech spec's data model marks `avatarInitials` as
  * derived. SET-6 then requires the sidebar footer and the Settings avatar to
  * agree, which is what makes one shared function the point rather than a
  * convenience.
+ *
+ * **One argument since PET-72**, which collapsed the profile's two name fields
+ * into one. It splits on whitespace and takes the first letter of the first two
+ * words, so "Marko Kovač" still reads "MK" and a single-word display name reads
+ * as one letter rather than as a letter and a blank.
  */
-export function initials(firstName: string, lastName: string): string {
-  return `${firstLetter(firstName)}${firstLetter(lastName)}`;
+export function initials(fullName: string): string {
+  const [first = '', second = ''] = fullName.trim().split(/\s+/);
+  return `${firstLetter(first)}${firstLetter(second)}`;
 }
 
 /**
- * The shortened name the sidebar footer shows, e.g. `('Marko', 'Kovač')` ->
+ * The shortened name the sidebar footer shows, e.g. `'Marko Kovač'` ->
  * `"Marko K."`.
  *
- * An empty last name yields the first name alone. Formatting it as designed
- * would leave a dangling `"Marko ."`, and the abbreviation mark has nothing to
- * abbreviate. `RegisterDto` marks both names `@IsNotEmpty`, so this is
- * defensive rather than expected, but the failure it prevents is visible on
- * every screen.
+ * A one-word name yields that word alone. Formatting it as designed would leave
+ * a dangling `"Marko ."`, and the abbreviation mark has nothing to abbreviate.
+ * `RegisterDto` marks the name `@IsNotEmpty`, so an empty string is defensive
+ * rather than expected, but a single word is now **ordinary**: PET-72 collapsed
+ * the two name fields into one "Display name" whose placeholder invites a
+ * nickname, so "Marko" with no surname is a value the form actively offers.
  */
-export function shortName(firstName: string, lastName: string): string {
-  const initial = firstLetter(lastName);
-  return initial === '' ? firstName : `${firstName} ${initial}.`;
+export function shortName(fullName: string): string {
+  const [first = '', second = ''] = fullName.trim().split(/\s+/);
+  const initial = firstLetter(second);
+  return initial === '' ? first : `${first} ${initial}.`;
 }
 
 // The period the page header shows, in the two lengths the design draws: the

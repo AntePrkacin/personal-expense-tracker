@@ -520,7 +520,7 @@ export function EditCategoryModal({
         <Input
           id={NOTE_ID}
           label="Note (optional)"
-          value={values.note}
+          value={values.description}
           onChange={(event) => setText('note', event.currentTarget.value)}
         />
       ) : null}

@@ -38,8 +38,26 @@ import { centreChosenRow } from '@/lib/pickerScroll';
 // Amendable - if the app ever implements the listbox contract, it should be implemented for all
 // five at once.
 
+/**
+ * The highest day a period may start on, and the reason there is no clamping case anywhere.
+ *
+ * Exported since PET-72, because a second screen collects this field: onboarding's budget step asks
+ * the pay day, and `app/setup/draft.ts` canonicalises a stored value against this bound. One
+ * constant rather than a `28` in each file, so the two cannot drift from the backend's
+ * `MAX_MONTH_START_DAY`.
+ */
+export const MAX_MONTH_START_DAY = 28;
+
+/**
+ * What a form preselects when the user has not chosen.
+ *
+ * The 1st: the commonest pay day, and the value an account would have had before onboarding asked
+ * the question at all.
+ */
+export const DEFAULT_MONTH_START_DAY = 1;
+
 /** The days a period may start on. 28 for the reason in the header. */
-const MONTH_START_DAYS = Array.from({ length: 28 }, (_, index) => index + 1);
+const MONTH_START_DAYS = Array.from({ length: MAX_MONTH_START_DAY }, (_, index) => index + 1);
 
 /**
  * The English ordinal suffix for a day of the month.
