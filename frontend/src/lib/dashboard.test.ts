@@ -31,6 +31,7 @@ const SUMMARY = {
   categories: [],
   recentTransactions: [],
   insight: null,
+  period: { start: '2025-10-01', end: '2025-11-01', label: 'October 2025' },
 };
 
 const originalFetch = global.fetch;
@@ -84,6 +85,34 @@ describe('reading the dashboard', () => {
 
   it('returns every figure the summary carries', async () => {
     expect(await readDashboard()).toEqual(SUMMARY);
+  });
+
+  it('asks for no period at all by default, which the API reads as the current one', async () => {
+    // A default is the absent key, which is `lib/periods.ts`'s rule and `filters.ts`'s before it: one
+    // view has one URL, so `/dashboard` must not become `/dashboard?period=<today's period>` - a
+    // request that would go stale the moment the period rolled over.
+    const fetchMock = respondWith(200);
+
+    await readDashboard();
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://backend.test/api/dashboard');
+  });
+
+  it('forwards a period the caller asked for', async () => {
+    // The value comes from `parsePeriodParam` and is a date the backend answers **400** for if it
+    // starts none of the caller's periods - which this read throws on, so a hand-edited link costs
+    // the screen rather than silently showing the wrong period.
+    const fetchMock = respondWith(200);
+
+    await readDashboard('2025-09-01');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://backend.test/api/dashboard?period=2025-09-01');
+  });
+
+  it('reports the period the summary was resolved for', async () => {
+    // What the header's overline names. It rides on the response rather than being derived, because a
+    // period stretched by a pay-schedule change has no name any month arithmetic produces.
+    expect((await readDashboard()).period.label).toBe('October 2025');
   });
 
   it('costs exactly one request, unlike the transactions read beside it', async () => {

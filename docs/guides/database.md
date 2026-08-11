@@ -27,7 +27,7 @@ curl -s http://localhost:3000/api/templates/categories | jq -r '.categories[] | 
 
 curl -i -X POST http://localhost:3000/api/auth/register \
   -H 'content-type: application/json' \
-  -d '{"firstName":"Marko","lastName":"Kovac","email":"marko@email.com","monthlyBudget":2000,"categories":["<a-template-id>"]}'
+  -d '{"fullName":"Marko Kovac","email":"marko@email.com","monthlyBudget":2000,"monthStartDay":1,"categories":["<a-template-id>"]}'
 # 202 with an empty body, backend/databases/app.db now holds the row and the
 # issued link, and the terminal running the backend prints the login link.
 # An id that is not a live template is a 400, so a stale copy-paste fails loudly.

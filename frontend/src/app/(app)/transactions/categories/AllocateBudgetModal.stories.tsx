@@ -4,7 +4,12 @@ import type { Allocation, Category } from '@/lib/categories';
 
 import { PreferencesProvider } from '../../PreferencesProvider';
 import { AllocateBudgetModal as Modal } from './AllocateBudgetModal';
-import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixture';
+import {
+  category,
+  CATEGORY_PERIODS,
+  FALLBACK_CATEGORY,
+  UNCAPPED_CATEGORY,
+} from './categoryFixture';
 
 /**
  * The modal inside the shell's preferences, which is what gives it a currency to format with.
@@ -17,7 +22,7 @@ import { category, FALLBACK_CATEGORY, UNCAPPED_CATEGORY } from './categoryFixtur
  */
 function AllocateBudgetModal(props: React.ComponentProps<typeof Modal>) {
   return (
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <Modal {...props} />
     </PreferencesProvider>
   );
@@ -118,6 +123,7 @@ const allocation = (overrides: Partial<Allocation> = {}): Allocation => ({
 export const Default: Story = {
   render: () => (
     <AllocateBudgetModal
+      periods={CATEGORY_PERIODS}
       categories={CATEGORIES}
       allocation={allocation()}
       save={accept}
@@ -141,6 +147,7 @@ export const Default: Story = {
 export const NearlyFullyAllocated: Story = {
   render: () => (
     <AllocateBudgetModal
+      periods={CATEGORY_PERIODS}
       categories={CATEGORIES}
       allocation={allocation({ allocated: 3199.99, unallocated: 0.01 })}
       save={accept}
@@ -160,6 +167,7 @@ export const NearlyFullyAllocated: Story = {
 export const WithReservedFallbackCap: Story = {
   render: () => (
     <AllocateBudgetModal
+      periods={CATEGORY_PERIODS}
       categories={[...CATEGORIES.slice(0, 5), { ...FALLBACK_CATEGORY, monthlyCap: 200 }]}
       allocation={allocation({ allocated: 2450, unallocated: 750 })}
       save={accept}
@@ -180,6 +188,7 @@ export const WithReservedFallbackCap: Story = {
 export const TinySegments: Story = {
   render: () => (
     <AllocateBudgetModal
+      periods={CATEGORY_PERIODS}
       categories={[
         category({ name: 'Stamps', monthlyCap: 1, spent: 0 }),
         category({
@@ -207,6 +216,7 @@ export const TinySegments: Story = {
 export const ManyCategories: Story = {
   render: () => (
     <AllocateBudgetModal
+      periods={CATEGORY_PERIODS}
       categories={Array.from({ length: 12 }, (_, index) =>
         category({
           id: `0198c2a1-0000-7000-8000-00000000f${index.toString(16)}0`,
@@ -236,6 +246,7 @@ export const ManyCategories: Story = {
 export const NothingToAllocate: Story = {
   render: () => (
     <AllocateBudgetModal
+      periods={CATEGORY_PERIODS}
       categories={[FALLBACK_CATEGORY]}
       allocation={allocation({ allocated: 0, unallocated: 3200 })}
       save={accept}
@@ -255,6 +266,7 @@ export const NothingToAllocate: Story = {
 export const WithMessages: Story = {
   render: () => (
     <AllocateBudgetModal
+      periods={CATEGORY_PERIODS}
       categories={CATEGORIES}
       allocation={allocation()}
       save={async () => ({ ok: false, reason: 'failed' }) as const}

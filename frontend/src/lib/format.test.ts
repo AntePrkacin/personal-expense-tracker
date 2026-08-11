@@ -7,8 +7,6 @@ import {
   initials,
   monthLabel,
   monthOverline,
-  periodLabel,
-  periodOverline,
   parseAmountInput,
   shortName,
 } from './format';
@@ -50,56 +48,80 @@ function inZone(zone: string, body: () => void) {
 // comment in `app/DecorativePanel.tsx` explaining why that file uses literal strings instead.
 
 describe('initials', () => {
-  it('takes the first letter of each name', () => {
+  it('takes the first letter of each of the first two words', () => {
     // The designed value on 04 Dashboard and 17 Settings, from the designed
-    // names: "Marko" + "Kovač".
-    expect(initials('Marko', 'Kovač')).toBe('MK');
+    // name: "Marko Kovač".
+    expect(initials('Marko Kovač')).toBe('MK');
   });
 
   it('uppercases a lowercase name', () => {
-    expect(initials('marko', 'kovač')).toBe('MK');
+    expect(initials('marko kovač')).toBe('MK');
   });
 
   it('takes the first letter of a diacritic name from the name, not the ASCII fold', () => {
     // Ž, not Z. Nothing normalises here, and nothing should: the initial is the
     // user's own letter.
-    expect(initials('Žan', 'Šimić')).toBe('ŽŠ');
+    expect(initials('Žan Šimić')).toBe('ŽŠ');
   });
 
   it('keeps an astral-plane character whole', () => {
     // The reason firstLetter uses Array.from rather than charAt. With charAt
     // this returns two lone surrogates, which render as replacement glyphs.
-    expect(initials('𝔐arko', '𝔎ovač')).toBe('𝔐𝔎');
+    expect(initials('𝔐arko 𝔎ovač')).toBe('𝔐𝔎');
   });
 
-  it('skips a name it has nothing to take', () => {
-    // RegisterDto marks both names @IsNotEmpty, so this is defensive. It must
+  it('takes one letter from a single-word name', () => {
+    // **Ordinary rather than defensive since PET-72**, which collapsed the two
+    // name fields into one whose placeholder invites a nickname - so "Marko"
+    // with no surname is a value the form actively offers.
+    expect(initials('Marko')).toBe('M');
+  });
+
+  it('ignores surrounding and repeated whitespace', () => {
+    // The stored name is untrimmed by design, so a value with stray spaces
+    // reaches here - and splitting on a single space would take an empty first
+    // word and produce nothing at all.
+    expect(initials('  Marko   Kovač  ')).toBe('MK');
+  });
+
+  it('produces nothing for a blank name rather than throwing', () => {
+    // `RegisterDto` marks the name @IsNotEmpty, so this is defensive. It must
     // not produce "undefined" or throw.
-    expect(initials('Marko', '')).toBe('M');
-    expect(initials('', '')).toBe('');
+    expect(initials('')).toBe('');
+    expect(initials('   ')).toBe('');
+  });
+
+  it('ignores a third word', () => {
+    // Two letters is what the 36px disc holds, and what the frame draws.
+    expect(initials('Ana Marija Kovač')).toBe('AM');
   });
 });
 
 describe('shortName', () => {
-  it('abbreviates the last name', () => {
-    expect(shortName('Marko', 'Kovač')).toBe('Marko K.');
+  it('abbreviates the second word', () => {
+    expect(shortName('Marko Kovač')).toBe('Marko K.');
   });
 
   it('uppercases the abbreviated initial', () => {
-    expect(shortName('Marko', 'kovač')).toBe('Marko K.');
+    expect(shortName('Marko kovač')).toBe('Marko K.');
   });
 
-  it('drops the abbreviation mark when there is no last name', () => {
+  it('drops the abbreviation mark for a single-word name', () => {
     // Not "Marko .": a full stop with nothing before it reads as a defect, and
-    // the sidebar footer shows this on every screen.
-    expect(shortName('Marko', '')).toBe('Marko');
-    expect(shortName('Marko', '')).not.toContain('.');
+    // the sidebar footer shows this on every screen. Ordinary rather than
+    // defensive since PET-72 - see `initials` above.
+    expect(shortName('Marko')).toBe('Marko');
+    expect(shortName('Marko')).not.toContain('.');
   });
 
-  it('leaves the first name unabbreviated', () => {
-    // Only the last name is shortened. A first-name initial would make the
+  it('leaves the first word unabbreviated', () => {
+    // Only the second is shortened. A first-name initial would make the
     // footer unreadable, and the design shows the full first name.
-    expect(shortName('Marko', 'Kovač')).toContain('Marko');
+    expect(shortName('Marko Kovač')).toContain('Marko');
+  });
+
+  it('ignores a third word', () => {
+    expect(shortName('Ana Marija Kovač')).toBe('Ana M.');
   });
 });
 
@@ -131,81 +153,6 @@ describe('monthLabel', () => {
   it('spells the month out rather than abbreviating it', () => {
     // 'short' would give "Sep", which is not what the frame draws.
     expect(monthLabel(new Date(2025, 8, 8))).toBe('September');
-  });
-});
-
-describe('periodOverline', () => {
-  // The budgeting period's own label, and the answer to the `docs/TODO.md` entry open since
-  // PET-19. `today` is passed explicitly throughout rather than faked with timers, which is
-  // exactly what the parameter exists for.
-
-  it('names one month at the default start day, matching the old behaviour', () => {
-    // At 1 the period *is* the calendar month, so this has to be byte-identical to what the four
-    // headers drew before PET-47 - otherwise the fix is a visible change for every account that
-    // never touched the setting, which is almost all of them.
-    expect(periodOverline(1, '2025-10-08')).toBe('October 2025');
-    expect(periodOverline(1, '2025-10-08')).toBe(monthOverline(new Date(2025, 9, 8)));
-  });
-
-  it('names both months above the default, with the year once', () => {
-    // 20 October at a start day of 15 is inside the period running 15 Oct - 15 Nov.
-    expect(periodOverline(15, '2025-10-20')).toBe('October / November 2025');
-  });
-
-  it('names the period the day belongs to, not the month it is in', () => {
-    // The whole defect: 10 October at a start day of 15 is in the period that opened on
-    // 15 September, so a header saying "October" names a window the figures below are not from.
-    expect(periodOverline(15, '2025-10-10')).toBe('September / October 2025');
-  });
-
-  it('puts the boundary day in the period it opens, matching the backend', () => {
-    // `>=`, the same comparison `src/common/month-window.ts` makes. The day before belongs to the
-    // previous period, and getting this backwards is a one-character error that is wrong for
-    // exactly one day a month.
-    expect(periodOverline(15, '2025-10-15')).toBe('October / November 2025');
-    expect(periodOverline(15, '2025-10-14')).toBe('September / October 2025');
-  });
-
-  it('carries both years across a year boundary', () => {
-    // The one case a single trailing year would be actively wrong about rather than merely terse:
-    // "December / January 2026" claims December 2026.
-    expect(periodOverline(15, '2025-12-20')).toBe('December 2025 / January 2026');
-    expect(periodOverline(15, '2026-01-10')).toBe('December 2025 / January 2026');
-  });
-
-  it('handles the last day a period may start on', () => {
-    // 28 is the backend's cap, chosen so every month has the day and there is no clamping case.
-    expect(periodOverline(28, '2025-02-28')).toBe('February / March 2025');
-    expect(periodOverline(28, '2025-02-27')).toBe('January / February 2025');
-  });
-
-  it('falls back to the calendar month for a start day the DTO cannot produce', () => {
-    // `@IsInt @Min(1) @Max(28)` makes these unreachable. A fallback rather than a throw because
-    // this is a page heading, and taking the screen out through the error boundary over a label
-    // is the worse of the two failures.
-    expect(periodOverline(0, '2025-10-20')).toBe('October 2025');
-    expect(periodOverline(31, '2025-10-20')).toBe('October 2025');
-  });
-});
-
-describe('periodLabel', () => {
-  it('names one month at the default start day', () => {
-    expect(periodLabel(1, '2025-10-08')).toBe('October');
-  });
-
-  it('names both months above it, and never a year', () => {
-    // The month pill and the Categories tab's "{period} spending" heading both draw this, and
-    // neither has room for a year - which is what makes it a second function rather than a slice
-    // off the overline.
-    expect(periodLabel(15, '2025-10-20')).toBe('October / November');
-    expect(periodLabel(15, '2025-12-20')).toBe('December / January');
-  });
-
-  it('agrees with periodOverline about which period today is in', () => {
-    // The two must never disagree: they appear on the same screen, one in the overline and one in
-    // the pill beneath it.
-    expect(periodLabel(15, '2025-10-14')).toBe('September / October');
-    expect(periodOverline(15, '2025-10-14')).toBe('September / October 2025');
   });
 });
 

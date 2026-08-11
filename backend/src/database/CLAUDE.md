@@ -48,8 +48,9 @@ field the Platform API returns. A dedicated test pins the flag in
 **Database per user.** A small **central** database (`users`: id, email, and a pointer to
 that person's database) exists because identity must resolve by email before the per-user
 database is known. Everything else about a person lives in **their own Turso database**,
-holding `profile` (single row), `categories` and `transactions`. Insights arrive there
-later as an ordinary migration. In cloud mode the central database and every per-user one
+holding `profile` (single row), `categories`, `transactions`, the insight tables, and as of
+PET-72 the three effective-dated histories: `period_rules`, `budget_history` and
+`category_cap_history`. In cloud mode the central database and every per-user one
 live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
 per-user ones itself, at **verification** rather than registration - see
 `backend/CLAUDE.md`, Access and sessions.
@@ -141,6 +142,17 @@ its own record of having run. It is **one statement**, so it cannot half-apply. 
 is **not a judgement call** - it composes the two frontend maps that ticket deleted, so a
 migrated account renders in exactly the colours it rendered in the day before.
 
+**Both of those backfills are gone as of PET-72, and the paragraphs above are dated rather than
+wrong.** That ticket reset the database ahead of launch - fresh baseline migrations in both scopes,
+generated with `--name=init`, replacing every migration that came before - because there are no real
+users to migrate and the alternative was a chain of migrations describing a schema nobody ever ran.
+So `user/legacy-colour-backfill.ts` and `test/legacy-colour-backfill.e2e-spec.ts` were deleted with
+the hexes they existed to convert. The central template seed **survives** and still runs
+programmatically after `migrate()`, because it is not a backfill: it is how an empty central database
+gets its templates at all. Keep reading the argument above rather than the two files it names - the
+next value-meaning change will need exactly that shape, and the reset is a once-before-launch licence
+rather than a precedent.
+
 **PET-64 shipped without it, and the shape of that failure is the reason this paragraph
 exists.** A category row is written once, at verification, and nothing rewrites it, so every
 account provisioned before the change kept its hexes permanently; the frontend's maps are keyed
@@ -151,6 +163,23 @@ updated in the same commit. **No test in either app can see this class of defect
 by opening the app. `test/legacy-colour-backfill.e2e-spec.ts` now writes the old hexes into a
 real database and reads back what the app would really load, which is the only shape of test
 that could have.
+
+**PET-72 added the first append-only tables, and they are a table shape rather than a feature.**
+`period_rules`, `budget_history` and `category_cap_history` each hold an `effective_from` calendar
+date and the value in force from it; a read resolves the newest row at or before the period's start,
+and a write **appends**. Four things about them are decisions worth not undoing.
+
+They carry `created_at` and `deleted_at` and **no `updated_at`**, because there is no update: a row
+records a decision that was made at a moment, and `$onUpdateFn` on a table nothing updates is a
+column that can only ever be wrong. `period_rules.effective_from` carries a **unique** index where
+the other two carry plain ones - that is what lets the schedule write use `onConflictDoNothing` so
+sending the same schedule twice converges instead of accumulating rules claiming one span, while two
+budget rows for one date are harmless and resolve to the newest. `period_rules.transition_start` is
+**stored, not derived**: which boundary a schedule change removed is a fact about the write that made
+it, and a walk re-deriving it would need the whole future of the history to answer a question about
+its past. And a **missing** cap row means uncapped, which is the one place in this schema where
+sparseness carries meaning - there is no "clear the cap" write, so an uncapped category is one whose
+newest applicable row is `NULL` or absent.
 
 **Conventions worth knowing before writing a table.** Primary keys are UUIDv7 text
 (`src/common/ids.ts`). Money is integer minor units in `*_cents` columns; the API speaks

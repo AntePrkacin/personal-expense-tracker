@@ -35,34 +35,37 @@ describe('SETUP_DRAFT_KEY', () => {
 
 describe('EMPTY_DRAFT', () => {
   it('defaults the currency, leaves the budget blank and picks no categories', () => {
-    // USD because A6 gives the design only one option. A blank budget because a
-    // pre-filled one would be a number nobody chose, and AC3 has to be reachable.
+    // EUR since PET-72 flipped the default. A blank budget because a pre-filled one would be a
+    // number nobody chose, and AC3 has to be reachable. The 1st for the pay day, which is both the
+    // commonest and the value an account would have had before onboarding asked.
     //
     // No categories preselected even though frame 03 draws seven chips selected:
     // that mock illustrates the selected state, and the product decision is that
     // the user picks. Pinned here rather than in the screen, because this is where
     // a default would have to live for step 3 to submit what step 2 displayed.
     expect(EMPTY_DRAFT).toEqual({
-      currency: 'USD',
+      currency: 'EUR',
       budget: '',
+      monthStartDay: 1,
       categories: [],
-      firstName: '',
-      lastName: '',
+      fullName: '',
       email: '',
     });
-    expect(DEFAULT_CURRENCY).toBe('USD');
+    expect(DEFAULT_CURRENCY).toBe('EUR');
   });
 
-  it('carries exactly the six fields onboarding collects before an account exists', () => {
-    // A seventh field would be data nothing submits. These six are the whole of
-    // RegisterDto bar monthStartDay, which onboarding never asks for.
+  it('carries exactly the five fields onboarding collects before an account exists', () => {
+    // A sixth field would be data nothing submits. These five are now the **whole** of
+    // `RegisterDto`: PET-72 collapsed the two names into one and added `monthStartDay`, which the
+    // budget step's third field asks for - so the "bar monthStartDay" this comment used to carry is
+    // history.
     expect(Object.keys(EMPTY_DRAFT).sort()).toEqual([
       'budget',
       'categories',
       'currency',
       'email',
-      'firstName',
-      'lastName',
+      'fullName',
+      'monthStartDay',
     ]);
   });
 });
@@ -73,9 +76,9 @@ describe('parseDraft', () => {
     // outside the list rendered in the trigger with no matching panel row, and step 3 posted it
     // straight through - `@IsISO4217CurrencyCode()` accepts it, so the account was created in a
     // currency the user never picked.
-    expect(parseDraft(JSON.stringify({ ...EMPTY_DRAFT, currency: 'JPY' })).currency).toBe('USD');
+    expect(parseDraft(JSON.stringify({ ...EMPTY_DRAFT, currency: 'JPY' })).currency).toBe('EUR');
     expect(parseDraft(JSON.stringify({ ...EMPTY_DRAFT, currency: 'nonsense' })).currency).toBe(
-      'USD',
+      'EUR',
     );
   });
 
@@ -85,11 +88,11 @@ describe('parseDraft', () => {
 
   it('reads a draft it wrote', () => {
     const draft: SetupDraft = {
-      currency: 'USD',
+      currency: 'EUR',
       budget: '2,000',
+      monthStartDay: 1,
       categories: ['Groceries', 'Transport'],
-      firstName: 'Marko',
-      lastName: 'Kovač',
+      fullName: 'Marko Kovač',
       email: 'marko@email.com',
     };
     expect(parseDraft(serializeDraft(draft))).toEqual(draft);
@@ -138,7 +141,7 @@ describe('parseDraft', () => {
     // isBudgetValid: '2.000,50' read back as 2.0005, four decimals, which
     // RegisterDto's @IsNumber({ maxDecimalPlaces: 2 }) rejects - so the screen
     // showed a plausible number and handed step 3 a guaranteed 400.
-    expect(parseDraft(JSON.stringify({ currency: 'USD', budget: stored })).budget).toBe(expected);
+    expect(parseDraft(JSON.stringify({ currency: 'EUR', budget: stored })).budget).toBe(expected);
   });
 
   it('leaves nothing it returns that the backend would reject on decimals', () => {
@@ -153,8 +156,12 @@ describe('parseDraft', () => {
   it('ignores keys it does not recognise', () => {
     // Forward compatibility, and it cut both ways: a payload written before
     // `categories` existed still loads, and one written by a later version that
-    // adds a fourth field does not break this one.
-    expect(parseDraft('{"currency":"USD","budget":"2,000","monthStartDay":5}')).toEqual(
+    // adds another field does not break this one.
+    //
+    // **The example key changed at PET-72**: this used `monthStartDay`, which the draft now
+    // genuinely carries, so the case was asserting that a real field is discarded. `timezone` is
+    // the plausible next addition and is not read by anything.
+    expect(parseDraft('{"currency":"USD","budget":"2,000","timezone":"Europe/Zagreb"}')).toEqual(
       expected({ currency: 'USD', budget: '2,000' }),
     );
   });
@@ -163,20 +170,33 @@ describe('parseDraft', () => {
 describe('parseDraft, the register fields', () => {
   it.each([
     ['a field that was never written', '{}', ''],
-    ['a value that is not a string', '{"firstName":5}', ''],
-    ['a name as typed', '{"firstName":"Marko"}', 'Marko'],
-    ['whitespace exactly as typed', '{"firstName":"Marko "}', 'Marko '],
+    ['a value that is not a string', '{"fullName":5}', ''],
+    ['a name as typed', '{"fullName":"Marko Kovač"}', 'Marko Kovač'],
+    ['whitespace exactly as typed', '{"fullName":"Marko "}', 'Marko '],
   ])('reads %s', (_label, raw, value) => {
     // Untrimmed on purpose, unlike the budget. Trimming here would delete the space
     // the moment somebody typed one between two words, and the boundary that needs a
     // trimmed value is toRegisterBody.
-    expect(parseDraft(raw).firstName).toBe(value);
+    expect(parseDraft(raw).fullName).toBe(value);
   });
 
-  it('reads all three independently', () => {
-    expect(parseDraft('{"lastName":"Kovač","email":"marko@email.com"}')).toEqual(
-      expected({ lastName: 'Kovač', email: 'marko@email.com' }),
+  it('reads both independently', () => {
+    // Two register fields since PET-72 collapsed the name pair.
+    expect(parseDraft('{"fullName":"Marko Kovač","email":"marko@email.com"}')).toEqual(
+      expected({ fullName: 'Marko Kovač', email: 'marko@email.com' }),
     );
+  });
+
+  it('canonicalises a pay day the picker could not have produced', () => {
+    // The same canonicalise-on-read the currency gets, and for the same reason: a draft written
+    // before this field existed carries none, and one hand-edited in `sessionStorage` could hold a
+    // 31 the backend refuses because not every month has that day.
+    expect(parseDraft('{}').monthStartDay).toBe(1);
+    expect(parseDraft('{"monthStartDay":31}').monthStartDay).toBe(1);
+    expect(parseDraft('{"monthStartDay":0}').monthStartDay).toBe(1);
+    expect(parseDraft('{"monthStartDay":3.5}').monthStartDay).toBe(1);
+    expect(parseDraft('{"monthStartDay":"14"}').monthStartDay).toBe(1);
+    expect(parseDraft('{"monthStartDay":14}').monthStartDay).toBe(14);
   });
 });
 
@@ -309,11 +329,11 @@ describe('isNameValid', () => {
 
 describe('toRegisterBody', () => {
   const draft: SetupDraft = {
-    currency: 'USD',
+    currency: 'EUR',
     budget: '2,000.50',
+    monthStartDay: 1,
     categories: ['Groceries', 'Transport'],
-    firstName: 'Marko',
-    lastName: 'Kovač',
+    fullName: 'Marko Kovač',
     email: 'marko@email.com',
   };
 
@@ -328,25 +348,25 @@ describe('toRegisterBody', () => {
     // AC4 in one assertion: the request is the whole draft, not just this screen's
     // half of it.
     expect(toRegisterBody(draft)).toEqual({
-      firstName: 'Marko',
-      lastName: 'Kovač',
+      fullName: 'Marko Kovač',
       email: 'marko@email.com',
-      currency: 'USD',
+      currency: 'EUR',
       monthlyBudget: 2000.5,
+      monthStartDay: 1,
       categories: ['Groceries', 'Transport'],
     });
   });
 
-  it('trims the three text fields', () => {
+  it('trims the two text fields', () => {
+    // Two since PET-72 collapsed the name pair. Inner whitespace is left alone - only the ends are
+    // trimmed, so a two-word display name survives intact.
     const body = toRegisterBody({
       ...draft,
-      firstName: ' Marko ',
-      lastName: ' Kovač ',
+      fullName: ' Marko Kovač ',
       email: '  marko@email.com  ',
     });
 
-    expect(body.firstName).toBe('Marko');
-    expect(body.lastName).toBe('Kovač');
+    expect(body.fullName).toBe('Marko Kovač');
     expect(body.email).toBe('marko@email.com');
   });
 
@@ -356,10 +376,12 @@ describe('toRegisterBody', () => {
     expect(toRegisterBody({ ...draft, email: 'Marko@Email.com' }).email).toBe('Marko@Email.com');
   });
 
-  it('omits monthStartDay rather than defaulting it', () => {
-    // Onboarding never asks for it and the backend applies its own default, so a
-    // value here would be one nobody chose.
-    expect('monthStartDay' in toRegisterBody(draft)).toBe(false);
+  it('sends the pay day onboarding now asks for', () => {
+    // **This reverses what it asserted before PET-72**, which was that the field is omitted because
+    // onboarding never asks. It does now: the budget step's third field collects it, and it becomes
+    // the account's first `period_rules` row - so omitting it would silently anchor every user's
+    // whole history to the 1st.
+    expect(toRegisterBody({ ...draft, monthStartDay: 14 }).monthStartDay).toBe(14);
   });
 
   it('keeps an empty selection empty', () => {

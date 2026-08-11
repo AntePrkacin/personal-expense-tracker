@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DEFAULT_CURRENCY } from '../common/currency';
 import { isUniqueViolation } from '../common/unique-violation';
 import type { OnboardingPayload } from '../database/central/schema';
 import { renderLoginLinkEmail } from '../mail/login-link.template';
@@ -63,9 +64,12 @@ export class AuthService {
     await this.assertCategoryTemplatesExist(dto.categories);
 
     const userId = await this.resolveRegistration(dto.email, {
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      currency: dto.currency ?? 'USD',
+      fullName: dto.fullName,
+      // EUR since PET-72, USD before it. The default lives in
+      // `src/common/currency.ts` rather than as a literal here, so this, the
+      // schema default and the frontend's empty draft cannot disagree about what
+      // a blank form means.
+      currency: dto.currency ?? DEFAULT_CURRENCY,
       monthlyBudget: dto.monthlyBudget,
       monthStartDay: dto.monthStartDay ?? 1,
       categories: dto.categories,

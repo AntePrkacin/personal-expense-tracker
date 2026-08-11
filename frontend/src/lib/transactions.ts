@@ -46,6 +46,9 @@ type TransactionList = ListOperation['responses'][200]['content']['application/j
 /** One row. The table, the dashboard's recent list and "Recent in {category}" all render these. */
 export type Transaction = components['schemas']['TransactionResponseDto'];
 
+/** The period a list covers, for the header's overline. Read off the response, never derived. */
+type PeriodSummary = components['schemas']['PeriodSummaryDto'];
+
 /**
  * Which of the three states the page is in, resolved once on the server.
  *
@@ -56,11 +59,18 @@ export type Transaction = components['schemas']['TransactionResponseDto'];
  *
  * `total` rides on all three so the tab badge is one expression at the call site. It is 0 on
  * both empty states by definition, since it is the count after filters.
+ *
+ * **`period` rides on all three too, and it comes from the *first* read rather than the probe.**
+ * The header's overline names the period the figures belong to, which is the one the caller's own
+ * filters asked for - so an empty screen still says which period found nothing, and the probe's
+ * `period=all` never overwrites it. It is `null` exactly when the caller asked for `period=all`,
+ * which the contract documents as having no single label.
  */
-export type TransactionsView =
+export type TransactionsView = { period: PeriodSummary | null } & (
   | { state: 'populated'; transactions: Transaction[]; total: number }
   | { state: 'noResults'; total: 0 }
-  | { state: 'empty'; total: 0 };
+  | { state: 'empty'; total: 0 }
+);
 
 /**
  * One list read, or the access flow.
@@ -135,8 +145,12 @@ export async function readTransactionsView(
 ): Promise<TransactionsView> {
   const list = await readTransactions(filters);
 
+  // The period every arm below reports, resolved once: it is the one *this* read covers, so the
+  // probe's own all-time answer can never become the header's label.
+  const period = list.period;
+
   if (list.total > 0) {
-    return { state: 'populated', transactions: list.transactions, total: list.total };
+    return { state: 'populated', transactions: list.transactions, total: list.total, period };
   }
 
   // The condition is "these filters already are the probe", not "the period is all": a
@@ -144,12 +158,14 @@ export async function readTransactionsView(
   // either of them still leaves the two cases apart - a filter matched nothing, or there is
   // nothing to match. Only the unfiltered all-time read answers both at once.
   if (isProbe(filters)) {
-    return { state: 'empty', total: 0 };
+    return { state: 'empty', total: 0, period };
   }
 
   const anything = await readTransactions(PROBE);
 
-  return anything.total > 0 ? { state: 'noResults', total: 0 } : { state: 'empty', total: 0 };
+  return anything.total > 0
+    ? { state: 'noResults', total: 0, period }
+    : { state: 'empty', total: 0, period };
 }
 
 /**

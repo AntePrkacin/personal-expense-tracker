@@ -80,9 +80,21 @@ from the row.
 so a live credential never reaches backend access logs) and does everything in order:
 `consume()` first because it _is_ the authentication, then the directory read, then - only if
 `users.onboarding_payload` is still set - provision the Turso database, persist the pointer,
-open and migrate it, insert the profile, seed the picked categories, and clear the payload
-**strictly last**, because while it is set it is both the profile's source data and the "this
-may be unfinished" marker. Then a session, then the response. Nothing here is floated, unlike
+open and migrate it, insert the profile, seed the picked categories, seed the account's first
+`period_rules` and `budget_history` rows, and clear the payload **strictly last**, because while it
+is set it is both the profile's source data and the "this may be unfinished" marker.
+
+**Those two seed rows are what establish the invariant every period read depends on**, and PET-72's
+one subtle decision here is where their anchor comes from. Both take the _same_ anchor, computed once
+in `provisionAccount` as `mostRecentAnchor(monthStartDay, today, SEED_ANCHOR_MONTHS_BACK)` - twelve
+months back - and passed in rather than re-read. Three things follow. It is **twelve months back
+rather than the current period**, because an anchor at today would sort _after_ any retroactive
+schedule change and leave two rules claiming one span; twelve is what makes the whole of Settings'
+nine-month window reachable. It is computed **once** rather than by each seed, because two clock
+reads either side of midnight can disagree and the budget would then be anchored to a period the rule
+does not start. And this is deliberately the one place that injects `ConfigService` rather than
+`PeriodService`: the service resolves periods _from_ the rules, so asking it to help write the first
+one is asking it to depend on the invariant being established already. Then a session, then the response. Nothing here is floated, unlike
 `AuthService`: the caller holds a token that was emailed to the address owner, so there is no
 enumeration timing to defend, and the response must not claim a session that provisioning
 failed to earn.
@@ -153,23 +165,68 @@ update, `TransactionsService` for amounts, and `CategoriesService` for caps and 
 totals - which is what the schema comments mean by the conversion happening at the service
 boundary. A fifth place doing its own arithmetic is a bug.
 
-**Every month-scoped figure resolves its period through `src/common/month-window.ts`, and
-nothing else computes one.** `monthWindow(monthStartDay, today)` returns `YYYY-MM-DD` bounds
-that are inclusive at the start and **exclusive** at the end, so a query reads `date >= start
-and date < end`: text compared against the text column the schema stores, served as a range
-scan by `transactions_date_idx`, with no last-day-of-month arithmetic anywhere. Nothing in the
-file constructs a `Date`, because round-tripping a calendar date through one shifts it across
-timezones - the same reason `transactions.date` is text.
+**Every period-scoped figure resolves its period through `PeriodService`, and nothing else
+resolves one.** That paragraph used to name `monthWindow(monthStartDay, today)` in
+`src/common/month-window.ts` as the single owner, and PET-72 replaced the function without
+changing the rule: a period is no longer derivable from one number, so the resolution reads a
+history. `src/periods/period.service.ts` is the only thing that reads `period_rules`, and
+`src/common/period-rules.ts` is the pure walk under it - no clock, no database, so its 40 cases
+pin every boundary without a fake timer or a connection. Both halves of the old shape survive.
+Bounds are still `YYYY-MM-DD`, inclusive at the start and **exclusive** at the end, so a query
+still reads `date >= start and date < end`: text against the text column the schema stores,
+served as a range scan by `transactions_date_idx`, with no last-day-of-month arithmetic
+anywhere. And nothing constructs a `Date` from a calendar date, because round-tripping one
+through a `Date` shifts it across timezones - the same reason `transactions.date` is text.
 
-`today` is a parameter rather than a clock read, which is what lets specs pin month-boundary
-behaviour without faking timers, and it is formatted by `todayIn()` against **`APP_TIMEZONE`**
-rather than UTC. UTC is wrong for everybody: just after local midnight on the boundary day a
-transaction falls into the previous period, so the whole screen shows the wrong month for a
-few hours, twice a month. One configured zone is right for every user this project has and
-honest about not solving the general case; the per-user fix is in `docs/TODO.md`. The profile
-constrains `monthStartDay` to 1-28 precisely so every month has the day and there is no
-clamping case - anything outside that range throws, because it is a programming error rather
-than input.
+**A period is anchored to a paycheck, which is what the history is for.** A `period_rules` row
+says "from this date, periods start on day N", and periods tile forward from it with no gap.
+Change the pay day and the change is anchored to **T**, the first paycheck under the new
+schedule: salaries are paid in arrears, so the old schedule's last paycheck never arrives, which
+means the boundary immediately before T is **removed** and one stretched **transition period**
+runs from the last kept boundary up to T. That period keeps the **old** budget, because it is
+the span the old paycheck was spent against. T may be retroactive, which re-shapes periods from
+then on, or in the future, which stretches the current period up to it. `transitionStart` is
+**stored on the rule rather than derived** by the walk: the decision about which boundary was
+removed belongs to the write that made it, and a walk that re-derived it would have to know the
+whole future of the history to answer a question about its past.
+
+**Three histories, one shape.** `period_rules`, `budget_history` and `category_cap_history` are
+all append-only and effective-dated, all resolved on read, and all resolved the same way: the
+newest row whose `effective_from` is at or before the period's start. That is the whole of what
+PET-72 changed - a budget, a cap and a pay day were single settings, so raising the budget in
+2026 silently re-priced every month of 2025. `backend/src/database/CLAUDE.md` owns the tables;
+what belongs here is the one asymmetry between them. **A budget falls back and a cap does
+not.** `budgetCentsFor` reads the earliest row for any period older than it, because an account
+always had _some_ budget; a cap with no row at or before the period is **uncapped**, because a
+sparse history is how an uncapped category is represented. So the seed and the fixture both
+anchor every history at or before the oldest transaction rather than at today, or every period a
+user can navigate back to would report every category uncapped.
+
+`today` is a parameter rather than a clock read, which is what lets specs pin boundary behaviour
+without faking timers, and it is formatted by `todayIn()` against **`APP_TIMEZONE`** rather than
+UTC. UTC is wrong for everybody: just after local midnight on the boundary day a transaction
+falls into the previous period, so the whole screen shows the wrong period for a few hours. One
+configured zone is right for every user this project has and honest about not solving the general
+case; the per-user fix is in `docs/TODO.md`. `MAX_MONTH_START_DAY` is **28** for the reason the
+profile's own constraint always gave - every month has the day, so there is no clamping case -
+and a day outside 1-28 reaching the walk throws, because it is a programming error rather than
+input.
+
+**`PeriodService.current()` returns the period _and_ the `today` it resolved from**, which is not
+redundancy. Two consumers need the day itself: the dashboard's `daysLeft`, and its `daysElapsed`.
+Resolving the period and then reading the clock a second time is a real defect rather than a
+theoretical one - the two reads can straddle midnight, and the figure that goes wrong is the one
+the card is about.
+
+**Money crosses two decimal places and the currency allowlist is why.** `toCents()` and
+`fromCents()` assume an exponent of 2, so `src/common/currency.ts` publishes
+`SUPPORTED_CURRENCIES` - every code on it exponent-2, and the list itself is that file's to count
+rather than a number to restate here - with `DEFAULT_CURRENCY = 'EUR'`
+
+- and `UpdateProfileDto` validates against it rather than against `@IsISO4217CurrencyCode()`.
+  That validator accepts `JPY` and `KWD`, whose exponents are 0 and 3, and either one turns every
+  figure in the app into a silent factor of 100 or 1000. A wider list is a real feature and it
+  needs a per-currency exponent first; `docs/TODO.md` carries it.
 
 ## Transaction endpoints
 
@@ -366,7 +423,7 @@ a response schema.
   on both ends: no column here, no uploaded file there.
 - **Every live category, as `{id, name}` pairs.** Uncapped, deliberately not narrowed, because the
   model is asked to return one of these ids verbatim and an id it was never shown cannot be
-  returned. Note the asymmetry with the merchant list below, which *is* capped: the categories are
+  returned. Note the asymmetry with the merchant list below, which _is_ capped: the categories are
   bounded by how many a person makes (thirteen seeded) rather than by a constant, so nothing
   enforces it. If prompt size ever matters, this is where an unbounded list is.
 - **The top `MERCHANT_HISTORY_LIMIT` merchants of the past `MERCHANT_HISTORY_DAYS`**, each with the
@@ -509,19 +566,55 @@ Renaming or deleting the fallback is a **409**, not a 403: the request is well-f
 caller is entitled to make it, it just conflicts with an invariant of the resource. Everything
 else about that row - cap, color, icon, note - is editable.
 
-The month window itself is `src/common/month-window.ts`, shared with PET-28 and PET-20 and
-described under Backend conventions.
+**This service no longer resolves the period, and that is PET-72's structural change here.** Read
+the two paragraphs this replaces as history: they said `CategoriesService` was "the app's only month
+aggregation", with `currentWindow(userId)` and `previousWindow(userId)` public purely so the
+transaction reads, the dashboard and the insights generator could reach the arithmetic - three
+features importing the categories feature for something with nothing to do with categories.
+`PeriodService` owns the resolution now and all four compose it directly. What stays here is
+aggregation: sum spend against a window somebody else resolved. `monthStatsFor(userId, categoryId)`
+stays public, because one category's stats for the current period really is this feature's business
+and the transaction detail needs it, and `update()` still goes through it rather than keeping a
+second copy - which is why that method carries no `.returning()`.
 
-**`CategoriesService` is the app's only month aggregation, and other features compose it.**
-Three public methods exist for that and for no screen of its own: `currentWindow(userId)` and
-`previousWindow(userId)` hand out the windows, and `monthStatsFor(userId, categoryId)` returns
-one `CategoryResponseDto` with its stats for the current period. The transaction reads use all
-three and PET-20's dashboard uses the first two, while `period()` and `withSpend()` behind
-them stay private so there is one copy of "resolve the window, then sum against it". `update()`
-goes through `monthStatsFor` too rather than keeping a second copy, which is why it carries no
-`.returning()`: the row comes back out of the stats read.
+**`GET /api/categories` takes `?period=<start>`, and a date that starts none of the caller's periods
+is a 400.** Omit it for the current period, the same absent-key rule the frontend states from its
+side. The response echoes the resolved period back as a `period` object with a **label**, which is
+what the screen prints above the cards: a period is not always one calendar month, so a client
+deriving a name from `start` would print the wrong thing exactly when a pay-day change has stretched
+one. `PeriodQueryDto` in `src/common/dto/` is shared with the dashboard rather than copied.
 
-## Dashboard
+**A cap is history now rather than a column, and `withSpend` resolves it with a correlated scalar
+subquery.** Every screen therefore shows the cap that was **in force for the period it is
+displaying**, not today's cap applied retroactively to a period that closed months ago. Three things
+about that query are easy to get wrong. It is a subquery rather than a **join**, because a join
+against a history table multiplies the rows inside the `SUM` and silently doubles the spend. The
+result is read as `capCents === null ? null : Number(capCents)`, because `Number(null)` is `0` - and
+a cap of zero is a category with no room rather than an uncapped one. And a category with no row at
+or before the period is **uncapped**, which is how sparseness carries meaning here: there is no
+"remove the cap" write, an uncapped category is one whose newest applicable row is `NULL`.
+
+The three writes that used to set `monthly_cap_cents` all append instead, through one private
+`appendCap`. `setCaps` is the interesting one, because it appends **many** rows conditionally: it is
+an `INSERT ... SELECT` over a `(values ...)` list whose `WHERE` carries the same `(select count(*)
+...) = n` guard the old `UPDATE` used, so the all-or-nothing story below is unchanged while the
+statement writes new rows rather than overwriting old ones. That shape was unproven in this Drizzle
+version, so it was probed against the real local driver before being written: an all-live payload
+inserts every row and returns every id, a payload naming one tombstoned category inserts nothing and
+returns `[]`, and a `NULL` cap round-trips.
+
+**A cap write is anchored to a period now, and the anchor is asked rather than assumed.** Both cap
+writes dated their rows at the current period unconditionally when PET-72 first shipped, which the
+review of PR #84 flagged from the UI side: the frontend offered the controls on a historical view and
+the write landed somewhere else. The decided behaviour (recorded in the PET-72 plan's user story) is
+the budget change's own shape: `PATCH /categories/{id}` takes an optional `capFrom` and the bulk
+`PATCH /categories` an optional `capsFrom` - a period's own `start` from `GET /api/periods`, resolved
+through `PeriodService.startingAt` so a non-start or a future period is a 400, defaulting to the
+current period when absent. A backdated row re-judges the anchored period onward _except_ periods a
+newer cap row already covers, because resolution prefers the greatest `effective_from` at or before
+each period's start - so backdating is visible and deliberate, never a silent rewrite of a span that
+had its own decision. `capFrom` without a `monthlyCap` is a 400 rather than ignored, and the bulk
+anchor is one value for the whole batch, because the Allocate modal asks its question once per save.
 
 **`GET /api/dashboard` computes nothing itself.** `src/dashboard/` has no imports from
 `categories` or `transactions` tables at all - `DashboardService` composes `CategoriesService`
@@ -530,17 +623,22 @@ current period's rows, for the total, the weekly buckets and the recent-transact
 A window resolved or a month summed here would be the fourth copy of arithmetic that
 `## Backend conventions`' money note already calls a bug at the third.
 
-**This is the most expensive read in the app, and that is accepted rather than optimised
-away.** `currentWindow`, `CategoriesService.list` and `TransactionsService.list` each resolve
-the period independently, so one request reads the profile row up to three times. All three
-land on the one connection `UserDatabaseService` caches per user, the database is small and
-the caller's own, and the alternative - a shared `PeriodService` - would edit code in both
-branches below this one to save a read nothing has measured as slow. That trade, and the
-`PeriodService` idea itself, are in `docs/TODO.md`. Resolving the period independently has one
-visible edge, at the midnight period boundary: the window and the request's own `today` can land
-on either side of it, so `daysLeft` could momentarily read 0 where its DTO promises 1. It
-self-heals on the next request and disappears the moment a shared `PeriodService` resolves the
-window once.
+**PET-72 built the shared `PeriodService` this paragraph used to argue against, and it closed the
+edge case the argument came with.** The old version said `currentWindow`, `CategoriesService.list`
+and `TransactionsService.list` each resolved the period independently - three profile reads for one
+request - and accepted it, because the connection is cached per user, the database is small and the
+caller's own, and nothing had measured it as slow. That trade is gone rather than re-taken: the
+period had to stop being derivable from a single column, so a service owning the resolution stopped
+being an optimisation and became the only place the walk can live. What the collapse also removed is
+the defect the old note recorded as self-healing: with the window and the request's own `today`
+resolved separately they could land on either side of midnight, so `daysLeft` could read 0 where its
+DTO promises 1. `PeriodService.current()` hands back the period **and** the `today` it resolved
+from, so the two cannot disagree - and `daysElapsed` reads the same day, which is what makes a _past_
+period's elapsed count the whole period rather than a number derived from now.
+
+**It is still the most expensive read in the app**, and that part is unchanged: one request composes
+two services over four tables and computes every figure on it. Nothing is stored, nothing is cached,
+and `docs/TODO.md` carries the measurement anybody optimising it should take first.
 
 Six things about the figures are easy to get wrong:
 
@@ -908,6 +1006,60 @@ invariant: the service throws a plain `Error` naming the user id. A documented 4
 invite a "create your profile" flow that has nothing behind it, which is why neither
 operation declares one.
 
+**PET-72 split this resource in two, and the split is the point of the ticket on this endpoint.**
+`PATCH /api/profile` no longer accepts `monthlyBudget` or `monthStartDay` at all - sending either is
+a **400** - because neither is a property of the account. Both are properties of a **span of time**,
+so a request setting one is incomplete without saying from when: raising the budget on the old
+endpoint silently re-priced every period the account had ever had. They go through
+`POST /api/profile/schedule` instead, and every field of `ChangeScheduleDto` is **required**, which
+is what makes the omission impossible rather than merely discouraged. What `GET /api/profile` returns
+for them is the value **as configured** - the newest row of each history, a change scheduled at a
+future paycheck included. This read used to report the values in force for the current period, and a
+review of PET-72 is why it stopped: Settings is a form, and a form must round-trip. Mid-pending-change
+the old semantics loaded the _old_ day, so a faithful budget-only re-submit wrote a rule reverting the
+change the user had just scheduled. What a period was actually lived under stays per-period on the
+dashboard, category and transaction reads.
+
+Five things about the schedule write are easy to get wrong:
+
+- **It answers 200, and `@HttpCode(HttpStatus.OK)` is what makes that true.** Nest defaults a POST to
+  201 and the DTO published 200, so the two disagreed with every gate green until an e2e case pinned
+  it. 200 is right: the write creates no resource a caller could then address - what comes back is the
+  profile, exactly as the read returns it.
+- **`firstPaycheckDate` must be day `monthStartDay` of its month**, or it is a 400. That is the guard
+  that keeps a rule's anchor and its own start day consistent, so the walk never has to reconcile a
+  rule that contradicts itself.
+- **An anchor earlier than the account's earliest rule is a 400**, which is why provisioning seeds
+  the first rule `SEED_ANCHOR_MONTHS_BACK` months back rather than at the current period. Anchored at
+  today, any retroactive change would sort _before_ the seed rule and two rules would claim one span.
+  Twelve months is what makes the whole of the Settings dialog's nine-month window reachable.
+- **A pay-day change moves boundaries and a budget-only change does not.** The service decides which
+  it is by comparing the requested day against `ruleInForceAt(anchor)`, not against the profile's
+  current day: at a retroactive anchor those are different rules, and comparing against the wrong one
+  writes a boundary move for a change that moved nothing. **One exception, found by review**: a body
+  carrying the _newest_ rule's day with an anchor before that rule is a budget-only change reaching
+  back across the last pay-day change - the form always sends the configured day, so the comparison
+  at the anchor misreads exactly that case - and it appends a budget row for the containing period,
+  never a rule.
+
+- **A pay-day change cannot be anchored behind a later pay-day change, and that is a 400.** A rule
+  inserted _between_ two existing ones leaves the later rule's stored `transitionStart` computed
+  against a predecessor that no longer governs the span, so the walk clamps periods at a bridge that
+  lands on no boundary - periods ending on a day nobody was ever paid. Correcting history is in
+  `## Not built here`; until it exists, refusing the anchor is the honest answer.
+- **Sending the identical body twice converges rather than duplicating.** The rule insert is
+  `onConflictDoNothing` on `period_rules`' unique `effective_from` index, and a second budget row for
+  one date resolves to the newest - which is the same value. That is why the frontend action publishes
+  no conflict arm: there is nothing here for two requests to collide over.
+
+**`GET /api/periods` is the read behind all of it**, in `src/periods/`, and it answers every period
+the account has, newest first, each with `start`, `end`, a **label** and a `current` flag. Two things
+about its range are decisions. It is bounded by the **oldest transaction** rather than by the oldest
+rule, because a rule anchored a year back for the reason above is not a claim that the account has a
+year of history. And the label is the backend's to compute for every consumer, because a period a
+schedule change stretched spans two calendar months and no client-side arithmetic over a start day
+can name it.
+
 ## Persistence
 
 The persistence layer has its own file, `backend/src/database/CLAUDE.md`, which loads
@@ -1057,9 +1209,17 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   describing no receipt at all. The 4MB cap is the practical bound today.
 
 - **A per-scan opt-in for training on the free tier.** V1's disclosure beside the scan buttons is
-  on-screen copy, not a setting: a real opt-in belongs in Settings, whose `<main>` is not built,
-  and migrating to the paid tier is the only mechanism that actually turns training off. See
-  `docs/TODO.md`.
+  on-screen copy, not a setting: a real opt-in belongs in Settings, which has no field for it and
+  no column behind one, and migrating to the paid tier is the only mechanism that actually turns
+  training off. See `docs/TODO.md`. (This bullet said the Settings `<main>` was not built, which
+  PET-46 and PET-47 ended - the gap is the setting, not the screen.)
+
+- **Correcting a history row.** `period_rules`, `budget_history` and `category_cap_history` are
+  append-only by design and no endpoint edits or removes a row, so a schedule change made from the
+  wrong paycheck can only be answered with another schedule change - which leaves both rows in the
+  history and resolves to the newer one. That is right for a record of decisions and wrong for a
+  typo, and the two are indistinguishable from here. Deleting the mistaken row needs an endpoint that
+  can say which row it means, which means exposing row ids the API currently publishes nowhere.
 
 - **A shared-store aggregate cap on the Gemini quota.** The `scan` throttler is per-user and
   in-memory, so it protects fairness and blast radius, not total consumption of the project's
@@ -1071,6 +1231,6 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   no such implementation exists and none is wired.
 
 - **Scanning several distinct receipts into several transactions.** One scan produces one
-  transaction; every image in a request is treated as a page of the *same* receipt and
+  transaction; every image in a request is treated as a page of the _same_ receipt and
   synthesized into one extraction. A batch import needs a review queue, N draft rows and a bulk
   write, none of which `POST /transactions/scan` can express.

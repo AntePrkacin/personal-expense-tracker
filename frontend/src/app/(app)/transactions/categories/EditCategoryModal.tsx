@@ -17,10 +17,12 @@ import { reformatAmountInput } from '@/lib/amountField';
 import { currencySymbol } from '@/lib/money';
 import type { Category } from '@/lib/categories';
 import type { Palette } from '@/lib/palette';
+import type { Period } from '@/lib/periods';
 import type { UpdateCategoryResult } from '@/lib/updateCategory';
 import type { components } from '@/types/api';
 
 import { Modal, type ModalHandle } from '../../Modal';
+import { CapPeriodDialog } from './CapPeriodDialog';
 import { ColourSelect } from './ColourSelect';
 import { IconSelect } from './IconSelect';
 import { useCurrency } from '../../PreferencesProvider';
@@ -174,6 +176,14 @@ type EditCategoryModalProps = {
    */
   palette: Palette | null;
   /**
+   * Every period the account has, for the cap-anchor question.
+   *
+   * A save whose diff carries `monthlyCap` opens `CapPeriodDialog` before anything is sent - the
+   * budget change's own shape, decided in the PET-72 plan's user story - and these are its options.
+   * Threaded from the screen's existing `GET /api/periods` read, so the question costs no request.
+   */
+  periods: readonly Period[];
+  /**
    * The update action.
    *
    * A prop rather than an import, which is every modal in this app's pattern and buys the same
@@ -211,6 +221,7 @@ type EditCategoryModalProps = {
 export function EditCategoryModal({
   category,
   palette,
+  periods,
   update,
   onDelete,
   focus = 'name',
@@ -252,14 +263,29 @@ export function EditCategoryModal({
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  /**
+   * The period start the cap-anchor question is asking about, or `null` when it is closed.
+   *
+   * `SettingsForm.anchorMonth`'s shape exactly: the owner holds the value so the dialog stays
+   * stateless, a failed save leaves the dialog open on the period the user picked, a successful one
+   * closes everything, and Cancel abandons only the question - the edits stay in the form and
+   * pressing Save asks again from the default.
+   */
+  const [capAnchor, setCapAnchor] = useState<string | null>(null);
+
+  /** The current period's start, which is the question's default and the value that sends no anchor. */
+  const currentStart = periods.find((period) => period.current)?.start;
+
   /** Writes one text field and clears its message, which is this repo's timing rule for forms. */
-  function setText(field: 'name' | 'monthlyCap' | 'note', value: string) {
+  function setText(field: 'name' | 'monthlyCap' | 'description', value: string) {
     setValues((current) => ({ ...current, [field]: value }));
 
     // Validation appears on submit only and clears as soon as the user starts fixing that field -
-    // never on the next keystroke of a different one. Same as every other form in the app. `note`
-    // is skipped because it can carry no message.
-    if (field !== 'note') setErrors((current) => ({ ...current, [field]: undefined }));
+    // never on the next keystroke of a different one. Same as every other form in the app.
+    // `description` is skipped because it can carry no message. (It was `'note'` until a review
+    // caught that the rename to `description` missed this handler: the Note input wrote a dead key
+    // the spread happily accepted, so the field would have frozen the day `SHOWS_NOTE` flips.)
+    if (field !== 'description') setErrors((current) => ({ ...current, [field]: undefined }));
     setFailure(null);
   }
 
@@ -318,6 +344,38 @@ export function EditCategoryModal({
       return;
     }
 
+    // **A cap change asks "from which period" before anything is sent**, the budget change's own
+    // shape (the PET-72 plan's user story is where it was decided). Only a diff carrying
+    // `monthlyCap` asks - a rename or a recolour is not a fact about a span of time - and the
+    // question defaults to the current period, so the ordinary save is one extra confirm. The send
+    // happens in `commitCap`, reached only through the dialog. The `currentStart` guard covers a
+    // periods list that somehow lacks a current entry, where the honest fallback is the old
+    // behaviour: send unanchored, which the backend dates at the current period.
+    if (body.monthlyCap !== undefined && currentStart !== undefined) {
+      setFailure(null);
+      setCapAnchor(currentStart);
+      return;
+    }
+
+    await send(body);
+  }
+
+  /**
+   * The cap-anchor dialog's confirm: the diff, anchored to the chosen period.
+   *
+   * The body is rebuilt rather than captured when the question opened, so the send always reflects
+   * the fields as they stand - the dialog is modal, so they cannot have changed, and rebuilding is
+   * what makes that a fact rather than an assumption. The current period sends **no** `capFrom`,
+   * because absent-means-current is the contract's own default and the body stays a diff.
+   */
+  async function commitCap(anchor: string) {
+    const body = toUpdateCategoryBody(category, values);
+
+    await send(anchor === currentStart ? body : { ...body, capFrom: anchor });
+  }
+
+  /** The one place the request is sent, whichever path led to it. */
+  async function send(body: components['schemas']['UpdateCategoryDto']) {
     setFailure(null);
     setPending(true);
 
@@ -335,12 +393,17 @@ export function EditCategoryModal({
       result = await update(category.id, body);
     } catch {
       setPending(false);
+      setCapAnchor(null);
       setFailure(MESSAGES.failed);
       return;
     }
 
     if (!result.ok) {
       setPending(false);
+      // The anchor question comes down with any failure, so the message reports once, in the modal
+      // holding the edits, and a retry re-asks - see `CapPeriodDialog`'s note on why it carries no
+      // failure line of its own.
+      setCapAnchor(null);
       setFailure(MESSAGES[result.reason]);
 
       // **One failure arm still refreshes, and leaving it out made this modal's copy a lie.**
@@ -371,7 +434,9 @@ export function EditCategoryModal({
     // screens get theirs on their own next render, for the same reason: none of them holds a copy.
     //
     // `modalRef.current.close()` rather than `onClose()` so the browser restores focus to whatever
-    // opened this. The close event then calls `onClose` for us.
+    // opened this. The close event then calls `onClose` for us. The anchor question, if it was
+    // open, unmounts with the modal.
+    setCapAnchor(null);
     router.refresh();
     modalRef.current?.close();
   }
@@ -381,69 +446,70 @@ export function EditCategoryModal({
   const previewName = values.name.trim();
 
   return (
-    <Modal
-      ref={modalRef}
-      title="Edit category"
-      onClose={onClose}
-      initialFocusId={FOCUS_ID[focus]}
-      onSubmit={onSubmit}
-      footerStart={
-        // CED-7 and AC7: opens the confirmation, and deletes nothing itself. `textDanger` is the
-        // ghost-plus-`text-error` variant `ui/Button` reserves for exactly this control on frames
-        // 11, 21 and 12's siblings, and the trash comes from lucide like every other glyph.
-        //
-        // **Deliberately live while a save is in flight**, which is the call both edit modals make
-        // about Cancel: no fetch in this app carries a timeout, so a hung request is exactly when a
-        // way out matters most. If the delete lands first, the in-flight patch answers 404 and this
-        // modal is already gone.
-        <Button
-          label="Delete category"
-          variant="textDanger"
-          icon={<Trash2 className="size-4" aria-hidden="true" />}
-          onClick={onDelete}
-        />
-      }
-      footer={
-        <>
-          {/* Its default type is `button`, which is what stops it submitting the form. Live while
+    <>
+      <Modal
+        ref={modalRef}
+        title="Edit category"
+        onClose={onClose}
+        initialFocusId={FOCUS_ID[focus]}
+        onSubmit={onSubmit}
+        footerStart={
+          // CED-7 and AC7: opens the confirmation, and deletes nothing itself. `textDanger` is the
+          // ghost-plus-`text-error` variant `ui/Button` reserves for exactly this control on frames
+          // 11, 21 and 12's siblings, and the trash comes from lucide like every other glyph.
+          //
+          // **Deliberately live while a save is in flight**, which is the call both edit modals make
+          // about Cancel: no fetch in this app carries a timeout, so a hung request is exactly when a
+          // way out matters most. If the delete lands first, the in-flight patch answers 404 and this
+          // modal is already gone.
+          <Button
+            label="Delete category"
+            variant="textDanger"
+            icon={<Trash2 className="size-4" aria-hidden="true" />}
+            onClick={onDelete}
+          />
+        }
+        footer={
+          <>
+            {/* Its default type is `button`, which is what stops it submitting the form. Live while
               the request is out for the sibling modals' reason: it cannot double-submit, and the X,
               Escape and a backdrop click all stay live regardless. */}
-          <Button label="Cancel" variant="secondary" onClick={() => modalRef.current?.close()} />
-          {/* Disabled while the request is out. A double submit here is gentler than the Add
+            <Button label="Cancel" variant="secondary" onClick={() => modalRef.current?.close()} />
+            {/* Disabled while the request is out. A double submit here is gentler than the Add
               modal's - a repeated patch is idempotent where a repeated post makes a duplicate - but
               it would still fire two requests and race their two answers into one line. */}
-          <Button type="submit" label="Save changes" disabled={pending} />
-        </>
-      }
-    >
-      {/* `required` with no asterisk, per A12: required fields are marked only by the absence of
+            <Button type="submit" label="Save changes" disabled={pending} />
+          </>
+        }
+      >
+        {/* `required` with no asterisk, per A12: required fields are marked only by the absence of
           "(optional)". Live even though `Uncategorized`'s name is fixed, because this modal has no
           trigger on that card - see the file comment. */}
-      <Input
-        id={NAME_ID}
-        label="Name"
-        value={values.name}
-        onChange={(event) => setText('name', event.currentTarget.value)}
-        error={errors.name}
-        required
-      />
+        <Input
+          id={NAME_ID}
+          label="Name"
+          value={values.name}
+          onChange={(event) => setText('name', event.currentTarget.value)}
+          error={errors.name}
+          required
+        />
 
-      {/* The currency variant draws the `$` prefix and the larger value frame 21 gives this field,
+        {/* The currency variant draws the `$` prefix and the larger value frame 21 gives this field,
           exactly as frame 19 does. **No `required`**, and that is the label's other half: this is
           the one money field in the app that may be left blank. Clearing it is how a cap is removed,
           and `toUpdateCategoryBody` is what turns that into the `null` the DTO wants - which is the
           same relationship the Note field has with its own `null` one modal over. */}
-      <Input
-        id={CAP_ID}
-        label="Monthly budget (optional)"
-        variant="currency"
-        currencySymbol={currencySymbol(currency)}
-        value={values.monthlyCap}
-        onChange={onCapChange}
-        error={errors.monthlyCap}
-      />
+        <Input
+          id={CAP_ID}
+          label="Monthly budget (optional)"
+          variant="currency"
+          currencySymbol={currencySymbol(currency)}
+          value={values.monthlyCap}
+          onChange={onCapChange}
+          error={errors.monthlyCap}
+        />
 
-      {/* Color and Icon share a row, as they do on frame 19. A flex row with flex-1 on each child
+        {/* Color and Icon share a row, as they do on frame 19. A flex row with flex-1 on each child
           rather than a grid, because `ui/FieldShell` is w-full and the two are separate components
           rather than cells of one layout.
 
@@ -452,86 +518,102 @@ export function EditCategoryModal({
           a picker whose stored token the palette no longer offers reads "Select…" beside the
           correct swatch, because both derive their label by finding the row; saving without
           touching the field omits the key, so nothing is lost. `docs/TODO.md` carries it. */}
-      <div className="flex w-full gap-3">
-        <div className="flex-1">
-          <ColourSelect
-            id={COLOUR_ID}
-            label="Color"
-            options={palette?.colors ?? []}
-            value={values.color}
-            onChange={chooseColour}
-            disabled={!offersMarks}
-          />
+        <div className="flex w-full gap-3">
+          <div className="flex-1">
+            <ColourSelect
+              id={COLOUR_ID}
+              label="Color"
+              options={palette?.colors ?? []}
+              value={values.color}
+              onChange={chooseColour}
+              disabled={!offersMarks}
+            />
+          </div>
+          <div className="flex-1">
+            <IconSelect
+              id={ICON_ID}
+              label="Icon"
+              options={palette?.icons ?? []}
+              value={values.icon}
+              onChange={chooseIcon}
+              disabled={!offersMarks}
+            />
+          </div>
         </div>
-        <div className="flex-1">
-          <IconSelect
-            id={ICON_ID}
-            label="Icon"
-            options={palette?.icons ?? []}
-            value={values.icon}
-            onChange={chooseIcon}
-            disabled={!offersMarks}
-          />
-        </div>
-      </div>
 
-      {/* The same preview `AddCategoryModal` draws, and the same `aria-hidden` argument: every
+        {/* The same preview `AddCategoryModal` draws, and the same `aria-hidden` argument: every
           piece of information in this row is already announced by the three fields above it, so
           announcing it again would repeat all three and add a glyph with no text of its own. It
           earns more here than there, because an edit is where somebody is looking at a mark rather
           than picking one for the first time. */}
-      <div aria-hidden="true" className="flex flex-col gap-1.5">
-        <span className="label text-xs">Preview</span>
+        <div aria-hidden="true" className="flex flex-col gap-1.5">
+          <span className="label text-xs">Preview</span>
 
-        <p className="flex items-center gap-3">
-          <span
-            className={`rounded-field flex size-9 shrink-0 items-center justify-center ${categoryTileClass(values.color)}`}
-          >
-            {/* `createElement` rather than `<PreviewIcon />`: `react-hooks/static-components` reads
+          <p className="flex items-center gap-3">
+            <span
+              className={`rounded-field flex size-9 shrink-0 items-center justify-center ${categoryTileClass(values.color)}`}
+            >
+              {/* `createElement` rather than `<PreviewIcon />`: `react-hooks/static-components` reads
                 a capitalised local in JSX as a component created during render, which this is not -
                 it is a lookup into `CATEGORY_ICON`, a static map the module already holds.
                 `CategoryCard` carries the full account, and this repo allows no eslint-disable
                 comments. */}
-            {PreviewIcon === null
-              ? null
-              : createElement(PreviewIcon, { className: 'size-4.5', 'aria-hidden': 'true' })}
-          </span>
-          {/* `/60` rather than `/50` for muted **text**, which AA holds to 4.5:1 - the reasoning is
+              {PreviewIcon === null
+                ? null
+                : createElement(PreviewIcon, { className: 'size-4.5', 'aria-hidden': 'true' })}
+            </span>
+            {/* `/60` rather than `/50` for muted **text**, which AA holds to 4.5:1 - the reasoning is
               `AddCategoryModal`'s and unchanged. **The claim that used to end this comment - that the
               branch is kept "so the two previews cannot drift" - was false when it was written**, and
               a code review caught it: this modal was already saying something different from the Add
               modal's `UNNAMED_PREVIEW`, through an inline literal that bypassed the constant
               entirely. See `UNNAMED_PREVIEW` above for why the two strings differ on purpose now, and
               why each is a named constant rather than a literal. */}
-          <span
-            className={
-              previewName === '' ? 'text-base-content/60 text-sm' : 'text-sm font-semibold'
-            }
-          >
-            {previewName === '' ? UNNAMED_PREVIEW : previewName}
-          </span>
-        </p>
-      </div>
+            <span
+              className={
+                previewName === '' ? 'text-base-content/60 text-sm' : 'text-sm font-semibold'
+              }
+            >
+              {previewName === '' ? UNNAMED_PREVIEW : previewName}
+            </span>
+          </p>
+        </div>
 
-      {/* The Note field, drawn by frame 21 and specified by CED-4, and **deliberately not rendered
+        {/* The Note field, drawn by frame 21 and specified by CED-4, and **deliberately not rendered
           today** - see `SHOWS_NOTE`. Its value is prefilled into state regardless, so a save never
           clears a note the user cannot see. */}
-      {SHOWS_NOTE ? (
-        <Input
-          id={NOTE_ID}
-          label="Note (optional)"
-          value={values.note}
-          onChange={(event) => setText('note', event.currentTarget.value)}
-        />
-      ) : null}
+        {SHOWS_NOTE ? (
+          <Input
+            id={NOTE_ID}
+            label="Note (optional)"
+            value={values.description}
+            onChange={(event) => setText('description', event.currentTarget.value)}
+          />
+        ) : null}
 
-      {/* Two form-level lines rather than one, because they answer different questions and can both
+        {/* Two form-level lines rather than one, because they answer different questions and can both
           be true: the pickers had nothing to offer, and the save was rejected.
           `components/FormError.tsx` owns the treatment and the `role="alert"` argument, and renders
           nothing when its message is absent - so neither needs a conditional here and a closed modal
           still contributes no text to the page, which `(app)/pages.test.tsx` depends on. */}
-      <FormError message={paletteMessage} />
-      <FormError message={failure} />
-    </Modal>
+        <FormError message={paletteMessage} />
+        <FormError message={failure} />
+      </Modal>
+
+      {/* The cap-anchor question, over this modal the way the delete confirmation already opens over
+        it - two dialogs at once is a case `(app)/Modal.tsx` handles by design. Mounted only while
+        being asked, so a closed question contributes nothing to any text query. */}
+      {capAnchor !== null && (
+        <CapPeriodDialog
+          value={capAnchor}
+          periods={periods}
+          confirmLabel="Save changes"
+          pending={pending}
+          onChange={setCapAnchor}
+          onConfirm={() => void commitCap(capAnchor)}
+          onClose={() => setCapAnchor(null)}
+        />
+      )}
+    </>
   );
 }

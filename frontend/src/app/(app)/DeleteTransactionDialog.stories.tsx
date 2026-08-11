@@ -15,7 +15,7 @@ import { DeleteTransactionDialog as Dialog, type DeleteTarget } from './DeleteTr
  */
 function DeleteTransactionDialog(props: React.ComponentProps<typeof Dialog>) {
   return (
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <Dialog {...props} />
     </PreferencesProvider>
   );

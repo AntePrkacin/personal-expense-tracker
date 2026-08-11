@@ -150,7 +150,7 @@ export interface paths {
         };
         /**
          * The signed-in person and their preferences.
-         * @description `email` comes from the central directory, everything else from your own database. `monthlyBudget` is in major units (2000.50, not 200050) and `monthStartDay` is the day of the month your budgeting period starts on.
+         * @description `email` comes from the central directory, everything else from your own database. `monthlyBudget` is in major units (2000.50, not 200050) and `monthStartDay` is the day of the month your budgeting period starts on - your pay day. Both are the values **as configured** - the newest entries of your budget and pay-schedule history, a change scheduled at a future paycheck included - so what a settings form loads is exactly what a save would leave unchanged. What any given period was actually lived under is answered per period by the dashboard, category and transaction reads. Change either value through `POST /api/profile/schedule`, which asks from which paycheck the change applies.
          */
         get: operations["ProfileController_get"];
         put?: never;
@@ -159,10 +159,50 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Change your details or preferences.
-         * @description Send only the fields to change: an absent field is left alone, and no field accepts null - every one of them is required in storage. An empty body is a **400**. `monthlyBudget` is in major units. Changing `email` changes where future login links are sent; links already in flight to the old address keep working, and your current session is unaffected. **409** means the address belongs to another account.
+         * Change your name, email or currency.
+         * @description Send only the fields to change: an absent field is left alone, and no field accepts null - every one of them is required in storage. An empty body is a **400**. Changing `email` changes where future login links are sent; links already in flight to the old address keep working, and your current session is unaffected. **409** means the address belongs to another account. **`monthlyBudget` and `monthStartDay` are deliberately not accepted here** - both apply from a date, so they go through `POST /api/profile/schedule`; sending either is a 400.
          */
         patch: operations["ProfileController_update"];
+        trace?: never;
+    };
+    "/api/profile/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change your budget or pay day, from a given paycheck.
+         * @description Sets your monthly budget and pay day **from `firstPaycheckDate` onward**, leaving every earlier period exactly as it was. If the pay day changes, that paycheck opens a new period and the one before it is **stretched** to meet it - salaries are paid in arrears, so the old schedule’s last paycheck never arrives, and the stretched period keeps the **old** budget. If the pay day is unchanged this is a budget-only change and no period boundary moves. The date may be in the **past**, which re-shapes periods from then on, or in the **future**, which stretches the period immediately before it up to the anchor and leaves everything earlier untouched. A **400** means `firstPaycheckDate` is not day `monthStartDay` of its month, predates the account’s first pay schedule, or anchors a pay-day change behind a later pay-day change. Sending the identical body twice is safe: it converges rather than duplicating. Answers the whole profile, exactly as `GET /api/profile` does.
+         */
+        post: operations["ProfileController_changeSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every budgeting period you have, newest first.
+         * @description What the period select on the Dashboard and Categories screens is built from. Pass a `start` from here as `?period=` on `GET /transactions`, `GET /categories` or `GET /dashboard` to read that period; omit it for the current one. Periods are **not** always calendar months and not always the same length: they start on your pay day, and changing your pay day stretches one period across the gap rather than rewriting the periods before it. So build the select from this list rather than from month arithmetic - index 0 is the current period.
+         */
+        get: operations["PeriodsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/transactions": {
@@ -245,8 +285,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Your categories with this period’s progress, and the allocation summary.
-         * @description One call serves the whole screen. Money is in major units. `spent` and `transactionCount` cover the current budgeting period, which starts on your profile’s `monthStartDay` rather than the 1st. An uncapped category reports `status: "uncapped"` with a null cap, percent, remaining and over - a cap is optional, so this is ordinary rather than exceptional. `allocation.unallocated` can be negative when caps exceed the budget.
+         * Your categories with a period’s progress, and the allocation summary.
+         * @description One call serves the whole screen. Money is in major units. `spent`, `transactionCount`, every cap and the whole `allocation` summary cover **one budgeting period** - the current one unless `?period=` names another, and `period` in the response says which. A period starts on your pay day rather than the 1st, and is not always a calendar month or even a month long: changing your pay day stretches one period across the gap. An uncapped category reports `status: "uncapped"` with a null cap, percent, remaining and over - a cap is optional, so this is ordinary rather than exceptional. `allocation.unallocated` can be negative when caps exceed the budget.
          */
         get: operations["CategoriesController_list"];
         put?: never;
@@ -260,7 +300,7 @@ export interface paths {
         head?: never;
         /**
          * Set the cap on several categories at once.
-         * @description What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen, exactly as `GET /categories` does.
+         * @description What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. Every cap applies **from the period `capsFrom` names onward** - the current one when it is absent - and never further back: periods before the anchor keep the caps they were budgeted under. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen for the current period, exactly as `GET /categories` does.
          */
         patch: operations["CategoriesController_setCaps"];
         trace?: never;
@@ -284,7 +324,7 @@ export interface paths {
         head?: never;
         /**
          * Change a category.
-         * @description Send only the fields to change. An absent field is left alone; `monthlyCap` and `note` also accept `null`, which clears them - clearing a cap makes the category uncapped. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and note are all editable.
+         * @description Send only the fields to change. An absent field is left alone; `monthlyCap` and `description` also accept `null`, which clears them - clearing a cap makes the category uncapped. A cap change applies **from the period `capFrom` names onward** - the current one when it is absent - and never further back: periods before the anchor keep the cap they were budgeted under. `capFrom` without `monthlyCap` is a **400**. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and description are all editable.
          */
         patch: operations["CategoriesController_update"];
         trace?: never;
@@ -297,8 +337,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Every figure the dashboard draws, for the current period.
-         * @description `remaining` and the weekly buckets can imply overspending; nothing here is clamped. `insight` is the latest insight set’s headline and body, or null when none has been generated. An account with no transactions this period returns zeroes, an empty weekly series, no categories and no top category rather than failing.
+         * Every figure the dashboard draws, for one period.
+         * @description The current period unless `?period=` names another, and `period` in the response says which. `remaining` and the weekly buckets can imply overspending; nothing here is clamped. `monthlyBudget` is the budget in force for the period being read, so navigating back does not re-price old periods with today’s budget. `daysLeft` is 0 for a finished period. `insight` is the latest insight set’s headline and body regardless of the period asked for, or null when none has been generated. An account with no transactions in the period returns zeroes, an empty weekly series, no categories and no top category rather than failing.
          */
         get: operations["DashboardController_get"];
         put?: never;
@@ -428,10 +468,12 @@ export interface components {
         };
         RegisterDto: {
             /**
-             * @description ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.
+             * @description ISO 4217 code. Case-insensitive on the way in, stored and returned uppercase. Restricted to two-decimal currencies, because the API assumes an exponent of 2 everywhere.
+             * @default EUR
              * @example EUR
+             * @enum {string}
              */
-            currency?: string;
+            currency: "EUR" | "USD" | "GBP" | "AED" | "AUD" | "BAM" | "BGN" | "BRL" | "CAD" | "CHF" | "CNY" | "CZK" | "DKK" | "HKD" | "HUF" | "ILS" | "INR" | "MKD" | "MXN" | "NOK" | "NZD" | "PLN" | "RON" | "RSD" | "SEK" | "SGD" | "TRY" | "UAH" | "ZAR";
             /**
              * @description Major units (e.g. 2000.50). Stored as integer cents. The cap is not a
              *     product judgment: it keeps the cents conversion far inside JS safe-integer
@@ -439,12 +481,27 @@ export interface components {
              *     carry many digits.
              */
             monthlyBudget: number;
-            /** @description Capped at 28 so the day exists in every month. */
+            /**
+             * @description The day of the month you are paid on. Capped at 28 so the day exists in
+             *     every month.
+             *
+             *     **This is the pay day, and onboarding asks for it as of PET-72.** It becomes
+             *     the account's first `period_rules` row, anchored to the most recent occurrence
+             *     of this day - so the account starts with a real pay schedule rather than a
+             *     setting, and changing it later moves only the periods from the change onward.
+             */
             monthStartDay?: number;
             /** @description Ids from `GET /api/templates/categories`. May be empty. Unknown ids are a 400. */
             categories: string[];
-            firstName: string;
-            lastName: string;
+            /**
+             * @description What the sidebar and greeting show. One field, not a first and last name.
+             *
+             *     PET-72 collapsed the two. The app never used them apart - the sidebar wants
+             *     initials and a short name, both derivable from one string - so the second was
+             *     data collected in order to be thrown away. The form's label is "Display name",
+             *     and a nickname is a legitimate answer.
+             */
+            fullName: string;
             /** Format: email */
             email: string;
         };
@@ -480,38 +537,125 @@ export interface components {
         };
         ProfileResponseDto: {
             /**
-             * @description Day of the month the budgeting period starts on, 1-28. Every period-scoped
-             *     read derives its month window from this at query time, so changing it
-             *     re-buckets history rather than rewriting anything.
+             * @description ISO 4217 code, uppercase. Display only - amounts are stored in minor units. The list is restricted to two-decimal currencies, because the whole API assumes an exponent of 2.
+             * @enum {string}
+             */
+            currency: "EUR" | "USD" | "GBP" | "AED" | "AUD" | "BAM" | "BGN" | "BRL" | "CAD" | "CHF" | "CNY" | "CZK" | "DKK" | "HKD" | "HUF" | "ILS" | "INR" | "MKD" | "MXN" | "NOK" | "NZD" | "PLN" | "RON" | "RSD" | "SEK" | "SGD" | "TRY" | "UAH" | "ZAR";
+            /**
+             * @description Day of the month the budgeting period starts on, 1-28 - your pay day.
+             *
+             *     **Effective-dated as of PET-72, and this comment used to claim the
+             *     opposite.** It read "every period-scoped read derives its month window from
+             *     this at query time, so changing it re-buckets history rather than rewriting
+             *     anything", which had the mechanism right and the desirability backwards:
+             *     re-bucketing *all* history is precisely the rewriting. A new pay day is a fact
+             *     about the periods after it. Changing it therefore goes through
+             *     `POST /api/profile/schedule` with the first new paycheck date, and only the
+             *     periods from that date onward move.
+             *
+             *     The value here is the day **as configured** - the newest rule's, a change
+             *     scheduled at a future paycheck included - for `monthlyBudget`'s reason: a
+             *     settings form has to load the value a save would leave unchanged, or a
+             *     faithful re-submit mid-pending-change would silently revert the change.
+             *     Which day any given period actually ran on is visible in that period's own
+             *     boundaries, via `GET /api/periods`.
              */
             monthStartDay: number;
-            firstName: string;
-            lastName: string;
+            /**
+             * @description One name field, not a first and last.
+             *
+             *     PET-72 collapsed the two: nothing in the app used them apart, so the second
+             *     was data collected to be thrown away. A client rendering initials or a short
+             *     greeting derives both from this.
+             */
+            fullName: string;
             /** @description The login identifier. Lives in the central directory, not the profile row. */
             email: string;
-            /** @description ISO 4217 code, uppercase. Display only - amounts are stored in minor units. */
-            currency: string;
-            /** @description Major units (e.g. 2000.5). Stored as integer cents; converted on the way out. */
+            /**
+             * @description Major units (e.g. 2000.5).
+             *
+             *     **The budget as configured - the newest entry of the budget history, a
+             *     change scheduled at a future paycheck included - resolved rather than stored
+             *     as a column.** The value a settings form loads is exactly the value a save
+             *     would leave unchanged; what a given period was actually lived under is
+             *     answered per period by the dashboard, category and transaction reads. The
+             *     write is `POST /api/profile/schedule` rather than `PATCH /api/profile`:
+             *     setting a budget requires saying from which paycheck it applies, so that
+             *     earlier periods keep the budget they were actually spent against.
+             */
             monthlyBudget: number;
         };
         UpdateProfileDto: {
             /**
-             * @description ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.
              * @example EUR
+             * @enum {string}
              */
-            currency?: string;
-            /** @description Major units (e.g. 2000.50), as at registration. Stored as integer cents. */
-            monthlyBudget?: number;
-            /** @description Capped at 28 so the day exists in every month. */
-            monthStartDay?: number;
-            firstName?: string;
-            lastName?: string;
+            currency?: "EUR" | "USD" | "GBP" | "AED" | "AUD" | "BAM" | "BGN" | "BRL" | "CAD" | "CHF" | "CNY" | "CZK" | "DKK" | "HKD" | "HUF" | "ILS" | "INR" | "MKD" | "MXN" | "NOK" | "NZD" | "PLN" | "RON" | "RSD" | "SEK" | "SGD" | "TRY" | "UAH" | "ZAR";
+            /**
+             * @description What the sidebar and greeting show. One field, not a first and last name.
+             *
+             *     The app never used the two apart - the sidebar wants initials and a short
+             *     name, both derivable from one string - so asking for a surname was asking for
+             *     data to throw away. The label on the form is "Display name", and a nickname is
+             *     a legitimate answer.
+             */
+            fullName?: string;
             /**
              * Format: email
              * @description The login identifier. Changing it changes where future login links are sent
              *     (AC6); links already in flight to the old address keep working.
              */
             email?: string;
+        };
+        ChangeScheduleDto: {
+            /**
+             * @description Major units (e.g. 2000.50). Stored as integer cents.
+             *
+             *     Required even when only the pay day is changing: send the budget you want to
+             *     keep. The alternative - an optional field meaning "leave it alone" - would
+             *     have the endpoint resolve the current budget and re-append it, which is the
+             *     same write with a hidden read in front of it.
+             */
+            monthlyBudget: number;
+            /**
+             * @description The day of the month you are paid on, 1-28.
+             *
+             *     Capped at 28 so the day exists in every month: a period starting on the 31st
+             *     would have to mean the 28th in February, and "the same day next month" would
+             *     stop being a function.
+             */
+            monthStartDay: number;
+            /**
+             * Format: date
+             * @description The first paycheck date under the new schedule, `YYYY-MM-DD`. Must be day `monthStartDay` of its month. May be in the past (re-shapes periods from then on) or the future (stretches the period immediately before it up to the anchor; earlier periods are untouched). A pay-day change anchored before a later pay-day change is a **400**.
+             * @example 2026-01-14
+             */
+            firstPaycheckDate: string;
+        };
+        PeriodResponseDto: {
+            /**
+             * Format: date
+             * @description First day of the period, inclusive. `YYYY-MM-DD`. Pass this verbatim as `?period=` elsewhere.
+             * @example 2025-12-01
+             */
+            start: string;
+            /**
+             * Format: date
+             * @description First day **after** the period, exclusive. `YYYY-MM-DD`. Also the next period’s `start`, so periods tile with no gap.
+             * @example 2026-01-14
+             */
+            end: string;
+            /**
+             * @description What to print above the screen, e.g. `October 2025`. Names **every month the period touches**, so an account paid mid-month reads `October / November 2025` - and a period stretched by a pay-schedule change can read `December 2025 / January 2026`. Do not derive this from `start`: a period is not always one month, so month arithmetic on the frontend would print the wrong thing exactly when it matters.
+             * @example December 2025 / January 2026
+             */
+            label: string;
+            /** @description True for the one period containing today. Exactly one period in the list carries it. */
+            current: boolean;
+        };
+        PeriodsResponseDto: {
+            /** @description Newest first, so index 0 is the current period. */
+            periods: components["schemas"]["PeriodResponseDto"][];
         };
         TransactionResponseDto: {
             id: string;
@@ -533,11 +677,32 @@ export interface components {
              */
             updatedAt: string;
         };
+        PeriodSummaryDto: {
+            /**
+             * Format: date
+             * @description First day of the period, inclusive. `YYYY-MM-DD`. Pass this verbatim as `?period=` elsewhere.
+             * @example 2025-12-01
+             */
+            start: string;
+            /**
+             * Format: date
+             * @description First day **after** the period, exclusive. `YYYY-MM-DD`. Also the next period’s `start`, so periods tile with no gap.
+             * @example 2026-01-14
+             */
+            end: string;
+            /**
+             * @description What to print above the screen, e.g. `October 2025`. Names **every month the period touches**, so an account paid mid-month reads `October / November 2025` - and a period stretched by a pay-schedule change can read `December 2025 / January 2026`. Do not derive this from `start`: a period is not always one month, so month arithmetic on the frontend would print the wrong thing exactly when it matters.
+             * @example December 2025 / January 2026
+             */
+            label: string;
+        };
         TransactionsResponseDto: {
             /** @description Every matching transaction, in the requested sort order. */
             transactions: components["schemas"]["TransactionResponseDto"][];
             /** @description Matches after every filter, not the account total. Equal to `transactions.length` while there is no pagination; read this rather than the array length, so a future page size cannot silently turn the badge into a page count. */
             total: number;
+            /** @description The period this list covers, echoing back what `?period=` resolved to - use `label` for the screen’s overline. **Null when `period=all`**, which spans every period and so has no single label. */
+            period: components["schemas"]["PeriodSummaryDto"] | null;
         };
         ScanReceiptResponseDto: {
             merchant: string | null;
@@ -565,16 +730,25 @@ export interface components {
              */
             color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
             /**
-             * @description Nullable because the column is, not because a new category may omit one:
-             *     `CreateCategoryDto.icon` is required as of PET-64 and `UpdateCategoryDto`
-             *     cannot clear it, so only a row predating that can be null.
-             * @enum {string|null}
+             * @description Always present as of PET-72, when the column became NOT NULL.
+             *
+             *     It was nullable "because the column is, not because a new category may omit
+             *     one" - `CreateCategoryDto.icon` has been required since PET-64 and no PATCH
+             *     can clear it, so the null was only ever reachable by a row predating that.
+             *     The database reset removed those rows and the column now agrees with the DTO.
+             * @enum {string}
              */
-            icon: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark" | "coffee" | "beer" | "pizza" | "ice-cream-cone" | "fuel" | "bus" | "panda" | "bike" | "square-parking" | "house" | "bird" | "waves-horizontal" | "wifi" | "smartphone" | "trash-2" | "wrench" | "sofa" | "pill" | "stethoscope" | "dumbbell" | "eye" | "tag" | "shirt" | "package" | "gem" | "scale" | "credit-card" | "piggy-bank" | "shopping-cart" | "percent" | "receipt" | "trending-up" | "shield" | "gamepad-2" | "music" | "film" | "ticket" | "book" | "camera" | "palette" | "briefcase" | "pencil" | "fish" | "baby" | "users" | "rabbit" | "sailboat" | "tree-palm" | "key-round" | "tent" | "heart" | null;
-            note: string | null;
+            icon: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark" | "coffee" | "beer" | "pizza" | "ice-cream-cone" | "fuel" | "bus" | "panda" | "bike" | "square-parking" | "house" | "bird" | "waves-horizontal" | "wifi" | "smartphone" | "trash-2" | "wrench" | "sofa" | "pill" | "stethoscope" | "dumbbell" | "eye" | "tag" | "shirt" | "package" | "gem" | "scale" | "credit-card" | "piggy-bank" | "shopping-cart" | "percent" | "receipt" | "trending-up" | "shield" | "gamepad-2" | "music" | "film" | "ticket" | "book" | "camera" | "palette" | "briefcase" | "pencil" | "fish" | "baby" | "users" | "rabbit" | "sailboat" | "tree-palm" | "key-round" | "tent" | "heart";
+            /**
+             * @description Free text the user owns. Called `note` before PET-72, renamed to match both
+             *     the column and the `category_templates.description` a starter category
+             *     copies it from - and to stop it reading like `transactions.note`, which is a
+             *     different field on a different table and keeps its own name.
+             */
+            description: string | null;
             /** @description True for the one `Uncategorized` category every account has. It cannot be deleted or renamed, deleting any other category moves its transactions here, and the transaction form preselects it. */
             isFallback: boolean;
-            /** @description Major units. Null means uncapped, which is not a cap of 0. */
+            /** @description Major units. Null means uncapped, which is not a cap of 0. **The cap in force for the period being reported**, not necessarily the one set today: changing a cap applies from the current period onward and leaves earlier periods reporting the cap they were budgeted under. */
             monthlyCap: number | null;
             /** @description Major units spent in this category during the current period. On the fallback (`isFallback`) row this also carries spend whose category no longer exists, so these figures always sum to the period total; see `transactionCount` for what that costs. */
             spent: number;
@@ -643,7 +817,7 @@ export interface components {
             categoryId?: string;
         };
         AllocationResponseDto: {
-            /** @description Major units, from your profile. */
+            /** @description Major units. The budget in force for the period being reported, not necessarily the one set today. */
             monthlyBudget: number;
             /** @description Major units. The sum of every live category cap; uncapped categories contribute nothing, so this can sit well below the budget for someone who caps little. */
             allocated: number;
@@ -653,6 +827,8 @@ export interface components {
         CategoriesResponseDto: {
             /** @description Live categories, ordered by name. */
             categories: components["schemas"]["CategoryResponseDto"][];
+            /** @description Which period every figure above is for - the current one unless `?period=` asked for another. Print `label` above the screen rather than deriving a month name from `start`: a period is not always a calendar month. */
+            period: components["schemas"]["PeriodSummaryDto"];
             allocation: components["schemas"]["AllocationResponseDto"];
         };
         CreateCategoryDto: {
@@ -673,7 +849,14 @@ export interface components {
              * @enum {string}
              */
             color: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
-            /** @description Major units (e.g. 400.00), stored as integer cents. Omit for no cap. */
+            /**
+             * @description Major units (e.g. 400.00), stored as integer cents. Omit for no cap.
+             *
+             *     **Stored as the first row of this category's cap history, effective from the
+             *     current period** - not as a column on the category. So a cap set today is the
+             *     cap for this period onward and does not claim to have applied to periods
+             *     before the category existed.
+             */
             monthlyCap?: number;
             /**
              * @description A lucide icon name, and **required** as of PET-64.
@@ -684,18 +867,25 @@ export interface components {
              *     on the frontend an exhaustiveness proof, and requiring it is free now and
              *     expensive later.
              *
-             *     The column stays **nullable**, deliberately: tightening `categories.icon`
-             *     to NOT NULL would be the one user-scope migration in this whole change, and
-             *     `backend/src/database/CLAUDE.md` is explicit that such a migration runs
-             *     unattended against live data one user at a time. The DTO is what enforces
-             *     the invariant going forward.
+             *     **The column is NOT NULL as of PET-72**, which is what this comment used to
+             *     explain the absence of: tightening it would have been the one user-scope
+             *     migration PET-64 declined to run against live data. The pre-launch database
+             *     reset removed that constraint along with the legacy rows, so the column now
+             *     says what this field has required since PET-64.
              * @example shopping-basket
              * @enum {string}
              */
             icon: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark" | "coffee" | "beer" | "pizza" | "ice-cream-cone" | "fuel" | "bus" | "panda" | "bike" | "square-parking" | "house" | "bird" | "waves-horizontal" | "wifi" | "smartphone" | "trash-2" | "wrench" | "sofa" | "pill" | "stethoscope" | "dumbbell" | "eye" | "tag" | "shirt" | "package" | "gem" | "scale" | "credit-card" | "piggy-bank" | "shopping-cart" | "percent" | "receipt" | "trending-up" | "shield" | "gamepad-2" | "music" | "film" | "ticket" | "book" | "camera" | "palette" | "briefcase" | "pencil" | "fish" | "baby" | "users" | "rabbit" | "sailboat" | "tree-palm" | "key-round" | "tent" | "heart";
             name: string;
-            /** @description Captured, but surfaces on no screen today (CED-4, A42). */
-            note?: string;
+            /**
+             * @description Captured, but surfaces on no screen today (CED-4, A42).
+             *
+             *     Called `description` since PET-72, matching both the column and the
+             *     `category_templates.description` a starter category copies it from. It was
+             *     `note`, which made the one field a user edits share a name with
+             *     `transactions.note`, a different field on a different table.
+             */
+            description?: string;
         };
         CategoryCapDto: {
             /** Format: uuid */
@@ -712,6 +902,12 @@ export interface components {
         UpdateCategoryCapsDto: {
             /** @description One entry per category, at least one. A repeated `id` is a 400. Either every entry is applied or none is. */
             categories: components["schemas"]["CategoryCapDto"][];
+            /**
+             * Format: date
+             * @description A period `start` from `GET /api/periods` that every cap in the batch applies from. Omit for the current period. Periods before it are untouched.
+             * @example 2025-12-01
+             */
+            capsFrom?: string;
         };
         UpdateCategoryDto: {
             /**
@@ -720,15 +916,29 @@ export interface components {
              * @enum {string}
              */
             color?: "primary" | "primary-content" | "secondary" | "secondary-content" | "accent" | "accent-content" | "neutral" | "neutral-content" | "info" | "info-content" | "success" | "success-content" | "warning" | "warning-content" | "error" | "error-content" | "base-content/50";
-            /** @description Major units. `null` clears the cap, leaving the category uncapped. */
+            /**
+             * @description Major units. `null` clears the cap, leaving the category uncapped.
+             *
+             *     Applies from the period `capFrom` names onward - the current one when it is
+             *     absent - never further back: the change is a new row in this category's cap
+             *     history, so every period before the anchor keeps the cap it was budgeted
+             *     under.
+             */
             monthlyCap?: number | null;
+            /**
+             * Format: date
+             * @description A period `start` from `GET /api/periods` that the cap applies from. Omit for the current period. Requires `monthlyCap` in the same body. Periods before it are untouched; periods from it onward use the new cap unless a later cap row already covers them.
+             * @example 2025-12-01
+             */
+            capFrom?: string;
             /**
              * @description A lucide icon name. Not clearable - see the class comment.
              * @example shopping-basket
              * @enum {string}
              */
             icon?: "shopping-basket" | "utensils" | "car" | "zap" | "heart-pulse" | "tv" | "graduation-cap" | "plane" | "scissors" | "gift" | "paw-print" | "landmark" | "circle-question-mark" | "coffee" | "beer" | "pizza" | "ice-cream-cone" | "fuel" | "bus" | "panda" | "bike" | "square-parking" | "house" | "bird" | "waves-horizontal" | "wifi" | "smartphone" | "trash-2" | "wrench" | "sofa" | "pill" | "stethoscope" | "dumbbell" | "eye" | "tag" | "shirt" | "package" | "gem" | "scale" | "credit-card" | "piggy-bank" | "shopping-cart" | "percent" | "receipt" | "trending-up" | "shield" | "gamepad-2" | "music" | "film" | "ticket" | "book" | "camera" | "palette" | "briefcase" | "pencil" | "fish" | "baby" | "users" | "rabbit" | "sailboat" | "tree-palm" | "key-round" | "tent" | "heart";
-            note?: string | null;
+            /** @description Free text the user owns. `null` clears it. Called `note` before PET-72. */
+            description?: string | null;
             name?: string;
         };
         TopCategoryDto: {
@@ -790,15 +1000,15 @@ export interface components {
         DashboardResponseDto: {
             /** @description Major units spent so far this period. */
             spent: number;
-            /** @description Major units, the monthly budget from your profile. */
+            /** @description Major units, the monthly budget **in force for this period**. Not necessarily the budget set today: raising it applies from the period you anchor the change to, and earlier periods keep the budget they were spent against. */
             monthlyBudget: number;
             /** @description Major units, `monthlyBudget - spent`. Can be negative: overspending is a state the frontend needs the magnitude to draw, the same reasoning as `unallocated` on `GET /api/categories`. */
             remaining: number;
-            /** @description Whole days from today to the end of the period, counting today. 1 on the last day of the period, never 0 - the day is not over. */
+            /** @description Whole days from today to the end of the period, counting today. 1 on the last day of the period, never 0 - the day is not over. **0 for a period you have navigated back to**, which is finished rather than nearly over. */
             daysLeft: number;
-            /** @description Live transactions in the current period. */
+            /** @description Live transactions in this period. */
             transactionCount: number;
-            /** @description `spent` divided by days elapsed so far (counting today), not by the days in the whole period - the rate that answers "am I burning too fast", not one that looks better the earlier in the month it is read. */
+            /** @description `spent` divided by days elapsed so far (counting today), not by the days in the whole period - the rate that answers "am I burning too fast", not one that looks better the earlier in the month it is read. For a **finished** period every day has elapsed, so it divides by the period’s full length; note that a period is not always a month long. */
             averagePerDay: number;
             /** @description The highest-spending category this period, ties broken by name ascending. Null when nothing has been spent yet. */
             topCategory: components["schemas"]["TopCategoryDto"] | null;
@@ -808,8 +1018,10 @@ export interface components {
             categories: components["schemas"]["DashboardCategoryDto"][];
             /** @description Up to 3 most recent transactions in the current period, newest first. */
             recentTransactions: components["schemas"]["TransactionResponseDto"][];
-            /** @description The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). */
+            /** @description The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). **Always the latest set**, not one for the period being viewed: insights are generated for the current period only. */
             insight: components["schemas"]["InsightSummaryDto"] | null;
+            /** @description The period every figure here covers - the current one unless `?period=` asked for another. Use `label` for the screen’s overline rather than deriving a month name from `start`. */
+            period: components["schemas"]["PeriodSummaryDto"];
         };
         InsightCardDto: {
             /**
@@ -1160,6 +1372,75 @@ export interface operations {
             };
         };
     };
+    ProfileController_changeSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeScheduleDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    PeriodsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodsResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
     TransactionsController_list: {
         parameters: {
             query?: {
@@ -1170,8 +1451,8 @@ export interface operations {
                  *     404ing - it is a filter, not a resource being addressed.
                  */
                 categoryId?: string;
-                /** @description Resolved server-side from your `monthStartDay`, so the boundary is your budgeting period rather than the calendar month. `previous` is the period before the current one. `all` applies no date filter. */
-                period?: "current" | "previous" | "all";
+                /** @description One of `current`, `previous`, `all`, or a period `start` in `YYYY-MM-DD` from `GET /api/periods`. Resolved server-side from your pay-schedule history, so the boundary is your budgeting period rather than the calendar month - and periods before a pay-day change keep the boundaries they had. `previous` is the period before the current one. `all` applies no date filter. A date that is not a real calendar date, or that starts none of your periods, is a **400**. */
+                period?: string;
                 /** @description Ties on `date` break on `createdAt` descending, then `id`, so the order is stable across requests rather than reshuffling for no visible reason. */
                 sort?: "date_desc" | "date_asc";
             };
@@ -1488,7 +1769,10 @@ export interface operations {
     };
     CategoriesController_list: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A period’s `start` from `GET /api/periods`. Omit for the current period. A date that is not the start of one of your periods is a **400**, so build this from that endpoint rather than from month arithmetic. */
+                period?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1501,6 +1785,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CategoriesResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
                 };
             };
             /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
@@ -1714,7 +2007,10 @@ export interface operations {
     };
     DashboardController_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A period’s `start` from `GET /api/periods`. Omit for the current period. A date that is not the start of one of your periods is a **400**, so build this from that endpoint rather than from month arithmetic. */
+                period?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1727,6 +2023,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
                 };
             };
             /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */

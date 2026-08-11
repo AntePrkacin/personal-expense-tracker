@@ -13,7 +13,7 @@ import { CategoryDonut as Donut } from './CategoryDonut';
  */
 function CategoryDonut(props: React.ComponentProps<typeof Donut>) {
   return (
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <Donut {...props} />
     </PreferencesProvider>
   );

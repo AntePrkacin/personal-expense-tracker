@@ -8,7 +8,8 @@ import { AppModule } from './../src/app.module';
 import { categoryTemplateIds } from './category-templates';
 import { LoginTokenService } from './../src/auth/login-token.service';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
-import { monthWindow, todayIn } from './../src/common/month-window';
+import { todayIn } from './../src/common/month-window';
+import { calendarMonthPeriods } from './periods';
 import { users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
@@ -40,7 +41,7 @@ describe('Dashboard (e2e)', () => {
   const databaseDir = process.env.DATABASE_DIR!;
 
   // monthStartDay defaults to 1, so the period is the calendar month.
-  const window = monthWindow(1, todayIn('Europe/Zagreb'));
+  const { current: window } = calendarMonthPeriods(todayIn('Europe/Zagreb'));
 
   const errorBody = (response: request.Response) =>
     response.body as ErrorResponseDto;
@@ -66,8 +67,7 @@ describe('Dashboard (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email,
         currency: 'eur',
         monthlyBudget,

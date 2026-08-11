@@ -13,7 +13,7 @@ import { TrendCard as Card } from './TrendCard';
  */
 function TrendCard(props: React.ComponentProps<typeof Card>) {
   return (
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <Card {...props} />
     </PreferencesProvider>
   );

@@ -383,9 +383,10 @@ export function generate(seed: number): Fixture {
     seed,
     months: MONTHS,
     profile: {
-      firstName: 'Showcase',
-      lastName: 'User',
-      currency: 'USD',
+      fullName: 'Showcase User',
+      // EUR since PET-72, which flipped the app's default and restricted the
+      // offered list to two-decimal currencies.
+      currency: 'EUR',
       monthlyBudgetCents: BUDGET_CENTS,
       monthStartDay: 1,
     },

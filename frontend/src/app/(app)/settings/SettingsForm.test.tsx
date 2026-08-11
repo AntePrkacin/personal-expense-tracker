@@ -17,17 +17,53 @@ jest.mock('next/navigation', () => ({
 
 /** Frame 17's own persona, which is also the fixtures'. */
 const PROFILE: Profile = {
-  firstName: 'Marko',
-  lastName: 'Kovač',
+  fullName: 'Marko Kovač',
   email: 'marko@email.com',
   currency: 'USD',
   monthlyBudget: 2000,
   monthStartDay: 1,
 };
 
+/**
+ * Today, pinned, so the paycheck dialog's nine-month window is the same list in every run.
+ *
+ * The component takes `today` as a prop with a default for exactly this: the list is relative to
+ * now, and a suite that let it read a clock would assert a different set of month labels every month.
+ */
+const TODAY = '2026-03-10';
+
+/**
+ * The schedule write, separate from `save` so a test can assert which of the two a press reached.
+ *
+ * PET-72 made one "Save changes" potentially two requests - the ordinary patch and
+ * `POST /api/profile/schedule` - and the whole point of injecting them apart is that "the budget was
+ * written and the profile was not" is a distinction the suite can see.
+ */
+let saveSchedule: jest.Mock;
+
 function renderForm(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true })) {
-  render(<SettingsForm profile={PROFILE} save={save} />);
+  render(<SettingsForm profile={PROFILE} save={save} saveSchedule={saveSchedule} today={TODAY} />);
   return save;
+}
+
+/**
+ * Presses Save and answers the paycheck dialog, which is the whole flow for a budget or pay-day
+ * change.
+ *
+ * Every schedule save goes through this rather than through `saveButton()` alone: the dialog is not
+ * optional and a test that skipped it would be asserting a request the app never makes.
+ */
+async function saveThroughDialog(user: ReturnType<typeof userEvent.setup>, month?: string) {
+  await user.click(saveButton());
+
+  if (month !== undefined) {
+    await user.selectOptions(screen.getByLabelText('First paycheck'), month);
+  }
+
+  // The dialog's own affirmative, which is named identically to the button that opened it - so this
+  // has to reach for the one inside the dialog rather than the form's.
+  const dialog = screen.getByRole('dialog');
+  await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
 }
 
 /**
@@ -40,12 +76,21 @@ function renderForm(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true }))
  * nothing.
  */
 function renderWithRefresh(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true })) {
-  const view = render(<SettingsForm profile={PROFILE} save={save} />);
+  const view = render(
+    <SettingsForm profile={PROFILE} save={save} saveSchedule={saveSchedule} today={TODAY} />,
+  );
 
   return {
     save,
     land: (next: Partial<Profile>) =>
-      view.rerender(<SettingsForm profile={{ ...PROFILE, ...next }} save={save} />),
+      view.rerender(
+        <SettingsForm
+          profile={{ ...PROFILE, ...next }}
+          save={save}
+          saveSchedule={saveSchedule}
+          today={TODAY}
+        />,
+      ),
   };
 }
 
@@ -53,14 +98,15 @@ const saveButton = () => screen.getByRole('button', { name: 'Save changes' });
 
 beforeEach(() => {
   jest.clearAllMocks();
+  saveSchedule = jest.fn().mockResolvedValue({ ok: true });
 });
 
 describe('AC1: the card shows the stored profile', () => {
-  it('prefills the three fields', () => {
+  it('prefills the two fields', () => {
+    // Two since PET-72 collapsed the name pair into one "Display name".
     renderForm();
 
-    expect(screen.getByLabelText('First name')).toHaveValue('Marko');
-    expect(screen.getByLabelText('Last name')).toHaveValue('Kovač');
+    expect(screen.getByLabelText('Display name')).toHaveValue('Marko Kovač');
     expect(screen.getByLabelText('Email')).toHaveValue('marko@email.com');
   });
 
@@ -114,36 +160,39 @@ describe('AC2: the avatar', () => {
 });
 
 describe('AC3: the initials follow what is being typed', () => {
-  it('updates the tile on a new first name, before any save', async () => {
+  it('updates the tile as the display name is typed, before any save', async () => {
     const user = userEvent.setup();
     const save = renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana Marić');
 
-    expect(screen.getByText('AK')).toBeInTheDocument();
+    expect(screen.getByText('AM')).toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('updates the tile on a new last name too', async () => {
+  it('shows one letter for a single-word display name', async () => {
+    // Ordinary rather than exotic since PET-72: the field's placeholder invites a nickname, so a
+    // one-word name is a value the form actively offers and the tile has to read as one letter
+    // rather than as a letter and a blank.
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('Last name'));
-    await user.type(screen.getByLabelText('Last name'), 'Marić');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Marko');
 
-    expect(screen.getByText('MM')).toBeInTheDocument();
+    expect(screen.getByText('M')).toBeInTheDocument();
   });
 
-  it('empties the tile when both names are cleared', async () => {
-    // Rather than falling back to a placeholder glyph the design does not draw. `initials('','')`
+  it('empties the tile when the name is cleared', async () => {
+    // Rather than falling back to a placeholder glyph the design does not draw. `initials('')`
     // is the empty string, and this pins that the card renders it rather than inventing something.
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.clear(screen.getByLabelText('Last name'));
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.clear(screen.getByLabelText('Display name'));
 
     expect(screen.queryByText('MK')).not.toBeInTheDocument();
   });
@@ -191,13 +240,13 @@ describe('AC4: a malformed or empty email persists nothing', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.clear(screen.getByLabelText('Last name'));
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.clear(screen.getByLabelText('Display name'));
     await user.clear(screen.getByLabelText('Email'));
     await user.click(saveButton());
 
-    expect(screen.getByText('Enter your first name.')).toBeInTheDocument();
-    expect(screen.getByText('Enter your last name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter a display name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter a display name.')).toBeInTheDocument();
     expect(screen.getByText('Enter your email address.')).toBeInTheDocument();
   });
 
@@ -205,7 +254,7 @@ describe('AC4: a malformed or empty email persists nothing', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
+    await user.clear(screen.getByLabelText('Display name'));
     await user.clear(screen.getByLabelText('Email'));
     await user.click(saveButton());
 
@@ -213,17 +262,17 @@ describe('AC4: a malformed or empty email persists nothing', () => {
 
     expect(screen.queryByText('Enter your email address.')).not.toBeInTheDocument();
     // Still on screen: the user has not been back to that field, so its message is still true.
-    expect(screen.getByText('Enter your first name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter a display name.')).toBeInTheDocument();
   });
 
   it('refuses a blank first name too', async () => {
     const user = userEvent.setup();
     const save = renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
+    await user.clear(screen.getByLabelText('Display name'));
     await user.click(saveButton());
 
-    expect(screen.getByText('Enter your first name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter a display name.')).toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
   });
 });
@@ -235,12 +284,12 @@ describe('AC5: a valid save', () => {
     const user = userEvent.setup();
     const save = renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith({ firstName: 'Ana' });
+    expect(save).toHaveBeenCalledWith({ fullName: 'Ana' });
   });
 
   it('refreshes the route, which is what redraws the sidebar footer', async () => {
@@ -249,8 +298,8 @@ describe('AC5: a valid save', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
@@ -265,8 +314,8 @@ describe('AC5: a valid save', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('');
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
@@ -277,12 +326,12 @@ describe('AC5: a valid save', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
 
-    await user.type(screen.getByLabelText('Last name'), 'x');
+    await user.type(screen.getByLabelText('Display name'), 'x');
 
     expect(screen.getByRole('status')).toHaveTextContent('');
   });
@@ -310,22 +359,179 @@ describe('the Preferences card (PET-47)', () => {
     );
   });
 
-  it('sends both cards in one PATCH, which is AC6', async () => {
-    // **The criterion this whole card rests on.** One "Save changes" beneath two cards, one
-    // request carrying whatever changed on either - which falls out of both cards writing into one
-    // `values` rather than being implemented anywhere. A second request, or a body missing one
-    // card's edit, is what this catches.
+  it('sends both cards from one press, as two writes, which is AC6 amended', async () => {
+    // **The criterion this card rested on, restated for PET-72.** One "Save changes" beneath two
+    // cards still serves both - what changed is that it is two requests rather than one body, because
+    // the pay day applies from a date and the display name does not. A press that reached only one of
+    // them, or reached either twice, is what this catches.
     const user = userEvent.setup();
     const save = jest.fn().mockResolvedValue({ ok: true });
     renderForm(save);
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(screen.getByRole('button', { name: '15th of the month' }));
+    await saveThroughDialog(user);
+
+    await waitFor(() => expect(saveSchedule).toHaveBeenCalledTimes(1));
+    expect(saveSchedule).toHaveBeenCalledWith({
+      monthlyBudget: 2000,
+      monthStartDay: 15,
+      // The month the dialog opens on, which is the current one.
+      firstPaycheckDate: '2026-03-15',
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith({ fullName: 'Ana' });
+  });
+
+  it('writes the schedule before the profile, so the confirmed change is not lost', async () => {
+    // No transaction spans the two endpoints, so the order is the only guarantee: the schedule write
+    // is the one the user was asked a question about, and it must not be skipped because an unrelated
+    // name change failed.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
+    await user.click(screen.getByRole('button', { name: '15th of the month' }));
+    await saveThroughDialog(user);
+
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(saveSchedule.mock.invocationCallOrder[0]).toBeLessThan(
+      save.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('sends no patch at all when only the budget moved', async () => {
+    // The ordinary budget-only save. A patch here would be a body with no keys, which the endpoint
+    // answers 400 to.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '2500');
+    await saveThroughDialog(user);
+
+    await waitFor(() => expect(saveSchedule).toHaveBeenCalledTimes(1));
+    expect(saveSchedule).toHaveBeenCalledWith(expect.objectContaining({ monthlyBudget: 2500 }));
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('never asks the paycheck question when neither field moved', async () => {
+    // Most presses. A dialog over a name change would be asking about a write that is not happening.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith({ firstName: 'Ana', monthStartDay: 15 });
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ fullName: 'Ana' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(saveSchedule).not.toHaveBeenCalled();
+  });
+
+  it('anchors on the month the user picks', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '2500');
+    await saveThroughDialog(user, '2026-01');
+
+    await waitFor(() =>
+      expect(saveSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({ firstPaycheckDate: '2026-01-01' }),
+      ),
+    );
+  });
+
+  // **The PR #84 review finding, end to end.** Every account in this suite and in
+  // `backend/test/periods.e2e-spec.ts` is paid on the 1st, where today is never before pay day - so
+  // these three render a profile paid mid-month, which is the only shape that can see the defect.
+  describe('the paycheck the dialog defaults to', () => {
+    /** The same render as `renderForm`, on an account paid on the 15th rather than the 1st. */
+    function renderPaidOnThe15th(save = jest.fn().mockResolvedValue({ ok: true })) {
+      render(
+        <SettingsForm
+          profile={{ ...PROFILE, monthStartDay: 15 }}
+          save={save}
+          saveSchedule={saveSchedule}
+          today={TODAY}
+        />,
+      );
+
+      return save;
+    }
+
+    it('opens on the paycheck the current period started on, not the calendar month', async () => {
+      // `TODAY` is the 10th, so a person paid on the 15th is still spending February's paycheck. The
+      // version this pins preselected March - a paycheck five days away - so the change applied from
+      // the next period and this one kept the old budget under a green "Changes saved".
+      const user = userEvent.setup();
+      renderPaidOnThe15th();
+
+      await user.clear(screen.getByLabelText('Monthly budget'));
+      await user.type(screen.getByLabelText('Monthly budget'), '2500');
+      await user.click(saveButton());
+
+      expect(screen.getByLabelText('First paycheck')).toHaveValue('2026-02');
+    });
+
+    it('sends that paycheck as the anchor', async () => {
+      // The half that matters on the wire: the month is completed with the form's pay day, so what
+      // reaches `POST /api/profile/schedule` is the current period's own start.
+      const user = userEvent.setup();
+      renderPaidOnThe15th();
+
+      await user.clear(screen.getByLabelText('Monthly budget'));
+      await user.type(screen.getByLabelText('Monthly budget'), '2500');
+      await saveThroughDialog(user);
+
+      await waitFor(() => expect(saveSchedule).toHaveBeenCalledTimes(1));
+      expect(saveSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({ firstPaycheckDate: '2026-02-15' }),
+      );
+    });
+
+    it('anchors a pay-day change on the first paycheck under the new schedule', async () => {
+      // The other arm, and deliberately **not** the most recent occurrence: the account is paid on
+      // the 1st and moving to the 15th, so the first 15th under the new schedule is this month's.
+      // Anchoring at a past 15th would assert a paycheck that never arrived and remove a boundary
+      // inside the period the user is already living in.
+      const user = userEvent.setup();
+      renderForm();
+
+      await user.click(screen.getByRole('button', { name: '15th of the month' }));
+      await saveThroughDialog(user);
+
+      await waitFor(() => expect(saveSchedule).toHaveBeenCalledTimes(1));
+      expect(saveSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({ monthStartDay: 15, firstPaycheckDate: '2026-03-15' }),
+      );
+    });
+  });
+
+  it('writes nothing when the dialog is dismissed', async () => {
+    // Cancel abandons the whole save rather than only the dialog: nothing has been written, and the
+    // form is left exactly as the user had it.
+    const user = userEvent.setup();
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '2500');
+    await user.click(saveButton());
+
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(saveSchedule).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Monthly budget')).toHaveValue('2,500');
   });
 
   it('groups and truncates the budget as it is typed, like every other amount field', async () => {
@@ -354,10 +560,11 @@ describe('the Preferences card (PET-47)', () => {
 
     await user.clear(screen.getByLabelText('Monthly budget'));
     await user.type(screen.getByLabelText('Monthly budget'), '0x10');
-    await user.click(saveButton());
+    await saveThroughDialog(user);
 
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith({ monthlyBudget: 10 });
+    await waitFor(() => expect(saveSchedule).toHaveBeenCalledTimes(1));
+    expect(saveSchedule).toHaveBeenCalledWith(expect.objectContaining({ monthlyBudget: 10 }));
+    expect(save).not.toHaveBeenCalled();
   });
 
   it('sends a picked currency as its ISO code', async () => {
@@ -406,8 +613,8 @@ describe('the Preferences card (PET-47)', () => {
     const save = jest.fn().mockReturnValue(new Promise<UpdateProfileResult>((r) => (release = r)));
     renderForm(save);
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(screen.getByLabelText('Monthly budget')).toBeDisabled());
@@ -433,8 +640,8 @@ describe('the baseline the diff is taken against', () => {
     const { save, land } = renderWithRefresh();
 
     // The user edits one field, which is what clears `awaitingSaved` in the real defect.
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
 
     // Another device changes the month start, and a refresh delivers it as a new prop.
     land({ monthStartDay: 15 });
@@ -442,19 +649,22 @@ describe('the baseline the diff is taken against', () => {
     await user.click(saveButton());
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith({ firstName: 'Ana' });
+    expect(save).toHaveBeenCalledWith({ fullName: 'Ana' });
     expect(save.mock.calls[0][0]).not.toHaveProperty('monthStartDay');
   });
 
   it('still sends a preference the user did change', async () => {
-    // The other half: one baseline must not make a real edit invisible.
+    // The other half: one baseline must not make a real edit invisible. The pay day goes through the
+    // schedule write since PET-72, so this asserts against that endpoint rather than the patch.
     const user = userEvent.setup();
-    const { save } = renderWithRefresh();
+    renderWithRefresh();
 
     await user.click(screen.getByRole('button', { name: '15th of the month' }));
-    await user.click(saveButton());
+    await saveThroughDialog(user);
 
-    await waitFor(() => expect(save).toHaveBeenCalledWith({ monthStartDay: 15 }));
+    await waitFor(() =>
+      expect(saveSchedule).toHaveBeenCalledWith(expect.objectContaining({ monthStartDay: 15 })),
+    );
   });
 });
 
@@ -487,7 +697,7 @@ describe('the clean form', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.type(screen.getByLabelText('First name'), 'x');
+    await user.type(screen.getByLabelText('Display name'), 'x');
     expect(saveButton()).toBeEnabled();
 
     await user.keyboard('{Backspace}');
@@ -498,7 +708,7 @@ describe('the clean form', () => {
     // The button must not be enabled by the diff alone: `toUpdateProfileBody` trims on the way out
     // and compares untrimmed, so a stored "  Marko  " differs from itself and would light up a
     // Save the user has no reason to press.
-    render(<SettingsForm profile={{ ...PROFILE, firstName: '  Marko  ' }} save={jest.fn()} />);
+    render(<SettingsForm profile={{ ...PROFILE, fullName: '  Marko  ' }} save={jest.fn()} />);
 
     expect(saveButton()).toBeDisabled();
   });
@@ -521,7 +731,7 @@ describe('the clean form', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
+    await user.clear(screen.getByLabelText('Display name'));
 
     expect(saveButton()).toBeEnabled();
   });
@@ -530,7 +740,7 @@ describe('the clean form', () => {
     const user = userEvent.setup();
     const save = renderForm();
 
-    await user.type(screen.getByLabelText('First name'), '  ');
+    await user.type(screen.getByLabelText('Display name'), '  ');
     await user.click(saveButton());
 
     expect(save).not.toHaveBeenCalled();
@@ -549,8 +759,8 @@ describe('the four failures', () => {
       jest.fn().mockResolvedValue({ ok: false, reason } as UpdateProfileResult),
     );
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(message));
@@ -591,8 +801,8 @@ describe('the four failures', () => {
     const user = userEvent.setup();
     renderForm(jest.fn().mockRejectedValue(new Error('connection lost')));
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() =>
@@ -607,12 +817,12 @@ describe('the four failures', () => {
     const user = userEvent.setup();
     renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'failed' }));
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
 
-    await user.type(screen.getByLabelText('First name'), 'x');
+    await user.type(screen.getByLabelText('Display name'), 'x');
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -629,12 +839,12 @@ describe('the pending state', () => {
     );
     renderForm(save);
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(saveButton()).toBeDisabled());
-    expect(screen.getByLabelText('First name')).toBeDisabled();
+    expect(screen.getByLabelText('Display name')).toBeDisabled();
 
     settle({ ok: true });
     await waitFor(() => expect(saveButton()).toBeEnabled());
@@ -649,10 +859,10 @@ describe('the form element', () => {
     const user = userEvent.setup();
     const save = renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana{Enter}');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana{Enter}');
 
-    await waitFor(() => expect(save).toHaveBeenCalledWith({ firstName: 'Ana' }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ fullName: 'Ana' }));
   });
 
   it('carries noValidate, so the browser bubble never replaces the inline message', async () => {
@@ -698,32 +908,36 @@ describe('the resync after a save', () => {
     const user = userEvent.setup();
     const { land } = renderWithRefresh();
 
-    await saveAnEdit(user, 'First name', ' ana');
-    expect(screen.getByText(/^\s*K$/)).toBeInTheDocument();
+    await saveAnEdit(user, 'Display name', ' ana kovac');
+    // The untrimmed value: `initials` splits on whitespace, so a leading space gives "AK" here too -
+    // what disagrees with the sidebar is the *field*, which still holds the space the save removed.
+    expect(screen.getByLabelText('Display name')).toHaveValue(' ana kovac');
 
-    land({ firstName: 'Ana' });
+    land({ fullName: 'Ana Kovac' });
 
     expect(screen.getByText('AK')).toBeInTheDocument();
-    expect(screen.getByLabelText('First name')).toHaveValue('Ana');
+    expect(screen.getByLabelText('Display name')).toHaveValue('Ana Kovac');
   });
 
   it('adopts a field another tab changed, so the next save cannot revert it', async () => {
-    // The cross-tab revert: without this, `values.lastName` stays at the mount-time value and the
-    // second save puts it back on the wire, undoing the other tab silently.
+    // The cross-tab revert: without this, `values.currency` stays at the mount-time value and the
+    // second save puts it back on the wire, undoing the other tab silently. Asserted on `currency`
+    // rather than on a second name field, which PET-72 removed - it is the remaining patch field the
+    // form does not touch in this flow.
     const user = userEvent.setup();
     const { save, land } = renderWithRefresh();
 
-    await saveAnEdit(user, 'First name', 'Ana');
-    land({ firstName: 'Ana', lastName: 'Novak' });
+    await saveAnEdit(user, 'Display name', 'Ana');
+    land({ fullName: 'Ana', currency: 'GBP' });
 
     save.mockClear();
     refresh.mockClear();
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Iva');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Iva');
     await user.click(saveButton());
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith({ firstName: 'Iva' });
+    expect(save).toHaveBeenCalledWith({ fullName: 'Iva' });
   });
 
   it('leaves the form alone when a refresh it did not cause arrives', async () => {
@@ -732,11 +946,11 @@ describe('the resync after a save', () => {
     const user = userEvent.setup();
     const { land } = renderWithRefresh();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Iva');
-    land({ firstName: 'Somebody else' });
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Iva');
+    land({ fullName: 'Somebody else' });
 
-    expect(screen.getByLabelText('First name')).toHaveValue('Iva');
+    expect(screen.getByLabelText('Display name')).toHaveValue('Iva');
   });
 
   it('abandons the resync if the user types before the refresh lands', async () => {
@@ -745,11 +959,52 @@ describe('the resync after a save', () => {
     const user = userEvent.setup();
     const { land } = renderWithRefresh();
 
-    await saveAnEdit(user, 'First name', 'Ana');
-    await user.type(screen.getByLabelText('Last name'), 'x');
-    land({ firstName: 'Ana', lastName: 'Overwritten' });
+    await saveAnEdit(user, 'Display name', 'Ana');
+    await user.type(screen.getByLabelText('Display name'), 'x');
+    land({ fullName: 'Overwritten' });
 
-    expect(screen.getByLabelText('Last name')).toHaveValue('Kovačx');
+    expect(screen.getByLabelText('Display name')).toHaveValue('Anax');
+  });
+
+  it('ends a save clean even when the server reports the same values back', async () => {
+    // **The second PR #84 review finding.** A *retroactive* schedule change appends a row older than
+    // the newest, and `GET /api/profile` reports the newest - so this save lands and the profile comes
+    // back byte-identical. The resync compared by value, so it short-circuited: `awaitingSaved` was
+    // never cleared, `values` kept the typed figure against a `syncedProfile` holding the old one, and
+    // the form stayed dirty with Save live - where a second press re-asked the paycheck question and
+    // appended another duplicate row. A save that landed was indistinguishable from one that did not.
+    //
+    // Adopting on identity ends it on the configured value, which reads as a revert and is the truth:
+    // the account's current budget really is unchanged, and what moved is January's row.
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '2500');
+    await saveThroughDialog(user, '2026-01');
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    land({});
+
+    expect(screen.getByLabelText('Monthly budget')).toHaveValue('2,000.00');
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('closes the dialog rather than leaving it open over the finished save', async () => {
+    // The same flow's other half, and the reason the two are one test apart: the dialog unmounting is
+    // what stops a second confirm re-POSTing the schedule, and it has never depended on the resync.
+    const user = userEvent.setup();
+    const { land } = renderWithRefresh();
+
+    await user.clear(screen.getByLabelText('Monthly budget'));
+    await user.type(screen.getByLabelText('Monthly budget'), '2500');
+    await saveThroughDialog(user, '2026-01');
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    land({});
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(saveSchedule).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -761,11 +1016,11 @@ describe('focus', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('Last name'));
+    await user.clear(screen.getByLabelText('Display name'));
     await user.clear(screen.getByLabelText('Email'));
     await user.click(saveButton());
 
-    expect(screen.getByLabelText('Last name')).toHaveFocus();
+    expect(screen.getByLabelText('Display name')).toHaveFocus();
   });
 
   it('returns to the control the save was fired from', async () => {
@@ -775,11 +1030,11 @@ describe('focus', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana{Enter}');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana{Enter}');
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByLabelText('First name')).toHaveFocus());
+    await waitFor(() => expect(screen.getByLabelText('Display name')).toHaveFocus());
   });
 
   it('returns focus on a failure too, not only on the happy path', async () => {
@@ -797,11 +1052,11 @@ describe('focus', () => {
     const user = userEvent.setup();
     renderForm(jest.fn().mockRejectedValue(new Error('connection lost')));
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana{Enter}');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana{Enter}');
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-    expect(screen.getByLabelText('First name')).toHaveFocus();
+    expect(screen.getByLabelText('Display name')).toHaveFocus();
   });
 });
 
@@ -812,7 +1067,7 @@ describe('a form nobody touched', () => {
     // untouched form fired a PATCH announcing "Changes saved" for an edit nobody made.
     const user = userEvent.setup();
     const save = jest.fn().mockResolvedValue({ ok: true });
-    render(<SettingsForm profile={{ ...PROFILE, firstName: '  Marko  ' }} save={save} />);
+    render(<SettingsForm profile={{ ...PROFILE, fullName: '  Marko  ' }} save={save} />);
 
     await user.click(saveButton());
 
@@ -826,20 +1081,27 @@ describe('a form nobody touched', () => {
     // with stray whitespace tidies itself the first time the user really edits the form.
     const user = userEvent.setup();
     const save = jest.fn().mockResolvedValue({ ok: true });
-    render(<SettingsForm profile={{ ...PROFILE, firstName: '  Marko  ' }} save={save} />);
+    render(
+      <SettingsForm
+        profile={{ ...PROFILE, fullName: '  Marko Kovač  ' }}
+        save={save}
+        saveSchedule={saveSchedule}
+        today={TODAY}
+      />,
+    );
 
-    await user.type(screen.getByLabelText('Last name'), 'ić');
+    await user.type(screen.getByLabelText('Display name'), 'ić');
     await user.click(saveButton());
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith({ firstName: 'Marko', lastName: 'Kovačić' });
+    expect(save).toHaveBeenCalledWith({ fullName: 'Marko Kovač  ić'.trim() });
   });
 
   it('sends nothing when an edit is typed and undone', async () => {
     const user = userEvent.setup();
     const save = renderForm();
 
-    await user.type(screen.getByLabelText('First name'), 'x');
+    await user.type(screen.getByLabelText('Display name'), 'x');
     await user.keyboard('{Backspace}');
     await user.click(saveButton());
 
@@ -851,8 +1113,8 @@ describe('the expired session', () => {
   async function expire(user: ReturnType<typeof userEvent.setup>) {
     renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'unauthenticated' }));
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
@@ -886,14 +1148,14 @@ describe('the expired session', () => {
     const user = userEvent.setup();
     await expire(user);
 
-    expect(screen.getByLabelText('First name')).toHaveValue('Ana');
+    expect(screen.getByLabelText('Display name')).toHaveValue('Ana');
   });
 
   it('clears the whole alert on the next keystroke', async () => {
     const user = userEvent.setup();
     await expire(user);
 
-    await user.type(screen.getByLabelText('Last name'), 'x');
+    await user.type(screen.getByLabelText('Display name'), 'x');
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Log in again' })).not.toBeInTheDocument();
@@ -921,13 +1183,13 @@ describe('after a successful save', () => {
     const user = userEvent.setup();
     const { land } = renderWithRefresh();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     expect(saveButton()).toBeEnabled();
 
     await user.click(saveButton());
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    land({ firstName: 'Ana' });
+    land({ fullName: 'Ana' });
 
     expect(saveButton()).toBeDisabled();
     expect(screen.getByRole('status')).toHaveTextContent('Changes saved');
@@ -939,8 +1201,8 @@ describe('after a successful save', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
@@ -951,13 +1213,13 @@ describe('after a successful save', () => {
     const user = userEvent.setup();
     const { land } = renderWithRefresh();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    land({ firstName: 'Ana' });
+    land({ fullName: 'Ana' });
 
-    await user.type(screen.getByLabelText('Last name'), 'x');
+    await user.type(screen.getByLabelText('Display name'), 'x');
 
     expect(saveButton()).toBeEnabled();
     expect(screen.getByRole('status')).toHaveTextContent('');
@@ -980,8 +1242,8 @@ describe('the confirmation retires itself', () => {
     const user = withTimers();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
@@ -997,8 +1259,8 @@ describe('the confirmation retires itself', () => {
     const user = withTimers();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
@@ -1016,8 +1278,8 @@ describe('the confirmation retires itself', () => {
     const user = withTimers();
     renderForm();
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
 
@@ -1037,8 +1299,8 @@ describe('the confirmation retires itself', () => {
       <SettingsForm profile={PROFILE} save={jest.fn().mockResolvedValue({ ok: true })} />,
     );
 
-    await user.clear(screen.getByLabelText('First name'));
-    await user.type(screen.getByLabelText('First name'), 'Ana');
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
 

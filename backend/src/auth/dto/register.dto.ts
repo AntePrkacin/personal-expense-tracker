@@ -5,8 +5,8 @@ import {
   ArrayUnique,
   IsArray,
   IsEmail,
+  IsIn,
   IsInt,
-  IsISO4217CurrencyCode,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -17,6 +17,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES } from '../../common/currency';
 import { normalizeEmail } from '../../common/normalize-email';
 
 /**
@@ -42,15 +43,18 @@ const MAX_PICKED_CATEGORIES = 100;
  * first two steps, so those values are held client-side until here (A32).
  */
 export class RegisterDto {
+  /**
+   * What the sidebar and greeting show. One field, not a first and last name.
+   *
+   * PET-72 collapsed the two. The app never used them apart - the sidebar wants
+   * initials and a short name, both derivable from one string - so the second was
+   * data collected in order to be thrown away. The form's label is "Display name",
+   * and a nickname is a legitimate answer.
+   */
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  firstName!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  lastName!: string;
+  fullName!: string;
 
   // See normalizeEmail for why this is normalized here. Non-strings pass
   // through so @IsEmail reports the type error rather than this silently
@@ -59,26 +63,33 @@ export class RegisterDto {
   @IsEmail()
   email!: string;
 
-  // Uppercased first, so 'eur' passes and is stored as 'EUR'; the validator
-  // checks against the (uppercase) ISO 4217 list, not just "any 3 letters".
+  // Uppercased first, so 'eur' passes and is stored as 'EUR'.
   //
-  // The plugin derives nothing from @IsISO4217CurrencyCode(), so without the
-  // metadata below this publishes as a bare string and the generated frontend
-  // type accepts any text at all. The pattern is case-insensitive because the
-  // transform above runs before validation - it is honest about what the
-  // endpoint takes, and the ISO list itself belongs in the description rather
-  // than a 180-entry enum that drifts the moment the standard does.
+  // **`@IsIn(SUPPORTED_CURRENCIES)` since PET-72, replacing
+  // `@IsISO4217CurrencyCode()`.** The old comment here argued that the ISO list
+  // "belongs in the description rather than a 180-entry enum that drifts the
+  // moment the standard does" - which was right about the enum and wrong about
+  // accepting the whole standard, because `src/common/money.ts` multiplies by 100
+  // unconditionally. A user picking JPY had every amount they typed inflated a
+  // hundredfold. The allowlist is exponent-2 currencies only; see
+  // `src/common/currency.ts` for why that is the fix rather than a workaround.
+  //
+  // The enum is spelled out in `@ApiProperty` because the plugin derives nothing
+  // from `@IsIn` - without it this publishes as a bare string and the generated
+  // frontend type accepts any text at all, which is what would let the picker
+  // offer a code the backend rejects.
   @ApiPropertyOptional({
-    pattern: '^[A-Za-z]{3}$',
+    enum: SUPPORTED_CURRENCIES,
+    default: DEFAULT_CURRENCY,
     description:
-      'ISO 4217 code, e.g. `EUR`. Case-insensitive on the way in, stored and returned uppercase.',
+      'ISO 4217 code. Case-insensitive on the way in, stored and returned uppercase. Restricted to two-decimal currencies, because the API assumes an exponent of 2 everywhere.',
     example: 'EUR',
   })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.toUpperCase() : value,
   )
   @IsOptional()
-  @IsISO4217CurrencyCode()
+  @IsIn(SUPPORTED_CURRENCIES)
   currency?: string;
 
   /**
@@ -97,7 +108,15 @@ export class RegisterDto {
   @Max(1_000_000_000)
   monthlyBudget!: number;
 
-  /** Capped at 28 so the day exists in every month. */
+  /**
+   * The day of the month you are paid on. Capped at 28 so the day exists in
+   * every month.
+   *
+   * **This is the pay day, and onboarding asks for it as of PET-72.** It becomes
+   * the account's first `period_rules` row, anchored to the most recent occurrence
+   * of this day - so the account starts with a real pay schedule rather than a
+   * setting, and changing it later moves only the periods from the change onward.
+   */
   // `type: 'integer'` spelled out because the plugin renders every TS `number`
   // as `type: 'number'`, which publishes 3.5 as a valid day while @IsInt()
   // rejects it. The derived `minimum` and `maximum` merge in alongside this.

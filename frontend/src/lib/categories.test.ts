@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 
-import { readCategoryLabels, readCategoryOptions } from './categories';
+import { readCategoriesView, readCategoryLabels, readCategoryOptions } from './categories';
 
 // Exercised through the real `authorizedGet` rather than by mocking it, which is
 // `transactions.test.ts`'s call and the reason these assertions are worth anything: the
@@ -103,6 +103,30 @@ describe('the request', () => {
     const init = fetchMock.mock.calls[0]![1] as RequestInit;
     expect(JSON.stringify(init.headers)).not.toContain('spendifico.session');
     expect(init).not.toHaveProperty('credentials');
+  });
+
+  it('asks for no period at all unless a caller names one', async () => {
+    // A default is the absent key, `lib/periods.ts`'s rule: the URL meaning "now" is the one with
+    // nothing in it. The two narrowed projections never pass a period either - a picker's options and
+    // a table's labels are the same whichever period is on screen.
+    const fetchMock = respondWith(200, { categories: [GROCERIES], allocation: ALLOCATION });
+
+    await readCategoriesView();
+
+    expect(fetchMock.mock.calls[0]![0]).toBe('http://backend.test/api/categories');
+  });
+
+  it('forwards the period the Categories tab was asked for', async () => {
+    // The value comes from `parsePeriodParam` and is a date the backend answers **400** for if it
+    // starts none of the caller's periods, which the page throws on rather than showing figures for a
+    // period nobody asked for.
+    const fetchMock = respondWith(200, { categories: [GROCERIES], allocation: ALLOCATION });
+
+    await readCategoriesView('2025-09-01');
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      'http://backend.test/api/categories?period=2025-09-01',
+    );
   });
 
   it('costs no round trip when there is no cookie', async () => {

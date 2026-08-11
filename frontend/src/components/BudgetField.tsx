@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { fieldDescribedBy, FieldShell } from '@/components/ui/FieldShell';
-import { currencySymbol, SUPPORTED_CURRENCIES } from '@/lib/money';
+import { currencySymbol, SUPPORTED_CURRENCIES, type CurrencyCode } from '@/lib/money';
 
 // The Monthly budget field: a currency segment joined to an amount input with a "/ month" suffix.
 //
@@ -99,7 +99,7 @@ type BudgetFieldProps = {
   value: string;
   onValueChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   /** Called with the picked code. Omit to render the segment inert - see `currencyDisabled`. */
-  onCurrencyChange?: (code: string) => void;
+  onCurrencyChange?: (code: CurrencyCode) => void;
   /** One line of validation copy, rendered by the shell beneath the box. */
   error?: string;
   /** One line of standing guidance. See `ui/FieldShell` on why this is a prop and not a `<p>`. */

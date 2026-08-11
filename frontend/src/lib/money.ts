@@ -32,6 +32,8 @@
  * to invisible in a terminal. Screen readers also announce U+2212 as "minus" while U+002D is
  * ambiguous, so the design's choice is the accessible one too.
  */
+import type { components } from '@/types/api';
+
 const MINUS = '−';
 
 /**
@@ -49,31 +51,95 @@ const MINUS = '−';
  */
 const LOCALE = 'en-US';
 
-/** A6 chose one currency and PET-47 widened it to three; this stays what a new account gets. */
-export const DEFAULT_CURRENCY = 'USD';
+/**
+ * A currency code the API accepts, straight off the generated contract.
+ *
+ * **Read from `api.d.ts` rather than declared, which is the rule for every other shape that crosses
+ * the wire and now finally applies to this one.** PET-47 could not do it: the backend validated
+ * `@IsISO4217CurrencyCode()`, which publishes no enum, so the offered list had to be a hand-written
+ * constant and the type behind it was `string`. PET-72 replaced that with an allowlist of
+ * two-decimal currencies - the whole ISO list let a JPY user have every amount inflated a
+ * hundredfold, because `money.ts` on the backend multiplies by 100 unconditionally - and an
+ * allowlist publishes a real enum. So the picker can no longer offer a code the API would refuse.
+ */
+export type CurrencyCode = NonNullable<
+  NonNullable<components['schemas']['UpdateProfileDto']['currency']>
+>;
 
 /**
  * The currencies the UI offers, in the order the budget field lists them.
  *
- * Read off the team's Claude Design system (`ui_kits/expensa-app/OnboardingScreen.jsx`'s
- * `ONBOARDING_CURRENCIES`), which is the authority for that field. The symbol and the name are
- * written out rather than derived from `Intl.DisplayNames`, because these two strings are **design
- * copy**: the panel draws "US Dollar" beside a "$", and a formatter's idea of a currency's display
- * name is not the designer's.
+ * The first three are the ones PET-47 shipped, read off the team's Claude Design system
+ * (`ui_kits/expensa-app/OnboardingScreen.jsx`'s `ONBOARDING_CURRENCIES`) with EUR promoted to the
+ * front, because it is the default now. The symbol and the name are written out rather than derived
+ * from `Intl.DisplayNames`, because these two strings are **design copy**: the panel draws "Euro"
+ * beside a "€", and a formatter's idea of a currency's display name is not the designer's.
  *
- * **The backend accepts far more than these three.** `UpdateProfileDto.currency` is validated with
- * `@IsISO4217CurrencyCode()`, so a profile can hold any of them - set through the API, or offered
- * here later by adding a row. Nothing in this module treats the list as exhaustive, which is why
- * `moneyFormatters` takes a `string` rather than a union of these codes: a stored `JPY` has to
- * render as money, not throw, even on a screen that cannot select it.
+ * **This list is exhaustive over `CurrencyCode` and is checked to be**, which reverses what the
+ * paragraph here used to say. It read "the backend accepts far more than these three", and pointed
+ * at a stored `JPY` as the reason `moneyFormatters` takes a bare `string`. That is no longer true in
+ * either direction: the API accepts exactly these codes, and the pair of checks below fails the
+ * build in both mismatch directions. The `satisfies` rejects an entry the contract does not accept;
+ * `EveryCurrencyCodeIsOffered` is what fails when the contract grows a code this list does not name.
+ * (A first version claimed the `satisfies` alone did both - it checks membership, not coverage, and
+ * a review caught the claim promising a proof nothing performed.) `moneyFormatters` still takes a
+ * `string` - see its own note, which is about `Intl` rather than about this list.
  */
 export const SUPPORTED_CURRENCIES = [
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'EUR', symbol: '€', name: 'Euro' },
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'GBP', symbol: '£', name: 'British Pound' },
-] as const;
+  { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  { code: 'BAM', symbol: 'KM', name: 'Bosnia-Herzegovina Mark' },
+  { code: 'BGN', symbol: 'лв', name: 'Bulgarian Lev' },
+  { code: 'BRL', symbol: 'R$', name: 'Brazilian Real' },
+  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
+  { code: 'CHF', symbol: 'CHF', name: 'Swiss Franc' },
+  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
+  { code: 'CZK', symbol: 'Kč', name: 'Czech Koruna' },
+  { code: 'DKK', symbol: 'kr', name: 'Danish Krone' },
+  { code: 'HKD', symbol: 'HK$', name: 'Hong Kong Dollar' },
+  { code: 'HUF', symbol: 'Ft', name: 'Hungarian Forint' },
+  { code: 'ILS', symbol: '₪', name: 'Israeli Shekel' },
+  { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+  { code: 'MKD', symbol: 'ден', name: 'Macedonian Denar' },
+  { code: 'MXN', symbol: 'MX$', name: 'Mexican Peso' },
+  { code: 'NOK', symbol: 'kr', name: 'Norwegian Krone' },
+  { code: 'NZD', symbol: 'NZ$', name: 'New Zealand Dollar' },
+  { code: 'PLN', symbol: 'zł', name: 'Polish Złoty' },
+  { code: 'RON', symbol: 'lei', name: 'Romanian Leu' },
+  { code: 'RSD', symbol: 'дин', name: 'Serbian Dinar' },
+  { code: 'SEK', symbol: 'kr', name: 'Swedish Krona' },
+  { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
+  { code: 'TRY', symbol: '₺', name: 'Turkish Lira' },
+  { code: 'UAH', symbol: '₴', name: 'Ukrainian Hryvnia' },
+  { code: 'ZAR', symbol: 'R', name: 'South African Rand' },
+] as const satisfies readonly { code: CurrencyCode; symbol: string; name: string }[];
 
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
+
+/**
+ * Compile-time proof that every code the contract accepts is offered.
+ *
+ * `AssertNever` fails to instantiate for anything but `never`, so a thirtieth code added to the
+ * backend's allowlist breaks `npm run build` rather than shipping a currency the picker cannot
+ * offer. The technique and its reasoning are `transactions/filters.ts`'s; this is its fourth user.
+ */
+type AssertNever<T extends never> = T;
+
+export type EveryCurrencyCodeIsOffered = AssertNever<
+  Exclude<CurrencyCode, SupportedCurrency['code']>
+>;
+
+/**
+ * What an account gets when it says nothing, and what a fresh onboarding draft preselects.
+ *
+ * EUR since PET-72, USD before it. The backend's `DEFAULT_CURRENCY`, its schema default and this
+ * constant are the same value written in three places for three different readers; the one that
+ * matters is that a blank form and a blank column agree.
+ */
+export const DEFAULT_CURRENCY: CurrencyCode = 'EUR';
 
 /**
  * The symbol for a stored code, falling back to the code itself.

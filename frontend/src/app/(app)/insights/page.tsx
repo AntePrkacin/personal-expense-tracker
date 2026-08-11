@@ -1,7 +1,5 @@
-import { todayIsoDate } from '@/lib/date';
-import { periodOverline } from '@/lib/format';
-import { requireProfile } from '@/lib/profile';
 import { requireInsights } from '@/lib/insights';
+import { currentPeriod, readPeriods } from '@/lib/periods';
 
 import { InsightsScreen } from './InsightsScreen';
 
@@ -18,21 +16,26 @@ import { InsightsScreen } from './InsightsScreen';
 // carries the amendment.
 
 export default async function InsightsPage() {
-  const set = await requireInsights();
-
   // The overline is built here rather than inside the screen, so the client component takes a
   // string and a suite can pin the period without faking a timer - the same reason `lib/date.ts`'s
   // helpers all take `today` as a parameter.
   //
-  // **It is the budgeting period as of PET-47, not the calendar month**, so it now agrees with the
-  // banner beneath it about what a month is: the set's own `monthLabel` is the backend's, resolved
-  // against `monthStartDay` through `month-window.ts`, and this used to be the calendar month
-  // regardless - two labels for different windows, one above the other. The remaining gap is the
-  // zone rather than the boundary: `todayIsoDate()` is the frontend host's and the backend's is
-  // `APP_TIMEZONE`, which `docs/TODO.md` already tracks for every figure on the dashboard.
+  // **It is the budgeting period as of PET-47 and the backend's own label as of PET-72**, so it
+  // agrees with the banner beneath it about what a month is *and* about where the month ends. It was
+  // `periodOverline(monthStartDay, todayIsoDate())`, which composed two months' names from a start
+  // day - correct only while every period was one calendar month offset by a fixed day, and wrong
+  // for a period a pay-schedule change has stretched. `lib/periods.ts` carries the whole argument.
   //
-  // The read is free - the shell's gate already made it, and `requireProfile` is `cache()`-memoized.
-  const { monthStartDay } = await requireProfile();
+  // **This is the one of the four headers whose period does not ride on the screen's own read.**
+  // `GET /api/insights` publishes no `period`, deliberately: a set is generated for the current
+  // period only, and its `monthLabel` is the label of the period it was generated *in*, which is
+  // null in the empty state and stale in the ready one the moment a period rolls over. So the label
+  // comes from `GET /api/periods`, and it costs the one extra request this page makes. The two reads
+  // are independent, so they go in parallel.
+  const [set, periods] = await Promise.all([requireInsights(), readPeriods()]);
 
-  return <InsightsScreen set={set} overline={periodOverline(monthStartDay, todayIsoDate())} />;
+  // The empty string is unreachable through the API - every account has at least the period it is in
+  // - and it is written rather than asserted because a header with a blank overline is a smaller
+  // failure than a screen replaced by the error boundary over a label.
+  return <InsightsScreen set={set} overline={currentPeriod(periods)?.label ?? ''} />;
 }

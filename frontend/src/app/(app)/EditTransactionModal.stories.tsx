@@ -16,7 +16,7 @@ import { EditTransactionModal as Wrapped } from './EditTransactionModal';
  */
 function EditTransactionModal(props: React.ComponentProps<typeof Wrapped>) {
   return (
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <Wrapped {...props} />
     </PreferencesProvider>
   );

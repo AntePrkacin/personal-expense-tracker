@@ -21,8 +21,7 @@ import { registerAccount } from './actions';
 jest.mock('../../../lib/pendingEmail', () => ({ setPendingEmail: jest.fn() }));
 
 const BODY: components['schemas']['RegisterDto'] = {
-  firstName: 'Marko',
-  lastName: 'Kovač',
+  fullName: 'Marko Kovač',
   email: 'marko@email.com',
   currency: 'USD',
   monthlyBudget: 2000.5,

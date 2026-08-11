@@ -98,8 +98,14 @@ export type CategoryLabelsResult = AuthorizedResult<CategoryLabel[]>;
  * between the exports is only which fields survive - and for `readCategoriesView`, that the
  * answer is "all of them", for the reason that function records.
  */
-async function readCategories(): Promise<AuthorizedResult<CategoriesResponse>> {
-  return authorizedGet<CategoriesResponse>('/api/categories');
+async function readCategories(period?: string): Promise<AuthorizedResult<CategoriesResponse>> {
+  // The absent key is the current period, which is `lib/periods.ts`'s rule: one view has one URL, and
+  // the URL meaning "now" is the one with nothing in it. The two narrowed projections below never pass
+  // one - a picker's options and a table's labels are the same whichever period is on screen, and a
+  // period would make the request uncacheable for nothing.
+  const query = period === undefined ? '' : `?period=${period}`;
+
+  return authorizedGet<CategoriesResponse>(`/api/categories${query}`);
 }
 
 /**
@@ -191,6 +197,6 @@ export type CategoriesViewResult = AuthorizedResult<CategoriesResponse>;
  * call site applies the policy, which for this screen is `/transactions`'s own: 401 to the
  * access flow, anything else thrown to the error boundary.
  */
-export async function readCategoriesView(): Promise<CategoriesViewResult> {
-  return readCategories();
+export async function readCategoriesView(period?: string): Promise<CategoriesViewResult> {
+  return readCategories(period);
 }

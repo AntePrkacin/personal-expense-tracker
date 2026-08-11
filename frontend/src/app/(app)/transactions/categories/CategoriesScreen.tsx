@@ -1,5 +1,4 @@
-import { todayIsoDate } from '@/lib/date';
-import { periodOverline } from '@/lib/format';
+import type { Period } from '@/lib/periods';
 import type { Allocation, Category } from '@/lib/categories';
 import type { CreateCategoryResult } from '@/lib/createCategory';
 import type { DeleteCategoryResult } from '@/lib/deleteCategory';
@@ -11,6 +10,7 @@ import type { components } from '@/types/api';
 import type { toAllocateBody } from './allocateForm';
 
 import { PageHeader } from '../../PageHeader';
+import { PeriodSelect } from '../../PeriodSelect';
 import { TransactionTabs } from '../TransactionTabs';
 import { AddCategoryButton } from './AddCategoryButton';
 import { CategoryCard } from './CategoryCard';
@@ -118,13 +118,15 @@ type CategoriesScreenProps = {
    */
   currency: string;
   /**
-   * The profile's month start day, for the header's period label.
+   * The period every figure on this screen belongs to, from the categories response's own `period`.
    *
-   * Threaded from the page rather than read here, the same split the currency takes: a Server
-   * Component cannot reach `PreferencesProvider`. It labels the period and resolves no window -
-   * every figure below is scoped to the one the backend resolved. See `periodOverline`.
+   * **This replaces `monthStartDay`, for `DashboardScreen`'s reason.** The label of a period that a
+   * pay-day change stretched across two months is not derivable from a start day, so it arrives beside
+   * the figures it describes rather than being computed alongside them.
    */
-  monthStartDay: number;
+  period: { start: string; end: string; label: string };
+  /** Every period the account has, newest first, for the header's select. */
+  periods: readonly Period[];
 };
 
 export function CategoriesScreen({
@@ -137,7 +139,8 @@ export function CategoriesScreen({
   create,
   save,
   currency,
-  monthStartDay,
+  period,
+  periods,
 }: CategoriesScreenProps) {
   // **Summed here rather than read from a field, and the sum is sound rather than approximate.**
   // `GET /api/categories` publishes no period total of its own, but every transaction in the
@@ -150,6 +153,23 @@ export function CategoriesScreen({
   // already implied by this one, and would introduce the disagreement it looks like it avoids -
   // the two are computed over different windows only if `monthStartDay` changes mid-request.
   const spent = categories.reduce((total, category) => total + category.spent, 0);
+
+  // **A historical period is read-only, and this flag is what makes it so.** Every write this
+  // screen offers - Add category's initial cap, the Edit modal's cap, "Set limit", "Allocate" -
+  // drafts from and validates against the account's live configuration, and a backdate is
+  // expressed through the cap-anchor question those flows ask (`CapPeriodDialog`), never by
+  // navigating to the past first. Left ungated, those controls stayed enabled on a historical
+  // view, prefilled and validated against the *viewed* period's caps and budget while the write
+  // landed elsewhere - a save that looked like a no-op while it silently rewrote the current caps.
+  // A review of PET-72 caught it, and the plan's user story records the decided shape: backdating
+  // is a deliberate answer to a question, so the controls are not drawn at all on a non-current
+  // period - the fallback card's own rule, nothing on this screen is drawn that cannot be acted
+  // on.
+  //
+  // Resolved off the periods list's own `current` flag rather than by comparing dates to a clock,
+  // and defaulting to read-only when the viewed period is somehow not in the list - the safe
+  // direction for a mismatch two reads apart.
+  const isCurrentPeriod = periods.find((entry) => entry.start === period.start)?.current ?? false;
 
   // **The name the delete confirmation says transactions move to, resolved once for the screen.**
   // This is PET-39's amendment to the ticket, which asks for the literal "Other": that role was
@@ -174,15 +194,30 @@ export function CategoriesScreen({
     // is a `useDeleteCategory()` call, so the edit provider has to sit inside the delete one - which
     // is also the direction that keeps the confirmation outliving the form it was opened from.
     <DeleteCategoryProvider fallbackName={fallbackName} remove={remove}>
-      <EditCategoryProvider palette={palette} update={update}>
+      <EditCategoryProvider palette={palette} periods={periods} update={update}>
         <PageHeader
-          overline={periodOverline(monthStartDay, todayIsoDate())}
+          overline={period.label}
           title="Transactions"
           // **No search field, which is CTG-1 and the visible difference from the sibling tab.**
           // `TransactionsScreen` keeps its field in the header specifically so React reconciles
           // it across filter changes; that reasoning is about a screen with a filter bar, and
           // this one has neither.
-          action={<AddCategoryButton palette={palette} create={create} />}
+          //
+          // The period select joins it as of PET-72, so this tab can be read for a past period the
+          // same way the Dashboard can - which is what makes a historical cap visible at all.
+          action={
+            <>
+              <PeriodSelect
+                periods={periods}
+                selected={period.start}
+                pathname="/transactions/categories"
+              />
+              {/* Not drawn on a historical period: a new category's cap is dated at the current
+                  period, so offering the modal here would validate against figures it cannot
+                  affect. See `isCurrentPeriod` above. */}
+              {isCurrentPeriod ? <AddCategoryButton palette={palette} create={create} /> : null}
+            </>
+          }
         />
 
         {/* gap-5 is the designed 20px between the tabs and what follows, matching the sibling
@@ -197,11 +232,13 @@ export function CategoriesScreen({
 
           <SpendingSummaryCard
             currency={currency}
-            monthStartDay={monthStartDay}
+            periodLabel={period.label}
             spent={spent}
             allocation={allocation}
             categories={categories}
+            periods={periods}
             save={save}
+            readOnly={!isCurrentPeriod}
           />
 
           {/* **The column count is responsive, and the ladder is chosen against the *content*
@@ -242,7 +279,7 @@ export function CategoriesScreen({
               // is its own <section> with an <h2>, so the list adds structure without competing
               // with the headings inside it.
               <li key={category.id}>
-                <CategoryCard category={category} currency={currency} />
+                <CategoryCard category={category} currency={currency} readOnly={!isCurrentPeriod} />
               </li>
             ))}
           </ul>

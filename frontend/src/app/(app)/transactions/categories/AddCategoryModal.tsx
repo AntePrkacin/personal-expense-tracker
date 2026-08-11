@@ -113,10 +113,12 @@ const UNNAMED_PREVIEW = 'New category';
  * flipping this one word.
  *
  * **Nothing behind the field was removed, and nothing needs adding back.** `categoryForm.ts` still
- * carries `note` in `CategoryFormValues`, still trims it and still omits it from the body when blank,
- * and its suite still pins all of that - so with the field hidden every category is simply created
- * without a note, which is a state the API already documents. `CreateCategoryDto.note` and the
- * `categories.note` column are untouched, so no migration is owed in either direction.
+ * carries the field in `CategoryFormValues` - as `description` since PET-72's rename, which this
+ * sentence used to state under its old name - still trims it and still omits it from the body when
+ * blank, and its suite still pins all of that. So with the field hidden every category is simply
+ * created without a description, which is a state the API already documents;
+ * `CreateCategoryDto.description` and the `categories.description` column are untouched, so no
+ * migration is owed in either direction.
  *
  * Typed `boolean` rather than left to infer `false`, so the ternary below reads as a branch rather
  * than as unreachable code.
@@ -171,7 +173,7 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
     monthlyCap: '',
     color: palette?.colors[0]?.token ?? '',
     icon: palette?.icons[0]?.name ?? '',
-    note: '',
+    description: '',
   }));
 
   /**
@@ -209,13 +211,15 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
   const [pending, setPending] = useState(false);
 
   /** Writes one text field and clears its message, which is this repo's timing rule for forms. */
-  function setText(field: 'name' | 'monthlyCap' | 'note', value: string) {
+  function setText(field: 'name' | 'monthlyCap' | 'description', value: string) {
     setValues((current) => ({ ...current, [field]: value }));
 
     // Validation appears on submit only and clears as soon as the user starts fixing that field -
-    // never on the next keystroke of a different one. Same as every other form in the app. `note`
-    // is skipped because it can carry no message.
-    if (field !== 'note') setErrors((current) => ({ ...current, [field]: undefined }));
+    // never on the next keystroke of a different one. Same as every other form in the app.
+    // `description` is skipped because it can carry no message. (It was `'note'` until a review
+    // caught that the rename to `description` missed this handler: the Note input wrote a dead key
+    // the spread happily accepted, so the field would have frozen the day `SHOWS_NOTE` flips.)
+    if (field !== 'description') setErrors((current) => ({ ...current, [field]: undefined }));
     setFailure(null);
   }
 
@@ -470,8 +474,8 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
         <Input
           id={NOTE_ID}
           label="Note (optional)"
-          value={values.note}
-          onChange={(event) => setText('note', event.currentTarget.value)}
+          value={values.description}
+          onChange={(event) => setText('description', event.currentTarget.value)}
         />
       ) : null}
 

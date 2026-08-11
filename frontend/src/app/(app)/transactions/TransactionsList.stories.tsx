@@ -90,7 +90,14 @@ const TRANSACTIONS: Transaction[] = ROWS.map(([merchant, categoryId, amount, dat
  * silently turn it into a page count.
  */
 function Frame({ filters }: { filters: TransactionFilters }) {
-  const view: TransactionsView = { state: 'populated', transactions: TRANSACTIONS, total: 128 };
+  const view: TransactionsView = {
+    state: 'populated',
+    transactions: TRANSACTIONS,
+    total: 128,
+    // The header's overline, straight off the read as of PET-72 rather than composed from a start
+    // day and a clock - which is what lets this story draw the frame's own month in any month.
+    period: { start: '2025-10-01', end: '2025-11-01', label: 'October 2025' },
+  };
 
   return (
     <AddTransactionProvider>
@@ -105,7 +112,7 @@ function Frame({ filters }: { filters: TransactionFilters }) {
           `next/headers` in the page instead of an RPC. The story text below invites exactly that
           click. Resolving `ok` lets the whole flow be walked; nothing is deleted, and the list
           does not change because no server answered. */}
-      <PreferencesProvider currency="USD" monthStartDay={1}>
+      <PreferencesProvider currency="USD">
         <DeleteTransactionProvider remove={async () => ({ ok: true })}>
           {/* PET-32's, inside the delete provider because it consumes that context, and with a stub
             action for the identical reason: the real `updateTransaction` is `'use server'`, and
@@ -119,7 +126,6 @@ function Frame({ filters }: { filters: TransactionFilters }) {
               gutter the `(app)` shell owns, since neither wraps a story. */}
             <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
               <TransactionsScreen
-                monthStartDay={1}
                 view={view}
                 filters={filters}
                 categoryCount={CATEGORIES.length}

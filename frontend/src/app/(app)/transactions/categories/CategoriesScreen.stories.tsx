@@ -222,6 +222,14 @@ const PALETTE: Palette = {
 // Server Action in the browser. Defaulting them here means a story added later cannot forget one,
 // which is the failure mode that made this necessary in the first place - the seam existed and
 // nothing was passing through it.
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true };
+
+const PERIODS = [
+  PERIOD,
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+  { start: '2025-08-01', end: '2025-09-01', label: 'August 2025', current: false },
+];
+
 // `save` joins them as of PET-70, and it is the sharpest case yet: every story with unassigned
 // budget draws a live "Allocate", and the modal behind it writes every cap on the screen at once.
 function Frame({
@@ -234,24 +242,34 @@ function Frame({
   // forgot it would render a screen with no currency to format with, and the shared default is
   // what makes that unreachable.
   currency = 'USD',
-  monthStartDay = 1,
+  // The period the header names and the list its select offers, defaulted for the same reason: as of
+  // PET-72 both come off the response rather than from a start day and a clock, so the frame's own
+  // "October 2025" is drawn whatever month a story is opened in. Three entries, because a select with
+  // one option cannot be reviewed.
+  period = PERIOD,
+  periods = PERIODS,
   ...props
-}: Omit<React.ComponentProps<typeof CategoriesScreen>, 'palette' | 'currency' | 'monthStartDay'> & {
+}: Omit<
+  React.ComponentProps<typeof CategoriesScreen>,
+  'palette' | 'currency' | 'period' | 'periods'
+> & {
   palette?: Palette | null;
   currency?: string;
-  monthStartDay?: number;
+  period?: (typeof PERIODS)[number];
+  periods?: typeof PERIODS;
 }) {
   return (
     // `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the gutter
     // the `(app)` shell owns, since neither wraps a story.
     // The Allocate banner's modal calls `useMoney()`; a review found this provider missing, so
     // pressing "Allocate" in this story threw rather than opening the dialog.
-    <PreferencesProvider currency="USD" monthStartDay={1}>
+    <PreferencesProvider currency="USD">
       <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
         <CategoriesScreen
           {...props}
           currency={currency}
-          monthStartDay={monthStartDay}
+          period={period}
+          periods={periods}
           palette={palette}
           remove={remove}
           update={update}

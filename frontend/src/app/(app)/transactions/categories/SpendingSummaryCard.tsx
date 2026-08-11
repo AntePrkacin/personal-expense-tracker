@@ -1,7 +1,6 @@
-import { todayIsoDate } from '@/lib/date';
-import { periodLabel } from '@/lib/format';
 import { moneyFormatters } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
+import type { Period } from '@/lib/periods';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
 import { AllocateBanner } from './AllocateBanner';
@@ -69,6 +68,8 @@ type SpendingSummaryCardProps = {
   allocation: Allocation;
   /** Every category, for the banner's modal. Not rendered here - see the note above. */
   categories: Category[];
+  /** Every period, for the modal's cap-anchor question. Threaded like `categories`. */
+  periods: readonly Period[];
   /** The bulk cap write, threaded through for the same reason. `AllocateBanner` defaults it. */
   save?: (body: ReturnType<typeof toAllocateBody>) => Promise<UpdateCategoryCapsResult>;
   /**
@@ -80,22 +81,39 @@ type SpendingSummaryCardProps = {
    */
   currency: string;
   /**
-   * The profile's month start day, for the header's period label.
+   * The period's own label, from the response.
    *
    * Threaded from the page rather than read here, the same split the currency takes: a Server
    * Component cannot reach `PreferencesProvider`. It labels the period and resolves no window -
-   * every figure below is scoped to the one the backend resolved. See `periodOverline`.
+   * every figure below is scoped to the one the backend resolved.
+   *
+   * **A label rather than a `monthStartDay` since PET-72.** This card derived "October spending" from
+   * a start day and today, which cannot name a period a pay-day change stretched across two months -
+   * and the paragraph below, about the heading and the figures disagreeing, is exactly the failure
+   * that derivation had one more way to produce.
    */
-  monthStartDay: number;
+  periodLabel: string;
+  /**
+   * True on a historical period view, where the Allocate banner is not drawn.
+   *
+   * The modal drafts from and validates against the live configuration, and its backdating path is
+   * the cap-anchor question it asks on save - so a banner over December's figures would open a
+   * modal editing something other than what is on screen. `CategoriesScreen`'s `isCurrentPeriod`
+   * note carries the full account. Not drawn rather than disabled, per the fallback card's rule:
+   * nothing on this screen is drawn that cannot be acted on.
+   */
+  readOnly?: boolean;
 };
 
 export function SpendingSummaryCard({
   spent,
   allocation,
   categories,
+  periods,
   save,
   currency,
-  monthStartDay,
+  periodLabel,
+  readOnly = false,
 }: SpendingSummaryCardProps) {
   const { formatWhole } = moneyFormatters(currency);
 
@@ -126,8 +144,10 @@ export function SpendingSummaryCard({
   // outright it can be negative: nothing stops caps summing past the budget (A43), and no
   // over-allocation state is designed. A truthy check would show the banner to someone who has
   // over-allocated, telling them an amount is unassigned when the opposite is true. Zero draws
-  // nothing because there is nothing to report.
-  const hasUnassigned = unallocated > 0;
+  // nothing because there is nothing to report. And nothing is drawn on a historical period,
+  // whose unassigned budget is a fact about a closed month that no write can change - see
+  // `readOnly` above.
+  const hasUnassigned = !readOnly && unallocated > 0;
 
   return (
     // A column wrapper rather than the card itself, because the banner is a **sibling** of the
@@ -137,17 +157,14 @@ export function SpendingSummaryCard({
       <BannerCardBody>
         <div className="card-body gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* **The heading names the calendar month, and that is a knowing trade rather than an
-              oversight.** The figures below it are scoped to the profile's `monthStartDay`
-              period, while a month name in the frontend can only be the host's calendar month -
-              so at `monthStartDay: 15` this reads "October spending" over Oct 15 to Nov 15
-              figures. It is the same mismatch that made `BudgetCard`'s caption drop "in October"
-              and `TrendCard`'s read only "Weekly". Kept here by product decision, because it is
-              correct at the default start day of 1; `docs/TODO.md` carries the backend field
-              that would let it be correct at every start day. */}
-            <h2 className="text-base font-semibold">
-              {periodLabel(monthStartDay, todayIsoDate())} spending
-            </h2>
+            {/* **The heading names the period the figures are from, and PET-72 is what made that
+              possible.** It used to name the host's calendar month while the figures below were
+              scoped to the profile's own period - so at a start day of 15 it read "October
+              spending" over Oct 15 to Nov 15 figures, the same mismatch that made `BudgetCard`'s
+              caption drop "in October" and `TrendCard`'s read only "Weekly". The label is the
+              backend's now, resolved from the same period the figures were summed over, so the
+              heading and the numbers under it cannot disagree. */}
+            <h2 className="text-base font-semibold">{periodLabel} spending</h2>
 
             <span className={tone.badge}>
               {/* aria-hidden: the badge's text already carries the state. */}
@@ -185,7 +202,12 @@ export function SpendingSummaryCard({
         // whitespace that contains a newline next to an expression, so the readable two-line
         // version renders "$850of your budget" with no space - which a suite caught here and
         // which no typecheck or lint could.
-        <AllocateBanner categories={categories} allocation={allocation} save={save}>
+        <AllocateBanner
+          categories={categories}
+          allocation={allocation}
+          periods={periods}
+          save={save}
+        >
           {`${formatWhole(unallocated)} of your budget isn’t assigned to a category.`}
         </AllocateBanner>
       ) : null}

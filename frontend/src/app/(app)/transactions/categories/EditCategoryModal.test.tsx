@@ -10,7 +10,7 @@ import type { Palette } from '../../../../lib/palette';
 import type { UpdateCategoryResult } from '../../../../lib/updateCategory';
 
 import { EditCategoryModal } from './EditCategoryModal';
-import { category } from './categoryFixture';
+import { category, CATEGORY_PERIODS } from './categoryFixture';
 
 // PET-38's acceptance suite. AC1, AC2, AC3's request half, AC5 and AC7 live here; AC4 and AC6 are
 // browser checks, for the reasons below.
@@ -31,14 +31,14 @@ const onClose = jest.fn();
 const onDelete = jest.fn();
 const update = jest.fn<Promise<UpdateCategoryResult>, [string, unknown]>();
 
-/** Frame 21's own category: "Subscriptions", $250.00, with a note it does not draw. */
+/** Frame 21's own category: "Subscriptions", $250.00, with a description it does not draw. */
 const SUBSCRIPTIONS = category({
   id: '0198c2a1-0000-7000-8000-0000000000b7',
   name: 'Subscriptions',
   monthlyCap: 250,
   color: 'primary',
   icon: 'tv',
-  note: 'Streaming, apps & memberships',
+  description: 'Streaming, apps & memberships',
 });
 
 /**
@@ -72,6 +72,7 @@ const user = () => userEvent.setup();
 function open(props: Partial<React.ComponentProps<typeof EditCategoryModal>> = {}) {
   return render(
     <EditCategoryModal
+      periods={CATEGORY_PERIODS}
       category={SUBSCRIPTIONS}
       palette={PALETTE}
       update={update}
@@ -88,12 +89,26 @@ const save = () => screen.getByRole('button', { name: 'Save changes' });
 const remove = () => screen.getByRole('button', { name: 'Delete category' });
 
 /** The Note field, which is **not rendered** while `SHOWS_NOTE` is false. */
-const note = () => screen.queryByLabelText('Note (optional)');
+const description = () => screen.queryByLabelText('Note (optional)');
 
 const colourTrigger = () => screen.getByRole('button', { name: /^Color/ });
 const colourPanel = () => document.querySelector('#edit-category-color-picker') as HTMLElement;
 const iconTrigger = () => screen.getByRole('button', { name: /^Icon/ });
 const iconPanel = () => document.querySelector('#edit-category-icon-picker') as HTMLElement;
+
+/**
+ * The cap-anchor question, mounted only once a save whose diff carries `monthlyCap` was pressed.
+ *
+ * Scoped by its heading because its confirm is deliberately named like the button that opened it -
+ * `PaycheckMonthDialog`'s call - so a bare name query is ambiguous while it is open, the same
+ * two-dialogs case the delete confirmation already exercises.
+ */
+const anchorDialog = () =>
+  screen.getByRole('heading', { name: 'From which period?' }).closest('dialog') as HTMLElement;
+
+/** Confirms the question on whatever period its select is showing. */
+const confirmAnchor = () =>
+  user().click(within(anchorDialog()).getByRole('button', { name: 'Save changes' }));
 
 describe('AC1: the modal opens prefilled from the card', () => {
   it('prefills the name', () => {
@@ -123,9 +138,9 @@ describe('AC1: the modal opens prefilled from the card', () => {
   });
 
   it('draws no Note field, which amends AC1 for A42’s reason', () => {
-    // The note is prefilled into state regardless, which the save case below pins: a hidden field
+    // The description is prefilled into state regardless, which the save case below pins: a hidden field
     // must not clear a value the user cannot see.
-    expect(note()).toBeNull();
+    expect(description()).toBeNull();
   });
 });
 
@@ -169,7 +184,7 @@ describe('the save', () => {
     );
   });
 
-  it('keeps the hidden note out of every body', async () => {
+  it('keeps the hidden description out of every body', async () => {
     // The field is not drawn, so its value cannot diverge from the prefill - and the diff compares
     // against the stored value rather than against `''`, which is what stops a hidden field
     // contributing a key to every patch.
@@ -178,9 +193,10 @@ describe('the save', () => {
     await user().clear(budget());
     await user().type(budget(), '300');
     await user().click(save());
+    await confirmAnchor();
 
     await waitFor(() => expect(update).toHaveBeenCalled());
-    expect(update.mock.calls[0]![1]).not.toHaveProperty('note');
+    expect(update.mock.calls[0]![1]).not.toHaveProperty('description');
   });
 
   it('sends a null cap when the budget is cleared, which is how a category is uncapped', async () => {
@@ -188,6 +204,7 @@ describe('the save', () => {
 
     await user().clear(budget());
     await user().click(save());
+    await confirmAnchor();
 
     await waitFor(() =>
       expect(update).toHaveBeenCalledWith(SUBSCRIPTIONS.id, { monthlyCap: null }),
@@ -212,6 +229,7 @@ describe('the save', () => {
     await user().clear(budget());
     await user().type(budget(), '300');
     await user().click(save());
+    await confirmAnchor();
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -225,6 +243,7 @@ describe('the save', () => {
     await user().clear(budget());
     await user().type(budget(), '999999');
     await user().click(save());
+    await confirmAnchor();
 
     await waitFor(() =>
       expect(update).toHaveBeenCalledWith(SUBSCRIPTIONS.id, { monthlyCap: 999999 }),
@@ -250,6 +269,71 @@ describe('the save', () => {
     expect(remove()).toBeEnabled();
 
     settle({ ok: true });
+  });
+});
+
+describe('the cap-anchor question', () => {
+  // The PET-72 plan's user story is where this behaviour was decided: a cap change asks "from
+  // which period" the way a budget change asks "from which paycheck", defaulting to the current
+  // period, and the chosen period dates the appended history row.
+
+  it('asks only when the diff carries a cap', async () => {
+    // A rename is not a fact about a span of time, so it saves with no question.
+    open();
+
+    await user().clear(name());
+    await user().type(name(), 'Streaming');
+    await user().click(save());
+
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(screen.queryByRole('heading', { name: 'From which period?' })).toBeNull();
+  });
+
+  it('sends capFrom for a past period, and no capFrom for the current one', async () => {
+    // Absent-means-current is the contract's own default, so confirming on the default sends a
+    // body with no anchor at all - the case every test above exercises through `confirmAnchor`.
+    open();
+
+    await user().clear(budget());
+    await user().type(budget(), '300');
+    await user().click(save());
+
+    await user().selectOptions(within(anchorDialog()).getByLabelText('Applies from'), '2025-08-01');
+    await confirmAnchor();
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(SUBSCRIPTIONS.id, {
+        monthlyCap: 300,
+        capFrom: '2025-08-01',
+      }),
+    );
+  });
+
+  it('offers the periods by the backend’s own labels', async () => {
+    open();
+
+    await user().clear(budget());
+    await user().type(budget(), '300');
+    await user().click(save());
+
+    const select = within(anchorDialog()).getByLabelText('Applies from');
+    expect(within(select).getByRole('option', { name: 'October 2025' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: 'August 2025' })).toBeInTheDocument();
+    // The current period preselected, so the ordinary save is one confirm.
+    expect(select).toHaveValue('2025-10-01');
+  });
+
+  it('cancelling the question sends nothing and keeps the edits', async () => {
+    open();
+
+    await user().clear(budget());
+    await user().type(budget(), '300');
+    await user().click(save());
+    await user().click(within(anchorDialog()).getByRole('button', { name: 'Cancel' }));
+
+    expect(update).not.toHaveBeenCalled();
+    // The question was abandoned, not the save's content: pressing Save asks again.
+    expect(budget()).toHaveValue('300');
   });
 });
 

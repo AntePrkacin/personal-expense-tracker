@@ -10,16 +10,17 @@ import { LoginTokenService } from './../src/auth/login-token.service';
 import type { CategoriesResponseDto } from './../src/categories/dto/categories-response.dto';
 import type { CategoryResponseDto } from './../src/categories/dto/category-response.dto';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
-import {
-  monthWindow,
-  previousMonthWindow,
-  todayIn,
-} from './../src/common/month-window';
+import { todayIn } from './../src/common/month-window';
+import { calendarMonthPeriods } from './periods';
 import { users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
 import { UserDatabaseService } from './../src/database/user-database.service';
-import { categories, transactions } from './../src/database/user/schema';
+import {
+  categories,
+  categoryCapHistory,
+  transactions,
+} from './../src/database/user/schema';
 import { MAILER } from './../src/mail/mailer';
 import { MemoryMailer } from './memory-mailer';
 
@@ -49,8 +50,9 @@ describe('Category endpoints (e2e)', () => {
 
   // Registration leaves monthStartDay at its default of 1, so the period is the
   // calendar month.
-  const window = monthWindow(1, todayIn('Europe/Zagreb'));
-  const lastMonth = previousMonthWindow(1, todayIn('Europe/Zagreb'));
+  const { current: window, previous: lastMonth } = calendarMonthPeriods(
+    todayIn('Europe/Zagreb'),
+  );
 
   const errorBody = (response: request.Response) =>
     response.body as ErrorResponseDto;
@@ -130,8 +132,7 @@ describe('Category endpoints (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email,
         currency: 'eur',
         monthlyBudget: 2000,
@@ -364,7 +365,7 @@ describe('Category endpoints (e2e)', () => {
           color: 'error',
           monthlyCap: 40.55,
           icon: 'utensils',
-          note: 'Too much',
+          description: 'Too much',
         }).expect(201),
       );
 
@@ -373,19 +374,23 @@ describe('Category endpoints (e2e)', () => {
         color: 'error',
         monthlyCap: 40.55,
         icon: 'utensils',
-        note: 'Too much',
+        description: 'Too much',
         isFallback: false,
         spent: 0,
         transactionCount: 0,
         status: 'on_track',
       });
 
+      // Stored as this category's first cap-history row, effective from the
+      // current period - not as a column on the category, which is what a cap
+      // stopped being at PET-72.
       const userDb = await userDatabases.getUserDb(userId);
       const [row] = await userDb
         .select()
-        .from(categories)
-        .where(eq(categories.id, created.id));
-      expect(row.monthlyCapCents).toBe(4055);
+        .from(categoryCapHistory)
+        .where(eq(categoryCapHistory.categoryId, created.id));
+      expect(row.capCents).toBe(4055);
+      expect(row.effectiveFrom).toBe(window.start);
     });
 
     it('creates an uncapped category when the cap is omitted', async () => {
@@ -486,6 +491,59 @@ describe('Category endpoints (e2e)', () => {
       });
     });
 
+    it('backdates a cap with capFrom, leaving a period with its own newer row alone', async () => {
+      const category = await cappedCategory(400, 'Backdate me');
+
+      // Anchored at the previous period's start: that period is re-judged from then on, while
+      // the current one keeps the newer row it got at creation - resolution prefers the greatest
+      // effective_from at or before each period's start, which is what makes a backdate visible
+      // and deliberate rather than a silent rewrite of a span that had its own decision.
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: lastMonth.start,
+      }).expect(200);
+
+      const previous = listBody(
+        await list().query({ period: lastMonth.start }).expect(200),
+      );
+      expect(
+        previous.categories.find((row) => row.id === category.id)?.monthlyCap,
+      ).toBe(250);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === category.id)?.monthlyCap,
+      ).toBe(400);
+    });
+
+    it('400s the capFrom misuses, writing nothing', async () => {
+      const category = await cappedCategory(400, 'Anchor rules');
+
+      // A capFrom with no cap to date is refused rather than ignored: silently dropping it would
+      // answer 200 to a body that read as a backdate, and the caller would believe one happened.
+      await patch(category.id, { capFrom: lastMonth.start }).expect(400);
+      await patch(category.id, {
+        name: 'Renamed anyway',
+        capFrom: lastMonth.start,
+      }).expect(400);
+
+      // Mid-month starts nobody's period on this account, and a future period start is refused
+      // like every other future read.
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: `${window.start.slice(0, 8)}15`,
+      }).expect(400);
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: window.end,
+      }).expect(400);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === category.id),
+      ).toMatchObject({ name: 'Anchor rules', monthlyCap: 400 });
+    });
+
     it('rejects an empty body before touching the database', async () => {
       const category = await cappedCategory(400, 'Empty patch');
       const response = await patch(category.id, {}).expect(400);
@@ -540,15 +598,37 @@ describe('Category endpoints (e2e)', () => {
    * other cap exactly where it was.
    */
   describe('PATCH /api/categories', () => {
-    /** Reads caps straight off the rows, so a claim about "unchanged" is real. */
+    /**
+     * The cap each id resolves to for the current period, read from history.
+     *
+     * **Resolved rather than selected, because a cap is no longer a column.**
+     * PET-72 made caps append-only `category_cap_history` rows, so "the cap" is
+     * the greatest `effective_from` at or before the period start with ties broken
+     * by the newest write - exactly what `CategoriesService.withSpend` does. A
+     * claim about a cap being "unchanged" therefore has to resolve the same way
+     * the app does, or it would pass on a table full of stale appends.
+     */
     const capsOf = async (ids: string[]) => {
       const userDb = await userDatabases.getUserDb(userId);
       const rows = await userDb
         .select()
-        .from(categories)
-        .where(inArray(categories.id, ids));
+        .from(categoryCapHistory)
+        .where(inArray(categoryCapHistory.categoryId, ids))
+        .orderBy(
+          asc(categoryCapHistory.effectiveFrom),
+          asc(categoryCapHistory.createdAt),
+          asc(categoryCapHistory.id),
+        );
 
-      return new Map(rows.map((row) => [row.id, row.monthlyCapCents]));
+      // Ascending, so the last write for each id wins - the same order the
+      // service's DESC-with-LIMIT-1 subquery picks out.
+      const resolved = new Map<string, number | null>();
+      for (const row of rows) {
+        if (row.effectiveFrom <= window.start) {
+          resolved.set(row.categoryId, row.capCents);
+        }
+      }
+      return resolved;
     };
 
     it('sets several caps in one request and recomputes the screen', async () => {
@@ -743,6 +823,56 @@ describe('Category endpoints (e2e)', () => {
       await allocate({
         categories: [{ id: category.id, monthlyCap: 400 }],
       }).expect(200);
+    });
+
+    it('anchors the whole batch with capsFrom, one answer for every row', async () => {
+      const first = await cappedCategory(400, 'Bulk backdate A');
+      const second = await cappedCategory(300, 'Bulk backdate B');
+
+      await allocate({
+        categories: [
+          { id: first.id, monthlyCap: 100 },
+          { id: second.id, monthlyCap: 50 },
+        ],
+        capsFrom: lastMonth.start,
+      }).expect(200);
+
+      const previous = listBody(
+        await list().query({ period: lastMonth.start }).expect(200),
+      );
+      expect(
+        previous.categories.find((row) => row.id === first.id)?.monthlyCap,
+      ).toBe(100);
+      expect(
+        previous.categories.find((row) => row.id === second.id)?.monthlyCap,
+      ).toBe(50);
+
+      // The current period keeps the rows it got at creation: a newer row wins, so the backdate
+      // re-judges only the span with no later decision of its own.
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === first.id)?.monthlyCap,
+      ).toBe(400);
+    });
+
+    it('400s a capsFrom that starts no period, writing nothing', async () => {
+      const target = await cappedCategory(400, 'Bulk anchor guard');
+
+      // The 15th starts nobody's period on this account, whatever the year.
+      await allocate({
+        categories: [{ id: target.id, monthlyCap: 100 }],
+        capsFrom: '2020-01-15',
+      }).expect(400);
+      // And a future period start is refused like every other future read.
+      await allocate({
+        categories: [{ id: target.id, monthlyCap: 100 }],
+        capsFrom: window.end,
+      }).expect(400);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === target.id)?.monthlyCap,
+      ).toBe(400);
     });
 
     it('rejects the malformed bodies', async () => {

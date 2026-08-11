@@ -115,6 +115,23 @@ type ModalProps = {
    */
   width?: ModalWidth;
   /**
+   * Refuses every dismissal while true: Escape, the backdrop, the X and `close()`.
+   *
+   * For a dialog whose affirmative is the only thing that writes, a dismissal
+   * mid-write unmounts the one surface that can report the outcome - the
+   * paycheck dialog's footer buttons were `disabled` while its POST was out and
+   * Escape sailed straight past them, losing the picked month with the write
+   * still landing. The footer buttons still carry their own `disabled`, because
+   * this prop does not reach the caller's controls; it closes the three
+   * platform-owned exits. Escape is refused by `preventDefault()` on the
+   * `cancel` event, which is the UA's own seam for exactly this.
+   *
+   * Deliberately not the default: a form modal's Cancel staying live during a
+   * save is a decision several of this app's dialogs make on purpose, because
+   * no fetch here carries a timeout.
+   */
+  locked?: boolean;
+  /**
    * Exposes `close()` so a caller can dismiss the dialog itself.
    *
    * **The point is that it closes the dialog rather than unmounting it**, and the difference
@@ -228,6 +245,7 @@ export function Modal({
   align = 'start',
   icon,
   footerStart,
+  locked = false,
   ref,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -295,9 +313,23 @@ export function Modal({
     [],
   );
 
-  /** Every affordance goes through here. Escape needs no code: the UA's own default calls it. */
+  /**
+   * Every affordance goes through here. Escape needs no code: the UA's own default calls it.
+   * `locked` refuses the lot - see the prop.
+   */
   function close() {
+    if (locked) return;
     dialogRef.current?.close();
+  }
+
+  /**
+   * Escape's `cancel` event, whose default action is the close this refuses while locked.
+   *
+   * jsdom fires no `cancel` for Escape, so like the trap and the unlocked Escape this is a
+   * browser check; the suite pins only that the handler is wired.
+   */
+  function onDialogCancel(event: React.SyntheticEvent<HTMLDialogElement>) {
+    if (locked) event.preventDefault();
   }
 
   // React 19 takes `ref` as an ordinary prop, so no forwardRef wrapper is needed.
@@ -376,6 +408,7 @@ export function Modal({
     <dialog
       ref={dialogRef}
       onClose={onClose}
+      onCancel={onDialogCancel}
       onClick={onDialogClick}
       aria-labelledby={titleId}
       className="modal"

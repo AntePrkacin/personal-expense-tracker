@@ -40,7 +40,7 @@ function store(value?: string) {
 }
 
 /** One 200 body per call, in order, so the two reads can answer differently. */
-function respondInTurn(...bodies: { transactions: unknown[]; total: number }[]) {
+function respondInTurn(...bodies: { transactions: unknown[]; total: number; period?: unknown }[]) {
   const fetchMock = jest.fn();
 
   for (const body of bodies) {
@@ -61,8 +61,11 @@ function respondWith(status: number, body: unknown = { transactions: [], total: 
   return fetchMock;
 }
 
-const empty = { transactions: [], total: 0 };
-const oneRow = { transactions: [ROW], total: 1 };
+/** The period a read echoes back, which is what the header's overline names. */
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025' };
+
+const empty = { transactions: [], total: 0, period: PERIOD };
+const oneRow = { transactions: [ROW], total: 1, period: PERIOD };
 
 /** The path of the nth fetch, backend origin stripped. */
 const pathOf = (fetchMock: jest.Mock, call: number) =>
@@ -87,6 +90,7 @@ describe('when the account has transactions', () => {
       state: 'populated',
       transactions: [ROW],
       total: 1,
+      period: PERIOD,
     });
   });
 
@@ -125,7 +129,32 @@ describe('when the first read comes back empty', () => {
   it('is empty when the probe finds nothing either', async () => {
     respondInTurn(empty, empty);
 
-    expect(await readTransactionsView()).toEqual({ state: 'empty', total: 0 });
+    expect(await readTransactionsView()).toEqual({ state: 'empty', total: 0, period: PERIOD });
+  });
+
+  it('reports the period the caller asked for, never the probe’s', async () => {
+    // The probe is an all-time read, whose response carries **no** period at all - so taking the
+    // second read's answer would put "All time" over a header whose figures are one period's, on
+    // exactly the two states that have nothing to render and most need to say which period they
+    // found nothing in.
+    respondInTurn({ ...empty, period: PERIOD }, { ...oneRow, period: null });
+
+    expect(await readTransactionsView({ search: 'zzzz' })).toMatchObject({
+      state: 'noResults',
+      period: PERIOD,
+    });
+  });
+
+  it('reports no period at all for an unfiltered all-time read', async () => {
+    // `period=all` spans every period, so the contract publishes `null` rather than a label - and the
+    // screen turns that into its one overline that is not the backend's.
+    respondInTurn({ ...empty, period: null });
+
+    expect(await readTransactionsView({ period: 'all' })).toEqual({
+      state: 'empty',
+      total: 0,
+      period: null,
+    });
   });
 
   it('is no-results when the probe finds something', async () => {
@@ -134,6 +163,7 @@ describe('when the first read comes back empty', () => {
     expect(await readTransactionsView({ search: 'zzzz' })).toEqual({
       state: 'noResults',
       total: 0,
+      period: PERIOD,
     });
   });
 
@@ -156,7 +186,10 @@ describe('when the caller already asked the probe’s own question', () => {
   it('does not probe again for an unfiltered all-time read', async () => {
     const fetchMock = respondInTurn(empty);
 
-    expect(await readTransactionsView({ period: 'all' })).toEqual({ state: 'empty', total: 0 });
+    expect(await readTransactionsView({ period: 'all' })).toMatchObject({
+      state: 'empty',
+      total: 0,
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

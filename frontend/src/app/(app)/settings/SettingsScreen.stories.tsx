@@ -42,8 +42,7 @@ import { SettingsScreen } from './SettingsScreen';
 
 /** Frame 17's own values, so `Default` is a literal diff target. */
 const PROFILE: Profile = {
-  firstName: 'Marko',
-  lastName: 'Kovač',
+  fullName: 'Marko Kovač',
   email: 'marko@email.com',
   currency: 'USD',
   monthlyBudget: 2000,
@@ -75,7 +74,7 @@ export const Default: Story = {};
  * non-empty only when the field is sent.
  */
 export const SingleName: Story = {
-  args: { profile: { ...PROFILE, firstName: 'Marko', lastName: '' } },
+  args: { profile: { ...PROFILE, fullName: 'Marko' } },
 };
 
 /** A long hyphenated name and a long address, against the two-column row and the `max-w-205` ceiling. */
@@ -83,8 +82,7 @@ export const LongValues: Story = {
   args: {
     profile: {
       ...PROFILE,
-      firstName: 'Marija-Magdalena',
-      lastName: 'Kovačević-Horvat',
+      fullName: 'Marija-Magdalena Kovačević-Horvat',
       email: 'marija.magdalena.kovacevic@example-company-mail.com',
     },
   },

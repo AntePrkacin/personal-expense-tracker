@@ -1,15 +1,31 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 
 /**
- * The period filter's three values.
+ * The period filter's three **named** values.
  *
  * Named windows rather than `?from=&to=`. A free date range lets a caller ask
  * for a span that is not a budgeting period at all, and then every figure
  * derived from it - `total` here, every aggregate on the dashboard - silently
  * means something other than what the screen claims. TRN-3's own control offers
  * periods, not a date picker, so nothing is given up.
+ *
+ * **PET-72 added a fourth form, and it does not weaken that argument.** A
+ * `YYYY-MM-DD` value names one period by its own `start`, taken from
+ * `GET /api/periods` - so it still names a real budgeting period rather than an
+ * arbitrary span, and a date that starts no period of yours is a 400 rather than
+ * a window. What it buys is history: `current` and `previous` can only reach two
+ * periods, and the period select on the Dashboard reaches all of them.
  */
 export const TRANSACTION_PERIODS = ['current', 'previous', 'all'] as const;
 export type TransactionPeriod = (typeof TRANSACTION_PERIODS)[number];
@@ -97,16 +113,39 @@ export class ListTransactionsQueryDto {
    * naming a single month - a wrong-data bug with nothing to catch it.
    *
    * `all` is how you ask for history, and it applies no date predicate at all.
+   *
+   * **A `YYYY-MM-DD` period start is the fourth accepted form**, which is what
+   * lets the period select reach further back than `previous`. It must be a
+   * period's own `start` from `GET /api/periods`; any other date is a 400.
    */
+  // Deliberately **not** `@IsIn(TRANSACTION_PERIODS)` any more, and deliberately
+  // not an enum in the spec either: the value set is now three literals plus an
+  // open date, which no enum can express. The regex is written out inline because
+  // the swagger plugin lifts only an inline literal into `pattern` and silently
+  // drops a named constant - the same trap the transaction write DTOs' `date`
+  // documents. `@IsDateString({ strict: true })` sits behind a `@ValidateIf`
+  // that exempts the three named values, because a keyword is not a date and
+  // `@ValidateIf` gates every validator on the property - which is safe here,
+  // since a named value has nothing left for `@Matches` to reject. A first
+  // version shipped without the date check, claiming `PeriodService.startingAt`
+  // was "a superset of what a date validator would catch"; it is not -
+  // `month-window.ts` round-trips a month 13 without carrying, so
+  // `?period=2026-13-01` answered 200 with an overlapping window and a literal
+  // `undefined 2026` label. The review of PET-72 is where that came out.
   @ApiPropertyOptional({
-    enum: TRANSACTION_PERIODS,
     default: DEFAULT_PERIOD,
+    pattern: '^(current|previous|all|\\d{4}-\\d{2}-\\d{2})$',
     description:
-      'Resolved server-side from your `monthStartDay`, so the boundary is your budgeting period rather than the calendar month. `previous` is the period before the current one. `all` applies no date filter.',
+      'One of `current`, `previous`, `all`, or a period `start` in `YYYY-MM-DD` from `GET /api/periods`. Resolved server-side from your pay-schedule history, so the boundary is your budgeting period rather than the calendar month - and periods before a pay-day change keep the boundaries they had. `previous` is the period before the current one. `all` applies no date filter. A date that is not a real calendar date, or that starts none of your periods, is a **400**.',
+    example: 'current',
   })
   @IsOptional()
-  @IsIn(TRANSACTION_PERIODS)
-  period?: TransactionPeriod;
+  @ValidateIf(
+    (_, value) => !TRANSACTION_PERIODS.includes(value as TransactionPeriod),
+  )
+  @Matches(/^(current|previous|all|\d{4}-\d{2}-\d{2})$/)
+  @IsDateString({ strict: true })
+  period?: string;
 
   /** Defaults to `date_desc`, which is AC1's "Newest first". */
   @ApiPropertyOptional({

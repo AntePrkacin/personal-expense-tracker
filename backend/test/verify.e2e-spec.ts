@@ -18,7 +18,12 @@ import type {
   UserDatabase,
 } from './../src/database/database.types';
 import { UserDatabaseService } from './../src/database/user-database.service';
-import { categories, profile } from './../src/database/user/schema';
+import {
+  budgetHistory,
+  categories,
+  periodRules,
+  profile,
+} from './../src/database/user/schema';
 import { MAILER } from './../src/mail/mailer';
 import { MemoryMailer } from './memory-mailer';
 
@@ -62,8 +67,7 @@ describe('Verification and sessions (e2e)', () => {
   let pickedCategoryIds: string[] = [];
 
   const registration = (email: string) => ({
-    firstName: 'Marko',
-    lastName: 'Kovac',
+    fullName: 'Marko Kovac',
     email,
     currency: 'eur',
     monthlyBudget: 2000.5,
@@ -100,6 +104,11 @@ describe('Verification and sessions (e2e)', () => {
         .select()
         .from(categories)
         .orderBy(asc(categories.name)),
+      // The two history tables provisioning seeds as of PET-72. The budget and
+      // the pay day are no longer profile columns, so a suite asserting what an
+      // account was provisioned with has to read them here.
+      periodRules: await userDb.select().from(periodRules),
+      budgets: await userDb.select().from(budgetHistory),
     };
   };
 
@@ -191,17 +200,37 @@ describe('Verification and sessions (e2e)', () => {
         access(join(databaseDir, 'users', `${user.dbName}.db`)),
       ).resolves.toBeUndefined();
 
-      const { profiles, categories: seeded } = await userRows(user.id);
+      const {
+        profiles,
+        categories: seeded,
+        periodRules: rules,
+        budgets,
+      } = await userRows(user.id);
       expect(profiles).toHaveLength(1);
       expect(profiles[0]).toMatchObject({
         id: user.id,
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         currency: 'EUR',
+      });
+
+      // The pay schedule and the budget are history rows as of PET-72, not
+      // profile columns. Exactly one of each, anchored on the same date: the most
+      // recent occurrence of the pay day onboarding asked for, so the period the
+      // user is standing in is already budgeted.
+      expect(rules).toHaveLength(1);
+      expect(rules[0]).toMatchObject({
+        monthStartDay: 15,
+        // The earliest rule has no predecessor to bridge from.
+        transitionStart: null,
+      });
+      expect(rules[0].effectiveFrom).toMatch(/^\d{4}-\d{2}-15$/);
+
+      expect(budgets).toHaveLength(1);
+      expect(budgets[0]).toMatchObject({
         // Major units in, cents out. The conversion happens here and nowhere
         // upstream.
-        monthlyBudgetCents: 200050,
-        monthStartDay: 15,
+        budgetCents: 200050,
+        effectiveFrom: rules[0].effectiveFrom,
       });
 
       // Sorted by name here, so this pins the set and the colours the
@@ -220,8 +249,11 @@ describe('Verification and sessions (e2e)', () => {
 
       // The template's description is copied into the user's own `note`, which
       // is what keeps the user scope free of a new column. Every seeded row
-      // carries one, the fallback included.
-      expect(seeded.every((row) => (row.note ?? '').length > 0)).toBe(true);
+      // carries one, the fallback included. Named `description` on both sides
+      // since PET-72; it was `note` here until the rename.
+      expect(seeded.every((row) => (row.description ?? '').length > 0)).toBe(
+        true,
+      );
       expect(seeded.map((row) => row.icon)).toEqual([
         'shopping-basket',
         'car',
@@ -329,7 +361,7 @@ describe('Verification and sessions (e2e)', () => {
 
       await post('register', {
         ...registration(email),
-        firstName: 'Corrected',
+        fullName: 'Corrected Name',
         monthlyBudget: 1500,
       }).expect(202);
       // The second registration supersedes the first link, so the second email
@@ -338,11 +370,11 @@ describe('Verification and sessions (e2e)', () => {
 
       await post('verify', { token: rawToken }).expect(200);
 
-      const { profiles } = await userRows((await liveUser(email)).id);
-      expect(profiles[0]).toMatchObject({
-        firstName: 'Corrected',
-        monthlyBudgetCents: 150000,
-      });
+      const { profiles, budgets } = await userRows((await liveUser(email)).id);
+      expect(profiles[0]).toMatchObject({ fullName: 'Corrected Name' });
+      // The corrected budget lands as the account's first `budget_history` row
+      // rather than as a profile column.
+      expect(budgets[0]).toMatchObject({ budgetCents: 150000 });
     });
 
     it('provisions an account that picked no categories at all', async () => {

@@ -55,7 +55,7 @@ export default async function TransactionsPage({
 
   // Free: `requireProfile()` is `cache()`-memoized per render pass and the shell's layout has
   // already called it to gate this route, so this resolves against that same promise.
-  const { currency, monthStartDay } = await requireProfile();
+  const { currency } = await requireProfile();
 
   const [view, categories] = await Promise.all([
     readTransactionsView(filters),
@@ -85,14 +85,21 @@ export default async function TransactionsPage({
 
   return (
     <TransactionsScreen
-      monthStartDay={monthStartDay}
       view={view}
       filters={filters}
       // The Categories tab's badge, free here: this page already holds the category list for
       // the table's join, so the count costs no request. The mirror image on the other route
       // is not free, which is what `readTransactionCount()` exists for.
       categoryCount={categories.data.length}
-      filterBar={<TransactionFilterBar filters={filters} categories={categories.data} />}
+      filterBar={
+        <TransactionFilterBar
+          filters={filters}
+          categories={categories.data}
+          // The response's own name for a date-form period, so the pill can offer it as a real
+          // option. Undefined for `period=all`, whose response carries no period to name.
+          periodLabel={view.period?.label}
+        />
+      }
       // Built only for the state that renders it. The screen drops both slots in the empty
       // state anyway, so this is about types rather than output: narrowing here lets the
       // table take a `Transaction[]` instead of a union it would have to re-narrow.

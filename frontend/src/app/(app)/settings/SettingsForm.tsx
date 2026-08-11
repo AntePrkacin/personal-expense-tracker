@@ -6,21 +6,45 @@ import { useEffect, useRef, useState } from 'react';
 
 import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
+import { changeSchedule, type ChangeScheduleResult } from '@/lib/changeSchedule';
 import type { Profile } from '@/lib/profile';
 import { ACCESS_ROUTES } from '@/lib/routes';
+import type { components } from '@/types/api';
 import { updateProfile, type UpdateProfileResult } from '@/lib/updateProfile';
 
+import { PaycheckMonthDialog } from './PaycheckMonthDialog';
 import { PreferencesCard } from './PreferencesCard';
 import { ProfileCard } from './ProfileCard';
 import {
+  defaultPaycheckMonth,
   FIELD_ID,
   invalidFields,
   sameSettingsValues,
+  scheduleChanged,
+  toChangeScheduleBody,
   toSettingsFormValues,
   toUpdateProfileBody,
   type SettingsFormField,
   type SettingsFormValues,
 } from './settingsForm';
+
+type ChangeScheduleBody = components['schemas']['ChangeScheduleDto'];
+
+/**
+ * Today, as `YYYY-MM-DD`, for the paycheck month list's default.
+ *
+ * The **browser's** local date rather than `APP_TIMEZONE`, and the difference cannot matter here:
+ * this only picks which of nine months the dialog opens on, and a reader either side of midnight who
+ * disagrees with the server by a day is still offered the same nine and can pick any of them. Every
+ * figure that has to agree with the server's clock is resolved server-side and arrives as data.
+ */
+function todayIso(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+
+  return `${now.getFullYear()}-${month}-${day}`;
+}
 
 // The Settings page's form: every card on 17 Settings and the single "Save changes" beneath them
 // (SET-5).
@@ -37,6 +61,20 @@ import {
 // `toUpdateProfileBody`, one entry in `MESSAGES`, one card in the JSX. Everything else in this file
 // is already general, because `UpdateProfileDto` is one DTO covering all six fields. That is the
 // whole reason PET-46 builds the page-level form rather than a card-level one.
+//
+// **PET-72 breaks that generality, and the one press can now be two writes.** The budget and the pay
+// day left `UpdateProfileDto`: both apply *from a date*, so neither can be set without saying which
+// paycheck it starts at. The controls stay exactly where PET-47 put them and Save stays one button -
+// what changes is that a press carrying either of them **asks the question first**, in a confirmation
+// dialog, and then sends `POST /api/profile/schedule` alongside the ordinary patch for whatever else
+// moved. A press carrying neither never sees the dialog, which is most presses.
+//
+// **Why intercept the single Save rather than give the schedule its own button.** SET-5 draws one
+// "Save changes" for the whole page and the alternative was a second, differently-shaped save inside
+// one card - two buttons whose enablement rules differ, on a screen the design gives one. Asking at
+// the moment of saving also puts the question where the answer is knowable: the user has just decided
+// what the budget should be, so "from which paycheck" is the natural next sentence rather than a
+// field they had to fill in before they knew they were changing anything.
 
 /**
  * Every string this form can show, in one place.
@@ -50,8 +88,7 @@ import {
  * other invented state in this app - SET-5 draws no success, error or unsaved-changes visual at all.
  */
 const MESSAGES = {
-  firstName: 'Enter your first name.',
-  lastName: 'Enter your last name.',
+  fullName: 'Enter a display name.',
   emailRequired: 'Enter your email address.',
   emailFormat: 'Enter a valid email address.',
   // BUD-6 and A5's one message, and the same string `app/setup/BudgetForm.tsx` shows for the same
@@ -89,8 +126,7 @@ const SAVED_VISIBLE_MS = 5_000;
 
 /** The inline message for one problem, which is why `emailProblem` reports a reason rather than a boolean. */
 function messageFor(field: SettingsFormField, reason: 'required' | 'format'): string {
-  if (field === 'firstName') return MESSAGES.firstName;
-  if (field === 'lastName') return MESSAGES.lastName;
+  if (field === 'fullName') return MESSAGES.fullName;
   if (field === 'monthlyBudget') return MESSAGES.monthlyBudget;
   return reason === 'required' ? MESSAGES.emailRequired : MESSAGES.emailFormat;
 }
@@ -124,9 +160,30 @@ type SettingsFormProps = {
    * up.
    */
   save?: (body: Parameters<typeof updateProfile>[0]) => Promise<UpdateProfileResult>;
+  /**
+   * The schedule write, injected on the same terms and for the same reasons as `save`.
+   *
+   * Separate rather than one combined prop, because the two are separate endpoints with separate
+   * result unions - and a test asserting "the schedule was written and the patch was not" needs to
+   * see them apart.
+   */
+  saveSchedule?: (body: ChangeScheduleBody) => Promise<ChangeScheduleResult>;
+  /**
+   * Today, as `YYYY-MM-DD`, for the paycheck month list.
+   *
+   * A prop with a default rather than a `new Date()` inside the component: the nine months the dialog
+   * offers are relative to today, and a suite pinning that list across a year boundary must not have
+   * to fake timers. `SettingsScreen` passes nothing, so the default is what ships.
+   */
+  today?: string;
 };
 
-export function SettingsForm({ profile, save = updateProfile }: SettingsFormProps) {
+export function SettingsForm({
+  profile,
+  save = updateProfile,
+  saveSchedule = changeSchedule,
+  today = todayIso(),
+}: SettingsFormProps) {
   const router = useRouter();
 
   const [values, setValues] = useState<SettingsFormValues>(() => toSettingsFormValues(profile));
@@ -137,6 +194,21 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
   const [expired, setExpired] = useState(false);
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
+
+  /**
+   * The paycheck month the dialog is asking about, or `null` when it is closed.
+   *
+   * **Holding the month here rather than in the dialog is what makes the dialog stateless**, which is
+   * the shape every other confirmation in this app has: `(app)/Modal.tsx` renders content and reports
+   * a decision, and the screen owns what the decision is about. A failed save leaves the dialog
+   * **open** on the month the user picked, with the failure rendered inside it, so the retry
+   * re-sends what they actually chose. (This comment used to promise "reopening after a failed save
+   * reopens on the picked month", which the code never did - `onSubmit` seeds a fresh default on
+   * every ask, and a review caught the dialog not closing on success while its failure report
+   * rendered invisibly behind the top layer. Staying open on failure is the behaviour that promise
+   * meant.) A successful save closes it; a cancelled one abandons the save whole.
+   */
+  const [anchorMonth, setAnchorMonth] = useState<string | null>(null);
 
   // **The server's values `values` was last seeded from, and the flag that says a save is waiting
   // for its refresh.** Together these are the resync below; both exist because `router.refresh()`
@@ -182,14 +254,38 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
    * must not happen. It also picks up any field another tab changed in the meantime, so the next
    * diff cannot silently revert it.
    *
-   * The comparison is by **value**, never by object identity: `page.tsx` builds a fresh profile
-   * object on every server render, so an identity test would be true after every refresh in the app.
+   * **The comparison is by object identity, and a code review of PR #84 is why it is not by value.**
+   * The version this replaces asked `!sameSettingsValues(fromServer, synced)` - "did the server's
+   * profile actually change" - on the reasoning that `page.tsx` builds a fresh profile object on every
+   * server render, so an identity test would fire after every refresh in the app. That reasoning is
+   * sound about identity alone and it left out `awaitingSaved`, which is what already restricts this
+   * to the one refresh this form caused.
+   *
+   * A save that lands without moving the server's *configured* values is what it got wrong, and PET-72
+   * made that an ordinary case rather than an exotic one. `GET /api/profile` reports the **newest** row
+   * of each history, so a **retroactive** schedule change - an anchor before the newest budget row -
+   * succeeds while the profile comes back byte-identical. The guard then short-circuited forever:
+   * `awaitingSaved` was never cleared, `values` kept the typed figure and `syncedProfile` kept the old
+   * one, so the form stayed `edited` with Save live, a second press re-asked the paycheck question and
+   * appended another duplicate row, and a save that had landed was indistinguishable from one that had
+   * not.
+   *
+   * Adopting on identity means the form always ends a save showing what the account now holds - which,
+   * after a retroactive change, is the *unchanged* configured budget. That reads as a revert and is the
+   * truth: the field is the configured value, and what moved is an earlier period's row. The
+   * alternative was leaving the form permanently dirty, which is the worse of the two.
+   *
+   * The one thing identity gives up is deliberate. A refresh this form did **not** cause, landing
+   * between the save and this form's own refresh, would be adopted - and if that payload predates the
+   * write, the fields revert under a green "Changes saved". Nothing on this route calls
+   * `router.refresh()` but this form, so there is no such caller today; a value comparison could not
+   * distinguish the two either, it could only wait, and waiting is the defect above.
    */
   const fromServer = toSettingsFormValues(profile);
 
   const synced = toSettingsFormValues(syncedProfile);
 
-  if (awaitingSaved && !sameSettingsValues(fromServer, synced)) {
+  if (awaitingSaved && profile !== syncedProfile) {
     setSyncedProfile(profile);
     setValues(fromServer);
     setAwaitingSaved(false);
@@ -239,8 +335,20 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
    */
   const edited = !sameSettingsValues(values, synced);
   const hasProblems = invalidFields(values).length > 0;
+
+  /**
+   * **PET-72 adds a fourth term, and without it the budget and pay day are unsavable.**
+   * `toUpdateProfileBody` no longer carries either field, so a save that changes only the budget
+   * produces an *edited* form whose patch body is empty - and on the three conditions above that
+   * disables Save, leaving the field editable and the change impossible to commit. Asking
+   * `scheduleChanged` too is what routes such a press into the dialog.
+   */
+  const scheduleMoved = scheduleChanged(syncedProfile, values);
   const hasChangesToSave =
-    edited && (hasProblems || Object.keys(toUpdateProfileBody(syncedProfile, values)).length > 0);
+    edited &&
+    (hasProblems ||
+      scheduleMoved ||
+      Object.keys(toUpdateProfileBody(syncedProfile, values)).length > 0);
 
   useEffect(() => {
     if (pending) return;
@@ -353,9 +461,48 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
     // Both guards outlive the disabled button rather than being replaced by it: a control that is
     // not offered is not an enforcement, which is the rule this repo applies to its two unreachable
     // 409s, and this handler is reachable by other routes than a press.
+    // **The dialog interposes here, and only here.** Everything above is validation and the
+    // no-op guards, which must run whether or not a schedule is in play - asking "from which
+    // paycheck" about a form with a blank budget would be asking about a write that cannot happen.
+    // Below this line is the request, which `commit` owns so the dialog's confirm reaches it by
+    // exactly the same path.
+    if (scheduleChanged(syncedProfile, values)) {
+      setFailure(null);
+      setExpired(false);
+      setSaved(false);
+      // **The stored day and the form's day, both, and neither is redundant.** The month depends on
+      // which paycheck is the obvious one to start from, and that differs by whether the pay day
+      // itself moved - `defaultPaycheckMonth` owns the argument. Passing only one of them is how the
+      // first version of this line defaulted to a paycheck in the future.
+      setAnchorMonth(
+        defaultPaycheckMonth(today, syncedProfile.monthStartDay, values.monthStartDay),
+      );
+      return;
+    }
+
+    await commit(null);
+  }
+
+  /**
+   * The writes, and the one place either of them is sent.
+   *
+   * **Two requests for one press when a schedule moved, and the order is deliberate.** The schedule
+   * write goes first because it is the one the user was just asked a question about: if the ordinary
+   * patch fails, the change they confirmed has still landed, where the reverse would discard it over
+   * an unrelated name. There is no transaction across the two and there cannot be - different
+   * endpoints, different tables - so the order is the only guarantee available, which is the same
+   * reasoning `backend/CLAUDE.md` applies to every ordered pair of writes in this app.
+   *
+   * **A failure in the second leaves the first applied, and the message says "check the values"
+   * rather than claiming nothing happened.** That is honest and it is not tidy; the alternative is a
+   * green "Changes saved" over a half-applied save, which is worse.
+   *
+   * @param month The paycheck month the dialog collected, or `null` when no schedule moved.
+   */
+  async function commit(month: string | null) {
     const body = toUpdateProfileBody(syncedProfile, values);
 
-    if (Object.keys(body).length === 0) return;
+    if (month === null && Object.keys(body).length === 0) return;
 
     setFailure(null);
     setExpired(false);
@@ -367,33 +514,70 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
 
     setPending(true);
 
-    // **The `catch` is not defensive, and without it a failed submit freezes the page.** `save` is
-    // a Server Action called from the client, so a transport that never completes - going offline
+    // **The `catch` is not defensive, and without it a failed submit freezes the page.** Both writes
+    // are Server Actions called from the client, so a transport that never completes - going offline
     // mid-submit, a deploy restarting underneath, a response that is not an action result -
-    // **rejects** rather than resolving to an `UpdateProfileResult`. A rejection escaping this
-    // handler skips every line below, so `pending` stays true, the submit button stays disabled for
-    // good (which also kills Enter), and nothing on screen says why.
-    let result: UpdateProfileResult;
+    // **rejects** rather than resolving to a result. A rejection escaping this handler skips every
+    // line below, so `pending` stays true, the submit button stays disabled for good (which also
+    // kills Enter), and nothing on screen says why.
+    if (month !== null) {
+      let schedule: ChangeScheduleResult;
 
-    try {
-      result = await save(body);
-    } catch {
-      setPending(false);
-      setFailure(MESSAGES.failed);
-      return;
-    }
-
-    if (!result.ok) {
-      setPending(false);
-
-      // The 401 renders its own alert with a way out of it; the other three are bare strings.
-      if (result.reason === 'unauthenticated') {
-        setExpired(true);
+      try {
+        schedule = await saveSchedule(toChangeScheduleBody(values, month));
+      } catch {
+        // The dialog stays open: `failure` renders inside it, and the picked
+        // month survives for the retry the message invites.
+        setPending(false);
+        setFailure(MESSAGES.failed);
         return;
       }
 
-      setFailure(MESSAGES[result.reason]);
-      return;
+      if (!schedule.ok) {
+        setPending(false);
+
+        if (schedule.reason === 'unauthenticated') {
+          // The one failure whose report lives outside the dialog - the expired
+          // alert carries the "Log in again" link - so the dialog has to come
+          // down for it to be reachable at all.
+          setAnchorMonth(null);
+          setExpired(true);
+          return;
+        }
+
+        setFailure(MESSAGES[schedule.reason]);
+        return;
+      }
+    }
+
+    // **Skipped when nothing else moved**, which is the ordinary case for a budget-only save: the
+    // patch would be a body with no keys, which the endpoint answers 400 to.
+    if (Object.keys(body).length > 0) {
+      let result: UpdateProfileResult;
+
+      try {
+        result = await save(body);
+      } catch {
+        setPending(false);
+        setFailure(MESSAGES.failed);
+        return;
+      }
+
+      if (!result.ok) {
+        setPending(false);
+
+        // The 401 renders its own alert with a way out of it; the other three are bare strings.
+        if (result.reason === 'unauthenticated') {
+          // Same reason as the schedule arm: the alert with its link lives
+          // under the dialog's top layer.
+          setAnchorMonth(null);
+          setExpired(true);
+          return;
+        }
+
+        setFailure(MESSAGES[result.reason]);
+        return;
+      }
     }
 
     // **`router.refresh()` is the whole of AC5.** It re-runs this route's Server Components *and*
@@ -406,6 +590,12 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
     // trimmed, and another tab may have changed a field this form did not send. The refresh is
     // asynchronous, so the corrected profile cannot be read on this line - the flag is what makes
     // the resync at the top of this component adopt it when it arrives.
+    // **The dialog comes down on success, and a review is why this line exists.** `commit` used to
+    // leave `anchorMonth` set, so the dialog stayed open over a finished save with its own Save
+    // re-enabled - a second click re-POSTed the schedule, and the only way out ran `onClose`, whose
+    // comment claims it "abandons the whole save". Unmounting here still restores focus, because
+    // `Modal` refocuses on unmount rather than only through `close()`.
+    setAnchorMonth(null);
     router.refresh();
     setAwaitingSaved(true);
     setPending(false);
@@ -521,6 +711,36 @@ export function SettingsForm({ profile, save = updateProfile }: SettingsFormProp
             stops Enter doing what the button will not. */}
         <Button type="submit" label="Save changes" disabled={pending || !hasChangesToSave} />
       </div>
+
+      {/* **Rendered inside the `<form>`, which is deliberate and worth stating.** `Modal` is a
+          `<dialog>` and the browser hoists it to the top layer, so nesting has no visual effect -
+          but `initialFocusId` and the focus trap both want it in the same tree as the control that
+          opened it, and its Save is an ordinary `onClick` rather than a submit, so it cannot
+          re-enter `onSubmit` from here.
+
+          Mounted only while a month is being asked about, so there is one exit: `onClose` clears the
+          month, which unmounts it, which is what returns focus to the Save button the platform
+          remembers. */}
+      {anchorMonth !== null && (
+        <PaycheckMonthDialog
+          value={anchorMonth}
+          today={today}
+          pending={pending}
+          // Inside the dialog as well as in the form's own FormError, because the dialog sits in
+          // the top layer and would otherwise cover the only report of its own failure. On failure
+          // the dialog stays open with the picked month intact, which is what the `anchorMonth`
+          // docblock's reopen-on-picked-month promise actually means in practice.
+          failure={failure}
+          onChange={setAnchorMonth}
+          onConfirm={() => void commit(anchorMonth)}
+          // Abandons the whole save rather than only the dialog: nothing the user confirmed has
+          // been kept, the form is left exactly as they had it, and pressing Save again asks
+          // again from the default month. (After a *failed* attempt the schedule may already have
+          // landed when the ordinary patch was what failed - retrying converges, so nothing is
+          // lost either way.)
+          onClose={() => setAnchorMonth(null)}
+        />
+      )}
     </form>
   );
 }

@@ -27,15 +27,8 @@ import { PreferencesProvider } from './PreferencesProvider';
 /** The currency every suite gets unless it says otherwise, matching what a new account holds. */
 const TEST_CURRENCY = 'USD';
 
-/** The default month start day, matching the backend's own. */
-const TEST_MONTH_START_DAY = 1;
-
 function ShellPreferences({ children }: { children: React.ReactNode }) {
-  return (
-    <PreferencesProvider currency={TEST_CURRENCY} monthStartDay={TEST_MONTH_START_DAY}>
-      {children}
-    </PreferencesProvider>
-  );
+  return <PreferencesProvider currency={TEST_CURRENCY}>{children}</PreferencesProvider>;
 }
 
 /**

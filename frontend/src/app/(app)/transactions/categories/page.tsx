@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 
 import { readCategoriesView } from '@/lib/categories';
+import { parsePeriodParam } from '@/lib/periodParams';
+import { readPeriods } from '@/lib/periods';
 import { readPalette } from '@/lib/palette';
 import { requireProfile } from '@/lib/profile';
 import { ACCESS_ROUTES } from '@/lib/routes';
@@ -46,14 +48,26 @@ import { CategoriesScreen } from './CategoriesScreen';
 // No `export const dynamic`: the cookie read behind both opts this route out of static
 // rendering on its own, as it does everywhere else in the app.
 
-export default async function CategoriesPage() {
-  // Free, for the reason `transactions/page.tsx` records: the shell's gate already read it.
-  const { currency, monthStartDay } = await requireProfile();
+export default async function CategoriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Dropped rather than trusted if malformed, forwarded verbatim if well-formed but unknown -
+  // `lib/periods.ts` records why those two cases differ.
+  const period = parsePeriodParam(await searchParams);
 
-  const [categories, transactionCount, palette] = await Promise.all([
-    readCategoriesView(),
+  // Free, for the reason `transactions/page.tsx` records: the shell's gate already read it.
+  const { currency } = await requireProfile();
+
+  // **A fourth entry in the `Promise.all`, and it joins for the reason the other three are here.**
+  // `readPeriods` is what the header's select is built from, and it is unconditional: the select is
+  // drawn in every state, so an account with one period still has to see which one it is looking at.
+  const [categories, transactionCount, palette, periods] = await Promise.all([
+    readCategoriesView(period),
     readTransactionCount(),
     readPalette(),
+    readPeriods(),
   ]);
 
   // The failure policy lives here rather than in `lib/categories.ts`, for the reason that
@@ -89,7 +103,8 @@ export default async function CategoriesPage() {
   // to unpick, and this read arriving with a second one would be exactly that shape again.
   return (
     <CategoriesScreen
-      monthStartDay={monthStartDay}
+      period={categories.data.period}
+      periods={periods.periods}
       currency={currency}
       categories={categories.data.categories}
       allocation={categories.data.allocation}

@@ -37,8 +37,7 @@ const HREFS = SIDEBAR_HREFS;
  * only do that if the fixture the other tests use is different from them.
  */
 const profile = {
-  firstName: 'Ivana',
-  lastName: 'Horvat',
+  fullName: 'Ivana Horvat',
   email: 'ivana@example.test',
 } as const;
 
@@ -206,8 +205,7 @@ describe('Sidebar', () => {
     // Figma clips instead, because it only ever draws the short sample address.
     // Truncation is the honest equivalent at a fixed 260px.
     renderSidebar('dashboard', {
-      firstName: 'Maximiliana',
-      lastName: 'Wolfeschlegelsteinhausenbergerdorff',
+      fullName: 'Maximiliana Wolfeschlegelsteinhausenbergerdorff',
       email: 'maximiliana.wolfeschlegelsteinhausenbergerdorff@a-very-long-domain.example',
     });
 

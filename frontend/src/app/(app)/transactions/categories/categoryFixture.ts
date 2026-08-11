@@ -33,7 +33,7 @@ export function category(overrides: Partial<Category> = {}): Category {
     name: 'Groceries',
     color: 'success',
     icon: 'shopping-basket',
-    note: null,
+    description: null,
     isFallback: false,
     monthlyCap: 500,
     spent: 397,
@@ -97,3 +97,19 @@ export const FALLBACK_CATEGORY: Category = category({
   spent: 148,
   transactionCount: 6,
 });
+
+/**
+ * The periods the cap-anchor question offers, newest first with the current one flagged - the shape
+ * `GET /api/periods` publishes and `CategoriesScreen.stories.tsx` already drew for the header's
+ * select.
+ *
+ * Lifted here when `CapPeriodDialog` gave every modal on this tab a `periods` prop: three story
+ * files and four suites would otherwise each restate it, which is the fixture-staleness failure the
+ * header of this file exists to prevent. Three entries, because a select with one option cannot be
+ * reviewed.
+ */
+export const CATEGORY_PERIODS = [
+  { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true },
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+  { start: '2025-08-01', end: '2025-09-01', label: 'August 2025', current: false },
+] as const;

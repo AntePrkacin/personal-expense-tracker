@@ -126,7 +126,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             `PreferencesProvider.tsx` for why the names and the email stay props on the two
             components that already have them. */}
         <div className="flex flex-1 flex-col px-4 sm:px-6 lg:px-10">
-          <PreferencesProvider currency={profile.currency} monthStartDay={profile.monthStartDay}>
+          <PreferencesProvider currency={profile.currency}>
             <AddTransactionProvider>
               <DeleteTransactionProvider>
                 <EditTransactionProvider>{children}</EditTransactionProvider>
@@ -147,11 +147,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             row, the email from the central `users` row - which is exactly what
             `GET /api/profile` stitches, and the reason the session read alone
             could never have fixed this. */}
-        <SidebarNav
-          firstName={profile.firstName}
-          lastName={profile.lastName}
-          email={profile.email}
-        />
+        <SidebarNav fullName={profile.fullName} email={profile.email} />
       </div>
     </div>
   );

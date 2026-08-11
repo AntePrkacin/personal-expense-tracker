@@ -62,6 +62,11 @@ export class CreateCategoryDto {
 
   /**
    * Major units (e.g. 400.00), stored as integer cents. Omit for no cap.
+   *
+   * **Stored as the first row of this category's cap history, effective from the
+   * current period** - not as a column on the category. So a cap set today is the
+   * cap for this period onward and does not claim to have applied to periods
+   * before the category existed.
    */
   // Spelled out for the same reason as CreateTransactionDto.amount: the plugin
   // renders @IsPositive() as `minimum: 1`, which is wrong where 0.50 is valid.
@@ -81,19 +86,26 @@ export class CreateCategoryDto {
    * on the frontend an exhaustiveness proof, and requiring it is free now and
    * expensive later.
    *
-   * The column stays **nullable**, deliberately: tightening `categories.icon`
-   * to NOT NULL would be the one user-scope migration in this whole change, and
-   * `backend/src/database/CLAUDE.md` is explicit that such a migration runs
-   * unattended against live data one user at a time. The DTO is what enforces
-   * the invariant going forward.
+   * **The column is NOT NULL as of PET-72**, which is what this comment used to
+   * explain the absence of: tightening it would have been the one user-scope
+   * migration PET-64 declined to run against live data. The pre-launch database
+   * reset removed that constraint along with the legacy rows, so the column now
+   * says what this field has required since PET-64.
    */
   @ApiProperty({ enum: ICON_NAMES, example: 'shopping-basket' })
   @IsIn(ICON_NAMES)
   icon!: string;
 
-  /** Captured, but surfaces on no screen today (CED-4, A42). */
+  /**
+   * Captured, but surfaces on no screen today (CED-4, A42).
+   *
+   * Called `description` since PET-72, matching both the column and the
+   * `category_templates.description` a starter category copies it from. It was
+   * `note`, which made the one field a user edits share a name with
+   * `transactions.note`, a different field on a different table.
+   */
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  note?: string;
+  description?: string;
 }

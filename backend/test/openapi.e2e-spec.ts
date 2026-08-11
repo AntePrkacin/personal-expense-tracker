@@ -82,7 +82,9 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/health`,
       `/${API_PREFIX}/insights`,
       `/${API_PREFIX}/insights/generate`,
+      `/${API_PREFIX}/periods`,
       `/${API_PREFIX}/profile`,
+      `/${API_PREFIX}/profile/schedule`,
       `/${API_PREFIX}/templates/categories`,
       `/${API_PREFIX}/templates/palette`,
       `/${API_PREFIX}/transactions`,
@@ -301,10 +303,16 @@ describe('openapi.json', () => {
         'search',
         'sort',
       ]);
+      // **`period` is the one filter that is deliberately not an enum**, and this
+      // is where that is recorded. PET-72 widened it to accept a period `start`
+      // alongthe three named values, and no enum can express "these three
+      // literals or any date" - so it publishes a `pattern` instead, which is the
+      // same defence against a widened bare string.
       expect(byName.period).toMatchObject({
-        enum: ['current', 'previous', 'all'],
+        pattern: '^(current|previous|all|\\d{4}-\\d{2}-\\d{2})$',
         default: 'current',
       });
+      expect(byName.period).not.toHaveProperty('enum');
       expect(byName.sort).toMatchObject({
         enum: ['date_desc', 'date_asc'],
         default: 'date_desc',
@@ -513,7 +521,9 @@ describe('openapi.json', () => {
     // Each row is already in sorted order, so a status added to an operation
     // shows up here as a mismatch rather than being absorbed.
     it.each([
-      ['list', () => collection().get, ['200', '401']],
+      // The list's 400 is PET-72's `?period=`: a date starting none of the
+      // caller's periods is rejected rather than answered with the one around it.
+      ['list', () => collection().get, ['200', '400', '401']],
       ['create', () => collection().post, ['201', '400', '401']],
       ['bulk caps', () => collection().patch, ['200', '400', '401', '404']],
       ['update', () => item().patch, ['200', '400', '401', '404', '409']],
@@ -639,11 +649,50 @@ describe('openapi.json', () => {
 
   describe('the profile endpoints', () => {
     const path = () => spec.paths[`/${API_PREFIX}/profile`];
+    const schedulePath = () => spec.paths[`/${API_PREFIX}/profile/schedule`];
 
     it('declares exactly a read and an update, on the collection itself', () => {
       // No `/profile/{id}`, and there must never be one: the resource is always
-      // the session's own.
+      // the session's own. `schedule` is a literal sub-path, not an id.
       expect(Object.keys(path()).sort()).toEqual(['get', 'patch']);
+      expect(Object.keys(schedulePath()).sort()).toEqual(['post']);
+    });
+
+    it('answers the schedule write with 200, not a POST’s default 201', () => {
+      // It appends rows but creates no addressable resource, and what it returns
+      // is the profile. Without `@HttpCode(HttpStatus.OK)` the runtime would send
+      // 201 while this document promised 200, and the generated client would read
+      // its success arm off a status the server never sends.
+      expect(Object.keys(schedulePath().post.responses).sort()).toEqual([
+        '200',
+        '400',
+        '401',
+      ]);
+    });
+
+    it('requires all three schedule fields, so a budget cannot be undated', () => {
+      // The whole reason the endpoint exists: `firstPaycheckDate` being required
+      // is what makes "set the budget for all of time" impossible to express.
+      expect(schema('ChangeScheduleDto').required!.slice().sort()).toEqual([
+        'firstPaycheckDate',
+        'monthStartDay',
+        'monthlyBudget',
+      ]);
+      expect(
+        schema('ChangeScheduleDto').properties!.firstPaycheckDate,
+      ).toMatchObject({ format: 'date' });
+      expect(
+        schema('ChangeScheduleDto').properties!.monthStartDay,
+      ).toMatchObject({ type: 'integer', maximum: 28 });
+    });
+
+    it('keeps the budget and pay day off the ordinary update', () => {
+      // Both were fields of this DTO before PET-72, and accepting them meant
+      // silently rewriting every period the account had. `forbidNonWhitelisted`
+      // rejects them now, and this is what would notice one creeping back.
+      expect(
+        Object.keys(schema('UpdateProfileDto').properties!).sort(),
+      ).toEqual(['currency', 'email', 'fullName']);
     });
 
     it.each([
@@ -681,22 +730,24 @@ describe('openapi.json', () => {
       }
     });
 
-    it('returns the same six-field profile from both', () => {
+    it('returns the same five-field profile from all three', () => {
       const ref = '#/components/schemas/ProfileResponseDto';
 
-      for (const op of [path().get, path().patch]) {
+      // Three operations now: PET-72 split the budget and pay-day write onto
+      // `POST /profile/schedule`, and all three answer the same representation.
+      for (const op of [path().get, path().patch, schedulePath().post]) {
         expect(
           op.responses['200'].content?.['application/json'].schema?.$ref,
         ).toBe(ref);
       }
 
-      // All six always present - a client never has to tell "unset" from
-      // "absent", and every column behind them is NOT NULL anyway.
+      // All five always present - a client never has to tell "unset" from
+      // "absent". Two of them are resolved from history rather than selected from
+      // a column, which the response shape deliberately does not reveal.
       expect(schema('ProfileResponseDto').required!.slice().sort()).toEqual([
         'currency',
         'email',
-        'firstName',
-        'lastName',
+        'fullName',
         'monthStartDay',
         'monthlyBudget',
       ]);
@@ -722,16 +773,18 @@ describe('openapi.json', () => {
       }
     });
 
-    it('publishes the update email as an email and the budget as money', () => {
+    it('publishes the update email as an email', () => {
       expect(schema('UpdateProfileDto').properties!.email).toMatchObject({
         type: 'string',
         format: 'email',
       });
+    });
 
-      // The @IsPositive() trap, now on a third DTO: the plugin renders it as
-      // `minimum: 1`, which is right for an integer and wrong for money - it
-      // would forbid every budget under a unit.
-      const budget = schema('UpdateProfileDto').properties!.monthlyBudget;
+    it('publishes the schedule budget as money, not as an integer', () => {
+      // The @IsPositive() trap, following the field onto its new endpoint: the
+      // plugin renders it as `minimum: 1`, which is right for an integer and wrong
+      // for money - it would forbid every budget under a unit.
+      const budget = schema('ChangeScheduleDto').properties!.monthlyBudget;
       expect(budget).toMatchObject({
         type: 'number',
         minimum: 0,
@@ -741,12 +794,24 @@ describe('openapi.json', () => {
       expect(budget).not.toMatchObject({ minimum: 1 });
     });
 
-    it('says what the 409 means and that null is not accepted', () => {
+    it('says what the 409 means, that null is not accepted, and where the budget went', () => {
       const description = path().patch.description!;
 
       expect(description).toMatch(/409/);
       expect(description).toMatch(/null/);
-      expect(description).toMatch(/major units/i);
+      // The redirection is the part a client cannot infer from the shape: the
+      // field is simply absent, which reads as an oversight without this.
+      expect(description).toMatch(/profile\/schedule/);
+    });
+
+    it('says the schedule write is from a date, and that it leaves history alone', () => {
+      const description = schedulePath().post.description!;
+
+      expect(description).toMatch(/firstPaycheckDate/);
+      expect(description).toMatch(/earlier period/i);
+      // The two properties a client has to know to build the modal's copy.
+      expect(description).toMatch(/stretched/i);
+      expect(description).toMatch(/past/i);
     });
   });
 
@@ -758,8 +823,15 @@ describe('openapi.json', () => {
       expect(Object.keys(path()).sort()).toEqual(['get']);
     });
 
-    it('documents exactly 200 and 401 - no query string and no id to reject', () => {
-      expect(Object.keys(path().get.responses).sort()).toEqual(['200', '401']);
+    it('documents 200, 400 and 401 - the 400 is the period query', () => {
+      // 400 arrived with PET-72's `?period=`: a date that starts none of the
+      // caller's periods is rejected rather than answered with the period around
+      // it. There is still no id to reject, so there is still no 404.
+      expect(Object.keys(path().get.responses).sort()).toEqual([
+        '200',
+        '400',
+        '401',
+      ]);
       expect(
         path().get.responses['401'].content?.['application/json'].schema?.$ref,
       ).toBe(ERROR_REF);
@@ -774,16 +846,18 @@ describe('openapi.json', () => {
         path().get.responses['200'].content?.['application/json'].schema?.$ref,
       ).toBe('#/components/schemas/DashboardResponseDto');
 
-      // All eleven fields, including the two nullable ones: nullable is not
+      // All twelve fields, including the two nullable ones: nullable is not
       // optional in this codebase's convention (TransactionResponseDto.note is
       // the precedent), so a null topCategory or insight is still a present
-      // key rather than an absent one.
+      // key rather than an absent one. `period` is PET-72's, and says which period
+      // every other figure here is for.
       expect(schema('DashboardResponseDto').required!.slice().sort()).toEqual([
         'averagePerDay',
         'categories',
         'daysLeft',
         'insight',
         'monthlyBudget',
+        'period',
         'recentTransactions',
         'remaining',
         'spent',
@@ -842,8 +916,7 @@ describe('openapi.json', () => {
   it("carries RegisterDto's validation constraints", () => {
     const properties = schema('RegisterDto').properties!;
 
-    expect(properties.firstName).toMatchObject({ maxLength: 100 });
-    expect(properties.lastName).toMatchObject({ maxLength: 100 });
+    expect(properties.fullName).toMatchObject({ maxLength: 100 });
     expect(properties.email).toMatchObject({ format: 'email' });
     // Major units, not the cents the column stores. The description is the
     // JSDoc on the DTO, lifted by the plugin's `introspectComments`.
@@ -851,8 +924,7 @@ describe('openapi.json', () => {
 
     expect(schema('RegisterDto').required).toEqual(
       expect.arrayContaining([
-        'firstName',
-        'lastName',
+        'fullName',
         'email',
         'monthlyBudget',
         'categories',
@@ -863,26 +935,40 @@ describe('openapi.json', () => {
   });
 
   describe.each(['RegisterDto', 'UpdateProfileDto'])(
-    'the preference fields %s shares with the other',
+    'the currency field %s shares with the other',
     (name) => {
-      it('constrains currency rather than publishing a bare string', () => {
-        // @IsISO4217CurrencyCode() derives nothing, so without the explicit
-        // metadata this is `{ type: 'string' }` and the generated frontend type
-        // accepts any text at all. Case-insensitive because the DTO uppercases
-        // before validating.
-        expect(schema(name).properties!.currency).toMatchObject({
-          type: 'string',
-          pattern: '^[A-Za-z]{3}$',
-        });
-        expect(schema(name).properties!.currency.description).toMatch(
-          /ISO 4217/,
-        );
+      it('publishes currency as a real enum rather than a bare string', () => {
+        // **An enum since PET-72, where it was a hand-written `pattern` before.**
+        // The old pin asserted `^[A-Za-z]{3}$`, which described the *shape* of an
+        // ISO 4217 code and accepted all 180 of them - including the zero- and
+        // three-decimal currencies `src/common/money.ts` would scale wrongly by a
+        // factor of a hundred or ten. The allowlist is the fix, and publishing it
+        // as an enum is what lets the frontend's picker be typed off the contract
+        // instead of restating a list.
+        const currency = schema(name).properties!.currency;
+        expect(currency).toMatchObject({ type: 'string' });
+        expect(currency.enum).toContain('EUR');
+        expect(currency.enum).toContain('USD');
+        // The exponent rule, asserted by its consequences rather than restated:
+        // these are real ISO 4217 codes and must not be offered.
+        expect(currency.enum).not.toContain('JPY');
+        expect(currency.enum).not.toContain('KWD');
+        expect(currency).not.toHaveProperty('pattern');
       });
+    },
+  );
 
+  describe.each(['RegisterDto', 'ChangeScheduleDto'])(
+    'the pay day %s publishes',
+    (name) => {
       it('publishes monthStartDay as an integer, not any number', () => {
         // The plugin renders every TS `number` as `type: 'number'`, which would
         // publish 3.5 as a valid day while @IsInt() rejects it. The explicit
         // type and the derived bounds coexist.
+        //
+        // Paired with `ChangeScheduleDto` rather than `UpdateProfileDto` since
+        // PET-72: the pay day left the ordinary update, because changing it
+        // reshapes every period after it and so needs a date to apply from.
         expect(schema(name).properties!.monthStartDay).toMatchObject({
           type: 'integer',
           minimum: 1,

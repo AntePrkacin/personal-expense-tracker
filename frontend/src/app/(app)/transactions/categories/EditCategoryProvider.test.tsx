@@ -12,7 +12,7 @@ import type { Palette } from '../../../../lib/palette';
 import { DELETE_CATEGORY_TITLE } from './DeleteCategoryDialog';
 import { DeleteCategoryProvider } from './DeleteCategoryProvider';
 import { EditCategoryProvider, useEditCategory } from './EditCategoryProvider';
-import { category } from './categoryFixture';
+import { category, CATEGORY_PERIODS } from './categoryFixture';
 
 jest.mock('next/navigation', () => ({ useRouter: jest.fn() }));
 
@@ -67,7 +67,7 @@ function renderProviders(
 ) {
   render(
     <DeleteCategoryProvider fallbackName="Uncategorized" remove={remove}>
-      <EditCategoryProvider palette={PALETTE} update={update}>
+      <EditCategoryProvider palette={PALETTE} periods={CATEGORY_PERIODS} update={update}>
         {children}
       </EditCategoryProvider>
     </DeleteCategoryProvider>,

@@ -36,7 +36,7 @@ const CATEGORY: CategoryContext = {
   // required and no PATCH can clear one - so a sign-off story showing an empty
   // tile would be diffing the design against a state no new account can be in.
   icon: 'shopping-basket',
-  note: null,
+  description: null,
   isFallback: false,
   monthlyCap: 500,
   spent: 397,
@@ -121,7 +121,7 @@ type Story = StoryObj<typeof TransactionDetailScreen>;
 function Frame({ detail }: { detail: TransactionDetail }) {
   return (
     <AddTransactionProvider>
-      <PreferencesProvider currency="USD" monthStartDay={1}>
+      <PreferencesProvider currency="USD">
         <DeleteTransactionProvider remove={async () => ({ ok: true })}>
           <EditTransactionProvider update={async () => ({ ok: true })}>
             {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for

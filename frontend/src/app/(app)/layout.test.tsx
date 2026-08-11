@@ -40,10 +40,9 @@ jest.mock('next/navigation', () => ({
 jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
 
 const PROFILE = {
-  firstName: 'Ana',
-  lastName: 'Horvat',
+  fullName: 'Ana Horvat',
   email: 'ana@email.com',
-  currency: 'USD',
+  currency: 'EUR',
   monthlyBudget: 2000,
   monthStartDay: 1,
 };
@@ -224,13 +223,16 @@ describe('AppLayout', () => {
 
     expect(screen.getByRole('dialog', { name: DELETE_TRANSACTION_TITLE })).toBeInTheDocument();
     // The formatted amount is the proof the dialog reached the provider rather than merely mounting.
-    expect(screen.getByText(/\$24\.00/)).toBeInTheDocument();
+    // Euro since PET-72 flipped the default, which this fixture now carries.
+    expect(screen.getByText(/€24\.00/)).toBeInTheDocument();
   });
 
   it('binds that provider to the read profile rather than to a default', async () => {
-    // The failure this catches is the quiet one: a provider wired to a literal `'USD'` renders a
-    // euro account's whole dashboard in dollars and looks entirely correct doing it.
-    (requireProfile as jest.Mock).mockResolvedValue({ ...PROFILE, currency: 'EUR' });
+    // The failure this catches is the quiet one: a provider wired to a literal default renders a
+    // sterling account's whole dashboard in euros and looks entirely correct doing it. The fixture
+    // is `GBP` against a default of `EUR` since PET-72, so the assertion still fails on a hard-coded
+    // default rather than accidentally agreeing with one.
+    (requireProfile as jest.Mock).mockResolvedValue({ ...PROFILE, currency: 'GBP' });
 
     function Probe() {
       return <p>{useMoney().formatWhole(1240.5)}</p>;
@@ -238,7 +240,7 @@ describe('AppLayout', () => {
 
     render(await AppLayout({ children: <Probe /> }));
 
-    expect(screen.getByText('€1,241')).toBeInTheDocument();
+    expect(screen.getByText('£1,241')).toBeInTheDocument();
   });
 
   it('renders none of the three dialogs until something opens one', async () => {
