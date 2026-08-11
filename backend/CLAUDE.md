@@ -904,6 +904,24 @@ Regenerate. The accurate statement is **heals on the next write**, `docs/TODO.md
 deferred work beside the debounce the LLM swap already needs, and the two want the same fix built
 once.
 
+**PET-73 built that fix, so read "there is no retry, no dirty flag and no sweep" as dated**, and
+read `InsightsService.dirty`'s own docblock for the mechanism rather than a copy of it here. The
+whole of what belongs in this file is the bound - a burst of N writes produces **at most two runs** -
+and the one thing a review of PR #86 corrected about it: the follow-up hung on the success path
+alone, so the **empty-account** path, which settles the state just as much by removing its own
+placeholder, scheduled none and leaked its flag. Reachable in one step - delete the last
+transaction, then create one before that run returns - and the consequence was the exact staleness
+the flag exists to close. Both settling paths schedule one now; the two that settle nothing (a
+failed run, a run reclaimed as abandoned) still deliberately do not.
+
+**And a review of that fix found it had left a fourth path**, which is worth one sentence because it
+is the same class of mistake twice: the empty-account delete is conditional on the row still being
+this run's, and the first version **discarded the result**, so a reclaimed run whose generator
+answered `null` deleted nothing and scheduled a follow-up regardless. It reads the delete back with
+`.returning()` now and returns early when it matched nothing, exactly as the completion transaction
+already read its own `UPDATE` back - so "settled the state" means the write actually landed rather
+than merely having been attempted.
+
 ## Templates
 
 **`src/templates/` serves the admin-managed data behind onboarding and the category picker, and
@@ -1059,6 +1077,21 @@ rule, because a rule anchored a year back for the reason above is not a claim th
 year of history. And the label is the backend's to compute for every consumer, because a period a
 schedule change stretched spans two calendar months and no client-side arithmetic over a start day
 can name it.
+
+## The assistant
+
+**PET-73's AI assistant chat has its own file**, `backend/src/assistant/CLAUDE.md`, which loads
+whenever the work is under `backend/src/assistant/`. It is the authority for the three endpoints, the
+prompt and its ceilings, the one-transaction-per-turn write, the abort chain's third hop, and - the
+reason it is a file rather than a section here - the `### What crosses the wire` inventory for the
+**second** place in this app that sends a user's data to a third party.
+
+Two things about it belong here rather than there, because they are claims about the rest of the
+backend. **It generates nothing**: `INSIGHT_GENERATOR` is still bound to
+`RuleBasedInsightGenerator` and the "No LLM behind the insights" bullet below is still literally
+true. And **`chat` is a fourth named throttler** beside `email`, `ip` and `scan`, registered in the
+one `ThrottlerModule.forRootAsync` in `app.module.ts` - so every guarded route now skips three
+throttlers it is not named by rather than two.
 
 ## Persistence
 

@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { argsOf, paramsOf, queryChain, toSql } from '../../test/query-chain';
 import { UserDatabaseService } from '../database/user-database.service';
@@ -59,6 +60,11 @@ describe('CategoriesService', () => {
             budgetCentsFor,
           },
         },
+        // A real emitter with nothing listening, rather than a mock:
+        // `emitAsync` resolving is what every write here depends on since
+        // PET-73 added `CATEGORY_CHANGED`, and a jest.fn() would pass whether
+        // or not the call is awaited.
+        { provide: EventEmitter2, useValue: new EventEmitter2() },
       ],
     }).compile();
 

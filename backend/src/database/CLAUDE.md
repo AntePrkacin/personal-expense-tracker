@@ -48,9 +48,9 @@ field the Platform API returns. A dedicated test pins the flag in
 **Database per user.** A small **central** database (`users`: id, email, and a pointer to
 that person's database) exists because identity must resolve by email before the per-user
 database is known. Everything else about a person lives in **their own Turso database**,
-holding `profile` (single row), `categories`, `transactions`, the insight tables, and as of
-PET-72 the three effective-dated histories: `period_rules`, `budget_history` and
-`category_cap_history`. In cloud mode the central database and every per-user one
+holding `profile` (single row), `categories`, `transactions`, the insight tables, PET-72's three
+effective-dated histories (`period_rules`, `budget_history` and `category_cap_history`) and PET-73's
+two assistant tables (`assistant_sessions` and its child `assistant_messages`). In cloud mode the central database and every per-user one
 live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
 per-user ones itself, at **verification** rather than registration - see
 `backend/CLAUDE.md`, Access and sessions.
@@ -180,6 +180,22 @@ it, and a walk re-deriving it would need the whole future of the history to answ
 its past. And a **missing** cap row means uncapped, which is the one place in this schema where
 sparseness carries meaning - there is no "clear the cap" write, so an uncapped category is one whose
 newest applicable row is `NULL` or absent.
+
+**PET-73's two assistant tables are the parent-child pair `insight_sets`/`insights` already sets,
+and their four differences are all consequences of one fact.** A generation run is asynchronous and
+single-flight; an assistant turn is **synchronous and request-scoped**. So `assistant_sessions`
+carries **no `status` and no partial unique index** - `insight_sets_generating_idx` exists because a
+run is in flight across requests and at most one may be, where a turn either completes inside its
+request or writes nothing at all, leaving no in-flight row to guard and nothing to reclaim past a
+staleness cutoff. `assistant_messages` carries **`sort_order`**, copying `insights.sort_order` and
+adding a reason of its own: the two messages of a turn are written inside one transaction and
+therefore share a millisecond, so `created_at` is not a tiebreak between a question and its own
+answer. **Neither carries `updated_at`**, which `insight_sets` also does without - the only mutation
+a session takes is `last_message_at` moving, and that column _is_ the record of it. And **neither
+takes either sanctioned exemption from the tombstone convention**: `backend/CLAUDE.md` names exactly
+two, the empty-account placeholder removal and the completed-run prune, and this is neither, because
+nothing here hard-deletes and nothing prunes - growth is bounded by how much a human types rather
+than by how much they spend.
 
 **Conventions worth knowing before writing a table.** Primary keys are UUIDv7 text
 (`src/common/ids.ts`). Money is integer minor units in `*_cents` columns; the API speaks

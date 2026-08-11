@@ -102,15 +102,17 @@ export class TransactionsController {
    * controller: the budget an abuser burns here is not their own, it is the
    * project's shared Gemini quota. `scan` is a third named throttler
    * `AppModule` registers, keyed on the session user id, and this route
-   * skips the two auth throttlers that would otherwise also apply -
-   * `ThrottlerGuard` runs every configured throttler on a route it guards,
-   * and `email`'s tracker reads `req.body.email`, which is `undefined` on a
-   * multipart request and would put every caller in one shared fallback
-   * bucket.
+   * skips every throttler it is not named by - `ThrottlerGuard` runs every
+   * configured throttler on a route it guards, and `email`'s tracker reads
+   * `req.body.email`, which is `undefined` on a multipart request and would
+   * put every caller in one shared fallback bucket. `chat` joined that list
+   * at PET-73: it protects the same Gemini quota with a budget an order of
+   * magnitude different, so a burst of chat turns must not be able to disable
+   * receipt scanning mid-form.
    */
   @Post('scan')
   @UseGuards(ThrottlerGuard)
-  @SkipThrottle({ email: true, ip: true })
+  @SkipThrottle({ email: true, ip: true, chat: true })
   @UseInterceptors(
     FilesInterceptor('files', MAX_RECEIPT_FILES, receiptUploadOptions),
   )

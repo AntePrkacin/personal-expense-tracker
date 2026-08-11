@@ -2,8 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   and,
   asc,
@@ -17,6 +19,10 @@ import {
 } from 'drizzle-orm';
 import { newId } from '../common/ids';
 import { fromCents, toCents } from '../common/money';
+import {
+  CATEGORY_CHANGED,
+  type CategoryChangedEvent,
+} from './category-changed.event';
 import type { Period } from '../common/period-rules';
 import { PeriodService } from '../periods/period.service';
 import type { UserDatabase } from '../database/database.types';
@@ -126,10 +132,48 @@ interface CategoryWithSpend {
  */
 @Injectable()
 export class CategoriesService {
+  private readonly logger = new Logger(CategoriesService.name);
+
   constructor(
     private readonly userDatabases: UserDatabaseService,
     private readonly periods: PeriodService,
+    private readonly events: EventEmitter2,
   ) {}
+
+  /**
+   * Announces that this user's categories moved, and **can never fail the
+   * write**. `TransactionsService.announceChange` is the shape, and both halves
+   * of its reasoning transfer unchanged.
+   *
+   * `emitAsync` rather than `emit`: `InsightsService.generate` commits its
+   * `generating` row before returning, so awaiting the listener carries that
+   * guarantee out to the request - by the time `PATCH /api/categories` responds,
+   * `GET /api/insights` already reports `generating`.
+   *
+   * **Every error is swallowed, and the catch is here as well as in the
+   * listener.** Neither is redundant: `emitAsync` rejects when a listener
+   * rejects, so one throwing synchronously would otherwise escape into the
+   * request, and a catch only in the listener leaves the hazard for whoever adds
+   * a second one. The expected error is a `ConflictException` from the
+   * single-run guard, which is benign and, since PET-73, no longer even loses a
+   * run: the listener sets a dirty flag the completing run picks up.
+   */
+  private async announceChange(
+    userId: string,
+    reason: CategoryChangedEvent['reason'],
+  ): Promise<void> {
+    try {
+      await this.events.emitAsync(CATEGORY_CHANGED, {
+        userId,
+        reason,
+      } satisfies CategoryChangedEvent);
+    } catch (error) {
+      this.logger.warn(
+        `A ${CATEGORY_CHANGED} listener failed for user ${userId} (${reason}); the write stands.`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
 
   /**
    * Live categories with their stats for a period, plus the allocation summary.
@@ -228,6 +272,8 @@ export class CategoriesService {
       await this.appendCap(db, created.id, period.start, capCents);
     }
 
+    await this.announceChange(userId, 'created');
+
     // A brand-new category cannot have transactions, so its stats are zero
     // without asking.
     return toResponse({
@@ -312,6 +358,8 @@ export class CategoriesService {
         cap === null ? null : toCents(cap),
       );
     }
+
+    await this.announceChange(userId, 'updated');
 
     // No `.returning()` above, because `monthStatsFor` selects the row again
     // anyway and the two copies of "id to stats" this file used to hold are what
@@ -432,6 +480,8 @@ export class CategoriesService {
       );
     }
 
+    await this.announceChange(userId, 'caps-set');
+
     // The whole screen, recomputed. `list` already builds it, and a second copy
     // of "sum the caps, subtract from the budget" is what this file's own money
     // note calls a bug at the third occurrence. Note the frontend discards this
@@ -481,6 +531,13 @@ export class CategoriesService {
       .update(categories)
       .set({ deletedAt: new Date() })
       .where(and(eq(categories.id, id), isNull(categories.deletedAt)));
+
+    // Emitted after both statements, so a listener that reads the tables sees
+    // the reassignment as well as the tombstone. That matters more here than on
+    // the other three writes: a delete moves this category's spend onto the
+    // fallback, which is exactly what the over-cap rule would otherwise
+    // recompute from a half-applied state.
+    await this.announceChange(userId, 'deleted');
   }
 
   /**

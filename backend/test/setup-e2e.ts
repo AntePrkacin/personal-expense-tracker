@@ -76,5 +76,15 @@ process.env.AUTH_RATE_IP_LIMIT = '1000';
  */
 process.env.SCAN_RATE_LIMIT = '3';
 
+/**
+ * The same again for PET-73's fourth throttler, and the same "before any hook"
+ * reason. `assistant.e2e-spec.ts` overrides `AssistantCompletionService` with a
+ * stub rather than relying on the missing key, because unlike `/scan` it has to
+ * exercise the **success** path too - so this limit is what its throttler test
+ * reaches, and the keyless 503 is asserted by re-overriding the stub for one
+ * case rather than by deleting the key.
+ */
+process.env.CHAT_RATE_LIMIT = '3';
+
 /** Exported so suites can clean the directory up in `afterAll`. */
 export const E2E_DATABASE_DIR = dir;

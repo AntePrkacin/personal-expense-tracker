@@ -227,22 +227,10 @@ describe('InsightsService', () => {
     });
   });
 
-  describe('latestReadySummary', () => {
-    it('returns the latest ready set headline and body for the dashboard', async () => {
-      db.select.mockReturnValueOnce(queryChain([readyRow()]));
-
-      await expect(service.latestReadySummary('user-id')).resolves.toEqual({
-        headline: 'You are on track this month',
-        body: "You've spent $1,240 of your $2,000 budget.",
-      });
-    });
-
-    it('returns null when there is no ready set', async () => {
-      db.select.mockReturnValueOnce(queryChain([]));
-
-      await expect(service.latestReadySummary('user-id')).resolves.toBeNull();
-    });
-  });
+  // `latestReadySummary` was covered here until PET-73 removed it with
+  // `DashboardResponseDto.insight`. Nothing composes this service now; the
+  // Dashboard reads `GET /api/insights` itself, which `getSet` above serves and
+  // this file already covers in all three states.
 
   describe('generate', () => {
     it('rejects with 409 when a run is already in flight, inserting nothing', async () => {
@@ -432,6 +420,193 @@ describe('InsightsService', () => {
       // above, or a claim that is not this prune's to delete.
       const [where] = argsOf(selectChain, 'where');
       expect(toSql(where)).toContain('"status" <> ?');
+    });
+  });
+
+  /**
+   * The bounded dirty flag (PET-73).
+   *
+   * `docs/TODO.md` recorded that a burst of writes leaves a stale set - writes
+   * 2..N all lose the single-run 409 - and that every honest fix looks like a
+   * re-entrant loop on the write path. **The bound is the whole argument for
+   * doing it**, so what is asserted here is not that a follow-up run happens but
+   * that it happens **once**, and that the paths which must not schedule one do
+   * not.
+   */
+  describe('the dirty flag', () => {
+    /** Several macrotask turns, since a follow-up run is floated off a floated run. */
+    const settle = async () => {
+      for (let turn = 0; turn < 5; turn += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    };
+
+    /** A completion transaction that claims the row, so the success path is taken. */
+    const claimingTransaction = () => {
+      const tx = {
+        update: jest.fn().mockReturnValue(queryChain([{ id: 'run-1' }])),
+        insert: jest.fn().mockReturnValue(queryChain([])),
+        select: jest.fn().mockReturnValue(queryChain([{ id: 'run-1' }])),
+        delete: jest.fn().mockReturnValue(queryChain([])),
+      };
+      db.transaction.mockImplementation(
+        (body: (handle: typeof tx) => Promise<unknown>) => body(tx),
+      );
+    };
+
+    beforeEach(() => {
+      db.select.mockReturnValue(queryChain([]));
+      // The placeholder delete is read back now, and an empty result means the row was reclaimed -
+      // so a run that really does own its row has to say so here, or every empty-account case in
+      // this block would take the reclaimed path instead.
+      db.delete.mockReturnValue(queryChain([{ id: 'run-1' }]));
+      claimingTransaction();
+    });
+
+    it('starts exactly one more run when a write landed during the first', async () => {
+      // The 409's listener marks the account dirty; here that lands while the
+      // generator is mid-read, which is precisely the burst this closes.
+      generatorGenerate
+        .mockImplementationOnce(() => {
+          service.markDirty('user-id');
+          return Promise.resolve(generatedSet());
+        })
+        .mockImplementation(() => Promise.resolve(generatedSet()));
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops at two runs, because each run clears the flag as it starts', async () => {
+      // This is the bound. Nothing sets the flag again after the first run
+      // cleared it, so the second run finds it clear and schedules nothing -
+      // there is no path from run 2 to run 3.
+      generatorGenerate
+        .mockImplementationOnce(() => {
+          service.markDirty('user-id');
+          return Promise.resolve(generatedSet());
+        })
+        .mockImplementation(() => Promise.resolve(generatedSet()));
+
+      await service.generate('user-id');
+      await settle();
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('collapses a burst of N writes into at most two runs', async () => {
+      generatorGenerate
+        .mockImplementationOnce(() => {
+          // Five more writes lose the 409 while this run reads.
+          for (let write = 0; write < 5; write += 1) {
+            service.markDirty('user-id');
+          }
+          return Promise.resolve(generatedSet());
+        })
+        .mockImplementation(() => Promise.resolve(generatedSet()));
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('starts one more run when the account was empty during the run', async () => {
+      // The empty-account path settles the state too - it removes its own
+      // placeholder - so it owes the same follow-up. Reachable in one step:
+      // deleting the last transaction starts this run, and a create landing
+      // before it returns loses the 409 and marks the account dirty. Shipped
+      // without it, the new transaction reached no set until the next write.
+      generatorGenerate
+        .mockImplementationOnce(() => {
+          service.markDirty('user-id');
+          return Promise.resolve(null);
+        })
+        .mockImplementation(() => Promise.resolve(generatedSet()));
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('schedules no follow-up from an empty run that lost its claim', async () => {
+      // The other half of the case above, and the one the first version of that fix got wrong. The
+      // placeholder delete matched nothing, so this run settled nothing at all - a newer run owns
+      // the state, including the right to decide what generates next.
+      db.delete.mockReturnValue(queryChain([]));
+      generatorGenerate.mockImplementationOnce(() => {
+        service.markDirty('user-id');
+        return Promise.resolve(null);
+      });
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts nothing extra when no write landed during the run', async () => {
+      generatorGenerate.mockResolvedValue(generatedSet());
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('schedules no follow-up from a failed run', async () => {
+      // A run that failed has not settled the state a follow-up would be
+      // scheduling against, and chaining off it is how a bounded retry becomes
+      // an unbounded one. The flag stays set for the next write to act on.
+      generatorGenerate.mockImplementationOnce(() => {
+        service.markDirty('user-id');
+        return Promise.reject(new Error('the generator blew up'));
+      });
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('schedules no follow-up from a run reclaimed as abandoned', async () => {
+      // The row was flipped to `failed` by a newer run, so this one owns
+      // nothing - including the right to decide what generates next.
+      const tx = {
+        update: jest.fn().mockReturnValue(queryChain([])), // claimed nothing
+        insert: jest.fn().mockReturnValue(queryChain([])),
+        select: jest.fn().mockReturnValue(queryChain([])),
+        delete: jest.fn().mockReturnValue(queryChain([])),
+      };
+      db.transaction.mockImplementation(
+        (body: (handle: typeof tx) => Promise<unknown>) => body(tx),
+      );
+      generatorGenerate.mockImplementationOnce(() => {
+        service.markDirty('user-id');
+        return Promise.resolve(generatedSet());
+      });
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the flag per user, so one account cannot regenerate another', async () => {
+      generatorGenerate.mockImplementation(() =>
+        Promise.resolve(generatedSet()),
+      );
+
+      service.markDirty('someone-else');
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(1);
+      expect(generatorGenerate).toHaveBeenCalledWith('user-id');
     });
   });
 });

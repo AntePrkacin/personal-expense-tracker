@@ -6,10 +6,15 @@ import { useAddTransaction } from './AddTransactionProvider';
 
 // The "Add transaction" trigger, wherever it appears.
 //
-// Four exist today - the Dashboard header, the Dashboard insight teaser's unlock state, the
-// Transactions header, and the Transactions empty card (ADD-1, DSH-2, DSH-9, TRN-1, TRN-9) - and
-// ADD-1 names one more that has no host UI yet: the AI Insights empty state (INS-7, PET-44). It
-// adds a trigger by rendering this and nothing else, exactly as PET-25's teaser did.
+// Four exist today - the Dashboard header, the Dashboard summary banner's unlock state, the
+// Transactions header, and the Transactions empty card (ADD-1, DSH-2, DSH-9, TRN-1, TRN-9).
+//
+// **This comment named a fifth for two tickets and it is gone rather than built.** ADD-1's AI
+// Insights empty state (INS-7) landed at PET-42-43-44 and PET-73 deleted the screen it was on:
+// `/insights` is a chat now, and its own empty state offers a question rather than a transaction.
+// The Dashboard site is also no longer the teaser's - `InsightTeaserCard` was deleted with
+// `DashboardResponseDto.insight`, and `dashboard/InsightSummarySlot.tsx` renders the trigger in
+// its place, still by rendering this and nothing else.
 //
 // **A component rather than an `onClick` written out at each site**, for one reason worth
 // stating: the `'use client'` boundary. Every host is a Server Component, and a Server
@@ -22,11 +27,11 @@ type AddTransactionButtonProps = {
    * The visible label.
    *
    * A prop with a default rather than a hard-coded string, because the empty states draw it
-   * differently: TRN-9's card says "Add transaction" while DSH-9's teaser draws
-   * "Add transaction →", which PET-25 passes. INS-7 passes its own when it lands.
+   * differently: TRN-9's card says "Add transaction" while the Dashboard's summary banner draws
+   * "Add transaction →", which `InsightSummarySlot` passes.
    */
   label?: string;
-  /** The variant. Primary at all four sites, the teaser included; INS-7 may differ. */
+  /** The variant. Primary at all four sites, the summary banner included. */
   variant?: ButtonVariant;
 };
 

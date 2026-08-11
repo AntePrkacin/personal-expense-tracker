@@ -10,6 +10,8 @@ import * as AddCategoryModal from './(app)/transactions/categories/AddCategoryMo
 import * as AllocateBudgetModal from './(app)/transactions/categories/AllocateBudgetModal.stories';
 import * as CategoriesScreen from './(app)/transactions/categories/CategoriesScreen.stories';
 import * as EditCategoryModal from './(app)/transactions/categories/EditCategoryModal.stories';
+import * as AssistantChatScreen from './(app)/insights/AssistantChatScreen.stories';
+import * as AssistantHistoryScreen from './(app)/insights/AssistantHistoryScreen.stories';
 import * as SettingsScreen from './(app)/settings/SettingsScreen.stories';
 import * as MonthStartField from './(app)/settings/MonthStartField.stories';
 import * as ThemeField from './(app)/settings/ThemeField.stories';
@@ -149,6 +151,11 @@ const MODULES: [name: string, module: StoryModule][] = [
   // three states render only in this module, and rendering one under Jest really writes the
   // document attribute and the cookie - which is fine, because jsdom's document is per-suite.
   ['ThemeField', ThemeField as StoryModule],
+  // PET-73's two, and the registration is the half of that ticket this suite exists to catch:
+  // `storybook build` bundles a module without ever running a story, so a runtime throw ships
+  // through a green CI. Two screens have already shipped unregistered.
+  ['AssistantChatScreen', AssistantChatScreen as StoryModule],
+  ['AssistantHistoryScreen', AssistantHistoryScreen as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

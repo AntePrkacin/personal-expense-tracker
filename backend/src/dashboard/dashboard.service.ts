@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { CategoriesService } from '../categories/categories.service';
-import { InsightsService } from '../insights/insights.service';
 import { fromCents, toCents } from '../common/money';
 import { addDays, daysBetween, daysLeftInWindow } from '../common/month-window';
 import type { Period } from '../common/period-rules';
@@ -60,7 +59,6 @@ export class DashboardService {
     private readonly categories: CategoriesService,
     private readonly periods: PeriodService,
     private readonly transactions: TransactionsService,
-    private readonly insights: InsightsService,
   ) {}
 
   /**
@@ -121,13 +119,6 @@ export class DashboardService {
       period,
     );
 
-    // The teaser summary from the latest ready insight set, or null when none
-    // has been generated. Composed like everything else here rather than read
-    // from the insights tables directly. Sequential, not a Promise.all, for the
-    // same reason the rest of this method is: the embedded driver prefers one
-    // statement at a time on the cached connection.
-    const insight = await this.insights.latestReadySummary(userId);
-
     // The source of truth for the account-wide total, deliberately not a sum
     // of `categoryRows`' own `spent` fields even though the two now agree.
     // `CategoriesService.withSpend` folds orphaned spend into the fallback row,
@@ -173,7 +164,6 @@ export class DashboardService {
       weeklyBuckets: weeklyBucketsOf(period, periodTransactions),
       categories: categoriesOf(categoryRows, totalCents),
       recentTransactions: periodTransactions.slice(0, RECENT_LIMIT),
-      insight,
       period: { start: period.start, end: period.end, label: period.label },
     };
   }

@@ -1,4 +1,5 @@
 import { readDashboard } from '@/lib/dashboard';
+import { requireInsights } from '@/lib/insights';
 import { parsePeriodParam } from '@/lib/periodParams';
 import { readPeriods } from '@/lib/periods';
 import { requireProfile } from '@/lib/profile';
@@ -6,7 +7,9 @@ import { requireProfile } from '@/lib/profile';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
-import { InsightTeaserCard } from './InsightTeaserCard';
+import { InsightCardsSlot } from './InsightCardsSlot';
+import { InsightPollProvider } from './InsightPoll';
+import { InsightSummarySlot } from './InsightSummarySlot';
 import { RecentTransactionsCard } from './RecentTransactionsCard';
 import { TrendCard } from './TrendCard';
 
@@ -38,6 +41,25 @@ import { TrendCard } from './TrendCard';
 // non-current period, because the select is drawn in every state and an account with one period still
 // has to see which one it is looking at.
 //
+// **PET-73 adds a fourth read, `requireInsights()`, and moves the insight cards onto this
+// screen.** They used to be `/insights`'s, summarising the month - which is what this screen is
+// for - while this screen carried `InsightTeaserCard`, whose whole job was rendering the same
+// headline and body from `DashboardResponseDto.insight` and linking to the page that repeated
+// them. That field is removed, the teaser is deleted, and the banner and the two cards read
+// `GET /api/insights` directly.
+//
+// **It reverses PET-25's reasoning, and the reversal is worth recording.** That ticket argued
+// "PET-20's endpoint exists so that one call serves the whole screen" and rejected a second read on
+// those grounds. Two things answer it now. The dashboard summary is a snapshot with no way to
+// update itself, so an `insight` field on it goes stale exactly where the poll's whole purpose is
+// to not be. And PET-72 has already spent that argument itself, by adding `readPeriods()` beside
+// `readDashboard()` for the header's select. `docs/TODO.md` records it beside the generate-on-write
+// reversal rather than deleting PET-25's argument.
+//
+// **Only one read decides whether the session is alive.** `requireInsights()` joins as a read that
+// redirects and the others keep their existing policies - two opinions about a dead cookie on one
+// page is the shape the `/dashboard` to `/login` redirect loop came out of.
+//
 // No `export const dynamic`: the cookie read behind `readDashboard()` opts this route out of
 // static rendering on its own, exactly as it does everywhere else in the app.
 
@@ -52,40 +74,61 @@ export default async function DashboardPage({
   // `lib/periods.ts` records why those two cases differ.
   const period = parsePeriodParam(await searchParams);
 
-  // **Three reads, and the profile one is free.** `requireProfile()` is `cache()`-memoized per render
+  // **Four reads, and the profile one is free.** `requireProfile()` is `cache()`-memoized per render
   // pass and `(app)/layout.tsx` has already called it to gate this route, so it resolves against that
   // same promise rather than issuing a second `GET /api/profile`. None of them is awaited together:
   // `Promise.all` would start the others before the gate had a chance to redirect a dead session.
   const summary = await readDashboard(period);
   const { periods } = await readPeriods();
   const { currency } = await requireProfile();
+  const insights = await requireInsights();
   const isEmpty = summary.transactionCount === 0;
 
+  // **The screen's second condition, resolved once here and threaded as a boolean.** That is
+  // PET-26's rule for `isEmpty` and the reason this screen has two conditions rather than five.
+  //
+  // It exists because insights are generated for the **current period only** - `GET /api/insights`
+  // publishes no period at all, which is why the set's own `monthLabel` names the period a set was
+  // generated in rather than the one being viewed. Without it, navigating back a period would put
+  // October's analysis above September's figures on a screen where every other number is right.
+  //
+  // Compared against the period the *response* resolved rather than against a clock: the frontend
+  // host's zone is not the backend's, which `BudgetCard` and `TrendCard` each have a paragraph
+  // about. `periods` carries the flag already, so nothing here does arithmetic on a date.
+  const isCurrentPeriod = periods.find((entry) => entry.current)?.start === summary.period.start;
+
   return (
-    <DashboardScreen
-      period={summary.period}
-      periods={periods}
-      budgetCard={<BudgetCard {...summary} isEmpty={isEmpty} currency={currency} />}
-      trendCard={
-        <TrendCard
-          weeklyBuckets={summary.weeklyBuckets}
-          daysLeft={summary.daysLeft}
-          isEmpty={isEmpty}
-          currency={currency}
-        />
-      }
-      donutCard={
-        <CategoryDonut categories={summary.categories} spent={summary.spent} currency={currency} />
-      }
-      recentTransactionsCard={
-        <RecentTransactionsCard
-          recentTransactions={summary.recentTransactions}
-          categories={summary.categories}
-          isEmpty={isEmpty}
-          currency={currency}
-        />
-      }
-      insightCard={<InsightTeaserCard insight={summary.insight} isEmpty={isEmpty} />}
-    />
+    <InsightPollProvider set={insights} isCurrentPeriod={isCurrentPeriod} isEmpty={isEmpty}>
+      <DashboardScreen
+        period={summary.period}
+        periods={periods}
+        budgetCard={<BudgetCard {...summary} isEmpty={isEmpty} currency={currency} />}
+        trendCard={
+          <TrendCard
+            weeklyBuckets={summary.weeklyBuckets}
+            daysLeft={summary.daysLeft}
+            isEmpty={isEmpty}
+            currency={currency}
+          />
+        }
+        donutCard={
+          <CategoryDonut
+            categories={summary.categories}
+            spent={summary.spent}
+            currency={currency}
+          />
+        }
+        recentTransactionsCard={
+          <RecentTransactionsCard
+            recentTransactions={summary.recentTransactions}
+            categories={summary.categories}
+            isEmpty={isEmpty}
+            currency={currency}
+          />
+        }
+        insightSummary={<InsightSummarySlot />}
+        insightCards={<InsightCardsSlot />}
+      />
+    </InsightPollProvider>
   );
 }

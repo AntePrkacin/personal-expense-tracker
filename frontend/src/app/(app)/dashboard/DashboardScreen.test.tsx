@@ -37,7 +37,8 @@ const SLOTS = {
   trendCard: SLOT('trend-card', 'Trend'),
   donutCard: SLOT('donut-card', 'Donut'),
   recentTransactionsCard: SLOT('recent-card', 'Recent'),
-  insightCard: SLOT('insight-card', 'Insight'),
+  insightSummary: SLOT('insight-summary', 'Summary'),
+  insightCards: SLOT('insight-cards', 'Cards'),
   period: PERIOD,
   periods: PERIODS,
 };
@@ -71,46 +72,54 @@ describe('the header', () => {
   });
 });
 
-describe('the five card slots', () => {
+// **Six slots since PET-73, not five.** `insightCard` - the teaser reading the dashboard
+// response's own `insight` field - was replaced by two: the summary banner at the top of the wide
+// column, and the rule-based insight cards under the donut in the narrow one. Both read
+// `GET /api/insights` through one client owner.
+describe('the six card slots', () => {
+  const ALL_SLOTS = [
+    'insight-summary',
+    'budget-card',
+    'trend-card',
+    'donut-card',
+    'recent-card',
+    'insight-cards',
+  ];
+
   it('renders every one of them', () => {
     renderScreen(<DashboardScreen {...SLOTS} />);
 
-    expect(screen.getByTestId('budget-card')).toBeInTheDocument();
-    expect(screen.getByTestId('trend-card')).toBeInTheDocument();
-    expect(screen.getByTestId('donut-card')).toBeInTheDocument();
-    expect(screen.getByTestId('recent-card')).toBeInTheDocument();
-    expect(screen.getByTestId('insight-card')).toBeInTheDocument();
+    for (const testId of ALL_SLOTS) {
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+    }
   });
 
-  it('puts all five inside main, below the header', () => {
+  it('puts all six inside main, below the header', () => {
     const { container } = renderScreen(<DashboardScreen {...SLOTS} />);
     const main = container.querySelector('main');
 
-    for (const testId of [
-      'budget-card',
-      'trend-card',
-      'donut-card',
-      'recent-card',
-      'insight-card',
-    ]) {
+    for (const testId of ALL_SLOTS) {
       expect(main).toContainElement(screen.getByTestId(testId));
     }
   });
 
-  it('keeps the budget, trend and recent cards in the left column, in order', () => {
+  it('leads the left column with the banner, then budget, trend and recent, in order', () => {
+    // The banner is the month's analysis in prose, which is what the rest of this column then
+    // breaks down - so it leads rather than sitting where the teaser did.
     renderScreen(<DashboardScreen {...SLOTS} />);
     const left = screen.getByTestId('budget-card').parentElement;
 
-    expect(left?.children[0]).toBe(screen.getByTestId('budget-card'));
-    expect(left?.children[1]).toBe(screen.getByTestId('trend-card'));
-    expect(left?.children[2]).toBe(screen.getByTestId('recent-card'));
+    expect(left?.children[0]).toBe(screen.getByTestId('insight-summary'));
+    expect(left?.children[1]).toBe(screen.getByTestId('budget-card'));
+    expect(left?.children[2]).toBe(screen.getByTestId('trend-card'));
+    expect(left?.children[3]).toBe(screen.getByTestId('recent-card'));
   });
 
-  it('keeps the donut and insight cards in the right column, in order', () => {
+  it('keeps the donut and the insight cards in the right column, in order', () => {
     renderScreen(<DashboardScreen {...SLOTS} />);
     const right = screen.getByTestId('donut-card').parentElement;
 
     expect(right?.children[0]).toBe(screen.getByTestId('donut-card'));
-    expect(right?.children[1]).toBe(screen.getByTestId('insight-card'));
+    expect(right?.children[1]).toBe(screen.getByTestId('insight-cards'));
   });
 });

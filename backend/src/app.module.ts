@@ -5,6 +5,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule, seconds } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AssistantModule } from './assistant/assistant.module';
 import { AuthModule } from './auth/auth.module';
 import { trackByEmail, trackByIp, trackByUser } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
@@ -25,6 +26,12 @@ const DEFAULT_IP_RATE_LIMIT = 30;
 const DEFAULT_AUTH_RATE_TTL_S = 900;
 const DEFAULT_SCAN_RATE_LIMIT = 10;
 const DEFAULT_SCAN_RATE_TTL_S = 3600;
+// Low on purpose, and lower per hour than the scan limit is: one chat turn costs
+// roughly 40k input tokens where a scan costs a few thousand, so a single account
+// can reach the free tier's tokens-per-minute ceiling in a way scanning never
+// made possible. See the `chat` throttler below.
+const DEFAULT_CHAT_RATE_LIMIT = 20;
+const DEFAULT_CHAT_RATE_TTL_S = 3600;
 
 @Module({
   imports: [
@@ -70,14 +77,32 @@ const DEFAULT_SCAN_RATE_TTL_S = 3600;
     // AuthModule's own, moved here byte-identical at PET-59; `scan` is the
     // third, for POST /api/transactions/scan, keyed on the session user id
     // rather than IP because the budget it protects - the project's shared
-    // Gemini quota - is per-user by construction. Every route not named
-    // `scan` must carry `@SkipThrottle({ scan: true })`, and `/scan` itself
-    // must skip `email` and `ip`: `ThrottlerGuard` runs every configured
-    // throttler on a guarded route, so leaving either skip off would either
-    // apply the scan limiter where it makes no sense or run the email
-    // tracker's `no-email:<ip>` fallback (req.body is undefined on a
-    // multipart request, guards running ahead of pipes) against a single
+    // Gemini quota - is per-user by construction. `chat` is PET-73's fourth,
+    // for POST /api/assistant/messages, keyed the same way and against the
+    // same budget. Every route must skip every throttler it is not named by:
+    // `ThrottlerGuard` runs every configured throttler on a guarded route, so
+    // leaving a skip off would either apply the wrong limiter or run the email
+    // tracker's `no-email:<ip>` fallback (req.body carries no `email` on
+    // either of these routes, and guards run ahead of pipes) against a single
     // shared bucket.
+    //
+    // **`chat` is not folded into `scan`, deliberately.** Both protect the
+    // same shared Gemini quota, but the budgets differ by an order of
+    // magnitude in opposite directions: a scan is one photo per logged
+    // expense, and a conversation is ten to thirty turns in five minutes. A
+    // shared bucket either starves the chat or opens the scan cap, and a burst
+    // of chat turns would silently disable receipt scanning mid-form with no
+    // message that could explain it.
+    //
+    // **What either limiter buys, stated as honestly as the scan one is.** The
+    // store is in-memory and the key is per user, so this buys fairness and
+    // blast radius rather than a cap on the project's shared free-tier quota -
+    // one account in a retry loop cannot outrun everybody else, and that is
+    // all. What is new with `chat` is the magnitude: one turn costs roughly
+    // 40k input tokens and nothing is cached, so a single account can now
+    // reach the free tier's tokens-per-minute ceiling in a way scanning never
+    // made possible. That is the argument for a low limit, and it extends the
+    // aggregate-cap entry in docs/TODO.md rather than opening a second one.
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -90,6 +115,9 @@ const DEFAULT_SCAN_RATE_TTL_S = 3600;
         );
         const scanTtl = seconds(
           config.get<number>('SCAN_RATE_TTL_S', DEFAULT_SCAN_RATE_TTL_S),
+        );
+        const chatTtl = seconds(
+          config.get<number>('CHAT_RATE_TTL_S', DEFAULT_CHAT_RATE_TTL_S),
         );
 
         return {
@@ -121,6 +149,15 @@ const DEFAULT_SCAN_RATE_TTL_S = 3600;
               ttl: scanTtl,
               getTracker: trackByUser,
             },
+            {
+              name: 'chat',
+              limit: config.get<number>(
+                'CHAT_RATE_LIMIT',
+                DEFAULT_CHAT_RATE_LIMIT,
+              ),
+              ttl: chatTtl,
+              getTracker: trackByUser,
+            },
           ],
         };
       },
@@ -135,6 +172,10 @@ const DEFAULT_SCAN_RATE_TTL_S = 3600;
     CategoriesModule,
     DashboardModule,
     InsightsModule,
+    // After InsightsModule and deliberately separate from it: a persisted set
+    // generated on a schedule and a conversation held with a user share a
+    // vocabulary and nothing else. See src/assistant/CLAUDE.md.
+    AssistantModule,
   ],
   controllers: [AppController],
   providers: [

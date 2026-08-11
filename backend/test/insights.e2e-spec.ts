@@ -371,8 +371,13 @@ describe('Insight endpoints (e2e)', () => {
     expect(body.generatedAt).toBe('2025-10-20T09:00:00.000Z');
   });
 
-  it('feeds the dashboard teaser from the newest ready set', async () => {
-    await seedReadySet('Older set', new Date('2025-09-20T09:00:00.000Z'));
+  it('publishes nothing about insights on the dashboard read', async () => {
+    // Two cases lived here until PET-73 - the teaser fed from the newest ready
+    // set, and null when nothing had generated. The field is gone: the insight
+    // cards moved onto the Dashboard and poll `GET /api/insights` themselves,
+    // because this response is a snapshot with no way to update itself. Pinned
+    // as an absence rather than deleted, since the seeded sets above are exactly
+    // what would make a leftover field come back non-null.
     await seedReadySet(
       'You are on track this month',
       new Date('2025-10-20T09:00:00.000Z'),
@@ -380,16 +385,7 @@ describe('Insight endpoints (e2e)', () => {
 
     const body = dashboardBody(await dashboard().expect(200));
 
-    expect(body.insight).toEqual({
-      headline: 'You are on track this month',
-      body: "You've spent $1,240 of your $2,000 budget.",
-    });
-  });
-
-  it('gives the dashboard teaser null when nothing has generated', async () => {
-    const body = dashboardBody(await dashboard().expect(200));
-
-    expect(body.insight).toBeNull();
+    expect(body).not.toHaveProperty('insight');
   });
 
   it('does not leak one user’s set to another', async () => {

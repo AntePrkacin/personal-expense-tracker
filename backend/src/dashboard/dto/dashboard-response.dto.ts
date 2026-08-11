@@ -3,7 +3,6 @@ import {
   COLOUR_TOKENS,
   ICON_NAMES,
 } from '../../database/central/template-tokens';
-import { InsightSummaryDto } from '../../insights/dto/insight-set-response.dto';
 import { PeriodSummaryDto } from '../../periods/dto/period-response.dto';
 import { TransactionResponseDto } from '../../transactions/dto/transaction-response.dto';
 
@@ -158,14 +157,6 @@ export class DashboardResponseDto {
       'Up to 3 most recent transactions in the current period, newest first.',
   })
   recentTransactions!: TransactionResponseDto[];
-
-  @ApiProperty({
-    type: InsightSummaryDto,
-    nullable: true,
-    description:
-      'The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). **Always the latest set**, not one for the period being viewed: insights are generated for the current period only.',
-  })
-  insight!: InsightSummaryDto | null;
 
   /**
    * Which period every figure above is for.

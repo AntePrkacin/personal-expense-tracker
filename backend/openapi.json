@@ -1424,6 +1424,209 @@
           "insights"
         ]
       }
+    },
+    "/api/assistant/messages": {
+      "post": {
+        "description": "Creates a conversation when `sessionId` is omitted and continues one when it is present, answering **201** with the stored question, the reply and the session both belong to. **Nothing is persisted unless the reply arrives**, so a failed, timed-out or cancelled turn stores neither the question nor an answer. `truncation` is non-null only when the account has more transactions than fit one prompt, and says how many of how many were sent and how far back the assistant could see. **503** means the assistant is not configured on this deployment, **504** that the model call did not finish in time - retrying the identical question is the right next move there, which is why it is distinct from the 503.",
+        "operationId": "AssistantController_send",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendMessageResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. Refused by the throttler guard, which runs before the request body is ever validated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The feature is not configured on this deployment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "A downstream call did not finish in time. Safe to retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ask the assistant a question about your spending.",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/sessions": {
+      "get": {
+        "description": "A wrapper object rather than a bare array, so a future field has somewhere to go. Carries no messages; read one conversation for those.",
+        "operationId": "AssistantController_sessions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSessionsResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your conversations, newest activity first.",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/sessions/{id}": {
+      "get": {
+        "description": "Messages come back in render order, oldest first. **404** means the conversation does not exist - unambiguously, since this route names exactly one resource. Cross-user isolation is structural: another account's id simply does not exist in your database.",
+        "operationId": "AssistantController_conversation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantConversationResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `message` is the array of field errors produced by the global ValidationPipe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "One conversation with its messages, for resuming it.",
+        "tags": [
+          "assistant"
+        ]
+      }
     }
   },
   "info": {
@@ -3061,23 +3264,6 @@
           "percent"
         ]
       },
-      "InsightSummaryDto": {
-        "type": "object",
-        "properties": {
-          "headline": {
-            "type": "string",
-            "example": "You are on track this month"
-          },
-          "body": {
-            "type": "string",
-            "example": "You've spent $1,240 of your $2,000 budget with 11 days to go."
-          }
-        },
-        "required": [
-          "headline",
-          "body"
-        ]
-      },
       "DashboardResponseDto": {
         "type": "object",
         "properties": {
@@ -3136,16 +3322,6 @@
               "$ref": "#/components/schemas/TransactionResponseDto"
             }
           },
-          "insight": {
-            "nullable": true,
-            "description": "The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). **Always the latest set**, not one for the period being viewed: insights are generated for the current period only.",
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/InsightSummaryDto"
-              }
-            ]
-          },
           "period": {
             "description": "The period every figure here covers - the current one unless `?period=` asked for another. Use `label` for the screen’s overline rather than deriving a month name from `start`.",
             "allOf": [
@@ -3166,8 +3342,24 @@
           "weeklyBuckets",
           "categories",
           "recentTransactions",
-          "insight",
           "period"
+        ]
+      },
+      "InsightSummaryDto": {
+        "type": "object",
+        "properties": {
+          "headline": {
+            "type": "string",
+            "example": "You are on track this month"
+          },
+          "body": {
+            "type": "string",
+            "example": "You've spent $1,240 of your $2,000 budget with 11 days to go."
+          }
+        },
+        "required": [
+          "headline",
+          "body"
         ]
       },
       "InsightCardDto": {
@@ -3244,6 +3436,200 @@
           "summary",
           "insights",
           "generatedAt"
+        ]
+      },
+      "SendMessageDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "example": "How much did I spend on groceries last month?",
+            "description": "The question. Trimmed, so a whitespace-only message is a 400 rather than a turn. The cap exists so a pasted novel cannot be what blows the model context; the composer restates it client-side, because `maxLength` reaches no generated type and the resulting 400 would otherwise produce advice the user cannot act on."
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The session to continue. Omit it to start one; the response carries the id that was created. An id naming no live session of yours is a **404**, unambiguously - this body references exactly one resource by id."
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "AssistantMessageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "example": "You spent 312.40 EUR on Groceries in August 2026."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO 8601."
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "content",
+          "createdAt"
+        ]
+      },
+      "AssistantTruncationDto": {
+        "type": "object",
+        "properties": {
+          "included": {
+            "type": "number",
+            "example": 3000,
+            "description": "How many transactions were sent."
+          },
+          "total": {
+            "type": "number",
+            "example": 4210,
+            "description": "How many the account has."
+          },
+          "oldestIncludedDate": {
+            "type": "string",
+            "example": "2024-02-09",
+            "description": "The oldest date the assistant could see. Anything earlier is missing from its answer."
+          }
+        },
+        "required": [
+          "included",
+          "total",
+          "oldestIncludedDate"
+        ]
+      },
+      "SendMessageResponseDto": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "example": "How much did I spend on groceries?",
+            "description": "Derived from the first message of the session and never rewritten."
+          },
+          "message": {
+            "$ref": "#/components/schemas/AssistantMessageDto"
+          },
+          "reply": {
+            "$ref": "#/components/schemas/AssistantMessageDto"
+          },
+          "truncation": {
+            "nullable": true,
+            "description": "Null whenever the whole history fitted, which is every account this project has.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AssistantTruncationDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "title",
+          "message",
+          "reply",
+          "truncation"
+        ]
+      },
+      "AssistantSessionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "example": "How much did I spend on groceries?"
+          },
+          "lastMessageAt": {
+            "type": "string",
+            "description": "ISO 8601, when the last completed turn landed. The list orders on it."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO 8601."
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "lastMessageAt",
+          "createdAt"
+        ]
+      },
+      "AssistantSessionsResponseDto": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantSessionDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "example": 3,
+            "description": "How many conversations there are. Equal to `sessions.length` while there is no pagination, and returned as its own field so a future page size cannot silently turn it into a page count - the reasoning `GET /transactions` already records for its own `total`."
+          }
+        },
+        "required": [
+          "sessions",
+          "total"
+        ]
+      },
+      "AssistantConversationResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "example": "How much did I spend on groceries?"
+          },
+          "lastMessageAt": {
+            "type": "string",
+            "description": "ISO 8601, when the last completed turn landed. The list orders on it."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO 8601."
+          },
+          "messages": {
+            "description": "In render order, oldest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantMessageDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "lastMessageAt",
+          "createdAt",
+          "messages"
         ]
       }
     }

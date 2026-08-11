@@ -573,10 +573,6 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **The `/api/chat` route handler.** The env template deliberately declares no model-provider
-  key. Add whichever variable your provider needs when you build the route, server-side only and
-  never behind `NEXT_PUBLIC_`. Note this is not the repo's _first_ route handler -
-  `app/auth/verify/route.ts` is, and it is the one to copy the shape from.
 - **The shell's content.** The `(app)` group, the four routes and the page header exist, every
   screen renders its designed header, and the shell is really gated and really shows the signed-in
   user's profile as of PET-52. What is missing is everything below the header on **one** of the
@@ -668,6 +664,19 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   would otherwise submit through a form that does not carry them. The Save button beneath is
   page-level rather than card-level for exactly that reason, and `settings/SettingsForm.tsx` records
   what PET-47 has to touch to join it.
+  **PET-73 moved the insight cards onto the Dashboard and turned `/insights` into an assistant
+  chat, which changes two sentences above and adds the route handler this list used to reserve.**
+  The Dashboard's fifth card is no longer `InsightTeaserCard`: the summary banner leads the wide
+  column and the two rule-based cards sit under the donut, both reading `GET /api/insights` through
+  one client-side poll, so `DashboardResponseDto.insight` is deleted. `/insights` is a chat with a
+  History tab beside it, and the app has a **fourth route handler** -
+  `app/api/assistant/messages/route.ts` - which is what the `/api/chat` bullet this list carried was
+  reserving; it is deleted rather than resolved-without, and it exists for a **third** reason
+  neither of the other two covers: a cancellable long write. Two things about the pair are worth
+  knowing before touching either. The banner and both cards **render nothing on a period navigated
+  back to**, because insights describe the current period only. And the assistant screens are the
+  **first in this app with no Figma frame at all** bar the verify-failure screen and the error
+  boundary, so every string on them is invented and joins what A29 owes a designer.
   **PET-47 built the second of those three, so read "only the first is here" as dated.** The
   **Preferences card** is real and really writes: `components/BudgetField.tsx` (the monthly budget
   joined to a live `USD`/`EUR`/`GBP` picker) over `settings/MonthStartField.tsx` (28 days, capped

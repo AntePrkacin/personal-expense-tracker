@@ -36,9 +36,11 @@ Backend variables:
 | `AUTH_RATE_LIMIT`        | `5`                     | Auth requests per window, per submitted address       |
 | `AUTH_RATE_IP_LIMIT`     | `30`                    | Auth requests per window, per caller IP               |
 | `AUTH_RATE_TTL_S`        | `900`                   | Window length in seconds, shared by both limiters     |
-| `GEMINI_API_KEY`         | -                       | Google AI Studio key for receipt scanning; unset means 503 |
+| `GEMINI_API_KEY`         | -                       | Google AI Studio key for receipt scanning and the assistant chat; unset means 503 from both |
 | `SCAN_RATE_LIMIT`        | `10`                    | Receipt scans per window, per session user id         |
 | `SCAN_RATE_TTL_S`        | `3600`                  | Window length in seconds for the scan limiter         |
+| `CHAT_RATE_LIMIT`        | `20`                    | Assistant chat turns per window, per session user id  |
+| `CHAT_RATE_TTL_S`        | `3600`                  | Window length in seconds for the chat limiter         |
 | `TRUST_PROXY_HOPS`       | `0`                     | Reverse proxies in front; 0 means `req.ip` is the socket |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
@@ -65,8 +67,9 @@ bundle and is therefore public forever.
 ## Getting a `GEMINI_API_KEY`
 
 The one variable in the table you cannot get from another part of this repo, and the only one
-whose absence disables a feature rather than a mode. Receipt scanning is off without it and the
-rest of the app is unaffected, so skipping this is a legitimate way to run the project.
+whose absence disables a feature rather than a mode. Receipt scanning and the assistant chat are
+both off without it and the rest of the app is unaffected, so skipping this is a legitimate way to
+run the project.
 
 1. Sign in to [Google AI Studio](https://aistudio.google.com/apikey) with any Google account.
 2. **Create API key**, then pick or let it create a Google Cloud project. A new account is put on
