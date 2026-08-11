@@ -82,6 +82,7 @@ describe('the rows (AC1, AC3)', () => {
     withToday(() => {
       render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={THREE_ROWS}
           categories={CATEGORIES}
           isEmpty={false}
@@ -100,6 +101,7 @@ describe('the rows (AC1, AC3)', () => {
     withToday(() => {
       render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={[THREE_ROWS[0]!]}
           categories={CATEGORIES}
           isEmpty={false}
@@ -116,6 +118,7 @@ describe('the caption (AC2, AC3)', () => {
     withToday(() => {
       render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={THREE_ROWS}
           categories={CATEGORIES}
           isEmpty={false}
@@ -130,6 +133,7 @@ describe('the caption (AC2, AC3)', () => {
     withToday(() => {
       render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={THREE_ROWS}
           categories={CATEGORIES}
           isEmpty={false}
@@ -144,6 +148,7 @@ describe('the caption (AC2, AC3)', () => {
     withToday(() => {
       render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={THREE_ROWS}
           categories={CATEGORIES}
           isEmpty={false}
@@ -160,6 +165,7 @@ describe('the tile and the amount (AC4)', () => {
     withToday(() => {
       const { container } = render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={THREE_ROWS}
           categories={CATEGORIES}
           isEmpty={false}
@@ -186,6 +192,7 @@ describe('the tile and the amount (AC4)', () => {
     withToday(() => {
       const { container } = render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={THREE_ROWS}
           categories={CATEGORIES}
           isEmpty={false}
@@ -209,6 +216,7 @@ describe('the tile and the amount (AC4)', () => {
     withToday(() => {
       const { container } = render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={[THREE_ROWS[0]!]}
           categories={[{ ...CATEGORIES[0]!, icon: null }]}
           isEmpty={false}
@@ -225,6 +233,7 @@ describe('the tile and the amount (AC4)', () => {
     withToday(() => {
       render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={THREE_ROWS}
           categories={CATEGORIES}
           isEmpty={false}
@@ -246,6 +255,7 @@ describe('an unresolved category', () => {
     withToday(() => {
       render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={[{ ...THREE_ROWS[0]!, categoryId: 'no-such-category' }]}
           categories={CATEGORIES}
           isEmpty={false}
@@ -261,6 +271,7 @@ describe('an unresolved category', () => {
     withToday(() => {
       const { container } = render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={[{ ...THREE_ROWS[0]!, categoryId: 'no-such-category' }]}
           categories={CATEGORIES}
           isEmpty={false}
@@ -278,6 +289,7 @@ describe('"View all" (AC5)', () => {
     withToday(() => {
       render(
         <RecentTransactionsCard
+          currency="USD"
           recentTransactions={THREE_ROWS}
           categories={CATEGORIES}
           isEmpty={false}
@@ -295,7 +307,12 @@ describe('"View all" (AC5)', () => {
 describe('the empty state (AC3, PET-26)', () => {
   it('draws the icon and its copy rather than an empty list', () => {
     render(
-      <RecentTransactionsCard recentTransactions={[]} categories={CATEGORIES} isEmpty={true} />,
+      <RecentTransactionsCard
+        currency="USD"
+        recentTransactions={[]}
+        categories={CATEGORIES}
+        isEmpty={true}
+      />,
     );
 
     expect(screen.getByText('No transactions yet')).toBeInTheDocument();
@@ -310,6 +327,7 @@ describe('the empty state (AC3, PET-26)', () => {
     // than re-deriving its own opinion from the array - proven by handing it real rows anyway.
     render(
       <RecentTransactionsCard
+        currency="USD"
         recentTransactions={THREE_ROWS}
         categories={CATEGORIES}
         isEmpty={true}
@@ -326,7 +344,12 @@ describe('the empty state (AC3, PET-26)', () => {
     // would tell them they have no transactions *and* delete the one route from this card to
     // the list where their history actually is.
     render(
-      <RecentTransactionsCard recentTransactions={[]} categories={CATEGORIES} isEmpty={true} />,
+      <RecentTransactionsCard
+        currency="USD"
+        recentTransactions={[]}
+        categories={CATEGORIES}
+        isEmpty={true}
+      />,
     );
 
     expect(screen.getByRole('link', { name: 'View all' })).toHaveAttribute('href', '/transactions');

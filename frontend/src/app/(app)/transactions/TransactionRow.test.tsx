@@ -2,7 +2,11 @@ import { render, screen } from '@testing-library/react';
 import { ShoppingBasket } from 'lucide-react';
 
 import { CATEGORY_TILE_NEUTRAL } from '../../../components/ui/categoryColour';
-import { formatIsoDayMonth, formatNegative } from '../../../lib/format';
+import { formatIsoDayMonth } from '../../../lib/format';
+import { moneyFormatters } from '../../../lib/money';
+
+/** The formatters the row is given, so no assertion restates a shipped money string. */
+const { formatNegative } = moneyFormatters('USD');
 import type { Transaction } from '../../../lib/transactions';
 
 import { DeleteTransactionProvider } from '../DeleteTransactionProvider';
@@ -71,7 +75,12 @@ function renderRow(
       <EditTransactionProvider>
         <table>
           <tbody>
-            <TransactionRow transaction={transaction} category={category} query={query} />
+            <TransactionRow
+              currency="USD"
+              transaction={transaction}
+              category={category}
+              query={query}
+            />
           </tbody>
         </table>
       </EditTransactionProvider>

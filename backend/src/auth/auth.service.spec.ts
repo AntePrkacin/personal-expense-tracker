@@ -15,17 +15,17 @@ const GROCERIES_ID = '0198f2b0-0000-7000-8000-000000000001';
 const TRANSPORT_ID = '0198f2b0-0000-7000-8000-000000000002';
 
 const dto: RegisterDto = {
-  firstName: 'Marko',
-  lastName: 'Kovac',
+  fullName: 'Marko Kovac',
   email: 'marko@email.com',
   monthlyBudget: 2000.5,
   categories: [GROCERIES_ID, TRANSPORT_ID],
 };
 
 const payload = {
-  firstName: 'Marko',
-  lastName: 'Kovac',
-  currency: 'USD',
+  fullName: 'Marko Kovac',
+  // EUR since PET-72 flipped the default; the literal here is the DTO default
+  // applied, which is what `resolveRegistration` stashes.
+  currency: 'EUR',
   monthlyBudget: 2000.5,
   monthStartDay: 1,
   categories: [GROCERIES_ID, TRANSPORT_ID],
@@ -92,7 +92,7 @@ describe('AuthService', () => {
 
       expect(createPending).toHaveBeenCalledWith(
         'marko@email.com',
-        expect.objectContaining({ currency: 'USD', monthStartDay: 1 }),
+        expect.objectContaining({ currency: 'EUR', monthStartDay: 1 }),
       );
     });
 
@@ -112,7 +112,7 @@ describe('AuthService', () => {
     it('overwrites the payload of an account that was never verified', async () => {
       findByEmail.mockResolvedValue({
         id: 'existing-id',
-        onboardingPayload: { ...payload, firstName: 'Stale' },
+        onboardingPayload: { ...payload, fullName: 'Stale' },
       });
 
       await service.register({ ...dto });

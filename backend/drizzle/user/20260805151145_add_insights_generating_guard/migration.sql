@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX `insight_sets_generating_idx` ON `insight_sets` (`status`) WHERE "insight_sets"."status" = 'generating';

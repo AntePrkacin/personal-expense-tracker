@@ -56,10 +56,18 @@ export type FixtureTransaction = {
   amountCents: number;
 };
 
-/** The profile the account is provisioned with, in minor units. */
+/**
+ * The profile the account is provisioned with, in minor units.
+ *
+ * `monthlyBudgetCents` and `monthStartDay` are still here and still single
+ * values, but they now describe what the account is **seeded** with rather than
+ * columns it holds: the seeder writes them as the first `budget_history` and
+ * `period_rules` rows. The showcase account has one budget and one pay day for the
+ * whole of its history, which is what makes its year of transactions comparable
+ * month to month - a schedule change mid-fixture would be a different demo.
+ */
 export type FixtureProfile = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   currency: string;
   monthlyBudgetCents: number;
   monthStartDay: number;

@@ -2,7 +2,8 @@ import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { CATEGORY_TILE_NEUTRAL } from '@/components/ui/categoryColour';
-import { formatIsoDayMonth, formatNegative } from '@/lib/format';
+import { formatIsoDayMonth } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { Transaction } from '@/lib/transactions';
 
 import { TransactionRowMenu } from './TransactionRowMenu';
@@ -47,9 +48,19 @@ type TransactionRowProps = {
    * breadcrumb return the user to the list they were looking at instead of the default one.
    */
   query: string;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
-export function TransactionRow({ transaction, category, query }: TransactionRowProps) {
+export function TransactionRow({ transaction, category, query, currency }: TransactionRowProps) {
+  const { formatNegative } = moneyFormatters(currency);
+
   return (
     <tr>
       {/* No padding and no width classes anywhere in this file: daisyUI's `table` sets the

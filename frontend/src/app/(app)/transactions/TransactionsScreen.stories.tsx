@@ -50,8 +50,12 @@ export default meta;
 
 type Story = StoryObj<typeof TransactionsScreen>;
 
-const EMPTY: TransactionsView = { state: 'empty', total: 0 };
-const NO_RESULTS: TransactionsView = { state: 'noResults', total: 0 };
+// The period the header names, which is the backend's own label as of PET-72 rather than something
+// this screen derives - so a story shows the frame's own "October 2025" with no clock involved.
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025' };
+
+const EMPTY: TransactionsView = { state: 'empty', total: 0, period: PERIOD };
+const NO_RESULTS: TransactionsView = { state: 'noResults', total: 0, period: PERIOD };
 
 /**
  * The column every state shares, supplying the height the empty card centres inside.
@@ -71,7 +75,7 @@ function Frame({ view }: { view: TransactionsView }) {
       {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
           gutter the `(app)` shell owns, since neither wraps a story. */}
       <div className="bg-base-200 flex h-screen flex-col px-4 sm:px-6 lg:px-10">
-        <TransactionsScreen view={view} filters={{}} />
+        <TransactionsScreen view={view} filters={{}} categoryCount={8} />
       </div>
     </AddTransactionProvider>
   );

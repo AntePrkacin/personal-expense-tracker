@@ -11,68 +11,16 @@ import { dateFromIso, partsFromIso, todayIsoDate } from './date';
 // is ever a number. None of them is a property of the data, so they live
 // here, once, instead of in every screen that shows them.
 
-/**
- * U+2212 MINUS SIGN, which is what the Figma frames use, not U+002D
- * HYPHEN-MINUS.
- *
- * This substitution is deliberate and has to stay. `Intl.NumberFormat` emits
- * U+002D, so "simplifying" formatNegative down to a plain `Intl` call with a
- * negative input silently swaps the glyph. The test failure then reads
- * `expected "−$24.00", received "-$24.00"`, which is close to invisible in a
- * terminal. Screen readers also announce U+2212 as "minus" while U+002D is
- * ambiguous, so the design's choice is the accessible one too.
- */
-const MINUS = '−';
-
-// USD only for now. The currency picked during onboarding (02 Setup) is not
-// stored yet; when it is, it gets threaded through here rather than into the
-// components.
-const CURRENCY = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-});
-
-/** Formats an amount as currency, e.g. `1240` -> `"$1,240.00"`. */
-export function formatCurrency(amount: number): string {
-  return CURRENCY.format(amount).replace('-', MINUS);
-}
-
-/**
- * A second `Intl` instance at zero fraction digits, `docs/TODO.md`'s cents item answered
- * (PET-21): the design draws every aggregate figure whole - `$1,240`, not `$1,240.00` - while
- * every per-transaction amount keeps its cents through `formatCurrency`/`formatNegative`
- * above. It **rounds**, which is `Intl`'s own behaviour at zero fraction digits and the right
- * one here: it keeps a whole-dollar aggregate as close to the real total as one dollar
- * allows, where truncating would bias every figure on the dashboard downwards.
- */
-const CURRENCY_WHOLE = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-});
-
-/**
- * Formats an amount as whole-dollar currency, e.g. `1240` -> `"$1,240"`.
- *
- * For an aggregate a user reconciles by eye - a budget readout, a chart bar, a legend total -
- * never for a per-transaction amount, which is what `formatCurrency` and `formatNegative` stay
- * for. Every caller in this epic hands it a non-negative figure; the `MINUS` substitution below
- * is defensive, matching `formatCurrency`'s own, rather than a sign this app draws anywhere.
- */
-export function formatWhole(amount: number): string {
-  return CURRENCY_WHOLE.format(amount).replace('-', MINUS);
-}
-
-/**
- * Formats a stored (positive) amount as the negative value the UI shows,
- * e.g. `24` -> `"−$24.00"`.
- *
- * Zero is returned unsigned: a negative zero reads as a bug, not as a debit.
- */
-export function formatNegative(amount: number): string {
-  const magnitude = Math.abs(amount);
-  return magnitude === 0 ? formatCurrency(0) : `${MINUS}${formatCurrency(magnitude)}`;
-}
+// **Money is not here any more.** `lib/money.ts` owns `formatCurrency`, `formatWhole` and
+// `formatNegative`, because PET-47 made them take the profile's currency and a formatter bound to
+// one currency at module scope is exactly what that ticket removed. A Server Component calls
+// `moneyFormatters(currency)` with a currency threaded from its page; a Client Component calls
+// `useMoney()`. Nothing re-exports the old default-bound trio from here: the plan expected
+// `app/DecorativePanel.tsx` to keep needing them, and it turned out that file draws its figures as
+// literal strings and only *mentions* `formatCurrency` in a comment saying why.
+//
+// What stays is the amount **field** - `formatAmountInput`, `parseAmountInput` and `amountCaret` -
+// which is deliberately currency-blind and must not follow the currency. That module records why.
 
 /**
  * The first character of a name, uppercased, or `''` for an empty one.
@@ -91,31 +39,39 @@ function firstLetter(name: string): string {
 }
 
 /**
- * Avatar initials, e.g. `('Marko', 'Kovač')` -> `"MK"`.
+ * Avatar initials, e.g. `'Marko Kovač'` -> `"MK"`.
  *
  * Derived, never stored: SET-2 says the initials come from the name and that no
  * upload exists, and the tech spec's data model marks `avatarInitials` as
  * derived. SET-6 then requires the sidebar footer and the Settings avatar to
  * agree, which is what makes one shared function the point rather than a
  * convenience.
+ *
+ * **One argument since PET-72**, which collapsed the profile's two name fields
+ * into one. It splits on whitespace and takes the first letter of the first two
+ * words, so "Marko Kovač" still reads "MK" and a single-word display name reads
+ * as one letter rather than as a letter and a blank.
  */
-export function initials(firstName: string, lastName: string): string {
-  return `${firstLetter(firstName)}${firstLetter(lastName)}`;
+export function initials(fullName: string): string {
+  const [first = '', second = ''] = fullName.trim().split(/\s+/);
+  return `${firstLetter(first)}${firstLetter(second)}`;
 }
 
 /**
- * The shortened name the sidebar footer shows, e.g. `('Marko', 'Kovač')` ->
+ * The shortened name the sidebar footer shows, e.g. `'Marko Kovač'` ->
  * `"Marko K."`.
  *
- * An empty last name yields the first name alone. Formatting it as designed
- * would leave a dangling `"Marko ."`, and the abbreviation mark has nothing to
- * abbreviate. `RegisterDto` marks both names `@IsNotEmpty`, so this is
- * defensive rather than expected, but the failure it prevents is visible on
- * every screen.
+ * A one-word name yields that word alone. Formatting it as designed would leave
+ * a dangling `"Marko ."`, and the abbreviation mark has nothing to abbreviate.
+ * `RegisterDto` marks the name `@IsNotEmpty`, so an empty string is defensive
+ * rather than expected, but a single word is now **ordinary**: PET-72 collapsed
+ * the two name fields into one "Display name" whose placeholder invites a
+ * nickname, so "Marko" with no surname is a value the form actively offers.
  */
-export function shortName(firstName: string, lastName: string): string {
-  const initial = firstLetter(lastName);
-  return initial === '' ? firstName : `${firstName} ${initial}.`;
+export function shortName(fullName: string): string {
+  const [first = '', second = ''] = fullName.trim().split(/\s+/);
+  const initial = firstLetter(second);
+  return initial === '' ? first : `${first} ${initial}.`;
 }
 
 // The period the page header shows, in the two lengths the design draws: the
@@ -126,11 +82,15 @@ export function shortName(firstName: string, lastName: string): string {
 // render the identical overline and must not drift, which is the same reason
 // initials() is shared with the Settings avatar.
 //
-// Two limits worth knowing. The locale is hard-coded to en-US, matching
-// CURRENCY above; when the onboarding currency is finally threaded through, the
-// locale should follow it. And the period is the calendar month, ignoring the
-// profile's `monthStartDay` - A9 makes that value define the period, but it is
-// PET-45's to read, and the display is correct for its default of 1.
+// Two limits worth knowing. The locale is hard-coded to en-US; `docs/TODO.md` carries that
+// deviation. And **these two format a calendar month, which is not the same thing as the
+// budgeting period** - a screen naming a period reads its label off the response that carries the
+// period's figures, which the note below records in full.
+//
+// **They survive PET-72's deletion of that pair, and the distinction is the whole point.**
+// `(app)/DateField.tsx` draws a real calendar grid and its popover header names the month that grid
+// is *of* - a period label over six rows of real weeks would be nonsense. So these two remain, with
+// exactly one caller each, and the period's own name is never computed here.
 
 const MONTH_AND_YEAR = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
 
@@ -145,6 +105,24 @@ export function monthOverline(date: Date): string {
 export function monthLabel(date: Date): string {
   return MONTH_ONLY.format(date);
 }
+
+// **The budgeting-period pair that used to sit here is gone, and PET-72 deleted it rather than
+// widened it.** `periodOverline(monthStartDay, today)` and `periodLabel(...)` named the period four
+// page headers draw, composing one or two month names from the profile's start day - PET-47's answer
+// to a `docs/TODO.md` entry open since PET-19, and correct for exactly as long as every period was
+// one calendar month offset by a fixed day.
+//
+// PET-72 ended that. A period is anchored to a paycheck now, a pay-schedule change stretches one
+// period across the gap between the old boundary and the new, and the fact that makes such a period
+// span three month names is a `period_rules` row this app cannot see. **So there is no arithmetic
+// over a start day that produces "December 2025 / January 2026"**, and the two functions were not
+// merely imprecise, they were unable in principle to be right. The label is published per period by
+// `GET /api/periods` and echoed beside the figures it describes by the categories, dashboard and
+// transactions reads; `lib/periods.ts` is the frontend's home for all of it.
+//
+// The old pair's own docblock said which thing would have to change: "If a period ever stops being
+// derivable from one number, this is the thing that has to become an API field rather than the thing
+// to extend." That is what happened, so the deletion is the prediction being carried out.
 
 // A single calendar date, in the two lengths the design draws it. Long is the Date
 // field's closed trigger, "Oct 8, 2025" (09 node 28:402, and the same string on 11).
@@ -267,9 +245,13 @@ export function formatRelativeDate(iso: string, today: string = todayIsoDate()):
 // caret. So none of this touches `Number` on the way out, and the `$` belongs to
 // `Input variant="currency"` rather than to the string.
 //
-// The group separator is hard-coded, matching CURRENCY and the two DateTimeFormats
-// above. When the onboarding currency is finally stored and threaded through,
-// this follows it along with them.
+// The group separator is hard-coded, matching the two DateTimeFormats above - **and it must not
+// follow the stored currency**, which is the opposite of what this comment promised until PET-47.
+// It named a `CURRENCY` constant that no longer exists in this file, and it predicted the separator
+// would follow the currency once one was stored. One is stored now, and both `lib/money.ts` and
+// `frontend/CLAUDE.md` record the decision that these three functions stay `en-US`: they format a
+// value mid-keystroke, so a locale-derived separator would desynchronise the field being typed into
+// from the figure rendered beside it.
 
 /** Digits and the decimal point: the characters a caret can meaningfully sit between. */
 const SIGNIFICANT = /[0-9.]/;

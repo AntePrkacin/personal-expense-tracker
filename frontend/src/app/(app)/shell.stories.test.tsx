@@ -5,8 +5,10 @@ import * as BudgetCard from './dashboard/BudgetCard.stories';
 import * as InsightTeaserCard from './dashboard/InsightTeaserCard.stories';
 import * as RecentTransactionsCard from './dashboard/RecentTransactionsCard.stories';
 import * as TrendCard from './dashboard/TrendCard.stories';
+import * as DeleteTransactionDialog from './DeleteTransactionDialog.stories';
 import * as Modal from './Modal.stories';
 import * as PageHeader from './PageHeader.stories';
+import * as DeleteCategoryDialog from './transactions/categories/DeleteCategoryDialog.stories';
 
 // Smoke-tests the shell's stories, the same job src/components/ui/ui.stories.test.tsx
 // does for the Components section and src/app/screens.stories.test.tsx does for
@@ -22,6 +24,16 @@ import * as PageHeader from './PageHeader.stories';
 //
 // SidebarNav has no story and must not get one here: it calls usePathname(), and
 // there is no router in context under Jest.
+//
+// **The mock below does not change that, and adding a story for it is still wrong.** It supplies
+// `useRouter` only, because `DeleteCategoryDialog` reads `refresh` off it for the post-delete
+// re-read - the same call `src/app/screens.stories.test.tsx` makes for the modals it holds.
+// SidebarNav wants `usePathname`, which is deliberately absent, and it stays excluded for the
+// separate reason above: it is a wrapper whose only job is reading the pathname, so there is
+// nothing in it to diff.
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), refresh: jest.fn() }),
+}));
 
 type Args = Record<string, unknown>;
 type Story = { render?: (args: Args, context: never) => React.ReactNode; args?: Args };
@@ -37,6 +49,17 @@ const MODULES: [name: string, module: StoryModule][] = [
   ['TrendCard', TrendCard as StoryModule],
   ['RecentTransactionsCard', RecentTransactionsCard as StoryModule],
   ['InsightTeaserCard', InsightTeaserCard as StoryModule],
+  // **Both delete dialogs, and neither was registered in any suite** - `docs/TODO.md` carried them as
+  // "the two story modules with no gate behind them at all", since `build-storybook` bundles a story
+  // without running it. Found again while PET-70 was registering its own module next door, and closed
+  // here rather than half-closed: the entry's own fix was the `next/navigation` mock plus both
+  // modules, and doing one would have left the harness mocked with the second still invisible.
+  //
+  // They land here rather than in `screens.stories.test.tsx` because both are filed under `Shell/`,
+  // which is precisely the distinction each suite's title assertion exists to keep unambiguous: these
+  // are confirmation boxes, not whole frames.
+  ['DeleteTransactionDialog', DeleteTransactionDialog as StoryModule],
+  ['DeleteCategoryDialog', DeleteCategoryDialog as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {

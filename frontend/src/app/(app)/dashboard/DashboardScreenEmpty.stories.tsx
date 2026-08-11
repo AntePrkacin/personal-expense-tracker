@@ -37,6 +37,18 @@ import { TrendCard } from './TrendCard';
 // `nextjs: { appDirectory: true }` is mandatory because the header's `AddTransactionButton` and
 // the teaser's unlock button both reach `useRouter` through the modal they open.
 
+// The period the header names and the list its select offers, both straight off the response as of
+// PET-72 - so the frame's own "October 2025" is drawn whatever month this story is opened in, where
+// the old `monthStartDay` prop derived it from the clock. The second entry is what makes the control
+// worth opening in Storybook at all: a select with one option cannot be reviewed.
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true };
+
+const PERIODS = [
+  PERIOD,
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+  { start: '2025-08-01', end: '2025-09-01', label: 'August 2025', current: false },
+];
+
 const meta: Meta<typeof DashboardScreen> = {
   title: 'Screens/05 Dashboard — Empty',
   component: DashboardScreen,
@@ -55,8 +67,11 @@ export const Empty: Story = {
           `(app)` shell's own gutter, since neither wraps a story. */}
       <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
         <DashboardScreen
+          period={PERIOD}
+          periods={PERIODS}
           budgetCard={
             <BudgetCard
+              currency="USD"
               spent={0}
               monthlyBudget={2000}
               remaining={2000}
@@ -67,10 +82,15 @@ export const Empty: Story = {
               isEmpty={true}
             />
           }
-          trendCard={<TrendCard weeklyBuckets={[]} daysLeft={31} isEmpty={true} />}
-          donutCard={<CategoryDonut categories={[]} spent={0} />}
+          trendCard={<TrendCard currency="USD" weeklyBuckets={[]} daysLeft={31} isEmpty={true} />}
+          donutCard={<CategoryDonut currency="USD" categories={[]} spent={0} />}
           recentTransactionsCard={
-            <RecentTransactionsCard recentTransactions={[]} categories={[]} isEmpty={true} />
+            <RecentTransactionsCard
+              currency="USD"
+              recentTransactions={[]}
+              categories={[]}
+              isEmpty={true}
+            />
           }
           insightCard={<InsightTeaserCard insight={null} isEmpty={true} />}
         />

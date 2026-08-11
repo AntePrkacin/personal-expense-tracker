@@ -1,0 +1,334 @@
+import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+import { useEffect, useRef } from 'react';
+
+import type { Palette } from '@/lib/palette';
+
+import { PreferencesProvider } from '../../PreferencesProvider';
+import { AddCategoryModal as Wrapped } from './AddCategoryModal';
+
+/**
+ * The modal inside the shell's preferences.
+ *
+ * Its Amount / budget field prefixes the profile's currency symbol as of PET-47, which reaches
+ * `useCurrency()` - so without this the story throws. A wrapper rather than a `decorators` entry,
+ * for the reason `frontend/src/app/CLAUDE.md` records: the story smoke tests never apply a meta's
+ * decorators, so a decorator works in the browser and fails under Jest.
+ */
+function AddCategoryModal(props: React.ComponentProps<typeof Wrapped>) {
+  return (
+    <PreferencesProvider currency="USD">
+      <Wrapped {...props} />
+    </PreferencesProvider>
+  );
+}
+
+// Type-only Storybook import, for the reason `Sidebar.stories.tsx` records: importing any *value*
+// from Storybook breaks the Jest story smoke test with an opaque ESM error, because
+// @storybook/nextjs-vite will not load under Jest.
+//
+// **`parameters.nextjs.appDirectory` is load-bearing and no gate will tell you it is missing.** The
+// modal calls `useRouter` for its post-save refresh, and `next/navigation` throws "invariant expected
+// app router to be mounted" outside a router. Both CI gates miss it from opposite directions -
+// `build-storybook` bundles stories without running one, and `screens.stories.test.tsx` renders them
+// under Jest with `next/navigation` already mocked - so the story throws in the browser with a green
+// suite and a green build until somebody opens it. `frontend/src/app/CLAUDE.md` records that trap.
+//
+// **Filed under `Screens`, not `Shell`.** `Shell/Modal` is the box itself; a frame built out of it is
+// a screen, which is where `Screens/09 Add transaction` sits too.
+//
+// The modal takes everything as props, so these stories need no provider and no fetch: the palette is
+// a literal and the action is a stub. `AddCategoryModal.test.tsx` covers the wiring for real.
+
+const meta: Meta<typeof AddCategoryModal> = {
+  title: 'Screens/19 Add category',
+  component: AddCategoryModal,
+  tags: ['autodocs'],
+  parameters: {
+    layout: 'fullscreen',
+    nextjs: { appDirectory: true },
+  },
+};
+
+export default meta;
+
+type Story = StoryObj<typeof AddCategoryModal>;
+
+/**
+ * The palette as seeded: all 16 colours, and 30 of the 64 icons, in admin order with the real labels.
+ *
+ * **The colours are the whole set because a reviewer has to see every hue** - the labels are the words
+ * a person picks from, and the palette preview artifacts sign the colours off as a set.
+ *
+ * **The icons are 30 of 64, which is a deliberate middle.** Eight was too few once the grid arrived: at
+ * six across it filled one row and proved nothing about scrolling or about the search. All 64 would
+ * make this file mostly fixture. Thirty gives five rows, so the grid scrolls under its search box and
+ * the shape is reviewable, and the real 64 are verified in the running app instead. Nothing in the
+ * frontend asserts either length - see `lib/palette.ts`.
+ */
+const PALETTE: Palette = {
+  colors: [
+    { token: 'success', label: 'Emerald' },
+    { token: 'secondary', label: 'Pink' },
+    { token: 'info', label: 'Sky' },
+    { token: 'accent', label: 'Teal' },
+    { token: 'error', label: 'Rose' },
+    { token: 'primary', label: 'Indigo' },
+    { token: 'primary-content', label: 'Lavender' },
+    { token: 'secondary-content', label: 'Blush' },
+    { token: 'accent-content', label: 'Pine' },
+    { token: 'success-content', label: 'Forest' },
+    { token: 'info-content', label: 'Navy' },
+    { token: 'warning', label: 'Amber' },
+    { token: 'warning-content', label: 'Umber' },
+    { token: 'neutral', label: 'Ink' },
+    { token: 'neutral-content', label: 'Silver' },
+    { token: 'base-content/50', label: 'Slate' },
+  ],
+  icons: [
+    { name: 'shopping-basket', label: 'Basket' },
+    { name: 'utensils', label: 'Utensils' },
+    { name: 'car', label: 'Car' },
+    { name: 'zap', label: 'Bolt' },
+    { name: 'heart-pulse', label: 'Heartbeat' },
+    { name: 'tv', label: 'Television' },
+    { name: 'graduation-cap', label: 'Graduation cap' },
+    { name: 'plane', label: 'Plane' },
+    { name: 'scissors', label: 'Scissors' },
+    { name: 'gift', label: 'Gift' },
+    { name: 'paw-print', label: 'Paw' },
+    { name: 'landmark', label: 'Bank' },
+    { name: 'circle-question-mark', label: 'Question mark' },
+    { name: 'coffee', label: 'Coffee' },
+    { name: 'beer', label: 'Beer' },
+    { name: 'pizza', label: 'Pizza' },
+    { name: 'ice-cream-cone', label: 'Ice cream' },
+    { name: 'fuel', label: 'Fuel pump' },
+    { name: 'bus', label: 'Bus' },
+    { name: 'bike', label: 'Bicycle' },
+    { name: 'house', label: 'House' },
+    { name: 'wifi', label: 'Wi-Fi' },
+    { name: 'smartphone', label: 'Phone' },
+    { name: 'sofa', label: 'Sofa' },
+    { name: 'pill', label: 'Pill' },
+    { name: 'dumbbell', label: 'Dumbbell' },
+    { name: 'shirt', label: 'Shirt' },
+    { name: 'credit-card', label: 'Credit card' },
+    { name: 'music', label: 'Music note' },
+    { name: 'camera', label: 'Camera' },
+  ],
+};
+
+/** Accepts everything, so the happy path closes. */
+const accept = async () => ({ ok: true }) as const;
+
+/**
+ * The modal as frame 19 draws it (node 102:878).
+ *
+ * What to diff against Figma is the structure, not the pixels: the box centred over the dimmed page,
+ * four of CED-4's five fields in order, the `$` prefix and larger value on the budget field, **Color and
+ * Icon sharing a row**, and the footer's secondary-then-primary pair. Its width, radius, shadow and
+ * focus ring are the theme's as of PET-57.
+ *
+ * **Three things here have no Figma counterpart and are the ones to actually look at.** The budget
+ * label carries "(optional)", because the cap really is optional and A12 makes that word the only
+ * marker; focus opens on **Name** rather than on the budget field the frame rings, since that frame
+ * draws every field already filled and is a mid-fill snapshot; and the tile-plus-name row under the
+ * two selects is AC2's "previews on the category", which the file draws no element for.
+ *
+ * **A fourth departure is a subtraction: the Note field is not drawn.** The frame draws it and CED-4
+ * specifies it, and it is hidden behind `SHOWS_NOTE` because a note surfaces on no screen once saved
+ * (A42) - so the field waits for a category detail page to show it on. The markup and every
+ * conversion behind it stay live; see the flag's own note in `AddCategoryModal.tsx`. This story is
+ * where to check that its absence leaves the budget field as the only "(optional)" label and does not
+ * strand the footer.
+ *
+ * **The frame's own two example values are unbuildable and are not reproduced.** It shows "Violet"
+ * and "Repeat": there is no `violet` token, and `repeat` is a real lucide name but not one of the 64
+ * this app imports. Change either select and watch the preview follow it.
+ */
+export const Default: Story = {
+  render: () => <AddCategoryModal palette={PALETTE} create={accept} onClose={() => {}} />,
+};
+
+/**
+ * Both validation messages at once, which is the artifact A29 owes a designer.
+ *
+ * A29 records that **no form error visual exists anywhere in the Figma file**, so the pattern -
+ * daisyUI's `input-error` border plus one `text-error` line, no icon - and both strings are ours.
+ * This story submits an empty form on mount with a zero budget already in place, because a genuinely
+ * untouched form is wrong about its **name only**: the cap is optional, so a blank budget is valid
+ * and one message is all an empty submit produces. Showing both together is what needs reviewing.
+ *
+ * **The budget message is the one to read carefully.** It has to state the rule and the escape at
+ * once - "or leave it blank for no limit" - because the field looks required and nothing else on
+ * screen says it is not. It is the only place in the UI where the optional cap is spelled out.
+ *
+ * The three post-network failure lines are not shown here: each replaces the others, they need a
+ * round trip to provoke, and `AddCategoryModal.test.tsx` pins all three strings.
+ */
+export const WithMessages: Story = {
+  render: () => {
+    // A local component so the hook runs inside a render pass. The smoke harness calls
+    // `render(args)` outside React, so a hook written directly in here would throw "invalid hook
+    // call" in a suite that never opens a browser - the same constraint `Shell/Modal`'s
+    // `FromTrigger` story works within.
+    function Demo() {
+      const host = useRef<HTMLDivElement>(null);
+
+      useEffect(() => {
+        const budget = host.current?.querySelector<HTMLInputElement>('#add-category-monthly-cap');
+
+        if (budget !== null && budget !== undefined) {
+          // Typed through the native setter and a real `input` event, so React's controlled value
+          // actually updates - assigning `.value` alone is invisible to it.
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+            budget,
+            '0',
+          );
+          budget.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // **Deferred a tick, and the first version of this story was wrong without it.** The `input`
+        // event above schedules a state update; submitting in the same tick runs validation against
+        // the *previous* `monthlyCap`, which is `''` - and a blank cap is valid, so the story drew
+        // one message instead of two and looked like the feature only validated the name. A browser
+        // check caught it; nothing else could, because the smoke suite only asserts the story does
+        // not throw. `setTimeout` rather than a second effect keyed on the value, because the modal
+        // owns that state and this wrapper cannot read it.
+        const timer = setTimeout(() => {
+          // `requestSubmit` rather than clicking, so this goes through the form's own submit path -
+          // the one that runs validation - instead of simulating a pointer. The form is the modal's,
+          // so it is found by tag rather than by role: a <form> only publishes the `form` role once
+          // it has an accessible name.
+          host.current?.querySelector('form')?.requestSubmit();
+        }, 0);
+
+        return () => clearTimeout(timer);
+      }, []);
+
+      return (
+        <div ref={host}>
+          <AddCategoryModal palette={PALETTE} create={accept} onClose={() => {}} />
+        </div>
+      );
+    }
+
+    return <Demo />;
+  },
+};
+
+/**
+ * The Color picker open, which **no frame draws at all** - A16 and A40 both record that Figma never
+ * shows a list expanded, so every part of this panel is ours and this story is where it gets reviewed.
+ *
+ * What to look at: the swatch left of each name, the tick on the **right** of the chosen row, the
+ * hover and the `menu-active` highlight, and that sixteen rows scroll inside `max-h-64` rather than
+ * pushing the modal. The swatches are `CATEGORY_DOT`'s, so they are the same colours the cards, the
+ * legend and the donut paint - a colour that looks wrong here looks wrong on the Dashboard too.
+ *
+ * **Worth checking in Firefox as well**, where the panel is not anchored: Firefox has no CSS anchor
+ * positioning, so daisyUI's `@supports` fallback centres it over a dimmed backdrop instead. Degraded
+ * rather than broken, and the same behaviour the transactions row menu already ships.
+ */
+export const ColourPickerOpen: Story = {
+  render: () => {
+    function Demo() {
+      const host = useRef<HTMLDivElement>(null);
+
+      useEffect(() => {
+        // Deferred a tick for `WithMessages`' reason: the modal's own effect calls `showModal()`, and
+        // opening a popover inside a dialog that is not in the top layer yet does nothing.
+        const timer = setTimeout(() => {
+          // Optionally called, because the story smoke suite renders this under jsdom, which
+          // implements no popover at all - `jest.setup.ts` deliberately fakes none.
+          host.current?.querySelector<HTMLElement>('#add-category-color-picker')?.showPopover?.();
+        }, 0);
+
+        return () => clearTimeout(timer);
+      }, []);
+
+      return (
+        <div ref={host}>
+          <AddCategoryModal palette={PALETTE} create={accept} onClose={() => {}} />
+        </div>
+      );
+    }
+
+    return <Demo />;
+  },
+};
+
+/**
+ * The Icon picker open, which is the most invented thing in this modal.
+ *
+ * Nothing in Figma draws it: not the grid, not the six-across width, not the cell size, and **not the
+ * search box**, which exists because 64 glyphs cannot be scanned as a list of names. So all of it wants
+ * a designer's eye, and this is where.
+ *
+ * What to look at: six across, the chosen glyph as a filled primary cell, the search box staying put
+ * while the grid scrolls under it, and the cells being large enough to aim at. Try typing `tv` - it
+ * matches "Television" by its **lucide name** rather than its label, which is the whole reason the
+ * search looks at both.
+ *
+ * **The one thing to try that is not visual**: press Enter in the search box. It must not create the
+ * category. `(app)/Modal.tsx` wraps the body in a real form so Enter submits it, and this field is the
+ * one place that has to refuse.
+ */
+export const IconPickerOpen: Story = {
+  render: () => {
+    function Demo() {
+      const host = useRef<HTMLDivElement>(null);
+
+      useEffect(() => {
+        const timer = setTimeout(() => {
+          host.current?.querySelector<HTMLElement>('#add-category-icon-picker')?.showPopover?.();
+        }, 0);
+
+        return () => clearTimeout(timer);
+      }, []);
+
+      return (
+        <div ref={host}>
+          <AddCategoryModal palette={PALETTE} create={accept} onClose={() => {}} />
+        </div>
+      );
+    }
+
+    return <Demo />;
+  },
+};
+
+/**
+ * The palette read having failed, which no frame draws either.
+ *
+ * Both selects are disabled and a `role="alert"` line says why, because a control that is inert with
+ * no explanation is worse than a message. The preview tile falls back to the neutral surface rather
+ * than to a colour and glyph the user did not choose, and the submit does nothing - deliberately
+ * without adding "Enter a name." on top, which would blame the user for a failed network read.
+ *
+ * Reachable when the backend is down. Note the modal is still fully closable, which is the half worth
+ * checking here. Its copy names a **reload** rather than reopening this modal, because the palette is
+ * a prop resolved once by the route - see `MESSAGES`.
+ */
+export const PaletteUnavailable: Story = {
+  render: () => <AddCategoryModal palette={null} create={accept} onClose={() => {}} />,
+};
+
+/**
+ * The palette read having **succeeded** with nothing in it, which is a different state and used to be
+ * an invisible one.
+ *
+ * `GET /api/templates/palette` returns `enabled` rows only, so an admin disabling a whole list answers
+ * 200 with an empty one. That arrives as a non-null palette, so every guard keyed on `null` let it
+ * through: both pickers opened onto empty panels, nothing explained why, and the submit button did
+ * nothing at all, forever, in silence. Both fields are disabled here and the line says what is true
+ * rather than blaming a request that worked.
+ *
+ * The third message this modal owes A29, and the one to put in front of a designer beside
+ * `PaletteUnavailable` - the two states read almost the same on screen and mean opposite things.
+ */
+export const PaletteEmpty: Story = {
+  render: () => (
+    <AddCategoryModal palette={{ colors: [], icons: [] }} create={accept} onClose={() => {}} />
+  ),
+};

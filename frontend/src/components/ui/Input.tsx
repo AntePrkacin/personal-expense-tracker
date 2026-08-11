@@ -13,7 +13,7 @@
 // with controlled messages passed through the `error` prop, so `input-error`
 // is applied from that prop instead.
 
-import { FieldShell, fieldErrorId } from './FieldShell';
+import { FieldShell, fieldDescribedBy } from './FieldShell';
 
 export type InputVariant = 'default' | 'currency';
 
@@ -39,6 +39,18 @@ type InputProps = {
   /** The Figma "Label" property, e.g. "Merchant". */
   label: string;
   variant?: InputVariant;
+  /**
+   * The glyph the `currency` variant prefixes, e.g. `'$'` or `'€'`.
+   *
+   * **A prop rather than the literal `$` this drew until PET-47's review.** The profile's currency
+   * is user-selectable now, so a hard-coded glyph made a GBP account read "£1,350 spent" above cap
+   * inputs prefixed `$`. It stays a prop rather than a `useCurrency()` call because `ui/`
+   * primitives take props - and because a pre-auth screen could legitimately want a fixed glyph.
+   *
+   * Ignored by every other variant. It has no default on purpose: a fallback here is what let the
+   * defect survive, so a caller that forgets it renders no prefix rather than a wrong one.
+   */
+  currencySymbol?: string;
   /** Defaults to `id`, which is what every form on the design needs. */
   name?: string;
   /**
@@ -58,6 +70,11 @@ type InputProps = {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  /**
+   * One line of standing guidance beneath the control, described by this input rather than merely
+   * sitting near it. `ui/FieldShell` owns what it is for and why it is a prop.
+   */
+  hint?: string;
   /** One line of validation copy, rendered beneath the control. */
   error?: string;
 };
@@ -66,6 +83,7 @@ export function Input({
   id,
   label,
   variant = 'default',
+  currencySymbol,
   name,
   type = 'text',
   inputMode,
@@ -75,9 +93,13 @@ export function Input({
   placeholder,
   required,
   disabled,
+  hint,
   error,
 }: InputProps) {
-  const errorId = fieldErrorId(id, error);
+  // Both lines at once when the field carries both, which is the case a naive `errorId` drops:
+  // an invalid field would stop describing its own hint at exactly the moment the reader most
+  // needs the whole picture.
+  const describedBy = fieldDescribedBy(id, hint, error);
 
   const control = (
     <input
@@ -92,13 +114,13 @@ export function Input({
       required={required}
       disabled={disabled}
       aria-invalid={error ? true : undefined}
-      aria-describedby={errorId}
+      aria-describedby={describedBy}
       className={variant === 'currency' ? 'grow' : INPUT_CONTROL[error ? 'invalid' : 'valid']}
     />
   );
 
   return (
-    <FieldShell id={id} label={label} error={error}>
+    <FieldShell id={id} label={label} hint={hint} error={error}>
       {variant === 'currency' ? (
         // The wrapping label is daisyUI's prefix pattern: the box styling sits on
         // it, the inner input is bare, and a click anywhere in the box - the "$"
@@ -106,7 +128,7 @@ export function Input({
         // accessible name still comes only from the visible label above.
         <label className={CURRENCY_BOX[error ? 'invalid' : 'valid']}>
           <span aria-hidden="true" className="opacity-60">
-            $
+            {currencySymbol}
           </span>
           {control}
         </label>

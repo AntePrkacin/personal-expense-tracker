@@ -3,7 +3,24 @@ import { useEffect, useRef } from 'react';
 
 import type { Transaction } from '@/lib/transactions';
 
-import { EditTransactionModal } from './EditTransactionModal';
+import { PreferencesProvider } from './PreferencesProvider';
+import { EditTransactionModal as Wrapped } from './EditTransactionModal';
+
+/**
+ * The modal inside the shell's preferences.
+ *
+ * Its Amount / budget field prefixes the profile's currency symbol as of PET-47, which reaches
+ * `useCurrency()` - so without this the story throws. A wrapper rather than a `decorators` entry,
+ * for the reason `frontend/src/app/CLAUDE.md` records: the story smoke tests never apply a meta's
+ * decorators, so a decorator works in the browser and fails under Jest.
+ */
+function EditTransactionModal(props: React.ComponentProps<typeof Wrapped>) {
+  return (
+    <PreferencesProvider currency="USD">
+      <Wrapped {...props} />
+    </PreferencesProvider>
+  );
+}
 
 // Type-only Storybook import, for the reason `Sidebar.stories.tsx` records: importing any *value*
 // from Storybook breaks the Jest story smoke test with an opaque ESM error, because

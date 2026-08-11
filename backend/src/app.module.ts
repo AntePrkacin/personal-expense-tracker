@@ -14,6 +14,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { InsightsModule } from './insights/insights.module';
+import { PeriodsModule } from './periods/periods.module';
 import { ProfileModule } from './profile/profile.module';
 import { TemplatesModule } from './templates/templates.module';
 import { TransactionsModule } from './transactions/transactions.module';
@@ -126,6 +127,10 @@ const DEFAULT_SCAN_RATE_TTL_S = 3600;
     }),
     AuthModule,
     ProfileModule,
+    // Registered here for its own `GET /api/periods` route. The four features
+    // that compose `PeriodService` import it themselves, so this entry is about
+    // the controller rather than about making the provider reachable.
+    PeriodsModule,
     TransactionsModule,
     CategoriesModule,
     DashboardModule,

@@ -6,11 +6,29 @@ import { DashboardScreen } from './DashboardScreen';
 // 04 Dashboard (Figma node 21:4). The header is `DashboardPage`'s own from PET-19, moved here
 // unchanged; what is new is the five-slot grid PET-21 through PET-26 draw into.
 //
+// The router is mocked because the header's period select is a real control as of PET-72 and
+// navigates through `router.replace`. A package specifier, so the `@/` alias trap does not apply.
+// Nothing here changes it - `PeriodSelect.test.tsx` owns that behaviour - so this only has to exist.
+//
 // `useAddTransaction` throws outside its provider by design, and the header's button calls it -
 // the same reason `TransactionsScreen.test.tsx` wraps every render.
 function renderScreen(screenElement: React.ReactNode) {
   return render(<AddTransactionProvider>{screenElement}</AddTransactionProvider>);
 }
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: jest.fn(), push: jest.fn(), refresh: jest.fn() }),
+}));
+
+// The period every figure on the screen belongs to, and the list the select offers. Both come off the
+// response as of PET-72, which is what let this suite drop its fake timers: the header used to
+// compose its overline from a start day and the clock, so the month it named was the test's to set.
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true };
+
+const PERIODS = [
+  PERIOD,
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+];
 
 const SLOT = (testId: string, label: string) => <div data-testid={testId}>{label}</div>;
 
@@ -20,28 +38,35 @@ const SLOTS = {
   donutCard: SLOT('donut-card', 'Donut'),
   recentTransactionsCard: SLOT('recent-card', 'Recent'),
   insightCard: SLOT('insight-card', 'Insight'),
+  period: PERIOD,
+  periods: PERIODS,
 };
-
-beforeEach(() => {
-  jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8));
-});
-
-afterEach(() => {
-  jest.useRealTimers();
-});
 
 describe('the header', () => {
   it('shows the designed overline and title', () => {
     renderScreen(<DashboardScreen {...SLOTS} />);
 
-    expect(screen.getByText('October 2025')).toBeInTheDocument();
+    // The overline and the select's chosen option are the same label, which is what makes them one
+    // fact rather than two - so this looks inside the header's own paragraph rather than sweeping
+    // the page, where the option below carries the identical string.
+    expect(screen.getByText('October 2025', { selector: 'p' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument();
   });
 
-  it('shows the inert month pill and the Add transaction button', () => {
+  it('shows the period select and the Add transaction button', () => {
+    // **The inversion of what this suite asserted for four tickets.** The month pill was an inert
+    // `<div>` by decision, because A8 said it renders the current period and does nothing "until
+    // month navigation is designed"; PET-72 designs it, so the assertion is turned over rather than
+    // deleted - a real `<select>` naming itself, with one option per period the account has.
     renderScreen(<DashboardScreen {...SLOTS} />);
 
-    expect(screen.getByText('October').tagName).toBe('DIV');
+    const select = screen.getByRole('combobox', { name: 'Budgeting period' });
+
+    expect(select).toHaveValue(PERIOD.start);
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'October 2025',
+      'September 2025',
+    ]);
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
   });
 });

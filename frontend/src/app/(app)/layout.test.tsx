@@ -17,7 +17,10 @@ import userEvent from '@testing-library/user-event';
 // resolved path, so this still intercepts layout.tsx's own aliased import.
 import { requireProfile } from '../../lib/profile';
 
+import { useDeleteTransaction } from './DeleteTransactionProvider';
+import { DELETE_TRANSACTION_TITLE } from './DeleteTransactionDialog';
 import { useEditTransaction } from './EditTransactionProvider';
+import { useMoney } from './PreferencesProvider';
 import AppLayout from './layout';
 
 // The shell layout's two jobs: gate the segment and lay the two columns out. The gate is
@@ -37,10 +40,9 @@ jest.mock('next/navigation', () => ({
 jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
 
 const PROFILE = {
-  firstName: 'Ana',
-  lastName: 'Horvat',
+  fullName: 'Ana Horvat',
   email: 'ana@email.com',
-  currency: 'USD',
+  currency: 'EUR',
   monthlyBudget: 2000,
   monthStartDay: 1,
 };
@@ -61,6 +63,33 @@ const TRANSACTION = {
   createdAt: '2025-10-08T09:30:00.000Z',
   updatedAt: '2025-10-08T09:30:00.000Z',
 };
+
+/**
+ * A child that opens the **delete confirmation**, for the provider-ordering test.
+ *
+ * That dialog formats the amount it is about to remove, so it is the one place a `useMoney()` call
+ * renders in a *dialog's* position rather than in `children`'s - which is what makes the ordering
+ * assertable at all.
+ */
+function OpenDeleteDialog() {
+  const { open } = useDeleteTransaction();
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        open({
+          id: TRANSACTION.id,
+          merchant: TRANSACTION.merchant,
+          amount: TRANSACTION.amount,
+          date: TRANSACTION.date,
+        })
+      }
+    >
+      Delete it
+    </button>
+  );
+}
 
 /** A page-shaped child that opens the edit modal, standing in for the row menu's kebab. */
 function OpenEditModal() {
@@ -176,6 +205,42 @@ describe('AppLayout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit it' }));
 
     expect(screen.getByRole('dialog', { name: 'Edit transaction' })).toBeInTheDocument();
+  });
+
+  it('mounts PreferencesProvider outside the three modal providers', async () => {
+    // **The probe has to render where a *dialog* renders, not where `children` does**, and the first
+    // version of this test got that wrong. The three dialogs are conditional siblings of `children`
+    // inside their own providers, so a hook probe placed in `children` resolves however deep
+    // `PreferencesProvider` sits - verified: with the provider moved to wrap only `{children}`, all
+    // of this file passed while the first Delete click threw.
+    //
+    // Opening the delete confirmation is what puts a `useMoney()` call in the dialog's own position:
+    // `DeleteTransactionDialog` formats the amount it is about to remove. If the provider is nested
+    // inside `DeleteTransactionProvider`, this render throws instead of showing the dialog.
+    render(await AppLayout({ children: <OpenDeleteDialog /> }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete it' }));
+
+    expect(screen.getByRole('dialog', { name: DELETE_TRANSACTION_TITLE })).toBeInTheDocument();
+    // The formatted amount is the proof the dialog reached the provider rather than merely mounting.
+    // Euro since PET-72 flipped the default, which this fixture now carries.
+    expect(screen.getByText(/€24\.00/)).toBeInTheDocument();
+  });
+
+  it('binds that provider to the read profile rather than to a default', async () => {
+    // The failure this catches is the quiet one: a provider wired to a literal default renders a
+    // sterling account's whole dashboard in euros and looks entirely correct doing it. The fixture
+    // is `GBP` against a default of `EUR` since PET-72, so the assertion still fails on a hard-coded
+    // default rather than accidentally agreeing with one.
+    (requireProfile as jest.Mock).mockResolvedValue({ ...PROFILE, currency: 'GBP' });
+
+    function Probe() {
+      return <p>{useMoney().formatWhole(1240.5)}</p>;
+    }
+
+    render(await AppLayout({ children: <Probe /> }));
+
+    expect(screen.getByText('£1,241')).toBeInTheDocument();
   });
 
   it('renders none of the three dialogs until something opens one', async () => {

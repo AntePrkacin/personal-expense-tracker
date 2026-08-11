@@ -1,8 +1,8 @@
-import { monthLabel, monthOverline } from '@/lib/format';
+import type { Period } from '@/lib/periods';
 
 import { AddTransactionButton } from '../AddTransactionButton';
 import { PageHeader } from '../PageHeader';
-import { MonthPill } from './MonthPill';
+import { PeriodSelect } from '../PeriodSelect';
 
 // 04 Dashboard (Figma node 21:4), and 05 in its empty state.
 //
@@ -41,6 +41,22 @@ type DashboardScreenProps = {
   recentTransactionsCard: React.ReactNode;
   /** DSH-8. PET-25's `InsightTeaserCard`. */
   insightCard: React.ReactNode;
+  /**
+   * The period every figure on this screen belongs to, from the dashboard response's own
+   * `period` object.
+   *
+   * **This replaces `monthStartDay`, and the swap is the point of PET-72 on this screen.** That prop
+   * existed so the header could derive a period's name from a start day and today, through
+   * `periodOverline` and `periodLabel`. No arithmetic over a start day can produce "December 2025 /
+   * January 2026", because the fact that makes it two months is a `period_rules` row this app cannot
+   * see - so the label is the backend's, and it arrives beside the figures it describes rather than
+   * being computed alongside them. It also closes the skew the old prop documented: the label and the
+   * figures now come from one resolution against `APP_TIMEZONE`, where the label used to come from
+   * the frontend host's clock.
+   */
+  period: { start: string; end: string; label: string };
+  /** Every period the account has, newest first, for the header's select. */
+  periods: readonly Period[];
 };
 
 export function DashboardScreen({
@@ -49,19 +65,20 @@ export function DashboardScreen({
   donutCard,
   recentTransactionsCard,
   insightCard,
+  period,
+  periods,
 }: DashboardScreenProps) {
-  // The server clock. The layout's `cookies()` read is what keeps this segment dynamic, so
-  // this is evaluated per request rather than once at build time.
-  const now = new Date();
-
   return (
     <>
       <PageHeader
-        overline={monthOverline(now)}
+        // The response's own label, uppercased by `PageHeader`'s overline treatment. No clock read
+        // here any more: this screen used to call `todayIsoDate()` purely to name the period, which
+        // was the frontend host's zone against figures scoped to `APP_TIMEZONE`.
+        overline={period.label}
         title="Dashboard"
         action={
           <>
-            <MonthPill label={monthLabel(now)} />
+            <PeriodSelect periods={periods} selected={period.start} pathname="/dashboard" />
             {/* Opens modal 09, as of PET-31. The trigger is a thin client wrapper so this
                 screen can stay a Server Component: a Server Component cannot hand `ui/Button`
                 an onClick, and the modal itself lives once on the shell's layout. */}

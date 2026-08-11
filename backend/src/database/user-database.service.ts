@@ -13,7 +13,6 @@ import { mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { isUuid } from '../common/ids';
 import { users } from './central/schema';
-import { backfillLegacyColours } from './user/legacy-colour-backfill';
 import {
   APP_DB,
   SYNC_ONLY_SIBLINGS,
@@ -214,14 +213,15 @@ export class UserDatabaseService {
       migrationsFolder: USER_MIGRATIONS_DIR,
     });
 
-    // PET-64's data migration, which could not be one of the above: it changes
-    // what a column's *values* mean and nothing about its structure, so
-    // `drizzle-kit generate` has nothing to emit and root `CLAUDE.md` forbids
-    // hand-writing the SQL. Runs here for the same reason `seedTemplates` runs
-    // straight after the central `migrate()` - it is the point before any
-    // consumer can read - and is guarded on the data itself, so it is a single
-    // cheap predicate on every open after the first.
-    await backfillLegacyColours(handle.db);
+    // PET-64's legacy-colour backfill used to run here, and PET-72 deleted it.
+    // It existed to repair rows written before `categories.color` held a daisyUI
+    // token rather than a hex, guarded on the data itself so it cost one cheap
+    // predicate per open. The pre-launch database reset removed every such row
+    // and the migrations were regenerated as fresh baselines, so there is nothing
+    // left for it to find - and it was reading a column whose paired `icon` is now
+    // NOT NULL, which it could no longer have filled in. A future data migration
+    // of that shape should copy its three properties rather than its code; they
+    // are written up in `backend/src/database/CLAUDE.md`.
 
     return handle;
   }

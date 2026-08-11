@@ -350,7 +350,7 @@ describe('AC4: Back keeps both steps values', () => {
   it('reads a selection that was already in storage before the first render', () => {
     sessionStorage.setItem(
       SETUP_DRAFT_KEY,
-      JSON.stringify({ currency: 'USD', budget: '2,000', categories: ['id-transport'] }),
+      JSON.stringify({ currency: 'EUR', budget: '2,000', categories: ['id-transport'] }),
     );
 
     renderScreen();
@@ -364,7 +364,7 @@ describe('AC4: Back keeps both steps values', () => {
     // what it stored, and only the walk back would reveal the loss.
     sessionStorage.setItem(
       SETUP_DRAFT_KEY,
-      JSON.stringify({ currency: 'USD', budget: '1,500.25', categories: [] }),
+      JSON.stringify({ currency: 'EUR', budget: '1,500.25', categories: [] }),
     );
 
     const user = userEvent.setup();
@@ -373,11 +373,11 @@ describe('AC4: Back keeps both steps values', () => {
     await user.click(chip('Alpha'));
 
     expect(storedDraft()).toEqual({
-      currency: 'USD',
+      currency: 'EUR',
       budget: '1,500.25',
       categories: ['id-alpha'],
-      firstName: '',
-      lastName: '',
+      fullName: '',
+      monthStartDay: 1,
       email: '',
     });
   });
@@ -406,7 +406,7 @@ describe('a stored pick that is no longer offered', () => {
   const withStored = (categories: string[]) =>
     sessionStorage.setItem(
       SETUP_DRAFT_KEY,
-      JSON.stringify({ currency: 'USD', budget: '2,000', categories }),
+      JSON.stringify({ currency: 'EUR', budget: '2,000', categories }),
     );
 
   it('drops the dead id and keeps the live ones', async () => {
@@ -433,7 +433,7 @@ describe('a stored pick that is no longer offered', () => {
     renderScreen();
 
     await waitFor(() => expect(storedCategories()).toEqual([]));
-    expect(storedDraft()).toMatchObject({ currency: 'USD', budget: '2,000' });
+    expect(storedDraft()).toMatchObject({ currency: 'EUR', budget: '2,000' });
   });
 
   it('writes nothing at all when every stored id is still offered', async () => {

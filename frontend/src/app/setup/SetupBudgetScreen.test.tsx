@@ -29,8 +29,10 @@ jest.mock('next/navigation', () => ({ useRouter: jest.fn() }));
 // a rendered colour or size; class names are the only appearance signal, and
 // nothing proves they generate CSS since PET-57 retired the compile guard.
 
-/** U+2014, so a substitution in the currency label fails loudly rather than invisibly. */
-const EM_DASH = '—';
+// **The `EM_DASH` constant went with the currency `<select>` (PET-47).** It guarded the one label
+// that could carry the glyph - Figma types U+2014 in "USD — $" and the repo normalised it to a
+// hyphen, two characters indistinguishable in a diff. `BudgetField` draws the code and the symbol
+// as separate elements with no separator between them, so there is no longer a string to get wrong.
 
 const SUPPORTING_COPY =
   'How much do you plan to spend each month? You can change this anytime in Settings.';
@@ -47,7 +49,14 @@ function renderScreen() {
 }
 
 const budgetField = () => screen.getByLabelText('Monthly budget');
-const currencyField = () => screen.getByLabelText('Currency');
+/**
+ * The currency segment's trigger.
+ *
+ * A `<button>` since PET-47, not a `<select>`, so `getByLabelText` no longer reaches it: its name
+ * is computed from its own subtree, which is the `sr-only` "Currency" plus the code it holds.
+ * Matching on the prefix is what lets the same helper serve every currency.
+ */
+const currencyTrigger = () => screen.getByRole('button', { name: /^Currency/ });
 const continueButton = () => screen.getByRole('button', { name: 'Continue' });
 
 const storedDraft = () => JSON.parse(sessionStorage.getItem(SETUP_DRAFT_KEY) ?? 'null');
@@ -99,25 +108,50 @@ describe('AC1: the card as designed', () => {
   });
 });
 
-describe('the currency field', () => {
-  it('offers the one option the design shows, with a hyphen', () => {
-    // A6: only "USD - $" appears anywhere in the file. The em-dash assertion is
-    // the point - Figma types U+2014 and the repo normalised to a hyphen, and the
-    // two are indistinguishable in a diff.
+describe('the currency segment', () => {
+  // **PET-47 replaced the separate "Currency" `<select>` with the left half of `BudgetField`**, so
+  // the two assertions this block used to carry are gone rather than adapted: A6's single
+  // `USD - $` option, and the value living on a `<select>`. Three currencies are offered now,
+  // which amends A6 and PET-47's AC2, and the control is a button over a popover.
+
+  it('names itself and its current code, so a reader hears both', () => {
+    // `aria-label="Currency"` - which the design system's own version uses - would replace the
+    // subtree and lose the code at exactly the moment a reader needs it. The subtree carries both.
     renderScreen();
 
-    const options = screen.getAllByRole('option');
-    expect(options).toHaveLength(1);
-    expect(options[0]).toHaveTextContent('USD - $');
-    expect(screen.queryByText(`USD ${EM_DASH} $`)).not.toBeInTheDocument();
+    expect(currencyTrigger()).toHaveAccessibleName('Currency EUR');
   });
 
-  it('holds the ISO code as its value, not the label', () => {
-    // RegisterDto validates @IsISO4217CurrencyCode, so the code is what step 3
-    // eventually posts. Storing the label would fail that validation.
+  it('offers the three the design draws', () => {
+    // Deliberately not `role="option"`: that role promises a keyboard contract this does not
+    // implement, so the rows are ordinary buttons and `aria-current` names the chosen one.
+    // `ColourSelect` carries the argument in full.
     renderScreen();
 
-    expect(currencyField()).toHaveValue('USD');
+    expect(screen.getByRole('button', { name: /US Dollar/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Euro/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /British Pound/ })).toBeInTheDocument();
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+  });
+
+  it('marks the stored code as current', () => {
+    renderScreen();
+
+    // EUR is the default since PET-72, so it is the row a fresh draft marks.
+    expect(screen.getByRole('button', { name: /Euro/ })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: /US Dollar/ })).not.toHaveAttribute('aria-current');
+  });
+
+  it('stores the ISO code the register body posts, not the label', async () => {
+    // RegisterDto validates @IsISO4217CurrencyCode, so the code is what step 3 eventually posts.
+    // Storing "Euro" would fail that validation.
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: /Euro/ }));
+
+    expect(storedDraft().currency).toBe('EUR');
+    expect(currencyTrigger()).toHaveAccessibleName('Currency EUR');
   });
 });
 
@@ -153,9 +187,11 @@ describe('AC2: the budget field', () => {
     // "dollar sign" before the value is noise, which is ui/Input's own reasoning.
     renderScreen();
 
-    const prefix = screen.getByText('$');
-    expect(prefix).toBeInTheDocument();
-    expect(prefix).toHaveAttribute('aria-hidden', 'true');
+    // `getAllBy`, because the picker's own USD row draws the symbol too. Both are hidden for the
+    // same reason: the code beside each says the same thing in words.
+    const symbols = screen.getAllByText('$');
+    expect(symbols.length).toBeGreaterThan(0);
+    for (const symbol of symbols) expect(symbol).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('truncates a third decimal rather than rounding it', async () => {
@@ -331,11 +367,11 @@ describe('AC5: the draft survives leaving and coming back', () => {
     // clobbering this budget and vice versa. Asserted exactly, rather than on the
     // budget alone, because that merge is the property under test.
     expect(storedDraft()).toEqual({
-      currency: 'USD',
+      currency: 'EUR',
       budget: '2,000',
       categories: [],
-      firstName: '',
-      lastName: '',
+      fullName: '',
+      monthStartDay: 1,
       email: '',
     });
   });
@@ -359,7 +395,7 @@ describe('AC5: the draft survives leaving and coming back', () => {
   it('reads a draft that was already in storage before the first render', async () => {
     sessionStorage.setItem(
       SETUP_DRAFT_KEY,
-      JSON.stringify({ currency: 'USD', budget: '1,500.25' }),
+      JSON.stringify({ currency: 'EUR', budget: '1,500.25' }),
     );
 
     renderScreen();
@@ -389,10 +425,14 @@ describe('the two controls', () => {
     expect(links[0]).toHaveAccessibleName('Back');
     expect(links[0]).toHaveAttribute('href', '/');
 
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0]).toHaveAccessibleName('Continue');
-    expect(buttons[0]).toHaveAttribute('type', 'submit');
+    // Scoped to submit buttons rather than counting every button on the screen, which stopped
+    // being one the moment `BudgetField` brought a picker trigger and three currency rows. What
+    // the count is protecting is unchanged: exactly one control submits, and it is not a link.
+    const submits = screen
+      .getAllByRole('button')
+      .filter((button) => button.getAttribute('type') === 'submit');
+    expect(submits).toHaveLength(1);
+    expect(submits[0]).toHaveAccessibleName('Continue');
   });
 
   it('carries no password field, here or anywhere in onboarding', () => {

@@ -77,9 +77,24 @@ const ALL_CATEGORIES = { value: '', label: 'All categories' } as const;
 type TransactionFilterBarProps = {
   filters: TransactionFilters;
   categories: CategoryLabel[];
+  /**
+   * The response's own label for the period the list covers, e.g. `December 2025`.
+   *
+   * Read only when `filters.period` is a date-form period start rather than one of the three named
+   * values - the case a link from the period select on a sibling screen, or the detail page's
+   * round trip, can produce. The pill then leads with that period as a real option instead of
+   * rendering a value its list does not contain, which browsers draw as blank or as the wrong
+   * first entry. The label is the backend's, never derived here: a period a pay-day change
+   * stretched spans two calendar months and no client arithmetic can name it.
+   */
+  periodLabel?: string;
 };
 
-export function TransactionFilterBar({ filters, categories }: TransactionFilterBarProps) {
+export function TransactionFilterBar({
+  filters,
+  categories,
+  periodLabel,
+}: TransactionFilterBarProps) {
   const { navigate } = useFilterNavigation();
 
   /**
@@ -120,11 +135,18 @@ export function TransactionFilterBar({ filters, categories }: TransactionFilterB
 
         {/* The value falls back to the default rather than reading `filters.period` raw: a
             bare /transactions parses to `{}`, and a select with an unmatched value renders
-            its first option in some browsers and blank in others. */}
+            its first option in some browsers and blank in others. The same trap is why a
+            date-form period - which `parseTransactionFilters` forwards since the contract grew
+            one - has to appear in the options list; see `periodOptions` and `periodLabel`. */}
         <FilterPill
           label="Period"
           value={filters.period ?? DEFAULT_PERIOD}
-          options={PERIOD_OPTIONS}
+          options={
+            filters.period === undefined ||
+            PERIOD_OPTIONS.some((option) => option.value === filters.period)
+              ? PERIOD_OPTIONS
+              : [{ value: filters.period, label: periodLabel ?? filters.period }, ...PERIOD_OPTIONS]
+          }
           onChange={(period) => apply({ period: period === DEFAULT_PERIOD ? undefined : period })}
         />
       </div>

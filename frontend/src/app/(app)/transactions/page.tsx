@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { readCategoryLabels } from '@/lib/categories';
+import { requireProfile } from '@/lib/profile';
 import { ACCESS_ROUTES } from '@/lib/routes';
 import { readTransactionsView } from '@/lib/transactions';
 
@@ -52,6 +53,10 @@ export default async function TransactionsPage({
 }) {
   const filters = parseTransactionFilters(await searchParams);
 
+  // Free: `requireProfile()` is `cache()`-memoized per render pass and the shell's layout has
+  // already called it to gate this route, so this resolves against that same promise.
+  const { currency } = await requireProfile();
+
   const [view, categories] = await Promise.all([
     readTransactionsView(filters),
     readCategoryLabels(),
@@ -82,13 +87,26 @@ export default async function TransactionsPage({
     <TransactionsScreen
       view={view}
       filters={filters}
-      filterBar={<TransactionFilterBar filters={filters} categories={categories.data} />}
+      // The Categories tab's badge, free here: this page already holds the category list for
+      // the table's join, so the count costs no request. The mirror image on the other route
+      // is not free, which is what `readTransactionCount()` exists for.
+      categoryCount={categories.data.length}
+      filterBar={
+        <TransactionFilterBar
+          filters={filters}
+          categories={categories.data}
+          // The response's own name for a date-form period, so the pill can offer it as a real
+          // option. Undefined for `period=all`, whose response carries no period to name.
+          periodLabel={view.period?.label}
+        />
+      }
       // Built only for the state that renders it. The screen drops both slots in the empty
       // state anyway, so this is about types rather than output: narrowing here lets the
       // table take a `Transaction[]` instead of a union it would have to re-narrow.
       table={
         view.state === 'populated' ? (
           <TransactionsTable
+            currency={currency}
             transactions={view.transactions}
             categories={categories.data}
             // PET-34: each row's merchant links to its detail page and carries these along, so

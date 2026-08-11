@@ -3,13 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { MonthStartField } from '@/app/(app)/settings/MonthStartField';
+import { BudgetField } from '@/components/BudgetField';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
-import { amountCaret, formatAmountInput } from '@/lib/format';
+import { reformatAmountInput } from '@/lib/amountField';
 import { ACCESS_ROUTES } from '@/lib/routes';
 
-import { DEFAULT_CURRENCY, isBudgetValid } from './draft';
+import { isBudgetValid } from './draft';
 import { useSetupDraft } from './SetupDraftProvider';
 
 // The interactive half of 02 Setup: the currency select, the monthly budget field
@@ -18,19 +18,14 @@ import { useSetupDraft } from './SetupDraftProvider';
 // This is the repo's first stateful form, so a few of the decisions below are
 // conventions rather than local choices. They are written out for that reason.
 
-/**
- * The only currency the design ever shows (A6, BUD-2).
- *
- * One option rather than a disabled control: Figma draws an ordinary enabled
- * select with its chevron, and no frame draws a disabled field at all. The label
- * carries the symbol because the frame does.
- *
- * A hyphen, not the em dash Figma types. The repo normalised that in
- * `Input.stories.tsx` and PET-9's own ticket text, and the two glyphs are
- * indistinguishable in a diff - which is why the test asserts against an em-dash
- * escape rather than eyeballing the string.
- */
-const CURRENCY_OPTIONS = [{ value: DEFAULT_CURRENCY, label: 'USD - $' }];
+// **The separate "Currency" select is gone as of PET-47**, and with it `CURRENCY_OPTIONS`, which
+// held the single `USD - $` entry A6 and BUD-2 called for. Both are absorbed into
+// `components/BudgetField`, whose left segment is the currency picker - the shape the team's
+// Claude Design system draws and the one the product owner chose over Figma's two-control row.
+// Three currencies are offered now rather than one, which amends A6 and PET-47's AC2.
+//
+// The draft's shape did not move: it still holds `currency` and a display-string `budget`, so
+// `parseDraft`, `toRegisterBody` and step 3's validation are all untouched.
 
 /**
  * The one validation message (A5, BUD-6).
@@ -43,8 +38,8 @@ const CURRENCY_OPTIONS = [{ value: DEFAULT_CURRENCY, label: 'USD - $' }];
  */
 const BUDGET_REQUIRED = 'Enter an amount greater than 0.';
 
-/** Field ids, which `ui/Input` and `ui/Select` require rather than generating. */
-const CURRENCY_ID = 'setup-currency';
+/** The field id, which `ui/FieldShell` requires as a literal rather than generating. */
+const MONTH_START_ID = 'setup-month-start';
 const BUDGET_ID = 'setup-budget';
 
 export function BudgetForm() {
@@ -53,28 +48,12 @@ export function BudgetForm() {
   const [error, setError] = useState<string | undefined>(undefined);
 
   function onBudgetChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const element = event.currentTarget;
-    const raw = element.value;
-    const caret = element.selectionStart ?? raw.length;
-    const formatted = formatAmountInput(raw);
-
-    // Write the DOM before React does, which is the whole trick and the reason
-    // `ui/Input` needed no `ref` prop: `event.currentTarget` is already the node.
-    // It works only because formatAmountInput is idempotent - format.test.ts pins
-    // that property for exactly this reason.
-    //
-    // React does restore a selection around its own controlled-input commit, so
-    // this is not the difference between "caret preserved" and "caret at the end".
-    // React restores the raw *offset*, which is wrong precisely when the reformat
-    // inserts a separator to the left of the caret: typing the last 0 of 2000
-    // would leave '2,00|0' rather than '2,000|'. amountCaret computes the semantic
-    // position, and setting it here is what wins, because React's own save happens
-    // before this handler's write lands.
-    element.value = formatted;
-    const at = amountCaret(raw, caret, formatted);
-    element.setSelectionRange(at, at);
-
-    patchDraft({ budget: formatted });
+    // The reformat-and-restore-the-caret dance lives in `lib/amountField.ts`, which is where the
+    // account of it went when a fourth field wanted the same seven lines. The three things worth
+    // knowing before touching it are all in that file: it writes the DOM before React does, it
+    // depends on `formatAmountInput` being idempotent, and the caret it sets is the *semantic*
+    // position rather than the raw offset React would restore.
+    patchDraft({ budget: reformatAmountInput(event.currentTarget) });
 
     // Clears as soon as the user starts fixing it, rather than surviving until a
     // second submit. The message appears on submit only - see onSubmit.
@@ -110,27 +89,35 @@ export function BudgetForm() {
     // gap-5 matches the card's own 20px rhythm, so the three rows below sit on the
     // same grid as the copy block above them.
     <form noValidate onSubmit={onSubmit} className="flex w-full flex-col gap-5">
-      <Select
-        id={CURRENCY_ID}
-        label="Currency"
-        options={CURRENCY_OPTIONS}
-        value={draft.currency}
-        onChange={(event) => patchDraft({ currency: event.currentTarget.value })}
+      {/* One control where the frame draws two rows. The `$` prefix `ui/Input`'s currency variant
+          used to draw is the picker's own symbol now, and the box, its border and its focus ring
+          are daisyUI's `join` and `input`, so nothing here restates them. */}
+      <BudgetField
+        id={BUDGET_ID}
+        label="Monthly budget"
+        currency={draft.currency}
+        onCurrencyChange={(currency) => patchDraft({ currency })}
+        value={draft.budget}
+        onValueChange={onBudgetChange}
+        error={error}
         required
       />
 
-      {/* The currency variant is what draws the `$` prefix and the larger value;
-          `ui/Input` documents it against this very node (42:721). The box, its
-          border and its focus ring are daisyUI's `input`, so nothing here
-          restates them. */}
-      <Input
-        id={BUDGET_ID}
-        label="Monthly budget"
-        variant="currency"
-        value={draft.budget}
-        onChange={onBudgetChange}
-        error={error}
-        required
+      {/* **The third field, and PET-72 added it here rather than as a fourth step.** The pay day is
+          one number that belongs with the budget it shapes: a step of its own for a single control
+          would be a screen the design does not draw, and asking for it later - on Settings - would
+          mean every account's first months were bucketed to the 1st and then re-bucketed once the
+          user corrected it.
+
+          The same control the Settings Preferences card uses, so the two screens cannot disagree
+          about what days are offered or how the list scrolls. Not designed: frame 02 draws two rows,
+          so this row's label and hint are invented and owe A29 a sign-off with the rest. */}
+      <MonthStartField
+        id={MONTH_START_ID}
+        label="Pay day"
+        hint="Your budget period starts on this day each month."
+        value={draft.monthStartDay}
+        onChange={(monthStartDay) => patchDraft({ monthStartDay })}
       />
 
       {/* pt-1.5 is the designed 6px the frame puts above this row (node 42:724). */}

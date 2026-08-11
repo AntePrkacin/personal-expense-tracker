@@ -8,10 +8,11 @@ import { FormError } from '@/components/FormError';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { reformatAmountInput } from '@/lib/amountField';
+import { currencySymbol } from '@/lib/money';
 import type { CategoryOption } from '@/lib/categories';
 import type { CreateTransactionResult } from '@/lib/createTransaction';
 import { todayIsoDate } from '@/lib/date';
-import { amountCaret, formatAmountInput } from '@/lib/format';
 import {
   compressReceiptFiles,
   MAX_PDF_BYTES,
@@ -23,6 +24,7 @@ import type { components } from '@/types/api';
 
 import { DateField } from './DateField';
 import { Modal, type ModalHandle } from './Modal';
+import { useCurrency } from './PreferencesProvider';
 import {
   invalidFields,
   mergeScannedFields,
@@ -74,12 +76,15 @@ const MESSAGES = {
   // one: each line below is one row of the plan's outcome table, kept beside
   // the four failures above because both sets answer the same question -
   // "why did this not just work" - to the same reader.
-  scanNothingExtracted: 'Nothing readable in that photo. Try again with the whole receipt in frame.',
+  scanNothingExtracted:
+    'Nothing readable in that photo. Try again with the whole receipt in frame.',
   scanRejected: "That file isn't a receipt we can read. Use photos, or a single PDF.",
-  scanMixedPdf: "Send a PDF on its own - it already holds every page.",
+  scanMixedPdf: 'Send a PDF on its own - it already holds every page.',
   scanTooMany: `Send up to ${MAX_RECEIPT_FILES} photos, or a single PDF.`,
-  scanTooLarge: 'That file is too big. Photos can be up to 1.5 MB after compressing, a PDF up to 4 MB.',
-  scanUnavailable: 'Receipt scanning is switched off right now. You can still add the transaction by hand.',
+  scanTooLarge:
+    'That file is too big. Photos can be up to 1.5 MB after compressing, a PDF up to 4 MB.',
+  scanUnavailable:
+    'Receipt scanning is switched off right now. You can still add the transaction by hand.',
   scanRateLimited: "You've scanned a lot in a short time. Wait a minute and try again.",
   scanTimedOut: 'That scan took too long. Try again, or add the transaction by hand.',
   scanFailed: "We couldn't read that receipt. Please try again.",
@@ -87,7 +92,8 @@ const MESSAGES = {
   // copy names the one fix a device with no camera control can act on.
   compressionFailedPhone:
     "This phone saves photos in a format the browser can't read (HEIC). Use Scan receipt, or convert the file first.",
-  compressionFailedDesktop: "This file is in a format the browser can't read (HEIC). Convert it to a JPEG or PNG first.",
+  compressionFailedDesktop:
+    "This file is in a format the browser can't read (HEIC). Convert it to a JPEG or PNG first.",
 } as const;
 
 /** What each scan failure reason (`lib/scanReceipt.ts`) reads as. */
@@ -175,6 +181,9 @@ export function AddTransactionModal({
   onClose,
 }: AddTransactionModalProps) {
   const router = useRouter();
+  // The prefix glyph for `ui/Input`'s currency variant, which drew a literal `$` until PET-47's
+  // review. See `useCurrency` for why the symbol is a prop rather than read inside the primitive.
+  const currency = useCurrency();
   const modalRef = useRef<ModalHandle>(null);
 
   /**
@@ -252,28 +261,14 @@ export function AddTransactionModal({
   /**
    * The amount field, reformatted under the caret on every keystroke.
    *
-   * Lifted wholesale from `app/setup/BudgetForm.tsx`, including why it works: the handler
-   * writes the formatted value and the caret onto `event.currentTarget` directly, which is
-   * already the node, so `ui/Input` needs no `ref` prop. It depends on `formatAmountInput`
-   * being idempotent - `lib/format.test.ts` pins that property for exactly this reason - and
-   * on `amountCaret` computing the *semantic* position, because React restores the raw offset
-   * and that is wrong precisely when a separator is inserted to the left of the caret.
-   *
-   * jsdom cannot observe the outcome either way, so the suite asserts `setSelectionRange` was
-   * called with the computed offset and the visible behaviour is a Storybook check. That gap
-   * is recorded in `docs/TODO.md` against the budget field already.
+   * This used to be seven lines copied from `app/setup/BudgetForm.tsx` along with the paragraph
+   * explaining them; both live in `lib/amountField.ts` now, which is where a fourth consumer sent
+   * them. Read that file before changing the call order - the DOM write, the idempotence it rests
+   * on and the semantic caret are each load-bearing, and the suite here can only see the last of
+   * the three.
    */
   function onAmountChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const element = event.currentTarget;
-    const raw = element.value;
-    const caret = element.selectionStart ?? raw.length;
-    const formatted = formatAmountInput(raw);
-
-    element.value = formatted;
-    const at = amountCaret(raw, caret, formatted);
-    element.setSelectionRange(at, at);
-
-    set('amount', formatted);
+    set('amount', reformatAmountInput(event.currentTarget));
   }
 
   /**
@@ -339,7 +334,9 @@ export function AddTransactionModal({
         typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
         window.matchMedia('(pointer: fine)').matches;
-      setScanFailure(isFinePointer ? MESSAGES.compressionFailedDesktop : MESSAGES.compressionFailedPhone);
+      setScanFailure(
+        isFinePointer ? MESSAGES.compressionFailedDesktop : MESSAGES.compressionFailedPhone,
+      );
       return;
     }
 
@@ -562,9 +559,9 @@ export function AddTransactionModal({
           <p className="flex gap-2 text-xs leading-relaxed opacity-60">
             <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
             <span>
-              What you upload, your recent merchant names and your category names are sent to
-              Google Gemini to read the receipt, and may be used to improve their models. Nothing
-              is stored. Up to {MAX_RECEIPT_FILES} photos or one PDF, all treated as pages of one
+              What you upload, your recent merchant names and your category names are sent to Google
+              Gemini to read the receipt, and may be used to improve their models. Nothing is
+              stored. Up to {MAX_RECEIPT_FILES} photos or one PDF, all treated as pages of one
               receipt.
             </span>
           </p>
@@ -590,13 +587,14 @@ export function AddTransactionModal({
           id={AMOUNT_ID}
           label="Amount"
           variant="currency"
+          currencySymbol={currencySymbol(currency)}
           value={values.amount}
           onChange={onAmountChange}
           error={errors.amount}
           required
         />
 
-      {/* A placeholder rather than the fallback "Uncategorized" preselected. The contract's
+        {/* A placeholder rather than the fallback "Uncategorized" preselected. The contract's
           own `isFallback` doc says the transaction form preselects it, and doing so would make
           AC3's "missing category" unreachable by construction - so the criterion is kept real
           at the cost of one interaction. Recorded on the ticket.
@@ -604,53 +602,53 @@ export function AddTransactionModal({
           Disabled until the options arrive, or for good if the read failed. A control that is
           inert with no explanation is worse than a message, which is why the line below always
           accompanies the failed case. */}
-      <Select
-        id={CATEGORY_ID}
-        label="Category"
-        options={categoryOptions}
-        placeholder={CATEGORY_PLACEHOLDER}
-        value={values.categoryId}
-        onChange={(event) => set('categoryId', event.currentTarget.value)}
-        error={errors.categoryId}
-        disabled={categories === null || categoriesFailed}
-        required
-      />
+        <Select
+          id={CATEGORY_ID}
+          label="Category"
+          options={categoryOptions}
+          placeholder={CATEGORY_PLACEHOLDER}
+          value={values.categoryId}
+          onChange={(event) => set('categoryId', event.currentTarget.value)}
+          error={errors.categoryId}
+          disabled={categories === null || categoriesFailed}
+          required
+        />
 
-      {/* Date and Merchant share a row at 230px each inside the 472px body (node 28:401).
+        {/* Date and Merchant share a row at 230px each inside the 472px body (node 28:401).
           A flex row with flex-1 on each child rather than a grid, because `ui/FieldShell` is
           w-full and the two are separate components rather than cells of one layout. */}
-      <div className="flex w-full gap-3">
-        <div className="flex-1">
-          <DateField
-            id={DATE_ID}
-            label="Date"
-            value={values.date}
-            onChange={(iso) => set('date', iso)}
-            error={errors.date}
-          />
+        <div className="flex w-full gap-3">
+          <div className="flex-1">
+            <DateField
+              id={DATE_ID}
+              label="Date"
+              value={values.date}
+              onChange={(iso) => set('date', iso)}
+              error={errors.date}
+            />
+          </div>
+          <div className="flex-1">
+            <Input
+              id={MERCHANT_ID}
+              label="Merchant"
+              value={values.merchant}
+              onChange={(event) => set('merchant', event.currentTarget.value)}
+              error={errors.merchant}
+              required
+            />
+          </div>
         </div>
-        <div className="flex-1">
-          <Input
-            id={MERCHANT_ID}
-            label="Merchant"
-            value={values.merchant}
-            onChange={(event) => set('merchant', event.currentTarget.value)}
-            error={errors.merchant}
-            required
-          />
-        </div>
-      </div>
 
-      {/* The one field marked optional, which is what makes the other four read as required
+        {/* The one field marked optional, which is what makes the other four read as required
           (ADD-5, A12). No `required`, and it can carry no error. */}
-      <Input
-        id={NOTE_ID}
-        label="Note (optional)"
-        value={values.note}
-        onChange={(event) => set('note', event.currentTarget.value)}
-      />
+        <Input
+          id={NOTE_ID}
+          label="Note (optional)"
+          value={values.note}
+          onChange={(event) => set('note', event.currentTarget.value)}
+        />
 
-      {/* Two form-level lines rather than one, because they answer different questions and can
+        {/* Two form-level lines rather than one, because they answer different questions and can
           both be true: the picker had nothing to offer, and the save was rejected.
           `components/FormError.tsx` owns the treatment and the `role="alert"` argument for both,
           and renders nothing when its message is absent - so neither needs a conditional here

@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -21,10 +22,12 @@ import {
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { SessionPrincipal } from '../auth/session.service';
 import { ApiErrorResponse } from '../common/decorators/api-error-response.decorator';
+import { PeriodQueryDto } from '../common/dto/period-query.dto';
 import { CategoriesService } from './categories.service';
 import { CategoriesResponseDto } from './dto/categories-response.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryCapsDto } from './dto/update-category-caps.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 /**
@@ -49,14 +52,19 @@ export class CategoriesController {
   @Get()
   @ApiOperation({
     summary:
-      'Your categories with this period’s progress, and the allocation summary.',
+      'Your categories with a period’s progress, and the allocation summary.',
     description:
-      'One call serves the whole screen. Money is in major units. `spent` and `transactionCount` cover the current budgeting period, which starts on your profile’s `monthStartDay` rather than the 1st. An uncapped category reports `status: "uncapped"` with a null cap, percent, remaining and over - a cap is optional, so this is ordinary rather than exceptional. `allocation.unallocated` can be negative when caps exceed the budget.',
+      'One call serves the whole screen. Money is in major units. `spent`, `transactionCount`, every cap and the whole `allocation` summary cover **one budgeting period** - the current one unless `?period=` names another, and `period` in the response says which. A period starts on your pay day rather than the 1st, and is not always a calendar month or even a month long: changing your pay day stretches one period across the gap. An uncapped category reports `status: "uncapped"` with a null cap, percent, remaining and over - a cap is optional, so this is ordinary rather than exceptional. `allocation.unallocated` can be negative when caps exceed the budget.',
   })
   @ApiOkResponse({ type: CategoriesResponseDto })
-  @ApiErrorResponse(HttpStatus.UNAUTHORIZED)
-  list(@CurrentUser() user: SessionPrincipal): Promise<CategoriesResponseDto> {
-    return this.categories.list(user.userId);
+  // 400 is new here: `?period=` naming no real period is rejected rather than
+  // answered with the period around it.
+  @ApiErrorResponse(HttpStatus.BAD_REQUEST, HttpStatus.UNAUTHORIZED)
+  list(
+    @CurrentUser() user: SessionPrincipal,
+    @Query() query: PeriodQueryDto,
+  ): Promise<CategoriesResponseDto> {
+    return this.categories.list(user.userId, query.period);
   }
 
   @Post()
@@ -74,11 +82,38 @@ export class CategoriesController {
     return this.categories.create(user.userId, dto);
   }
 
+  // A bare `@Patch()`, not `@Patch('caps')`. The two collection-level patterns
+  // and `:id` are disjoint - a `:id` segment requires at least one character -
+  // so this needs no ordering care against the route below. A literal sub-path
+  // would need it, since `/categories/caps` does match `@Patch(':id')` and the
+  // failure would be a 400 from `ParseUUIDPipe` on a route that looks fine; it
+  // would also add a `spec.paths` key that `test/openapi.e2e-spec.ts` asserts on.
+  @Patch()
+  @ApiOperation({
+    summary: 'Set the cap on several categories at once.',
+    description:
+      'What the “Allocate budget” modal saves, in one request. Each entry sets that category’s cap, and `null` clears it, leaving the category uncapped; a cap of **0 or less is a 400**. `monthlyCap` is **required on every entry** - unlike `PATCH /categories/{id}`, this endpoint has no "leave this field alone" case, so an omitted cap is a 400 rather than a no-op. Every cap applies **from the period `capsFrom` names onward** - the current one when it is absent - and never further back: periods before the anchor keep the caps they were budgeted under. **All or nothing:** if any id names no live category the whole request is a **404** and no cap changes, so the identical payload can be retried. Nothing stops the caps summing above your monthly budget - `allocation.unallocated` simply goes negative. Answers the whole Categories screen for the current period, exactly as `GET /categories` does.',
+  })
+  @ApiOkResponse({ type: CategoriesResponseDto })
+  // No 409: the fallback's cap is editable and no rename is in play, so this is
+  // the one categories write with no conflict case.
+  @ApiErrorResponse(
+    HttpStatus.BAD_REQUEST,
+    HttpStatus.UNAUTHORIZED,
+    HttpStatus.NOT_FOUND,
+  )
+  setCaps(
+    @CurrentUser() user: SessionPrincipal,
+    @Body() dto: UpdateCategoryCapsDto,
+  ): Promise<CategoriesResponseDto> {
+    return this.categories.setCaps(user.userId, dto);
+  }
+
   @Patch(':id')
   @ApiOperation({
     summary: 'Change a category.',
     description:
-      'Send only the fields to change. An absent field is left alone; `monthlyCap` and `note` also accept `null`, which clears them - clearing a cap makes the category uncapped. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and note are all editable.',
+      'Send only the fields to change. An absent field is left alone; `monthlyCap` and `description` also accept `null`, which clears them - clearing a cap makes the category uncapped. A cap change applies **from the period `capFrom` names onward** - the current one when it is absent - and never further back: periods before the anchor keep the cap they were budgeted under. `capFrom` without `monthlyCap` is a **400**. An empty body is a **400**. **409** means you tried to rename `Uncategorized`, whose name is fixed; its cap, color, icon and description are all editable.',
   })
   @ApiOkResponse({ type: CategoryResponseDto })
   @ApiErrorResponse(

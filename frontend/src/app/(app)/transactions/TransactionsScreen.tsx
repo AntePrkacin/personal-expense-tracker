@@ -1,8 +1,8 @@
 import type { TransactionFilters, TransactionsView } from '@/lib/transactions';
-import { monthOverline } from '@/lib/format';
 
 import { AddTransactionButton } from '../AddTransactionButton';
 import { PageHeader } from '../PageHeader';
+import { filterHref } from './filters';
 import { FilterNavigationProvider, PendingRegion } from './FilterNavigation';
 import { TransactionsEmpty } from './TransactionsEmpty';
 import { TransactionSearch } from './TransactionSearch';
@@ -40,6 +40,16 @@ type TransactionsScreenProps = {
    */
   filters: TransactionFilters;
   /**
+   * How many live categories the account has, for the other tab's badge (PET-36).
+   *
+   * A prop rather than a read, and free at the call site: `page.tsx` already fetches the
+   * categories to join names and colours onto the table's rows, so this is `categories.length`
+   * over data it is holding anyway. Required rather than defaulted, for the same reason
+   * `filters` is - `npm run build` never typechecks `*.test.tsx`, so a default would let a call
+   * site quietly render the bar with a zero it never meant.
+   */
+  categoryCount: number;
+  /**
    * TRN-3's three selects: "All categories", "This month" and the right-aligned "Newest
    * first". Rendered in the populated and no-results states and **never** in the empty one.
    */
@@ -48,7 +58,24 @@ type TransactionsScreenProps = {
   table?: React.ReactNode;
 };
 
-export function TransactionsScreen({ view, filters, filterBar, table }: TransactionsScreenProps) {
+/**
+ * The overline for the one filter that spans every period, `period=all`.
+ *
+ * **The response's `period` is `null` there rather than empty**, which the contract states in as
+ * many words: a list covering every period has no single label. So this is the one overline on the
+ * screen that is not the backend's, and it is deliberately the string `PERIOD_OPTIONS` already
+ * offers for that filter rather than a second name for one thing - the pill reading "All time" over
+ * a header saying anything else would be two answers to one question.
+ */
+const ALL_PERIODS_OVERLINE = 'All time';
+
+export function TransactionsScreen({
+  view,
+  filters,
+  categoryCount,
+  filterBar,
+  table,
+}: TransactionsScreenProps) {
   // A15's amendment in one line: the no-results state keeps every control, the empty one drops
   // the filter bar. Reading it off the state name rather than off "is a filter active" is what
   // `lib/transactions.ts` documents at length - the two disagree for an account whose rows are
@@ -62,7 +89,7 @@ export function TransactionsScreen({ view, filters, filterBar, table }: Transact
     // also what lets `PendingRegion` below dim the table for a change the header started.
     <FilterNavigationProvider>
       <PageHeader
-        overline={monthOverline(new Date())}
+        overline={view.period?.label ?? ALL_PERIODS_OVERLINE}
         title="Transactions"
         action={
           <>
@@ -89,7 +116,17 @@ export function TransactionsScreen({ view, filters, filterBar, table }: Transact
           here would double it and put this page's content on a different grid from the other
           three. */}
       <main className="flex flex-1 flex-col gap-5 pb-10">
-        <TransactionTabs total={view.total} />
+        {/* `filterHref(filters)` rather than the bare route: this tab is the control a
+            filtering user clicks to get back to their own view, so pointing it at
+            `/transactions` would empty the search box and reset the period on the one click
+            that means "stay here". The Categories tab keeps the bare path - see
+            `TransactionTabs` for why the two directions differ. */}
+        <TransactionTabs
+          active="transactions"
+          transactionCount={view.total}
+          categoryCount={categoryCount}
+          transactionsHref={filterHref(filters)}
+        />
 
         {showFilterBar ? filterBar : null}
 

@@ -43,13 +43,13 @@ import { categories } from './schema';
  * There is no muted semantic token that works, which is what the seventeenth
  * entry in the allowlist exists for.
  *
- * It has no template to take a description from, so its `note` is written here.
+ * It has no template to take a description from, so its own is written here.
  */
 export const FALLBACK_CATEGORY = {
   name: 'Uncategorized',
   color: 'base-content/50',
   icon: 'circle-question-mark',
-  note: "Any transaction that doesn't have its own category.",
+  description: "Any transaction that doesn't have its own category.",
 } as const;
 
 /**
@@ -64,13 +64,13 @@ export const FALLBACK_CATEGORY = {
  * moment it is written, so an admin later editing a template does not - and must
  * not - reach back into it. Only new provisions pick up new wording.
  *
- * **The template's `description` becomes the user's `note`.** No new user-scope
- * column, which is what keeps this whole change free of a user-scope migration:
- * `note` already exists, is nullable, is editable through both category DTOs and
- * is returned by `CategoryResponseDto`, so a second free-text column would need
- * a stated difference and has none. The visible consequence is that `note` is no
- * longer empty on a fresh account - and that it surfaces on no screen yet
- * (CED-4, A42), so do not read a blank screen as a failed seed.
+ * **The template's `description` becomes the user's `description`.** The two
+ * shared no name until PET-72: the user-scope column was `note`, reused rather
+ * than added so PET-64 needed no user-scope migration, and the mismatch was the
+ * only thing left to explain. The rename cost nothing once the databases were
+ * reset. The visible consequence is unchanged - `description` is not empty on a
+ * fresh account, and it surfaces on no screen yet (CED-4, A42), so do not read a
+ * blank screen as a failed seed.
  *
  * **The fallback is inserted whether or not anything was picked.** Selecting no
  * chips is a valid choice (A4 enforces no minimum) and used to leave the table
@@ -94,7 +94,7 @@ export async function seedStarterCategories(
       name: FALLBACK_CATEGORY.name,
       color: FALLBACK_CATEGORY.color,
       icon: FALLBACK_CATEGORY.icon,
-      note: FALLBACK_CATEGORY.note,
+      description: FALLBACK_CATEGORY.description,
       isFallback: true,
     },
     ...picked.map((template) => ({
@@ -102,7 +102,7 @@ export async function seedStarterCategories(
       name: template.name,
       color: template.color,
       icon: template.icon,
-      note: template.description,
+      description: template.description,
     })),
   ]);
 }

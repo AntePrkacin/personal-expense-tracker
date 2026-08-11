@@ -36,7 +36,7 @@ and update, the category endpoints with their month stats, and the dashboard sum
 has the design system, the app shell with its four routed views, all six access screens, and
 PET-52's verify handler at `/auth/verify` with the httpOnly `spendifico.session` cookie behind it.
 So a person can register, click the emailed link, and land signed in on a Dashboard that knows who
-they are - the sidebar footer reads a real `GET /api/profile`. Nine things beyond access work
+they are - the sidebar footer reads a real `GET /api/profile`. Thirteen things beyond access work
 now: `/transactions` reads and renders its own list state, the table under it draws the rows with
 their filters live in the URL, every "Add transaction" button opens a modal that really
 writes, and as of PET-33 each row's kebab opens a menu whose "Delete" really removes the
@@ -55,8 +55,59 @@ delete regenerates the set and the screen is a pure read plus a Regenerate butto
 thing that has to decide when a first run happens. PET-59 adds a ninth: the Add transaction modal
 can scan a photo or PDF of a receipt and fill Merchant, Amount, Category, Date and Note from it,
 on `gemini-3.6-flash` via `POST /api/transactions/scan`, with nothing about the image ever
-stored. What is still missing is what the one
-remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
+stored. The tenth is PET-36's:
+`/transactions/categories` is a real route behind a tab bar that finally navigates, drawing a card
+per category with its cap, its month's spend and its status, over a summary of the period's
+spending against the monthly budget. The eleventh is PET-37's, and it is the first write anywhere
+outside transactions: that tab's "Add category" opens a modal that really creates one, with its
+colour and icon offered from the admin-managed template tables rather than from a list the frontend
+keeps, and a monthly budget that may be left blank because an uncapped category is a first-class
+choice. The twelfth is PET-39's, and it makes that tab's card kebab real: each one opens a menu
+whose "Delete" removes the category behind a confirmation, and the transactions filed under it move
+to the `Uncategorized` fallback rather than disappearing - which is why the dialog names that row
+rather than the "Other" the ticket asked for. The thirteenth is PET-70's, and it is the one that
+finally clears the tab: the summary card's "Allocate" opens a modal that sets every category's cap
+in one atomic write, so the Categories tab is the first screen in the app with no inert control on
+it. That write is the app's first **bulk** one and the contract's first array body - `PATCH
+/api/categories`, all-or-nothing, refusing the whole payload rather than half-applying it. The
+sentence this replaces said that menu's "Edit", every uncapped card's "Set limit" and that
+"Allocate" were all still unavailable and all three were PET-38's; PET-38 made two of them live and
+left this one, so the claim was stale by two before it was stale by three. What is still missing is
+what the one remaining unbuilt screen *shows*: the Settings `<main>` below the page header is empty.
+
+**That last sentence is stale twice over, and both halves are worth naming.** PET-46 filled the
+Settings `<main>` with the Profile card and the page-level "Save changes", so no routed view renders
+an empty one and all four fetch. PET-47 is the fourteenth thing that works and it finishes two of
+frame 17's three cards: the **Preferences** card is real and really writes, holding the monthly
+budget with its currency and the day the budgeting period starts on. Three things about it reach
+past that screen. **Money follows the profile's currency now** - `USD`, `EUR` or `GBP` - where every
+figure in the app was formatted as dollars by a module-scope formatter with the code written into
+it; switching **re-denominates rather than converts**, because amounts are integer cents with no
+currency attached and there is no rate source. **Every page header names the budgeting period rather
+than the calendar month**, so a `monthStartDay` of 15 reads "September / October 2025" instead of
+claiming a boundary the figures below it do not have - the `docs/TODO.md` entry open since PET-19.
+And the app's fifth custom picker arrived with it: a 28-row "Month starts on" list, capped and
+scrolling, because a native `<select>`'s popup height cannot be set in CSS in Firefox or Safari.
+What is still missing on that screen is frame 17's **third** card, the Categories summary with its
+"Manage" - PET-47's, drawn in Figma and deliberately not built here.
+
+**PET-72 is the fifteenth thing that works, and it is the one that changes what the other fourteen
+*mean*.** Budget, category caps and the day a period starts on were single settings, so changing any
+of them silently rewrote every period the account had ever had: raising the budget in 2026 re-priced
+every month of 2025. All three are **append-only, effective-dated histories resolved on read** now,
+so a change applies from a date and never backwards. Periods are anchored to **paychecks** rather
+than to a day of the month: a schedule change is anchored to the first paycheck under the new
+schedule, arrears removes the boundary immediately before it, and one stretched **transition period**
+runs from the last kept boundary up to it keeping the **old** budget. That date may be retroactive or
+in the future. `GET /api/periods` publishes the account's whole history with a **label** per period,
+because a period is no longer one calendar month and no arithmetic over a start day can name one that
+spans three month names - so the Dashboard's month select, inert since PET-19 because A8 wanted a
+designed control first, is a real one and the app has no inert control anywhere. Four things were
+bundled into it because it lands with the pre-launch database reset and they were each a migration on
+their own: `fullName` replaces two name fields, EUR becomes the default of a real two-decimal
+currency allowlist, `categories.note` becomes `description`, and onboarding asks the pay day. The
+Settings save is unchanged in shape and different in effect - one "Save changes", intercepted by a
+dialog asking which paycheck a budget or pay-day change applies from.
 
 ## Repository map
 
@@ -155,6 +206,9 @@ read the file before you write the change, not after.
 | add or change the insights endpoint                                 | `backend/CLAUDE.md`, Insights    |
 | touch a category template, a colour token or an icon name           | `backend/CLAUDE.md`, Templates   |
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
+| resolve a period, or touch a budget, cap or pay-schedule history    | `backend/CLAUDE.md`, Backend conventions |
+| add or change the periods endpoint, or the schedule write           | `backend/CLAUDE.md`, Profile and preferences |
+| name a period on a screen, or add a `?period=` to a read            | `frontend/src/app/CLAUDE.md`, The app shell |
 | touch any file under `frontend/`                                    | `frontend/CLAUDE.md`            |
 | write a Tailwind class or style anything                            | `frontend/CLAUDE.md`, Design tokens |
 | add or change a daisyUI theme, or re-map a `--color-*`              | `frontend/CLAUDE.md`, Changing or adding a theme |

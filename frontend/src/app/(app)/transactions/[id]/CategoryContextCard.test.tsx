@@ -11,8 +11,8 @@ const CAPPED: CategoryContext = {
   id: '0198c2a1-0000-7000-8000-0000000000a1',
   name: 'Groceries',
   color: 'success',
-  icon: null,
-  note: null,
+  icon: 'shopping-basket',
+  description: null,
   isFallback: false,
   monthlyCap: 500,
   spent: 397,
@@ -69,7 +69,12 @@ const SIBLINGS: TransactionDetail['recentInCategory'] = [
 
 function renderCard(category: CategoryContext, recent = SIBLINGS, query = '') {
   return render(
-    <CategoryContextCard category={category} recentInCategory={recent} query={query} />,
+    <CategoryContextCard
+      currency="USD"
+      category={category}
+      recentInCategory={recent}
+      query={query}
+    />,
   );
 }
 

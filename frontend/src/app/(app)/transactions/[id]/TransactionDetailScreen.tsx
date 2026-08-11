@@ -2,7 +2,8 @@ import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 
 import { categoryDotClass } from '@/components/ui/categoryColour';
-import { formatIsoDate, formatNegative } from '@/lib/format';
+import { formatIsoDate } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { TransactionDetail } from '@/lib/transactionDetail';
 
 import { PageHeader } from '../../PageHeader';
@@ -33,6 +34,14 @@ type TransactionDetailScreenProps = {
   query: string;
   /** DET-2's Edit and Delete. A slot, because they need the client and this file does not. */
   actions: React.ReactNode;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
 export function TransactionDetailScreen({
@@ -40,7 +49,10 @@ export function TransactionDetailScreen({
   backHref,
   query,
   actions,
+  currency,
 }: TransactionDetailScreenProps) {
+  const { formatNegative } = moneyFormatters(currency);
+
   const { transaction, category, recentInCategory } = detail;
 
   // A note that is null, or present but blank, hides the card entirely (A21). Blank is worth
@@ -101,6 +113,7 @@ export function TransactionDetailScreen({
             </section>
 
             <CategoryContextCard
+              currency={currency}
               category={category}
               recentInCategory={recentInCategory}
               query={query}

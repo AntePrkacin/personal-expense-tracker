@@ -1,9 +1,10 @@
-import type { ConfigService } from '@nestjs/config';
 import type { CategoriesService } from '../categories/categories.service';
 import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
+import { todayIn } from '../common/month-window';
 import type { InsightSummaryDto } from '../insights/dto/insight-set-response.dto';
 import type { InsightsService } from '../insights/insights.service';
 import type { TransactionResponseDto } from '../transactions/dto/transaction-response.dto';
+import type { PeriodService } from '../periods/period.service';
 import type { TransactionsService } from '../transactions/transactions.service';
 import { DashboardService } from './dashboard.service';
 
@@ -18,7 +19,8 @@ describe('DashboardService', () => {
   const USER_ID = '0190c3f0-0000-7000-8000-000000000001';
 
   let service: DashboardService;
-  let currentWindow: jest.Mock;
+  let currentPeriod: jest.Mock;
+  let startingAt: jest.Mock;
   let categoriesList: jest.Mock;
   let transactionsList: jest.Mock;
   let insightSummaryFn: jest.Mock;
@@ -70,10 +72,25 @@ describe('DashboardService', () => {
     monthlyBudget?: number;
     insight?: InsightSummaryDto | null;
   }) => {
-    currentWindow = jest
+    // `current()` hands back the period **and** the `today` it was resolved
+    // from, which is what closes the midnight edge the old two-call shape had.
+    // The specs drive `today` with fake timers, so it is read here rather than
+    // hard-coded.
+    const window = options?.window ?? {
+      start: '2026-08-01',
+      end: '2026-09-01',
+    };
+    currentPeriod = jest.fn().mockImplementation(() =>
+      Promise.resolve({
+        ...window,
+        label: 'August 2026',
+        today: todayIn('Europe/Zagreb'),
+      }),
+    );
+    startingAt = jest
       .fn()
-      .mockResolvedValue(
-        options?.window ?? { start: '2026-08-01', end: '2026-09-01' },
+      .mockImplementation(() =>
+        Promise.resolve({ ...window, label: 'August 2026' }),
       );
     categoriesList = jest.fn().mockResolvedValue({
       categories: options?.categories ?? [],
@@ -90,10 +107,14 @@ describe('DashboardService', () => {
     insightSummaryFn = jest.fn().mockResolvedValue(options?.insight ?? null);
 
     service = new DashboardService(
-      { currentWindow, list: categoriesList } as unknown as CategoriesService,
+      { list: categoriesList } as unknown as CategoriesService,
+      {
+        current: currentPeriod,
+        startingAt,
+        today: () => todayIn('Europe/Zagreb'),
+      } as unknown as PeriodService,
       { list: transactionsList } as unknown as TransactionsService,
       { latestReadySummary: insightSummaryFn } as unknown as InsightsService,
-      { get: () => 'Europe/Zagreb' } as unknown as ConfigService,
     );
   };
 
@@ -135,7 +156,7 @@ describe('DashboardService', () => {
 
     const result = await service.get(USER_ID);
 
-    expect(currentWindow).toHaveBeenCalledWith(USER_ID);
+    expect(currentPeriod).toHaveBeenCalledWith(USER_ID);
     expect(result.daysLeft).toBe(26);
     expect(result.weeklyBuckets[0]?.startDate).toBe('2026-08-15');
   });
@@ -335,10 +356,20 @@ describe('DashboardService', () => {
 
     await service.get(USER_ID);
 
-    expect(transactionsList).toHaveBeenCalledWith(USER_ID, {
-      period: 'current',
-      sort: 'date_desc',
-    });
+    // The third argument is the already-resolved period, passed so one request
+    // resolves "current" exactly once - the midnight skew the class docblock
+    // records. The selector still travels so the query object says what was
+    // asked. Asserted against the mock's own answer rather than a matcher, so
+    // this also pins that the *same* resolution is what travels.
+    const resolved: unknown = await currentPeriod.mock.results[0].value;
+    expect(transactionsList).toHaveBeenCalledWith(
+      USER_ID,
+      {
+        period: 'current',
+        sort: 'date_desc',
+      },
+      resolved,
+    );
   });
 
   it('passes the insight summary through from the composed InsightsService', async () => {

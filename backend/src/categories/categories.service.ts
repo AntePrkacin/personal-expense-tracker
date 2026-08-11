@@ -4,21 +4,26 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { and, asc, eq, gte, isNull, lt, notExists, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  sql,
+} from 'drizzle-orm';
 import { newId } from '../common/ids';
 import { fromCents, toCents } from '../common/money';
-import {
-  monthWindow,
-  previousMonthWindow,
-  todayIn,
-  type MonthWindow,
-} from '../common/month-window';
+import type { Period } from '../common/period-rules';
+import { PeriodService } from '../periods/period.service';
 import type { UserDatabase } from '../database/database.types';
 import { UserDatabaseService } from '../database/user-database.service';
 import {
   categories,
-  profile,
+  categoryCapHistory,
   transactions,
   type CategoryRow,
 } from '../database/user/schema';
@@ -28,27 +33,45 @@ import type {
 } from './dto/category-response.dto';
 import type { CategoriesResponseDto } from './dto/categories-response.dto';
 import type { CreateCategoryDto } from './dto/create-category.dto';
+import type { UpdateCategoryCapsDto } from './dto/update-category-caps.dto';
 import type { UpdateCategoryDto } from './dto/update-category.dto';
 
 const NO_CATEGORY = 'Category not found.';
 const NOTHING_TO_UPDATE = 'Provide at least one field to update.';
+const CAP_FROM_WITHOUT_CAP =
+  'capFrom dates a cap change, so it needs a monthlyCap in the same body; send both or neither.';
 const NO_DELETE_FALLBACK =
   'The Uncategorized category cannot be deleted: it is where deleting any other category moves its transactions.';
 const NO_RENAME_FALLBACK =
-  'The Uncategorized category cannot be renamed. Its cap, color, icon and note can all be changed.';
-const NO_PROFILE = (userId: string) =>
-  `Profile row missing for user ${userId}; a verified session implies one exists.`;
+  'The Uncategorized category cannot be renamed. Its cap, color, icon and description can all be changed.';
 const NO_FALLBACK = (userId: string) =>
   `No fallback category for user ${userId}; provisioning seeds one for every account.`;
+// The second sentence is not decoration: it is the only way a client learns the
+// identical payload is safe to retry whole, which is the point of the guard.
+const NO_CATEGORIES = (ids: string[]) =>
+  `No live category for ${ids.join(', ')}. No cap was changed.`;
+const GUARD_DISAGREES = (ids: string[]) =>
+  `Bulk cap update for ${ids.join(', ')} matched no rows, yet every id reads back live.`;
 
-/** The sparse column set an UPDATE applies. Never includes `updatedAt`. */
+/**
+ * The sparse column set an UPDATE applies. Never includes `updatedAt`.
+ *
+ * No cap here since PET-72: a cap change is an append to
+ * `category_cap_history`, not a column on this row, so it travels separately.
+ */
 type CategoryUpdate = Partial<
-  Pick<CategoryRow, 'name' | 'color' | 'monthlyCapCents' | 'icon' | 'note'>
+  Pick<CategoryRow, 'name' | 'color' | 'icon' | 'description'>
 >;
 
 /** One category's row plus its aggregates for the period, straight from SQL. */
 interface CategoryWithSpend {
   row: CategoryRow;
+  /**
+   * The cap in force for the period being reported, resolved from history rather
+   * than read off the row. NULL means uncapped - which is the same answer as
+   * having no history row at all, deliberately indistinguishable.
+   */
+  capCents: number | null;
   spentCents: number;
   transactionCount: number;
 }
@@ -58,68 +81,119 @@ interface CategoryWithSpend {
  *
  * **Every figure here is derived on read and none of it is stored.** There is no
  * month column on `transactions` and there must not be one: a category's spend
- * for a period is a SUM over `transactions.date` read against the window this
- * service resolves, which is what makes a backdated transaction land in its own
- * month and a changed `monthStartDay` re-bucket history correctly.
+ * for a period is a SUM over `transactions.date` read against the window
+ * `PeriodService` resolves, which is what makes a backdated transaction land in
+ * its own period.
  *
  * **Cross-user isolation is structural, not enforced here.** Every method opens
  * the caller's own database, so another user's category id simply does not exist
  * in it and the ordinary 404 covers the case. There is no `WHERE user_id = ?` to
  * forget, because there is no user column to have.
  *
- * **This is the app's only month aggregation, and other features compose it
- * rather than repeat it.** `currentWindow`, `previousWindow` and `monthStatsFor`
- * are public for exactly that: PET-28's transaction reads need a window to filter
- * by and one category's stats for the detail screen, and PET-20's dashboard needs
- * the same window again. `period` and `withSpend` behind them stay private so
- * there is one copy of "resolve the window, then sum against it" - a second copy
- * is how the Categories screen and the transaction detail would come to disagree
- * the first time a threshold moved.
+ * **This service no longer resolves the period, and that is PET-72's structural
+ * change here.** It used to own the app's only month arithmetic behind a private
+ * `period()`, with `currentWindow` and `previousWindow` public purely so the
+ * transaction reads, the dashboard and the insights generator could reach it -
+ * three features importing the categories feature for something that had nothing
+ * to do with categories. `PeriodService` owns that now and all four compose it
+ * directly. What stays here is aggregation: sum spend against a window somebody
+ * else resolved, and resolve each category's **cap** for that window.
+ * `monthStatsFor` stays public, because one category's stats for the current
+ * period really is this feature's business and the transaction detail needs it.
+ *
+ * **A cap is history now, not a column.** `withSpend` resolves it per window with
+ * a correlated subquery, so every screen shows the cap that was in force for the
+ * period it is displaying rather than today's cap applied retroactively to a
+ * period that closed months ago. The three writes that used to set
+ * `monthly_cap_cents` all append instead.
  *
  * **No `db.transaction()` anywhere in this file, deliberately** - including in
- * `remove`, which is the one operation with two writes. Both tables are in the
- * same database so a transaction is genuinely available, but
- * `backend/CLAUDE.md` records that `LoginTokenService.issue()` is the app's only
- * transactional call site on purpose: the embedded driver refuses overlapping
- * transactions rather than queueing them, so a second call site means two quick
- * deletes on one user's database collide. Ordering solves the same problem for
- * free - see `remove`.
+ * `remove`, which has two writes, and `setCaps`, which writes many rows at once.
+ * Both tables are in the same database so a transaction is genuinely available,
+ * but `backend/CLAUDE.md` records why the app keeps its transactional call sites
+ * countable: the embedded driver refuses overlapping transactions rather than
+ * queueing them, so a second call site on a user database means two quick writes
+ * on one person's database collide.
+ *
+ * **Two shapes replace it, and which one applies depends on the write.** Where
+ * the statements are order-dependent, ordering them so a failure between the two
+ * is the harmless direction costs nothing - `remove`. Where they are not, and a
+ * half-applied result would be a real one, the answer is a **conditional single
+ * statement**: one statement whose own `WHERE` carries the condition that makes
+ * it all-or-nothing, so the database decides rather than this code, and there is
+ * no await between a check and a write for a concurrent request to land in.
+ * `setCaps` is that, and `LoginTokenService.consume()` is the same shape.
  */
 @Injectable()
 export class CategoriesService {
   constructor(
     private readonly userDatabases: UserDatabaseService,
-    private readonly config: ConfigService,
+    private readonly periods: PeriodService,
   ) {}
 
-  /** Live categories with their month stats, plus the allocation summary. */
-  async list(userId: string): Promise<CategoriesResponseDto> {
+  /**
+   * Live categories with their stats for a period, plus the allocation summary.
+   *
+   * @param periodStart A period's own `start`, from `GET /api/periods`. Omitted
+   * means the current period, which is what every screen asks for by default.
+   * **The whole response is period-scoped, including the allocation summary**:
+   * caps and the monthly budget are both history now, so reporting last
+   * December's spend against today's caps would be the exact retroactive
+   * rewriting this ticket exists to stop.
+   *
+   * @throws BadRequestException if `periodStart` is not the start of a real
+   * period for this account.
+   *
+   * @param resolvedPeriod A period the caller already resolved. Passed by the
+   * dashboard and the insights generator so one request resolves "current"
+   * exactly once - see `TransactionsService.list` for the midnight skew this
+   * closes. When supplied it wins over `periodStart`.
+   */
+  async list(
+    userId: string,
+    periodStart?: string,
+    resolvedPeriod?: Period,
+  ): Promise<CategoriesResponseDto> {
+    const period =
+      resolvedPeriod ??
+      (periodStart === undefined
+        ? await this.periods.current(userId)
+        : await this.periods.startingAt(userId, periodStart));
+
+    const budgetCents = await this.periods.budgetCentsFor(userId, period);
     const db = await this.userDatabases.getUserDb(userId);
-    const { window, monthlyBudgetCents } = await this.period(db, userId);
-    const rows = await this.withSpend(db, window);
+    const rows = await this.withSpend(db, period);
 
     // Uncapped categories contribute nothing, which is what lets `unallocated`
     // sit near the full budget for someone who caps little. Correct, and not a
     // state frame 13 anticipates.
     const allocatedCents = rows.reduce(
-      (total, { row }) => total + (row.monthlyCapCents ?? 0),
+      (total, { capCents }) => total + (capCents ?? 0),
       0,
     );
 
     return {
       categories: rows.map(toResponse),
+      period: { start: period.start, end: period.end, label: period.label },
       allocation: {
-        monthlyBudget: fromCents(monthlyBudgetCents),
+        monthlyBudget: fromCents(budgetCents),
         allocated: fromCents(allocatedCents),
         // Unclamped: nothing prevents caps exceeding the budget (A43), and the
         // magnitude is what a future over-allocation state would need.
-        unallocated: fromCents(monthlyBudgetCents - allocatedCents),
+        unallocated: fromCents(budgetCents - allocatedCents),
       },
     };
   }
 
   /**
    * Creates a category. A cap is optional; absent means uncapped.
+   *
+   * **Two writes when a cap is given, ordered rather than wrapped**, for the
+   * reason the class note gives: the category first, its first cap row second. A
+   * failure between them leaves an uncapped category, which is visible on the
+   * card and fixed by editing it. The reverse order would write a cap row for a
+   * category that does not exist - harmless to every read, since they all join
+   * from `categories`, but it would be a row nothing could ever reach or clean up.
    *
    * @throws BadRequestException via the DTO for a cap of zero or less.
    */
@@ -135,20 +209,33 @@ export class CategoriesService {
         id: newId(),
         name: dto.name,
         color: dto.color,
-        monthlyCapCents:
-          dto.monthlyCap === undefined ? null : toCents(dto.monthlyCap),
-        icon: dto.icon ?? null,
-        note: dto.note ?? null,
+        icon: dto.icon,
+        description: dto.description ?? null,
         // Never settable through the API: the fallback is seeded at
         // provisioning and the partial unique index would reject a second one.
         isFallback: false,
       })
       .returning();
 
+    // Resolved only when there is a cap to date. A category created without one
+    // writes no history row at all - the sparse history the schema describes -
+    // and pays for no period read either.
+    const capCents =
+      dto.monthlyCap === undefined ? null : toCents(dto.monthlyCap);
+
+    if (capCents !== null) {
+      const period = await this.periods.current(userId);
+      await this.appendCap(db, created.id, period.start, capCents);
+    }
+
     // A brand-new category cannot have transactions, so its stats are zero
-    // without asking. That is why this method never resolves the period: the
-    // profile read it would cost buys a window nothing here would query.
-    return toResponse({ row: created, spentCents: 0, transactionCount: 0 });
+    // without asking.
+    return toResponse({
+      row: created,
+      capCents,
+      spentCents: 0,
+      transactionCount: 0,
+    });
   }
 
   /**
@@ -165,10 +252,25 @@ export class CategoriesService {
   ): Promise<CategoryResponseDto> {
     const changes = toUpdate(dto);
 
+    // A cap change is no longer one of `changes`: it is an append to a different
+    // table, so "did this request ask for anything" has to consider both. Read
+    // into a local so `undefined` and `null` narrow properly below - the
+    // difference between them is the whole tri-state.
+    const cap = dto.monthlyCap;
+    const capChanged = cap !== undefined;
+
+    // A `capFrom` with no cap to date is refused rather than ignored: silently
+    // dropping it would answer 200 to a body that read as a backdate, and the
+    // caller would believe one happened. Ahead of the empty-body 400, so a body
+    // carrying only `capFrom` gets the message that names its actual mistake.
+    if (dto.capFrom !== undefined && !capChanged) {
+      throw new BadRequestException(CAP_FROM_WITHOUT_CAP);
+    }
+
     // Before the database is even opened: a bare UPDATE would still bump
     // `updated_at` through `$onUpdateFn` and record an edit that changed
     // nothing. Same reasoning as UpdateTransactionDto's.
-    if (Object.keys(changes).length === 0) {
+    if (Object.keys(changes).length === 0 && !capChanged) {
       throw new BadRequestException(NOTHING_TO_UPDATE);
     }
 
@@ -179,12 +281,37 @@ export class CategoriesService {
       throw new ConflictException(NO_RENAME_FALLBACK);
     }
 
-    await db
-      .update(categories)
-      // Never sets `updatedAt` by hand: drizzle v1's buildUpdateSet applies
-      // `$onUpdateFn` columns itself.
-      .set(changes)
-      .where(and(eq(categories.id, id), isNull(categories.deletedAt)));
+    // Skipped for a cap-only change, which is the same rule the 400 above
+    // enforces applied one level down: there is nothing to set on this row, and
+    // an empty UPDATE would move `updated_at` for an edit that happened in
+    // another table.
+    if (Object.keys(changes).length > 0) {
+      await db
+        .update(categories)
+        // Never sets `updatedAt` by hand: drizzle v1's buildUpdateSet applies
+        // `$onUpdateFn` columns itself.
+        .set(changes)
+        .where(and(eq(categories.id, id), isNull(categories.deletedAt)));
+    }
+
+    if (cap !== undefined) {
+      // The anchored period - `capFrom` from the follow-up dialog, the current
+      // period when absent. `startingAt` is what refuses a date that starts no
+      // period, or a future one, so a backdate can only land on a period the
+      // account really has.
+      const period =
+        dto.capFrom === undefined
+          ? await this.periods.current(userId)
+          : await this.periods.startingAt(userId, dto.capFrom);
+      // `null` is a real value here, not an absence: it is how a capped category
+      // becomes uncapped from the anchored period onward.
+      await this.appendCap(
+        db,
+        id,
+        period.start,
+        cap === null ? null : toCents(cap),
+      );
+    }
 
     // No `.returning()` above, because `monthStatsFor` selects the row again
     // anyway and the two copies of "id to stats" this file used to hold are what
@@ -192,6 +319,126 @@ export class CategoriesService {
     // copy, and it is also what turns a row deleted between `liveCategory` and
     // this UPDATE into the ordinary 404 rather than a TypeError.
     return this.monthStatsFor(userId, id);
+  }
+
+  /**
+   * Sets the cap on many categories at once, all of them or none.
+   *
+   * **One conditional statement, and still no `db.transaction()`.** The class
+   * note above forbids a second transactional call site on a user database; this
+   * is the shape that replaces it where ordering cannot help, because N cap
+   * writes are order-independent and a failure part-way through would leave a
+   * genuinely half-allocated budget. The `count(*)` subquery in the `WHERE` is
+   * the whole atomicity story: the statement refuses itself unless every id in
+   * the payload is live at the instant it runs, so there is no window between a
+   * check and a write, and a concurrent delete cannot land in one.
+   *
+   * **PET-72 turned it from an UPDATE into an INSERT and the guard survived
+   * unchanged**, which is the point of having written it this way. Caps are
+   * append-only history now, so this inserts one `category_cap_history` row per
+   * entry, all effective from the same period, instead of overwriting a column.
+   * The guard is still a `count(*)` against live categories in the same
+   * statement's `WHERE`, so it is still the database refusing a partial payload
+   * rather than this code checking first.
+   *
+   * **The `WHERE` sits on a constant subquery, which is what makes it
+   * all-or-nothing rather than per-row.** `INSERT ... SELECT ... FROM (VALUES
+   * ...) WHERE <guard>` evaluates the guard for each generated row, and the guard
+   * mentions none of them - so it is the same answer every time and either every
+   * row is inserted or none is. Verified against the real driver before it was
+   * written, in both directions.
+   *
+   * **The `CASE`-arms trap is gone, and that is a real simplification.** The old
+   * UPDATE built a `CASE` from the payload and an `IN` list beside it, where a row
+   * matched by the `WHERE` with no arm of its own fell off the end of the `CASE`
+   * and was silently set to NULL - so the two halves had to come from one array
+   * or the statement would wipe caps nobody named. Rows and ids now come from the
+   * same `items` array by construction, because a row that is not in the VALUES
+   * list is not inserted at all. There is no longer a way to express the bug.
+   *
+   * **No ceiling against the monthly budget, on purpose.** Nothing stops these
+   * caps summing past it; `allocation.unallocated` simply comes back negative,
+   * which `CategoriesResponseDto` documents and A43 records as undesigned. The
+   * Allocate modal enforces a ceiling of its own, and `PATCH /categories/:id`
+   * enforces none - putting one here would make this endpoint disagree with that
+   * one about what a legal cap is.
+   *
+   * @throws NotFoundException if any id names no live category. Nothing is
+   * applied, so the same payload can be retried once the caller has refreshed.
+   */
+  async setCaps(
+    userId: string,
+    dto: UpdateCategoryCapsDto,
+  ): Promise<CategoriesResponseDto> {
+    const items = dto.categories;
+    const ids = items.map((item) => item.id);
+
+    // Every row carries the same `effective_from`: the anchored period's start -
+    // `capsFrom`, one answer for the whole batch, or the current period when it
+    // is absent. One anchor rather than one per entry, because the Allocate
+    // modal asks its "from when" question once per save; `startingAt` refuses a
+    // date that starts no period of the caller's, or a future one.
+    const period =
+      dto.capsFrom === undefined
+        ? await this.periods.current(userId)
+        : await this.periods.startingAt(userId, dto.capsFrom);
+    const db = await this.userDatabases.getUserDb(userId);
+
+    // One instant for every row, so a later resolution ordering by `created_at`
+    // cannot prefer one entry of a single save over another.
+    const createdAt = Date.now();
+
+    const values = sql.join(
+      items.map(
+        (item) =>
+          sql`(${newId()}, ${item.id}, ${period.start}, ${item.monthlyCap === null ? null : toCents(item.monthlyCap)}, ${createdAt})`,
+      ),
+      sql`, `,
+    );
+
+    // The guard, and the only thing in the statement that reads `categories`.
+    const live = and(inArray(categories.id, ids), isNull(categories.deletedAt));
+
+    const applied = await db
+      .insert(categoryCapHistory)
+      .select(
+        db
+          .select({
+            // SQLite names a VALUES clause's columns `column1`, `column2`, ... -
+            // there is no syntax to name them inline - so the aliases here are
+            // what map them onto the insert's column list, in this order.
+            id: sql`column1`.as('id'),
+            categoryId: sql`column2`.as('category_id'),
+            effectiveFrom: sql`column3`.as('effective_from'),
+            capCents: sql`column4`.as('cap_cents'),
+            // Supplied rather than defaulted: `$defaultFn` runs when drizzle
+            // builds a `values()` list, and this insert has none to build.
+            createdAt: sql`column5`.as('created_at'),
+          })
+          .from(sql`(values ${values})`)
+          .where(
+            sql`(select count(*) from ${categories} where ${live}) = ${ids.length}`,
+          ),
+      )
+      // Returning ids rather than counting the driver's result: the two driver
+      // modes report different result shapes, which `database.types.ts` types as
+      // `any` for that reason, so a row count would be the one place in the app
+      // that depends on which mode it is running in.
+      .returning({ id: categoryCapHistory.categoryId });
+
+    if (applied.length !== ids.length) {
+      throw new NotFoundException(
+        NO_CATEGORIES(await this.missingIds(db, ids)),
+      );
+    }
+
+    // The whole screen, recomputed. `list` already builds it, and a second copy
+    // of "sum the caps, subtract from the budget" is what this file's own money
+    // note calls a bug at the third occurrence. Note the frontend discards this
+    // body today and re-reads through `router.refresh()`; it is the right
+    // contract for the endpoint regardless, and the rest of the page needs that
+    // refresh anyway.
+    return this.list(userId);
   }
 
   /**
@@ -237,35 +484,6 @@ export class CategoriesService {
   }
 
   /**
-   * The budgeting period containing today, for callers outside this feature.
-   *
-   * A window, not a window and a budget: the transaction list filters by date
-   * and has no use for `monthlyBudget`, so handing it one would invite a second
-   * place to decide what a budget means.
-   */
-  async currentWindow(userId: string): Promise<MonthWindow> {
-    const db = await this.userDatabases.getUserDb(userId);
-    const { window } = await this.period(db, userId);
-
-    return window;
-  }
-
-  /**
-   * The window immediately before the current one.
-   *
-   * Resolved from `monthStartDay` and today rather than from the current
-   * window's bounds, because "one month before this window started" is calendar
-   * arithmetic `previousMonthWindow` already owns and subtracting a day count
-   * here would drift.
-   */
-  async previousWindow(userId: string): Promise<MonthWindow> {
-    const db = await this.userDatabases.getUserDb(userId);
-    const { monthStartDay, today } = await this.period(db, userId);
-
-    return previousMonthWindow(monthStartDay, today);
-  }
-
-  /**
    * One category with its stats for the current period.
    *
    * The same three steps `list` runs for every category, narrowed to one. The
@@ -284,9 +502,9 @@ export class CategoriesService {
     userId: string,
     categoryId: string,
   ): Promise<CategoryResponseDto> {
+    const period = await this.periods.current(userId);
     const db = await this.userDatabases.getUserDb(userId);
-    const { window } = await this.period(db, userId);
-    const [category] = await this.withSpend(db, window, categoryId);
+    const [category] = await this.withSpend(db, period, categoryId);
 
     // `withSpend` filters on `deleted_at IS NULL`, so this covers a tombstoned
     // category as well as an unknown id - and, for the transaction detail, a
@@ -305,71 +523,77 @@ export class CategoriesService {
   }
 
   /**
-   * The caller's budgeting period and monthly budget.
+   * One append to a category's cap history.
    *
-   * "Today" is resolved in `APP_TIMEZONE`, not UTC: on the boundary day a
-   * transaction logged just after local midnight would otherwise fall into the
-   * previous period, and the whole screen would show the wrong month for a few
-   * hours. A per-user timezone is the eventual fix (docs/TODO.md).
-   *
-   * `monthStartDay` and `today` come back alongside the window they produced, so
-   * `previousWindow` can derive a second window from the same profile read
-   * instead of taking one of its own.
+   * The single-row counterpart of `setCaps`' bulk insert, and the only other
+   * place that writes this table. No conditional guard here: the caller has
+   * already established the category is live, and a single append has no partial
+   * state to protect against - the failure mode `setCaps` guards is "half the
+   * budget allocated", which cannot arise from one row.
    */
-  private async period(
+  private async appendCap(
     db: UserDatabase,
-    userId: string,
-  ): Promise<{
-    window: MonthWindow;
-    monthStartDay: number;
-    today: string;
-    monthlyBudgetCents: number;
-  }> {
-    const [row] = await db
-      .select({
-        monthStartDay: profile.monthStartDay,
-        monthlyBudgetCents: profile.monthlyBudgetCents,
-      })
-      .from(profile)
-      .where(eq(profile.id, userId))
-      .limit(1);
-
-    // A verified session implies a profile row, so its absence is a broken
-    // invariant rather than a 404 a client could act on - the same call
-    // ProfileService makes.
-    if (!row) {
-      throw new Error(NO_PROFILE(userId));
-    }
-
-    const today = todayIn(
-      this.config.get<string>('APP_TIMEZONE', 'Europe/Zagreb'),
-    );
-
-    return {
-      window: monthWindow(row.monthStartDay, today),
-      monthStartDay: row.monthStartDay,
-      today,
-      monthlyBudgetCents: row.monthlyBudgetCents,
-    };
+    categoryId: string,
+    effectiveFrom: string,
+    capCents: number | null,
+  ): Promise<void> {
+    await db.insert(categoryCapHistory).values({
+      id: newId(),
+      categoryId,
+      effectiveFrom,
+      capCents,
+    });
   }
 
   /**
-   * Live categories with their spend for the window, in one grouped query.
+   * Live categories with their spend and their cap for the period, in one query.
    *
    * A LEFT JOIN, so a category with no transactions still comes back, with the
    * `coalesce` turning SQL's NULL sum into a real zero. The date predicates sit
    * in the join condition rather than the WHERE clause: in a WHERE they would
    * filter out the category rows themselves, silently hiding every category that
    * happened to have no spend this period.
+   *
+   * **The cap is a correlated scalar subquery, not a join**, and that is the
+   * shape PET-72 needed. A join to `category_cap_history` would multiply the rows
+   * being aggregated - every historical cap row would duplicate that category's
+   * transactions inside the SUM - so the cap has to be resolved to exactly one
+   * value per category before it meets the aggregate. A scalar subquery does that
+   * by construction, and it correlates on `categories.id`, which the GROUP BY
+   * already keys on.
+   *
+   * **NULL and no-row both mean uncapped, and nothing distinguishes them.** A
+   * category with no history for this window returns no row and the subquery
+   * yields NULL; a category explicitly set back to uncapped has a row whose
+   * `cap_cents` is NULL and yields NULL too. Both are correct and both render as
+   * `status: "uncapped"`, which is why there is no third branch anywhere
+   * downstream.
    */
   private async withSpend(
     db: UserDatabase,
-    window: MonthWindow,
+    period: Period,
     onlyId?: string,
   ): Promise<CategoryWithSpend[]> {
+    // Greatest `effective_from` at or before the period's start, ties broken by
+    // the newest write - the same resolution rule `PeriodService.budgetCentsFor`
+    // applies to the budget, because a cap and a budget are the same kind of
+    // effective-dated setting.
+    const capCents = sql<number | null>`(
+      select ${categoryCapHistory.capCents}
+      from ${categoryCapHistory}
+      where ${categoryCapHistory.categoryId} = ${categories.id}
+        and ${categoryCapHistory.deletedAt} is null
+        and ${categoryCapHistory.effectiveFrom} <= ${period.start}
+      order by ${categoryCapHistory.effectiveFrom} desc,
+               ${categoryCapHistory.createdAt} desc,
+               ${categoryCapHistory.id} desc
+      limit 1
+    )`;
+
     const rows = await db
       .select({
         row: categories,
+        capCents,
         spentCents: sql<number>`coalesce(sum(${transactions.amountCents}), 0)`,
         transactionCount: sql<number>`count(${transactions.id})`,
       })
@@ -379,8 +603,8 @@ export class CategoriesService {
         and(
           eq(transactions.categoryId, categories.id),
           isNull(transactions.deletedAt),
-          gte(transactions.date, window.start),
-          lt(transactions.date, window.end),
+          gte(transactions.date, period.start),
+          lt(transactions.date, period.end),
         ),
       )
       .where(
@@ -395,11 +619,15 @@ export class CategoriesService {
 
     const withSpend = rows.map((row) => ({
       row: row.row,
+      // `Number(null)` is 0, not null, so the uncapped case has to be checked
+      // before converting - otherwise every uncapped category would report a cap
+      // of zero and read as Over on its first transaction.
+      capCents: row.capCents === null ? null : Number(row.capCents),
       spentCents: Number(row.spentCents),
       transactionCount: Number(row.transactionCount),
     }));
 
-    return this.foldOrphansIntoFallback(db, window, withSpend);
+    return this.foldOrphansIntoFallback(db, period, withSpend);
   }
 
   /**
@@ -444,7 +672,7 @@ export class CategoriesService {
    */
   private async foldOrphansIntoFallback(
     db: UserDatabase,
-    window: MonthWindow,
+    period: Period,
     rows: CategoryWithSpend[],
   ): Promise<CategoryWithSpend[]> {
     const fallback = rows.find(({ row }) => row.isFallback);
@@ -459,8 +687,8 @@ export class CategoriesService {
       .where(
         and(
           isNull(transactions.deletedAt),
-          gte(transactions.date, window.start),
-          lt(transactions.date, window.end),
+          gte(transactions.date, period.start),
+          lt(transactions.date, period.end),
           // A correlated NOT EXISTS rather than `notInArray` over the ids already in `rows`,
           // because `rows` is a single category when `onlyId` was passed and every other live
           // category would then read as orphaned.
@@ -510,6 +738,32 @@ export class CategoriesService {
     return row;
   }
 
+  /**
+   * Which of these ids name no live category.
+   *
+   * Runs on the miss path only, so `setCaps`' success path stays exactly one
+   * statement - `LoginTokenService.consume()`'s diagnostic read, for the same
+   * reason: the classification is worth a second query precisely because it is
+   * never paid when nothing went wrong.
+   */
+  private async missingIds(db: UserDatabase, ids: string[]): Promise<string[]> {
+    const rows = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(inArray(categories.id, ids), isNull(categories.deletedAt)));
+
+    const live = new Set(rows.map((row) => row.id));
+    const missing = ids.filter((id) => !live.has(id));
+
+    // The guard matched nothing, so at least one id was not live. An empty answer
+    // means the guard and this read disagree, which is a broken invariant rather
+    // than a client error - the same shape as NO_PROFILE and NO_FALLBACK.
+    if (missing.length === 0) {
+      throw new Error(GUARD_DISAGREES(ids));
+    }
+    return missing;
+  }
+
   /** The reassignment target every delete depends on. */
   private async fallbackId(db: UserDatabase, userId: string): Promise<string> {
     const [row] = await db
@@ -552,10 +806,10 @@ function statusFor(
 
 function toResponse({
   row,
+  capCents,
   spentCents,
   transactionCount,
 }: CategoryWithSpend): CategoryResponseDto {
-  const capCents = row.monthlyCapCents;
   const status = statusFor(spentCents, capCents);
   const capped = capCents !== null;
 
@@ -564,7 +818,7 @@ function toResponse({
     name: row.name,
     color: row.color,
     icon: row.icon,
-    note: row.note,
+    description: row.description,
     isFallback: row.isFallback,
     monthlyCap: capped ? fromCents(capCents) : null,
     spent: fromCents(spentCents),
@@ -579,7 +833,13 @@ function toResponse({
   };
 }
 
-/** The sparse column set, with `undefined` fields left out entirely. */
+/**
+ * The sparse column set, with `undefined` fields left out entirely.
+ *
+ * `monthlyCap` is deliberately absent: it is no longer a column on this row, so
+ * it travels to `appendCap` instead of through here. Adding it back is how a
+ * future edit would silently re-introduce the overwriting this ticket removed.
+ */
 function toUpdate(dto: UpdateCategoryDto): CategoryUpdate {
   const changes: CategoryUpdate = {};
 
@@ -589,16 +849,11 @@ function toUpdate(dto: UpdateCategoryDto): CategoryUpdate {
   if (dto.color !== undefined) {
     changes.color = dto.color;
   }
-  if (dto.monthlyCap !== undefined) {
-    // null clears the cap, which is how a capped category becomes uncapped.
-    changes.monthlyCapCents =
-      dto.monthlyCap === null ? null : toCents(dto.monthlyCap);
-  }
   if (dto.icon !== undefined) {
     changes.icon = dto.icon;
   }
-  if (dto.note !== undefined) {
-    changes.note = dto.note;
+  if (dto.description !== undefined) {
+    changes.description = dto.description;
   }
 
   return changes;

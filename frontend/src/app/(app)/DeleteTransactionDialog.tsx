@@ -1,24 +1,20 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
-
-import { Button } from '@/components/ui/Button';
 import type { DeleteTransactionResult } from '@/lib/deleteTransaction';
-import { formatCurrency, formatIsoDayMonth } from '@/lib/format';
+import { formatIsoDayMonth } from '@/lib/format';
+import type { MoneyFormatters } from '@/lib/money';
 
-import { Modal, type ModalHandle } from './Modal';
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
+import { useMoney } from './PreferencesProvider';
 
 // 12 Delete confirmation (node 31:302): the warning, and the one request it makes.
 //
 // The box, the scrim and every close affordance belong to `(app)/Modal.tsx`, which PET-33 gave
-// its centred shape for this frame - see `align` there. What is here is the copy, the
-// interpolation and the write.
-//
-// **It draws no form**, unlike `AddTransactionModal`, and `Modal`'s `onSubmit` is deliberately
-// left off: there is nothing to type, so Enter has nothing to submit and a `<form>` around two
-// buttons would only invite one of them to become a submit by accident.
+// its centred shape for this frame - see `align` there. The request and the four behaviours around
+// it belong to `(app)/ConfirmDeleteDialog.tsx` as of PET-39, which is the ticket that produced a
+// second confirmation by copying this one; that file records what moved and why it moved at the
+// second consumer rather than the third. **What is left here is the copy, the interpolation and
+// the target.**
 //
 // **The target arrives as values rather than as an id to fetch.** DEL-1's copy quotes the
 // merchant, the amount and the date, and every entry point already has all three on screen -
@@ -52,6 +48,16 @@ const MESSAGES = {
   unauthenticated: 'Your session has expired. Log in again to delete this.',
   failed: "We couldn't delete this transaction. Please try again.",
 } as const;
+
+/**
+ * The one failure arm that still refreshes.
+ *
+ * A 404 means the row is gone from the server, so the list behind this dialog is showing something
+ * that no longer exists - precisely what `missing`'s copy tells the user closing the dialog will
+ * fix. Without it the promise is false until a manual reload: delete a row in one tab, then delete
+ * it again from a second, and the second tab keeps rendering it.
+ */
+const STALE_REASONS = ['missing'] as const;
 
 type DeleteTransactionDialogProps = {
   target: DeleteTarget;
@@ -106,8 +112,17 @@ type DeleteTransactionDialogProps = {
  *
  * Exported so no test or story restates a shipped string, which is `TransactionsEmpty.tsx`'s
  * rule.
+ *
+ * **The formatters are a parameter rather than a module import, because this is not a component.**
+ * PET-47 made money formatting follow the profile's currency, which the shell publishes through a
+ * context - and a context is only reachable from a hook. Passing `MoneyFormatters` in keeps this
+ * function pure and keeps its suite free of a provider, which is the same property that made it
+ * worth exporting in the first place. The caller below reads it once with `useMoney()`.
  */
-export function deleteTransactionBody({ merchant, amount, date }: DeleteTarget): string {
+export function deleteTransactionBody(
+  { merchant, amount, date }: DeleteTarget,
+  { formatCurrency }: MoneyFormatters,
+): string {
   return `This permanently removes "${merchant} - ${formatCurrency(amount)}" (${formatIsoDayMonth(date)}) from your records. This can't be undone.`;
 }
 
@@ -120,131 +135,33 @@ export function DeleteTransactionDialog({
   onDeleted,
   navigates = false,
 }: DeleteTransactionDialogProps) {
-  const router = useRouter();
-  const modalRef = useRef<ModalHandle>(null);
+  const money = useMoney();
 
-  /** The post-network failure line, already resolved to its copy. `null` means none showing. */
-  const [failure, setFailure] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-
-  async function onDelete() {
-    setFailure(null);
-    setPending(true);
-
-    /**
-     * **The `try` is load-bearing, and `deleteTransaction`'s "never throws" does not cover it.**
-     * That guarantee is about the action's own body: it classifies every status and every fetch
-     * rejection into a result. What it cannot classify is the RPC *carrying* the call - the
-     * client-to-Server-Action request itself rejects when the browser is offline, the connection
-     * drops, or a deployment moves the action id out from under an open tab. Without this catch
-     * the rejection escapes the handler, `setPending(false)` never runs, and Delete stays
-     * disabled with no message and no way back except Escape: the exact state the `failed` copy
-     * exists for, never reached. A code review found it, and the suite could not - every test
-     * here mocks a *resolved* value, so nothing exercised the rejecting path until
-     * `rejects with a network error` was added beside them.
-     */
-    let result: DeleteTransactionResult;
-
-    try {
-      result = await remove(target.id);
-    } catch {
-      result = { ok: false, reason: 'failed' };
-    }
-
-    if (!result.ok) {
-      setPending(false);
-      setFailure(MESSAGES[result.reason]);
-
-      // **A 404 refreshes even though it failed**, which is the one failure arm that does.
-      // `missing` means the row is gone from the server, so the list behind this dialog is
-      // showing something that no longer exists - which is precisely what its copy tells the
-      // user closing the dialog will fix. Without this the promise is false until a manual
-      // reload: delete a row in one tab, then delete it again from a second, and the second
-      // tab keeps rendering it. The other two arms change nothing on the server and so have
-      // nothing to re-read.
-      if (result.reason === 'missing') router.refresh();
-
-      return;
-    }
-
-    // **Refresh before closing, and close through the dialog rather than by unmounting.**
-    // `AddTransactionModal` documents both halves. `router.refresh()` re-runs the Server
-    // Components of whichever route the user is on, which is what drops the row and the count
-    // badge together (AC4) without this file knowing which route that is.
-    //
-    // **Unless the caller is leaving that route**, which is exactly the case where "whichever
-    // route the user is on" stops being the right target: on `/transactions/[id]` it re-reads
-    // the transaction just deleted, 404s, and renders the not-found boundary in a race with
-    // the navigation `onDeleted` is about to start. A code review on PET-34 found it. The
-    // navigation re-reads the destination on its own, so nothing goes stale.
-    //
-    // The focus restore `modalRef.current.close()` buys has one case it cannot serve here, and
-    // it is the common one: the kebab that opened this dies with its row, so `Modal`'s
-    // `isConnected` guard finds nothing and focus lands on `<body>`. Recorded in
-    // `docs/TODO.md` beside the identical gap saving from the empty state leaves.
-    if (!navigates) router.refresh();
-    modalRef.current?.close();
-
-    // **Last, and the order is the interesting part when something is open behind this.** With
-    // the edit modal underneath, the two dialogs come down top-first: `close()` above restores
-    // focus to whatever opened this - the edit modal's own "Delete transaction" - and only then
-    // does this line unmount that modal, which restores focus onward to the kebab. Calling it
-    // before `close()` would detach the element the restore was aiming at, which is the same
-    // trap `Modal`'s own focus effect exists for.
-    //
-    // The kebab dies with its row, so the chain ends on `<body>` regardless; what this ordering
-    // buys is that it does so for one reason rather than two, and it is already correct for the
-    // detail page, where the element behind survives.
-    onDeleted?.();
-  }
-
+  // **The box, the request and every behaviour around it are `(app)/ConfirmDeleteDialog.tsx`'s
+  // now.** That file records why it was lifted at the second consumer rather than the third: what
+  // moved is four behaviours a code review found and fixed once each - the `try` around the RPC,
+  // the 404 arm that still refreshes, the refresh-then-close-then-`onDeleted` ordering, and Delete
+  // disabling while Cancel does not - all of which PET-39 had duplicated by copy-paste into the
+  // category confirmation, where the next such fix would not have reached them.
+  //
+  // **What stays here is this frame's own copy and its target**, which is the whole reason this
+  // wrapper still exists rather than the row menu calling the shared component directly:
+  // `DeleteTarget` and the category's target share no shape, and `MESSAGES` is three lines of
+  // A29-owed prose about transactions.
   return (
-    <Modal
-      ref={modalRef}
+    <ConfirmDeleteDialog
       title={DELETE_TRANSACTION_TITLE}
-      align="center"
-      icon={<Trash2 className="size-6" aria-hidden="true" />}
+      body={deleteTransactionBody(target, money)}
+      messages={MESSAGES}
+      // Bound here, so the shared component never learns what a transaction is.
+      remove={() => remove(target.id)}
+      // The 404 arm: the row is gone from the server, so the list behind is showing something
+      // that no longer exists - which is exactly what `missing`'s copy asks the user to close the
+      // dialog to see. The other two arms change nothing on the server.
+      staleReasons={STALE_REASONS}
       onClose={onClose}
-      footer={
-        <>
-          {/* Cancel closes and does nothing (DEL-2, AC5) - **before Delete is pressed**, which
-              is the whole of what AC5 asks for and the only thing this control promises.
-
-              **It does not abort a delete already in flight, and it deliberately does not
-              pretend to.** A code review asked for an `AbortController` here; that would abort
-              the RPC without un-deleting anything, because by then the server may already have
-              removed the row - so it would report a cancellation that did not happen, which is
-              worse than the honest version. There is no cancel to offer until the operation
-              itself is cancellable.
-
-              What follows from that is the refresh in `onDelete` staying outside this
-              component's lifetime: cancel mid-flight and the delete still lands, and the list
-              still re-reads, so the screen agrees with the database rather than keeping a row
-              the server dropped. Still not disabled while pending, which is
-              `AddTransactionModal`'s call - no fetch in this app carries a timeout, so a hung
-              request is when a visible way out matters most, and the centred shape has no X
-              beside it. `docs/TODO.md` records what a real cancel would take. */}
-          <Button label="Cancel" variant="secondary" onClick={() => modalRef.current?.close()} />
-          {/* `danger` is `btn btn-error`, already in ui/Button for both confirmation dialogs.
-              Disabled while the request is out: a second delete cannot remove a second row,
-              but it does answer 404, so a double click would replace a succeeding delete with
-              "that transaction is already gone". */}
-          <Button label="Delete" variant="danger" onClick={onDelete} disabled={pending} />
-        </>
-      }
-    >
-      {/* Centred to match the header; `Modal` deliberately has no opinion about children. */}
-      <p className="text-base-content/70 text-center text-sm">{deleteTransactionBody(target)}</p>
-
-      {/* `role="alert"` where ui/FieldShell's inline message has none, for the reason
-          RegisterForm and AddTransactionModal both give: this appears after a network round
-          trip with nothing else on screen changing, so nothing else would tell a screen reader
-          the delete failed. */}
-      {failure !== null ? (
-        <p role="alert" className="text-error text-center text-sm">
-          {failure}
-        </p>
-      ) : null}
-    </Modal>
+      onDeleted={onDeleted}
+      navigates={navigates}
+    />
   );
 }

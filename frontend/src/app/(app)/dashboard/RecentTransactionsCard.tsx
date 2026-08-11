@@ -3,7 +3,8 @@ import { ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
 import { SIDEBAR_HREFS } from '@/components/ui/Sidebar';
-import { formatNegative, formatRelativeDate } from '@/lib/format';
+import { formatRelativeDate } from '@/lib/format';
+import { moneyFormatters } from '@/lib/money';
 import type { DashboardSummary } from '@/lib/dashboard';
 
 // Recent transactions card (Figma node 21:4, DSH-7).
@@ -41,13 +42,24 @@ export type RecentTransactionsCardProps = Pick<
    * spelling of the one condition `page.tsx` already resolved.
    */
   isEmpty: boolean;
+  /**
+   * The profile's currency, threaded from the page rather than read here.
+   *
+   * A Server Component cannot reach `PreferencesProvider`, which is client-side, so the server
+   * half of the app takes the currency as a prop while the client half uses `useMoney()`.
+   * `lib/money.ts` records the split.
+   */
+  currency: string;
 };
 
 export function RecentTransactionsCard({
   recentTransactions,
   categories,
   isEmpty,
+  currency,
 }: RecentTransactionsCardProps) {
+  const { formatNegative } = moneyFormatters(currency);
+
   // **The header is identical in both states, and the review of PET-26 is what made it so.**
   // The first version dropped "View all" from the empty branch, on frame 05's rule that no empty
   // treatment carries an interactive control of its own. That rule reads correctly for a new

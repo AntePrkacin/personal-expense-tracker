@@ -2,7 +2,24 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { DeleteTransactionResult } from '@/lib/deleteTransaction';
 
-import { DeleteTransactionDialog, type DeleteTarget } from './DeleteTransactionDialog';
+import { PreferencesProvider } from './PreferencesProvider';
+import { DeleteTransactionDialog as Dialog, type DeleteTarget } from './DeleteTransactionDialog';
+
+/**
+ * DeleteTransactionDialog inside the shell's preferences, which is what gives it a currency to format with.
+ *
+ * **A wrapper rather than a `decorators` entry.** The story smoke test builds each story from
+ * `render` or `meta.component` and never applies a meta's decorators, so a decorator would work in
+ * the browser and throw under Jest - the trap `frontend/src/app/CLAUDE.md` records under Storybook.
+ * Wrapping the component keeps every story body below unchanged.
+ */
+function DeleteTransactionDialog(props: React.ComponentProps<typeof Dialog>) {
+  return (
+    <PreferencesProvider currency="USD">
+      <Dialog {...props} />
+    </PreferencesProvider>
+  );
+}
 
 // 12 Delete confirmation (node 31:302).
 //

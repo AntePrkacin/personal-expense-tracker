@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { argsOf, paramsOf, queryChain, toSql } from '../../test/query-chain';
 import type { CategoriesService } from '../categories/categories.service';
+import type { PeriodService } from '../periods/period.service';
 import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
 import type { UserDatabaseService } from '../database/user-database.service';
 import type { TransactionRow } from '../database/user/schema';
@@ -14,8 +15,9 @@ describe('TransactionsService', () => {
   let select: jest.Mock;
   let insert: jest.Mock;
   let update: jest.Mock;
-  let currentWindow: jest.Mock;
-  let previousWindow: jest.Mock;
+  let currentPeriod: jest.Mock;
+  let previousPeriod: jest.Mock;
+  let startingAt: jest.Mock;
   let monthStatsFor: jest.Mock;
 
   const USER_ID = '0190c3f0-0000-7000-8000-000000000001';
@@ -23,8 +25,24 @@ describe('TransactionsService', () => {
   const CATEGORY_ID = '0190c3f0-0000-7000-8000-000000000003';
   const OTHER_TX_ID = '0190c3f0-0000-7000-8000-000000000004';
 
-  const CURRENT = { start: '2026-08-01', end: '2026-09-01' };
-  const PREVIOUS = { start: '2026-07-01', end: '2026-08-01' };
+  // Periods carry a label now, which the list response echoes back so the
+  // screen's overline names the period it is actually showing.
+  const CURRENT = {
+    start: '2026-08-01',
+    end: '2026-09-01',
+    label: 'August 2026',
+  };
+  const PREVIOUS = {
+    start: '2026-07-01',
+    end: '2026-08-01',
+    label: 'July 2026',
+  };
+  /** A period reached by its own start date, which `current`/`previous` cannot. */
+  const NAMED = {
+    start: '2026-05-01',
+    end: '2026-06-01',
+    label: 'May 2026',
+  };
 
   /**
    * The uncapped shape, which is the common case rather than the exotic one:
@@ -75,8 +93,9 @@ describe('TransactionsService', () => {
     select = jest.fn().mockReturnValue(categoryFound());
     insert = jest.fn().mockReturnValue(queryChain([row]));
     update = jest.fn().mockReturnValue(queryChain([row]));
-    currentWindow = jest.fn().mockResolvedValue(CURRENT);
-    previousWindow = jest.fn().mockResolvedValue(PREVIOUS);
+    currentPeriod = jest.fn().mockResolvedValue(CURRENT);
+    previousPeriod = jest.fn().mockResolvedValue(PREVIOUS);
+    startingAt = jest.fn().mockResolvedValue(NAMED);
     monthStatsFor = jest.fn().mockResolvedValue(uncappedStats);
 
     buildService();
@@ -94,11 +113,14 @@ describe('TransactionsService', () => {
 
     service = new TransactionsService(
       { getUserDb } as unknown as UserDatabaseService,
+      { monthStatsFor } as unknown as CategoriesService,
+      // The period is `PeriodService`'s since PET-72; the list read asks it for a
+      // window and the detail read asks Categories for one category's stats.
       {
-        currentWindow,
-        previousWindow,
-        monthStatsFor,
-      } as unknown as CategoriesService,
+        current: currentPeriod,
+        previous: previousPeriod,
+        startingAt,
+      } as unknown as PeriodService,
       // A real emitter with nothing listening, rather than a mock: `emitAsync`
       // resolving is the behaviour every write here depends on, and a jest.fn()
       // would pass whether or not the call is awaited.
@@ -154,8 +176,8 @@ describe('TransactionsService', () => {
 
       // TRN-1's overline names one month and TRN-3's filter already reads "This
       // month", so one period is the designed default view.
-      expect(currentWindow).toHaveBeenCalledWith(USER_ID);
-      expect(previousWindow).not.toHaveBeenCalled();
+      expect(currentPeriod).toHaveBeenCalledWith(USER_ID);
+      expect(previousPeriod).not.toHaveBeenCalled();
       expect(paramsOf(whereOf())).toEqual(
         expect.arrayContaining([CURRENT.start, CURRENT.end]),
       );
@@ -175,8 +197,8 @@ describe('TransactionsService', () => {
     it('resolves previous through CategoriesService, never by subtracting days', async () => {
       await service.list(USER_ID, { period: 'previous' });
 
-      expect(previousWindow).toHaveBeenCalledWith(USER_ID);
-      expect(currentWindow).not.toHaveBeenCalled();
+      expect(previousPeriod).toHaveBeenCalledWith(USER_ID);
+      expect(currentPeriod).not.toHaveBeenCalled();
       expect(paramsOf(whereOf())).toEqual(
         expect.arrayContaining([PREVIOUS.start, PREVIOUS.end]),
       );
@@ -185,8 +207,8 @@ describe('TransactionsService', () => {
     it('applies no date predicate at all for all, and reads no profile for one', async () => {
       await service.list(USER_ID, { period: 'all' });
 
-      expect(currentWindow).not.toHaveBeenCalled();
-      expect(previousWindow).not.toHaveBeenCalled();
+      expect(currentPeriod).not.toHaveBeenCalled();
+      expect(previousPeriod).not.toHaveBeenCalled();
       expect(paramsOf(whereOf())).not.toEqual(
         expect.arrayContaining([CURRENT.start]),
       );
@@ -285,7 +307,26 @@ describe('TransactionsService', () => {
       await expect(service.list(USER_ID, {})).resolves.toEqual({
         transactions: [],
         total: 0,
+        // Still named, because an empty period is a period: the screen's overline
+        // has to say which one it found nothing in.
+        period: CURRENT,
       });
+    });
+
+    it('echoes back the period it resolved, for the screen’s overline', async () => {
+      await expect(
+        service.list(USER_ID, { period: '2026-05-01' }),
+      ).resolves.toMatchObject({ period: NAMED });
+      expect(startingAt).toHaveBeenCalledWith(USER_ID, '2026-05-01');
+    });
+
+    it('answers a null period for `all`, which spans every one of them', async () => {
+      // Not an error case: a list covering every period can be labelled by none
+      // of them, and the screen falls back to its own copy.
+      await expect(
+        service.list(USER_ID, { period: 'all' }),
+      ).resolves.toMatchObject({ period: null });
+      expect(startingAt).not.toHaveBeenCalled();
     });
   });
 
@@ -458,11 +499,12 @@ describe('TransactionsService', () => {
       getUserDb = jest.fn().mockResolvedValue({ select, insert, update });
       return new TransactionsService(
         { getUserDb } as unknown as UserDatabaseService,
+        { monthStatsFor } as unknown as CategoriesService,
         {
-          currentWindow,
-          previousWindow,
-          monthStatsFor,
-        } as unknown as CategoriesService,
+          current: currentPeriod,
+          previous: previousPeriod,
+          startingAt,
+        } as unknown as PeriodService,
         events,
       );
     };

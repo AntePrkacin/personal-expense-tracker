@@ -1,4 +1,8 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+
+// `render` comes from the shell wrapper: the modal below prefixes the profile's currency symbol as
+// of PET-47, so it reaches `useMoney()`/`useCurrency()`. See `shellRender.tsx`.
+import { render } from '../shellRender';
 import userEvent from '@testing-library/user-event';
 
 import { generateInsights } from '../../../lib/generateInsights';

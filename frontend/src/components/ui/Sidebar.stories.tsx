@@ -30,8 +30,7 @@ const meta: Meta<typeof Sidebar> = {
   ],
   args: {
     active: 'dashboard',
-    firstName: 'Marko',
-    lastName: 'Kovač',
+    fullName: 'Marko Kovač',
     email: 'marko@email.com',
   },
   argTypes: {
@@ -70,8 +69,7 @@ export const AllVariants: Story = {
 export const LongProfile: Story = {
   args: {
     active: 'settings',
-    firstName: 'Maximiliana',
-    lastName: 'Wolfeschlegelsteinhausenbergerdorff',
+    fullName: 'Maximiliana Wolfeschlegelsteinhausenbergerdorff',
     email: 'maximiliana.wolfeschlegelsteinhausenbergerdorff@a-very-long-domain.example',
   },
 };

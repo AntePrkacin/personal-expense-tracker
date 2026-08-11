@@ -1,8 +1,14 @@
-import { render, screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+
+// `render` comes from the shell wrapper: these pages render inside `(app)/layout.tsx` in
+// production, so the cards below reach `PreferencesProvider` there. See `shellRender.tsx`.
+import { render } from './shellRender';
 
 import { readCategoryLabels } from '../../lib/categories';
 import { readDashboard } from '../../lib/dashboard';
 import { requireInsights } from '../../lib/insights';
+import { readPeriods } from '../../lib/periods';
+import { requireProfile } from '../../lib/profile';
 import { readTransactionsView } from '../../lib/transactions';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
@@ -17,12 +23,11 @@ import TransactionsPage from './transactions/page';
 // worth asserting is the *set*: that every screen has its designed overline,
 // title and action, and that the differences between them are the designed ones.
 //
-// Three of the four are still plain Server Components with no data of their own.
-// **Transactions is not, as of PET-30**: it awaits `readTransactionsView()`, so it is
-// mocked here and every page goes through the `renderScreen` helper below - which works
-// uniformly, since awaiting a synchronous component's return value is a no-op. The
-// layout that wraps them is not exercised here - SidebarNav.test.tsx covers the
-// sidebar half.
+// **All four fetch as of PET-46**, so every page goes through the `renderScreen` helper below and
+// every read is mocked. That helper predates the fourth: it works uniformly because awaiting a
+// synchronous component's return value is a no-op, which is the property PET-30 relied on when
+// Transactions became the first async one. The layout that wraps them is not exercised here -
+// SidebarNav.test.tsx covers the sidebar half.
 //
 // A relative specifier, because `jest.mock` cannot resolve the `@/` alias from
 // anywhere in this repo - see the note in frontend/src/app/CLAUDE.md.
@@ -38,9 +43,24 @@ jest.mock('../../lib/dashboard', () => ({ readDashboard: jest.fn() }));
 jest.mock('../../lib/categories', () => ({ readCategoryLabels: jest.fn() }));
 
 // AI Insights is not a plain Server Component either, as of PET-42-43-44: it awaits
-// `requireInsights()`, the same shape as the two above. Three of the four routed views fetch
-// now; Settings is the last one that does not.
+// `requireInsights()`, the same shape as the two above.
 jest.mock('../../lib/insights', () => ({ requireInsights: jest.fn() }));
+
+// Settings was the last plain one and stopped being so at PET-46: it awaits `requireProfile()`,
+// which reaches `cookies()` and would throw outside a request scope. Note this is the same read
+// `(app)/layout.tsx` makes, which is not exercised here.
+jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
+
+// PET-72 adds a fifth read, and it is the one module here that is **partially** mocked. Dashboard
+// and AI Insights both await `readPeriods()` for the header's select and its overline, so that one
+// has to be a `jest.fn()`; the rest of the module is pure - `parsePeriodParam` is what a page turns
+// its `searchParams` into, and `periodHref` is what the select navigates with - and stubbing those
+// would replace the seam under test with a fake. So the actual module is spread and one export
+// replaced, which is the only mock in this file that is not wholesale.
+jest.mock('../../lib/periods', () => ({
+  ...jest.requireActual('../../lib/periods'),
+  readPeriods: jest.fn(),
+}));
 
 // Two of these screens now hold an "Add transaction" trigger that calls
 // `useAddTransaction`, which throws outside its provider by design - so every render
@@ -112,7 +132,14 @@ beforeEach(() => {
     state: 'populated',
     transactions: [],
     total: 128,
+    // The header's overline as of PET-72, and no longer derived from the profile: the list read
+    // echoes back the period it resolved, so the label and the figures come from one resolution.
+    period: PERIOD,
   });
+
+  // Dashboard's and AI Insights' select, and the second's overline too. Two entries, so the control
+  // has something to offer - `PeriodSelect.test.tsx` owns what it does with them.
+  (readPeriods as jest.Mock).mockResolvedValue({ periods: PERIODS });
 
   // An empty list is enough: the rows are `TransactionsTable.test.tsx`'s subject, and this
   // file asserts the header. The read still has to succeed, because the page throws on an
@@ -138,6 +165,7 @@ beforeEach(() => {
     categories: [],
     recentTransactions: [],
     insight: null,
+    period: PERIOD,
   });
 
   // A `ready` set rather than an empty one, because this file asserts the header and the
@@ -152,11 +180,38 @@ beforeEach(() => {
     insights: [{ tone: 'warning', title: 'Dining out is over budget', body: '$12 over' }],
     generatedAt: '2025-10-08T09:00:00.000Z',
   });
+
+  // The Figma persona, which is what the whole file is drawn with. The Profile card's own
+  // behaviour is `SettingsForm.test.tsx`'s subject; this file needs the read only to succeed, and
+  // asserts the header above it. `requireProfile` redirects or throws rather than returning a
+  // wrapper, so there is no `{ ok }` to mock - the same shape as `readDashboard` above.
+  (requireProfile as jest.Mock).mockResolvedValue({
+    fullName: 'Marko Kovač',
+    email: 'marko@email.com',
+    currency: 'USD',
+    monthlyBudget: 2000,
+    monthStartDay: 1,
+  });
 });
 
-// October 2025 is the month the whole Figma file is drawn in, so pinning the
-// clock lets these assert the designed strings literally rather than recomputing
-// them, which would pass against a broken derivation.
+/**
+ * The period every read here answers with, and the list the select offers.
+ *
+ * October 2025 is the month the whole Figma file is drawn in. **It is a fixture rather than a
+ * derivation as of PET-72**, which is what the frozen clock below used to be for on the headers:
+ * three of them composed their overline from the profile's start day and today, so the month they
+ * named was this file's to set. Now the label is the backend's and arrives on the response.
+ */
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true };
+
+const PERIODS = [
+  PERIOD,
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+];
+
+// The clock is still pinned to a day inside that period: the cards below it read one -
+// `RecentTransactionsCard`'s relative caption is the clearest - so an unpinned run would drift the
+// content under assertions about the header.
 beforeAll(() => {
   jest.useFakeTimers().setSystemTime(new Date(2025, 9, 8));
 });
@@ -182,7 +237,10 @@ describe('the four routed views', () => {
       // AC1.
       await renderScreen(Page);
 
-      expect(screen.getByText(overline)).toBeInTheDocument();
+      // Scoped to the header's own paragraph: Dashboard's period select carries an `<option>` with
+      // the identical label as of PET-72, so a bare `getByText` matches twice there and nowhere else
+      // - which would make this shared case fail on one screen for a reason about a different one.
+      expect(screen.getByText(overline, { selector: 'p' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument();
     },
   );
@@ -197,22 +255,27 @@ describe('the four routed views', () => {
 });
 
 describe('the header action, which differs on every screen', () => {
-  it('Dashboard offers the month select and Add transaction', async () => {
-    // AC2 and AC3. The month select is Dashboard's alone.
+  it('Dashboard offers the period select and Add transaction', async () => {
+    // AC2 and AC3. The period select is Dashboard's alone among the four.
     await renderScreen(DashboardPage);
 
-    expect(screen.getByText('October')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Budgeting period' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
   });
 
-  it('Dashboard shows the month without the year in the select', async () => {
-    // Two near-identical strings sit in this header. getByText is exact by
-    // default, so "October" would not match "October 2025" - this asserts the
-    // select really carries the shorter form rather than the overline twice.
+  it('Dashboard offers one option per period the account has', async () => {
+    // **This asserted the opposite shape until PET-72**, and the old version is worth recording: it
+    // pinned that the pill read "October" while the overline read "October 2025", because the design
+    // draws a shorter label in the control than above it. There is one label per period now, so the
+    // two deliberately match - a period a pay-day change stretched has no short form that is not
+    // month arithmetic. What is worth pinning instead is that the list is the account's own history
+    // rather than the one period being viewed.
     await renderScreen(DashboardPage);
 
-    const select = screen.getByText('October');
-    expect(select).not.toHaveTextContent('2025');
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'October 2025',
+      'September 2025',
+    ]);
   });
 
   it('Transactions offers the search field and Add transaction, and no month select', async () => {
@@ -225,7 +288,12 @@ describe('the header action, which differs on every screen', () => {
 
     expect(screen.getByRole('textbox', { name: 'Search transactions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
-    expect(screen.queryByText('October')).not.toBeInTheDocument();
+    // No period select either, which PET-72 makes worth stating by role rather than by text: this
+    // screen chooses its period through the filter bar's own pill under `<main>`, so the assertion
+    // is scoped to the header rather than sweeping a page that really does hold three comboboxes.
+    const header = screen.getByRole('banner');
+
+    expect(within(header).queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('AI Insights offers Regenerate', async () => {
@@ -238,22 +306,35 @@ describe('the header action, which differs on every screen', () => {
   it('Settings offers no header action at all', async () => {
     // AC2's second half. "Save changes" belongs at the foot of the form, not up
     // here, so there is no control in the header to find.
-    await renderScreen(SettingsPage);
+    //
+    // **Scoped to the `<header>` as of PET-46, and the criterion it pins is unchanged.** It used
+    // to sweep the whole page for buttons and links, which was the same assertion only while the
+    // `<main>` below was empty - so the moment this screen grew its form and its Save button, a
+    // page-wide sweep would have failed for a reason having nothing to do with the header. What
+    // AC2 says is that the header carries no action, and that is what this now measures.
+    const { container } = await renderScreen(SettingsPage);
+    const header = container.querySelector('header');
 
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
-    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(header).not.toBeNull();
+    expect(within(header!).queryAllByRole('button')).toHaveLength(0);
+    expect(within(header!).queryAllByRole('link')).toHaveLength(0);
   });
 });
 
 describe('the inert header controls', () => {
-  it('does not expose the month select as an operable control', async () => {
-    // A8: only October exists, so it renders the current period and does
-    // nothing. It is a <div> rather than a <select> or a <button> so it never
-    // announces itself as operable.
+  it('does expose the period select as an operable control, which reverses A8', async () => {
+    // **The last of the drawn-but-dead header controls, and PET-72 is the ticket A8 was waiting
+    // for.** That assumption said the pill renders the current period and does nothing "until month
+    // navigation is designed", so it shipped as a `<div>` rather than as a control announcing itself
+    // as operable - and this case pinned exactly that, with `queryByRole('combobox')` empty. The
+    // assertion inverts rather than being deleted: a `<div>` creeping back here would be a
+    // regression now, the same way it is for the search field below.
     await renderScreen(DashboardPage);
 
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.getByText('October').tagName).toBe('DIV');
+    const select = screen.getByRole('combobox', { name: 'Budgeting period' });
+
+    expect(select.tagName).toBe('SELECT');
+    expect(select).toHaveValue(PERIOD.start);
   });
 
   it('does expose the search field as a text box, which reverses PET-30', async () => {
@@ -269,28 +350,29 @@ describe('the inert header controls', () => {
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 
-  it('does not expose either tab as an operable control', async () => {
-    // "Categories" opens frame 13, which is PET-36's route and has no page.tsx behind
-    // it - and routes.test.ts asserts with `fs` that every declared route does. So a
-    // link here would 404 or force a hole into that check.
+  it('exposes both tabs as links, without claiming to be a tablist', async () => {
+    // **The inversion of a four-ticket-old assertion, and worth reading as such.** Both tabs
+    // were inert because "Categories" opened frame 13, which had no `page.tsx` behind it while
+    // `routes.test.ts` asserts with `fs` that every declared route does. PET-36 built that
+    // route, so the constraint is gone.
     //
-    // **This still holds by decision rather than by absence of features.** PET-29 made every
-    // other control on the page real and deliberately left these two, so the assertion is
-    // now the record of that choice rather than a description of an unbuilt screen.
-    //
-    // **The page-wide `queryByRole('link')` that used to sit here is gone, and deliberately
-    // not replaced by a count.** It covered two claims at once - the tabs are not links, and a
-    // row is not clickable - and PET-34 made the second one false. Worse, it would still
-    // *pass*: this file mocks the list to `transactions: []`, so there are no rows to link
-    // and the assertion would quietly go vacuous while its comment still claimed to be
-    // pinning something. So each tab is now checked directly, which is the claim that
-    // survives.
+    // The half that survives is `role="tab"`. These two navigate between routes rather than
+    // swapping a panel in place, so the bar is a `<nav>` of links and the ARIA tab pattern -
+    // which promises an `aria-controls` relationship to a `tabpanel` in the same document -
+    // would be a lie. Pinning the absence is what stops a future "use the real tablist"
+    // landing without the panel it implies.
     await renderScreen(TransactionsPage);
 
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(screen.getByText('Categories').tagName).toBe('SPAN');
-    expect(screen.getByText('Categories').closest('a')).toBeNull();
-    expect(screen.getByText('All transactions').closest('a')).toBeNull();
+
+    expect(screen.getByRole('link', { name: /All transactions/ })).toHaveAttribute(
+      'href',
+      '/transactions',
+    );
+    expect(screen.getByRole('link', { name: /Categories/ })).toHaveAttribute(
+      'href',
+      '/transactions/categories',
+    );
   });
 
   it('exposes exactly the three filter selects the design draws', async () => {
@@ -370,6 +452,7 @@ describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
         },
       ],
       insight: null,
+      period: PERIOD,
     });
 
     await renderScreen(DashboardPage);
@@ -380,6 +463,164 @@ describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
     expect(
       screen.getByRole('heading', { name: 'Insights unlock after your first expense.' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("the profile's currency reaches the figures (PET-47)", () => {
+  // **The one test that proves the whole server-side thread**, which nothing else does. Every
+  // card has its own suite passing `currency="USD"` by hand, so a `page.tsx` that stopped reading
+  // the profile - or read it and forgot to pass it on - would leave all of those green while the
+  // app rendered a euro account in dollars. This renders the real page against a real profile and
+  // asserts the symbol that could only have come through it.
+  //
+  // Deliberately at the page level rather than per card, and deliberately EUR rather than USD:
+  // the default is what a broken thread falls back to, so asserting dollars proves nothing.
+  it('renders the dashboard in the profile currency', async () => {
+    (requireProfile as jest.Mock).mockResolvedValue({
+      fullName: 'Marko Kovač',
+      email: 'marko@email.com',
+      currency: 'EUR',
+      monthlyBudget: 2000,
+      monthStartDay: 1,
+    });
+    (readDashboard as jest.Mock).mockResolvedValue({
+      spent: 1240,
+      monthlyBudget: 2000,
+      remaining: 760,
+      daysLeft: 8,
+      transactionCount: 12,
+      averagePerDay: 155,
+      topCategory: null,
+      weeklyBuckets: [],
+      categories: [],
+      recentTransactions: [],
+      insight: null,
+      period: PERIOD,
+    });
+
+    await renderScreen(DashboardPage);
+
+    // `getAllBy`, because two cards draw the period's spend - the budget card's headline and the
+    // donut's centre readout - and both arriving in euros is the point rather than an annoyance.
+    expect(screen.getAllByText('€1,240').length).toBeGreaterThan(1);
+    expect(screen.getByText('of €2,000')).toBeInTheDocument();
+    expect(screen.queryAllByText('$1,240')).toHaveLength(0);
+  });
+
+  it('renders the transactions table in the profile currency', async () => {
+    (requireProfile as jest.Mock).mockResolvedValue({
+      fullName: 'Marko Kovač',
+      email: 'marko@email.com',
+      currency: 'GBP',
+      monthlyBudget: 2000,
+      monthStartDay: 1,
+    });
+    (readTransactionsView as jest.Mock).mockResolvedValue({
+      state: 'populated',
+      transactions: [
+        {
+          id: 't1',
+          merchant: 'Whole Foods',
+          categoryId: 'cat-1',
+          amount: 86.4,
+          date: '2025-10-08',
+          note: null,
+          createdAt: '2025-10-08T12:00:00.000Z',
+          updatedAt: '2025-10-08T12:00:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+
+    await renderScreen(TransactionsPage);
+
+    expect(screen.getByText('−£86.40')).toBeInTheDocument();
+  });
+});
+
+describe("the period's label reaches the header, from the read rather than the profile (PET-72)", () => {
+  // **This block replaces PET-47's, and the replacement is the point of the ticket on these three
+  // screens.** That one proved the profile's `monthStartDay` reached the header, by setting it to 15
+  // against a clock pinned to 8 October and asserting the overline read "September / October 2025" -
+  // the period the day actually falls in. The thread it proved is gone: a period is anchored to a
+  // paycheck now, a pay-schedule change stretches one across the gap, and no arithmetic over a start
+  // day can name the result. So the label rides on the response, and what is worth proving is that
+  // each page renders the label it was *given* rather than one it composed.
+  //
+  // Asserted at the page level for the reason the currency cases above are: every screen suite hands
+  // in a period fixture by hand, so a page that dropped the field would leave all of them green.
+
+  /** A period no month arithmetic could name: the stretched one a pay-day change produces. */
+  const STRETCHED = {
+    start: '2025-12-15',
+    end: '2026-01-14',
+    label: 'December 2025 / January 2026',
+    current: true,
+  };
+
+  it('Dashboard names the period the dashboard read answered with', async () => {
+    (readDashboard as jest.Mock).mockResolvedValue({
+      spent: 0,
+      monthlyBudget: 2000,
+      remaining: 2000,
+      daysLeft: 8,
+      transactionCount: 0,
+      averagePerDay: 0,
+      topCategory: null,
+      weeklyBuckets: [],
+      categories: [],
+      recentTransactions: [],
+      insight: null,
+      period: STRETCHED,
+    });
+
+    await renderScreen(DashboardPage);
+
+    expect(screen.getByText(STRETCHED.label, { selector: 'p' })).toBeInTheDocument();
+  });
+
+  it('Transactions names the period the list read answered with', async () => {
+    (readTransactionsView as jest.Mock).mockResolvedValue({
+      state: 'populated',
+      transactions: [],
+      total: 3,
+      period: STRETCHED,
+    });
+
+    await renderScreen(TransactionsPage);
+
+    expect(screen.getByText(STRETCHED.label)).toBeInTheDocument();
+  });
+
+  it('Transactions names every period when the list spans all of them', async () => {
+    // `period=all` is the one filter whose response carries **no** period, which the contract states
+    // in as many words: a list covering every period has no single label. So this is the one overline
+    // in the app that is not the backend's, and it is the same string the filter pill offers.
+    (readTransactionsView as jest.Mock).mockResolvedValue({
+      state: 'populated',
+      transactions: [],
+      total: 3,
+      period: null,
+    });
+
+    await renderScreen(TransactionsPage);
+
+    expect(screen.getByText('All time', { selector: 'p' })).toBeInTheDocument();
+  });
+
+  it('AI Insights names the current period, which is the one its set is for', async () => {
+    // The one header of the four whose label does not ride on its own screen's read.
+    // `GET /api/insights` publishes no period - a set is generated for the current period only, and
+    // its `monthLabel` names the period it was generated *in* - so this page asks `/api/periods` and
+    // takes the entry flagged current.
+    (readPeriods as jest.Mock).mockResolvedValue({
+      periods: [{ ...PERIOD, current: false }, STRETCHED],
+    });
+
+    await renderScreen(InsightsPage);
+
+    expect(screen.getByText(STRETCHED.label)).toBeInTheDocument();
+    expect(screen.queryByText(PERIOD.label)).not.toBeInTheDocument();
   });
 });
 

@@ -79,7 +79,7 @@ Then, in another terminal:
 ```bash
 curl -i -X POST http://localhost:3111/api/auth/register \
   -H 'content-type: application/json' \
-  -d '{"firstName":"Marko","lastName":"Kovac","email":"spendifico@gmail.com","monthlyBudget":2000,"categories":["Groceries"]}'
+  -d '{"fullName":"Marko Kovac","email":"spendifico@gmail.com","monthlyBudget":2000,"monthStartDay":1,"categories":["Groceries"]}'
 ```
 
 Expect `202` with an empty body, and one email within a few seconds. Send the same request

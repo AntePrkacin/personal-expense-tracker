@@ -1,12 +1,9 @@
 import {
   amountCaret,
   formatAmountInput,
-  formatCurrency,
   formatIsoDate,
   formatIsoDayMonth,
-  formatNegative,
   formatRelativeDate,
-  formatWhole,
   initials,
   monthLabel,
   monthOverline,
@@ -14,14 +11,11 @@ import {
   shortName,
 } from './format';
 
-// The point of these tests is the sign glyph.
-//
-// Every assertion below writes the expected minus as the escape − rather
-// than a pasted character, because U+2212 MINUS SIGN and U+002D HYPHEN-MINUS
-// are visually near-identical in most editors and terminals. Pasting the glyph
-// works right up until someone retypes it, and then the diff is unreadable.
-
-const MINUS = '−';
+// **The sign-glyph note this file opened on moved to `money.test.ts` with the assertions it was
+// about.** It said every expected minus is written as the escape − rather than as a pasted
+// character, because U+2212 MINUS SIGN and U+002D HYPHEN-MINUS are near-identical in most editors
+// and terminals - and nothing left here formats a signed amount, so the constant it introduced had
+// no remaining reader. The rule still holds wherever a minus is asserted.
 
 /**
  * Runs `body` with the process pinned to `zone`, restoring whatever `TZ` held before it.
@@ -46,134 +40,88 @@ function inZone(zone: string, body: () => void) {
   }
 }
 
-describe('formatCurrency', () => {
-  it('formats a whole amount with cents', () => {
-    expect(formatCurrency(24)).toBe('$24.00');
-  });
-
-  it('separates thousands', () => {
-    expect(formatCurrency(1240)).toBe('$1,240.00');
-  });
-
-  it('keeps two decimal places', () => {
-    expect(formatCurrency(18.5)).toBe('$18.50');
-    expect(formatCurrency(15.99)).toBe('$15.99');
-  });
-
-  it('formats zero unsigned', () => {
-    expect(formatCurrency(0)).toBe('$0.00');
-  });
-
-  it('uses U+2212 for a negative input rather than the hyphen Intl emits', () => {
-    // Intl.NumberFormat returns "-$24.00" with U+002D. The replacement in
-    // formatCurrency is what makes this pass, so this test is what stops the
-    // replacement being dropped as redundant.
-    expect(formatCurrency(-24)).toBe(`${MINUS}$24.00`);
-    expect(formatCurrency(-24)).not.toContain('-');
-  });
-});
-
-describe('formatNegative', () => {
-  it('renders a stored positive amount as a negative one', () => {
-    // Transactions are stored as magnitudes; the sign is presentation.
-    expect(formatNegative(24)).toBe(`${MINUS}$24.00`);
-    expect(formatNegative(1240)).toBe(`${MINUS}$1,240.00`);
-  });
-
-  it('ignores the sign of the input', () => {
-    // Defensive: an API that starts returning signed amounts must not produce
-    // a double negative or flip back to positive.
-    expect(formatNegative(-24)).toBe(`${MINUS}$24.00`);
-  });
-
-  it('leaves zero unsigned', () => {
-    expect(formatNegative(0)).toBe('$0.00');
-    expect(formatNegative(-0)).toBe('$0.00');
-  });
-});
-
-describe('formatWhole', () => {
-  it('drops the cents, e.g. the dashboard budget readout', () => {
-    // The design draws "$1,240", never "$1,240.00" - node 21:4's real budget card and frame
-    // 01's sample card both. formatCurrency keeps the cents for a per-transaction amount.
-    expect(formatWhole(1240)).toBe('$1,240');
-  });
-
-  it('separates thousands, matching formatCurrency', () => {
-    expect(formatWhole(12400)).toBe('$12,400');
-  });
-
-  it('formats zero unsigned', () => {
-    expect(formatWhole(0)).toBe('$0');
-  });
-
-  it('rounds rather than truncating', () => {
-    // Rounding keeps a whole-dollar aggregate as close to the real total as one dollar
-    // allows; truncating would bias every figure on the dashboard downwards.
-    expect(formatWhole(54.4)).toBe('$54');
-    expect(formatWhole(54.6)).toBe('$55');
-  });
-
-  it('uses U+2212 for a negative input rather than the hyphen Intl emits', () => {
-    // Defensive, matching formatCurrency's own case: nothing in this epic hands formatWhole a
-    // negative figure, but a caller that started would get the design's glyph rather than
-    // Intl's hyphen.
-    expect(formatWhole(-1240)).toBe(`${MINUS}$1,240`);
-    expect(formatWhole(-1240)).not.toContain('-');
-  });
-});
+// **The three money formatters moved to `lib/money.ts` at PET-47**, where they take the profile's
+// currency, and their suite moved with them to `money.test.ts` - including the cases this file used
+// to own: the two-decimal-place pinning, the unsigned zero on all three, and the U+2212
+// substitution that is the whole point of the comment at the top of this file. Nothing re-exports
+// them from here any more, because after the thread landed the last consumer turned out to be a
+// comment in `app/DecorativePanel.tsx` explaining why that file uses literal strings instead.
 
 describe('initials', () => {
-  it('takes the first letter of each name', () => {
+  it('takes the first letter of each of the first two words', () => {
     // The designed value on 04 Dashboard and 17 Settings, from the designed
-    // names: "Marko" + "Kovač".
-    expect(initials('Marko', 'Kovač')).toBe('MK');
+    // name: "Marko Kovač".
+    expect(initials('Marko Kovač')).toBe('MK');
   });
 
   it('uppercases a lowercase name', () => {
-    expect(initials('marko', 'kovač')).toBe('MK');
+    expect(initials('marko kovač')).toBe('MK');
   });
 
   it('takes the first letter of a diacritic name from the name, not the ASCII fold', () => {
     // Ž, not Z. Nothing normalises here, and nothing should: the initial is the
     // user's own letter.
-    expect(initials('Žan', 'Šimić')).toBe('ŽŠ');
+    expect(initials('Žan Šimić')).toBe('ŽŠ');
   });
 
   it('keeps an astral-plane character whole', () => {
     // The reason firstLetter uses Array.from rather than charAt. With charAt
     // this returns two lone surrogates, which render as replacement glyphs.
-    expect(initials('𝔐arko', '𝔎ovač')).toBe('𝔐𝔎');
+    expect(initials('𝔐arko 𝔎ovač')).toBe('𝔐𝔎');
   });
 
-  it('skips a name it has nothing to take', () => {
-    // RegisterDto marks both names @IsNotEmpty, so this is defensive. It must
+  it('takes one letter from a single-word name', () => {
+    // **Ordinary rather than defensive since PET-72**, which collapsed the two
+    // name fields into one whose placeholder invites a nickname - so "Marko"
+    // with no surname is a value the form actively offers.
+    expect(initials('Marko')).toBe('M');
+  });
+
+  it('ignores surrounding and repeated whitespace', () => {
+    // The stored name is untrimmed by design, so a value with stray spaces
+    // reaches here - and splitting on a single space would take an empty first
+    // word and produce nothing at all.
+    expect(initials('  Marko   Kovač  ')).toBe('MK');
+  });
+
+  it('produces nothing for a blank name rather than throwing', () => {
+    // `RegisterDto` marks the name @IsNotEmpty, so this is defensive. It must
     // not produce "undefined" or throw.
-    expect(initials('Marko', '')).toBe('M');
-    expect(initials('', '')).toBe('');
+    expect(initials('')).toBe('');
+    expect(initials('   ')).toBe('');
+  });
+
+  it('ignores a third word', () => {
+    // Two letters is what the 36px disc holds, and what the frame draws.
+    expect(initials('Ana Marija Kovač')).toBe('AM');
   });
 });
 
 describe('shortName', () => {
-  it('abbreviates the last name', () => {
-    expect(shortName('Marko', 'Kovač')).toBe('Marko K.');
+  it('abbreviates the second word', () => {
+    expect(shortName('Marko Kovač')).toBe('Marko K.');
   });
 
   it('uppercases the abbreviated initial', () => {
-    expect(shortName('Marko', 'kovač')).toBe('Marko K.');
+    expect(shortName('Marko kovač')).toBe('Marko K.');
   });
 
-  it('drops the abbreviation mark when there is no last name', () => {
+  it('drops the abbreviation mark for a single-word name', () => {
     // Not "Marko .": a full stop with nothing before it reads as a defect, and
-    // the sidebar footer shows this on every screen.
-    expect(shortName('Marko', '')).toBe('Marko');
-    expect(shortName('Marko', '')).not.toContain('.');
+    // the sidebar footer shows this on every screen. Ordinary rather than
+    // defensive since PET-72 - see `initials` above.
+    expect(shortName('Marko')).toBe('Marko');
+    expect(shortName('Marko')).not.toContain('.');
   });
 
-  it('leaves the first name unabbreviated', () => {
-    // Only the last name is shortened. A first-name initial would make the
+  it('leaves the first word unabbreviated', () => {
+    // Only the second is shortened. A first-name initial would make the
     // footer unreadable, and the design shows the full first name.
-    expect(shortName('Marko', 'Kovač')).toContain('Marko');
+    expect(shortName('Marko Kovač')).toContain('Marko');
+  });
+
+  it('ignores a third word', () => {
+    expect(shortName('Ana Marija Kovač')).toBe('Ana M.');
   });
 });
 

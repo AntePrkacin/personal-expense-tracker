@@ -1,4 +1,8 @@
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
+import { isFilled, isPositiveAmount } from '@/lib/amount';
+import { DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY } from '@/app/(app)/settings/MonthStartField';
+import { SUPPORTED_CURRENCIES } from '@/lib/money';
+import { DEFAULT_CURRENCY, type CurrencyCode } from '@/lib/money';
 import type { components } from '@/types/api';
 
 // The onboarding draft: everything screens 02, 03 and 22 collect before there is
@@ -26,16 +30,28 @@ import type { components } from '@/types/api';
  */
 export const SETUP_DRAFT_KEY = 'spendifico.setup.draft';
 
-/** A6: only "USD - $" appears anywhere in the design file. */
-export const DEFAULT_CURRENCY = 'USD';
+/**
+ * What a draft starts with, re-exported from `lib/money.ts` rather than declared here.
+ *
+ * It said "A6: only 'USD - $' appears anywhere in the design file", which was the whole story while
+ * one currency was offered and is now only half of it: PET-47 offers three, taken from the team's
+ * Claude Design system, so this is the **default** rather than the only value. `lib/money.ts` owns
+ * it alongside the list, because a default that lives apart from the options it defaults to is how
+ * the two stop agreeing. Re-exported rather than moved outright so `BudgetForm` and `parseDraft`
+ * keep importing the draft's own vocabulary from the draft.
+ */
+export { DEFAULT_CURRENCY };
 
 export type SetupDraft = {
   /**
-   * An ISO 4217 code, not the "USD - $" label the select shows.
-   * `RegisterDto.currency` is validated with `@IsISO4217CurrencyCode()`, so the
-   * code is what eventually crosses the wire.
+   * An ISO 4217 code, not the "EUR - €" label the select shows.
+   *
+   * Typed off the contract since PET-72. `RegisterDto.currency` used to be validated with
+   * `@IsISO4217CurrencyCode()`, which publishes no enum, so this was a bare `string`; it is now an
+   * allowlist of two-decimal currencies and `CurrencyCode` is that enum, so a draft cannot hold a
+   * code the register endpoint would refuse.
    */
-  currency: string;
+  currency: CurrencyCode;
   /**
    * The **display** string, grouped, e.g. `'2,000'`. Not a number.
    *
@@ -72,10 +88,25 @@ export type SetupDraft = {
    * register route, so component state cannot survive it. Untrimmed, exactly as
    * typed: trimming on read would fight a controlled input the moment somebody
    * types a space between two words. `toRegisterBody` trims at the boundary.
+   *
+   * One field since PET-72, which collapsed the profile's two name columns into one - the app only
+   * ever used them together. The register screen's label is "Display name".
    */
-  firstName: string;
-  lastName: string;
+  fullName: string;
   email: string;
+  /**
+   * The day of the month the user is paid on, 1 to 28.
+   *
+   * **Onboarding asks for this as of PET-72**, as a third field on the budget step rather than a
+   * fourth step: it is one number that belongs with the budget it shapes, and a step of its own for
+   * one control would be a screen the design does not draw. A number rather than a display string,
+   * because the control is a closed list.
+   *
+   * It becomes the account's first `period_rules` row, so it is the pay day the whole of the user's
+   * history is bucketed by - which is why the comment below on `toRegisterBody` no longer says it is
+   * omitted.
+   */
+  monthStartDay: number;
 };
 
 /**
@@ -89,9 +120,12 @@ export const EMPTY_DRAFT: SetupDraft = {
   currency: DEFAULT_CURRENCY,
   budget: '',
   categories: [],
-  firstName: '',
-  lastName: '',
+  fullName: '',
   email: '',
+  // The 1st, which is what the backend defaulted to before onboarding asked. A fresh draft has to
+  // preselect *something* - the control is a closed list with no empty state - and the 1st is both
+  // the commonest pay day and the value the account would have had if the question were never put.
+  monthStartDay: DEFAULT_MONTH_START_DAY,
 };
 
 /**
@@ -111,6 +145,32 @@ function emptyDraft(): SetupDraft {
 
 export function serializeDraft(draft: SetupDraft): string {
   return JSON.stringify(draft);
+}
+
+/** The stored currency when it is one the picker offers, or the default. */
+function readCurrency(source: Record<string, unknown>): CurrencyCode {
+  const stored = readString(source, 'currency', DEFAULT_CURRENCY);
+  const offered = SUPPORTED_CURRENCIES.find((entry) => entry.code === stored);
+
+  return offered?.code ?? DEFAULT_CURRENCY;
+}
+
+/**
+ * The stored pay day when it is one the picker offers, or the default.
+ *
+ * The same canonicalise-on-read the currency gets, and for the same reason: a draft written before
+ * this field existed has no `monthStartDay` at all, and one hand-edited in `sessionStorage` could
+ * hold `31` - which the backend refuses, because not every month has that day.
+ */
+function readMonthStartDay(source: Record<string, unknown>): number {
+  const stored = source['monthStartDay'];
+
+  return typeof stored === 'number' &&
+    Number.isInteger(stored) &&
+    stored >= 1 &&
+    stored <= MAX_MONTH_START_DAY
+    ? stored
+    : DEFAULT_MONTH_START_DAY;
 }
 
 /** A string field, or the fallback when the stored value is not one. */
@@ -209,11 +269,17 @@ export function parseDraft(raw: string | null): SetupDraft {
 
   const source = parsed as Record<string, unknown>;
   return {
-    currency: readString(source, 'currency', DEFAULT_CURRENCY),
+    // **Checked against the offered list, not merely type-checked**, which is the fix `docs/TODO.md`
+    // said was owed the moment a second currency was offered - and PET-47 offered three. A stored
+    // code outside the list rendered in `BudgetField`'s trigger with no matching panel row and no
+    // `aria-current`, and step 3 posted it straight through: `@IsISO4217CurrencyCode()` accepts it,
+    // so the account was created in a currency the user never picked. The same canonicalise-on-read
+    // rule the budget and the categories already follow.
+    currency: readCurrency(source),
     budget: formatAmountInput(readString(source, 'budget', '')),
     categories: readCategories(source),
-    firstName: readString(source, 'firstName', ''),
-    lastName: readString(source, 'lastName', ''),
+    fullName: readString(source, 'fullName', ''),
+    monthStartDay: readMonthStartDay(source),
     email: readString(source, 'email', ''),
   };
 }
@@ -230,12 +296,12 @@ export function parseDraft(raw: string | null): SetupDraft {
  * A5 designs none, and the backend's own cap is its business to enforce.
  */
 export function isBudgetValid(budget: string): boolean {
-  return parseAmountInput(budget) > 0;
+  return isPositiveAmount(budget);
 }
 
 /** Whether a name field is filled (REG-2), matching the DTO's `@IsNotEmpty()`. */
 export function isNameValid(name: string): boolean {
-  return name.trim() !== '';
+  return isFilled(name);
 }
 
 // `isEmailValid` used to sit here, beside the other two rules, and moved to
@@ -254,16 +320,17 @@ export function isNameValid(name: string): boolean {
  * `@Transform(normalizeEmail)`, so normalisation has an owner; doing it here too
  * would be a second authority that can drift from it.
  *
- * `monthStartDay` is omitted rather than defaulted: onboarding never asks for it,
- * and the backend applies its own default.
+ * `monthStartDay` **is** sent as of PET-72, where the sentence here used to say it was omitted
+ * because onboarding never asked for it. It does now: the budget step's third field collects the
+ * pay day, and it becomes the account's first `period_rules` row.
  */
 export function toRegisterBody(draft: SetupDraft): components['schemas']['RegisterDto'] {
   return {
-    firstName: draft.firstName.trim(),
-    lastName: draft.lastName.trim(),
+    fullName: draft.fullName.trim(),
     email: draft.email.trim(),
     currency: draft.currency,
     monthlyBudget: parseAmountInput(draft.budget),
+    monthStartDay: draft.monthStartDay,
     categories: draft.categories,
   };
 }

@@ -5,15 +5,22 @@ import { SEED_MODE } from './seed-showcase.env';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { eq, isNull } from 'drizzle-orm';
+import { isNull } from 'drizzle-orm';
 import type { INestApplicationContext } from '@nestjs/common';
 import { AppModule } from '../app.module';
 import { LoginTokenService } from '../auth/login-token.service';
 import { VerificationService } from '../auth/verification.service';
 import { todayIn } from '../common/month-window';
+import { mostRecentAnchor } from '../common/period-rules';
 import { newId } from '../common/ids';
 import { UserDatabaseService } from '../database/user-database.service';
-import { categories, profile, transactions } from '../database/user/schema';
+import {
+  budgetHistory,
+  categories,
+  categoryCapHistory,
+  periodRules,
+  transactions,
+} from '../database/user/schema';
 import { InsightsService } from '../insights/insights.service';
 import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
@@ -95,8 +102,7 @@ async function onboardingPayload(
   app: INestApplicationContext,
   fixture: Fixture,
 ): Promise<{
-  firstName: string;
-  lastName: string;
+  fullName: string;
   currency: string;
   monthlyBudget: number;
   monthStartDay: number;
@@ -114,8 +120,7 @@ async function onboardingPayload(
   }
 
   return {
-    firstName: fixture.profile.firstName,
-    lastName: fixture.profile.lastName,
+    fullName: fixture.profile.fullName,
     currency: fixture.profile.currency,
     // Major units, like a real onboarding payload: `VerificationService` runs
     // it through `toCents`.
@@ -245,18 +250,6 @@ async function seed(app: INestApplicationContext): Promise<void> {
   const userId = await ensureShowcaseUser(app, fixture);
   const userDb = await userDatabaseService.getUserDb(userId);
 
-  // Re-asserted rather than assumed. On a re-run the account is already
-  // verified, so nothing above touched the profile, and a budget or a month
-  // start day changed through PATCH /api/profile in between would leave the
-  // caps below distributing against a number the profile no longer holds.
-  await userDb
-    .update(profile)
-    .set({
-      monthlyBudgetCents: fixture.profile.monthlyBudgetCents,
-      monthStartDay: fixture.profile.monthStartDay,
-    })
-    .where(eq(profile.id, userId));
-
   // Tombstones filtered, like every other read in this codebase, and here it is
   // load-bearing rather than conventional: a category deleted through the API
   // is still a row, so an unfiltered read would satisfy the assert below and
@@ -270,21 +263,11 @@ async function seed(app: INestApplicationContext): Promise<void> {
 
   const idByName = new Map(allCategories.map((c) => [c.name, c.id]));
 
-  // Caps come out of the fixture now rather than an even split, which put every
-  // category at $384.62 - Groceries and Healthcare on the same allowance, and a
-  // mortgage on a quarter of what it costs. `assertPlanIsCoherent` has already
-  // checked they sum to the budget, so `unallocated` still lands on zero.
-  for (const category of fixture.categories) {
-    await userDb
-      .update(categories)
-      .set({ monthlyCapCents: category.capCents })
-      .where(eq(categories.id, idByName.get(category.name)!));
-  }
-
   // Today in the app's own zone, not the machine's, so a run just either side
   // of local midnight agrees with every month-scoped figure the dashboard
   // computes - all of which resolve their window against APP_TIMEZONE.
-  const today = parseDate(todayIn(config.get<string>('APP_TIMEZONE')!));
+  const todayIso = todayIn(config.get<string>('APP_TIMEZONE')!);
+  const today = parseDate(todayIso);
 
   // The fixture carries no monthsAgo - only the calendar position
   // (month, occurrence) `MONTH_TARGETS` was drawn against - so it is resolved
@@ -306,6 +289,67 @@ async function seed(app: INestApplicationContext): Promise<void> {
       amountCents: transaction.amountCents,
       date: dateMonthsAgo(today, transaction.monthsAgo, transaction.day),
     }));
+
+  // **One anchor for all three histories, at or before the oldest transaction.**
+  // The budget would not need it - `budgetCentsFor` falls back to the earliest row
+  // for any period older than it - but a **cap** falls back to *uncapped*, because
+  // a sparse history is how an uncapped category is represented. Anchored at today
+  // instead, every period the demo can navigate back to would show thirteen
+  // uncapped categories, which is the one thing this account exists to
+  // demonstrate not being.
+  const historyAnchor = mostRecentAnchor(
+    fixture.profile.monthStartDay,
+    rows.reduce(
+      (oldest, row) => (row.date < oldest ? row.date : oldest),
+      todayIso,
+    ),
+  );
+
+  // **Rewritten rather than appended, and this is the one place in the app that
+  // treats these tables as mutable.** Everything the API does to them is an
+  // append, because a user's history is a record of decisions they made. A fixture
+  // is not a record: it is a statement of what this demo account *is*. Appending
+  // would accumulate one budget row per seeding run rather than converging, and
+  // `mise run seed` being idempotent is the property the whole script is built
+  // around.
+  //
+  // Re-asserted rather than assumed for the same reason the old profile write was:
+  // on a re-run the account is already verified, so nothing above touched its
+  // history, and a budget or pay day changed through the API in between would
+  // leave the caps distributing against a figure the account no longer resolves.
+  await userDb.delete(periodRules);
+  await userDb.insert(periodRules).values({
+    id: newId(),
+    effectiveFrom: historyAnchor,
+    monthStartDay: fixture.profile.monthStartDay,
+    // The earliest rule has no predecessor to bridge from. This account has one
+    // pay schedule for the whole of its history on purpose: a mid-fixture
+    // schedule change would make its months incomparable, which is a different
+    // demo from the one the caps and the trend chart are built for.
+    transitionStart: null,
+  });
+
+  await userDb.delete(budgetHistory);
+  await userDb.insert(budgetHistory).values({
+    id: newId(),
+    effectiveFrom: historyAnchor,
+    budgetCents: fixture.profile.monthlyBudgetCents,
+  });
+
+  // Caps come out of the fixture rather than an even split, which put every
+  // category at $384.62 - Groceries and Healthcare on the same allowance, and a
+  // mortgage on a quarter of what it costs. `assertPlanIsCoherent` has already
+  // checked they sum to the budget, so `unallocated` still lands on zero, in
+  // every period the demo can navigate to.
+  await userDb.delete(categoryCapHistory);
+  await userDb.insert(categoryCapHistory).values(
+    fixture.categories.map((category) => ({
+      id: newId(),
+      categoryId: idByName.get(category.name)!,
+      effectiveFrom: historyAnchor,
+      capCents: category.capCents,
+    })),
+  );
 
   // One transaction, so a failure part-way through leaves the account with the
   // history it had rather than with whichever chunk landed before the error.

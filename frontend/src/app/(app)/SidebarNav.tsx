@@ -63,8 +63,7 @@ export function matchItem(pathname: string): SidebarItem | undefined {
 const FALLBACK_ITEM: SidebarItem = 'dashboard';
 
 type SidebarNavProps = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   email: string;
 };
 
@@ -80,7 +79,7 @@ function closeDrawer() {
   if (toggle instanceof HTMLInputElement) toggle.checked = false;
 }
 
-export function SidebarNav({ firstName, lastName, email }: SidebarNavProps) {
+export function SidebarNav({ fullName, email }: SidebarNavProps) {
   const pathname = usePathname();
   const active = matchItem(pathname) ?? FALLBACK_ITEM;
 
@@ -99,13 +98,5 @@ export function SidebarNav({ firstName, lastName, email }: SidebarNavProps) {
   // looking at that page. Both are kept rather than the click alone: a navigation can
   // arrive from somewhere other than these five links (the browser's Back button, a
   // redirect out of a page), and only the pathname read sees those.
-  return (
-    <Sidebar
-      active={active}
-      firstName={firstName}
-      lastName={lastName}
-      email={email}
-      onNavigate={closeDrawer}
-    />
-  );
+  return <Sidebar active={active} fullName={fullName} email={email} onNavigate={closeDrawer} />;
 }

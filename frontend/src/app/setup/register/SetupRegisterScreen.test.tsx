@@ -69,13 +69,13 @@ describe('AC1: the card as designed', () => {
     expect(container.querySelector(`.${STEP_WIDTH[2].split(' ').join('.')}`)).toBeNull();
   });
 
-  it('renders the three fields in the designed order', () => {
+  it('renders the two fields in the designed order', () => {
     renderScreen();
 
-    const labels = [...screen.getAllByText(/^(First name|Last name|Email)$/)].map(
+    const labels = [...screen.getAllByText(/^(Display name|Email)$/)].map(
       (node) => node.textContent,
     );
-    expect(labels).toEqual(['First name', 'Last name', 'Email']);
+    expect(labels).toEqual(['Display name', 'Email']);
   });
 
   it('carries no password field', () => {

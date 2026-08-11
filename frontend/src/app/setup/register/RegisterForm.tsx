@@ -24,21 +24,19 @@ import type { RegisterResult } from './actions';
  * state at all, so these owe a designer sign-off.
  */
 const MESSAGES = {
-  firstName: 'Enter your first name.',
-  lastName: 'Enter your last name.',
+  fullName: 'Enter a display name.',
   emailRequired: 'Enter your email address.',
   emailFormat: 'Enter a valid email address.',
   submitFailed: "We couldn't create your account. Please try again.",
 } as const;
 
-const FIRST_NAME_ID = 'register-first-name';
-const LAST_NAME_ID = 'register-last-name';
+const FULL_NAME_ID = 'register-full-name';
 const EMAIL_ID = 'register-email';
 
-type FieldErrors = { firstName?: string; lastName?: string; email?: string };
+type FieldErrors = { fullName?: string; email?: string };
 
-/** The three values as typed, kept on screen after the draft is cleared. */
-type ShownFields = Pick<SetupDraft, 'firstName' | 'lastName' | 'email'>;
+/** The two values as typed, kept on screen after the draft is cleared. */
+type ShownFields = Pick<SetupDraft, 'fullName' | 'email'>;
 
 type RegisterFormProps = {
   /**
@@ -65,7 +63,7 @@ export function RegisterForm({ register }: RegisterFormProps) {
 
   const fields: ShownFields = shown ?? draft;
 
-  function change(field: 'firstName' | 'lastName' | 'email', value: string) {
+  function change(field: 'fullName' | 'email', value: string) {
     // Frozen means the register succeeded and we are navigating away; a keystroke
     // landing here would write a new draft over the one just cleared.
     if (shown !== null) return;
@@ -85,8 +83,7 @@ export function RegisterForm({ register }: RegisterFormProps) {
     // Every field at once rather than the first failure, so two empty fields show
     // two messages.
     const next: FieldErrors = {
-      firstName: isNameValid(draft.firstName) ? undefined : MESSAGES.firstName,
-      lastName: isNameValid(draft.lastName) ? undefined : MESSAGES.lastName,
+      fullName: isNameValid(draft.fullName) ? undefined : MESSAGES.fullName,
       email:
         draft.email.trim() === ''
           ? MESSAGES.emailRequired
@@ -95,7 +92,7 @@ export function RegisterForm({ register }: RegisterFormProps) {
             : MESSAGES.emailFormat,
     };
     setErrors(next);
-    if (next.firstName || next.lastName || next.email) return;
+    if (next.fullName || next.email) return;
 
     // The two values this screen submits on behalf of steps 1 and 2 have to be
     // checked too, and only the budget can be missing - an empty selection is
@@ -133,35 +130,27 @@ export function RegisterForm({ register }: RegisterFormProps) {
     // synchronously while the push takes a moment, so the card would otherwise empty
     // itself in front of the user. `pending` deliberately stays true too: the account
     // exists now, so the button must not offer a second registration.
-    setShown({ firstName: draft.firstName, lastName: draft.lastName, email: draft.email });
+    setShown({ fullName: draft.fullName, email: draft.email });
     clearDraft();
     router.push(ACCESS_ROUTES.checkEmail);
   }
 
   return (
     <form noValidate onSubmit={onSubmit} className="flex w-full flex-col gap-5">
-      {/* A grid, not a flex row: the frame draws two 214px fields with a 12px gap
-          inside the card's 440px content box, and (440 - 12) / 2 is exactly 214, so
-          two equal columns reproduce it without measuring anything (node 129:1156).
-          Field is w-full, which spans a grid cell but would overflow a flex row. */}
-      <div className="grid grid-cols-2 gap-3">
-        <Input
-          id={FIRST_NAME_ID}
-          label="First name"
-          value={fields.firstName}
-          onChange={(event) => change('firstName', event.currentTarget.value)}
-          error={errors.firstName}
-          required
-        />
-        <Input
-          id={LAST_NAME_ID}
-          label="Last name"
-          value={fields.lastName}
-          onChange={(event) => change('lastName', event.currentTarget.value)}
-          error={errors.lastName}
-          required
-        />
-      </div>
+      {/* **One full-width field, where the frame draws two 214px ones in a grid.** PET-72
+          collapsed the profile's two name columns into one, so the grid that reproduced the frame's
+          (440 - 12) / 2 columns went with it - a single field in a two-column grid would sit in the
+          left half with a hole beside it. Labelled "Display name", and the placeholder says a
+          nickname is fine, because that is what one free-text field honestly offers. */}
+      <Input
+        id={FULL_NAME_ID}
+        label="Display name"
+        placeholder="Your name, full name or nickname."
+        value={fields.fullName}
+        onChange={(event) => change('fullName', event.currentTarget.value)}
+        error={errors.fullName}
+        required
+      />
 
       <Input
         id={EMAIL_ID}

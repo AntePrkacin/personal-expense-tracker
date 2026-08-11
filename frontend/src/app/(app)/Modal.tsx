@@ -100,6 +100,38 @@ type ModalProps = {
    */
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   /**
+   * How wide the box may grow. Defaults to daisyUI's own ceiling.
+   *
+   * **A designed fixed width becomes a `max-w-*` ceiling, never a `w-*`**, which is
+   * `frontend/CLAUDE.md`'s standing carve-out: every Figma frame is a fixed 1440px, so a width read
+   * off one has to be an upper bound or the box overflows a narrow viewport. `'wide'` is frame-less
+   * PET-70's Allocate modal, which the design system draws at 620px against `modal-box`'s stock
+   * 32rem - it holds two stacked cards and a row per category, where every other modal in this app
+   * holds a short column of fields.
+   *
+   * A `Record` of complete literal class strings rather than an interpolated `max-w-[${n}]`, for the
+   * reason `ui/categoryColour.ts` is written that way: Tailwind scans raw text, so a computed class
+   * compiles to nothing at all and paints nothing with every gate green.
+   */
+  width?: ModalWidth;
+  /**
+   * Refuses every dismissal while true: Escape, the backdrop, the X and `close()`.
+   *
+   * For a dialog whose affirmative is the only thing that writes, a dismissal
+   * mid-write unmounts the one surface that can report the outcome - the
+   * paycheck dialog's footer buttons were `disabled` while its POST was out and
+   * Escape sailed straight past them, losing the picked month with the write
+   * still landing. The footer buttons still carry their own `disabled`, because
+   * this prop does not reach the caller's controls; it closes the three
+   * platform-owned exits. Escape is refused by `preventDefault()` on the
+   * `cancel` event, which is the UA's own seam for exactly this.
+   *
+   * Deliberately not the default: a form modal's Cancel staying live during a
+   * save is a decision several of this app's dialogs make on purpose, because
+   * no fetch here carries a timeout.
+   */
+  locked?: boolean;
+  /**
    * Exposes `close()` so a caller can dismiss the dialog itself.
    *
    * **The point is that it closes the dialog rather than unmounting it**, and the difference
@@ -184,6 +216,24 @@ export type ModalShape =
 /** What `ref` exposes. One method, because there is one thing a caller cannot already do. */
 export type ModalHandle = { close: () => void };
 
+export type ModalWidth = 'default' | 'wide';
+
+/**
+ * The box's class per width, each string complete so Tailwind's scanner can see it.
+ *
+ * **`translate-none scale-none` is on every arm and must stay there.** It is not styling - see the
+ * comment at the render site. Writing the arms as whole strings rather than appending a modifier is
+ * what makes it impossible to add a third width that forgets them.
+ *
+ * `40rem` is 640px against the design's 620, the nearest of Tailwind's own steps rather than an
+ * arbitrary value; the box is a ceiling and the padding sits inside it, so a few pixels either way
+ * is not a measurement anything depends on.
+ */
+const MODAL_BOX: Record<ModalWidth, string> = {
+  default: 'modal-box translate-none scale-none',
+  wide: 'modal-box translate-none scale-none max-w-[40rem]',
+};
+
 export function Modal({
   title,
   onClose,
@@ -191,9 +241,11 @@ export function Modal({
   footer,
   initialFocusId,
   onSubmit,
+  width = 'default',
   align = 'start',
   icon,
   footerStart,
+  locked = false,
   ref,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -261,9 +313,23 @@ export function Modal({
     [],
   );
 
-  /** Every affordance goes through here. Escape needs no code: the UA's own default calls it. */
+  /**
+   * Every affordance goes through here. Escape needs no code: the UA's own default calls it.
+   * `locked` refuses the lot - see the prop.
+   */
   function close() {
+    if (locked) return;
     dialogRef.current?.close();
+  }
+
+  /**
+   * Escape's `cancel` event, whose default action is the close this refuses while locked.
+   *
+   * jsdom fires no `cancel` for Escape, so like the trap and the unlocked Escape this is a
+   * browser check; the suite pins only that the handler is wired.
+   */
+  function onDialogCancel(event: React.SyntheticEvent<HTMLDialogElement>) {
+    if (locked) event.preventDefault();
   }
 
   // React 19 takes `ref` as an ordinary prop, so no forwardRef wrapper is needed.
@@ -342,6 +408,7 @@ export function Modal({
     <dialog
       ref={dialogRef}
       onClose={onClose}
+      onCancel={onDialogCancel}
       onClick={onDialogClick}
       aria-labelledby={titleId}
       className="modal"
@@ -355,7 +422,7 @@ export function Modal({
           opening the Date field scrolls the whole box sideways. Tailwind's utilities layer
           outranks daisyUI's component layer, which is what lets two utilities beat the
           open-state rule. */}
-      <div className="modal-box translate-none scale-none">
+      <div className={MODAL_BOX[width]}>
         {align === 'center' ? (
           // Frame 12's header: the glyph in its circle, the title under it, both centred, and
           // no X - see `align`'s note for why losing it costs nothing. `bg-error/10` is the

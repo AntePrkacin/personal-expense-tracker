@@ -23,9 +23,9 @@ const register = jest.fn<Promise<RegisterResult>, [unknown]>();
 const FILLED: SetupDraft = {
   currency: 'USD',
   budget: '2,000',
+  monthStartDay: 1,
   categories: ['Groceries', 'Transport'],
-  firstName: 'Marko',
-  lastName: 'Kovač',
+  fullName: 'Marko Kovač',
   email: 'marko@email.com',
 };
 
@@ -41,8 +41,7 @@ function renderForm() {
   );
 }
 
-const firstNameField = () => screen.getByLabelText('First name');
-const lastNameField = () => screen.getByLabelText('Last name');
+const nameField = () => screen.getByLabelText('Display name');
 const emailField = () => screen.getByLabelText('Email');
 const finishButton = () => screen.getByRole('button', { name: 'Finish setup' });
 
@@ -55,20 +54,16 @@ beforeEach(() => {
   register.mockResolvedValue({ ok: true });
 });
 
-describe('AC1: the three fields', () => {
-  it('lays the two names on one row and the email across both', () => {
-    // The frame draws two 214px fields with a 12px gap inside a 440px content box,
-    // and (440 - 12) / 2 is exactly 214 - so two equal columns is the design rather
-    // than an approximation of it (node 129:1156). The email is a sibling of the
-    // grid, not a third cell, which is what makes it full width.
+describe('AC1: the two fields', () => {
+  it('draws no two-column row, because there is no field pair left to put in one', () => {
+    // **This reverses what it asserted before PET-72.** The frame draws two 214px name fields with a
+    // 12px gap inside a 440px content box - and (440 - 12) / 2 being exactly 214 was the reason the
+    // grid reproduced the design rather than approximating it (node 129:1156). Collapsing the two
+    // names into one "Display name" left nothing to pair, and a single field in a two-column grid
+    // would sit in the left half with a hole beside it.
     const { container } = renderForm();
 
-    const row = container.querySelector('.grid')!;
-    expect(row.className).toContain('grid-cols-2');
-    expect(row.className).toContain('gap-3');
-    expect(row).toContainElement(firstNameField());
-    expect(row).toContainElement(lastNameField());
-    expect(row).not.toContainElement(emailField());
+    expect(container.querySelector('.grid')).toBeNull();
   });
 
   it('types the email field as an email', () => {
@@ -77,16 +72,16 @@ describe('AC1: the three fields', () => {
     renderForm();
 
     expect(emailField()).toHaveAttribute('type', 'email');
-    expect(firstNameField()).toHaveAttribute('type', 'text');
+    expect(nameField()).toHaveAttribute('type', 'text');
   });
 
-  it('marks all three required without an asterisk', () => {
+  it('marks both required without an asterisk', () => {
     // A12 marks required fields by not saying "(optional)". `required` still carries
     // aria-required, and noValidate below is what stops the browser bubble replacing
     // the designed message.
     renderForm();
 
-    for (const field of [firstNameField(), lastNameField(), emailField()]) {
+    for (const field of [nameField(), emailField()]) {
       expect(field).toBeRequired();
     }
     expect(screen.queryByText(/\*/)).not.toBeInTheDocument();
@@ -116,22 +111,24 @@ describe('AC2: an empty field blocks the submit', () => {
 
     await user.click(finishButton());
 
-    expect(screen.getByText('Enter your first name.')).toBeInTheDocument();
-    expect(screen.getByText('Enter your last name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter a display name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter your email address.')).toBeInTheDocument();
     expect(screen.getByText('Enter your email address.')).toBeInTheDocument();
     expect(register).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('reports only the field that is empty', async () => {
+  it('reports the name field when it is empty and leaves the email alone', async () => {
+    // One name field since PET-72, so "only the field that is empty" is now a
+    // statement about the name against the email rather than about two names.
     const user = userEvent.setup();
-    seed({ ...FILLED, lastName: '' });
+    seed({ ...FILLED, fullName: '' });
     renderForm();
 
     await user.click(finishButton());
 
-    expect(screen.getByText('Enter your last name.')).toBeInTheDocument();
-    expect(screen.queryByText('Enter your first name.')).not.toBeInTheDocument();
+    expect(screen.getByText('Enter a display name.')).toBeInTheDocument();
+    expect(screen.queryByText('Enter your email address.')).not.toBeInTheDocument();
     expect(register).not.toHaveBeenCalled();
   });
 
@@ -139,12 +136,12 @@ describe('AC2: an empty field blocks the submit', () => {
     // The DTO's @IsNotEmpty() runs after its own trim, so spaces are a 400 rather
     // than a name - and this screen has no error surface designed for one.
     const user = userEvent.setup();
-    seed({ ...FILLED, firstName: '   ' });
+    seed({ ...FILLED, fullName: '   ' });
     renderForm();
 
     await user.click(finishButton());
 
-    expect(screen.getByText('Enter your first name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter a display name.')).toBeInTheDocument();
     expect(register).not.toHaveBeenCalled();
   });
 
@@ -154,9 +151,9 @@ describe('AC2: an empty field blocks the submit', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.type(firstNameField(), 'M');
+    await user.type(nameField(), 'M');
 
-    expect(screen.queryByText('Enter your first name.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Enter a display name.')).not.toBeInTheDocument();
   });
 
   it('wires the message to the field it belongs to', async () => {
@@ -165,10 +162,12 @@ describe('AC2: an empty field blocks the submit', () => {
 
     await user.click(finishButton());
 
-    const message = screen.getByText('Enter your first name.');
-    expect(firstNameField()).toHaveAttribute('aria-invalid', 'true');
-    expect(firstNameField()).toHaveAttribute('aria-describedby', message.id);
-    expect(lastNameField()).not.toHaveAttribute('aria-describedby', message.id);
+    const message = screen.getByText('Enter a display name.');
+    expect(nameField()).toHaveAttribute('aria-invalid', 'true');
+    expect(nameField()).toHaveAttribute('aria-describedby', message.id);
+    // The email carries its own message, never this one - which is what "wired to the field it
+    // belongs to" means. Asserted against the email since PET-72; it was the second name field.
+    expect(emailField()).not.toHaveAttribute('aria-describedby', message.id);
   });
 
   it('clears one field s message without clearing the others', async () => {
@@ -176,10 +175,11 @@ describe('AC2: an empty field blocks the submit', () => {
     renderForm();
 
     await user.click(finishButton());
-    await user.type(firstNameField(), 'Marko');
+    await user.type(nameField(), 'Marko');
 
-    expect(screen.queryByText('Enter your first name.')).not.toBeInTheDocument();
-    expect(screen.getByText('Enter your last name.')).toBeInTheDocument();
+    expect(screen.queryByText('Enter a display name.')).not.toBeInTheDocument();
+    // Untouched, because the user has not returned to it.
+    expect(screen.getByText('Enter your email address.')).toBeInTheDocument();
   });
 });
 
@@ -225,11 +225,11 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
 
     expect(register).toHaveBeenCalledTimes(1);
     expect(register).toHaveBeenCalledWith({
-      firstName: 'Marko',
-      lastName: 'Kovač',
+      fullName: 'Marko Kovač',
       email: 'marko@email.com',
       currency: 'USD',
       monthlyBudget: 2000,
+      monthStartDay: 1,
       categories: ['Groceries', 'Transport'],
     });
   });
@@ -275,13 +275,12 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
     seed({ budget: '2,000', categories: ['Groceries'] });
     renderForm();
 
-    await user.type(firstNameField(), 'Marko');
-    await user.type(lastNameField(), 'Kovač');
+    await user.type(nameField(), 'Marko Kovač');
     await user.type(emailField(), 'marko@email.com');
     await user.click(finishButton());
 
     expect(register).toHaveBeenCalledWith(
-      expect.objectContaining({ firstName: 'Marko', email: 'marko@email.com' }),
+      expect.objectContaining({ fullName: 'Marko Kovač', email: 'marko@email.com' }),
     );
   });
 
@@ -323,7 +322,7 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
 
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
     expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
-    expect(firstNameField()).toHaveValue('Marko');
+    expect(nameField()).toHaveValue('Marko Kovač');
     expect(emailField()).toHaveValue('marko@email.com');
   });
 
@@ -337,10 +336,10 @@ describe('AC4: a valid form submits everything and opens Check your email', () =
     await user.click(finishButton());
     await waitFor(() => expect(mockPush).toHaveBeenCalled());
 
-    await user.type(firstNameField(), 'X');
+    await user.type(nameField(), 'X');
 
     expect(sessionStorage.getItem(SETUP_DRAFT_KEY)).toBeNull();
-    expect(firstNameField()).toHaveValue('Marko');
+    expect(nameField()).toHaveValue('Marko Kovač');
   });
 
   it('leaves the submit disabled after a success', async () => {
@@ -411,8 +410,7 @@ describe('the values steps 1 and 2 were supposed to collect', () => {
     await user.click(finishButton());
 
     expect(storedDraft()).toMatchObject({
-      firstName: 'Marko',
-      lastName: 'Kovač',
+      fullName: 'Marko Kovač',
       email: 'marko@email.com',
       categories: ['Groceries', 'Transport'],
     });
@@ -422,12 +420,12 @@ describe('the values steps 1 and 2 were supposed to collect', () => {
     // Order matters: an empty form with an empty budget should say what is wrong
     // here rather than silently bouncing to step 1.
     const user = userEvent.setup();
-    seed({ ...FILLED, budget: '', firstName: '' });
+    seed({ ...FILLED, budget: '', fullName: '' });
     renderForm();
 
     await user.click(finishButton());
 
-    expect(screen.getByText('Enter your first name.')).toBeInTheDocument();
+    expect(screen.getByText('Enter a display name.')).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
   });
 
@@ -466,7 +464,7 @@ describe('AC5: Back returns to step 2 with the selection intact', () => {
     seed(FILLED);
     renderForm();
 
-    await user.type(firstNameField(), '!');
+    await user.type(nameField(), '!');
 
     expect(storedDraft().categories).toEqual(['Groceries', 'Transport']);
     expect(storedDraft().budget).toBe('2,000');
@@ -479,13 +477,13 @@ describe('AC5: Back returns to step 2 with the selection intact', () => {
     const user = userEvent.setup();
     const { unmount } = renderForm();
 
-    await user.type(firstNameField(), 'Marko');
+    await user.type(nameField(), 'Marko Kovač');
     await user.type(emailField(), 'marko@email.com');
     unmount();
 
     renderForm();
 
-    expect(firstNameField()).toHaveValue('Marko');
+    expect(nameField()).toHaveValue('Marko Kovač');
     expect(emailField()).toHaveValue('marko@email.com');
   });
 

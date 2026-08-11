@@ -10,11 +10,8 @@ import { LoginTokenService } from './../src/auth/login-token.service';
 import type { CategoryResponseDto } from './../src/categories/dto/category-response.dto';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
 import { newId } from './../src/common/ids';
-import {
-  monthWindow,
-  previousMonthWindow,
-  todayIn,
-} from './../src/common/month-window';
+import { todayIn } from './../src/common/month-window';
+import { calendarMonthPeriods } from './periods';
 import { users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
@@ -39,7 +36,7 @@ import { MemoryMailer } from './memory-mailer';
  * around whatever rows its tests happened to have left behind, tombstones
  * included.
  *
- * **The windows come from the real `monthWindow`, not from hardcoded dates.**
+ * **The windows come from the real period walk, not from hardcoded dates.**
  * `period=current` resolves against the clock, so a fixture pinned to August 2026
  * would pass today and silently stop covering anything in September. Every date
  * below is derived from the window the app itself would compute, which is also
@@ -75,8 +72,7 @@ describe('Transaction reads (e2e)', () => {
   // monthStartDay defaults to 1, which registration does not override, so both
   // windows are calendar months.
   const today = todayIn('Europe/Zagreb');
-  const current = monthWindow(1, today);
-  const previous = previousMonthWindow(1, today);
+  const { current, previous } = calendarMonthPeriods(today);
 
   /**
    * A day inside a window, as `YYYY-MM-DD`.
@@ -141,8 +137,7 @@ describe('Transaction reads (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email,
         currency: 'eur',
         monthlyBudget: 2000.5,
@@ -422,7 +417,13 @@ describe('Transaction reads (e2e)', () => {
         200,
       );
 
-      expect(listBody(response)).toEqual({ transactions: [], total: 0 });
+      // `period` is null because both of these ask for `all`, which spans every
+      // period and so can be labelled by none of them.
+      expect(listBody(response)).toEqual({
+        transactions: [],
+        total: 0,
+        period: null,
+      });
     });
 
     it('composes filters, sort and period together', async () => {
@@ -439,6 +440,15 @@ describe('Transaction reads (e2e)', () => {
       expect(errorBody(response).statusCode).toBe(400);
     });
 
+    it('rejects a pseudo-date period with a 400, never an overlapping window', async () => {
+      // The shape regex alone accepted these, and `month-window.ts` round-trips a thirteenth
+      // month without carrying - so `?period=2026-13-01` answered 200 with a window overlapping
+      // January 2027's and a literal "undefined 2026" label. The review of PET-72 is where that
+      // came out; `@IsDateString({ strict: true })` behind the keyword exemption is the fix.
+      await list('?period=2026-13-01').expect(400);
+      await list('?period=2026-02-30').expect(400);
+    });
+
     it('rejects an unknown query parameter, not just an unknown body field', async () => {
       // `forbidNonWhitelisted` reaches query strings too, which is what stops a
       // frontend believing `?limit=10` did something.
@@ -453,7 +463,11 @@ describe('Transaction reads (e2e)', () => {
       // Structural isolation: the other user's database simply has no such rows.
       const response = await list('?period=all', otherBearer).expect(200);
 
-      expect(listBody(response)).toEqual({ transactions: [], total: 0 });
+      expect(listBody(response)).toEqual({
+        transactions: [],
+        total: 0,
+        period: null,
+      });
     });
   });
 

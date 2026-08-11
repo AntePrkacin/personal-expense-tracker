@@ -46,8 +46,7 @@ describe('AuthController (e2e)', () => {
   let pickedCategoryIds: string[] = [];
 
   const registration = (email: string) => ({
-    firstName: 'Marko',
-    lastName: 'Kovac',
+    fullName: 'Marko Kovac',
     email,
     monthlyBudget: 2000.5,
     categories: pickedCategoryIds,
@@ -121,8 +120,7 @@ describe('AuthController (e2e)', () => {
 
       const [row] = await liveUsers(email.toLowerCase());
       expect(row.onboardingPayload).toEqual({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         currency: 'EUR',
         // Major units, exactly as submitted: the cents conversion happens at
         // the profile boundary, in verification.
@@ -150,7 +148,7 @@ describe('AuthController (e2e)', () => {
 
       const second = await post('register', {
         ...registration(email.toUpperCase()),
-        firstName: 'Corrected',
+        fullName: 'Corrected Name',
       }).expect(202);
       await mailer.waitFor(email.toLowerCase(), 2);
 
@@ -163,7 +161,7 @@ describe('AuthController (e2e)', () => {
       expect(rows).toHaveLength(1);
       // Never verified, so the resubmitted form wins: they must verify into the
       // profile they last saw.
-      expect(rows[0].onboardingPayload?.firstName).toBe('Corrected');
+      expect(rows[0].onboardingPayload?.fullName).toBe('Corrected Name');
     });
 
     it('rejects a malformed email with 400', async () => {

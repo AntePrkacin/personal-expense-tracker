@@ -101,8 +101,7 @@ describe('Profile (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email,
         currency: 'eur',
         monthlyBudget: 2000.5,
@@ -176,7 +175,7 @@ describe('Profile (e2e)', () => {
       await request(app.getHttpServer()).get('/api/profile').expect(401);
       await request(app.getHttpServer())
         .patch('/api/profile')
-        .send({ firstName: 'Ana' })
+        .send({ fullName: 'Ana Anic' })
         .expect(401);
     });
 
@@ -200,19 +199,21 @@ describe('Profile (e2e)', () => {
   });
 
   describe('GET /api/profile', () => {
-    it('answers exactly the six fields, from two databases', async () => {
+    it('answers exactly the five fields, from two databases and two histories', async () => {
       const response = await get(bearer).expect(200);
 
       expect(body(response)).toEqual({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         // Central's, normalized at registration. Everything else is the
         // caller's own database.
         email: await storedEmail(userId),
         // Uppercased by the DTO transform on the way in, and stored that way.
         currency: 'EUR',
-        // Major units, though the column holds 200050.
+        // Major units. **Resolved from `budget_history`, not from a column**:
+        // PET-72 moved both of these off the profile row, and the read still
+        // serves them as single current values so no client can tell.
         monthlyBudget: 2000.5,
+        // The pay day onboarding asked for, resolved from `period_rules`.
         monthStartDay: 5,
       });
       expect(body(response).email).toBe(body(response).email.toLowerCase());
@@ -220,8 +221,7 @@ describe('Profile (e2e)', () => {
       expect(Object.keys(body(response)).sort()).toEqual([
         'currency',
         'email',
-        'firstName',
-        'lastName',
+        'fullName',
         'monthStartDay',
         'monthlyBudget',
       ]);
@@ -231,59 +231,58 @@ describe('Profile (e2e)', () => {
   describe('PATCH /api/profile', () => {
     /** Puts the primary account back, so tests cannot interfere with each other. */
     afterEach(async () => {
+      // Only what this endpoint still accepts. The budget and the pay day are the
+      // schedule endpoint's, and no test in this block changes them.
       await patch(bearer, {
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         currency: 'EUR',
-        monthlyBudget: 2000.5,
-        monthStartDay: 5,
       }).expect(200);
     });
 
-    it('saves the whole form in one request, as the Settings page does', async () => {
+    it('saves the fields it still owns in one request', async () => {
       const response = await patch(bearer, {
-        firstName: 'Ana',
-        lastName: 'Anic',
+        fullName: 'Ana Anic',
         currency: 'usd',
-        monthlyBudget: 1500.25,
-        monthStartDay: 15,
       }).expect(200);
 
       expect(body(response)).toEqual({
-        firstName: 'Ana',
-        lastName: 'Anic',
+        fullName: 'Ana Anic',
         email: await storedEmail(userId),
         currency: 'USD',
-        monthlyBudget: 1500.25,
-        monthStartDay: 15,
+        // Untouched by this endpoint, and still served: both come out of history.
+        monthlyBudget: 2000.5,
+        monthStartDay: 5,
       });
 
-      // Cents in the column, majors in the API - the whole point of money.ts.
       const row = await storedRow(userId);
-      expect(row.monthlyBudgetCents).toBe(150025);
-      expect(Number.isInteger(row.monthlyBudgetCents)).toBe(true);
-      expect(row.firstName).toBe('Ana');
-      expect(row.monthStartDay).toBe(15);
+      expect(row.fullName).toBe('Ana Anic');
     });
 
-    it('leaves absent fields alone', async () => {
-      await patch(bearer, { firstName: 'Ana' }).expect(200);
+    it('400s a budget or a pay day, which have to say from when', async () => {
+      // The whole point of PET-72's split. `forbidNonWhitelisted` rejects both
+      // rather than dropping them, so a frontend can never believe it saved a
+      // budget that went nowhere - which is what the old endpoint did to every
+      // period the account had.
+      await patch(bearer, { monthlyBudget: 1500.25 }).expect(400);
+      await patch(bearer, { monthStartDay: 15 }).expect(400);
 
       const response = await get(bearer).expect(200);
       expect(body(response)).toMatchObject({
-        firstName: 'Ana',
-        lastName: 'Kovac',
-        currency: 'EUR',
         monthlyBudget: 2000.5,
         monthStartDay: 5,
       });
     });
 
-    it('stores the cent that naive float multiplication would lose', async () => {
-      await patch(bearer, { monthlyBudget: 4.02 }).expect(200);
+    it('leaves absent fields alone', async () => {
+      await patch(bearer, { fullName: 'Ana Anic' }).expect(200);
 
-      // 4.02 * 100 is 401.99999999999994.
-      expect((await storedRow(userId)).monthlyBudgetCents).toBe(402);
+      const response = await get(bearer).expect(200);
+      expect(body(response)).toMatchObject({
+        fullName: 'Ana Anic',
+        currency: 'EUR',
+        monthlyBudget: 2000.5,
+        monthStartDay: 5,
+      });
     });
 
     it('bumps updatedAt but never createdAt', async () => {
@@ -292,7 +291,7 @@ describe('Profile (e2e)', () => {
       // millisecond would leave the two timestamps equal and prove nothing.
       await new Promise((resolve) => setTimeout(resolve, 5));
 
-      await patch(bearer, { firstName: 'Ana' }).expect(200);
+      await patch(bearer, { fullName: 'Ana Anic' }).expect(200);
 
       const after = await storedRow(userId);
       expect(after.updatedAt.getTime()).toBeGreaterThan(
@@ -314,23 +313,18 @@ describe('Profile (e2e)', () => {
       expect(after).toEqual(before);
     };
 
+    // The budget and pay-day cases live on the schedule endpoint now; this table
+    // covers only what `PATCH /api/profile` still accepts.
     it.each([
       ['a malformed email', { email: 'not-an-email' }, 'email'],
-      ['an empty first name', { firstName: '' }, 'firstName'],
-      ['an over-long last name', { lastName: 'x'.repeat(101) }, 'lastName'],
-      ['a budget of zero', { monthlyBudget: 0 }, 'monthlyBudget'],
-      ['a negative budget', { monthlyBudget: -5 }, 'monthlyBudget'],
-      ['three decimal places', { monthlyBudget: 1.005 }, 'monthlyBudget'],
-      [
-        'a budget over the cap',
-        { monthlyBudget: 1_000_000_001 },
-        'monthlyBudget',
-      ],
-      ['a fractional month start day', { monthStartDay: 3.5 }, 'monthStartDay'],
-      ['a month start day of 0', { monthStartDay: 0 }, 'monthStartDay'],
-      ['a month start day past 28', { monthStartDay: 29 }, 'monthStartDay'],
+      ['an empty display name', { fullName: '' }, 'fullName'],
+      ['an over-long display name', { fullName: 'x'.repeat(101) }, 'fullName'],
       ['an invalid currency code', { currency: 'XYZ' }, 'currency'],
       ['a two-letter currency', { currency: 'EU' }, 'currency'],
+      // Real ISO 4217, and rejected anyway: the allowlist is two-decimal
+      // currencies only, because money.ts multiplies by 100 unconditionally.
+      ['a zero-decimal currency', { currency: 'JPY' }, 'currency'],
+      ['a three-decimal currency', { currency: 'KWD' }, 'currency'],
     ])('400s %s, naming the field', async (_case, payload, field) => {
       await expectUntouched(async () => {
         const response = await patch(bearer, payload).expect(400);
@@ -341,7 +335,7 @@ describe('Profile (e2e)', () => {
       });
     });
 
-    it.each(['firstName', 'lastName', 'email', 'currency', 'monthStartDay'])(
+    it.each(['fullName', 'email', 'currency'])(
       '400s an explicit null on %s, which no column accepts',
       async (field) => {
         // The @IsOptional trap this DTO exists to avoid: with @IsOptional()
@@ -365,22 +359,29 @@ describe('Profile (e2e)', () => {
       });
     });
 
-    it.each(['monthlyBudgetCents', 'categories', 'id', 'createdAt'])(
-      '400s the unknown key %s rather than dropping it',
-      async (field) => {
-        // forbidNonWhitelisted, so a frontend can never believe it saved
-        // something the API silently discarded.
-        await expectUntouched(async () => {
-          const response = await patch(bearer, { [field]: 'anything' }).expect(
-            400,
-          );
+    // `monthlyBudget` and `monthStartDay` are in this list now rather than in the
+    // accepted set: they are real fields of the *schedule* endpoint, so rejecting
+    // them here is what keeps "set a budget" from meaning "and for all of time".
+    it.each([
+      'monthlyBudget',
+      'monthStartDay',
+      'monthlyBudgetCents',
+      'categories',
+      'id',
+      'createdAt',
+    ])('400s the unknown key %s rather than dropping it', async (field) => {
+      // forbidNonWhitelisted, so a frontend can never believe it saved
+      // something the API silently discarded.
+      await expectUntouched(async () => {
+        const response = await patch(bearer, { [field]: 'anything' }).expect(
+          400,
+        );
 
-          expect(errorBody(response).message).toEqual(
-            expect.arrayContaining([expect.stringContaining(field)]),
-          );
-        });
-      },
-    );
+        expect(errorBody(response).message).toEqual(
+          expect.arrayContaining([expect.stringContaining(field)]),
+        );
+      });
+    });
 
     it('accepts a lowercase currency and stores it uppercase', async () => {
       const response = await patch(bearer, { currency: 'eur' }).expect(200);
@@ -395,7 +396,7 @@ describe('Profile (e2e)', () => {
       const before = await storedRow(userId);
 
       const response = await patch(bearer, {
-        firstName: 'Ana',
+        fullName: 'Ana Anic',
         email: otherEmail,
       }).expect(409);
 
@@ -458,16 +459,16 @@ describe('Profile (e2e)', () => {
 
     it('changes the address alongside other fields in one request', async () => {
       const response = await patch(moverBearer, {
-        firstName: 'Ivana',
+        fullName: 'Ivana Ivic',
         email: 'preseljen2@example.com',
       }).expect(200);
 
       expect(body(response)).toMatchObject({
-        firstName: 'Ivana',
+        fullName: 'Ivana Ivic',
         email: 'preseljen2@example.com',
       });
       // Both stores moved, and the profile one moved first.
-      expect((await storedRow(moverId)).firstName).toBe('Ivana');
+      expect((await storedRow(moverId)).fullName).toBe('Ivana Ivic');
       expect(await storedEmail(moverId)).toBe('preseljen2@example.com');
     });
   });

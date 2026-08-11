@@ -1,6 +1,7 @@
-import type { ConfigService } from '@nestjs/config';
 import type { CategoriesService } from '../categories/categories.service';
 import type { CategoryResponseDto } from '../categories/dto/category-response.dto';
+import { todayIn } from '../common/month-window';
+import type { PeriodService } from '../periods/period.service';
 import { queryChain } from '../../test/query-chain';
 import type { UserDatabaseService } from '../database/user-database.service';
 import type { TransactionResponseDto } from '../transactions/dto/transaction-response.dto';
@@ -20,8 +21,8 @@ describe('RuleBasedInsightGenerator', () => {
   const USER_ID = 'user-1';
 
   let generator: RuleBasedInsightGenerator;
-  let currentWindow: jest.Mock;
-  let previousWindow: jest.Mock;
+  let currentPeriod: jest.Mock;
+  let previousPeriod: jest.Mock;
   let categoriesList: jest.Mock;
   let transactionsList: jest.Mock;
 
@@ -62,6 +63,8 @@ describe('RuleBasedInsightGenerator', () => {
   const build = (options?: {
     window?: { start: string; end: string };
     previousWindow?: { start: string; end: string };
+    label?: string;
+    previousLabel?: string;
     categories?: CategoryResponseDto[];
     budget?: number;
     currency?: string;
@@ -69,16 +72,29 @@ describe('RuleBasedInsightGenerator', () => {
     current?: TransactionResponseDto[];
     previous?: TransactionResponseDto[];
   }) => {
-    currentWindow = jest
-      .fn()
-      .mockResolvedValue(
-        options?.window ?? { start: '2025-10-01', end: '2025-11-01' },
-      );
-    previousWindow = jest
-      .fn()
-      .mockResolvedValue(
-        options?.previousWindow ?? { start: '2025-09-01', end: '2025-10-01' },
-      );
+    // `current()` carries the `today` it was resolved from, so the generator's
+    // day counts cannot straddle a midnight boundary; the specs drive it with
+    // fake timers.
+    const window = options?.window ?? {
+      start: '2025-10-01',
+      end: '2025-11-01',
+    };
+    const previous = options?.previousWindow ?? {
+      start: '2025-09-01',
+      end: '2025-10-01',
+    };
+
+    currentPeriod = jest.fn().mockImplementation(() =>
+      Promise.resolve({
+        ...window,
+        label: options?.label ?? 'October 2025',
+        today: todayIn('Europe/Zagreb'),
+      }),
+    );
+    previousPeriod = jest.fn().mockResolvedValue({
+      ...previous,
+      label: options?.previousLabel ?? 'September 2025',
+    });
     categoriesList = jest.fn().mockResolvedValue({
       categories: options?.categories ?? [],
       allocation: {
@@ -105,14 +121,22 @@ describe('RuleBasedInsightGenerator', () => {
     } as unknown as UserDatabaseService;
 
     generator = new RuleBasedInsightGenerator(
+      { list: categoriesList } as unknown as CategoriesService,
       {
-        currentWindow,
-        previousWindow,
-        list: categoriesList,
-      } as unknown as CategoriesService,
+        current: currentPeriod,
+        previous: previousPeriod,
+        // Read once and threaded into the two resolutions above, which both
+        // ignore it here - the mocks answer fixed periods either way.
+        rules: jest.fn().mockResolvedValue([
+          {
+            effectiveFrom: '2024-10-01',
+            monthStartDay: 1,
+            transitionStart: null,
+          },
+        ]),
+      } as unknown as PeriodService,
       { list: transactionsList } as unknown as TransactionsService,
       userDatabases,
-      { get: () => 'Europe/Zagreb' } as unknown as ConfigService,
     );
   };
 
@@ -200,7 +224,7 @@ describe('RuleBasedInsightGenerator', () => {
     expect(card).toEqual({
       tone: 'positive',
       title: 'Transport is down 22%',
-      body: 'You spent $63 less than September',
+      body: 'You spent $63 less than September 2025',
     });
   });
 
@@ -233,7 +257,7 @@ describe('RuleBasedInsightGenerator', () => {
     expect(card).toMatchObject({
       tone: 'neutral',
       title: 'Transport is up 22%',
-      body: 'You spent $22 more than September',
+      body: 'You spent $22 more than September 2025',
     });
   });
 

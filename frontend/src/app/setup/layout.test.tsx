@@ -51,7 +51,7 @@ describe('SetupLayout', () => {
     // failure the hook's own error message exists to give.
     await renderSetup(<DraftProbe />);
 
-    expect(screen.getByText('currency: USD')).toBeInTheDocument();
+    expect(screen.getByText('currency: EUR')).toBeInTheDocument();
   });
 
   it('renders its children', async () => {
@@ -140,7 +140,7 @@ describe('patchDraft', () => {
     await renderSetup(<DraftEditor />);
 
     await user.click(screen.getByRole('button', { name: 'set budget' }));
-    expect(screen.getByText('USD / 2,000')).toBeInTheDocument();
+    expect(screen.getByText('EUR / 2,000')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'set currency' }));
 
@@ -157,9 +157,9 @@ describe('patchDraft', () => {
     expect(JSON.parse(sessionStorage.getItem(SETUP_DRAFT_KEY)!)).toEqual({
       currency: 'EUR',
       budget: '2,000',
+      monthStartDay: 1,
       categories: [],
-      firstName: '',
-      lastName: '',
+      fullName: '',
       email: '',
     });
   });
@@ -210,10 +210,10 @@ describe('clearDraft', () => {
     return (
       <>
         <p>
-          {draft.budget} / {draft.firstName}
+          {draft.budget} / {draft.fullName}
         </p>
-        <button onClick={() => patchDraft({ budget: '2,000', firstName: 'Marko' })}>fill</button>
-        <button onClick={() => patchDraft({ firstName: 'Marko' })}>set name</button>
+        <button onClick={() => patchDraft({ budget: '2,000', fullName: 'Marko' })}>fill</button>
+        <button onClick={() => patchDraft({ fullName: 'Marko' })}>set name</button>
         <button onClick={clearDraft}>clear</button>
       </>
     );

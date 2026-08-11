@@ -1,4 +1,5 @@
 import { SIDEBAR_HREFS } from '@/components/ui/Sidebar';
+import { partsFromIso } from '@/lib/date';
 import { toQuery } from '@/lib/transactionQuery';
 import type { TransactionFilters } from '@/lib/transactions';
 
@@ -33,7 +34,27 @@ import type { TransactionFilters } from '@/lib/transactions';
 /** What Next hands a page as its resolved `searchParams`. A repeated key arrives as an array. */
 export type TransactionSearchParams = Record<string, string | string[] | undefined>;
 
+/**
+ * Every value the contract's `period` accepts, which since PET-72 is **not a closed set**.
+ *
+ * It was `'current' | 'previous' | 'all'`, a real enum in the spec. PET-72 widened it to accept a
+ * period `start` in `YYYY-MM-DD` as well, so that the period select can reach further back than
+ * "last month" - and no enum can express "these three literals or any date". The contract publishes
+ * a `pattern` instead, which `openapi-typescript` renders as `string`.
+ */
 type Period = NonNullable<TransactionFilters['period']>;
+
+/**
+ * The three period values that are **named** rather than dated.
+ *
+ * Declared here because the contract can no longer declare it: this is the closed half of an open
+ * field, and it is what the select's options are proved exhaustive against. Restating three literals
+ * is the price of that proof, and the alternative - dropping the proof - is what would let a fourth
+ * named value ship with no option for it. A date value is deliberately not representable here; it
+ * comes from `GET /api/periods` and reaches this file only as a raw string.
+ */
+type NamedPeriod = 'current' | 'previous' | 'all';
+
 type Sort = NonNullable<TransactionFilters['sort']>;
 
 /** One entry in a filter select. Matches `ui/Select`'s option shape, though these are not Selects. */
@@ -57,7 +78,7 @@ export const PERIOD_OPTIONS = [
   { value: 'current', label: 'This month' },
   { value: 'previous', label: 'Last month' },
   { value: 'all', label: 'All time' },
-] as const satisfies readonly FilterOption<Period>[];
+] as const satisfies readonly FilterOption<NamedPeriod>[];
 
 /**
  * The sort select's two options (TRN-3, A16).
@@ -73,16 +94,24 @@ export const SORT_OPTIONS = [
 /**
  * Compile-time proof that every value the contract accepts is offered.
  *
- * `AssertNever` fails to instantiate for anything but `never`, so a fifth period added to the
- * backend breaks `npm run build` rather than shipping a filter nobody can reach. The reverse
+ * `AssertNever` fails to instantiate for anything but `never`, so a fourth *named* period added to
+ * the backend breaks `npm run build` rather than shipping a filter nobody can reach. The reverse
  * needs no guard - `satisfies` already rejects a value the contract does not accept. The
  * technique and its reasoning are `app/setup/starterCategories.ts`'s; these are its second
  * and third users.
+ *
+ * **PET-72 rewrote the period half of this pair, and what it proves is genuinely weaker.** The
+ * assertion used to read `Exclude<Period, ...>`, against a `Period` that was a three-member union;
+ * widening the field to accept a date made that type `string`, so `Exclude` yielded `string` and the
+ * proof failed - the deliberate tripwire the plan expected. It is now stated against `NamedPeriod`,
+ * the locally-declared closed half. That still catches a fourth named value, which is the case worth
+ * catching, and it cannot catch a change to the *date* form, which no type could express. The
+ * `Period`-typed parse below is what keeps the open half honest at runtime.
  */
 type AssertNever<T extends never> = T;
 
-export type EveryPeriodIsOffered = AssertNever<
-  Exclude<Period, (typeof PERIOD_OPTIONS)[number]['value']>
+export type EveryNamedPeriodIsOffered = AssertNever<
+  Exclude<NamedPeriod, (typeof PERIOD_OPTIONS)[number]['value']>
 >;
 
 export type EverySortIsOffered = AssertNever<Exclude<Sort, (typeof SORT_OPTIONS)[number]['value']>>;
@@ -156,6 +185,16 @@ export function parseTransactionFilters(params: TransactionSearchParams): Transa
 
   const period = one(params.period);
   if (isPeriod(period)) {
+    filters.period = period;
+  } else if (period !== undefined && partsFromIso(period) !== null) {
+    // **The date form the contract grew at PET-72, which a first version silently dropped.** A
+    // period `start` from `GET /api/periods` is a value the API accepts, and the sibling screens'
+    // period select links with it - so a URL carrying one has to keep meaning that period here
+    // too, or the detail page's round trip and any shared link quietly show the current period
+    // instead. `partsFromIso` is the same strict calendar check `lib/periodParams.ts` applies:
+    // an impossible date is malformed and dropped, while a real date that starts no period is
+    // forwarded and 400s - the honest answer to a link naming a period the account does not have,
+    // exactly as that module argues.
     filters.period = period;
   }
 

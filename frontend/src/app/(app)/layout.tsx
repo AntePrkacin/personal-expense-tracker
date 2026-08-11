@@ -6,6 +6,7 @@ import { AddTransactionProvider } from './AddTransactionProvider';
 import { DeleteTransactionProvider } from './DeleteTransactionProvider';
 import { DRAWER_TOGGLE_ID } from './drawer';
 import { EditTransactionProvider } from './EditTransactionProvider';
+import { PreferencesProvider } from './PreferencesProvider';
 import { SidebarNav } from './SidebarNav';
 
 // The app shell: the dark sidebar beside a content column, which every
@@ -110,13 +111,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             three. It calls `useDeleteTransaction()` to open the confirmation over itself, so it
             must sit *inside* that provider; swapping the two throws on the first Edit. Its own
             trigger is per row as well, so the one-instance argument is `DeleteTransactionProvider`'s
-            rather than `AddTransactionProvider`'s. */}
+            rather than `AddTransactionProvider`'s.
+
+            **`PreferencesProvider` is outermost of the four, and its position is load-bearing for a
+            different reason from `EditTransactionProvider`'s.** That one must sit inside
+            `DeleteTransactionProvider` because it *calls* `useDeleteTransaction()`; this one must sit
+            outside all three because the dialogs *they* mount format money. `DeleteTransactionDialog`
+            quotes the amount it is about to remove and `AllocateBudgetModal` is a column of currency
+            fields, so a provider nested any deeper would throw the moment either opened. Nothing
+            here consumes it, which is exactly why the ordering has to be written down rather than
+            discovered: every assertion in `layout.test.tsx` would still pass with it moved.
+
+            It carries only the currency and the month start day, never the profile - see
+            `PreferencesProvider.tsx` for why the names and the email stay props on the two
+            components that already have them. */}
         <div className="flex flex-1 flex-col px-4 sm:px-6 lg:px-10">
-          <AddTransactionProvider>
-            <DeleteTransactionProvider>
-              <EditTransactionProvider>{children}</EditTransactionProvider>
-            </DeleteTransactionProvider>
-          </AddTransactionProvider>
+          <PreferencesProvider currency={profile.currency}>
+            <AddTransactionProvider>
+              <DeleteTransactionProvider>
+                <EditTransactionProvider>{children}</EditTransactionProvider>
+              </DeleteTransactionProvider>
+            </AddTransactionProvider>
+          </PreferencesProvider>
         </div>
       </div>
       <div className="drawer-side">
@@ -131,11 +147,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             row, the email from the central `users` row - which is exactly what
             `GET /api/profile` stitches, and the reason the session read alone
             could never have fixed this. */}
-        <SidebarNav
-          firstName={profile.firstName}
-          lastName={profile.lastName}
-          email={profile.email}
-        />
+        <SidebarNav fullName={profile.fullName} email={profile.email} />
       </div>
     </div>
   );

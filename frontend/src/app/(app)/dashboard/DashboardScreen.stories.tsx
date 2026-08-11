@@ -4,6 +4,7 @@ import { addDays } from '@/lib/calendar';
 import { todayIsoDate } from '@/lib/date';
 
 import { AddTransactionProvider } from '../AddTransactionProvider';
+import { PreferencesProvider } from '../PreferencesProvider';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
@@ -145,6 +146,18 @@ const RECENT_TRANSACTIONS = [
   },
 ];
 
+// The period the header names and the list its select offers, both straight off the response as of
+// PET-72 - so the frame's own "October 2025" is drawn whatever month this story is opened in, where
+// the old `monthStartDay` prop derived it from the clock. The second entry is what makes the control
+// worth opening in Storybook at all: a select with one option cannot be reviewed.
+const PERIOD = { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true };
+
+const PERIODS = [
+  PERIOD,
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+  { start: '2025-08-01', end: '2025-09-01', label: 'August 2025', current: false },
+];
+
 const meta: Meta<typeof DashboardScreen> = {
   title: 'Screens/04 Dashboard',
   component: DashboardScreen,
@@ -158,48 +171,58 @@ type Story = StoryObj<typeof DashboardScreen>;
 
 export const Default: Story = {
   render: () => (
-    <AddTransactionProvider>
-      {/* `bg-base-200` is what the root layout paints `<body>`; `px-*` stands in for the
+    // `PreferencesProvider` is what `(app)/layout.tsx` wraps the shell in, and the cards below
+    // format money through it. Mounted here rather than in `decorators` for the reason
+    // `frontend/src/app/CLAUDE.md` records: the story smoke test never applies a meta's
+    // decorators, so a decorator works in the browser and throws under Jest.
+    <PreferencesProvider currency="USD">
+      <AddTransactionProvider>
+        {/* `bg-base-200` is what the root layout paints `<body>`; `px-*` stands in for the
           `(app)` shell's own gutter, since neither wraps a story. */}
-      <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
-        <DashboardScreen
-          budgetCard={<BudgetCard {...BUDGET} isEmpty={false} />}
-          trendCard={
-            <TrendCard
-              weeklyBuckets={[
-                { startDate: '2025-10-01', endDate: '2025-10-08', total: 280 },
-                { startDate: '2025-10-08', endDate: '2025-10-15', total: 410 },
-                { startDate: '2025-10-15', endDate: '2025-10-22', total: 250 },
-                { startDate: '2025-10-22', endDate: '2025-10-29', total: 300 },
-              ]}
-              daysLeft={BUDGET.daysLeft}
-              isEmpty={false}
-            />
-          }
-          donutCard={
-            // Summing to `BUDGET.spent` so the donut's centre and the budget card's readout are
-            // the same figure on one screen, which is AC2 and is what the real response
-            // guarantees.
-            <CategoryDonut categories={CATEGORIES} spent={BUDGET.spent} />
-          }
-          recentTransactionsCard={
-            <RecentTransactionsCard
-              recentTransactions={RECENT_TRANSACTIONS}
-              categories={CATEGORIES}
-              isEmpty={false}
-            />
-          }
-          insightCard={
-            <InsightTeaserCard
-              insight={{
-                headline: 'You are on track this month',
-                body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
-              }}
-              isEmpty={false}
-            />
-          }
-        />
-      </div>
-    </AddTransactionProvider>
+        <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
+          <DashboardScreen
+            period={PERIOD}
+            periods={PERIODS}
+            budgetCard={<BudgetCard currency="USD" {...BUDGET} isEmpty={false} />}
+            trendCard={
+              <TrendCard
+                currency="USD"
+                weeklyBuckets={[
+                  { startDate: '2025-10-01', endDate: '2025-10-08', total: 280 },
+                  { startDate: '2025-10-08', endDate: '2025-10-15', total: 410 },
+                  { startDate: '2025-10-15', endDate: '2025-10-22', total: 250 },
+                  { startDate: '2025-10-22', endDate: '2025-10-29', total: 300 },
+                ]}
+                daysLeft={BUDGET.daysLeft}
+                isEmpty={false}
+              />
+            }
+            donutCard={
+              // Summing to `BUDGET.spent` so the donut's centre and the budget card's readout are
+              // the same figure on one screen, which is AC2 and is what the real response
+              // guarantees.
+              <CategoryDonut currency="USD" categories={CATEGORIES} spent={BUDGET.spent} />
+            }
+            recentTransactionsCard={
+              <RecentTransactionsCard
+                currency="USD"
+                recentTransactions={RECENT_TRANSACTIONS}
+                categories={CATEGORIES}
+                isEmpty={false}
+              />
+            }
+            insightCard={
+              <InsightTeaserCard
+                insight={{
+                  headline: 'You are on track this month',
+                  body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
+                }}
+                isEmpty={false}
+              />
+            }
+          />
+        </div>
+      </AddTransactionProvider>
+    </PreferencesProvider>
   ),
 };

@@ -46,6 +46,9 @@ type TransactionList = ListOperation['responses'][200]['content']['application/j
 /** One row. The table, the dashboard's recent list and "Recent in {category}" all render these. */
 export type Transaction = components['schemas']['TransactionResponseDto'];
 
+/** The period a list covers, for the header's overline. Read off the response, never derived. */
+type PeriodSummary = components['schemas']['PeriodSummaryDto'];
+
 /**
  * Which of the three states the page is in, resolved once on the server.
  *
@@ -56,11 +59,18 @@ export type Transaction = components['schemas']['TransactionResponseDto'];
  *
  * `total` rides on all three so the tab badge is one expression at the call site. It is 0 on
  * both empty states by definition, since it is the count after filters.
+ *
+ * **`period` rides on all three too, and it comes from the *first* read rather than the probe.**
+ * The header's overline names the period the figures belong to, which is the one the caller's own
+ * filters asked for - so an empty screen still says which period found nothing, and the probe's
+ * `period=all` never overwrites it. It is `null` exactly when the caller asked for `period=all`,
+ * which the contract documents as having no single label.
  */
-export type TransactionsView =
+export type TransactionsView = { period: PeriodSummary | null } & (
   | { state: 'populated'; transactions: Transaction[]; total: number }
   | { state: 'noResults'; total: 0 }
-  | { state: 'empty'; total: 0 };
+  | { state: 'empty'; total: 0 }
+);
 
 /**
  * One list read, or the access flow.
@@ -135,8 +145,12 @@ export async function readTransactionsView(
 ): Promise<TransactionsView> {
   const list = await readTransactions(filters);
 
+  // The period every arm below reports, resolved once: it is the one *this* read covers, so the
+  // probe's own all-time answer can never become the header's label.
+  const period = list.period;
+
   if (list.total > 0) {
-    return { state: 'populated', transactions: list.transactions, total: list.total };
+    return { state: 'populated', transactions: list.transactions, total: list.total, period };
   }
 
   // The condition is "these filters already are the probe", not "the period is all": a
@@ -144,10 +158,45 @@ export async function readTransactionsView(
   // either of them still leaves the two cases apart - a filter matched nothing, or there is
   // nothing to match. Only the unfiltered all-time read answers both at once.
   if (isProbe(filters)) {
-    return { state: 'empty', total: 0 };
+    return { state: 'empty', total: 0, period };
   }
 
   const anything = await readTransactions(PROBE);
 
-  return anything.total > 0 ? { state: 'noResults', total: 0 } : { state: 'empty', total: 0 };
+  return anything.total > 0
+    ? { state: 'noResults', total: 0, period }
+    : { state: 'empty', total: 0, period };
+}
+
+/**
+ * The current period's transaction count, for the tab badge on a screen that renders no
+ * transactions (PET-36, TRN-2).
+ *
+ * **The Categories tab draws both badges, not just its own**, which is what makes this exist:
+ * frame 13 shows "All transactions 128" beside "Categories 8", so the route that has no
+ * transactions on it still has to state how many there are. `/transactions` needs no mirror of
+ * this - it already reads the categories for the table's name-and-colour join, so its own
+ * second badge is `categories.length` and costs nothing.
+ *
+ * **It is not `readTransactionsView`**, and the difference is the probe. That function fires a
+ * second request when the first returns zero, to tell an empty account from an empty filter -
+ * a distinction that decides which of three screens to render. A badge has no such branch: it
+ * prints the number, and 0 is a perfectly good number to print. So this is one request always,
+ * where the view is one or two.
+ *
+ * No filters, so `period` defaults to `current` and this counts the budgeting period the rest
+ * of the screen is about. That matches what the badge means on `/transactions` itself, where
+ * A17 was amended to "matches after the filter bar" - from here there is no filter bar, so the
+ * unfiltered period count is the same question asked with nothing narrowing it.
+ *
+ * **A failure takes the page down rather than hiding the badge**, deliberately. The policy is
+ * inherited from `readTransactions` above rather than softened here, because both reads on that
+ * page hit the same backend through the same guard: an account that cannot reach it to count
+ * transactions could not reach it to load the categories either, so a degraded badge would be a
+ * second answer to a question the other read has already failed.
+ */
+export async function readTransactionCount(): Promise<number> {
+  const list = await readTransactions({});
+
+  return list.total;
 }

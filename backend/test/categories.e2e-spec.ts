@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -10,16 +10,17 @@ import { LoginTokenService } from './../src/auth/login-token.service';
 import type { CategoriesResponseDto } from './../src/categories/dto/categories-response.dto';
 import type { CategoryResponseDto } from './../src/categories/dto/category-response.dto';
 import type { ErrorResponseDto } from './../src/common/dto/error-response.dto';
-import {
-  monthWindow,
-  previousMonthWindow,
-  todayIn,
-} from './../src/common/month-window';
+import { todayIn } from './../src/common/month-window';
+import { calendarMonthPeriods } from './periods';
 import { users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
 import { UserDatabaseService } from './../src/database/user-database.service';
-import { categories, transactions } from './../src/database/user/schema';
+import {
+  categories,
+  categoryCapHistory,
+  transactions,
+} from './../src/database/user/schema';
 import { MAILER } from './../src/mail/mailer';
 import { MemoryMailer } from './memory-mailer';
 
@@ -49,8 +50,9 @@ describe('Category endpoints (e2e)', () => {
 
   // Registration leaves monthStartDay at its default of 1, so the period is the
   // calendar month.
-  const window = monthWindow(1, todayIn('Europe/Zagreb'));
-  const lastMonth = previousMonthWindow(1, todayIn('Europe/Zagreb'));
+  const { current: window, previous: lastMonth } = calendarMonthPeriods(
+    todayIn('Europe/Zagreb'),
+  );
 
   const errorBody = (response: request.Response) =>
     response.body as ErrorResponseDto;
@@ -86,6 +88,13 @@ describe('Category endpoints (e2e)', () => {
       .delete(`/api/categories/${id}`)
       .set('Authorization', `Bearer ${token}`);
 
+  /** The bulk cap write. Takes any payload, so malformed bodies are testable. */
+  const allocate = (payload: object, token = bearer) =>
+    request(app.getHttpServer())
+      .patch('/api/categories')
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload);
+
   /** Adds a spend to a category, inside the current period unless told otherwise. */
   const spend = (categoryId: string, amount: number, date = window.start) =>
     request(app.getHttpServer())
@@ -110,6 +119,10 @@ describe('Category endpoints (e2e)', () => {
   const named = (response: request.Response, name: string) =>
     listBody(response).categories.find((row) => row.name === name)!;
 
+  /** The same lookup against a body already parsed, e.g. a write's own answer. */
+  const rowNamed = (body: CategoriesResponseDto, name: string) =>
+    body.categories.find((row) => row.name === name)!;
+
   // Resolved in beforeAll: RegisterDto.categories takes category template
   // ids, and those are minted by the boot seed into this run's own database.
   let pickedCategoryIds: string[] = [];
@@ -119,8 +132,7 @@ describe('Category endpoints (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
-        firstName: 'Marko',
-        lastName: 'Kovac',
+        fullName: 'Marko Kovac',
         email,
         currency: 'eur',
         monthlyBudget: 2000,
@@ -353,7 +365,7 @@ describe('Category endpoints (e2e)', () => {
           color: 'error',
           monthlyCap: 40.55,
           icon: 'utensils',
-          note: 'Too much',
+          description: 'Too much',
         }).expect(201),
       );
 
@@ -362,19 +374,23 @@ describe('Category endpoints (e2e)', () => {
         color: 'error',
         monthlyCap: 40.55,
         icon: 'utensils',
-        note: 'Too much',
+        description: 'Too much',
         isFallback: false,
         spent: 0,
         transactionCount: 0,
         status: 'on_track',
       });
 
+      // Stored as this category's first cap-history row, effective from the
+      // current period - not as a column on the category, which is what a cap
+      // stopped being at PET-72.
       const userDb = await userDatabases.getUserDb(userId);
       const [row] = await userDb
         .select()
-        .from(categories)
-        .where(eq(categories.id, created.id));
-      expect(row.monthlyCapCents).toBe(4055);
+        .from(categoryCapHistory)
+        .where(eq(categoryCapHistory.categoryId, created.id));
+      expect(row.capCents).toBe(4055);
+      expect(row.effectiveFrom).toBe(window.start);
     });
 
     it('creates an uncapped category when the cap is omitted', async () => {
@@ -475,6 +491,59 @@ describe('Category endpoints (e2e)', () => {
       });
     });
 
+    it('backdates a cap with capFrom, leaving a period with its own newer row alone', async () => {
+      const category = await cappedCategory(400, 'Backdate me');
+
+      // Anchored at the previous period's start: that period is re-judged from then on, while
+      // the current one keeps the newer row it got at creation - resolution prefers the greatest
+      // effective_from at or before each period's start, which is what makes a backdate visible
+      // and deliberate rather than a silent rewrite of a span that had its own decision.
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: lastMonth.start,
+      }).expect(200);
+
+      const previous = listBody(
+        await list().query({ period: lastMonth.start }).expect(200),
+      );
+      expect(
+        previous.categories.find((row) => row.id === category.id)?.monthlyCap,
+      ).toBe(250);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === category.id)?.monthlyCap,
+      ).toBe(400);
+    });
+
+    it('400s the capFrom misuses, writing nothing', async () => {
+      const category = await cappedCategory(400, 'Anchor rules');
+
+      // A capFrom with no cap to date is refused rather than ignored: silently dropping it would
+      // answer 200 to a body that read as a backdate, and the caller would believe one happened.
+      await patch(category.id, { capFrom: lastMonth.start }).expect(400);
+      await patch(category.id, {
+        name: 'Renamed anyway',
+        capFrom: lastMonth.start,
+      }).expect(400);
+
+      // Mid-month starts nobody's period on this account, and a future period start is refused
+      // like every other future read.
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: `${window.start.slice(0, 8)}15`,
+      }).expect(400);
+      await patch(category.id, {
+        monthlyCap: 250,
+        capFrom: window.end,
+      }).expect(400);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === category.id),
+      ).toMatchObject({ name: 'Anchor rules', monthlyCap: 400 });
+    });
+
     it('rejects an empty body before touching the database', async () => {
       const category = await cappedCategory(400, 'Empty patch');
       const response = await patch(category.id, {}).expect(400);
@@ -519,6 +588,333 @@ describe('Category endpoints (e2e)', () => {
     it('404s on another account’s category id', async () => {
       const category = await cappedCategory(400, 'Not yours');
       await patch(category.id, { name: 'Stolen' }, otherBearer).expect(404);
+    });
+  });
+
+  /**
+   * The bulk cap write. **This is the only place its atomicity can be shown** -
+   * a mock can prove the statement carries a count guard, but only a real
+   * database can prove that a payload naming one dead category leaves every
+   * other cap exactly where it was.
+   */
+  describe('PATCH /api/categories', () => {
+    /**
+     * The cap each id resolves to for the current period, read from history.
+     *
+     * **Resolved rather than selected, because a cap is no longer a column.**
+     * PET-72 made caps append-only `category_cap_history` rows, so "the cap" is
+     * the greatest `effective_from` at or before the period start with ties broken
+     * by the newest write - exactly what `CategoriesService.withSpend` does. A
+     * claim about a cap being "unchanged" therefore has to resolve the same way
+     * the app does, or it would pass on a table full of stale appends.
+     */
+    const capsOf = async (ids: string[]) => {
+      const userDb = await userDatabases.getUserDb(userId);
+      const rows = await userDb
+        .select()
+        .from(categoryCapHistory)
+        .where(inArray(categoryCapHistory.categoryId, ids))
+        .orderBy(
+          asc(categoryCapHistory.effectiveFrom),
+          asc(categoryCapHistory.createdAt),
+          asc(categoryCapHistory.id),
+        );
+
+      // Ascending, so the last write for each id wins - the same order the
+      // service's DESC-with-LIMIT-1 subquery picks out.
+      const resolved = new Map<string, number | null>();
+      for (const row of rows) {
+        if (row.effectiveFrom <= window.start) {
+          resolved.set(row.categoryId, row.capCents);
+        }
+      }
+      return resolved;
+    };
+
+    it('sets several caps in one request and recomputes the screen', async () => {
+      const one = await cappedCategory(400, 'Bulk one');
+      const two = await cappedCategory(300, 'Bulk two');
+      await spend(one.id, 100);
+
+      const body = listBody(
+        await allocate({
+          categories: [
+            { id: one.id, monthlyCap: 500 },
+            { id: two.id, monthlyCap: 250 },
+          ],
+        }).expect(200),
+      );
+
+      expect(rowNamed(body, 'Bulk one')).toMatchObject({
+        monthlyCap: 500,
+        spent: 100,
+        remaining: 400,
+        status: 'on_track',
+      });
+      expect(rowNamed(body, 'Bulk two')).toMatchObject({ monthlyCap: 250 });
+      // The header moves with the caps, which is the whole reason the response
+      // is the screen rather than the rows.
+      expect(body.allocation.allocated).toBeGreaterThanOrEqual(750);
+    });
+
+    it('sets and clears caps in the same request', async () => {
+      const setMe = await cappedCategory(100, 'Bulk set');
+      const clearMe = await cappedCategory(200, 'Bulk clear');
+
+      const body = listBody(
+        await allocate({
+          categories: [
+            { id: setMe.id, monthlyCap: 175.25 },
+            { id: clearMe.id, monthlyCap: null },
+          ],
+        }).expect(200),
+      );
+
+      expect(rowNamed(body, 'Bulk set')).toMatchObject({ monthlyCap: 175.25 });
+      expect(rowNamed(body, 'Bulk clear')).toMatchObject({
+        monthlyCap: null,
+        status: 'uncapped',
+        remaining: null,
+      });
+    });
+
+    it('stores the cap as integer cents', async () => {
+      const category = await cappedCategory(100, 'Bulk cents');
+      await allocate({
+        categories: [{ id: category.id, monthlyCap: 40.55 }],
+      }).expect(200);
+
+      expect((await capsOf([category.id])).get(category.id)).toBe(4055);
+    });
+
+    it('changes nothing when one id names no category', async () => {
+      const one = await cappedCategory(400, 'Atomic unknown one');
+      const two = await cappedCategory(300, 'Atomic unknown two');
+
+      const response = await allocate({
+        categories: [
+          { id: one.id, monthlyCap: 999 },
+          { id: two.id, monthlyCap: 888 },
+          // A well-formed id that names nothing.
+          { id: '018f0000-0000-7000-8000-0000000000ff', monthlyCap: 777 },
+        ],
+      }).expect(404);
+
+      expect(errorBody(response).message).toMatch(/no cap was changed/i);
+
+      const caps = await capsOf([one.id, two.id]);
+      expect(caps.get(one.id)).toBe(40000);
+      expect(caps.get(two.id)).toBe(30000);
+    });
+
+    it('changes nothing when one id was deleted', async () => {
+      const live = await cappedCategory(400, 'Atomic live');
+      const doomed = await cappedCategory(300, 'Atomic doomed');
+      await remove(doomed.id).expect(204);
+
+      await allocate({
+        categories: [
+          { id: live.id, monthlyCap: 999 },
+          { id: doomed.id, monthlyCap: 888 },
+        ],
+      }).expect(404);
+
+      expect((await capsOf([live.id])).get(live.id)).toBe(40000);
+    });
+
+    it('changes nothing when one id belongs to another account', async () => {
+      const mine = await cappedCategory(400, 'Atomic mine');
+      // One of the other account's seeded rows, read rather than created: this
+      // suite's DELETE block asserts that account still holds exactly what
+      // provisioning gave it, so adding one here would break it from a distance.
+      const theirs = named(await list(otherBearer).expect(200), 'Groceries');
+
+      // Cross-user isolation is structural, so another account's id reads
+      // exactly like a nonexistent one.
+      await allocate({
+        categories: [
+          { id: mine.id, monthlyCap: 999 },
+          { id: theirs.id, monthlyCap: 888 },
+        ],
+      }).expect(404);
+
+      expect((await capsOf([mine.id])).get(mine.id)).toBe(40000);
+    });
+
+    it('accepts a cap on the Uncategorized fallback', async () => {
+      // No 409 on this route: the fallback's cap is editable and there is no
+      // rename in play, so this is the one categories write with no conflict
+      // case. Pinned so a 409 cannot leak onto it later.
+      const fallback = named(await list().expect(200), 'Uncategorized');
+
+      const body = listBody(
+        await allocate({
+          categories: [{ id: fallback.id, monthlyCap: 60 }],
+        }).expect(200),
+      );
+      expect(rowNamed(body, 'Uncategorized')).toMatchObject({
+        monthlyCap: 60,
+        isFallback: true,
+      });
+
+      // Put it back uncapped, the seeded shape later tests read.
+      await allocate({
+        categories: [{ id: fallback.id, monthlyCap: null }],
+      }).expect(200);
+    });
+
+    it('lets the caps sum above the monthly budget, unallocated going negative', async () => {
+      // The counterpart to the Allocate modal's own ceiling, which is a frontend
+      // rule. `unallocated` is documented unclamped (A43) and
+      // `PATCH /categories/:id` enforces no ceiling either, so enforcing one here
+      // would make the two endpoints disagree about what a legal cap is.
+      const hog = await cappedCategory(100, 'Budget hog');
+
+      const body = listBody(
+        await allocate({
+          categories: [{ id: hog.id, monthlyCap: 9000 }],
+        }).expect(200),
+      );
+
+      expect(body.allocation.monthlyBudget).toBe(2000);
+      expect(body.allocation.unallocated).toBeLessThan(0);
+
+      await allocate({
+        categories: [{ id: hog.id, monthlyCap: 100 }],
+      }).expect(200);
+    });
+
+    it('moves updated_at on the rows it touched and no others', async () => {
+      const touched = await cappedCategory(400, 'Bulk touched');
+      const untouched = await cappedCategory(300, 'Bulk untouched');
+
+      const stamps = async (id: string) => {
+        const userDb = await userDatabases.getUserDb(userId);
+        const [row] = await userDb
+          .select()
+          .from(categories)
+          .where(eq(categories.id, id));
+        return row.updatedAt;
+      };
+
+      const before = {
+        touched: await stamps(touched.id),
+        untouched: await stamps(untouched.id),
+      };
+
+      await allocate({
+        categories: [{ id: touched.id, monthlyCap: 450 }],
+      }).expect(200);
+
+      expect(await stamps(untouched.id)).toEqual(before.untouched);
+      // $onUpdateFn fires even though the SET carries a raw sql expression.
+      expect((await stamps(touched.id)).getTime()).toBeGreaterThanOrEqual(
+        before.touched.getTime(),
+      );
+    });
+
+    it('accepts an entry whose cap already equals the stored value', async () => {
+      // A 200, not a 400. `PATCH /categories/:id` already behaves this way for a
+      // field that happens to match, and filtering no-ops would mean reading
+      // every current cap first - which reintroduces the check-then-write this
+      // endpoint exists to avoid.
+      const category = await cappedCategory(400, 'Bulk noop');
+
+      await allocate({
+        categories: [{ id: category.id, monthlyCap: 400 }],
+      }).expect(200);
+    });
+
+    it('anchors the whole batch with capsFrom, one answer for every row', async () => {
+      const first = await cappedCategory(400, 'Bulk backdate A');
+      const second = await cappedCategory(300, 'Bulk backdate B');
+
+      await allocate({
+        categories: [
+          { id: first.id, monthlyCap: 100 },
+          { id: second.id, monthlyCap: 50 },
+        ],
+        capsFrom: lastMonth.start,
+      }).expect(200);
+
+      const previous = listBody(
+        await list().query({ period: lastMonth.start }).expect(200),
+      );
+      expect(
+        previous.categories.find((row) => row.id === first.id)?.monthlyCap,
+      ).toBe(100);
+      expect(
+        previous.categories.find((row) => row.id === second.id)?.monthlyCap,
+      ).toBe(50);
+
+      // The current period keeps the rows it got at creation: a newer row wins, so the backdate
+      // re-judges only the span with no later decision of its own.
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === first.id)?.monthlyCap,
+      ).toBe(400);
+    });
+
+    it('400s a capsFrom that starts no period, writing nothing', async () => {
+      const target = await cappedCategory(400, 'Bulk anchor guard');
+
+      // The 15th starts nobody's period on this account, whatever the year.
+      await allocate({
+        categories: [{ id: target.id, monthlyCap: 100 }],
+        capsFrom: '2020-01-15',
+      }).expect(400);
+      // And a future period start is refused like every other future read.
+      await allocate({
+        categories: [{ id: target.id, monthlyCap: 100 }],
+        capsFrom: window.end,
+      }).expect(400);
+
+      const current = listBody(await list().expect(200));
+      expect(
+        current.categories.find((row) => row.id === target.id)?.monthlyCap,
+      ).toBe(400);
+    });
+
+    it('rejects the malformed bodies', async () => {
+      const category = await cappedCategory(400, 'Bulk invalid');
+      const id = category.id;
+
+      // An empty array: @ArrayNotEmpty owns this, and it matters because the
+      // statement itself would accept it (the count guard reads 0 = 0).
+      await allocate({ categories: [] }).expect(400);
+      // A repeated id, which would otherwise make the count guard unreachable
+      // and turn every duplicate into a permanent 404.
+      await allocate({
+        categories: [
+          { id, monthlyCap: 10 },
+          { id, monthlyCap: 20 },
+        ],
+      }).expect(400);
+      await allocate({ categories: [{ id, monthlyCap: 0 }] }).expect(400);
+      await allocate({ categories: [{ id, monthlyCap: -5 }] }).expect(400);
+      await allocate({ categories: [{ id, monthlyCap: 1.234 }] }).expect(400);
+      // The one that differs from PATCH /:id, and the one most likely to be
+      // "fixed" into @IsOptional later: this endpoint has no leave-alone case.
+      await allocate({ categories: [{ id }] }).expect(400);
+      await allocate({
+        categories: [{ id: 'not-a-uuid', monthlyCap: 10 }],
+      }).expect(400);
+      await allocate({
+        categories: [{ id, monthlyCap: 10, sneaky: true }],
+      }).expect(400);
+      await allocate({ categories: [{ id, monthlyCap: 10 }], extra: 1 }).expect(
+        400,
+      );
+      // A bare array body, the shape that would arrive with the global pipe
+      // skipped entirely if the DTO were not a wrapper object.
+      await allocate([{ id, monthlyCap: 10 }]).expect(400);
+    });
+
+    it('refuses a request with no bearer', async () => {
+      await request(app.getHttpServer())
+        .patch('/api/categories')
+        .send({ categories: [] })
+        .expect(401);
     });
   });
 
