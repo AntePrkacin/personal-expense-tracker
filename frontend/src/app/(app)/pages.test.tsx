@@ -62,6 +62,14 @@ jest.mock('../../lib/periods', () => ({
   readPeriods: jest.fn(),
 }));
 
+// PET-74's addendum gives the Settings page a *direct* `cookies()` call - the theme-preference
+// read - which the lib-level mocks above cannot intercept, so the module itself is mocked: outside
+// a request scope the real one throws. An empty jar is the right stand-in, because `system` (the
+// absent-cookie parse) is the state every assertion in this file was written against.
+jest.mock('next/headers', () => ({
+  cookies: jest.fn(async () => ({ get: () => undefined })),
+}));
+
 // Two of these screens now hold an "Add transaction" trigger that calls
 // `useAddTransaction`, which throws outside its provider by design - so every render
 // here goes through `renderScreen()` below rather than through `render()` directly. The

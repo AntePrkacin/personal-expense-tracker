@@ -4,10 +4,9 @@ import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour'
 import { moneyFormatters, type MoneyFormatters } from '@/lib/money';
 import type { Category } from '@/lib/categories';
 
-import { BannerCardBody } from './CardBanner';
 import { barClassFor, barPercent, chipFor, isCapped } from './categoryCardStatus';
 import { CategoryCardMenu } from './CategoryCardMenu';
-import { SetLimitBanner } from './SetLimitBanner';
+import { SetLimitButton } from './SetLimitButton';
 
 // One category card on frame 13 (nodes 37:471 and its seven siblings, CTG-3, CTG-4).
 //
@@ -70,10 +69,14 @@ function transactionCountLabel(count: number): string {
  * `over` is null unless the status is `over`, so the `full` case supplies the zero as a literal
  * rather than formatting a field that is not there.
  *
- * Both "over" readings take `text-error`, which is what the frame draws on Housing as well as
- * on Dining out. The chip disagrees on Housing - `full` is a warning chip over an error-toned
- * figure - and that is the frame's own pairing rather than an accident here: the chip reports
- * the band, the figure reports that the cap has been reached.
+ * The two "over" readings take two colours as of PET-74's sixth addendum, and that amends the
+ * frame. Node 36:423 draws `text-error` on Housing's "$0 over" as well as on Dining out's real
+ * overspend - a warning chip over an error-toned figure, the frame's own pairing - and the
+ * product owner's call is that a zero is not an alarm: `full`'s figure goes muted, the same
+ * `text-base-content/60` as the cap caption above it, keeping `font-medium` so it still reads
+ * as a figure. Red is reserved for money actually gone over, which also stops the card from
+ * disagreeing with its own chip - orange band, red figure was the frame's pairing, not this
+ * card's.
  */
 function footerFigure(
   category: Category,
@@ -87,7 +90,7 @@ function footerFigure(
   }
 
   if (category.status === 'full') {
-    return { label: `${formatWhole(0)} over`, className: 'text-error font-medium' };
+    return { label: `${formatWhole(0)} over`, className: 'text-base-content/60 font-medium' };
   }
 
   return { label: `${formatWhole(category.remaining ?? 0)} left`, className: 'font-medium' };
@@ -174,49 +177,40 @@ export function CategoryCard({
   // designed fixed size becomes a ceiling here. A hard height would also clip a wrapped chip on
   // a card whose category name and status labels are longer than the mock's.
   if (!isCapped(category)) {
-    // The uncapped body, identical in both of the two shapes below.
-    const body = (
-      <div className="card-body gap-4">
-        <CategoryCardHeader category={category} readOnly={readOnly} />
-
-        <p className="flex flex-wrap items-baseline gap-1.5">
-          <span className="text-base font-semibold">{formatWhole(category.spent)}</span>
-          <span className="text-base-content/60 text-sm">
-            in {transactionCountLabel(category.transactionCount)}
-          </span>
-        </p>
-      </div>
-    );
-
-    // **The fallback card has no banner, because it has nowhere for one to lead.** Every other
-    // uncapped card's strip is a live "Set limit" as of PET-38, and the control that sets a cap is
-    // the Edit modal, which this card has no trigger for - so a strip here would be either a dead
-    // control or a second explanation of a rule nobody asked about. It draws the plain card box
-    // instead, which is the same `card bg-base-100 shadow-sm` the capped shape below uses, so the
-    // grid stays on one rhythm with one fewer element rather than with an empty one.
-    //
-    // A historical period takes the same plain box for every uncapped card: "Set limit" edits the
-    // live configuration (backdating goes through its cap-anchor question), so on a closed period
-    // it would be an action on something other than what is on screen. Not drawn rather than
-    // disabled - the fallback card's own rule.
-    if (category.isFallback || readOnly) {
-      return <section className="card bg-base-100 shadow-sm">{body}</section>;
-    }
-
     return (
-      // The same `CardBanner` idiom the summary card above uses, and the same one the source
-      // design system uses for both: the body keeps its four rounded corners and overlaps a
-      // strip pulled up by one radius. It sits exactly where the bar and the footer sit on a
-      // capped card, so a grid mixing the two shapes stays on one rhythm.
-      <section className="flex flex-col">
-        <BannerCardBody>{body}</BannerCardBody>
+      // One plain card box, the same `card bg-base-100 shadow-sm` as the capped shape below.
+      // **The `CardBanner` strip this card used to end in is gone (PET-74's third addendum,
+      // the product owner's decision):** Claude Design's own `CategoriesTab.jsx` draws no
+      // footer banner on an uncapped card - "the call to action rides as a chip on the spend
+      // row", its comment says - and reserves the strip for the summary card's "Allocate". So
+      // "No limit set for this category" is retired copy, and the action is the accent pill
+      // beside the spend figure.
+      <section className="card bg-base-100 shadow-sm">
+        <div className="card-body gap-4">
+          <CategoryCardHeader category={category} readOnly={readOnly} />
 
-        {/* **Live as of PET-38, and the paragraph this replaces called it inert "for the same
-            reason" as the summary card's "Allocate".** That symmetry is gone: "Set limit" has one
-            obvious destination and now goes there, while "Allocate" still has none designed.
-            `SetLimitBanner` is the client wrapper that carries the handler, so this card stays a
-            Server Component; the accessible-name composition it relies on is `CardBanner`'s. */}
-        <SetLimitBanner category={category} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* daisyUI's `.card-body p { flex-grow: 1 }` makes this paragraph absorb the free
+                space, which here is what pushes the pill flush right - the same rule the capped
+                footer below has to fight is load-bearing on this row. */}
+            <p className="flex flex-wrap items-baseline gap-1.5">
+              <span className="text-base font-semibold">{formatWhole(category.spent)}</span>
+              <span className="text-base-content/60 text-sm">
+                in {transactionCountLabel(category.transactionCount)}
+              </span>
+            </p>
+
+            {/* **The fallback card gets no pill, because it has nowhere for one to lead.** The
+                control that sets a cap is the Edit modal, which that card has no trigger for -
+                so a pill there would be either a dead control or a second explanation of a rule
+                nobody asked about. The same `isFallback` decision that hides its kebab, made in
+                the same file. A historical period gets no pill either, PET-72's readOnly rule
+                carried onto PET-74's control: "Set limit" edits the live configuration, so on a
+                closed period it would act on something other than what is on screen - not drawn
+                rather than disabled, the fallback card's own doctrine. */}
+            {category.isFallback || readOnly ? null : <SetLimitButton category={category} />}
+          </div>
+        </div>
       </section>
     );
   }

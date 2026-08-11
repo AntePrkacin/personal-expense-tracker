@@ -16,9 +16,11 @@ only when the work is actually in a route.
 
 ## The app shell
 
-`frontend/src/app/(app)/` is the shell every signed-in screen renders inside: the fixed dark
+`frontend/src/app/(app)/` is the shell every signed-in screen renders inside: the fixed
 sidebar beside a content column, with the four routed views `/dashboard`, `/transactions`,
-`/insights` and `/settings` under it. A **route group**, so the paths stay exactly the hrefs
+`/insights` and `/settings` under it. (The sidebar was the Figma frames' dark ink panel until
+PET-74's addendum restyled it to Claude Design's card-coloured one; `ui/Sidebar.tsx` carries
+the account.) A **route group**, so the paths stay exactly the hrefs
 `ui/Sidebar` declares while sharing one layout; the access screens (01, 02, 03, 22, 23, 24)
 sit outside it and inherit none of it.
 
@@ -245,10 +247,12 @@ track" as if it described their finances. (PET-57 inlined daisyUI `progress` and
 does **not** remove focusable descendants from the tab order, so the screen's test pins that
 the subtree contains none; and it is a plain `div`, never an `<aside>`, because an
 `aria-hidden` landmark is self-contradictory.
-The panel also pins `data-theme="light"` on itself, daisyUI's own mechanism for a subtree that
-must not follow the page: the art is a bright `base-100` card on a `neutral` panel, a pairing
+The panel also pins `data-theme="expensa-light"` on itself, daisyUI's own mechanism for a subtree
+that must not follow the page: the art is a bright `base-100` card on a `neutral` panel, a pairing
 only the light theme's values keep legible, and every figure in it is fabricated, so there is
-nothing for the reader's theme to adapt.
+nothing for the reader's theme to adapt. The value has to be a **registered** theme's name: it said
+`light`, and when PET-74 replaced the stock pair the pin silently stopped matching anything and the
+panel followed the page theme, with every gate green - the file's own comment carries the account.
 
 **Onboarding is three nested routes under one layout**: `/setup` (02, step 1),
 `/setup/categories` (03, step 2) and `/setup/register` (22, step 3, PET-11). PET-9
@@ -1598,6 +1602,17 @@ than left as archaeology about a state nothing can reach. **The Categories tab i
 this app with no inert control on it.** Four things about the modal behind it are decisions rather
 than shape.
 
+**PET-74's third addendum broke that symmetry the other way, and the uncapped card's strip is
+gone.** Claude Design's own `CategoriesTab.jsx` draws no footer banner on an uncapped card - its
+comment says the call to action "rides as a chip on the spend row" - and reserves the `CardBanner`
+strip for the summary card's "Allocate", which is now the app's arrangement too, by the product
+owner's decision. `SetLimitBanner.tsx` is deleted; `SetLimitButton.tsx` is the same smallest client
+wrapper rendering the accent pill on the spend row, same `useEditCategory().open(category,
+{ focus: 'monthlyCap' })`, same composed accessible name ("Set limit for Groceries"), and the
+"No limit set for this category" sentence is retired copy. `AllocateBanner` is `CardBanner`'s only
+caller now, and the uncapped card is one plain `card bg-base-100 shadow-sm` box like its capped
+sibling.
+
 **It owns its open state and takes no provider**, which is `AddCategoryButton`'s criterion applied
 unchanged: one trigger on one route, where `EditCategoryProvider` exists because the edit modal has a
 kebab per card _and_ a "Set limit" per uncapped card. Being a large modal changes nothing about that.
@@ -1870,6 +1885,9 @@ so the walk measured it again instead of inheriting the old numbers: **1.527:1 i
 in dark**, and `base-300` still measures **1.115:1** through the identical harness. That last
 number is the point of re-running it - a check that has never been seen to fail is not evidence,
 and this one is now on record failing for the token it rejected.
+**PET-74's Expensa themes re-measured both again**, because a theme change voids every recorded
+figure: `base-content/20` composites to **1.532:1 light / 1.909:1 dark**, and `base-300` still
+fails at **1.152:1 / 1.163:1** - the tone keeps its job and the rejected token stays rejected.
 
 **PET-23 filled the third slot, `CategoryDonut`, and the requirement it was built to is stronger
 than the one its plan was written to.** That plan designed a ring **deliberately allowed not to
@@ -1943,7 +1961,9 @@ rejected for the trend chart's muted bars - **1.157:1** in light and **1.115:1**
 this card - and it mattered more here than there, because the backend's orphan fold routes real
 money into that one slice, so drawing it invisible is the ring failing to close by another route.
 It is `base-content/50` now: **3.401:1** light, **4.769:1** dark, composited and measured through
-the same harness, which probed the old token in the same run and watched it fail. And the arcs
+the same harness, which probed the old token in the same run and watched it fail. Under PET-74's
+Expensa themes the same composite reads **3.395:1** light and **5.076:1** dark and `base-300`
+still fails, so both findings survive the re-theme. And the arcs
 carry a `stroke` of `base-100` where they carried none, because `CATEGORY_FILL` is lossy on
 purpose - `orange` and `yellow` both resolve to `var(--color-warning)` - so two same-coloured
 slices landing next to each other in the `spent`-descending sort merged into one arc, showing four
@@ -2574,3 +2594,20 @@ from a save that did nothing. What closes them is one sentence naming the period
 on, off the `label` the backend already publishes, which makes it the first success message in this
 app carrying a variable - so it is filed against the notification system that entry marks HIGH
 IMPORTANCE rather than as a fifth hand-rolled `role="status"` line on one screen.
+
+**PET-74's addendum gives the Preferences card a third row, the Theme control, and it is
+deliberately not a form field.** `settings/ThemeField.tsx` is the Claude Design system's
+`ThemeSegmented` (System / Light / Dark) translated to semantic classes, and it applies
+**instantly**: an explicit choice stamps `data-theme` on `<html>` and writes the
+`spendifico.theme` cookie, `system` removes the attribute (which is what re-arms the automatic OS
+selection - `lib/theme.ts` owns why that cannot fight the explicit choice), and the root layout
+re-stamps the attribute from the cookie on every server render, so a reload arrives already
+themed. Because the choice never travels in the PATCH, it joins no `SettingsFormValues`, no diff
+and no `invalidFields`, and it is the one control on the page that takes no `disabled` while a
+save is in flight - the Categories-summary reasoning applied to a control instead of a card.
+Under the segmented skin are visually-hidden **native radios**, one tab stop with platform arrow
+keys, because `role="radio"` on styled buttons - which is what the design source literally
+draws - would promise a keyboard contract nothing implemented, the refusal this app has already
+made four times. `settings/page.tsx` reads the cookie a second time so the control's checked
+state agrees with the server HTML at hydration; `(app)/pages.test.tsx` mocks `next/headers` for
+exactly that read.

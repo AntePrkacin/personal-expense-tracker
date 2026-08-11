@@ -70,9 +70,11 @@ type CardBannerProps = {
        * What the action does.
        *
        * **This component takes no `'use client'` of its own**, so a handler has to arrive from a
-       * caller that has one. `SetLimitBanner.tsx` and `AllocateBanner.tsx` are those callers and
-       * exist for no other reason, which is what keeps `CategoryCard` and `SpendingSummaryCard`
-       * Server Components.
+       * caller that has one. `AllocateBanner.tsx` is that caller and exists for no other reason,
+       * which is what keeps `SpendingSummaryCard` a Server Component. It was one of two until
+       * PET-74's third addendum retired `SetLimitBanner`: the uncapped category card carries an
+       * in-row `SetLimitButton` pill now, per Claude Design's own `CategoriesTab.jsx`, and the
+       * strip is the summary card's alone - which is also what the design system uses it for.
        */
       onAction: () => void;
     }

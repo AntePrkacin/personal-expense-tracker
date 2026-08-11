@@ -56,7 +56,7 @@ const meta: Meta<typeof SettingsScreen> = {
   component: SettingsScreen,
   tags: ['autodocs'],
   parameters: { layout: 'fullscreen', nextjs: { appDirectory: true } },
-  args: { profile: PROFILE, save: accept },
+  args: { profile: PROFILE, save: accept, themePref: 'system' },
 };
 
 export default meta;

@@ -8,10 +8,15 @@ in `docs/guides/configuration.md`.
 ## Design tokens
 
 **daisyUI 5 on Tailwind v4 is the design system as of PET-57**, which retired the hand-rolled
-Figma-token layer. `frontend/src/app/globals.css` is now small enough to read in one breath: the
-Tailwind import, the daisyUI plugin registering the built-in `light` / `dark` themes selected
-automatically from the OS, and the two font tokens. There is no `tailwind.config`; Tailwind v4
-is configured CSS-first.
+Figma-token layer. `frontend/src/app/globals.css` holds the Tailwind import, the daisyUI plugin
+registration, the two **Expensa theme blocks** PET-74 authored from the design tokens -
+`expensa-light` the default, `expensa-dark` selected automatically from the OS - the two font
+tokens, the field-focus rules that swap daisyUI's double focus ring for Claude Design's
+single accent one, and the three `-orange` status modifiers PET-74's sixth addendum added
+beside them (daisyUI ships no orange, and the budget banding's "Full" band wants one between
+`warning` and `error` - the theme blocks define the `--color-orange` pair and those rules are
+daisyUI's own `-warning` modifiers transcribed for it). Its comments are the authority for
+where every value came from and which four are derivations. There is no `tailwind.config`; Tailwind v4 is configured CSS-first.
 
 ### Figma against daisyUI: the division of authority
 
@@ -41,12 +46,20 @@ violated once by somebody working from the design file in good faith.
    gone. See the icon-library rule under Shared components below.
 
 2. **On the Screens page the split is exact.** Figma governs **structure, layout and content** -
-   what is on the screen, in what order, grouped how, with which words. Stock daisyUI governs
-   **colour, type, radius and shadow**. **Never re-theme daisyUI toward Figma's values.**
-   Concretely: `globals.css` registers the built-in `light` / `dark` pair and declares two font
-   variables, and that is the whole of what it may ever contain - no theme block, no overridden
-   `--color-*`, no custom radius or shadow scale. The colour rule below is the same prohibition
-   from the other end, because a raw `text-red-600` is re-theming by hand, one element at a time.
+   what is on the screen, in what order, grouped how, with which words. The theme governs
+   **colour, type, radius and shadow** - and as of PET-74 the theme is the custom **Expensa
+   pair** in `globals.css`, authored from the design tokens with the Claude Design project as
+   the token authority, which supersedes PET-57's stock registration and the "never re-theme"
+   sentence that stood here. What that rule forbade narrowed rather than died: **never re-theme
+   at a call site, and never eyedrop a value from the dead Figma pages** - a colour changes by
+   editing the theme blocks and re-running the guard below, nowhere else. `globals.css` holds
+   the two `@plugin 'daisyui/theme'` blocks, the two font variables, the field-focus rules
+   (PET-74's fourth addendum: daisyUI's border-plus-offset-outline focus read as a double
+   border, and Claude Design's single accent ring replaces it - the file's own comment carries
+   the account, including why an error field's ring stays error-coloured) and the sixth
+   addendum's `-orange` status modifiers, and that is still the
+   whole of what it may ever contain. The colour rule below is the same prohibition from the
+   other end, because a raw `text-red-600` is re-theming by hand, one element at a time.
 
 3. **Match the frame as closely as those boundaries allow, and build it with the daisyUI
    Blueprint MCP.** Closeness is measured in structure, layout and content; it is never measured
@@ -66,7 +79,12 @@ Four rules keep the rest coherent:
   `success`, `warning` and `error`, each with a `-content` pair for what sits on it. Tailwind's
   full palette is back, so `text-red-600` now compiles and quietly bypasses the theme - the
   exact inversion of the old failure, where a wrong class generated nothing. The compile-time
-  check died with the token layer, so this rests on review.
+  check died with the token layer, so this rests on review. `orange` is the one app-authored
+  name beside daisyUI's own, PET-74's "Full" band hue: the theme blocks define the
+  `--color-orange` pair, and `badge-orange`, `status-orange` and `progress-orange` in
+  `globals.css` are its only three classes. Reach for those rather than minting a fourth, and
+  note Tailwind's own `orange-50` to `orange-950` scale stays as forbidden as the rest of the
+  raw palette - `text-orange-600` is not the theme's orange, however close it looks.
 
 - **Never write a `dark:` variant.** Semantic colours resolve through the active theme, so dark
   mode needs nothing from markup, and a `dark:` override would fight the theme instead of
@@ -89,10 +107,16 @@ preflight reads as the default body family; `font-display` (Plus Jakarta Sans) i
 and wordmark face. Type sizes are Tailwind's own scale (`text-sm`, `text-2xl`); the 19 named
 Figma type styles are gone.
 
-**Light and dark both ship**, selected by `prefers-color-scheme` with no theme controller,
-deliberately: a controller and automatic prefers-dark must not coexist, or a browser already in
-dark mode makes the control switch dark to dark. A visible toggle is deferred and trades away
-the automatic behaviour when it lands.
+**Light and dark both ship, and the Settings Preferences card carries the app's one theme
+control as of PET-74's addendum**: a three-way System / Light / Dark segmented radio group,
+persisting in the `spendifico.theme` cookie the root layout stamps `<html data-theme>` from.
+This closes rather than violates the old "no controller" rule, which existed because a two-way
+toggle and automatic prefers-dark cannot coexist - the `system` arm is the coexistence, meaning
+"no `data-theme` attribute at all", which is exactly the state daisyUI's prefers-dark selector
+(`:root:not([data-theme])`) requires. `lib/theme.ts` owns the mechanism and
+`settings/ThemeField.tsx` the control; do not add a second controller elsewhere, and note a
+`data-theme` value must be a **registered theme's name** - `app/DecorativePanel.tsx` records how
+an unregistered one fails silently.
 
 ### Changing or adding a theme: the category palette is the guard
 
@@ -108,11 +132,15 @@ change that moves what a `--color-*` resolves to.
   categories, which is what a real account actually shows.
 
 Both are stock HTML pinned to the installed daisyUI, Tailwind and lucide, so opening one in a
-browser is the whole procedure. **Open both under the new theme and satisfy three conditions
+browser is the whole procedure. As of PET-74 each explainer also embeds the Expensa theme values
+in its own `<style>` block, because the CDN `daisyui.css` carries only the stock themes - so a
+theme edit is not done until every explainer's block matches `globals.css`, and nothing checks
+that they do. **Open both under the new theme and satisfy three conditions
 before the theme lands.** First, every one of the seventeen tokens has to stay **distinguishable
 from every other**, because a picker offering two colours that paint the same is a picker with
-sixteen entries and a lie in it - three pairs are already deliberately close (`categoryColour.ts`
-names them with their measured ΔE), so a theme that collapses a fourth pair is spending margin
+sixteen entries and a lie in it - two pairs are already deliberately close (`categoryColour.ts`
+names them with their measured ΔE, beside the third pair PET-74's hues separated), so a theme
+that collapses a third pair is spending margin
 that was already spent. Second, every colour has to stay **visible against `bg-base-100`** as an
 8px dot, not merely as a 36px tile: that is the mark a theme change breaks first, and the whole
 reason both files draw the small marks at all. Third, every tile's glyph has to stay legible on
@@ -127,8 +155,8 @@ guard exists for, and it is the same failure `backend/CLAUDE.md` records for `wa
 the claim "a semantic token is theme-aware and therefore safe" is false, was written down anyway,
 and was caught by measuring rather than by reasoning.
 
-**Re-measure rather than reuse the numbers.** Both files carry figures from headless Chromium
-against the installed daisyUI, and a new theme invalidates every one of them - `COLOUR_CONTRAST`
+**Re-measure rather than reuse the numbers.** Both files carry measured figures, and a new theme
+invalidates every one of them - `COLOUR_CONTRAST`
 in `backend/src/database/central/template-tokens.ts` is where the table lives and where a
 re-measurement belongs. Compositing matters: a token carrying an alpha means nothing until it is
 painted over the card and the pixel is read, so a check that stops at `getComputedStyle` has not
@@ -545,10 +573,6 @@ is not there. One bullet per capability, ordered alphabetically by its bold lead
 capability lands, delete its whole bullet and nothing else. Why each one is deferred, where
 that was a decision rather than a queue, is in `docs/TODO.md`.
 
-- **A visible theme toggle.** There is no `theme-controller` anywhere, so nothing in markup may
-  assume one: adding it trades the automatic `prefers-color-scheme` selection away rather than
-  sitting beside it. `docs/TODO.md` carries why, per the conventions table's rule that a gap list
-  holds the warning and points at the reasoning.
 - **The `/api/chat` route handler.** The env template deliberately declares no model-provider
   key. Add whichever variable your provider needs when you build the route, server-side only and
   never behind `NEXT_PUBLIC_`. Note this is not the repo's _first_ route handler -

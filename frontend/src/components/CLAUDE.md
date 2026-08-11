@@ -67,8 +67,10 @@ their markup.
 - **`ui/Sidebar` takes its active item as a prop**, not a `usePathname()` call, which keeps it a
   Server Component; the `(app)` shell's thin `'use client'` wrapper (`SidebarNav`) reads the
   pathname. `SIDEBAR_HREFS` is the single declaration of the four app routes and the contract
-  the route folders match. The panel is `bg-neutral`, daisyUI's always-dark slot, so it stays
-  dark in both themes the way the design draws it. Its collapse lives in the layout, not here:
+  the route folders match. The panel is `bg-base-100` with a hairline `border-r` as of PET-74's
+  addendum - Claude Design's card-coloured sidebar, which the product owner chose over the
+  Figma frames' ink one after the ink dissolved into the Expensa dark canvas; the file's header
+  comment carries the account. Its collapse lives in the layout, not here:
   the `(app)` shell wraps everything in a daisyUI `drawer` that is fixed open at `lg` and
   off-canvas behind a hamburger below it. Its one optional handler prop, `onNavigate`, exists
   for that drawer: the pathname effect that used to close it cannot see a click on the section

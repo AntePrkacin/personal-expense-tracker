@@ -42,7 +42,15 @@ const TODAY = '2026-03-10';
 let saveSchedule: jest.Mock;
 
 function renderForm(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true })) {
-  render(<SettingsForm profile={PROFILE} save={save} saveSchedule={saveSchedule} today={TODAY} />);
+  render(
+    <SettingsForm
+      profile={PROFILE}
+      save={save}
+      saveSchedule={saveSchedule}
+      today={TODAY}
+      themePref="system"
+    />,
+  );
   return save;
 }
 
@@ -77,7 +85,13 @@ async function saveThroughDialog(user: ReturnType<typeof userEvent.setup>, month
  */
 function renderWithRefresh(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true })) {
   const view = render(
-    <SettingsForm profile={PROFILE} save={save} saveSchedule={saveSchedule} today={TODAY} />,
+    <SettingsForm
+      profile={PROFILE}
+      save={save}
+      saveSchedule={saveSchedule}
+      today={TODAY}
+      themePref="system"
+    />,
   );
 
   return {
@@ -89,6 +103,7 @@ function renderWithRefresh(save: jest.Mock = jest.fn().mockResolvedValue({ ok: t
           save={save}
           saveSchedule={saveSchedule}
           today={TODAY}
+          themePref="system"
         />,
       ),
   };
@@ -150,7 +165,9 @@ describe('AC2: the avatar', () => {
 
   it('offers no upload control of any kind', () => {
     // SET-2: the initials are derived and never stored, so there is nothing to replace them with.
-    const { container } = render(<SettingsForm profile={PROFILE} save={jest.fn()} />);
+    const { container } = render(
+      <SettingsForm profile={PROFILE} save={jest.fn()} themePref="system" />,
+    );
 
     expect(container.querySelector('input[type="file"]')).toBeNull();
     expect(
@@ -461,6 +478,7 @@ describe('the Preferences card (PET-47)', () => {
           save={save}
           saveSchedule={saveSchedule}
           today={TODAY}
+          themePref="system"
         />,
       );
 
@@ -708,7 +726,13 @@ describe('the clean form', () => {
     // The button must not be enabled by the diff alone: `toUpdateProfileBody` trims on the way out
     // and compares untrimmed, so a stored "  Marko  " differs from itself and would light up a
     // Save the user has no reason to press.
-    render(<SettingsForm profile={{ ...PROFILE, fullName: '  Marko  ' }} save={jest.fn()} />);
+    render(
+      <SettingsForm
+        profile={{ ...PROFILE, fullName: '  Marko  ' }}
+        save={jest.fn()}
+        themePref="system"
+      />,
+    );
 
     expect(saveButton()).toBeDisabled();
   });
@@ -868,7 +892,9 @@ describe('the form element', () => {
   it('carries noValidate, so the browser bubble never replaces the inline message', async () => {
     // Without it the user agent's own validation fires on the `required` email and the designed
     // message never renders. daisyUI's `validator` class is unused for the same reason.
-    const { container } = render(<SettingsForm profile={PROFILE} save={jest.fn()} />);
+    const { container } = render(
+      <SettingsForm profile={PROFILE} save={jest.fn()} themePref="system" />,
+    );
 
     expect(container.querySelector('form')).toHaveAttribute('novalidate');
   });
@@ -1067,7 +1093,13 @@ describe('a form nobody touched', () => {
     // untouched form fired a PATCH announcing "Changes saved" for an edit nobody made.
     const user = userEvent.setup();
     const save = jest.fn().mockResolvedValue({ ok: true });
-    render(<SettingsForm profile={{ ...PROFILE, fullName: '  Marko  ' }} save={save} />);
+    render(
+      <SettingsForm
+        profile={{ ...PROFILE, fullName: '  Marko  ' }}
+        save={save}
+        themePref="system"
+      />,
+    );
 
     await user.click(saveButton());
 
@@ -1087,6 +1119,7 @@ describe('a form nobody touched', () => {
         save={save}
         saveSchedule={saveSchedule}
         today={TODAY}
+        themePref="system"
       />,
     );
 
@@ -1296,7 +1329,11 @@ describe('the confirmation retires itself', () => {
     const user = withTimers();
     const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
     const view = render(
-      <SettingsForm profile={PROFILE} save={jest.fn().mockResolvedValue({ ok: true })} />,
+      <SettingsForm
+        profile={PROFILE}
+        save={jest.fn().mockResolvedValue({ ok: true })}
+        themePref="system"
+      />,
     );
 
     await user.clear(screen.getByLabelText('Display name'));

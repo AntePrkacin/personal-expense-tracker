@@ -102,21 +102,22 @@ export type CategoryColour = components['schemas']['CreateCategoryDto']['color']
 /** A stored category icon, same rule. Required on create as of PET-64. */
 export type IconName = components['schemas']['CreateCategoryDto']['icon'];
 
-// **Three of the thirteen seeded colour pairs are visibly close, deliberately.**
-// Measured in OKLab, where roughly 0.10 is the floor for telling two categories
-// apart:
+// **Two of the thirteen seeded colour pairs are visibly close, deliberately, and
+// a third was until PET-74.** Measured in OKLab against the Expensa themes,
+// where roughly 0.10 is the floor for telling two categories apart:
 //
-//   ΔE 0.029  Personal care / Gifts     accent-content / success-content
-//   ΔE 0.037  Education / Travel        primary-content / secondary-content
-//   ΔE 0.060  Groceries / Utilities     success / accent
+//   ΔE 0.020  Education / Travel        primary-content / secondary-content
+//   ΔE 0.060  Personal care / Gifts     accent-content / success-content
+//   ΔE 0.137  Groceries / Utilities     success / accent - measured 0.060 under
+//             the stock themes; the Expensa hues separated it past the floor
 //
 // Kept rather than re-picked. Breaking Education / Travel would force one onto a
-// near-black tile, since `primary-content`, `secondary-content` and
-// `neutral-content` are all near-white and only one pale tile is possible - a
-// large visual change to fix something invisible, in a channel that carries
-// nothing. Near-identical also beats exact reuse: `accent-content` and
-// `success-content` differ in hue (188° against 169°) and can separate on a
-// wide-gamut display, where a reused token never can.
+// dark tile, since `primary-content` ("Lavender") and `secondary-content`
+// ("Blush") are the two near-white tiles and a dark replacement would break the
+// picker label it ships under - a large visual change to fix something
+// invisible, in a channel that carries nothing. Near-identical also beats exact
+// reuse: `accent-content` and `success-content` differ in hue (180° against
+// 153°) and can separate on a wide-gamut display, where a reused token never can.
 //
 // **What makes it safe is that each category has its own icon**, which is why
 // `CATEGORY_ICON` below landed in the same ticket as this palette rather than

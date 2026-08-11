@@ -29,18 +29,19 @@
  *
  * Stored on `categories.color` as written here, not as a hex. Hex is not merely
  * indirect, it is **incoherent**: `primary` is valued differently per theme, so
- * `primary` (`#422ad5` light, `#605dff` dark) and `primary-content` (`#e0e7ff`,
- * `#edf1fe`) have no single hex, and a stored one would record one value and
- * paint the other half the time.
+ * `primary` (`#4f46e5` light, `#6963ee` dark under PET-74's Expensa themes) and
+ * `primary-content` (`#ecebfd`, `#edecfd`) have no single hex, and a stored one
+ * would record one value and paint the other half the time.
  *
  * The `base-100/200/300` surfaces are deliberately absent. They are the page's
  * own backgrounds, so a category painted in one is a category painted in
- * nothing - `base-300` measures 1.16:1 against the card and PET-22 and PET-23
- * each rejected it by name after measuring it.
+ * nothing - `base-300` measures 1.15:1 (light) and 1.16:1 (dark) against the
+ * card under the Expensa themes, and PET-22 and PET-23 each rejected it by name
+ * after measuring the stock value at the same 1.16.
  *
  * **`base-content/50` is the one exception and it is not a surface**, it is the
  * *ink* on those surfaces at half strength - a mid grey in light and a light
- * grey in dark, measured 3.401:1 and 4.769:1 against the card. It is here
+ * grey in dark, measured 3.395:1 and 5.076:1 against the card. It is here
  * because the sixteen semantic tokens cannot supply a muted colour that is
  * visible in both themes, which is a measured fact rather than an impression;
  * see the table on `COLOUR_CONTRAST` below.
@@ -70,22 +71,27 @@ export type ColourToken = (typeof COLOUR_TOKENS)[number];
 /**
  * What each token measures against the card it is drawn on, light then dark.
  *
- * **Measured, not estimated**, in headless Chromium against the installed
- * daisyUI, by painting each token over `base-100` on a canvas and computing the
- * WCAG ratio - the method `frontend/CLAUDE.md` requires, because Chromium
- * reports `oklch()` and a token carrying an alpha means nothing until it is
- * composited. The harness is cross-validated: it reports `base-300` at 1.16
- * against PET-22's independently recorded 1.157, and `base-content/50` at
- * 3.401 / 4.769 against PET-23's own figures for the same colour.
+ * **Re-measured for PET-74's Expensa theme pair**, which replaced the stock
+ * `light`/`dark` these numbers first described. The themes now author every
+ * colour as an exact hex in `frontend/src/app/globals.css`, so each figure is
+ * computed from those values directly (the WCAG formula, with `base-content/50`
+ * alpha-composited over the card first) and cross-checked in headless Chromium
+ * by painting the token over `base-100` and reading the pixel - the method
+ * `frontend/CLAUDE.md` requires, kept even though the arithmetic is now exact,
+ * because a computed table drifts the moment somebody edits a theme value
+ * without re-running the check.
  *
- * **The number that matters is that only `primary` and `secondary` clear 3:1 in
- * both themes.** Every other semantic token is near-invisible in one of them,
- * because daisyUI pairs each colour with a `-content` that is deliberately at
- * the opposite end of the lightness range - which is exactly what makes it
- * legible *as text on its own colour* and exactly what makes it illegible as a
- * fill on the page's own surface. That is a property of the design system, not
- * of any one assignment here, so it cannot be fixed by re-picking a colour:
- * twelve categories cannot all be distinct and all clear 3:1.
+ * **Under the stock themes only `primary` and `secondary` cleared 3:1 in both
+ * columns; the Expensa values were chosen with this table in the loop, so six
+ * now do** - `primary`, `secondary`, `info`, `success`, `error` and
+ * `base-content/50`. What has not changed is the shape of the rest: every
+ * `-content` token is still deliberately at the opposite end of the lightness
+ * range from its base, which is exactly what makes it legible *as a glyph on
+ * its own tile* (every pairing measures 3.4:1 or better, both themes) and
+ * exactly what makes it near-invisible as a fill on the page's own surface in
+ * one theme. That is a property of the pairing, not of any one assignment, so
+ * it cannot be fixed by re-picking a colour: seventeen categories cannot all be
+ * distinct and all clear 3:1 in both themes.
  *
  * PET-64 accepted that for the twelve category templates, on the argument its
  * PR records - the ring is `aria-hidden`, the legend names every slice in real
@@ -104,23 +110,23 @@ export type ColourToken = (typeof COLOUR_TOKENS)[number];
  * check that has to pass before one lands.
  */
 export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
-  primary: [8.321, 3.399],
-  'primary-content': [1.232, 14.037],
-  secondary: [3.67, 4.316],
-  'secondary-content': [1.208, 13.109],
-  accent: [1.903, 8.322],
-  'accent-content': [9.686, 1.635],
-  neutral: [19.895, 1.256],
-  'neutral-content': [1.269, 12.48],
-  info: [2.221, 7.13],
-  'info-content': [14.073, 1.125],
-  success: [1.959, 8.084],
-  'success-content': [10.034, 1.578],
-  warning: [1.763, 8.983],
-  'warning-content': [9.245, 1.713],
-  error: [2.864, 5.53],
-  'error-content': [15.702, 1.009],
-  'base-content/50': [3.401, 4.769],
+  primary: [6.288, 3.608],
+  'primary-content': [1.175, 14.073],
+  secondary: [4.253, 3.857],
+  'secondary-content': [1.175, 13.953],
+  accent: [2.415, 6.793],
+  'accent-content': [10.13, 1.619],
+  neutral: [18.019, 1.099],
+  'neutral-content': [1.913, 8.574],
+  info: [3.374, 4.861],
+  'info-content': [11.904, 1.378],
+  success: [3.296, 4.977],
+  'success-content': [12.334, 1.33],
+  warning: [2.278, 7.2],
+  'warning-content': [8.402, 1.952],
+  error: [4.829, 3.396],
+  'error-content': [16.613, 1.009],
+  'base-content/50': [3.395, 5.076],
 };
 
 /**

@@ -8,8 +8,10 @@
     <!--
       The sibling of category-colors-icons-description-preview.html, and the pins are the same
       ones for the same reason: exactly what frontend/package.json installs, so the colours here
-      are the colours the app paints. daisyui.css carries the light and dark themes, which is the
-      pair globals.css registers, so themes.css (all 35) is deliberately not loaded.
+      are the colours the app paints. daisyui.css supplies the component CSS; its stock light and
+      dark theme *values* are overridden by the block below, because as of PET-74 globals.css
+      registers the custom Expensa pair rather than the stock one. themes.css (all 35) is still
+      deliberately not loaded.
 
       Where that file answers "what do the thirteen seeded categories look like", this one answers
       "what may a category be painted in at all" - the seventeen-token allowlist, its picker
@@ -18,6 +20,71 @@
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
     <script src="https://unpkg.com/lucide@1.29.0"></script>
+
+    <!--
+      PET-74's Expensa theme values, re-declared with the same selectors daisyui.css emits so the
+      toggle below keeps working. This block and the two @plugin 'daisyui/theme' blocks in
+      frontend/src/app/globals.css must carry the same values, or this page stops being evidence
+      of anything - edit them together.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+        --color-base-100: #ffffff;
+        --color-base-200: #f5f7f8;
+        --color-base-300: #edeff2;
+        --color-base-content: #131820;
+        --color-primary: #4f46e5;
+        --color-primary-content: #ecebfd;
+        --color-secondary: #c1519e;
+        --color-secondary-content: #f9e8f3;
+        --color-accent: #34b9ae;
+        --color-accent-content: #0d4a41;
+        --color-neutral: #101720;
+        --color-neutral-content: #b4bcc9;
+        --color-info: #3f8ee6;
+        --color-info-content: #14356e;
+        --color-success: #16a34a;
+        --color-success-content: #0b3d20;
+        --color-warning: #e0a020;
+        --color-warning-content: #64490a;
+        --color-error: #dc2626;
+        --color-error-content: #3f0b0b;
+        --color-orange: #ea580c;
+        --color-orange-content: #431407;
+        --radius-selector: 0.5rem;
+        --radius-field: 0.75rem;
+        --radius-box: 1rem;
+        --size-selector: 0.25rem;
+        --size-field: 0.25rem;
+        --border: 1px;
+        --depth: 0;
+        --noise: 0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) {
+          color-scheme: dark;
+          --color-base-100: #18202b;
+          --color-base-200: #101720;
+          --color-base-300: #232c38;
+          --color-base-content: #ffffff;
+          --color-primary: #6963ee;
+          --color-primary-content: #edecfd;
+          --color-neutral: #101720;
+        }
+      }
+      :root:has(input.theme-controller[value='dark']:checked),
+      [data-theme='dark'] {
+        color-scheme: dark;
+        --color-base-100: #18202b;
+        --color-base-200: #101720;
+        --color-base-300: #232c38;
+        --color-base-content: #ffffff;
+        --color-primary: #6963ee;
+        --color-primary-content: #edecfd;
+        --color-neutral: #101720;
+      }
+    </style>
 </head>
 
 <!--
@@ -150,8 +217,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-success)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Emerald</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">success</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.959</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">8.084</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.296</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">4.977</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Groceries</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -163,8 +230,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-secondary)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Pink</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">secondary</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.670</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">4.316</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">4.253</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.857</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Dining out</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -176,8 +243,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-info)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Sky</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">info</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">2.221</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">7.130</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.374</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">4.861</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Transportation</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -189,8 +256,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-accent)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Teal</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">accent</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.903</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">8.322</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">2.415</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">6.793</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Utilities</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -202,8 +269,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-error)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Rose</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">error</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">2.864</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">5.530</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">4.829</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.396</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Healthcare</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -215,8 +282,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-primary)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Indigo</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">primary</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">8.321</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.399</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">6.288</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.608</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Entertainment</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -228,8 +295,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-primary-content)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Lavender</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">primary-content</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.232</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">14.037</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.175</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">14.073</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Education</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -241,8 +308,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-secondary-content)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Blush</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">secondary-content</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.208</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">13.109</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.175</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">13.953</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Travel</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -254,8 +321,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-accent-content)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Pine</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">accent-content</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">9.686</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.635</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">10.130</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.619</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Personal care</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -267,8 +334,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-success-content)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Forest</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">success-content</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">10.034</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.578</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">12.334</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.330</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Gifts</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -280,8 +347,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-info-content)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Navy</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">info-content</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">14.073</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.125</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">11.904</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.378</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Family &amp; pets</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -293,8 +360,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-warning)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Amber</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">warning</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.763</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">8.983</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">2.278</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">7.200</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Loans &amp; debt</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -310,8 +377,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-warning-content)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Umber</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">warning-content</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">9.245</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.713</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">8.402</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.952</span></td>
             <td class="text-sm whitespace-nowrap opacity-50">spare</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -323,8 +390,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-neutral)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Ink</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">neutral</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">19.895</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.256</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">18.019</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.099</span></td>
             <td class="text-sm whitespace-nowrap opacity-50">spare</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -336,8 +403,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-neutral-content)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Silver</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">neutral-content</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.269</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">12.480</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.913</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">8.574</span></td>
             <td class="text-sm whitespace-nowrap opacity-50">spare</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -349,7 +416,7 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: var(--color-error-content)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Maroon</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">error-content</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">15.702</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">16.613</span></td>
             <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-error badge-soft">1.009</span></td>
             <td class="text-sm whitespace-nowrap opacity-50">spare</td>
             <td class="text-sm whitespace-nowrap"><span class="badge badge-sm badge-warning badge-soft">Disabled</span></td>
@@ -362,8 +429,8 @@
             <td><svg viewBox="0 0 20 20" class="size-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="10" style="fill: color-mix(in oklab, var(--color-base-content) 50%, transparent)" /></svg></td>
             <td class="font-semibold whitespace-nowrap">Slate</td>
             <td class="font-mono text-xs whitespace-nowrap opacity-70">base-content/50</td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.401</span></td>
-            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">4.769</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">3.395</span></td>
+            <td class="font-mono text-xs whitespace-nowrap"><span class="badge badge-sm badge-success badge-soft">5.076</span></td>
             <td class="text-sm whitespace-nowrap opacity-70">Uncategorized</td>
             <td class="text-sm whitespace-nowrap opacity-70">Offered</td>
           </tr>
@@ -378,21 +445,26 @@
             <!-- No `font-display` anywhere on this page: that utility is registered by the app's
                  own globals.css @theme block, which a standalone file does not load, so it would
                  be a class that paints nothing. -->
-            <h2 class="font-semibold">Why almost nothing clears 3:1 in both themes</h2>
+            <h2 class="font-semibold">Why a third of the palette clears 3:1 in both themes, and the rest cannot</h2>
             <p class="mt-2 text-sm opacity-70">
                 The Light and Dark columns are the WCAG contrast ratio of the colour against the
-                <code class="font-mono">bg-base-100</code> card it is drawn on, measured in headless
-                Chromium against the installed daisyUI rather than estimated. 3:1 is the non-text
-                bar, which is why a figure below it is badged as failing.
+                <code class="font-mono">bg-base-100</code> card it is drawn on. The Expensa themes
+                (PET-74) author every colour as an exact hex, so each figure is computed from those
+                values directly and cross-checked in headless Chromium rather than estimated. 3:1 is
+                the non-text bar, which is why a figure below it is badged as failing.
             </p>
             <p class="mt-2 text-sm opacity-70">
-                Of the sixteen semantic tokens, only <code class="font-mono">primary</code> and
-                <code class="font-mono">secondary</code> clear 3:1 in both. That is a property of
-                daisyUI rather than of any assignment here: each colour is paired with a
-                <code class="font-mono">-content</code> at the opposite end of the lightness range,
-                which is exactly what makes it legible <em>as text on its own colour</em> and exactly
-                what makes it illegible as a fill on the page's own surface. Re-picking cannot fix it,
-                because twelve categories cannot all be distinct and all clear 3:1.
+                Six of the seventeen clear 3:1 in both themes - <code class="font-mono">primary</code>,
+                <code class="font-mono">secondary</code>, <code class="font-mono">info</code>,
+                <code class="font-mono">success</code>, <code class="font-mono">error</code> and
+                <code class="font-mono">base-content/50</code> - where the stock themes managed two.
+                The other eleven are legible in exactly one, and that is a property of the pairing
+                rather than of any assignment here: each colour's
+                <code class="font-mono">-content</code> sits at the opposite end of the lightness
+                range, which is exactly what keeps a glyph legible <em>on its own tile</em> (every
+                pairing measures 3.4:1 or better, both themes) and exactly what makes the same colour
+                near-invisible as a fill on the page's own surface in one theme. Re-picking cannot fix
+                it, because seventeen categories cannot all be distinct and all clear 3:1 in both.
             </p>
             <p class="mt-2 text-sm opacity-70">
                 <code class="font-mono">base-content/50</code> is the seventeenth entry and is not a
@@ -410,23 +482,24 @@
         </div>
 
         <div class="border-base-300 bg-base-100 rounded-box border p-4">
-            <h2 class="font-semibold">Three pairs are close on purpose</h2>
+            <h2 class="font-semibold">Two pairs are close on purpose, and a third was</h2>
             <p class="mt-2 text-sm opacity-70">
-                Measured in OKLab, where roughly 0.10 is the floor for telling two categories apart:
+                Measured in OKLab against the Expensa themes, where roughly 0.10 is the floor for
+                telling two categories apart:
             </p>
             <ul class="mt-2 flex flex-col gap-1 text-sm opacity-70">
-                <li><span class="font-mono">ΔE 0.029</span> &nbsp; Personal care / Gifts &nbsp; <span class="font-mono text-xs">accent-content / success-content</span></li>
-                <li><span class="font-mono">ΔE 0.037</span> &nbsp; Education / Travel &nbsp; <span class="font-mono text-xs">primary-content / secondary-content</span></li>
-                <li><span class="font-mono">ΔE 0.060</span> &nbsp; Groceries / Utilities &nbsp; <span class="font-mono text-xs">success / accent</span></li>
+                <li><span class="font-mono">ΔE 0.020</span> &nbsp; Education / Travel &nbsp; <span class="font-mono text-xs">primary-content / secondary-content</span></li>
+                <li><span class="font-mono">ΔE 0.060</span> &nbsp; Personal care / Gifts &nbsp; <span class="font-mono text-xs">accent-content / success-content</span></li>
+                <li><span class="font-mono">ΔE 0.137</span> &nbsp; Groceries / Utilities &nbsp; <span class="font-mono text-xs">success / accent - 0.060 under the stock themes; PET-74 separated it past the floor</span></li>
             </ul>
             <p class="mt-2 text-sm opacity-70">
-                Kept rather than re-picked. Breaking Education / Travel would force one onto a
-                near-black tile, since <code class="font-mono">primary-content</code>,
-                <code class="font-mono">secondary-content</code> and
-                <code class="font-mono">neutral-content</code> are all near-white and only one pale
-                tile is possible. What makes it safe is that every category carries its own icon,
-                which is the channel that separates them, and it is why the icon map shipped in the
-                same ticket as the palette rather than after it.
+                Kept rather than re-picked. Breaking Education / Travel would force one onto a dark
+                tile, since <code class="font-mono">primary-content</code> ("Lavender") and
+                <code class="font-mono">secondary-content</code> ("Blush") are the two near-white
+                tiles and a dark replacement would break the picker label it ships under. What makes
+                it safe is that every category carries its own icon, which is the channel that
+                separates them, and it is why the icon map shipped in the same ticket as the palette
+                rather than after it.
             </p>
             <h2 class="mt-4 font-semibold">The icons have spares now too</h2>
             <p class="mt-2 text-sm opacity-70">

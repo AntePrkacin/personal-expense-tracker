@@ -146,10 +146,12 @@ Five gotchas, all of them met in practice:
   and ~4.8:1 dark and must pass. A third worth knowing about: **a class Tailwind never compiled
   reports a ratio of exactly 1.0**, indistinguishable from a colour identical to the background,
   so a control that passes tells you the harness works *and* that the class exists.
-- **Headless starts in the light theme.** This app ships `light` and `dark` selected by
-  `prefers-color-scheme` with no controller, so anything theme-specific needs
+- **Headless starts in the light theme.** This app ships the Expensa pair selected by
+  `prefers-color-scheme` (PET-74), so anything theme-specific needs
   `Emulation.setEmulatedMedia` - and a check that silently only ever ran in light is half a
-  check.
+  check. The Settings Theme control can pin a theme instead, via a `data-theme` attribute the
+  root layout stamps from the `spendifico.theme` cookie; a walk of that path sets the attribute
+  or the cookie rather than emulating media.
 - **`next/font` fetches from Google at build time**, so with no network the fallback family
   renders. Any check whose subject is a glyph is untrustworthy offline; the ₵ CEDI SIGN in
   `ui/Sidebar.tsx`'s wordmark is the one this repo already flags for a human eye.

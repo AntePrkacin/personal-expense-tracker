@@ -1,13 +1,179 @@
 @import 'tailwindcss';
 
-/* daisyUI's built-in themes, selected automatically from the OS. No custom
-   theme and no manual theme toggle control: PET-57 ships the defaults, and a
-   toggle must not coexist with automatic prefers-dark selection - a browser
-   already in dark mode would make it switch dark to dark. */
+/* The Expensa theme pair (PET-74), replacing the stock light/dark registration
+   PET-57 shipped. That ticket's decision - daisyUI is the component library,
+   semantic colour is the only theme-aware colour - stands unchanged; what PET-74
+   amends is the theme's *values*, which now come from the design tokens instead
+   of daisyUI's defaults. The token authority is the team's Claude Design
+   "Expensa Design System" project (its `components/fig-tokens.css` is generated
+   from the same Figma variables the retired token layer transcribed, and its
+   `tokens/colors.css` composes the dark theme Figma never authored). Do not
+   eyedrop values from the Figma Foundations page - it is still a dead page;
+   these hexes and the derivations below are the source now.
+
+   The Settings Preferences card carries the app's one theme control (PET-74's
+   addendum): three-way, System / Light / Dark, where an explicit choice stamps
+   `data-theme` on `<html>` and `system` removes it. That closes the old rule
+   that a controller must not coexist with automatic prefers-dark - a two-way
+   toggle could not, and the `system` arm is the coexistence, because
+   `--prefersdark` below emits under `:root:not([data-theme])` and so yields to
+   any stamped choice by construction. `frontend/src/lib/theme.ts` owns the
+   cookie and the mapping; the names in these two blocks are one half of that
+   contract.
+
+   Every colour here is measured, not judged: WCAG contrast against the card and
+   pairwise OKLab distance across the 17-token category allowlist, both themes.
+   The measured table lives in `COLOUR_CONTRAST` in
+   `backend/src/database/central/template-tokens.ts`, and the procedure that
+   must pass before any value moves is `frontend/CLAUDE.md`, "Changing or adding
+   a theme: the category palette is the guard". Four sets of values are
+   derivations rather than transcriptions, each constrained by the picker labels
+   the central seed already ships (template-seed.ts):
+
+   - `secondary` is Category/8 Pink deepened (#ce6fb8 to #c1519e) so its Blush
+     content pair clears 3:1 on the tile; the label "Pink" stays truthful.
+   - The dark `-content` values (Pine, Navy, Forest, Umber, Maroon) are dark
+     casts of their base hues, spread far enough apart in OKLab that no new
+     near-identical pair joins the two deliberate ones categoryColour.ts names.
+   - `info`/`accent`/`secondary` take real hues from the Figma category ramp
+     (Sky #3f8ee6, Teal #34b9ae, Pink) because all three are picker colours in
+     their own right and paint no control anywhere - an indigo variant would
+     collide with `primary` in the picker.
+   - Dark `primary` lightens #4f46e5 to #6963ee: Claude Design keeps dark
+     buttons on full indigo and lightens accent *text* to #A79FF6, daisyUI has
+     one token for both roles, and #6963ee is the compromise that keeps
+     `text-primary`/`link-primary` readable on the ink card (3.61:1, above the
+     stock dark theme's 3.40) while staying visibly indigo.
+
+   `--depth: 0` and `--noise: 0` because the design is flat ("a hairline system,
+   not a shadow system" - tokens/elevation.css); the `shadow-*` utilities in
+   markup are a separate follow-up, see docs/TODO.md. The radius scale is
+   Foundations' sm/md/lg (8/12/16px) on daisyUI's three radius slots; the 20px
+   xl step has no slot and is dropped. */
 @plugin 'daisyui' {
-  themes:
-    light --default,
-    dark --prefersdark;
+  themes: false;
+}
+
+@plugin 'daisyui/theme' {
+  name: 'expensa-light';
+  default: true;
+  color-scheme: light;
+
+  /* Surfaces: Surface/Card, Canvas, Muted; ink is Text/Primary. */
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f7f8;
+  --color-base-300: #edeff2;
+  --color-base-content: #131820;
+
+  /* Brand/Accent, with Brand/Accent Soft as its content ("Lavender"). */
+  --color-primary: #4f46e5;
+  --color-primary-content: #ecebfd;
+
+  /* Category ramp hues: Pink/Blush, Teal/Pine, Sky/Navy. */
+  --color-secondary: #c1519e;
+  --color-secondary-content: #f9e8f3;
+  --color-accent: #34b9ae;
+  --color-accent-content: #0d4a41;
+
+  /* Surface/Ink and Text/On Dark Muted ("Ink" and "Silver" in the picker).
+     Nothing in the shell paints bg-neutral any more - the sidebar moved to
+     the card panel Claude Design draws (ui/Sidebar.tsx) - so this pair now
+     serves the category picker and the Welcome panel's ground. */
+  --color-neutral: #101720;
+  --color-neutral-content: #b4bcc9;
+
+  --color-info: #3f8ee6;
+  --color-info-content: #14356e;
+
+  /* The Status ramp, each content a dark cast of its own hue. */
+  --color-success: #16a34a;
+  --color-success-content: #0b3d20;
+  --color-warning: #e0a020;
+  --color-warning-content: #64490a;
+  --color-error: #dc2626;
+  --color-error-content: #3f0b0b;
+
+  /* A fourth status hue daisyUI does not ship, between warning's amber and
+     error's red: the "Full" band of the budget banding (PET-74's sixth
+     addendum), so exactly-at-the-limit reads one step hotter than "getting
+     close" instead of sharing its amber. Not one of the seventeen picker
+     colours, so the category-palette guard does not measure it. The custom
+     property alone paints nothing - the three `.{badge,status,progress}-orange`
+     rules after the theme blocks are what daisyUI's own modifiers would have
+     been, and both live or die together. Measured 3.56:1 against this card. */
+  --color-orange: #ea580c;
+  --color-orange-content: #431407;
+
+  /* Foundations radius sm/md/lg. */
+  --radius-selector: 0.5rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
+
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin 'daisyui/theme' {
+  name: 'expensa-dark';
+  prefersdark: true;
+  color-scheme: dark;
+
+  /* Claude Design's dark composition: the card is Surface/Ink Raised, the
+     canvas Surface/Ink, the muted step Surface/Ink Elevated. */
+  --color-base-100: #18202b;
+  --color-base-200: #101720;
+  --color-base-300: #232c38;
+  --color-base-content: #ffffff;
+
+  /* Lightened per the header note; content stays the light Lavender. */
+  --color-primary: #6963ee;
+  --color-primary-content: #edecfd;
+
+  /* The chromatic tokens keep their light-theme values: every one measures
+     3.4:1 or better against the ink card, where the stock dark theme left
+     most of them near-invisible in one theme or the other. */
+  --color-secondary: #c1519e;
+  --color-secondary-content: #f9e8f3;
+  --color-accent: #34b9ae;
+  --color-accent-content: #0d4a41;
+
+  /* As a picker swatch this is near-invisible on the dark card (1.10:1),
+     exactly as the stock dark theme's neutral was (1.256:1) - accepted on
+     that precedent, and #101720 is the one dark value that clears OKLab 0.10
+     from all five dark content colours. An earlier comment here defended it
+     as the sidebar's colour too, claiming ink-on-ink was "Claude Design's own
+     dark arrangement"; the design project's Sidebar.jsx disproved that (its
+     sidebar is --bg-card with a hairline border, both themes), and the shell's
+     sidebar no longer reads this token at all. */
+  --color-neutral: #101720;
+  --color-neutral-content: #b4bcc9;
+
+  --color-info: #3f8ee6;
+  --color-info-content: #14356e;
+  --color-success: #16a34a;
+  --color-success-content: #0b3d20;
+  --color-warning: #e0a020;
+  --color-warning-content: #64490a;
+  --color-error: #dc2626;
+  --color-error-content: #3f0b0b;
+
+  /* The light theme's own comment carries the account; theme-invariant like
+     the rest of the status ramp. Measured 4.61:1 against this card (#18202b). */
+  --color-orange: #ea580c;
+  --color-orange-content: #431407;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
+
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
 }
 
 /* The two project typefaces, loaded via next/font in src/app/fonts.ts, which
@@ -22,4 +188,74 @@
 @theme static inline {
   --font-display: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* The field focus treatment (PET-74's fourth addendum, the product owner's
+   decision). daisyUI's default recolours a focused field's border to full
+   base-content AND draws a second 2px outline of the same colour offset 2px
+   outside it - in dark mode a white ring floating around a white border, which
+   reads as a double border on every click, since the trigger is :focus rather
+   than :focus-visible. Claude Design's fields focus as a single thin accent
+   ring hugging the field (its pickers use `inset 0 0 0 1.5px var(--bg-accent)`
+   when open), and that is what these rules paint instead: the border recolours
+   to primary and a 1px inset shadow thickens it, mouse and keyboard alike, so
+   the indicator WCAG 2.4.7 wants never disappears - it just stops doubling.
+
+   Deliberately unlayered, which is what makes them win: daisyUI's component
+   rules sit inside nested @layer blocks, and unlayered author CSS outranks any
+   layered rule at any specificity. The outline is transparent rather than
+   `none` so Windows High Contrast (forced-colors), which ignores box-shadow
+   and repaints transparent outlines in system colours, keeps a visible ring -
+   daisyUI's own forced-colors fallback uses the same trick.
+
+   The error rules restate what daisyUI's `.input-error:focus` already says,
+   because these unlayered rules would otherwise beat it and paint a focused
+   invalid field's ring primary: an error field's ring stays error-coloured,
+   focused or not. */
+.input:focus,
+.input:focus-within,
+.select:focus,
+.select:focus-within,
+.select:open,
+.textarea:focus,
+.textarea:focus-within {
+  --input-color: var(--color-primary);
+  outline: 2px solid #0000;
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.input-error:focus,
+.input-error:focus-within,
+.select-error:focus,
+.select-error:focus-within,
+.select-error:open {
+  --input-color: var(--color-error);
+  box-shadow: inset 0 0 0 1px var(--color-error);
+}
+
+/* The orange status modifiers (PET-74's sixth addendum, the product owner's
+   decision): the "Full" band of the budget banding, one step hotter than
+   warning's amber. daisyUI ships no orange, so these are its own modifiers
+   transcribed for the `--color-orange` pair the theme blocks define - each is
+   byte-for-byte the body of its `-warning` sibling in
+   node_modules/daisyui/components/{badge,status,progress}.css with the token
+   swapped, and nothing more. Unlayered for the reason the focus rules above
+   are, though nothing here needs to *win*: no daisyUI rule sets these
+   properties on these class names, so layering is moot and consistency with
+   the block above is the only reason for the placement. `.badge-soft` reads
+   `--badge-color` for its wash, so `badge badge-soft badge-orange` composes
+   exactly as `badge-soft badge-warning` does. */
+.badge-orange {
+  --badge-color: var(--color-orange);
+  --badge-fg: var(--color-orange-content);
+}
+
+.status-orange {
+  background-color: var(--color-orange);
+  color: var(--color-orange);
+}
+
+.progress-orange {
+  color: var(--color-orange);
 }

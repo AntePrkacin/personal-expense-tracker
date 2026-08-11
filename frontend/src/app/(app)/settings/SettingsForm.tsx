@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { changeSchedule, type ChangeScheduleResult } from '@/lib/changeSchedule';
 import type { Profile } from '@/lib/profile';
 import { ACCESS_ROUTES } from '@/lib/routes';
+import type { ThemePref } from '@/lib/theme';
 import type { components } from '@/types/api';
 import { updateProfile, type UpdateProfileResult } from '@/lib/updateProfile';
 
@@ -176,6 +177,13 @@ type SettingsFormProps = {
    * to fake timers. `SettingsScreen` passes nothing, so the default is what ships.
    */
   today?: string;
+  /**
+   * The theme preference the server rendered with, passed straight through to
+   * `PreferencesCard`. Deliberately absent from `values`, `errors` and the diff: it is a
+   * per-browser cookie the Theme control applies instantly, not a profile field this form
+   * saves. `ThemeField.tsx` carries the reasoning.
+   */
+  themePref: ThemePref;
 };
 
 export function SettingsForm({
@@ -183,6 +191,7 @@ export function SettingsForm({
   save = updateProfile,
   saveSchedule = changeSchedule,
   today = todayIso(),
+  themePref,
 }: SettingsFormProps) {
   const router = useRouter();
 
@@ -614,7 +623,13 @@ export function SettingsForm({
           at once, and one press sends one PATCH carrying whatever changed on either.
 
           `<CategoriesSummaryCard />` is still PET-47's third card and is still not drawn. */}
-      <PreferencesCard values={values} errors={errors} disabled={pending} onChange={change} />
+      <PreferencesCard
+        values={values}
+        errors={errors}
+        disabled={pending}
+        themePref={themePref}
+        onChange={change}
+      />
 
       {/* **The 401 is the one failure that carries a control, so it does not go through
           `FormError`.** That component renders a bare string by design, and this arm needs a link

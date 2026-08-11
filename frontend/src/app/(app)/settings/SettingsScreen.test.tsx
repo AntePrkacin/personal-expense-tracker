@@ -20,7 +20,7 @@ const PROFILE: Profile = {
 };
 
 function renderScreen() {
-  return render(<SettingsScreen profile={PROFILE} save={jest.fn()} />);
+  return render(<SettingsScreen profile={PROFILE} save={jest.fn()} themePref="system" />);
 }
 
 describe('SettingsScreen', () => {

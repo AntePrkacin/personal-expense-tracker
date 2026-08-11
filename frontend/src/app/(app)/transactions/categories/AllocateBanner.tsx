@@ -10,13 +10,17 @@ import { AllocateBudgetModal } from './AllocateBudgetModal';
 import { CardBanner } from './CardBanner';
 import type { toAllocateBody } from './allocateForm';
 
-// The summary card's "Allocate" banner, and the second instance of `SetLimitBanner`'s shape - which
+// The summary card's "Allocate" banner, and as of PET-74's third addendum the **only** `CardBanner`
+// caller: the uncapped card's strip became the in-row `SetLimitButton` pill, per Claude Design's own
+// `CategoriesTab.jsx`, which reserves the strip for exactly this card. It began as the second
+// instance of `SetLimitBanner`'s shape - which
 // turns that file's smallest-wrapper argument into a pattern rather than a one-off.
 //
 // **A component whose job is holding a `'use client'`.** `SpendingSummaryCard` is a Server Component
 // and cannot pass a function, so `CardBanner`'s `onAction` has to arrive from a client module; the
 // directive lives here so the card's heading, chip, figures and progress bar all stay
-// server-rendered. `CardBanner` itself takes no directive and is used from both sides.
+// server-rendered. `CardBanner` itself takes no directive, so it renders on whichever side its
+// caller is on.
 //
 // **The banner cannot be hoisted into `CategoriesScreen`, and this is why it takes the data rather
 // than the screen rendering the modal.** The overlap effect needs the banner to be a *sibling* of

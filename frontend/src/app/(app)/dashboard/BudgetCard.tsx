@@ -1,4 +1,5 @@
 import { moneyFormatters } from '@/lib/money';
+import { BUDGET_TONE, budgetStatus } from '@/lib/budgetStatus';
 import type { DashboardSummary } from '@/lib/dashboard';
 
 // Monthly budget card with stats row (Figma node 22:55, DSH-3 to DSH-6).
@@ -7,29 +8,6 @@ import type { DashboardSummary } from '@/lib/dashboard';
 // `page.tsx` builds it from the one dashboard read, which is why its props are a `Pick` off
 // `DashboardSummary` rather than a shape of its own - the same "read the type off the
 // contract" rule every other reader in this app follows.
-
-/**
- * The status chip's two tones, complete literal class strings per key so Tailwind's scanner
- * finds them - the pattern `ui/categoryColour.ts` sets.
- *
- * **Two tones, not three.** `remaining` going negative is the one branch the contract
- * documents ("overspending is a state the frontend needs the magnitude to draw"), so under
- * budget and over budget are the two the data can actually distinguish. A third "getting
- * close" tone would need a threshold - 80%? 90%? pace-relative? - that nothing designs;
- * `docs/TODO.md` records it as owed rather than inventing one here.
- */
-const CHIP = {
-  onTrack: {
-    badge: 'badge badge-soft badge-success',
-    dot: 'status status-success',
-    label: 'On track',
-  },
-  overBudget: {
-    badge: 'badge badge-soft badge-error',
-    dot: 'status status-error',
-    label: 'Over budget',
-  },
-} as const;
 
 /**
  * The shortest a budgeting period can be, in days, and therefore the smallest `daysLeft` that
@@ -45,13 +23,7 @@ const SHORTEST_PERIOD_DAYS = 28;
 
 type BudgetCardProps = Pick<
   DashboardSummary,
-  | 'spent'
-  | 'monthlyBudget'
-  | 'remaining'
-  | 'daysLeft'
-  | 'transactionCount'
-  | 'averagePerDay'
-  | 'topCategory'
+  'spent' | 'monthlyBudget' | 'daysLeft' | 'transactionCount' | 'averagePerDay' | 'topCategory'
 > & {
   /**
    * The screen's shared PET-26 condition. Necessary but **not sufficient** for the caption to
@@ -71,7 +43,6 @@ type BudgetCardProps = Pick<
 export function BudgetCard({
   spent,
   monthlyBudget,
-  remaining,
   daysLeft,
   transactionCount,
   averagePerDay,
@@ -81,8 +52,15 @@ export function BudgetCard({
 }: BudgetCardProps) {
   const { formatWhole } = moneyFormatters(currency);
 
-  const overBudget = remaining < 0;
-  const tone = overBudget ? CHIP.overBudget : CHIP.onTrack;
+  // **The tone bands at the category cards' 75%, decided on cents** - `lib/budgetStatus.ts`
+  // carries the account, including why it mirrors the backend's `statusFor` rather than
+  // inventing a threshold, and why it is shared with the Categories tab's summary card at two
+  // consumers. It replaces `remaining < 0`, which could only say overspent-or-not; the
+  // over-budget boundary is unchanged, because the contract's `remaining` is
+  // `monthlyBudget - spent` computed in the same integer cents this recovers - which is also
+  // why that field left this card's props: nothing here reads it any more, and the remainder
+  // the caption prints is derived from the rounded pair below.
+  const tone = BUDGET_TONE[budgetStatus(spent, monthlyBudget)];
 
   // The whole-dollar figures are rounded **once, here**, and the remainder is derived from
   // that rounded pair rather than formatted from `remaining` independently.
@@ -94,9 +72,8 @@ export function BudgetCard({
   // a user adds up by hand - that is inherent in drawing whole dollars at all - but it does not
   // accept two figures on the same card visibly disagreeing about the same budget.
   //
-  // `remaining` is still what decides the tone above, because the contract computes it in
-  // integer cents and it is the field that is documented as going negative; this is only about
-  // what the two captions print.
+  // The raw pair is still what decides the tone above, on cents; this is only about what the
+  // two captions print.
   const spentWhole = Math.round(spent);
   const budgetWhole = Math.round(monthlyBudget);
   const remainingWhole = budgetWhole - spentWhole;
@@ -126,20 +103,21 @@ export function BudgetCard({
             assistive technology. Not aria-hidden, unlike DecorativePanel's decorative bar -
             this one reports the reader's own budget, so it needs a real accessible name
             instead of none at all. */}
-        {/* **`bg-base-300` pins the track neutral and is not decoration.** daisyUI derives a
-            `<progress>`'s track from its fill - `color-mix(currentcolor 20%, transparent)`, where
-            `progress-primary` sets `currentcolor` - so an unspent budget drew as one solid violet
-            pill with no fill visible in it. `transactions/categories/categoryCardStatus.ts` carries
-            the full account. */}
+        {/* **The bar takes the chip's tone, not `primary`.** The category cards and the
+            Categories tab's summary card already do this, and a dashboard bar that stayed violet
+            under a green chip was the last bar in the app where the two disagreed. Same rule,
+            one source: `tone` decides both, so they cannot drift - and `lib/budgetStatus.ts`'s
+            class strings carry the `bg-base-300` that pins the track neutral, with the account
+            of why. */}
         <progress
-          className="progress progress-primary bg-base-300 w-full"
+          className={tone.bar}
           value={Math.min(spent, monthlyBudget)}
           max={monthlyBudget}
           aria-label="Monthly budget spent"
         />
 
         <div className="flex items-center justify-between text-sm">
-          {/* The magnitude, not a formatted negative: overspent, `remaining` is negative, and
+          {/* The magnitude, not a formatted negative: overspent, the remainder is negative, and
               `−$240 left` reads as a double negative colliding with the chip that already
               says "Over budget". */}
           <p>{formatWhole(Math.abs(remainingWhole))} left</p>

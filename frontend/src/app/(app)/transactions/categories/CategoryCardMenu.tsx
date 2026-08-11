@@ -62,7 +62,7 @@ export function CategoryCardMenu({ category }: CategoryCardMenuProps) {
           a target shape of its own.
 
           No `focus` option: the kebab's "Edit" is an unspecific invitation, so the modal opens on
-          its first field. `SetLimitBanner` is the trigger that asks for the budget instead. */}
+          its first field. `SetLimitButton` is the trigger that asks for the budget instead. */}
       <PopoverMenuItem
         label="Edit"
         icon={<Pencil className="size-4" aria-hidden="true" />}

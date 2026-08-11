@@ -330,8 +330,9 @@ export const AllUncapped: Story = {
  * Spending past the monthly budget, with the caps over-allocated too.
  *
  * Two things to check, and both are guards rather than decoration. The summary chip flips to
- * "Over budget" - the two-tone split `dashboard/BudgetCard.tsx` uses, rather than the 80% band
- * neither design's threshold justified. And the unassigned banner **disappears**: `unallocated`
+ * "Over budget" - the red end of the four-band tone `lib/budgetStatus.ts` shares with
+ * `dashboard/BudgetCard.tsx`, the category cards' own banding applied to the whole budget as of
+ * PET-74. And the unassigned banner **disappears**: `unallocated`
  * is returned unclamped and goes negative when caps exceed the budget (A43), so a truthy guard
  * would announce that money is unassigned at the exact moment the opposite is true.
  */

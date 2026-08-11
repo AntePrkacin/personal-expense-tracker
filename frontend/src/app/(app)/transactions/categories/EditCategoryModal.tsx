@@ -208,8 +208,8 @@ type EditCategoryModalProps = {
    * Which field opens focused, because two triggers mean two answers.
    *
    * The kebab's "Edit" is an unspecific invitation, so it focuses Name - the first field, and the
-   * one frame 21 draws filled. "Set limit" is not unspecific at all: the banner it sits on reads
-   * "No limit set for this category", so it focuses the budget. Frame 21 draws the budget field with
+   * one frame 21 draws filled. "Set limit" is not unspecific at all: it is the uncapped card's own
+   * pill, a request to type a number, so it focuses the budget. Frame 21 draws the budget field with
    * a focus ring, which is a mid-fill snapshot rather than an on-open state - the same reading
    * `AddCategoryModal` gives frame 19 - so it settles neither case on its own.
    */
