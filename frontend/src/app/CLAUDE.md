@@ -996,6 +996,25 @@ including Escape, and which - because it is our code rather than the platform's 
 `Modal.test.tsx` rather than eyeballed. The lesson generalises past this component: **a platform
 guarantee that fires during an event React unmounts inside is not a guarantee.**
 
+**A fourth behaviour was found the same way, and it is the one that bites a `Modal` rendered inside
+another `Modal`.** PET-48's Manage categories modal is the first place in this app where that
+happens - the two category modals it opens are React descendants of it, where every other pair in
+the app is a pair of siblings mounted by two providers - and pressing Cancel in the sub-modal closed
+**both** dialogs. **React propagates `close` and `cancel` through the component tree even though
+neither event bubbles in the DOM**, so the outer `Modal`'s `onClose` ran off the inner dialog's
+event and its owner unmounted it. The walk caught it as an outer `<dialog>` still carrying `open`
+and no longer in the document, having received no native `close` at all - which is what says React
+rather than the platform did it.
+
+`Modal` guards both handlers on `event.target === dialogRef.current` now, which is the test
+`onDialogClick` had always made for the backdrop, applied to the two events that were missing it.
+**jsdom cannot reproduce this and the suite says so**: `jest.setup.ts` dispatches a faithful
+non-bubbling `close` that only React's element-level listener sees, so the case models React's
+propagation with a bubbling dispatch instead - and it was watched failing with the guard reverted
+before it was trusted. Read that as the same lesson one level up: **an event that does not bubble in
+the DOM may still bubble in React**, and a component that assumes otherwise is correct exactly until
+somebody nests it.
+
 **PET-33 gave `Modal` a second shape rather than a second component.** Frame 12 is a centred icon
 circle over a centred title with no X, so `align` and `icon` arrived: `align="center"` centres
 the header, renders the icon in a tinted circle, splits the footer into two equal buttons and

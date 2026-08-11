@@ -329,7 +329,31 @@ export function Modal({
    * browser check; the suite pins only that the handler is wired.
    */
   function onDialogCancel(event: React.SyntheticEvent<HTMLDialogElement>) {
+    if (!isOwnEvent(event)) return;
     if (locked) event.preventDefault();
+  }
+
+  /**
+   * Whether a dialog event belongs to *this* dialog rather than to one nested inside it.
+   *
+   * **React propagates `close` and `cancel` through the component tree even though neither event
+   * bubbles in the DOM**, so a `Modal` rendered inside another `Modal` closes both. That is not a
+   * theory: a browser walk of the Manage categories modal found the outer dialog **removed from the
+   * DOM while still carrying `open`, having received no native `close` event at all** - React had
+   * run its `onClose` off the inner dialog's event and the owner unmounted it.
+   *
+   * **jsdom cannot reproduce it**, which is why this arrived with a browser walk rather than a
+   * failing suite: `jest.setup.ts` dispatches a faithful non-bubbling `close`, and React's
+   * element-level listener is the only thing that sees it - so the propagation this guards against
+   * simply does not happen there. The suite models it by dispatching a bubbling `close` from a
+   * nested dialog, which is what React's synthetic propagation is equivalent to for a handler.
+   *
+   * It costs nothing for the ordinary case: a dialog's own `close` reports itself as the target.
+   * `onDialogClick` below has always made the same test for the backdrop, arrived at from the other
+   * direction - which is why this file already had the idea and only this handler was missing it.
+   */
+  function isOwnEvent(event: React.SyntheticEvent<HTMLDialogElement>): boolean {
+    return event.target === dialogRef.current;
   }
 
   // React 19 takes `ref` as an ordinary prop, so no forwardRef wrapper is needed.
@@ -407,7 +431,11 @@ export function Modal({
   return (
     <dialog
       ref={dialogRef}
-      onClose={onClose}
+      // Guarded rather than passed straight through, because React runs a nested dialog's `close`
+      // on every ancestor `Modal` too - see `isOwnEvent`.
+      onClose={(event) => {
+        if (isOwnEvent(event)) onClose();
+      }}
       onCancel={onDialogCancel}
       onClick={onDialogClick}
       aria-labelledby={titleId}
