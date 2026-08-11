@@ -171,6 +171,23 @@ describe('buildPrompt', () => {
     expect(buildPrompt(context())).toContain('260811|Konzum|12.34|Groceries');
   });
 
+  it('asks for markdown and says it is rendered', () => {
+    // PET-76. The rule this replaces forbade markdown, the model emitted it
+    // anyway, and the bubble printed the asterisks - so the instruction was
+    // both ignored and, once the frontend started rendering, false. Pinned
+    // because the sentence is only correct while
+    // `frontend/src/app/(app)/insights/AssistantMarkdown.tsx` exists to render
+    // it: the two are one decision stated in two repositories' worth of files.
+    const prompt = buildPrompt(context());
+
+    expect(prompt).toContain('markdown, which is rendered');
+    expect(prompt).toContain('table');
+    // Raw HTML is escaped rather than parsed on the way out, so a reply full of
+    // tags would be shown as tags. Asking for none is what avoids that.
+    expect(prompt).toContain('no raw HTML');
+    expect(prompt).not.toContain('Answer in plain prose');
+  });
+
   it('sends no category id, so nothing identifying travels with a name', () => {
     const prompt = buildPrompt(context());
 

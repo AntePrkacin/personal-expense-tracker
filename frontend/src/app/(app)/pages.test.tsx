@@ -52,11 +52,14 @@ jest.mock('../../lib/insights', () => ({ requireInsights: jest.fn() }));
 jest.mock('../../lib/profile', () => ({ requireProfile: jest.fn() }));
 
 // PET-72 adds a fifth read, and it is the one module here that is **partially** mocked. Dashboard
-// and AI Insights both await `readPeriods()` for the header's select and its overline, so that one
-// has to be a `jest.fn()`; the rest of the module is pure - `parsePeriodParam` is what a page turns
-// its `searchParams` into, and `periodHref` is what the select navigates with - and stubbing those
-// would replace the seam under test with a fake. So the actual module is spread and one export
-// replaced, which is the only mock in this file that is not wholesale.
+// awaits `readPeriods()` for the header's select, so that one has to be a `jest.fn()`; the rest of
+// the module is pure - `parsePeriodParam` is what a page turns its `searchParams` into, and
+// `periodHref` is what the select navigates with - and stubbing those would replace the seam under
+// test with a fake. So the actual module is spread and one export replaced, which is the only mock
+// in this file that is not wholesale.
+//
+// **AI Insights was the second caller until PET-76** and is not one now: its header is two literals,
+// so it reads no period. The mock stays partial for Dashboard's sake alone.
 jest.mock('../../lib/periods', () => ({
   ...jest.requireActual('../../lib/periods'),
   readPeriods: jest.fn(),
@@ -230,15 +233,20 @@ afterAll(() => {
 const SCREENS = [
   ['Dashboard', DashboardPage, 'October 2025', 'Dashboard'],
   ['Transactions', TransactionsPage, 'October 2025', 'Transactions'],
-  // The overline is the period rather than INS-1's "Your money assistant", decided at the
-  // 2026-08-08 review so the four routed views read consistently. The Jira ticket carries the
-  // amendment.
+  // **PET-76 makes this the one screen of the four whose overline is not a period**, and both of
+  // its strings are literals. The two paragraphs replaced here are the record of how it got that
+  // way: the 2026-08-08 review took the overline to a period so the four read consistently, and
+  // PET-73 changed the title to "Assistant" while leaving the sidebar item saying "Insights"
+  // because the section heading above it already said ASSISTANT. Naming a period over a
+  // conversation that belongs to none was the weakest of the four overlines and cost a whole
+  // request, so this page reads no period at all now, and the sidebar item says "AI Assistant"
+  // too - which **amends INS-1 a third time**.
   //
-  // **The title is "Assistant" as of PET-73, which amends INS-1 again.** The screen is a chat over
-  // the account's own transactions now; the insight cards moved to the Dashboard. The **sidebar**
-  // label is deliberately unchanged - `ui/Sidebar` renders "Insights" under a section heading
-  // "ASSISTANT", so renaming the item would repeat that heading directly above it.
-  ['Assistant', InsightsPage, 'October 2025', 'Assistant'],
+  // Note what this case proves cheaply: the title is queried **by role**, which matters here more
+  // than on the other three, because "AI Assistant" is also the label on every assistant chat row.
+  // No tree holds both today - this page renders an empty chat - and the role query is what keeps
+  // that from being load-bearing.
+  ['AI Assistant', InsightsPage, 'Your very own personal', 'AI Assistant'],
   ['Settings', SettingsPage, 'Manage your account', 'Settings'],
 ] as const;
 
@@ -643,19 +651,22 @@ describe("the period's label reaches the header, from the read rather than the p
     expect(screen.getByText('All time', { selector: 'p' })).toBeInTheDocument();
   });
 
-  it('AI Insights names the current period, which is the one its set is for', async () => {
-    // The one header of the four whose label does not ride on its own screen's read.
-    // `GET /api/insights` publishes no period - a set is generated for the current period only, and
-    // its `monthLabel` names the period it was generated *in* - so this page asks `/api/periods` and
-    // takes the entry flagged current.
+  it('AI Insights names no period at all, whichever one is current', async () => {
+    // **This case is PET-73's own, inverted (PET-76).** It used to pin that this header named the
+    // period flagged `current`, on the argument that the four routed views should read consistently -
+    // and it was the one of the four whose label rode on no read of its own, because a conversation
+    // belongs to no period. So the request went for a string and nothing else. The overline is a
+    // literal now, and the inversion is what stops the read being restored: the header renders
+    // identically whether or not the period is fetched, so only the absence is assertable.
     (readPeriods as jest.Mock).mockResolvedValue({
       periods: [{ ...PERIOD, current: false }, STRETCHED],
     });
 
     await renderScreen(InsightsPage);
 
-    expect(screen.getByText(STRETCHED.label)).toBeInTheDocument();
+    expect(screen.queryByText(STRETCHED.label)).not.toBeInTheDocument();
     expect(screen.queryByText(PERIOD.label)).not.toBeInTheDocument();
+    expect(readPeriods).not.toHaveBeenCalled();
   });
 });
 

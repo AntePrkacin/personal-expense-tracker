@@ -1,5 +1,4 @@
 import { readConversation } from '@/lib/assistant';
-import { currentPeriod, readPeriods } from '@/lib/periods';
 
 import { PageHeader } from '../PageHeader';
 import { InsightsTabs } from './InsightsTabs';
@@ -20,24 +19,33 @@ import { SESSION_PARAM } from './AssistantHistoryScreen';
 // this paragraph rules out. `NewChat.tsx` carries the account; nothing in the header reads the
 // conversation still, which is the claim that mattered.
 //
-// **The title is "Assistant" and the sidebar label is not.** `ui/Sidebar` renders "Insights" under
-// a section heading "ASSISTANT"; renaming the item would repeat that heading directly above it and
-// cost edits to the item list, the section list and the suite pinning both strings. So the sidebar
-// is untouched and the **title** changes, which **amends INS-1 again** - the Jira ticket carries
-// the note.
+// **The title is "AI Assistant" and so is the sidebar label, as of PET-76.** The paragraph this
+// replaces argued the opposite and it is worth knowing why: `ui/Sidebar` rendered "Insights" under
+// a section heading "ASSISTANT", so renaming the item would have repeated that heading directly
+// above it - which made "keep the sidebar, change the title" the cheap answer, and left the one
+// item in the navigation naming something different from the page it opens. The heading is
+// "INSIGHTS" now and the item is "AI Assistant", so the two agree and this **amends INS-1 a third
+// time**. `ui/Sidebar.tsx` carries what that costs, which the product owner accepted.
 //
-// **The overline stays the period**, so the four routed views keep reading consistently - the same
-// argument the 2026-08-08 review made when it took this overline to a period in the first place.
-// It is still the one of the four whose period does not ride on the screen's own read, because a
-// conversation has no period; `GET /api/periods` answers it.
+// **The overline is a fixed literal and this screen reads no period at all.** It was the current
+// period's label, on the 2026-08-08 review's argument that the four routed views should read
+// consistently - and this is the one of the four where that cost a whole request, because a
+// conversation has no period, so `GET /api/periods` was called for a string in a header and nothing
+// else. Naming a period over a chat that spans any number of them was also the weakest of the four
+// claims. So both routes lose `readPeriods()` - one fewer request per view on each - and
+// `currentPeriod` goes with them, having had exactly these two callers. `readPeriods` itself stays:
+// the dashboard and the categories tab use it.
 //
 // **Resuming is `?session=`, not a dynamic segment**, and an unknown one **drops the parameter and
 // renders an empty chat with a `role="status"` line** rather than `notFound()`. That is the call
 // `transactions/[id]/page.tsx` already makes about an invalid `?sort=`, and it avoids a
 // `not-found.tsx` for this segment entirely.
 //
-// No `export const dynamic`: the cookie read behind `readPeriods()` opts this route out of static
-// rendering on its own, exactly as it does everywhere else in the app.
+// No `export const dynamic`, and the reason moved rather than went away - this is the class of bug
+// that froze a month name at build time once before, so `npm run build`'s output is checked for
+// this route still reporting dynamic. Reading `searchParams` opts it out on its own, and
+// `(app)/layout.tsx`'s `requireProfile()` reads a cookie above it either way, which is what covered
+// every route in this app when its own `force-dynamic` was deleted.
 
 export default async function AssistantChatPage({
   searchParams,
@@ -51,10 +59,9 @@ export default async function AssistantChatPage({
   // two conversation ids in one URL names no single conversation.
   const requested = typeof raw === 'string' ? raw : undefined;
 
-  const [periods, conversation] = await Promise.all([
-    readPeriods(),
-    requested === undefined ? Promise.resolve(null) : readConversation(requested),
-  ]);
+  // One read rather than the two this made: the header names no period, so there is nothing to
+  // resolve in parallel with. A bare `/insights` now fetches nothing at all.
+  const conversation = requested === undefined ? null : await readConversation(requested);
 
   return (
     // **The provider wraps the header as well as `<main>`**, `FilterNavigation`'s requirement for
@@ -63,11 +70,11 @@ export default async function AssistantChatPage({
     // stay Server Components.
     <NewChatProvider>
       <PageHeader
-        // The empty string is unreachable through the API - every account has at least the period
-        // it is in - and it is written rather than asserted because a header with a blank overline
-        // is a smaller failure than a screen replaced by the error boundary over a label.
-        overline={currentPeriod(periods)?.label ?? ''}
-        title="Assistant"
+        // Both literals, and both invented, so they join what A29 owes a designer along with every
+        // other string on these two screens. The overline reads as a phrase leading into the title
+        // rather than as a label of its own, which is what the four period overlines beside it are.
+        overline="Your very own personal"
+        title="AI Assistant"
         action={
           // A button rather than the link this shipped as, because a link to the URL the user is
           // already on resets nothing and the conversation is client state. `NewChat.tsx` carries

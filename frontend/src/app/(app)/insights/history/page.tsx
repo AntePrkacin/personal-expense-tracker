@@ -1,5 +1,4 @@
 import { requireSessions } from '@/lib/assistant';
-import { currentPeriod, readPeriods } from '@/lib/periods';
 
 import { PageHeader } from '../../PageHeader';
 import { AssistantHistoryScreen } from '../AssistantHistoryScreen';
@@ -19,19 +18,20 @@ import { InsightsTabs } from '../InsightsTabs';
 // **No header action.** `PageHeader`'s action is optional, and "New chat" belongs on the Chat tab
 // where it means something: from here the Chat tab itself is the way to a new conversation.
 //
+// **The header is two fixed literals as of PET-76, matching the Chat tab's**, so this route reads no
+// period either and makes one request rather than two. `insights/page.tsx` carries the argument;
+// what it means here is that the `Promise.all` this page was built around has one member left and is
+// gone with it.
+//
 // No `export const dynamic`: the cookie read behind `requireSessions()` opts this route out of
-// static rendering on its own.
+// static rendering on its own, and `(app)/layout.tsx`'s `requireProfile()` does it again above.
 
 export default async function AssistantHistoryPage() {
-  // Independent reads, so they go in parallel. `requireSessions()` is the one that decides whether
-  // the session is alive; `readPeriods()` throws rather than redirecting, which is the split every
-  // multi-read page in this app keeps - two opinions about a dead cookie on one page is the shape
-  // the `/dashboard` to `/login` loop came out of.
-  const [{ sessions }, periods] = await Promise.all([requireSessions(), readPeriods()]);
+  const { sessions } = await requireSessions();
 
   return (
     <>
-      <PageHeader overline={currentPeriod(periods)?.label ?? ''} title="Assistant" />
+      <PageHeader overline="Your very own personal" title="AI Assistant" />
 
       <InsightsTabs active="history" />
 

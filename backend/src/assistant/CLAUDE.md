@@ -111,6 +111,22 @@ model was asked and charged for. Trimmed at the DTO rather than in the service, 
 differs from every other Gemini call in the repo: the answer is prose. So there is no schema whose
 field descriptions double as instruction - the whole instruction is the prompt string.
 
+**The prompt asks for markdown as of PET-76, and it forbade markdown before.** That rule read "Answer
+in plain prose. Do not use markdown tables or headings" and the model emitted markdown regardless -
+which is a fact about models rather than about the wording, and the reason this is a reversal rather
+than a stronger prohibition. What made it a defect rather than a curiosity is that the bubble printed
+what arrived, so `**July 2026**` reached the user as four asterisks and a month. The frontend renders
+it now (`frontend/src/app/(app)/insights/AssistantMarkdown.tsx`), so the instruction is true instead
+of ignored, and it **names what is rendered** rather than merely permitting markup: GFM tables are
+supported, and saying so is what turns a per-category answer from a paragraph of figures into a table.
+It also asks for **no raw HTML**, because none is parsed on the way out - the renderer escapes it and
+shows it as characters - so a reply full of tags would be a reply full of visible tags.
+
+Two consequences worth knowing before touching either side. The two halves are **one decision stated
+in two apps**, so the prompt and that component have to move together; `assistant-context.builder.spec.ts`
+pins the sentence, which is what makes a silent half-revert fail. And **no DTO moved**, so this needed
+no `api:sync` - the reply has always been a string and still is.
+
 **The abort chain's third hop lives here.** `AssistantCompletionService.complete` combines the
 request-close signal with its own timeout through `AbortSignal.any`, so an abandoned turn stops
 spending quota. `src/common/request-abort.ts` is what produces that signal, and its `writableEnded`

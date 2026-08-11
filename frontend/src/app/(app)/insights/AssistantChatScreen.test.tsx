@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { AssistantConversation } from '../../../lib/assistant';
@@ -402,10 +402,90 @@ describe('the message list', () => {
   });
 
   it('labels each turn in text rather than by colour or side alone', () => {
+    // **"AI Assistant" is queried inside the log rather than by bare text (PET-76)**, because that
+    // string is now also the page's own `h1` - the sidebar item's label too. This tree holds
+    // neither, since the screen renders without a header, so a bare `getByText` passes today and
+    // becomes ambiguous the first time somebody renders the page and the chat together. Scoping it
+    // to the region under test is what makes the case say what it means.
     renderScreen(jest.fn(), { conversation: conversation() });
 
-    expect(screen.getByText('You')).toBeInTheDocument();
-    expect(screen.getByText('Assistant')).toBeInTheDocument();
+    const log = screen.getByRole('log', { name: 'Conversation' });
+    expect(within(log).getByText('You')).toBeInTheDocument();
+    expect(within(log).getByText('AI Assistant')).toBeInTheDocument();
+  });
+
+  it("renders the assistant's markdown rather than printing it", async () => {
+    // **The defect PET-76 fixes.** The prompt asked for plain prose, the model answered in markdown
+    // anyway, and this bubble printed `**July 2026**` as four asterisks and a month.
+    const user = userEvent.setup();
+    renderScreen(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        data: turn({ reply: 'You spent **312.40 EUR** on Groceries.' }),
+      }),
+    );
+
+    await ask(user, 'Hello');
+
+    await waitFor(() => expect(screen.getByText('312.40 EUR')).toBeInTheDocument());
+    // The emphasis is real markup, not a class on a run of text with asterisks still in it.
+    expect(screen.getByText('312.40 EUR').tagName).toBe('STRONG');
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument();
+  });
+
+  it('leaves a typed message literal, asterisks included', async () => {
+    // The user's own bubble keeps `whitespace-pre-wrap` and renders no markdown: somebody typing
+    // `**hi**` is asking about their own text, not formatting it.
+    const user = userEvent.setup();
+    const { promise } = deferred();
+    renderScreen(jest.fn().mockReturnValue(promise));
+
+    await ask(user, 'What is **this**?');
+
+    expect(screen.getByText('What is **this**?')).toBeInTheDocument();
+  });
+
+  it('scrolls a markdown table inside its own bubble rather than widening the page', async () => {
+    // **The one structural requirement permitting tables creates.** A `chat-bubble` is sized by its
+    // content, so a wide table pushes the whole chat column sideways and takes the page's own
+    // horizontal scrollbar with it. jsdom runs no layout, so what is assertable here is the
+    // containment: the table sits inside an `overflow-x-auto` box that is inside the bubble. That
+    // it really scrolls, and that the page body does not, is a browser check.
+    const user = userEvent.setup();
+    renderScreen(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        data: turn({
+          reply: ['| Category | Spent |', '| --- | --- |', '| Groceries | 312.40 |'].join('\n'),
+        }),
+      }),
+    );
+
+    await ask(user, 'Break it down');
+
+    const table = await screen.findByRole('table');
+    const wrapper = table.parentElement;
+    expect(wrapper).toHaveClass('overflow-x-auto');
+    expect(wrapper?.closest('.chat-bubble')).not.toBeNull();
+  });
+
+  it('escapes raw HTML instead of parsing it, and instead of dropping it', async () => {
+    // The reply is a model's output over the user's own merchant names, so it is not trusted input.
+    // No `rehype-raw` and no `dangerouslySetInnerHTML`: react-markdown turns a raw HTML node into a
+    // **text** node, which is what makes the tag visible rather than either executed or silently
+    // swallowed. `skipHtml` would do the swallowing, which is why it is deliberately not set.
+    const user = userEvent.setup();
+    renderScreen(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        data: turn({ reply: 'Careful: <img src=x onerror="alert(1)"> is in a merchant name.' }),
+      }),
+    );
+
+    await ask(user, 'Hello');
+
+    await waitFor(() => expect(screen.getByText(/<img src=x/)).toBeInTheDocument());
+    expect(document.querySelector('img')).toBeNull();
   });
 
   it('gives every bubble its daisyUI root and its side', () => {

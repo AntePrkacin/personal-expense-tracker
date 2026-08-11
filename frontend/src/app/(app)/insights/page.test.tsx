@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 
 import { readConversation } from '../../../lib/assistant';
 import type { AssistantConversation } from '../../../lib/assistant';
-import { readPeriods } from '../../../lib/periods';
+import * as periods from '../../../lib/periods';
 
 import { MISSING_SESSION_NOTICE } from './AssistantChatScreen';
 import InsightsPage from './page';
@@ -20,6 +20,11 @@ import InsightsPage from './page';
 
 jest.mock('../../../lib/assistant', () => ({ readConversation: jest.fn() }));
 
+// **Mocked so the absence of a call can be asserted, not so a call can be answered (PET-76).** This
+// route awaited `readPeriods()` for the current period's label in its overline; both strings are
+// literals now, so it reads no period at all - which is one fewer request per view and the thing
+// `reads no period for its header` below pins. The module is spread and one export replaced, the
+// shape `pages.test.tsx` uses, because the rest of it is pure.
 jest.mock('../../../lib/periods', () => ({
   ...jest.requireActual('../../../lib/periods'),
   readPeriods: jest.fn(),
@@ -27,17 +32,6 @@ jest.mock('../../../lib/periods', () => ({
 
 // The header's "New chat" reaches `useRouter`; nothing here presses it.
 jest.mock('next/navigation', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
-
-const PERIODS = {
-  periods: [
-    {
-      start: '2026-08-01',
-      end: '2026-09-01',
-      label: 'August 2026',
-      current: true,
-    },
-  ],
-};
 
 const conversation = (id: string, question: string): AssistantConversation => ({
   id,
@@ -59,7 +53,6 @@ const B = conversation('0198f3a1-2b4c-7d8e-9f01-2345678900bb', 'And on coffee?')
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (readPeriods as jest.Mock).mockResolvedValue(PERIODS);
   (readConversation as jest.Mock).mockResolvedValue(null);
 });
 
@@ -71,6 +64,16 @@ describe('the session parameter', () => {
     render(await page());
 
     expect(readConversation).not.toHaveBeenCalled();
+  });
+
+  it('reads no period for its header, so a bare visit fetches nothing at all', async () => {
+    // PET-76. The overline was the current period's label, which cost a whole `GET /api/periods` for
+    // a string over a conversation that belongs to no period. Both header strings are literals now.
+    // Pinned as an absence because that is the only way it fails if somebody restores the read: the
+    // rendered header would look identical either way.
+    render(await page());
+
+    expect(periods.readPeriods).not.toHaveBeenCalled();
   });
 
   it('resumes the conversation it names', async () => {

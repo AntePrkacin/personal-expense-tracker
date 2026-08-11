@@ -84,6 +84,18 @@ export const SIDEBAR_HREFS: Record<SidebarItem, string> = {
  * The destination is read from SIDEBAR_HREFS rather than written out per item,
  * so this file states each route exactly once. Everything else about an item -
  * its label and its glyph - is genuinely local to the navigation.
+ *
+ * **PET-76 swapped the second section's heading and its one label**, so the item
+ * and the page it opens finally agree: the screen's title is "AI Assistant" and
+ * the item said "Insights". The `key` deliberately stays `'insights'`, so
+ * SIDEBAR_ITEMS, SIDEBAR_HREFS and the route directory are untouched and the URL
+ * is still `/insights`.
+ *
+ * The heading becoming INSIGHTS is the half worth flagging, and the product owner
+ * accepted it: since PET-73 moved the insight cards onto the Dashboard, a section
+ * called INSIGHTS holds a chat, while the screen that actually shows insights sits
+ * under MENU. The alternative was a heading naming the same thing as the single
+ * item directly beneath it, which is what the arrangement PET-73 chose did.
  */
 const NAV_SECTIONS = [
   {
@@ -94,8 +106,8 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    heading: 'ASSISTANT',
-    items: [{ key: 'insights', label: 'Insights', Glyph: Sparkle }],
+    heading: 'INSIGHTS',
+    items: [{ key: 'insights', label: 'AI Assistant', Glyph: Sparkle }],
   },
   {
     heading: 'ACCOUNT',
@@ -219,7 +231,7 @@ export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
 
         {/* One nav, three labelled lists. The overlines are the groups' names, so
             each list points at its own with aria-labelledby: that gives a screen
-            reader the MENU / ASSISTANT / ACCOUNT structure without promoting
+            reader the MENU / INSIGHTS / ACCOUNT structure without promoting
             them to headings, which the design does not draw and which would put
             them in the heading rotor ahead of the page's own title. */}
         <nav aria-label="Main" className="flex flex-col gap-5">

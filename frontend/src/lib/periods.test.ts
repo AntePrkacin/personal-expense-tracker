@@ -1,11 +1,12 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { currentPeriod, readPeriods, type PeriodsView } from './periods';
+import { readPeriods, type PeriodsView } from './periods';
 
-// The period select's data source, plus `currentPeriod`. The three `?period=` functions moved to
-// `periodParams.test.ts` with the module they belong to - see `lib/periodParams.ts` for why the URL
-// half cannot live beside a read that touches `next/headers`.
+// The period select's data source. The three `?period=` functions moved to `periodParams.test.ts`
+// with the module they belong to - see `lib/periodParams.ts` for why the URL half cannot live beside
+// a read that touches `next/headers`. `currentPeriod`'s four cases went with the function itself at
+// PET-76, which took the assistant's two headers off a period and left it with no callers.
 //
 // One read, no probe: `GET /api/periods` takes no filters, so there is no ambiguous-empty case for
 // a second request to resolve - `lib/dashboard.ts`'s shape exactly.
@@ -146,27 +147,5 @@ describe('when the backend could not answer', () => {
 
     await expect(readPeriods()).rejects.toThrow(/Could not load your budgeting periods/);
     expect(redirect).not.toHaveBeenCalled();
-  });
-});
-
-describe('currentPeriod', () => {
-  it('finds the one period flagged as containing today', () => {
-    expect(currentPeriod({ periods: [PREVIOUS, CURRENT] })).toBe(CURRENT);
-  });
-
-  it('reads the flag rather than the index, so the two cannot disagree', () => {
-    // The contract documents index 0 as the current one *and* flags it per row. Two statements of
-    // one fact, and the flag is the one that cannot be wrong if the ordering ever changes.
-    expect(currentPeriod({ periods: [PREVIOUS, CURRENT] })?.label).toBe('October 2025');
-  });
-
-  it('falls back to the newest when nothing is flagged', () => {
-    // Unreachable through the API - exactly one period contains today - and a fallback rather than a
-    // throw because the caller is naming a header.
-    expect(currentPeriod({ periods: [PREVIOUS] })).toBe(PREVIOUS);
-  });
-
-  it('answers undefined for an empty list', () => {
-    expect(currentPeriod({ periods: [] })).toBeUndefined();
   });
 });

@@ -9,11 +9,17 @@ import { SIDEBAR_HREFS, SIDEBAR_ITEMS, Sidebar, type SidebarItem } from './Sideb
 
 const ITEMS = [...SIDEBAR_ITEMS];
 
-/** The labels as designed, in sidebar order, keyed by variant. */
+/**
+ * The labels as designed, in sidebar order, keyed by variant.
+ *
+ * `insights` reads "AI Assistant" as of PET-76, so the item and the page it opens finally agree.
+ * The **key** deliberately did not move with the label, which is what kept `SIDEBAR_ITEMS`,
+ * `SIDEBAR_HREFS` and the route folder out of that change.
+ */
 const LABELS: Record<SidebarItem, string> = {
   dashboard: 'Dashboard',
   transactions: 'Transactions',
-  insights: 'Insights',
+  insights: 'AI Assistant',
   settings: 'Settings',
 };
 
@@ -69,7 +75,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Spendifico')).toBeInTheDocument();
     expect(screen.queryByText('Expensa')).not.toBeInTheDocument();
 
-    for (const heading of ['MENU', 'ASSISTANT', 'ACCOUNT']) {
+    for (const heading of ['MENU', 'INSIGHTS', 'ACCOUNT']) {
       expect(screen.getByText(heading)).toBeInTheDocument();
     }
 
@@ -86,10 +92,11 @@ describe('Sidebar', () => {
     expect(lists).toHaveLength(3);
 
     // Each list is named by its own overline, which is what gives a screen reader
-    // the MENU / ASSISTANT / ACCOUNT structure.
+    // the MENU / INSIGHTS / ACCOUNT structure. The ids are derived from the headings
+    // themselves, so PET-76's rename moved the second one with it.
     expect(lists.map((list) => list.getAttribute('aria-labelledby'))).toEqual([
       'sidebar-menu',
-      'sidebar-assistant',
+      'sidebar-insights',
       'sidebar-account',
     ]);
     for (const list of lists) {

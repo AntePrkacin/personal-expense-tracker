@@ -114,6 +114,18 @@ current, because `GET /api/insights` publishes no period and its `monthLabel` na
 generated _in_. `lib/format.ts`'s `periodOverline` and `periodLabel` are deleted with the derivation
 they were - `frontend/CLAUDE.md` carries that argument in full.
 
+**PET-76 makes that three headers rather than four, and the clause about `/insights` is history.**
+Both assistant routes draw the fixed overline "Your very own personal" over the title "AI Assistant"
+and read no period at all. The paragraph above is the argument for why that one was different, and it
+is also the argument against it: `/insights` was the only header whose label rode on **neither** its
+own response nor a clock, so `GET /api/periods` was requested for a string and nothing else - one
+request per view on each of the two routes, naming a period over a conversation that belongs to none.
+`lib/periods.ts`'s `currentPeriod` went with them, having had exactly those two callers, and its
+absence is the thing to know before writing a fourth header: a screen that needs the current period
+takes it off the read whose figures it is labelling, which is what the other three do. What stays
+true is the rule the deletion of `periodOverline` established - **no period name is ever derived on
+this side** - reached here by not naming one.
+
 **`export const dynamic = 'force-dynamic'` was on the layout and is deliberately gone.** It
 existed because the pages read `new Date()` for the overline, and without it Next prerendered
 them and every screen showed whatever month the build ran in - a bug that only appears a month
@@ -1786,6 +1798,18 @@ already makes about an invalid `?sort=`. The **title is "Assistant" and the side
 `ui/Sidebar` renders "Insights" under a section heading "ASSISTANT", so renaming the item would
 repeat that heading directly above it. That amends INS-1 again.
 
+**That last sentence is PET-76's, reversed: both say "AI Assistant" now, and the heading above the
+item says "INSIGHTS".** The reasoning it replaces was sound and cheap, and what it bought was the one
+item in the navigation naming something different from the page it opens - so the sidebar moved
+instead of the argument being extended, which **amends INS-1 a third time**. The item's `key` stays
+`'insights'`, so `SIDEBAR_ITEMS`, `SIDEBAR_HREFS`, `INSIGHTS_TAB_HREFS` and the route folder are all
+untouched and the URL is still `/insights`. Two consequences worth knowing. A section called INSIGHTS
+now holds a chat while the screen that shows insights sits under MENU, which the product owner
+accepted and `ui/Sidebar.tsx` records. And **"AI Assistant" names two things on one screen** - the
+`h1` and every assistant chat row - so `getByText('AI Assistant')` is a trap: `pages.test.tsx` queries
+the heading **by role** and `AssistantChatScreen.test.tsx` scopes the row label to the log region. No
+tree holds both today, which is what keeps that a precaution rather than a fix.
+
 **Cancellation is the reason the send is a route handler, and it travels three hops.** The composer
 owns an `AbortController` and "Stop" replaces "Send" while a turn is in flight; the handler passes
 `request.signal` through; the backend combines the dropped connection with its own timeout. **An
@@ -1872,6 +1896,60 @@ date out of it while `today` defaults to the frontend host's zone - a second zon
 host-versus-`APP_TIMEZONE` gap that screen already documents, so at UTC+2 a conversation from
 minutes ago read "Yesterday". Both sides are read in one zone now, which leaves only the documented
 gap.
+
+**PET-76 is eight fixups on those two screens, and what it adds to this file is one class of defect
+plus one dependency.** None of it is a missing feature and not one item could fail a gate - every one
+of them passed `build`, `lint` and every Jest suite on `main` - which is why they were found by using
+the finished screens with real data rather than by reviewing them. Six of the eight are one-line
+changes documented where they happen; three things reach past that.
+
+**Two root causes account for five of the eight, and both are `frontend/CLAUDE.md`'s to carry rather
+than this file's** - they are in its Where daisyUI and Tailwind fight list, which is the home for
+exactly this shape: a class present in the markup that paints the wrong thing. In one sentence each,
+because they explain why these screens specifically: the page canvas is `bg-base-200` and so is
+daisyUI's fill for a **disabled `textarea`** and for a **plain `.btn`**, so the composer's message box
+vanished for the whole of a turn and "New chat" had no visible box at all; and `loading-*` is SMIL
+inside a `mask-image` data-URI SVG rather than CSS, so the typing indicator's 3-second cycle with only
+57% of its timeline in motion could not be sped up by any class. The composer is on a
+`card bg-base-100` now and the dots are real CSS animation. **The assistant composer was the app's
+only form not on a card**, which is why this bit here and nowhere else, and it is the thing to check
+before putting a new control directly on the canvas.
+
+**The reply renders its markdown, which is this ticket's one substantive addition.** Gemini answered
+in markdown from the day the chat shipped and the bubble printed the asterisks; the prompt had asked
+for plain prose, and a model asked not to emit markup emits it anyway. So
+`insights/AssistantMarkdown.tsx` renders it with **`react-markdown` + `remark-gfm`**, the app's
+seventh and eighth runtime dependencies, and the backend's rule is reversed in the same change -
+`backend/src/assistant/CLAUDE.md` carries that half, and the two are **one decision stated in two
+apps**. Four things about it not to undo. It renders to **React elements, never through
+`dangerouslySetInnerHTML`**, and with **no `rehype-raw`**: a reply is a model's output over the user's
+own merchant names and is not trusted input, and without that plugin react-markdown turns raw HTML
+into a **text** node, so a tag arrives as visible characters. `skipHtml` is deliberately also unset,
+because that one deletes the text instead of showing it and would silently swallow part of an answer.
+The class map holds **whole Tailwind literals per tag**, the `ui/categoryColour.ts` convention, since
+the scanner reads source as raw text - and every tag needs one, because preflight resets heading
+sizes, list markers and margins to nothing, so an unmapped `<h2>` renders as a paragraph that lost its
+full stop. **A table gets an `overflow-x-auto` wrapper**, which is the one structural requirement
+permitting tables creates: a `chat-bubble` is sized by its content, so a wide table would push the
+chat column sideways and take the page's own horizontal scrollbar with it. And the **user's** bubble
+keeps `whitespace-pre-wrap` and renders no markdown, so somebody typing `**hi**` sees their own
+asterisks rather than watching them be interpreted.
+
+**It cost a `jest.config.ts` that post-processes next/jest's own config, and the obvious version of
+that fix does nothing.** The unified ecosystem behind those two packages is **85 ESM-only packages**,
+which Jest's default transform never touches - so the first `import` dies on
+`SyntaxError: Unexpected token 'export'`. next/jest says in a comment that custom config "can append
+to transformIgnorePatterns but not modify it", and a pattern list is a set of things to **skip**, so a
+permissive pattern added beside `/node_modules/` changes nothing at all: a `jest.config.ts` that only
+widened the array looks like a fix and still fails. `transpilePackages` in `next.config.ts` is the
+other lever next/jest reads and is the wrong one, because it makes the **application** build transpile
+85 packages it already handles natively to fix a problem only Jest has. That file carries the whole
+account, including why it throws when it rewrites nothing and why `escape-string-regexp` is on a list
+it looks like it should not be on.
+
+**Both assistant headers lose their period, which takes a `lib/` function with them** - see the
+Two-of-the-four-headers paragraph above, where that amendment lives, since it is a claim about all
+four screens rather than about these two.
 
 ## Not built here
 
