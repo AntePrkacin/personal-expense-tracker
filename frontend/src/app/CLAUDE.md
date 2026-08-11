@@ -2566,3 +2566,11 @@ change is the _unchanged_ configured budget: that reads as a revert and is the t
 is an earlier period's row. What identity gives up is stated in the code and is deliberate - a refresh
 this form did not cause, landing between the write and this form's own refresh, would be adopted, and
 nothing on this route calls `router.refresh()` but this form.
+
+**Neither fix gives the screen anything to _say_, and `docs/TODO.md` is where that is now tracked.**
+A retroactive save settles the field back on the configured value under a green "Changes saved", and
+a future-anchored one moves no figure on any screen at all - both correct, both indistinguishable
+from a save that did nothing. What closes them is one sentence naming the period the change landed
+on, off the `label` the backend already publishes, which makes it the first success message in this
+app carrying a variable - so it is filed against the notification system that entry marks HIGH
+IMPORTANCE rather than as a fifth hand-rolled `role="status"` line on one screen.
