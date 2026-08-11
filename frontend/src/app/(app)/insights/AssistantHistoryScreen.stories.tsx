@@ -43,7 +43,7 @@ const SESSIONS: AssistantSession[] = [
 
 const Frame = ({ sessions }: { sessions: AssistantSession[] }) => (
   <div className="bg-base-200 flex min-h-screen flex-col gap-6 p-10">
-    <InsightsTabs active="history" />
+    <InsightsTabs active="history" historyCount={sessions.length} />
     <AssistantHistoryScreen sessions={sessions} today={TODAY} />
   </div>
 );

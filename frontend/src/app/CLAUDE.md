@@ -2011,6 +2011,65 @@ Its comment about the `.pnpm` sibling was also right about the behaviour and wro
 which is worth fixing rather than leaving because the two reasons expire differently - see the
 comment itself.
 
+**A second round of PET-76, from using the finished screens, added three more and two of them are
+features rather than fixes.** Taken in this ticket at the product owner's direction rather than filed
+as their own, because it lands with the pre-launch push. The three spacing and affordance fixes are
+documented where they happen; what reaches past their own files is below.
+
+**The two spacing defects had one shape and it is worth naming: a gap that was never declared.**
+`.chat` is a grid with `column-gap` and `grid-auto-rows: min-content` and **no row gap at all**, so
+the row label sat flush on its bubble the moment PET-76 grew it from `text-xs` to `text-sm` - the
+class that made the label legible is what made the crowding visible. And `(app)/layout.tsx`'s content
+column declares no gap either, only `px-*`: `PageHeader` supplies the space above the tab bar with
+its own `pb-5`, and nothing supplied the space below it, so the active tab's `-bottom-px` underline
+started on the very pixel the card below began. **`TransactionTabs` escaped both by being a child of
+`<main className="... gap-5">` rather than a sibling of `<main>`** - which is the general lesson:
+this shell has no vertical rhythm of its own, so **every gap between two of a page's top-level
+children is somebody's explicit margin**, and a component that looks spaced on one route because of
+its parent will be flush on another.
+
+**The History tab has a count badge now, which reverses a PET-73 decision rather than extending
+it.** That bar shipped with none "because a badge on Chat would force the bare route to fetch a
+count", and the reasoning was sound about the count that existed: the only way to get one was
+`GET /api/assistant/sessions`, a whole list transferred and discarded for its length, on the route
+PET-76 had just made fetch nothing at all. So the backend grew
+**`GET /api/assistant/sessions/count`**, which answers `{ total }` and nothing else - and the
+decision to read before copying it is that the two endpoints **share one predicate** in
+`assistant.service.ts` rather than one query, because they publish the same field name and a second
+hand-written `isNull(deletedAt)` is how one of them silently starts counting tombstones.
+`docs/TODO.md` carries the question of whether `/transactions` should follow, and the reason it
+probably should not: its categories read has another caller, where the assistant's would not have.
+
+Two things about the badge itself. **`null` draws no badge and `0` draws a `0`**, which are different
+facts: `readSessionCount` **degrades** rather than throwing - `lib/palette.ts`'s policy, not
+`requireSessions`' - because a badge is chrome and a count that cannot be read must not replace a
+working conversation with the error boundary. And the Chat tab carries no badge at all, because
+nothing behind it is countable; a pill invented for symmetry would have to say something.
+
+**And each chat row now carries its own timestamp, which cost a new client component for a reason
+that generalises past this screen.** `MessageTime.tsx` renders the formatted time **only after
+hydration**, and the version that did not is the more instructive artifact: `AssistantMessageList`
+renders inside a client component, so a resumed conversation is server-rendered first, and a
+locale-formatted time is computed in the **server's** zone there and the **reader's** zone on
+hydration. `suppressHydrationWarning` is the obvious tool and is the wrong one - a walk with the
+frontend under `TZ=UTC` against a `Europe/Zagreb` browser measured an instant of `18:36:47Z`
+rendering as "6:36 PM" and **staying** so, where the reader's own clock says 8:36 PM. The attribute
+silences the warning and keeps the server's text rather than correcting it, so what it buys is every
+timestamp in the app quietly wrong by the reader's UTC offset, with a clean console and every gate
+green. **The rule to carry: a value that depends on the viewer's locale or zone cannot be
+server-rendered inside a client component at all** - render it after hydration through
+`useSyncExternalStore`, which is the same hook `app/setup/SetupDraftProvider.tsx` reaches for and for
+the same hydration-correctness reason, and keep the machine-readable value in the markup
+(`<time dateTime>`) so only the human-readable half waits. `MessageTime.test.tsx` renders the
+component through **two** renderers for that reason: a defect that is a disagreement between the
+server pass and the client pass is invisible to a suite that only performs one.
+
+Its formatter is `lib/format.ts`'s `formatMessageTimestamp`, built on **`calendarDateOfInstant`** -
+which is the instant-to-calendar-date conversion `insights/AssistantHistoryScreen.tsx` held privately
+after a review of PET-73 found its zone bug, lifted here at its **second** consumer rather than its
+third. That is `lib/pickerScroll.ts`'s exception restated: two copies of markup are cheap, and two
+copies of a _fix_ are a divergence waiting for the next reviewer who corrects only one of them.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

@@ -199,7 +199,10 @@ const Frame = ({
   ...props
 }: Partial<React.ComponentProps<typeof AssistantChatScreen>> & { active?: 'chat' | 'history' }) => (
   <div className="bg-base-200 flex min-h-screen flex-col gap-6 p-10">
-    <InsightsTabs active={active} />
+    {/* A plausible count, so the History badge is in the frame for a designer to look at. The real
+        page reads it from `GET /api/assistant/sessions/count`; a story has no session to ask with,
+        and `null` here would review the failed-read state rather than the ordinary one. */}
+    <InsightsTabs active={active} historyCount={4} />
     <AssistantChatScreen
       conversation={null}
       send={async ({ message }) => reply(message)}

@@ -42,7 +42,7 @@ import { INSIGHTS_TAB_HREFS, InsightsTabs } from '../InsightsTabs';
 // static rendering on its own, and `(app)/layout.tsx`'s `requireProfile()` does it again above.
 
 export default async function AssistantHistoryPage() {
-  const { sessions } = await requireSessions();
+  const { sessions, total } = await requireSessions();
 
   return (
     <>
@@ -52,7 +52,13 @@ export default async function AssistantHistoryPage() {
         action={<Button label="New chat" variant="primary" href={INSIGHTS_TAB_HREFS.chat} />}
       />
 
-      <InsightsTabs active="history" />
+      {/* **The count comes off the read this page already made**, not from a second request to
+          `sessions/count`. `AssistantSessionsResponseDto` publishes `total` beside the rows for
+          exactly this - and the two endpoints share one predicate backend-side, so the number here
+          and the number the Chat tab draws cannot disagree. Reading `sessions.length` instead would
+          be the mistake `TransactionsTable`'s badge already records: a future page size would
+          silently turn a total into a page count. */}
+      <InsightsTabs active="history" historyCount={total} />
 
       <AssistantHistoryScreen sessions={sessions} />
     </>

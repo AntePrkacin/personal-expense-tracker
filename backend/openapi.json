@@ -1561,6 +1561,44 @@
         ]
       }
     },
+    "/api/assistant/sessions/count": {
+      "get": {
+        "description": "The same figure `GET /assistant/sessions` publishes as `total`, over the same predicate, without the rows. Exists so a screen that wants only the number does not read the list to get it.",
+        "operationId": "AssistantController_sessionCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSessionCountResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated. The bearer credential is missing, invalid, expired or already spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "How many conversations you have.",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
     "/api/assistant/sessions/{id}": {
       "get": {
         "description": "Messages come back in render order, oldest first. **404** means the conversation does not exist - unambiguously, since this route names exactly one resource. Cross-user isolation is structural: another account's id simply does not exist in your database.",
@@ -3594,6 +3632,19 @@
         },
         "required": [
           "sessions",
+          "total"
+        ]
+      },
+      "AssistantSessionCountResponseDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "example": 3,
+            "description": "How many live conversations there are. The same figure `GET /assistant/sessions` publishes as `total`, over the same predicate, without the rows."
+          }
+        },
+        "required": [
           "total"
         ]
       },

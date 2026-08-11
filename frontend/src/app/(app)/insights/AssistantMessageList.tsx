@@ -3,6 +3,7 @@ import { Sparkle } from 'lucide-react';
 import type { AssistantMessage } from '@/lib/assistant';
 
 import { AssistantMarkdown } from './AssistantMarkdown';
+import { MessageTime } from './MessageTime';
 
 // The conversation itself: daisyUI `chat` rows, one per stored message.
 //
@@ -104,6 +105,28 @@ export function AssistantMessageList({ messages }: { messages: readonly Assistan
               <Sparkle className="size-4" aria-hidden="true" />
             ) : null}
             {ROLE_LABEL[message.role]}
+
+            {/* **The timestamp, PET-76, and the separator is `aria-hidden` while the time is not.**
+                A screen reader reading "You bullet Today 2:32 PM" gets a word that is not in the
+                sentence; the bullet is decoration between two facts, exactly like the step
+                indicator's dots and `ui/Input`'s `$` prefix. The time itself is content and is
+                announced, because when a message was sent is the whole point of adding it.
+
+                **The time is its own client component and that is a correctness requirement, not a
+                boundary preference.** `MessageTime.tsx` carries the account in full: a
+                locale-formatted time server-rendered in the host's zone and hydrated in the
+                reader's is two different strings for one instant, and a walk measured
+                `suppressHydrationWarning` keeping the **server's** - so a Vercel deployment would
+                have shown every reader a time off by their own UTC offset, silently. It renders the
+                text only after hydration.
+
+                `formatMessageTimestamp` gives "Today, 2:32 PM" and its own docblock carries why the
+                day half goes through `calendarDateOfInstant` first: `createdAt` is an **instant**,
+                and taking a calendar date out of one with `slice(0, 10)` reads it in UTC while
+                "today" is the host's zone - the defect a review of PET-73 found in the History
+                caption, which would have been reintroduced here verbatim. */}
+            <span aria-hidden="true">•</span>
+            <MessageTime instant={message.createdAt} />
           </div>
           <div className={BUBBLE_CLASS[message.role]}>
             {message.role === 'assistant' ? (

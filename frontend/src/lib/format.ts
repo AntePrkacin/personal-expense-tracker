@@ -234,6 +234,66 @@ export function formatRelativeDate(iso: string, today: string = todayIsoDate()):
   return formatIsoDayMonth(iso);
 }
 
+/**
+ * The calendar date an ISO **instant** falls on, in the same zone `today` is read in.
+ *
+ * **Every function above takes a `YYYY-MM-DD` column and an instant is not one**, which is the
+ * distinction a review of PET-73 paid for: `slice(0, 10)` takes the **UTC** date out of a
+ * timestamp while `todayIsoDate()` reads the host's own zone, so at UTC+2 a message sent at 00:30
+ * local is 22:30 UTC the day before and a conversation from minutes ago read "Yesterday". Reach for
+ * this before handing any `createdAt` or `lastMessageAt` to `formatRelativeDate`.
+ *
+ * **It lives here rather than beside either caller, one consumer before the rule of three would
+ * allow.** It was private to `insights/AssistantHistoryScreen.tsx` until PET-76 gave the chat rows
+ * their own timestamps, and the reason to lift it at two rather than three is the one
+ * `lib/pickerScroll.ts` and `(app)/ConfirmDeleteDialog.tsx` record: two copies of a *fix* are not
+ * two copies of markup - the second copy is where the next reviewer's correction fails to land.
+ *
+ * `todayIsoDate` is the right tool despite its name: it formats a moment as the calendar date it
+ * falls on using local getters, and "today" is only what its default argument means.
+ */
+export function calendarDateOfInstant(instant: string): string {
+  return todayIsoDate(new Date(instant));
+}
+
+/**
+ * `en-US`, so a time renders "2:32 PM" rather than "14:32".
+ *
+ * **A product decision rather than an oversight**, and the same one every formatter in this file
+ * makes: the locale stays `en-US` while the currency follows the profile, which `frontend/CLAUDE.md`
+ * states outright. A 24-hour clock would be the right call for most of this app's users and it is
+ * not this function's to make unilaterally - the whole file moves together or none of it does.
+ */
+const TIME_OF_DAY = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+/**
+ * An ISO instant as "Today, 2:32 PM", "Yesterday, 2:32 PM" or "Oct 8, 2:32 PM" - the timestamp
+ * beside each chat row's speaker label (PET-76).
+ *
+ * **Composed from the two functions above rather than a third `Intl` format**, so a chat row and the
+ * History caption cannot disagree about which day an instant fell on: both go through
+ * `calendarDateOfInstant` into `formatRelativeDate`, and this one appends the clock.
+ *
+ * **The year is dropped beyond yesterday**, which `formatIsoDayMonth` decides and this inherits. A
+ * conversation from last December reads "Dec 14, 4:02 PM" with no year on it - acceptable because
+ * the History list already orders and dates conversations, and because a chat row is read in the
+ * context of the conversation around it rather than as a record on its own. If a year is ever wanted
+ * here it is a fourth string in this family, not a change to `formatIsoDayMonth`, which four other
+ * callers share.
+ *
+ * `today` is a parameter with a default for `formatRelativeDate`'s own reason: a suite has to be
+ * able to pin "Yesterday" without faking a timer. It inherits that function's host-zone gap, which
+ * `docs/TODO.md` tracks.
+ */
+export function formatMessageTimestamp(instant: string, today: string = todayIsoDate()): string {
+  const day = formatRelativeDate(calendarDateOfInstant(instant), today);
+
+  return `${day}, ${TIME_OF_DAY.format(new Date(instant))}`;
+}
+
 // The amount field as it is being typed into (02 Setup's "Monthly budget", and
 // later every Amount field). Three functions: the display string, the number
 // behind it, and where the caret belongs after reformatting.

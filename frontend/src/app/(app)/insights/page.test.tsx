@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { readConversation } from '../../../lib/assistant';
+import { readConversation, readSessionCount } from '../../../lib/assistant';
 import type { AssistantConversation } from '../../../lib/assistant';
 import * as periods from '../../../lib/periods';
 
@@ -18,7 +18,10 @@ import InsightsPage from './page';
 // and posting to it. Relative specifiers throughout, the `@/` alias being unresolvable to
 // `jest.mock` from anywhere in this repo.
 
-jest.mock('../../../lib/assistant', () => ({ readConversation: jest.fn() }));
+jest.mock('../../../lib/assistant', () => ({
+  readConversation: jest.fn(),
+  readSessionCount: jest.fn(),
+}));
 
 // **Mocked so the absence of a call can be asserted, not so a call can be answered (PET-76).** This
 // route awaited `readPeriods()` for the current period's label in its overline; both strings are
@@ -54,6 +57,9 @@ const B = conversation('0198f3a1-2b4c-7d8e-9f01-2345678900bb', 'And on coffee?')
 beforeEach(() => {
   jest.clearAllMocks();
   (readConversation as jest.Mock).mockResolvedValue(null);
+  // The tab bar's History badge. Every case below renders the whole page, so this has to answer
+  // something - `null` is the degraded arm and would leave the badge out of the tree entirely.
+  (readSessionCount as jest.Mock).mockResolvedValue(2);
 });
 
 const page = (search: Record<string, string | string[]> = {}) =>
@@ -66,14 +72,33 @@ describe('the session parameter', () => {
     expect(readConversation).not.toHaveBeenCalled();
   });
 
-  it('reads no period for its header, so a bare visit fetches nothing at all', async () => {
+  it('reads no period for its header, and nothing it does not draw', async () => {
     // PET-76. The overline was the current period's label, which cost a whole `GET /api/periods` for
     // a string over a conversation that belongs to no period. Both header strings are literals now.
     // Pinned as an absence because that is the only way it fails if somebody restores the read: the
     // rendered header would look identical either way.
+    //
+    // **This used to say "a bare visit fetches nothing at all", and that claim is now false by
+    // design.** The same ticket added the History count badge, which is a fact about the account
+    // rather than about the conversation, so something has to ask - and what it asks for is a single
+    // integer from `sessions/count` rather than the session list. The period read stays absent; the
+    // count read is asserted present, so neither can be quietly swapped for the other.
     render(await page());
 
     expect(periods.readPeriods).not.toHaveBeenCalled();
+    expect(readSessionCount).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the chat with no badge when the count could not be read', async () => {
+    // The degraded arm, and the reason it matters here rather than in the tab bar's own suite: a
+    // throwing count read would replace a working conversation with the error boundary. This page
+    // has to keep rendering.
+    (readSessionCount as jest.Mock).mockResolvedValue(null);
+
+    const { container } = render(await page());
+
+    expect(container.querySelector('.badge')).toBeNull();
+    expect(screen.getByRole('link', { name: 'History' })).toBeInTheDocument();
   });
 
   it('resumes the conversation it names', async () => {

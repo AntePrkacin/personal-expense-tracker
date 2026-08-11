@@ -512,6 +512,37 @@ What would change the calculus is the account-wide count discussed above landing
 enough categories that the join stops being trivial. Whoever picks it up should look at the two
 reads together rather than only this one.
 
+### The tab badges: `/transactions` reads a whole list for a number, and the assistant no longer does
+
+Placed here rather than at the end of the section because it is the entry above continued, and the
+cross-reference is the whole content of it.
+
+`app/(app)/transactions/page.tsx` numbers its **Categories** tab by calling `readCategoryLabels()`
+and taking the length of what comes back - a full category list, with every name, colour and icon,
+fetched on a route that draws none of them, so that one integer can be rendered in a pill. PET-76 hit
+the identical problem giving the assistant's History tab a badge, and answered it the other way:
+`GET /api/assistant/sessions/count` returns `{ total }` and nothing else, so the Chat route pays one
+small round trip instead of transferring a list it discards. `AssistantSessionsResponseDto` and that
+endpoint share one predicate backend-side, which is what keeps the two published totals from
+disagreeing.
+
+**The question this entry exists to ask is whether Transactions should follow.** Three things to weigh
+before assuming yes:
+
+- The categories read there is **not** wasted the way the assistant's would have been. That page also
+  needs the list for its filter select, so the badge is riding on a request that has another caller -
+  which is precisely why the assistant case is clearer-cut than this one.
+- The sibling badge on that bar reads `total` off the transactions response, already the right shape,
+  and `docs/TODO.md`'s account-wide-count entry above is about a *different* missing number.
+- A count endpoint per resource is a pattern with a cost of its own: two endpoints publishing one
+  fact, which only stays honest while they share a predicate. The assistant pair does; a third and
+  fourth would each need the same discipline.
+
+So the likely answer is "not for Transactions, and yes for the next tab bar whose count has no other
+caller" - but it is a real decision rather than an oversight, and it should be made with both call
+sites in front of whoever makes it. The product owner asked for it to be written down here when the
+assistant badge landed.
+
 ### Money and dates hard-code `en-US`, and three modules move together or not at all
 
 **What is left of the "header period ignores the profile's month start day" entry, which PET-47

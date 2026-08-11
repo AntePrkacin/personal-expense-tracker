@@ -16,6 +16,26 @@ that wire wants a home somebody can find without reading four files.
 conversations and `GET /api/assistant/sessions/{id}` reads one back. The model is Gemini on the same
 `GEMINI_API_KEY` receipt scanning uses.
 
+**There is a fourth endpoint as of PET-76, so read the three above as dated**: `GET
+/api/assistant/sessions/count` answers `{ total }` and nothing else. It exists because the frontend's
+tab bar draws a count on its History tab and renders that bar on the Chat route too, where the whole
+session list would otherwise cross the wire to be discarded except for its length.
+
+**The thing to know before adding a fifth is that `count` is a literal sibling of `:id`, and
+declaration order is what makes it reachable.** Nest matches whichever route is declared first, and
+`sessions/count` and `sessions/{id}` have the same segment count - so declared after, every request
+for the count is handled by `conversation()` and `ParseUUIDPipe` answers **400** for the literal
+`count`. The symptom would be a badge that never renders beside a validation error naming a rule
+nobody broke. Any further literal `sessions/*` route goes above `sessions/:id` as well.
+
+**And its total shares a predicate with the list's, not a query.** Both publish a field called
+`total` over the same set, so `LIVE_SESSION` is declared once at module scope in
+`assistant.service.ts` and used by both; `sessions()` still derives its own figure from the rows it
+already holds, because counting again in SQL there would be a second round trip for a number in hand.
+What is single-sourced is the **condition**, which is the half that can drift - a second hand-written
+`isNull(deletedAt)` is how one of the two silently starts counting tombstones, with both numbers
+staying individually plausible.
+
 **It generates nothing.** `src/insights/` still owns the rule-based insight sets, `INSIGHT_GENERATOR`
 is still bound to `RuleBasedInsightGenerator`, and `backend/CLAUDE.md`'s "**No LLM behind the
 insights**" bullet is still literally true.

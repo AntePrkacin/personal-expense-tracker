@@ -1,4 +1,4 @@
-import { readConversation } from '@/lib/assistant';
+import { readConversation, readSessionCount } from '@/lib/assistant';
 
 import { PageHeader } from '../PageHeader';
 import { InsightsTabs } from './InsightsTabs';
@@ -59,9 +59,24 @@ export default async function AssistantChatPage({
   // two conversation ids in one URL names no single conversation.
   const requested = typeof raw === 'string' ? raw : undefined;
 
-  // One read rather than the two this made: the header names no period, so there is nothing to
-  // resolve in parallel with. A bare `/insights` now fetches nothing at all.
-  const conversation = requested === undefined ? null : await readConversation(requested);
+  // **Two reads, and the paragraph this replaces is worth keeping because PET-76 wrote it and PET-76
+  // undid it.** It said "one read rather than the two this made... a bare `/insights` now fetches
+  // nothing at all", which was true when the header named no period and the tab bar carried no
+  // badge. The badge is the second thing on this screen that is a fact about the *account* rather
+  // than about the conversation, so something has to ask.
+  //
+  // What that costs is one **count** rather than one list: `GET /api/assistant/sessions/count`
+  // answers a single integer over the same predicate the list uses, which is the whole reason that
+  // endpoint exists rather than this page reading `sessions` and discarding the rows. So the claim
+  // narrows from "fetches nothing" to "fetches nothing it does not draw".
+  //
+  // `Promise.all` because neither depends on the other, and serialising two independent round trips
+  // is the mistake `/transactions` records for its own pair. Note `readSessionCount` **degrades to
+  // `null`** rather than throwing, so a failed count costs the badge and not the chat.
+  const [conversation, historyCount] = await Promise.all([
+    requested === undefined ? Promise.resolve(null) : readConversation(requested),
+    readSessionCount(),
+  ]);
 
   return (
     // **The provider wraps the header as well as `<main>`**, `FilterNavigation`'s requirement for
@@ -84,7 +99,7 @@ export default async function AssistantChatPage({
         }
       />
 
-      <InsightsTabs active="chat" />
+      <InsightsTabs active="chat" historyCount={historyCount} />
 
       {/* **Keyed on the requested session**, which is what makes every change the URL can express
           - a History link to another conversation, Back, a bookmarked `?session=` - re-seed the
