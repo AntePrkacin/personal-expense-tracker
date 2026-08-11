@@ -1814,6 +1814,44 @@ notice, both empty states, the "conversation no longer available" line and each 
 arms - and all of them join what A29 owes a designer. The stories exist to put them in front of one
 at once.
 
+**A code review of PR #86 changed three things about those two screens, and the first is worth
+keeping as a correction because the paragraph arguing for it is still above and was still wrong.**
+It said "New chat" is "a navigation rather than state, which keeps this header on the server and
+drops the `?session=` parameter for free" - every clause true and the conclusion false, because
+**the conversation is client state.** `AssistantChatScreen` seeds its five pieces of state from its
+props on mount only and sat at a fixed position with no `key`, so a `<Button href="/insights">`
+reset nothing twice over: on a bare `/insights` the href **is** the current URL, so nothing
+navigated at all and the next message was appended to the conversation the user had just asked to
+leave; and from `?session=A` the navigation happened, the server handed back `conversation: null`,
+and React reconciled the same component rather than remounting it, so A's messages stayed on screen
+and A's id stayed on every send. **`insights/NewChat.tsx` is the answer and it is
+`transactions/FilterNavigation.tsx`'s shape**: a provider wrapping the header and `<main>` both,
+because the control is above the boundary and the state is below it. Three things about it not to
+undo. The reset is a **`key`** rather than five setters, so the whole of "new chat" is one remount
+and `AssistantChatScreen` itself is untouched. `ChatSlot` **drops the `conversation` prop as well
+as the state**, keyed on a per-mount baseline, because `router.replace` is an RSC round trip away
+and a remount inside that window would re-seed from the conversation being abandoned - the same
+defect reached through its own fix. And `page.tsx` **keys `ChatSlot` on the requested session**,
+which is the half a click cannot express: a History link to another conversation, Back, a
+bookmarked `?session=`. `insights/page.test.tsx` is the route's own suite, added for that half, and
+both of its reconciliation cases fail with the `key` deleted.
+
+**The second is that a malformed `?session=` replaced the whole screen rather than dropping the
+parameter**, which is what the paragraph above promises and `lib/assistant.ts`'s own docblock
+claimed in as many words. `GET /api/assistant/sessions/{id}` answers a non-uuid with a **400** from
+`ParseUUIDPipe`, and `authorizedGet` reports that as `unavailable` - indistinguishable from an
+unreachable backend, so `readConversation` threw and `app/error.tsx` took the page. It checks the
+id's **shape** before asking now, `lib/periodParams.ts`'s call applied to a second parameter:
+validate and do not canonicalise, so a well-formed id the account does not have is still forwarded
+and still answered by the 404 arm. The suite had pinned the throw, which is why no gate caught it.
+
+**The third is the History caption's zone.** `lastMessageAt` is an ISO **instant** where
+`RecentTransactionsCard` is handed a real `YYYY-MM-DD` column, and `slice(0, 10)` took the **UTC**
+date out of it while `today` defaults to the frontend host's zone - a second zone on top of the
+host-versus-`APP_TIMEZONE` gap that screen already documents, so at UTC+2 a conversation from
+minutes ago read "Yesterday". Both sides are read in one zone now, which leaves only the documented
+gap.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

@@ -1112,7 +1112,7 @@ export interface components {
         };
         SendMessageDto: {
             /**
-             * @description The question. The cap exists so a pasted novel cannot be what blows the model context; the composer restates it client-side, because `maxLength` reaches no generated type and the resulting 400 would otherwise produce advice the user cannot act on.
+             * @description The question. Trimmed, so a whitespace-only message is a 400 rather than a turn. The cap exists so a pasted novel cannot be what blows the model context; the composer restates it client-side, because `maxLength` reaches no generated type and the resulting 400 would otherwise produce advice the user cannot act on.
              * @example How much did I spend on groceries last month?
              */
             message: string;

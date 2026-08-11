@@ -327,6 +327,14 @@ describe('Assistant endpoints (e2e)', () => {
       await send({ message: '' }).expect(400);
     });
 
+    it('answers 400 for a whitespace-only message', async () => {
+      // `@MinLength(1)` measures the untrimmed string, so this passed validation
+      // and stored a session whose derived title was the empty string - a History
+      // row rendering a link with no accessible name, over a blank question. The
+      // DTO trims now, which is what makes this the same case as the one above.
+      await send({ message: '   \n\t ' }).expect(400);
+    });
+
     it('answers 400 past the message cap', async () => {
       await send({ message: 'x'.repeat(MAX_MESSAGE_CHARS + 1) }).expect(400);
     });

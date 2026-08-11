@@ -99,6 +99,14 @@ was cut will confidently answer "you never shopped there". A fact the model is t
 fact the UI can state, or the only witness to it is a sentence the model may or may not produce -
 hence the nullable `truncation` on the reply DTO.
 
+**The message is trimmed in the DTO, and a review of PR #86 is why that is not cosmetic.**
+`@MinLength(1)` measures the **untrimmed** string, so `{"message":"   "}` was a valid turn: the
+composer's `canSend` guards the UI and this endpoint is reachable directly, `deriveSessionTitle`
+collapsed the value to `''`, and `assistant_sessions.title` is NOT NULL but not non-empty - so the
+History row rendered a link with no text and therefore no accessible name, over a blank question the
+model was asked and charged for. Trimmed at the DTO rather than in the service, which is
+`ListTransactionsQueryDto.search`'s call: both length bounds then measure what will actually be sent.
+
 **There is no response schema and no JSON response type**, which is the one respect in which this
 differs from every other Gemini call in the repo: the answer is prose. So there is no schema whose
 field descriptions double as instruction - the whole instruction is the prompt string.

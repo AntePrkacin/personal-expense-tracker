@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsString,
   IsUUID,
@@ -22,8 +23,19 @@ export class SendMessageDto {
     minLength: 1,
     maxLength: MAX_MESSAGE_CHARS,
     description:
-      'The question. The cap exists so a pasted novel cannot be what blows the model context; the composer restates it client-side, because `maxLength` reaches no generated type and the resulting 400 would otherwise produce advice the user cannot act on.',
+      'The question. Trimmed, so a whitespace-only message is a 400 rather than a turn. The cap exists so a pasted novel cannot be what blows the model context; the composer restates it client-side, because `maxLength` reaches no generated type and the resulting 400 would otherwise produce advice the user cannot act on.',
   })
+  // Trimmed here rather than in the service, `ListTransactionsQueryDto.search`'s
+  // reasoning applied to a required field: both length bounds then measure what
+  // will actually be sent to the model. **`@MinLength(1)` runs against the
+  // untrimmed string**, so without this a body of `"   "` was a valid turn - the
+  // composer's own `canSend` guards the UI and this endpoint is reachable
+  // directly - and `deriveSessionTitle` collapsed it to `''`, which is legal in a
+  // NOT NULL column. The History row then rendered a link with no text and
+  // therefore no accessible name, over a blank question the model was asked.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @MinLength(1)
   @MaxLength(MAX_MESSAGE_CHARS)

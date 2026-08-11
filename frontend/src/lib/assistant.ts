@@ -68,6 +68,14 @@ export async function requireSessions(): Promise<AssistantSessions> {
 }
 
 /**
+ * `8-4-4-4-12` hex and nothing else, matching what `ParseUUIDPipe` accepts.
+ *
+ * Shape only, deliberately: this is not a claim that the id names a live conversation, which is
+ * the backend's to answer. It is what tells a **malformed** value apart from a merely unknown one.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * One conversation with its messages, or `null` when it is not there.
  *
  * **A missing conversation is `null` rather than `notFound()`**, which is the one place this
@@ -76,8 +84,24 @@ export async function requireSessions(): Promise<AssistantSessions> {
  * the honest answer to a stale `?session=` is the same one `transactions/[id]/page.tsx` gives an
  * invalid `?sort=`: drop the parameter and render the screen. The chat screen says so in a
  * `role="status"` line rather than replacing the page.
+ *
+ * **A malformed id is dropped here rather than asked about**, and a review of PET-73 is why this
+ * function has a shape check at all. The docblock already promised that a stale `?session=` drops
+ * the parameter, and `frontend/src/app/CLAUDE.md` says the same - but `GET
+ * /api/assistant/sessions/{id}` answers a non-uuid with a **400** from `ParseUUIDPipe`, which
+ * `authorizedGet` reports as `unavailable`, indistinguishable here from an unreachable backend and
+ * therefore thrown. So `/insights?session=abc` - a truncated paste, a hand-edited URL - replaced
+ * the whole screen with the error boundary. Validating the shape is
+ * `lib/periodParams.ts`'s call for the identical problem: **validate and do not canonicalise**, so
+ * a well-formed id the account does not have is still forwarded and still answered by the 404
+ * arm below. The `unavailable` throw stays, now unreachable from this caller, because it is what a
+ * genuinely unanswerable backend still deserves.
  */
 export async function readConversation(sessionId: string): Promise<AssistantConversation | null> {
+  if (!UUID.test(sessionId)) {
+    return null;
+  }
+
   const result = await authorizedGet<AssistantConversation>(
     `/api/assistant/sessions/${encodeURIComponent(sessionId)}`,
   );
@@ -90,9 +114,9 @@ export async function readConversation(sessionId: string): Promise<AssistantConv
     redirect(ACCESS_ROUTES.login);
   }
 
-  // `missing` is a 404 - the conversation is gone or never existed. A 400 from `ParseUUIDPipe`
-  // arrives as `unavailable`, which is the same answer to the user: this id names nothing they
-  // can open. Both drop the parameter rather than replacing the screen.
+  // `missing` is a 404 - the conversation is gone or never existed, which drops the parameter
+  // rather than replacing the screen. A non-uuid never reaches here at all; see the shape check
+  // above for why it cannot be folded in on this side of the request.
   if (result.reason === 'missing') {
     return null;
   }

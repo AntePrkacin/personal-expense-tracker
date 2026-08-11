@@ -904,6 +904,16 @@ Regenerate. The accurate statement is **heals on the next write**, `docs/TODO.md
 deferred work beside the debounce the LLM swap already needs, and the two want the same fix built
 once.
 
+**PET-73 built that fix, so read "there is no retry, no dirty flag and no sweep" as dated**, and
+read `InsightsService.dirty`'s own docblock for the mechanism rather than a copy of it here. The
+whole of what belongs in this file is the bound - a burst of N writes produces **at most two runs** -
+and the one thing a review of PR #86 corrected about it: the follow-up hung on the success path
+alone, so the **empty-account** path, which settles the state just as much by removing its own
+placeholder, scheduled none and leaked its flag. Reachable in one step - delete the last
+transaction, then create one before that run returns - and the consequence was the exact staleness
+the flag exists to close. Both settling paths schedule one now; the two that settle nothing (a
+failed run, a run reclaimed as abandoned) still deliberately do not.
+
 ## Templates
 
 **`src/templates/` serves the admin-managed data behind onboarding and the category picker, and

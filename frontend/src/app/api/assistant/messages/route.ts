@@ -64,12 +64,17 @@ export async function POST(request: NextRequest) {
   // status, which is what keeps the copy in one place.
   //
   // An absent status means the request never completed - the convention `lib/backend.ts` sets -
-  // and 503 is the honest answer to that from here: something downstream did not answer. Note a
-  // **401 travels through unchanged rather than becoming a redirect**, for the reason
-  // `app/api/insights/route.ts` records: a redirect answers the browser's `fetch` with an HTML
-  // login page carrying a 200, which the composer would render as a reply.
+  // and **502 is the honest answer to that from here, deliberately not 503.** This shipped as 503
+  // and a review caught it: `lib/sendAssistantMessage.ts` reads a 503 as `unavailable`, whose copy
+  // says the assistant is switched off on this deployment, so a dropped connection or an
+  // unreachable backend told the user something definite about configuration. That file's own
+  // taxonomy assigns "a request that never completed" to `failed` ("Try again in a moment"), which
+  // is what any status outside its switch produces. Note a **401 travels through unchanged rather
+  // than becoming a redirect**, for the reason `app/api/insights/route.ts` records: a redirect
+  // answers the browser's `fetch` with an HTML login page carrying a 200, which the composer would
+  // render as a reply.
   return new NextResponse(null, {
-    status: result.status ?? 503,
+    status: result.status ?? 502,
     headers: NO_STORE,
   });
 }

@@ -510,6 +510,25 @@ describe('InsightsService', () => {
       expect(generatorGenerate).toHaveBeenCalledTimes(2);
     });
 
+    it('starts one more run when the account was empty during the run', async () => {
+      // The empty-account path settles the state too - it removes its own
+      // placeholder - so it owes the same follow-up. Reachable in one step:
+      // deleting the last transaction starts this run, and a create landing
+      // before it returns loses the 409 and marks the account dirty. Shipped
+      // without it, the new transaction reached no set until the next write.
+      generatorGenerate
+        .mockImplementationOnce(() => {
+          service.markDirty('user-id');
+          return Promise.resolve(null);
+        })
+        .mockImplementation(() => Promise.resolve(generatedSet()));
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(2);
+    });
+
     it('starts nothing extra when no write landed during the run', async () => {
       generatorGenerate.mockResolvedValue(generatedSet());
 

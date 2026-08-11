@@ -83,13 +83,27 @@ describe('the list', () => {
     expect(screen.getByText('Last active Yesterday')).toBeInTheDocument();
   });
 
-  it('reads the instant as a calendar date rather than through a Date', () => {
-    // `formatRelativeDate` takes `YYYY-MM-DD`, and `lastMessageAt` is an ISO instant - so the
-    // screen slices rather than parsing. Round-tripping a calendar date through a `Date` shifts it
-    // across timezones, which is the rule `lib/date.ts` states from both directions.
-    render(<AssistantHistoryScreen sessions={[session()]} today={TODAY} />);
+  it('reads the instant in the zone `today` is read in', () => {
+    // `formatRelativeDate` takes `YYYY-MM-DD` and `lastMessageAt` is an ISO **instant**, so
+    // something has to turn one into the other. `slice(0, 10)` took the **UTC** date while `today`
+    // defaults to the host's own zone, which is a second zone on top of the documented
+    // host-versus-`APP_TIMEZONE` gap - so a conversation from minutes ago read "Yesterday".
+    //
+    // Both bounds are built from **local** parts for that reason: 00:30 catches a host ahead of
+    // UTC (the instant lands on the previous UTC day) and 23:30 a host behind it (the next one).
+    // Neither can catch anything in UTC itself, where the two dates never differ, which is worth
+    // knowing before reading a green run here as proof on a UTC-deployed frontend.
+    for (const local of [new Date(2026, 7, 11, 0, 30), new Date(2026, 7, 11, 23, 30)]) {
+      const { unmount } = render(
+        <AssistantHistoryScreen
+          sessions={[session({ lastMessageAt: local.toISOString() })]}
+          today={TODAY}
+        />,
+      );
 
-    expect(screen.getByText('Last active Today')).toBeInTheDocument();
+      expect(screen.getByText('Last active Today')).toBeInTheDocument();
+      unmount();
+    }
   });
 
   it('draws no empty state when there is anything to list', () => {

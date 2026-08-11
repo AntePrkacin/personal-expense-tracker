@@ -1,10 +1,9 @@
-import { Button } from '@/components/ui/Button';
 import { readConversation } from '@/lib/assistant';
 import { currentPeriod, readPeriods } from '@/lib/periods';
 
 import { PageHeader } from '../PageHeader';
-import { AssistantChatScreen } from './AssistantChatScreen';
-import { INSIGHTS_TAB_HREFS, InsightsTabs } from './InsightsTabs';
+import { InsightsTabs } from './InsightsTabs';
+import { ChatSlot, NewChatButton, NewChatProvider } from './NewChat';
 import { SESSION_PARAM } from './AssistantHistoryScreen';
 
 // The assistant's Chat view (PET-73). This route used to be the AI Insights screen; those cards
@@ -14,6 +13,12 @@ import { SESSION_PARAM } from './AssistantHistoryScreen';
 // one.** That is a genuine improvement on the `InsightsScreen` this replaces, which had to wrap
 // the header because Regenerate's label and disabled state came from the same value the cards did.
 // Nothing in this header depends on the conversation.
+//
+// **That still holds, and PET-73's review narrowed it by one control.** "New chat" is a client
+// component now, because a link cannot reset client state on the URL it already points at, so the
+// header renders one client leaf inside otherwise server-rendered markup - which is not the thing
+// this paragraph rules out. `NewChat.tsx` carries the account; nothing in the header reads the
+// conversation still, which is the claim that mattered.
 //
 // **The title is "Assistant" and the sidebar label is not.** `ui/Sidebar` renders "Insights" under
 // a section heading "ASSISTANT"; renaming the item would repeat that heading directly above it and
@@ -52,7 +57,11 @@ export default async function AssistantChatPage({
   ]);
 
   return (
-    <>
+    // **The provider wraps the header as well as `<main>`**, `FilterNavigation`'s requirement for
+    // the same reason: "New chat" lives in the header and the state it resets lives below. It is
+    // the only client boundary this file introduces - the header, the tab bar and this page all
+    // stay Server Components.
+    <NewChatProvider>
       <PageHeader
         // The empty string is unreachable through the API - every account has at least the period
         // it is in - and it is written rather than asserted because a header with a blank overline
@@ -60,24 +69,30 @@ export default async function AssistantChatPage({
         overline={currentPeriod(periods)?.label ?? ''}
         title="Assistant"
         action={
-          // A navigation rather than state, which keeps this header on the server and drops the
-          // session parameter for free. History carries none, which `PageHeader`'s optional action
-          // already supports.
-          <Button label="New chat" variant="secondary" href={INSIGHTS_TAB_HREFS.chat} />
+          // A button rather than the link this shipped as, because a link to the URL the user is
+          // already on resets nothing and the conversation is client state. `NewChat.tsx` carries
+          // the full account. History carries no action at all, which `PageHeader`'s optional
+          // slot already supports.
+          <NewChatButton />
         }
       />
 
       <InsightsTabs active="chat" />
 
-      {/* **No `send` prop.** It defaults inside the client bundle, because
-          `sendAssistantMessage` is an ordinary browser function rather than a Server Action and
-          React cannot serialise one across this boundary - passing it here is a 500 on every load
-          of this route, which is how the browser walk found it. `AssistantChatScreen` carries the
-          full account. */}
-      <AssistantChatScreen
+      {/* **Keyed on the requested session**, which is what makes every change the URL can express
+          - a History link to another conversation, Back, a bookmarked `?session=` - re-seed the
+          chat rather than leave the previous one on screen still posting its own id. "New chat" on
+          the current URL is the case a key cannot see; `ChatSlot` is where that half lives.
+
+          **No `send` prop.** It defaults inside the client bundle, because `sendAssistantMessage`
+          is an ordinary browser function rather than a Server Action and React cannot serialise
+          one across this boundary - passing it here is a 500 on every load of this route, which is
+          how the browser walk found it. `AssistantChatScreen` carries the full account. */}
+      <ChatSlot
+        key={requested ?? 'new'}
         conversation={conversation}
         missingSession={requested !== undefined && conversation === null}
       />
-    </>
+    </NewChatProvider>
   );
 }

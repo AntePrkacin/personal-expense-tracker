@@ -137,6 +137,18 @@ module (`lib/assistant.ts`) exporting both redirecting reads for the two `page.t
 non-redirecting send for this one. `docs/explainers/cancelling-an-ai-request.md` is the
 plain-language account.
 
+**One thing it deliberately does not share, and a review of PR #86 is why: an unreachable backend is
+a 502 here, not the 503 the insights handler answers.** Both handlers face the same fact - an absent
+status from `lib/session.ts` means the request never completed - and the difference is what the
+caller does with it. The insights poll has one failure branch, so a status is only a status; the
+composer has seven, and `lib/sendAssistantMessage.ts` maps **503 to `unavailable`**, whose copy says
+the assistant is switched off on this deployment. So a dropped connection told the user something
+definite and wrong about configuration, on the one screen where a per-status taxonomy exists. Any
+status outside that switch classifies as `failed` - "try again in a moment" - which is where that
+file's own docblock already assigns a request that never completed. **A shared convention stops
+being shared the moment one consumer reads meaning into the number**, which is the general form
+worth carrying to the next handler.
+
 **There are six verbs in `lib/session.ts` now**: `authorizedGet`, `authorizedPost`,
 PET-33's `authorizedDelete`, PET-32's `authorizedPatch`, PET-59's `authorizedPostFormData` and
 PET-73's `authorizedPostJson`. **Four of them discard the response body and share

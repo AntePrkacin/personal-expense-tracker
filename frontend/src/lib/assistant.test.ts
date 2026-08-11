@@ -138,15 +138,39 @@ describe('readConversation', () => {
     await expect(readConversation(SESSION_ID)).resolves.toEqual(CONVERSATION);
   });
 
-  it('encodes the id into the path', async () => {
+  it('puts the id in the path, encoded', async () => {
+    // The `encodeURIComponent` stays and is now unreachable-by-construction: the shape check drops
+    // every value that has anything to encode, which is the case above. Kept rather than deleted
+    // on this repo's standing rule that a value which cannot arrive is not an enforcement, and
+    // because the two guards protect different things - one the screen, one the URL.
     const fetchMock = respondWith(200, CONVERSATION);
 
-    await readConversation('a b/c');
+    await readConversation(SESSION_ID);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://backend.test/api/assistant/sessions/a%20b%2Fc',
+      `http://backend.test/api/assistant/sessions/${SESSION_ID}`,
       expect.anything(),
     );
+  });
+
+  it('answers null for a malformed id, without asking the backend', async () => {
+    // The 400 `ParseUUIDPipe` answers arrives as `unavailable`, which this module cannot tell
+    // apart from an unreachable backend - so before the shape check, `/insights?session=abc`
+    // replaced the whole screen with the error boundary rather than dropping the parameter the
+    // way this function's own docblock and `frontend/src/app/CLAUDE.md` both promise.
+    const fetchMock = respondWith(400, null);
+
+    await expect(readConversation('abc')).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('still asks about a well-formed id the account may not have', async () => {
+    // Validate and do not canonicalise, `lib/periodParams.ts`'s call: this app cannot know which
+    // uuids name conversations, so an unknown one is the backend's 404 to answer.
+    const fetchMock = respondWith(404, null);
+
+    await expect(readConversation(SESSION_ID)).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it('answers null on a 404 rather than throwing', async () => {

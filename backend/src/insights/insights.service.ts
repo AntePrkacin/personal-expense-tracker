@@ -128,8 +128,10 @@ export class InsightsService implements OnApplicationShutdown {
    *    logging.
    * 2. {@link runGeneration} clears the flag **as its own run starts**, so it can
    *    only ever be re-set by a write that landed after that read began.
-   * 3. On the success path, a flag that is set again starts **exactly one** more
-   *    run.
+   * 3. On either path that **settled** the state - a set written, or an empty
+   *    account's placeholder removed - a flag that is set again starts **exactly
+   *    one** more run. See {@link startFollowUpIfDirty} for why the two paths that
+   *    settled nothing schedule none.
    *
    * Because each run clears the flag as it starts, a burst of N writes produces
    * **at most two runs**, and there is no path that schedules a third from the
@@ -291,6 +293,18 @@ export class InsightsService implements OnApplicationShutdown {
         // so it holds no content to audit and nothing a soft-delete would keep.
         // The one row in this database exempt from the tombstone convention.
         await db.delete(insightSets).where(this.stillRunning(runId));
+
+        // **This path schedules a follow-up too, and a review of PET-73 is why.**
+        // It read as the account having nothing to say, so nothing to chase - but
+        // the generator answered `null` because it read **zero** transactions, and
+        // a write landing after that read is exactly how the account stops being
+        // empty. Reachable in one step: delete the last transaction (this run
+        // starts and clears the flag), then create one before this run returns -
+        // the create loses the 409 and marks the account dirty. Without this call
+        // the new transaction reached no set until the next write, which is the
+        // staleness {@link dirty} exists to close, and the user's entry leaked in
+        // the set for the lifetime of the process.
+        await this.startFollowUpIfDirty(userId, runId);
         return;
       }
 
@@ -377,30 +391,7 @@ export class InsightsService implements OnApplicationShutdown {
         return;
       }
 
-      // A write landed while this run was reading, so the set it just wrote is
-      // already stale. Start exactly one more, and only from the success path -
-      // a run that failed or was reclaimed has not settled the state it would be
-      // scheduling against, and chaining off it is how a bounded retry becomes an
-      // unbounded one. `generate` is called rather than `runGeneration`, so the
-      // follow-up takes the same placeholder row, the same 409 guard and the same
-      // shutdown tracking as any other run; its own start clears the flag again.
-      if (this.dirty.has(userId)) {
-        this.logger.debug(
-          `Insight set for user ${userId} was superseded while run ${runId} ` +
-            `was in flight; starting one more run.`,
-        );
-        await this.generate(userId).catch((error) => {
-          // A 409 here means yet another run beat this one to it, which is the
-          // benign outcome: something newer is already generating.
-          if (error instanceof ConflictException) {
-            return;
-          }
-          this.logger.error(
-            `The follow-up insight run for user ${userId} could not be started`,
-            error instanceof Error ? error.stack : String(error),
-          );
-        });
-      }
+      await this.startFollowUpIfDirty(userId, runId);
     } catch (error) {
       const db = await this.userDatabases.getUserDb(userId);
       await db
@@ -409,6 +400,45 @@ export class InsightsService implements OnApplicationShutdown {
         .where(this.stillRunning(runId));
       throw error;
     }
+  }
+
+  /**
+   * Starts one more run when a write landed while this one was reading.
+   *
+   * Called from **both** paths that settled the state - the set written, and the
+   * empty account's placeholder removed - and from neither of the two that did
+   * not: a run that failed or was reclaimed has not settled the state a follow-up
+   * would be scheduling against, and chaining off it is how a bounded retry
+   * becomes an unbounded one.
+   *
+   * `generate` is called rather than `runGeneration`, so the follow-up takes the
+   * same placeholder row, the same 409 guard and the same shutdown tracking as any
+   * other run; its own start clears the flag again, which is the bound.
+   */
+  private async startFollowUpIfDirty(
+    userId: string,
+    runId: string,
+  ): Promise<void> {
+    if (!this.dirty.has(userId)) {
+      return;
+    }
+
+    this.logger.debug(
+      `Insight set for user ${userId} was superseded while run ${runId} ` +
+        `was in flight; starting one more run.`,
+    );
+
+    await this.generate(userId).catch((error) => {
+      // A 409 here means yet another run beat this one to it, which is the
+      // benign outcome: something newer is already generating.
+      if (error instanceof ConflictException) {
+        return;
+      }
+      this.logger.error(
+        `The follow-up insight run for user ${userId} could not be started`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    });
   }
 
   /** This run's row, and only while it is still the run that owns the state. */

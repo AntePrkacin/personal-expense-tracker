@@ -311,15 +311,17 @@ describe('the header action, which differs on every screen', () => {
   it('the assistant offers New chat, and no longer Regenerate', async () => {
     // **Regenerate moved to the Dashboard with the cards it regenerates** (PET-73). This header
     // used to carry it, which INS-1 and node 38:542 both draw; there is nothing on this screen for
-    // it to act on any more. What replaces it is a navigation rather than state, which is what
-    // keeps this header a Server Component and drops the `?session=` parameter for free.
+    // it to act on any more.
+    //
+    // **It is a button rather than the link this first shipped as**, which a review caught: the
+    // conversation is client state, so a link pointing at the URL the user is already on reset
+    // nothing and the next message went to the conversation they asked to leave. `NewChat.tsx`
+    // carries the account, and `NewChat.test.tsx` pins the reset itself.
     await renderScreen(InsightsPage);
 
     const header = screen.getByRole('banner');
-    expect(within(header).getByRole('link', { name: 'New chat' })).toHaveAttribute(
-      'href',
-      '/insights',
-    );
+    expect(within(header).getByRole('button', { name: 'New chat' })).toBeInTheDocument();
+    expect(within(header).queryByRole('link', { name: 'New chat' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
   });
 
