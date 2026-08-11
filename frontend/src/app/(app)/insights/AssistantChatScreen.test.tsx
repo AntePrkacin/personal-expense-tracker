@@ -10,6 +10,7 @@ import {
   MISSING_SESSION_NOTICE,
 } from './AssistantChatScreen';
 import { DISCLOSURE } from './AssistantComposer';
+import { AssistantMarkdown } from './AssistantMarkdown';
 import { THINKING_TEXT } from './TypingIndicator';
 import { FAILURE_COPY, MAX_MESSAGE_CHARS } from './assistantChat';
 
@@ -486,6 +487,65 @@ describe('the message list', () => {
 
     await waitFor(() => expect(screen.getByText(/<img src=x/)).toBeInTheDocument());
     expect(document.querySelector('img')).toBeNull();
+  });
+
+  it('renders a markdown image as its alt text, and requests nothing', async () => {
+    // **An image is the one element that fires a network request on render**, so unlike the anchor
+    // beside it in the map it cannot wait to be clicked. `defaultUrlTransform` filters protocols and
+    // says nothing about hosts, so an `![](https://third-party/...)` in a reply would beacon the
+    // user's IP and agent string to whoever the model echoed - reachable through a merchant name the
+    // user controls. The alt text renders in its place rather than the node being dropped, on the
+    // same argument that refuses `skipHtml`: swallowing part of an answer in silence is worse.
+    const user = userEvent.setup();
+    renderScreen(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        data: turn({
+          reply: 'Here it is: ![Receipt total](https://third-party.example/beacon.png)',
+        }),
+      }),
+    );
+
+    await ask(user, 'Show me');
+
+    expect(await screen.findByText('Receipt total')).toBeInTheDocument();
+    expect(document.querySelector('img')).toBeNull();
+  });
+
+  it("keeps a table column's alignment, because a money column is right-aligned", async () => {
+    // The prompt asks for a table when comparing categories or periods, so the common table here is
+    // a money table the model right-aligns with `| ---: |`. `th` hard-coded `text-left` and both
+    // cells dropped every prop react-markdown passes, so every such column rendered left-aligned.
+    // A class assertion because alignment *is* the behaviour and jsdom runs no layout - the same
+    // exception the daisyUI-state case below claims.
+    const user = userEvent.setup();
+    renderScreen(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        data: turn({
+          reply: ['| Category | Spent |', '| :-- | ---: |', '| Groceries | 312.40 |'].join('\n'),
+        }),
+      }),
+    );
+
+    await ask(user, 'Break it down');
+
+    expect(await screen.findByRole('columnheader', { name: 'Spent' })).toHaveClass('text-right');
+    expect(screen.getByRole('columnheader', { name: 'Category' })).toHaveClass('text-left');
+    expect(screen.getByRole('cell', { name: '312.40' })).toHaveClass('text-right');
+    expect(screen.getByRole('cell', { name: 'Groceries' })).toHaveClass('text-left');
+  });
+
+  it('memoizes a bubble, so a keystroke in the composer does not re-parse the conversation', () => {
+    // **A structural assertion, and the only one available.** `memo`'s effect is a render that does
+    // not happen, which no DOM query can see - so this pins the wrapper the way `layout.test.tsx`
+    // pins the *absence* of a `force-dynamic` export, and for the same reason: one deletion no
+    // rendering assertion would notice. What it defends is real and was measured in review - the
+    // composer's `draft` is state three components up, react-markdown caches nothing, so before this
+    // every character typed re-ran a full unified parse for every bubble on screen.
+    expect((AssistantMarkdown as unknown as { $$typeof: symbol }).$$typeof).toBe(
+      Symbol.for('react.memo'),
+    );
   });
 
   it('gives every bubble its daisyUI root and its side', () => {

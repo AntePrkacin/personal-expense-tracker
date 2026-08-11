@@ -107,8 +107,12 @@ const MARKDOWN: AssistantConversation = {
         '',
         'You spent **1,904.30 EUR** of a 2,000.00 EUR budget, so 95.70 EUR is left. "Over" means _above the cap you set for that category_, not above the budget.',
         '',
+        // **The three money columns are right-aligned, which is the review surface for an
+        // alignment that used to be discarded** (see `AssistantMarkdown`'s own note). This row read
+        // `| --- |` four times until a review of PR #88, so the story could not have shown the
+        // defect: every column was left-aligned in the markdown as well as on screen.
         '| Category | Spent | Cap | Over |',
-        '| --- | --- | --- | --- |',
+        '| :--- | ---: | ---: | ---: |',
         '| Groceries | 312.40 | 300.00 | 12.40 |',
         '| Transport | 188.00 | 200.00 | — |',
         '| Eating out | 402.15 | 250.00 | 152.15 |',
@@ -139,6 +143,15 @@ const MARKDOWN: AssistantConversation = {
 const neverSettles = () => new Promise<SendMessageResult>(() => {});
 
 /**
+ * Turns answered so far in this Storybook session, which is what keeps the ids unique.
+ *
+ * Module scope and mutable, deliberately: a story is not a suite, and monotonic ids are easier to
+ * read in devtools than random ones while still never colliding. It never resets, so two presses in
+ * two different stories cannot collide either.
+ */
+let turns = 0;
+
+/**
  * What the default `send` answers, and it is a real shape rather than a cast (PET-76).
  *
  * This was `{} as never`, which typechecks and **cannot survive an actual submit**: the success
@@ -147,26 +160,38 @@ const neverSettles = () => new Promise<SendMessageResult>(() => {});
  * the `Empty` story in this ticket's browser walk, and invisible to every gate, because
  * `build-storybook` bundles stories without running one and the story harness under Jest renders
  * them without interacting.
+ *
+ * **It is a function of the submitted text rather than a constant, and that is the second half of
+ * the same defect.** As a constant it carried a fixed `'sent'` and `'answered'`, so a **second**
+ * press in `Empty` or `Conversation` appended a second pair of messages holding ids the list was
+ * already keyed on - React logs the duplicate-key warning and reconciles the wrong rows onto the
+ * wrong bubbles. Found by a review of PR #88, in exactly the flow the fix above made pressable for
+ * the first time. Echoing the submitted message also makes the answer visibly a reply to what was
+ * typed rather than to whatever this constant happened to say.
  */
-const REPLY: SendMessageResult = {
-  ok: true,
-  data: {
-    sessionId: SESSION_ID,
-    title: 'How much did I spend on groceries last month?',
-    message: {
-      id: 'sent',
-      role: 'user',
-      content: 'How much did I spend on groceries last month?',
-      createdAt: '2026-08-11T09:20:00.000Z',
+const reply = (message: string): SendMessageResult => {
+  turns += 1;
+
+  return {
+    ok: true,
+    data: {
+      sessionId: SESSION_ID,
+      title: message,
+      message: {
+        id: `sent-${turns}`,
+        role: 'user',
+        content: message,
+        createdAt: '2026-08-11T09:20:00.000Z',
+      },
+      reply: {
+        id: `answered-${turns}`,
+        role: 'assistant',
+        content: 'You spent **312.40 EUR** on Groceries in July 2026.',
+        createdAt: '2026-08-11T09:20:11.000Z',
+      },
+      truncation: null,
     },
-    reply: {
-      id: 'answered',
-      role: 'assistant',
-      content: 'You spent **312.40 EUR** on Groceries in July 2026.',
-      createdAt: '2026-08-11T09:20:11.000Z',
-    },
-    truncation: null,
-  },
+  };
 };
 
 const Frame = ({
@@ -175,7 +200,11 @@ const Frame = ({
 }: Partial<React.ComponentProps<typeof AssistantChatScreen>> & { active?: 'chat' | 'history' }) => (
   <div className="bg-base-200 flex min-h-screen flex-col gap-6 p-10">
     <InsightsTabs active={active} />
-    <AssistantChatScreen conversation={null} send={async () => REPLY} {...props} />
+    <AssistantChatScreen
+      conversation={null}
+      send={async ({ message }) => reply(message)}
+      {...props}
+    />
   </div>
 );
 

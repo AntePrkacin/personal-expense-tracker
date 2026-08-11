@@ -46,6 +46,15 @@ import { MAX_MESSAGE_CHARS } from './assistantChat';
 // `resize-none`, because the user agent's own resize handle occupies exactly the corner the button
 // now sits in. The accessible names are unchanged - `aria-label` carries what the visible label
 // used to - so every existing assertion still passes, which is the point of naming them that way.
+//
+// **The resize handle is not the only thing in that corner, which is what a review of PR #88 found
+// and is the unfixed half of the trap above.** A `textarea`'s **vertical scrollbar** occupies the
+// same inline-end edge, and it appears the moment a question outgrows `h-24` - so a button flush in
+// the corner sits on top of the bottom of the scroll track, and that part of it cannot be dragged.
+// `resize-none` cannot help: the scrollbar is not the handle and is not optional. Trailing padding
+// cannot either, because it insets the **text** and the scrollbar is outside the content box. So
+// the button is inset past the gutter instead rather than being moved out of the field, which would
+// have changed a design decision to fix a geometry one - see the measurement on the class below.
 
 /**
  * **The disclosure, and it is categorically larger than receipt scanning's.**
@@ -114,14 +123,29 @@ export function AssistantComposer({
         <div className="relative">
           <textarea
             id="assistant-message"
-            // `pe-14` clears the button in the corner: `btn-circle` is 2.5rem wide and sits at
-            // `end-2`, so 3.5rem of trailing padding leaves half a rem of air - measured at 56px of
-            // padding-inline-end in the walk. Both are logical properties (`pe`, `end`) rather than
-            // `pr`/`right`, so the pair stays correct if this app is ever laid out right-to-left.
-            // `resize-none`
+            // `pe-17` clears the button in the corner: `btn-circle` is 2.5rem wide and sits at
+            // `end-5`, so 4.25rem of trailing padding leaves half a rem of air. Both are logical
+            // properties (`pe`, `end`) rather than `pr`/`right`, so the pair stays correct if this
+            // app is ever laid out right-to-left. `resize-none`
             // because the user agent's resize handle occupies that exact corner otherwise, and a
             // grab handle under a button is a control the user cannot reach.
-            className="textarea h-24 w-full resize-none pe-14"
+            //
+            // **`end-5` rather than the `end-2` this shipped at, and the extra 12px is the
+            // scrollbar's** - see the header comment. A classic vertical scrollbar is 12px to 17px
+            // wide depending on the platform, plus the field's 1px border, so 1.25rem of inset is
+            // the first step on Tailwind's scale that clears the widest of them.
+            //
+            // **Measured rather than reasoned, and the old placement was probed in the same run.**
+            // The walk fills the field until it scrolls and derives the gutter from
+            // `offsetWidth - clientWidth` less the two borders, which is the only definition of
+            // "outside the gutter" that does not hard-code a scrollbar width: **15px of gutter
+            // behind a 1px border, so its inner edge is 16px from the field's outer edge**. The
+            // button's inline-end edge now sits at **20px**, clearing it by 4, where `end-2` put it
+            // at **8px** - 8px inside the track, which is the control this check needs to have been
+            // seen failing. Trailing padding measures 68px against the button's 20px + 40px, so the
+            // half-rem of air above is the same half-rem as before. Under overlay scrollbars (macOS)
+            // the gutter has no layout width at all and the inset is simply a slightly wider gap.
+            className="textarea h-24 w-full resize-none pe-17"
             placeholder="How much did I spend on groceries last month?"
             maxLength={MAX_MESSAGE_CHARS}
             value={value}
@@ -156,7 +180,7 @@ export function AssistantComposer({
             <button
               type="button"
               aria-label="Stop"
-              className="btn btn-circle btn-error absolute end-2 bottom-2"
+              className="btn btn-circle btn-error absolute end-5 bottom-2"
               onClick={onStop}
             >
               <Square className="size-4" aria-hidden="true" />
@@ -165,7 +189,7 @@ export function AssistantComposer({
             <button
               type="submit"
               aria-label="Send"
-              className="btn btn-circle btn-primary absolute end-2 bottom-2"
+              className="btn btn-circle btn-primary absolute end-5 bottom-2"
               disabled={!canSend}
             >
               <SendHorizontal className="size-4" aria-hidden="true" />

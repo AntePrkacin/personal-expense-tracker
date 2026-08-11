@@ -1951,6 +1951,66 @@ it looks like it should not be on.
 Two-of-the-four-headers paragraph above, where that amendment lives, since it is a claim about all
 four screens rather than about these two.
 
+**A code review of PR #88 found six things, and what they have in common is the interesting part:
+five of the six are costs the markdown rendering created rather than defects in it.** Permitting
+one new capability moved four separate questions from "cannot happen" to "happens on ordinary
+data", and none of the six could fail a gate. Each is documented where it happens; three reach past
+their own file.
+
+**The reply's parse is memoized, and before that every keystroke re-parsed the whole conversation.**
+The bubble was a bare `string` until this ticket, so a re-render of the list cost nothing;
+react-markdown caches nothing at all - it builds a fresh processor and re-parses on every render -
+and the composer's `draft` is state on `AssistantChatScreen`, three components above the bubbles. So
+a resumed twenty-turn conversation paid twenty full unified parses **per character typed**, on the
+one control the user is interacting with. `AssistantMarkdown` is wrapped in `memo` and its
+`remarkPlugins` array is hoisted to module scope, which is the other half: a fresh array is a changed
+prop and would have defeated the memo from inside. The general form is worth carrying, because this
+app now has three components whose render is genuinely expensive: **a component whose props are one
+primitive memoizes exactly, and the moment a cheap child becomes an expensive one, every ancestor's
+state becomes its problem.** The assertion for it is structural - `memo`'s effect is a render that
+does not happen, which no DOM query can see - so `AssistantChatScreen.test.tsx` pins the wrapper the
+way `layout.test.tsx` pins the _absence_ of a `force-dynamic` export, and for the same reason.
+
+**`img` was missing from the tag map, and it is the one element that acts before the user does.**
+The file's stated rule is that a state a caller cannot produce is still a state to handle, and it
+applied that to the anchor - which needs a click, so an odd one costs nothing until asked for. An
+image fires a request from the user's browser the moment the bubble paints, and
+`defaultUrlTransform` filters protocols while saying nothing about hosts: a
+`![](https://third-party/x.png)` echoed out of a merchant name the user controls is a beacon
+carrying their IP, their agent string and the fact that they are reading this screen. It renders the
+**alt text** in place of the mark rather than dropping the node, which is the same argument that
+refuses `skipHtml` two paragraphs up in that file - swallowing part of an answer in silence is the
+worse failure. **This is the entry to read before adding a tag to that map**: the question is not
+only how a tag should look, it is whether rendering it does anything.
+
+**And the composer's send button sat on the textarea's scrollbar, which is the unfixed half of the
+trap `resize-none` was added for.** That class was added because the user agent's resize handle
+occupies the corner the button moved into; the **vertical scrollbar** occupies the same inline-end
+edge, appears the moment a question outgrows `h-24`, and is neither optional nor something trailing
+padding can move - `pe-*` insets the text and the scrollbar lives outside the content box. The
+button is inset past the gutter (`end-5`, with `pe-17` keeping the same half-rem of air) rather than
+being moved out of the field, which would have changed a design decision to fix a geometry one.
+Measured in the walk rather than reasoned, with the old placement probed in the same run: **15px of
+gutter behind a 1px border, so its inner edge is 16px from the field's outer edge; the button now
+starts at 20px and `end-2` started at 8px**, i.e. 8px inside the track. The lesson is the general
+one this file keeps paying for from new directions - **a control placed over a scrollable element's
+corner is competing with two widgets the user agent draws there, and jsdom can see neither.**
+
+The other three are local. A markdown table's column alignment was being discarded, which matters
+because the prompt asks for a table when comparing categories or periods - so the common table here
+is a money table the model right-aligns, and `th` hard-coded `text-left` while both cells dropped
+every prop react-markdown passes. The `Markdown` story's own table used no alignment at all, so the
+review surface could not have shown it; it right-aligns its three money columns now. The stories'
+default `send` answered a constant carrying fixed message ids, so a **second** press appended ids the
+list was already keyed on - `key={message.id}` collided, React logged it and reconciled the wrong
+rows, in exactly the flow this ticket made pressable for the first time; it is a function of the
+submitted text over a counter now. And `jest.config.ts` said the ESM closure was 84 packages where
+`frontend/src/app/CLAUDE.md` said 85: it is **85 of 100**, measured against the installed tree, and
+that file now records how to re-derive both figures rather than asserting a number nobody can check.
+Its comment about the `.pnpm` sibling was also right about the behaviour and wrong about the reason,
+which is worth fixing rather than leaving because the two reasons expire differently - see the
+comment itself.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

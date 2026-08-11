@@ -15,13 +15,21 @@ const config: Config = {
 /**
  * The ESM-only families `react-markdown` pulls in, as regex prefixes.
  *
- * PET-76 added `react-markdown` and `remark-gfm`, and the unified ecosystem behind them is
- * **84 packages, every one of them `"type": "module"` with no CJS build**. Jest's default
+ * PET-76 added `react-markdown` and `remark-gfm`, and their dependency closure is 100 packages, of
+ * which **85 are `"type": "module"` with no CJS build**. Jest's default
  * transform never touches `node_modules`, so the first `import` reaches SWC untransformed and the
  * suite dies on `SyntaxError: Unexpected token 'export'` inside `react-markdown/index.js` - which
  * is a failure of the harness rather than of anything this repo wrote.
  *
- * **Prefixes rather than the 84 names**, because the families are the stable unit: `micromark`
+ * **Both figures are measurements and neither should be trusted after a dependency change.** They
+ * said 84 here and 85 in `frontend/src/app/CLAUDE.md` until a review of PR #88 walked the installed
+ * tree, which is exactly the drift `docs/agents/conventions.md` puts counts under a
+ * single-home rule for. Re-derive rather than reason: walk the `dependencies` of those two packages
+ * with `require.resolve`'s own upward search, dedupe by resolved path so a nested copy counts once,
+ * and read `type` off each `package.json`. The 15 that are not ESM are `@types/*` plus `debug`,
+ * `ms`, `dequal`, `extend`, `inline-style-parser`, `style-to-js` and `style-to-object`.
+ *
+ * **Prefixes rather than the 85 names**, because the families are the stable unit: `micromark`
  * ships one package per grammar construct and `remark-gfm` alone accounts for nine of them, so a
  * literal list is a file somebody has to come back to the next time a plugin is added. The
  * families are `hast-util-*`, `mdast-util-*`, `micromark*`, `remark-*`, `unist-util-*`, `vfile*`
@@ -84,7 +92,7 @@ const ESM_PACKAGES = [
  *
  * **`transpilePackages` in `next.config.ts` is the other lever next/jest reads, and it is the wrong
  * one.** It would work - next/jest folds those names into this very pattern - but it does so by
- * telling the **application** build to transpile 84 packages it already handles natively, to fix a
+ * telling the **application** build to transpile packages it already handles natively, to fix a
  * problem only Jest has. The cost lands on every `next build` and on every dev server start.
  *
  * What it inserts is one more negative lookahead at the same position as next/jest's own, so all of
@@ -102,8 +110,16 @@ async function withEsmTransforms(): Promise<Config> {
   let rewritten = 0;
 
   const widened = patterns.map((pattern) => {
-    // The `.pnpm` sibling is deliberately left alone: it only matches paths under
-    // `node_modules/.pnpm/`, and this repo installs with npm, so nothing it could match exists.
+    // **What this test actually skips, which is not what an earlier version of this comment
+    // claimed.** It said the `.pnpm` sibling is left alone because this repo installs with npm so
+    // nothing it could match exists - true, and not the reason: next/jest spells that entry
+    // `/node_modules[\\/]\.pnpm[\\/]...`, with character classes rather than literal slashes, so it
+    // fails this prefix test on its fifteenth character and would be skipped whatever the installer
+    // was. The distinction matters because the two reasons expire differently. If next/jest ever
+    // normalises that entry to a literal `/node_modules/`, the prefix test starts matching it,
+    // `rewritten` silently becomes 2, and a lookahead is inserted into a pattern this file has never
+    // been read against - so the honest guard is the count below, which fails loudly at zero. A
+    // review of PR #88 found the reasoning; the behaviour was already correct.
     if (!pattern.startsWith('/node_modules/')) {
       return pattern;
     }
