@@ -170,6 +170,21 @@ export type Category = components['schemas']['CategoryResponseDto'];
 /** The budget against the sum of the caps, straight off the contract. */
 export type Allocation = components['schemas']['AllocationResponseDto'];
 
+/**
+ * The categories read's payload: every category plus the account's allocation.
+ *
+ * Named and exported at PET-48, when `settings/SettingsScreen.tsx` needed to take one prop rather
+ * than the two halves it had been given separately - a review found that shape let the Settings card
+ * and its Manage modal be handed data about different accounts.
+ *
+ * **A `Pick` here, where `readCategoriesView` deliberately returns the whole DTO**, and the two are
+ * not in tension. That read is the Categories tab's, which draws every field, so a projection there
+ * would restate the response and go stale. This is a *prop* naming what one screen consumes, which
+ * is these two and not the `period` beside them - so the narrower type is what lets a suite build a
+ * fixture without inventing a period the screen never reads.
+ */
+export type CategoriesView = Pick<CategoriesResponse, 'categories' | 'allocation'>;
+
 export type CategoriesViewResult = AuthorizedResult<CategoriesResponse>;
 
 /**

@@ -2834,6 +2834,61 @@ why it wants the notification system under HIGH IMPORTANCE above rather than a f
 `role="status"` line on one screen. Until then the honest summary is that the feature is correct
 and unobservable, and A29 owes the copy along with everything else invented on this screen.
 
+### Settings reads the palette and the periods for a modal most visits never open
+
+PET-48's follow-up made the Categories card's "Manage" open the Manage categories modal, and the two
+sub-modals behind it need a colour/icon palette and a period list. So `settings/page.tsx` now awaits
+`readPalette()` and `readPeriods()` alongside `readCategoriesView()` on **every** visit to Settings,
+for a dialog that most visits never open.
+
+This is the same trade `transactions/categories/page.tsx` already took for its own palette, and the
+entry above about that one is the same fact from another side. Both buy away a route handler, a hook,
+and the null-versus-failed-versus-loading triple `AddTransactionModal` has to model for a modal that
+can open from anywhere. Neither is free, and `Promise.all` means the page waits for the slowest -
+which is why `readPalette` carries its own timeout and why adding a read with none to that array is
+the thing to think about rather than the count.
+
+The fix, when it is worth taking, is the shape `app/api/categories/route.ts` already sets: a route
+handler the modal fetches from on open. What that costs is the three loading states, which is exactly
+what both pages declined to model.
+
+**Both degrade rather than throw, and the periods one is a deliberate departure.** `lib/periods.ts`
+rejects on failure by design, because on `/transactions/categories` a period-less header over
+period-scoped figures is a screen that lies. Settings catches it, because there the periods back one
+question inside an unopened modal and `requireProfile()` is the only read on that page with an
+opinion about whether the session is alive. It is sound rather than merely convenient -
+`EditCategoryModal` already guards an absent current period by sending the cap with no anchor - but
+it does mean a Settings visit during a periods outage silently loses the "from which paycheck"
+question on a cap edit. `(app)/pages.test.tsx` pins the arm; nothing tells the user.
+
+### Settings counts categories one lower than the Transactions tab badge, by decision
+
+The Categories summary card excludes the `Uncategorized` fallback from its count; the tab badge in
+`TransactionTabs` counts every live category and documents itself as never 0 for that reason. So one
+account reads "13 categories" on Settings and "14" on the Categories tab, which was measured in
+PET-48's browser walk rather than reasoned about. The product owner chose it: the card is about the
+categories a user manages, and the fallback is the one they cannot - it draws no kebab and no banner,
+and the entry above about it being neither renamable nor cappable from the UI is the same fact from
+another side.
+
+The seam it leaves is small and real. `allocation.allocated` is passed through verbatim rather than
+re-summed - it is the same figure the Categories tab's summary card and the Allocate modal read, and
+a private `reduce` here would be a second authority on one number - and that figure **includes** a
+cap on the fallback if one were ever set. No screen offers that, `PATCH /api/categories` accepts it,
+and `allocateForm.ts`'s `reservedCents` is what recovering it looks like when a caller genuinely
+needs to. Until then the count and the sum disagree about one row that contributes zero.
+
+### Two more invented states on Settings, both PET-48's
+
+A29 designs neither, and both are collected by `Screens/17 Settings` stories rather than left to be
+described:
+
+- **"We couldn't load your category totals just now."**, the card's degraded line, shown when the
+  categories read fails. It claims nothing about why, because the read collapses a dead session, a
+  dead backend and a 500 into one answer on purpose. Story: `CategoriesUnavailable`.
+- **"0 categories · $0 allocated of $2,000"**, which an account holding only the fallback reaches.
+  Every word of it true and none of it drawn. Story: `NoCategories`.
+
 ---
 
 ## Scaling, when it is actually needed

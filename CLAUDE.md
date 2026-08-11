@@ -80,6 +80,33 @@ currency allowlist, `categories.note` becomes `description`, and onboarding asks
 Settings save is unchanged in shape and different in effect - one "Save changes", intercepted by a
 dialog asking which paycheck a budget or pay-day change applies from.
 
+**PET-48 is the seventeenth thing that works, and it closes the one gap the first paragraph above
+still names.** The **Categories** summary is frame 17's third and last card: one read-only line
+reading "{n} categories · {allocated} allocated of {budget}", every figure real, over a secondary
+"Manage" - so "what remains unbuilt is that one Settings card" is closed, Settings is a complete
+screen, and no card on any of the four routed views is missing. Two things about it are decisions
+rather than shape, and both were the product owner's. The count **excludes the `Uncategorized`
+fallback**, so this card reads one lower than the Transactions tab badge on the same account -
+deliberate, because the card is about the categories a user manages and the fallback is the one they
+cannot. The second was that **"Manage" shipped inert**, with no `disabled` and no `aria-disabled`,
+which made it the app's only silently inert control and narrowed PET-72's "the app has no inert
+control anywhere" to everything except one button.
+
+**That second decision is superseded, and PET-72's clause holds again without an exception.**
+"Manage" opens the **Manage categories modal**, which the Spendifico Design System drew
+(`ui_kits/spendifico-app/ManageCategoriesModal.jsx`) and which frame 17 does not: the account's
+categories in a scrolling list, each with Edit and Delete, over a summary island and an "Add
+category". So AC3 is superseded rather than amended - the button opens a dialog and never navigates
+to the Categories tab - and **this app once again ships no control that looks operable and is not.**
+Three things about it are worth knowing before touching either screen. The modal **performs no write
+of its own**: `AddCategoryModal`, `EditCategoryModal` and `DeleteCategoryDialog` already owned every
+one and all three open over it, so this was assembly rather than new behaviour and needed no
+`api:sync`. It **excludes `Uncategorized`** where the design draws its "Other" like any other row,
+which is `allocatableCategories`' existing call from PET-70 rather than a new rule. And the Settings
+route grew two reads for it - the palette and the periods - both of which **degrade rather than
+throw**, because `requireProfile()` stays the only read on that page with an opinion about whether
+the session is alive.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and

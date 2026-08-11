@@ -620,3 +620,54 @@ describe('the box', () => {
     expect(dialog()).toBeInTheDocument();
   });
 });
+
+describe('a Modal nested inside another Modal', () => {
+  /**
+   * **The regression a browser walk found and no gate could.** React propagates `close` and `cancel`
+   * through the component tree even though neither bubbles in the DOM, so the Manage categories
+   * modal's "Add category" sub-modal closed both dialogs: pressing Cancel unmounted the outer one,
+   * which the walk caught as an outer `<dialog>` still carrying `open` and no longer in the DOM,
+   * having received no native `close` at all.
+   *
+   * **The dispatch below is bubbling and the real event is not, and that is deliberate.**
+   * `jest.setup.ts`'s polyfill fires a faithful non-bubbling `close`, which React's element-level
+   * listener alone receives - so the propagation this case exists for cannot occur under jsdom, and
+   * a faithful dispatch would pass with the guard deleted. A bubbling dispatch is what React's
+   * synthetic propagation is *equivalent to* from a handler's point of view, so this fails without
+   * the guard and passes with it. Verified both ways.
+   */
+  function Nested({ onOuterClose }: { onOuterClose: () => void }) {
+    return (
+      <Modal title="Outer" onClose={onOuterClose} footer={<button type="button">Done</button>}>
+        <Modal title="Inner" onClose={() => {}} footer={<button type="button">Cancel</button>}>
+          <p>inner body</p>
+        </Modal>
+      </Modal>
+    );
+  }
+
+  it('does not run the outer onClose when the inner dialog closes', () => {
+    const onOuterClose = jest.fn();
+    render(<Nested onOuterClose={onOuterClose} />);
+
+    const [outer, inner] = Array.from(document.querySelectorAll('dialog'));
+
+    expect(outer).toBeDefined();
+    expect(inner).toBeDefined();
+
+    inner!.dispatchEvent(new Event('close', { bubbles: true }));
+
+    expect(onOuterClose).not.toHaveBeenCalled();
+  });
+
+  it('still runs its own onClose when the dialog itself closes', () => {
+    // The other half, so the guard cannot be "fixed" into never firing at all.
+    const onOuterClose = jest.fn();
+    render(<Nested onOuterClose={onOuterClose} />);
+
+    const [outer] = Array.from(document.querySelectorAll('dialog'));
+    outer!.dispatchEvent(new Event('close', { bubbles: true }));
+
+    expect(onOuterClose).toHaveBeenCalledTimes(1);
+  });
+});

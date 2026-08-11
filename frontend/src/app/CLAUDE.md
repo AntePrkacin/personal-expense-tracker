@@ -1008,6 +1008,25 @@ including Escape, and which - because it is our code rather than the platform's 
 `Modal.test.tsx` rather than eyeballed. The lesson generalises past this component: **a platform
 guarantee that fires during an event React unmounts inside is not a guarantee.**
 
+**A fourth behaviour was found the same way, and it is the one that bites a `Modal` rendered inside
+another `Modal`.** PET-48's Manage categories modal is the first place in this app where that
+happens - the two category modals it opens are React descendants of it, where every other pair in
+the app is a pair of siblings mounted by two providers - and pressing Cancel in the sub-modal closed
+**both** dialogs. **React propagates `close` and `cancel` through the component tree even though
+neither event bubbles in the DOM**, so the outer `Modal`'s `onClose` ran off the inner dialog's
+event and its owner unmounted it. The walk caught it as an outer `<dialog>` still carrying `open`
+and no longer in the document, having received no native `close` at all - which is what says React
+rather than the platform did it.
+
+`Modal` guards both handlers on `event.target === dialogRef.current` now, which is the test
+`onDialogClick` had always made for the backdrop, applied to the two events that were missing it.
+**jsdom cannot reproduce this and the suite says so**: `jest.setup.ts` dispatches a faithful
+non-bubbling `close` that only React's element-level listener sees, so the case models React's
+propagation with a bubbling dispatch instead - and it was watched failing with the guard reverted
+before it was trusted. Read that as the same lesson one level up: **an event that does not bubble in
+the DOM may still bubble in React**, and a component that assumes otherwise is correct exactly until
+somebody nests it.
+
 **PET-33 gave `Modal` a second shape rather than a second component.** Frame 12 is a centred icon
 circle over a centred title with no X, so `align` and `icon` arrived: `align="center"` centres
 the header, renders the icon in a tinted circle, splits the footer into two equal buttons and
@@ -2940,3 +2959,119 @@ draws - would promise a keyboard contract nothing implemented, the refusal this 
 made four times. `settings/page.tsx` reads the cookie a second time so the control's checked
 state agrees with the server HTML at hydration; `(app)/pages.test.tsx` mocks `next/headers` for
 exactly that read.
+
+**PET-48 built frame 17's third card, so "the Categories summary is still not drawn" above is
+history - and it was PET-48's, not PET-47's, which two sentences in this file and two in
+`frontend/CLAUDE.md` got wrong.** Settings is a complete screen: three cards over one "Save
+changes", and `SettingsScreen.test.tsx` now pins exactly three `h2`s so a fourth cannot arrive
+without somebody deciding it belongs.
+
+**It is the first card on this page that reads rather than writes, and every difference from its two
+siblings follows from that.** It takes one `summary` object instead of the shared `values` /
+`errors` / `disabled` / `onChange`, because it has no field to carry a message or to freeze; it
+touches `settingsForm.ts` nowhere, so `SettingsFormValues`, `invalidFields`, `sameSettingsValues`
+and `toUpdateProfileBody` are all untouched by it; and it takes no `disabled`, so a save in flight
+leaves it alone. It still sits **inside** the `<form>`, because the frame puts it above the Save row
+and Save is inside the form - and it is a prop rather than a `React.ReactNode` slot on
+`SettingsScreen` for the reason both siblings cite, that a slot with one possible occupant expresses
+no choice. `settings/categoriesSummary.ts` is the React-free half, the same split `settingsForm.ts`
+makes beside it.
+
+**Settings is the second route in this app to read two guarded endpoints, and it copies
+`transactions/categories/page.tsx`'s division of labour exactly.** `requireProfile()` decides
+whether the session is alive; `readCategoriesView()` never does, **including on its own 401**, which
+is the half worth stating - two opinions about the session on one page is the shape the `/dashboard`
+to `/login` loop PET-52 had to unpick came out of. The other half is the opposite call that page
+makes for its own list: there the response _is_ the screen, so a failure throws; here it is one
+sentence on the third of three cards, so every failure degrades to `summary: null` and the card
+draws an invented line saying the totals are unavailable while the two cards above it stay editable
+and still save. `lib/palette.ts` is the precedent for that policy, and `(app)/pages.test.tsx` pins
+both arms rather than `SettingsForm.test.tsx`, because what they pin is the decision `page.tsx`
+makes.
+
+**The card reads the _saved_ currency, not the one the Preferences card above it may be mid-edit.**
+`useMoney()` comes from `(app)/PreferencesProvider`, which the layout builds from the profile it
+already read - so typing `EUR` into the picker above changes that field and leaves this card in
+dollars until a save lands. That is correct rather than a lag: every figure on this card is a saved
+figure, and a symbol from an unsaved edit would be the one lie the card could tell. It is also why
+the card can stay a plain module with no `'use client'` of its own, exactly like both siblings.
+
+**Two things about it are product decisions that depart from what this file otherwise prescribes,
+and both are on the ticket.** The count **excludes the `Uncategorized` fallback**, so Settings reads
+one lower than the Transactions tab badge on the same account - measured in a browser walk at 13
+against 14. Accepted, because this card is about the categories a user manages and the fallback is
+the one they cannot; the seam it leaves is that `allocation.allocated` is used verbatim and would
+include a cap on that row if one were ever set through the API, which no screen offers.
+And **"Manage" shipped inert with no `disabled` and no `aria-disabled`**, which amended AC3 and made
+it the one place this app shipped a control that looks operable and is not - the exact failure every
+`aria-disabled` on the Categories tab was added to avoid, and which PET-70 had finished clearing.
+
+**That second decision is superseded, and the paragraph above is history on its second half only.**
+"Manage" opens the **Manage categories modal**, so AC3 is superseded rather than amended - the button
+opens a dialog and never navigates - and this app ships no silently inert control again. The
+fallback-exclusion half stands unchanged and is still the one to cite. `type="button"` also stands,
+and it is _more_ load-bearing than before: it was guarding a press nobody made, and it now guards the
+ordinary path a user takes to open the modal.
+
+**Two suites and the story file changed shape for it, and the reason is `useMoney()`.**
+`SettingsForm.test.tsx` and `SettingsScreen.test.tsx` import `render` from `(app)/shellRender`
+rather than from Testing Library, because that hook throws outside `PreferencesProvider` by design.
+`SettingsScreen.stories.tsx` could not do the same - `shellRender` says so itself - so every story
+renders through a local `Frame` that mounts the provider **inside `render`**, never in a
+`decorators` array, since the story smoke harness builds each story from `render` or
+`meta.component` and never applies a meta's decorators. A decorator there works in the browser and
+throws under Jest.
+
+**PET-48's follow-up makes "Manage" real, and the modal behind it is the design system's rather than
+Figma's.** `settings/ManageCategoriesModal.tsx` is
+`ui_kits/spendifico-app/ManageCategoriesModal.jsx` rebuilt on daisyUI: a summary island over a
+scrolling list with Edit and Delete per row, an "Add category" against a "Done", and no Figma frame
+anywhere behind it. Four things about it reach past that one file.
+
+**It is `AllocateBudgetModal`'s counterpart and not its reuse, which the source says in its own
+header** - same canvas shell and two-island structure, but "the list island trades the cap field for
+Edit / Delete icon actions". Reusing the Allocate modal unchanged was considered and rejected on
+that basis: it edits caps inline and can neither rename nor delete. **This modal performs no write of
+its own**, which is the most important thing about it: `AddCategoryModal`, `EditCategoryModal` and
+`DeleteCategoryDialog` own every one, all three already existed, and all three open _over_ it - so
+there is no action prop, no `pending`, no failure taxonomy and no `role="alert"` in it at all.
+
+**It reads from props and resyncs, which is deliberately the opposite of the Allocate modal's rule.**
+That one reads once on open and never resyncs, because it holds a draft a background refresh would
+rewrite under the user's hands; this one holds no draft, so a delete landing behind it has to take
+the dead row off the list. That also deletes the entire `stale` apparatus its neighbour needs, since
+there is no payload here for the server to refuse.
+
+**`ManageCategoriesProvider` exists for a reason no other modal in this app has, and it is the DOM
+rather than the design.** `AddCategoryButton`'s one-trigger-one-route rule would put the state in the
+card - but the card is inside `SettingsForm`'s `<form>`, and the sub-modals it opens pass `onSubmit`,
+which is what makes `Modal` wrap their bodies in a real `<form>`. A `<dialog>` does not break form
+association, so a modal rendered from the card would nest a form inside the page's - invalid HTML
+that React will happily build via `appendChild` even though a parser would not. So the provider wraps
+the header and `<main>` both and the dialog renders as a **sibling** of the form.
+`transactions/FilterNavigation.tsx`'s shape, reached from the other direction. It must sit **inside**
+`DeleteCategoryProvider` and `EditCategoryProvider`, in that order, because the edit modal's footer
+calls `useDeleteCategory()`.
+
+**Settings reads two more endpoints for it, and both degrade where their own modules throw.**
+`readPalette()` and `readPeriods()` join `readCategoriesView()` in a `Promise.all`, mirroring
+`transactions/categories/page.tsx`. The periods one is the departure worth knowing: `lib/periods.ts`
+throws by design, because on that page a period-less header over period-scoped figures is a screen
+that lies - here the periods back one question inside a modal nobody has opened, and
+`EditCategoryModal` guards an absent current period by sending the cap with no anchor, which its own
+comment calls "the honest fallback". `(app)/pages.test.tsx` pins both degraded arms, and the periods
+case is written as a **rejection** so it fails if the `.catch` is ever removed.
+
+**A review of that arrangement found the periods half unsafe as first written, and the fix is worth
+knowing before copying the shape.** "The honest fallback" is honest for a caller that has no anchor
+to offer; it is not honest for one that simply failed to load the list. A cap raised from Settings
+during a periods outage was sent unanchored, so the backend dated it at the current period and
+**retroactively re-priced the period already in progress** - the exact rewriting PET-72 exists to
+prevent, with no dialog and nothing on screen to say the anchor had been dropped. So the degrade
+stays and its consequence is now **visible**: `SettingsScreen` resolves a `canManage` flag and the
+card's "Manage" is `disabled` when either the categories or the periods read is missing. The general
+rule that leaves is worth stating - **a read may only be degraded to a value the UI can tell apart
+from a real one**, and where it cannot, the control that would consume it closes instead. The same
+review found the categories half degrading to an empty list plus a zeroed allocation, which the
+modal drew as "you have no categories" over a $0 budget: an outage stated as a fact about the
+account. It is `null` now, and `null` renders no modal at all.

@@ -1,6 +1,7 @@
 import type { CategoryColour, IconName } from '@/components/ui/categoryColour';
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
 import type { Allocation, Category } from '@/lib/categories';
+import { withoutFallback } from '@/lib/fallbackCategory';
 import type { components } from '@/types/api';
 
 import { isCapValid } from './categoryForm';
@@ -86,9 +87,14 @@ function centsOf(major: number): number {
  *
  * Backend order is preserved (name ascending, id tiebreak), so the rows read in the same order as
  * the cards behind the modal.
+ *
+ * **The filter itself moved to `lib/fallbackCategory.ts` at PET-48** and this delegates to it. The
+ * name stays because it says something true here that the shared spelling cannot - these are the
+ * rows a budget can be *allocated* to - which is `lib/amount.ts`'s recorded call about the same kind
+ * of lift: one copy of each rule to fix, deliberately not one vocabulary.
  */
 export function allocatableCategories(categories: Category[]): Category[] {
-  return categories.filter((category) => !category.isFallback);
+  return withoutFallback(categories);
 }
 
 /**
