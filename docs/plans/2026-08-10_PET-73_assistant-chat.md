@@ -5,12 +5,23 @@ from `/insights` and the chat has not landed, regressing a complete screen to an
 
 ## What this is written against, and the branch that lands first
 
-Written against `7563ccf` (`main`, after PET-46 and PET-47 merged in #82), **and adjusted for
-PET-72 (#84), which is implemented, in review, and lands before this branch.** An earlier draft of
-this plan described PET-72 as "two commits and both are docs" and assumed this branch went first.
-Both are wrong: #84 is 192 files, +9,726/-5,864, and the ordering is reversed. Everything below is
-adjusted for it, so **cut this branch from a `main` that already has #84** and re-read every path
-named here at that commit.
+**PET-72 (#84) has merged, and this branch is rebased onto it.** Every path and API named below was
+re-checked against `2f7e374` after the rebase rather than against the branch they were first read
+from, and all of them hold: `PeriodService` is there, `CategoriesService.currentWindow` and
+`previousWindow` are gone with zero references left in `backend/src`, `backend/drizzle/user/` holds
+exactly `20260810085329_init`, `MonthPill.tsx` is deleted, and `lib/session.ts` still exports
+`AuthorizedFormDataResult` under that name so the rename below still applies.
+
+Two earlier drafts of this section were wrong and are worth naming so nobody restores them: one
+described PET-72 as "two commits and both are docs", and one assumed **this** branch landed first.
+It is 192 files, +9,726/-5,864, and the ordering is the other way round.
+
+**Two of #84's own new required-reading rows apply directly to this ticket**, and root `CLAUDE.md`
+carries them: "resolve a period, or touch a budget, cap or pay-schedule history" points at
+`backend/CLAUDE.md`'s Backend conventions, which the assistant does the moment it asks for a window
+or a budget; and "name a period on a screen, or add a `?period=` to a read" points at
+`frontend/src/app/CLAUDE.md`'s The app shell, which the Dashboard guard below does. Read both before
+writing either.
 
 Six things it changes that this plan depends on:
 
@@ -886,8 +897,8 @@ there is no path that schedules a third from the second. State it that way in th
 
 ## Tasks
 
-- [ ] Write this plan, commit it alone as the branch's first commit, push, open a draft PR
-- [ ] **Wait for #84 to merge, then rebase this branch onto the post-#84 `main`** and re-read every
+- [x] Write this plan, commit it alone as the branch's first commit, push, open a draft PR
+- [x] **Wait for #84 to merge, then rebase this branch onto the post-#84 `main`** and re-read every
       path this plan names before writing code
 - [x] `docs/explainers/cancelling-an-ai-request.md`, the plain-language version of the cancellation
       section, plus a `docs/TODO.md` entry carrying the same retrofit for the receipt scan, to be
