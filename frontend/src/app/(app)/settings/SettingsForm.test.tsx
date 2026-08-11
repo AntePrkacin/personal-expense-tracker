@@ -1,9 +1,16 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { Profile } from '@/lib/profile';
 import type { UpdateProfileResult } from '@/lib/updateProfile';
 
+// `shellRender`'s `render`, not RTL's, as of PET-48: the Categories card calls `useMoney()`, which
+// throws outside `PreferencesProvider` by design. One import swap rather than a wrapper at every
+// call site; `shellRender.tsx` carries the reasoning.
+import { render } from '../shellRender';
+
+import type { CategoriesSummary } from './categoriesSummary';
+import { SUMMARY_UNAVAILABLE } from './CategoriesSummaryCard';
 import { SettingsForm } from './SettingsForm';
 
 // PET-46's acceptance suite. The action is injected as a prop rather than mocked as a module -
@@ -15,6 +22,18 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: (...args: unknown[]) => refresh(...args) }),
 }));
 
+// **The Manage seam, mocked rather than provided**, which is `CategoryCardMenu.test.tsx`'s shape for
+// exactly this situation: the card under test calls `useManageCategories()`, the provider mounts a
+// whole modal this suite is not about, and what is worth asserting here is that the button reaches
+// the seam. The modal's own behaviour is `ManageCategoriesModal.test.tsx`'s.
+//
+// Relative specifier, because `jest.mock('@/...')` fails with "Cannot find module" from anywhere in
+// this repo - the alias trap `frontend/src/app/CLAUDE.md` records.
+const openManage = jest.fn();
+jest.mock('./ManageCategoriesProvider', () => ({
+  useManageCategories: () => ({ open: openManage }),
+}));
+
 /** Frame 17's own persona, which is also the fixtures'. */
 const PROFILE: Profile = {
   fullName: 'Marko Kovač',
@@ -23,6 +42,14 @@ const PROFILE: Profile = {
   monthlyBudget: 2000,
   monthStartDay: 1,
 };
+
+/**
+ * The Categories card's figures, frame `40:722`'s own - eight categories, $1,800 of $2,000.
+ *
+ * A default rather than a prop every call site passes, because only the PET-48 block below is about
+ * this card and the other twenty-odd cases would carry noise for it.
+ */
+const SUMMARY: CategoriesSummary = { count: 8, allocated: 1800, monthlyBudget: 2000 };
 
 /**
  * Today, pinned, so the paycheck dialog's nine-month window is the same list in every run.
@@ -45,6 +72,8 @@ function renderForm(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true }))
   render(
     <SettingsForm
       profile={PROFILE}
+      summary={SUMMARY}
+      canManage
       save={save}
       saveSchedule={saveSchedule}
       today={TODAY}
@@ -87,6 +116,8 @@ function renderWithRefresh(save: jest.Mock = jest.fn().mockResolvedValue({ ok: t
   const view = render(
     <SettingsForm
       profile={PROFILE}
+      summary={SUMMARY}
+      canManage
       save={save}
       saveSchedule={saveSchedule}
       today={TODAY}
@@ -100,6 +131,8 @@ function renderWithRefresh(save: jest.Mock = jest.fn().mockResolvedValue({ ok: t
       view.rerender(
         <SettingsForm
           profile={{ ...PROFILE, ...next }}
+          summary={SUMMARY}
+          canManage
           save={save}
           saveSchedule={saveSchedule}
           today={TODAY}
@@ -166,7 +199,13 @@ describe('AC2: the avatar', () => {
   it('offers no upload control of any kind', () => {
     // SET-2: the initials are derived and never stored, so there is nothing to replace them with.
     const { container } = render(
-      <SettingsForm profile={PROFILE} save={jest.fn()} themePref="system" />,
+      <SettingsForm
+        profile={PROFILE}
+        summary={SUMMARY}
+        canManage
+        save={jest.fn()}
+        themePref="system"
+      />,
     );
 
     expect(container.querySelector('input[type="file"]')).toBeNull();
@@ -475,6 +514,8 @@ describe('the Preferences card (PET-47)', () => {
       render(
         <SettingsForm
           profile={{ ...PROFILE, monthStartDay: 15 }}
+          summary={SUMMARY}
+          canManage
           save={save}
           saveSchedule={saveSchedule}
           today={TODAY}
@@ -729,6 +770,8 @@ describe('the clean form', () => {
     render(
       <SettingsForm
         profile={{ ...PROFILE, fullName: '  Marko  ' }}
+        summary={SUMMARY}
+        canManage
         save={jest.fn()}
         themePref="system"
       />,
@@ -893,7 +936,13 @@ describe('the form element', () => {
     // Without it the user agent's own validation fires on the `required` email and the designed
     // message never renders. daisyUI's `validator` class is unused for the same reason.
     const { container } = render(
-      <SettingsForm profile={PROFILE} save={jest.fn()} themePref="system" />,
+      <SettingsForm
+        profile={PROFILE}
+        summary={SUMMARY}
+        canManage
+        save={jest.fn()}
+        themePref="system"
+      />,
     );
 
     expect(container.querySelector('form')).toHaveAttribute('novalidate');
@@ -1096,6 +1145,8 @@ describe('a form nobody touched', () => {
     render(
       <SettingsForm
         profile={{ ...PROFILE, fullName: '  Marko  ' }}
+        summary={SUMMARY}
+        canManage
         save={save}
         themePref="system"
       />,
@@ -1116,6 +1167,8 @@ describe('a form nobody touched', () => {
     render(
       <SettingsForm
         profile={{ ...PROFILE, fullName: '  Marko Kovač  ' }}
+        summary={SUMMARY}
+        canManage
         save={save}
         saveSchedule={saveSchedule}
         today={TODAY}
@@ -1331,6 +1384,8 @@ describe('the confirmation retires itself', () => {
     const view = render(
       <SettingsForm
         profile={PROFILE}
+        summary={SUMMARY}
+        canManage
         save={jest.fn().mockResolvedValue({ ok: true })}
         themePref="system"
       />,
@@ -1348,5 +1403,208 @@ describe('the confirmation retires itself', () => {
 
     expect(errors).not.toHaveBeenCalled();
     errors.mockRestore();
+  });
+});
+
+// The Categories summary card (PET-48), frame 17's third and last.
+//
+// Covered here rather than in a `CategoriesSummaryCard.test.tsx`, which is the shape PET-46 and
+// PET-47 set: neither `ProfileCard` nor `PreferencesCard` has a suite of its own, because the thing
+// worth asserting is the card inside the form it ships in. The arithmetic behind the sentence is
+// `categoriesSummary.test.ts`'s, with no DOM at all.
+describe('the Categories summary card (PET-48)', () => {
+  it('files the card under a Categories heading', () => {
+    renderForm();
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Categories' })).toBeInTheDocument();
+  });
+
+  it('draws the count, the allocated sum and the monthly budget (AC1)', () => {
+    renderForm();
+
+    expect(screen.getByText('8 categories · $1,800 allocated of $2,000')).toBeInTheDocument();
+  });
+
+  it('pluralizes the count (AC2)', () => {
+    render(
+      <SettingsForm
+        profile={PROFILE}
+        summary={{ count: 1, allocated: 200, monthlyBudget: 2000 }}
+        canManage
+        save={jest.fn()}
+        themePref="system"
+      />,
+    );
+
+    expect(screen.getByText('1 category · $200 allocated of $2,000')).toBeInTheDocument();
+  });
+
+  it('draws whole figures, so the cents on a stored budget do not reach the line', () => {
+    // `formatWhole` rather than `formatCurrency`, which is the rule every aggregate in this app
+    // follows. A `$2,000.50` here would be the one figure on the page carrying cents.
+    render(
+      <SettingsForm
+        profile={PROFILE}
+        summary={{ count: 3, allocated: 1800.25, monthlyBudget: 2000.5 }}
+        canManage
+        save={jest.fn()}
+        themePref="system"
+      />,
+    );
+
+    expect(screen.getByText('3 categories · $1,800 allocated of $2,001')).toBeInTheDocument();
+  });
+
+  it('carries exactly one control, and no field (AC5)', () => {
+    renderForm();
+
+    const card = screen.getByRole('heading', { level: 2, name: 'Categories' }).closest('section');
+
+    expect(card).not.toBeNull();
+    expect(within(card!).getAllByRole('button')).toHaveLength(1);
+    expect(within(card!).getByRole('button', { name: 'Manage' })).toBeInTheDocument();
+    expect(within(card!).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(card!).queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  // **AC3 is superseded rather than amended, and this is the third answer the control has had.** It
+  // shipped inert by a product decision over an AC3 asking it to open the Categories tab; it now
+  // opens the Manage categories modal and never navigates. The two cases below used to pin the inert
+  // treatment - "neither disabled nor aria-disabled" and "is not a link" - and both survive as
+  // assertions about what it still must not be.
+  it('offers "Manage" as an available control, neither disabled nor aria-disabled', () => {
+    renderForm();
+
+    const manage = screen.getByRole('button', { name: 'Manage' });
+
+    expect(manage).toBeEnabled();
+    expect(manage).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('does not navigate, because "Manage" opens a modal rather than a route', () => {
+    renderForm();
+
+    expect(screen.queryByRole('link', { name: 'Manage' })).not.toBeInTheDocument();
+  });
+
+  it('is disabled when the screen says the modal cannot open', () => {
+    // The gate `SettingsScreen` resolves: a failed categories read, or a missing period list.
+    render(
+      <SettingsForm
+        profile={PROFILE}
+        summary={SUMMARY}
+        canManage={false}
+        save={jest.fn()}
+        saveSchedule={saveSchedule}
+        today={TODAY}
+        themePref="system"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeDisabled();
+  });
+
+  it('opens the Manage categories modal when pressed', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(screen.getByRole('button', { name: 'Manage' }));
+
+    expect(openManage).toHaveBeenCalledTimes(1);
+  });
+
+  // **The assertion that catches a missing `type="button"`, and it matters more now than it did.**
+  // This card sits inside the page's `<form>`, where HTML defaults a bare `<button>` to `submit` -
+  // so the day somebody replaces `ui/Button` here with a plain element, pressing "Manage" saves the
+  // profile. While the control was inert that was a silent PATCH from a button nobody pressed; now
+  // it is a silent PATCH on the ordinary path a user takes to open the modal.
+  it('does not submit the form when pressed', async () => {
+    const user = userEvent.setup();
+    const save = renderForm();
+
+    await user.click(screen.getByRole('button', { name: 'Manage' }));
+
+    expect(save).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  // **Reversed by a review, and the case is kept rather than deleted so the reversal is visible.**
+  // This used to assert the opposite - that Manage stays live through a save, because the card
+  // carries nothing into it. True of the card and false of the button, once the modal behind it
+  // could write: its three sub-modals each call `router.refresh()`, and `SettingsForm`'s resync
+  // guard documents "nothing on this route calls `router.refresh()` but this form" as the condition
+  // that makes it safe. Pressing Manage mid-save is exactly how that condition breaks.
+  it('freezes while a save is out, because the modal behind it can refresh the route', async () => {
+    const user = userEvent.setup();
+    let resolve: (result: UpdateProfileResult) => void = () => {};
+    const save = jest.fn(
+      () =>
+        new Promise<UpdateProfileResult>((keep) => {
+          resolve = keep;
+        }),
+    );
+
+    render(
+      <SettingsForm profile={PROFILE} summary={SUMMARY} canManage save={save} themePref="system" />,
+    );
+
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
+    await user.click(saveButton());
+
+    await waitFor(() => expect(saveButton()).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeDisabled();
+
+    await act(async () => {
+      resolve({ ok: true });
+    });
+  });
+
+  describe('when the categories read failed', () => {
+    const renderDegraded = () =>
+      render(
+        <SettingsForm
+          profile={PROFILE}
+          summary={null}
+          canManage
+          save={jest.fn()}
+          themePref="system"
+        />,
+      );
+
+    it('says the totals are unavailable rather than drawing a figure', () => {
+      renderDegraded();
+
+      expect(screen.getByText(SUMMARY_UNAVAILABLE)).toBeInTheDocument();
+      expect(screen.queryByText(/allocated of/)).not.toBeInTheDocument();
+    });
+
+    it('keeps the heading and the control', () => {
+      renderDegraded();
+
+      expect(screen.getByRole('heading', { level: 2, name: 'Categories' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Manage' })).toBeInTheDocument();
+    });
+
+    it('leaves the rest of the page saveable, which is why the read degrades rather than throws', async () => {
+      const user = userEvent.setup();
+      const save = jest.fn().mockResolvedValue({ ok: true });
+
+      render(
+        <SettingsForm profile={PROFILE} summary={null} canManage save={save} themePref="system" />,
+      );
+
+      await user.clear(screen.getByLabelText('Display name'));
+      await user.type(screen.getByLabelText('Display name'), 'Ana');
+      await user.click(saveButton());
+
+      await waitFor(() => expect(save).toHaveBeenCalledWith({ fullName: 'Ana' }));
+    });
+
+    it('says nothing assertively, because nothing the reader did caused it', () => {
+      renderDegraded();
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
   });
 });

@@ -1,8 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { useEffect, useRef } from 'react';
 
+import type { Allocation, Category } from '@/lib/categories';
 import type { Profile } from '@/lib/profile';
 import type { UpdateProfileResult } from '@/lib/updateProfile';
+
+import { PreferencesProvider } from '../PreferencesProvider';
+import { category, FALLBACK_CATEGORY } from '../transactions/categories/categoryFixture';
 
 import { SettingsScreen } from './SettingsScreen';
 
@@ -30,15 +34,25 @@ import { SettingsScreen } from './SettingsScreen';
 // **The sidebar is deliberately absent.** These stories are the content column, so diff them
 // against node `40:676` (frame 17's right-hand column) rather than against the whole 1440px frame.
 //
-// **Two of the frame's three cards are here as of PET-47**, so read the sentence this replaces -
-// "Only the Profile card is here" - as dated. The Preferences card renders below Profile with its
-// real controls, and a diff against the frame is expected to stop after **it** and the Save row,
-// because the **Categories summary** with its "Manage" is still PET-47's and still not drawn.
+// **All three of the frame's cards are here as of PET-48**, so read the two sentences this replaces
+// - "Only the Profile card is here", then "Two of the frame's three cards are here" - as dated. A
+// diff against the frame now runs the whole column: Profile, Preferences, the Categories summary,
+// and the Save row.
 //
-// Two deliberate differences from the frame in that second card, both recorded where they are
+// Two deliberate differences from the frame in the second card, both recorded where they are
 // decided: currency is the budget field's left segment rather than a row of its own
 // (`components/BudgetField.tsx`), and there is no "On track" status chip in the header, because
-// Settings fetches no dashboard data to put behind one (`settings/PreferencesCard.tsx`).
+// Settings fetches no dashboard data to put behind one (`settings/PreferencesCard.tsx`). The third
+// card's "Manage" is live as of PET-48's follow-up and opens the Manage categories modal, which
+// **these stories cannot show**: it is provider state, so pressing the button here opens the real
+// dialog over the screen. Its own states are `Screens/Manage categories`.
+//
+// **Every story goes through `Frame` and none may render `SettingsScreen` directly.** The Categories
+// card calls `useMoney()`, which throws outside `PreferencesProvider` - and the provider cannot live
+// in a `decorators` array, because the story smoke tests build each story from `render` or
+// `meta.component` and never apply a meta's decorators, so a decorator would work in the browser and
+// throw under Jest. `shellRender.tsx` records that split; `CategoriesScreen.stories.tsx` solves it
+// the same way.
 
 /** Frame 17's own values, so `Default` is a literal diff target. */
 const PROFILE: Profile = {
@@ -51,19 +65,75 @@ const PROFILE: Profile = {
 
 const accept = async (): Promise<UpdateProfileResult> => ({ ok: true });
 
+/**
+ * The account behind the Categories card's "Manage", which opens the Manage categories modal.
+ *
+ * Present in every story because the props are required, and required for `TransactionsScreen`'s
+ * documented reason: `npm run build` never typechecks `*.tsx` tests or stories' arg objects deeply
+ * enough to catch a screen quietly rendered with no categories behind its one modal.
+ * `Screens/Manage categories` is where that modal's own states are reviewed.
+ */
+const CATEGORIES: Category[] = [
+  category({ name: 'Groceries', monthlyCap: 500, spent: 397 }),
+  category({ id: 'b', name: 'Transport', color: 'info', icon: 'bus', monthlyCap: 350, spent: 223 }),
+  FALLBACK_CATEGORY,
+];
+
+const ALLOCATION: Allocation = { monthlyBudget: 2000, allocated: 850, unallocated: 1150 };
+
+/** One current period, which is what enables the card's "Manage". */
+const PERIODS = [{ start: '2026-08-01', end: '2026-09-01', label: 'August 2026', current: true }];
+
+/**
+ * The screen inside the one piece of the shell it cannot do without.
+ *
+ * The provider's currency is read off the story's own profile rather than pinned to `USD`, so a
+ * story changing one changes both - which is what `(app)/layout.tsx` does with the same profile, and
+ * what stops a `EUR` story drawing euros in the budget field over dollars on the Categories card.
+ */
+function Frame(args: React.ComponentProps<typeof SettingsScreen>) {
+  return (
+    <PreferencesProvider currency={args.profile.currency}>
+      <SettingsScreen {...args} />
+    </PreferencesProvider>
+  );
+}
+
 const meta: Meta<typeof SettingsScreen> = {
   title: 'Screens/17 Settings',
   component: SettingsScreen,
   tags: ['autodocs'],
   parameters: { layout: 'fullscreen', nextjs: { appDirectory: true } },
-  args: { profile: PROFILE, save: accept, themePref: 'system' },
+  args: {
+    profile: PROFILE,
+    save: accept,
+    themePref: 'system',
+    // One prop, so the card's figures and the modal's rows cannot describe different accounts -
+    // which is what this file was doing before a review caught it: `SUMMARY` claimed eight
+    // categories beside a `CATEGORIES` holding two and the fallback.
+    categories: { categories: CATEGORIES, allocation: ALLOCATION },
+    palette: null,
+    periods: PERIODS,
+  },
+  // On `meta` for the browser, and repeated on every story below because the smoke harness reads
+  // `story.render` or `meta.component` and never `meta.render`. Both are needed: without this one
+  // Storybook's own docs page would render the bare component, and without the per-story ones the
+  // Jest harness would.
+  render: (args) => <Frame {...args} />,
 };
 
 export default meta;
 type Story = StoryObj<typeof SettingsScreen>;
 
-/** The frame as drawn: the Profile card prefilled, initials "MK", and the page's single Save. */
-export const Default: Story = {};
+/**
+ * The frame as drawn: three cards prefilled, initials "MK", and the page's single Save.
+ *
+ * The literal diff target for node `40:676`, and as of PET-48 it is the whole column rather than the
+ * top of it.
+ */
+export const Default: Story = {
+  render: (args) => <Frame {...args} />,
+};
 
 /**
  * A stored last name of nothing, which is the state `initials` and `shortName` both degrade for.
@@ -75,6 +145,7 @@ export const Default: Story = {};
  */
 export const SingleName: Story = {
   args: { profile: { ...PROFILE, fullName: 'Marko' } },
+  render: (args) => <Frame {...args} />,
 };
 
 /** A long hyphenated name and a long address, against the two-column row and the `max-w-205` ceiling. */
@@ -86,6 +157,68 @@ export const LongValues: Story = {
       email: 'marija.magdalena.kovacevic@example-company-mail.com',
     },
   },
+  render: (args) => <Frame {...args} />,
+};
+
+/**
+ * One category, which is AC2's singular (PET-48).
+ *
+ * Reachable rather than contrived: an account that has deleted everything it did not want is left
+ * with one row plus the fallback this card does not count.
+ */
+export const SingleCategory: Story = {
+  args: {
+    categories: {
+      categories: [category({ name: 'Groceries', monthlyCap: 200, spent: 120 }), FALLBACK_CATEGORY],
+      allocation: { monthlyBudget: 2000, allocated: 200, unallocated: 1800 },
+    },
+  },
+  render: (args) => <Frame {...args} />,
+};
+
+/**
+ * No categories at all, and the state neither design draws (PET-48).
+ *
+ * The card excludes the `Uncategorized` fallback, so an account holding only that row reads "0
+ * categories · $0 allocated of $2,000" - every word of it true, and none of it designed. This story
+ * is what to put in front of a designer for it, alongside the unavailable line below.
+ */
+export const NoCategories: Story = {
+  args: {
+    categories: {
+      categories: [FALLBACK_CATEGORY],
+      allocation: { monthlyBudget: 2000, allocated: 0, unallocated: 2000 },
+    },
+  },
+  render: (args) => <Frame {...args} />,
+};
+
+/**
+ * The categories read having failed, which is the fourth state on this page with no frame behind it
+ * (PET-48).
+ *
+ * The card keeps its heading and its button and says what is missing; the two cards above it stay
+ * editable and still save, which is the whole reason `page.tsx` degrades this read rather than
+ * throwing. Its one sentence is invented copy and owes A29 a sign-off with the rest.
+ */
+export const CategoriesUnavailable: Story = {
+  // The failed read. The card says so and "Manage" is disabled, because a modal drawing zeroes over
+  // "you have no categories" would state an outage as a fact about the account.
+  args: { categories: null },
+  render: (args) => <Frame {...args} />,
+};
+
+/**
+ * A euro account, and the one story that proves money follows the profile across *both* new cards
+ * (PET-47's budget field and PET-48's summary line).
+ *
+ * PET-47 made the switch re-denominate rather than convert - the amounts are integer cents with no
+ * currency attached and there is no rate source - so `€2,000` here is the same stored number the
+ * dollar stories draw.
+ */
+export const EuroAccount: Story = {
+  args: { profile: { ...PROFILE, currency: 'EUR' } },
+  render: (args) => <Frame {...args} />,
 };
 
 /**
@@ -128,7 +261,7 @@ export const WithMessages: Story = {
 
       return (
         <div ref={host}>
-          <SettingsScreen {...args} />
+          <Frame {...args} />
         </div>
       );
     }
@@ -170,7 +303,7 @@ export const EmailTaken: Story = {
 
       return (
         <div ref={host}>
-          <SettingsScreen {...args} />
+          <Frame {...args} />
         </div>
       );
     }
@@ -219,7 +352,7 @@ export const SessionExpired: Story = {
 
       return (
         <div ref={host}>
-          <SettingsScreen {...args} />
+          <Frame {...args} />
         </div>
       );
     }
@@ -260,7 +393,7 @@ export const Saved: Story = {
 
       return (
         <div ref={host}>
-          <SettingsScreen {...args} />
+          <Frame {...args} />
         </div>
       );
     }
