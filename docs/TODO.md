@@ -2787,3 +2787,61 @@ than discovered.
   replica) is just as destructive, not merely undocumented. `backend/src/database/CLAUDE.md` and
   `docs/guides/seeding-dummy-data.md` describe the guard now; the repair for a directory mixed
   before PET-61 - delete the central replica and let it re-bootstrap - still applies.
+
+### The cloud reset has no dry-run, and no backup behind it
+
+PET-71 turned the manual "wipe everything" sequence into `mise run reset:cloud`
+(`scripts/reset-databases.sh`). What it does not have is a rehearsal: there is no `--dry-run`
+that prints the plan without executing it, so the only preview is the confirmation block
+listing the counts and the resolved targets, and the only guard is having to type the project
+name back. A
+dry-run is genuinely useful here because the expensive mistake is running it against the wrong
+Fly app or the wrong Turso organization, and both are read out of files rather than typed - so
+the confirmation shows you what it resolved, but you have to actually read it.
+
+There is also no backup. Turso database deletion is immediate and the Fly volume is destroyed
+rather than snapshotted, so a reset aimed at the wrong target is unrecoverable. That is
+accepted for a project whose accounts are all test accounts (see the no-migrations entry
+above), and it stops being acceptable the moment anybody real registers. Whoever changes that
+should add the dry-run and a pre-flight export in the same ticket, since either alone gives a
+false sense of safety.
+
+One narrower gap worth naming: the script tolerates a 404 when deleting a database, which is
+what makes it re-runnable after a mid-way failure, but that same tolerance means a typo in the
+derived central database name would delete nothing and still report success on that step. The
+`database_type: "tursodb"` assertion on the recreate is what actually catches a wrong name, one
+step later.
+
+### The cloud reset's failure branches are reviewed, not run
+
+`reset:cloud` was run end to end on 2026-08-11 and its happy path is now exercised twice, but
+the `die` branches that run fixed that day are not covered by either run. They fire only when
+`flyctl` itself fails - a `machine stop` that does not stop, a `machine destroy` that leaves the
+machine, a `volume destroy` that fails while the volume is still attached - and nothing
+available locally makes `flyctl` fail on demand.
+
+This matters more than an ordinary untested-branch note, because two of those branches exist
+specifically to convert a **silent** wrong outcome into a loud one, and their previous versions
+were `|| true`. So the code that stops a reset from quietly not resetting is exactly the code no
+run has entered. Testing it properly needs a fake `flyctl` on `PATH` returning non-zero for a
+chosen subcommand, which is a small harness and a reasonable thing to add the next time this
+script is touched. Until then, treat edits to steps 4 and 9 as unprotected by anything but
+review.
+
+### A template seed change only reaches an already-seeded central database through a reset
+
+`openCentralDatabase` seeds `colour_templates`, `icon_templates` and `category_templates`
+programmatically at boot, guarded on "any `category_templates` row exists". The guard is not
+only idempotence - it is what stops a restart re-creating a template an admin deliberately
+deleted (`backend/src/database/CLAUDE.md`). The consequence is easy to miss and has been
+missed twice: **editing the seed constants and deploying does nothing at all** to an
+environment whose central database is already seeded. The new rows simply never appear, with
+no error and no log line.
+
+Until the super-admin write path exists, the only mechanism that applies a seed change to a
+live environment is `mise run reset:cloud`, which recreates central and therefore re-seeds it -
+at the cost of every account. That is fine while all accounts are test accounts and wrong
+afterwards. The real fix is the admin panel the templates were moved into central for, or
+failing that a narrower "sync templates" path that adds rows absent from the table without
+resurrecting deliberately deleted ones - which needs a tombstone on the template rows to tell
+those two cases apart.

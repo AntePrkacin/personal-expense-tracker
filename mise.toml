@@ -205,3 +205,26 @@ run = "npx ts-node src/scripts/check-showcase-fixture.ts"
 description = "Regenerate the committed showcase fixture.data.json"
 dir = "backend"
 run = "npx ts-node src/scripts/build-showcase-fixture.ts"
+
+# Reset is the inverse of seed, and split into two tasks for the same reason: a
+# mistaken local run deletes a gitignored SQLite file, a mistaken cloud run
+# destroys every account in Turso and the volume under the deployed app. So
+# reaching the cloud has to be typed out here, and the script then asks for the
+# project name on top of that.
+#
+# `raw = true` on both because the cloud reset reads a confirmation from the
+# terminal, and mise's captured output would swallow the prompt.
+#
+# The cloud reset needs TURSO_API_TOKEN, an operator token the app deliberately
+# does not have: TURSO_ORG_TOKEN is scoped to db:create, db:delete and
+# db:mint-token, and answers 403 on the list call the reset starts with. The
+# procedure and the ordering constraint behind it are in docs/guides/database.md.
+[tasks."reset"]
+description = "Delete the local database files (backend/databases/)"
+raw = true
+run = "scripts/reset-databases.sh --local"
+
+[tasks."reset:cloud"]
+description = "Destroy and recreate every Turso database and the Fly volume"
+raw = true
+run = "scripts/reset-databases.sh --cloud"

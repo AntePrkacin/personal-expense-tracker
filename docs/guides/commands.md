@@ -78,6 +78,13 @@ Fly deploy (see [Deployment](deployment.md)).
 | `mise run seed:cloud`         | The same, against Turso Cloud - needs `backend/.env`                 |
 | `mise run seed:fixture`       | Regenerate the committed showcase fixture from the spending model    |
 | `mise run seed:check`         | Measure the showcase spending model without seeding anything         |
+| `mise run reset`              | Delete the local database files under `backend/databases/`           |
+| `mise run reset:cloud`        | Destroy every Turso database and the Fly volume, then redeploy       |
+
+`reset:cloud` is destructive and has no undo: it deletes every account in Turso, replaces
+the deployed app's volume and redeploys. It asks for the project name before doing anything,
+and needs a `TURSO_API_TOKEN` the app itself does not have. Read
+[Database](database.md#resetting-everything-to-a-clean-state) before running it.
 
 Every task also has per-package variants when you want just one: `install:repo`,
 `install:backend`, `install:frontend`, `dev:backend`, `dev:frontend`, `update:repo`,
