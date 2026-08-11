@@ -195,8 +195,20 @@ export async function authorizedGet<T>(
  */
 export type AuthorizedWriteResult = { ok: true } | { ok: false; status?: number };
 
-/** What `authorizedPostFormData` reports back. See its own doc and the note on `AuthorizedWriteResult` above for why this is not that type. */
-export type AuthorizedFormDataResult<T> = { ok: true; data: T } | { ok: false; status?: number };
+/**
+ * What a guarded write whose **response body is the point** reports back.
+ *
+ * `AuthorizedWriteResult` above with the body carried, for the two writes whose answer the
+ * caller actually reads: the receipt scan's extracted fields, and PET-73's assistant reply.
+ * See that type's own note for why discarding the body is right for the other four.
+ *
+ * **It was `AuthorizedFormDataResult` until PET-73**, named after the one caller it then had.
+ * The assistant's send is a JSON post over the same shape, so the name described the encoding
+ * of one caller rather than what the type means - which is "a write that answers with
+ * something". Renamed rather than duplicated, and renamed in its own commit so the diff reads
+ * as a rename.
+ */
+export type AuthorizedBodyResult<T> = { ok: true; data: T } | { ok: false; status?: number };
 
 /**
  * POSTs a JSON body to a guarded endpoint with the session lifted into an `Authorization`
@@ -367,9 +379,11 @@ export async function authorizedPatch(path: string, body: unknown): Promise<Auth
  * derives the header itself, including the multipart boundary, which is not something this
  * function could compute and set correctly on its own.
  *
- * **Returns the parsed body on success**, unlike every other verb here: see
+ * **Returns the parsed body on success**, unlike the four verbs above: see
  * `AuthorizedWriteResult`'s own note on why the scan is the one write whose response is the
- * entire point of the call, rather than a fact this function was missing.
+ * entire point of the call, rather than a fact this function was missing. PET-73's
+ * `authorizedPostJson` below is the second such write, which is what renamed the shared result
+ * type.
  *
  * It takes a `path` and so must not become a Server Action, for the reason every other verb
  * here already gives: `'use server'` would publish an endpoint accepting an arbitrary path.
@@ -380,7 +394,7 @@ export async function authorizedPatch(path: string, body: unknown): Promise<Auth
 export async function authorizedPostFormData<T>(
   path: string,
   formData: FormData,
-): Promise<AuthorizedFormDataResult<T>> {
+): Promise<AuthorizedBodyResult<T>> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
 
@@ -403,6 +417,71 @@ export async function authorizedPostFormData<T>(
     return { ok: true, data: (await response.json()) as T };
   } catch {
     // Unreachable backend, DNS, a dropped connection, or a body that would not parse.
+    return { ok: false };
+  }
+}
+
+/**
+ * POSTs a JSON body to a guarded endpoint and **returns the parsed response body**.
+ *
+ * **The sixth verb.** `authorizedPost` deliberately discards the body, and for PET-73's
+ * assistant the reply *is* the body - so this is `authorizedPostFormData`'s JSON sibling
+ * rather than a widening of `authorizedPost`, which would have made the four writes that want
+ * nothing back pay for a parse and, worse, would have let a 2xx with an unparseable body turn a
+ * created transaction into a reported failure. The two body-carrying verbs share
+ * `AuthorizedBodyResult`; the four that do not share `AuthorizedWriteResult`.
+ *
+ * **It takes an optional `signal`, which no other verb here does, and that is the abort
+ * chain's second hop.** The composer owns an `AbortController` and passes its signal to the
+ * browser's `fetch`; the route handler receives that as `request.signal` and passes it here;
+ * this threads it into the fetch at the backend, whose Express `close` then aborts the Gemini
+ * call. Threaded into the fetch and **nothing else** - the other five verbs omit it, so the
+ * widening costs them nothing. See `docs/explainers/cancelling-an-ai-request.md`.
+ *
+ * **An abort rejects rather than reporting a status, and the caller must tell that apart from
+ * a failure.** `fetch` throws an `AbortError` on a signal, which lands in the `catch` below as
+ * `{ ok: false }` with no status - the same shape a dropped connection produces. So the caller
+ * checks `signal.aborted` itself rather than reading this result, because a deliberate cancel
+ * must render no error line at all. `lib/sendAssistantMessage.ts` is where that branch lives.
+ *
+ * It takes a `path` and so must not become a Server Action, for the reason every verb here
+ * gives: `'use server'` would publish an endpoint accepting an arbitrary path.
+ *
+ * @param path the backend path including its `/api` prefix
+ * @param signal aborts the request; the caller distinguishes an abort from a failure
+ */
+export async function authorizedPostJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<AuthorizedBodyResult<T>> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
+    return { ok: false, status: 401 };
+  }
+
+  try {
+    const response = await fetch(`${process.env.BACKEND_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+      signal,
+    });
+
+    if (!response.ok) {
+      return { ok: false, status: response.status };
+    }
+
+    return { ok: true, data: (await response.json()) as T };
+  } catch {
+    // Unreachable backend, DNS, a dropped connection, a body that would not parse - or the
+    // caller's own abort, which is why the caller checks its signal rather than this shape.
     return { ok: false };
   }
 }

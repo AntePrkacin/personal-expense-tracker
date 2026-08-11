@@ -389,6 +389,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assistant/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the assistant a question about your spending.
+         * @description Creates a conversation when `sessionId` is omitted and continues one when it is present, answering **201** with the stored question, the reply and the session both belong to. **Nothing is persisted unless the reply arrives**, so a failed, timed-out or cancelled turn stores neither the question nor an answer. `truncation` is non-null only when the account has more transactions than fit one prompt, and says how many of how many were sent and how far back the assistant could see. **503** means the assistant is not configured on this deployment, **504** that the model call did not finish in time - retrying the identical question is the right next move there, which is why it is distinct from the 503.
+         */
+        post: operations["AssistantController_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your conversations, newest activity first.
+         * @description A wrapper object rather than a bare array, so a future field has somewhere to go. Carries no messages; read one conversation for those.
+         */
+        get: operations["AssistantController_sessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One conversation with its messages, for resuming it.
+         * @description Messages come back in render order, oldest first. **404** means the conversation does not exist - unambiguously, since this route names exactly one resource. Cross-user isolation is structural: another account's id simply does not exist in your database.
+         */
+        get: operations["AssistantController_conversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -991,12 +1051,6 @@ export interface components {
             /** @description Percentage of the period's total spend this category accounts for, unrounded. Relative to `spent` on this response, not to any cap. Across the whole `categories` array these sum to 100: spend belonging to no live category is folded into the Uncategorized fallback, so every transaction in the period is counted in exactly one entry. Round for display with an apportionment that preserves the total, since rounding each value independently can sum to 99 or 101. */
             percent: number;
         };
-        InsightSummaryDto: {
-            /** @example You are on track this month */
-            headline: string;
-            /** @example You've spent $1,240 of your $2,000 budget with 11 days to go. */
-            body: string;
-        };
         DashboardResponseDto: {
             /** @description Major units spent so far this period. */
             spent: number;
@@ -1018,10 +1072,14 @@ export interface components {
             categories: components["schemas"]["DashboardCategoryDto"][];
             /** @description Up to 3 most recent transactions in the current period, newest first. */
             recentTransactions: components["schemas"]["TransactionResponseDto"][];
-            /** @description The headline and body of the most recently generated insight set, for the teaser card. Null when nothing has been generated yet (including while the first run is still in flight). **Always the latest set**, not one for the period being viewed: insights are generated for the current period only. */
-            insight: components["schemas"]["InsightSummaryDto"] | null;
             /** @description The period every figure here covers - the current one unless `?period=` asked for another. Use `label` for the screen’s overline rather than deriving a month name from `start`. */
             period: components["schemas"]["PeriodSummaryDto"];
+        };
+        InsightSummaryDto: {
+            /** @example You are on track this month */
+            headline: string;
+            /** @example You've spent $1,240 of your $2,000 budget with 11 days to go. */
+            body: string;
         };
         InsightCardDto: {
             /**
@@ -1051,6 +1109,88 @@ export interface components {
             insights: components["schemas"]["InsightCardDto"][];
             /** @description ISO 8601, when the latest ready set finished generating. Null when empty. */
             generatedAt: string | null;
+        };
+        SendMessageDto: {
+            /**
+             * @description The question. The cap exists so a pasted novel cannot be what blows the model context; the composer restates it client-side, because `maxLength` reaches no generated type and the resulting 400 would otherwise produce advice the user cannot act on.
+             * @example How much did I spend on groceries last month?
+             */
+            message: string;
+            /**
+             * Format: uuid
+             * @description The session to continue. Omit it to start one; the response carries the id that was created. An id naming no live session of yours is a **404**, unambiguously - this body references exactly one resource by id.
+             */
+            sessionId?: string;
+        };
+        AssistantMessageDto: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            role: "user" | "assistant";
+            /** @example You spent 312.40 EUR on Groceries in August 2026. */
+            content: string;
+            /** @description ISO 8601. */
+            createdAt: string;
+        };
+        AssistantTruncationDto: {
+            /**
+             * @description How many transactions were sent.
+             * @example 3000
+             */
+            included: number;
+            /**
+             * @description How many the account has.
+             * @example 4210
+             */
+            total: number;
+            /**
+             * @description The oldest date the assistant could see. Anything earlier is missing from its answer.
+             * @example 2024-02-09
+             */
+            oldestIncludedDate: string;
+        };
+        SendMessageResponseDto: {
+            /** Format: uuid */
+            sessionId: string;
+            /**
+             * @description Derived from the first message of the session and never rewritten.
+             * @example How much did I spend on groceries?
+             */
+            title: string;
+            message: components["schemas"]["AssistantMessageDto"];
+            reply: components["schemas"]["AssistantMessageDto"];
+            /** @description Null whenever the whole history fitted, which is every account this project has. */
+            truncation: components["schemas"]["AssistantTruncationDto"] | null;
+        };
+        AssistantSessionDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example How much did I spend on groceries? */
+            title: string;
+            /** @description ISO 8601, when the last completed turn landed. The list orders on it. */
+            lastMessageAt: string;
+            /** @description ISO 8601. */
+            createdAt: string;
+        };
+        AssistantSessionsResponseDto: {
+            sessions: components["schemas"]["AssistantSessionDto"][];
+            /**
+             * @description How many conversations there are. Equal to `sessions.length` while there is no pagination, and returned as its own field so a future page size cannot silently turn it into a page count - the reasoning `GET /transactions` already records for its own `total`.
+             * @example 3
+             */
+            total: number;
+        };
+        AssistantConversationResponseDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example How much did I spend on groceries? */
+            title: string;
+            /** @description ISO 8601, when the last completed turn landed. The list orders on it. */
+            lastMessageAt: string;
+            /** @description ISO 8601. */
+            createdAt: string;
+            /** @description In render order, oldest first. */
+            messages: components["schemas"]["AssistantMessageDto"][];
         };
     };
     responses: never;
@@ -2099,6 +2239,159 @@ export interface operations {
             };
             /** @description The request conflicts with the current state. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AssistantController_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendMessageResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Rate limited. Refused by the throttler guard, which runs before the request body is ever validated. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The feature is not configured on this deployment. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description A downstream call did not finish in time. Safe to retry. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AssistantController_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSessionsResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AssistantController_conversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationResponseDto"];
+                };
+            };
+            /** @description Validation failed. `message` is the array of field errors produced by the global ValidationPipe. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

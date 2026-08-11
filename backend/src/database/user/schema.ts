@@ -12,8 +12,8 @@ import {
  * this schema is instantiated once per person and its migrations run on first
  * open of each file (see UserDatabaseService).
  *
- * `profile`, `categories`, `transactions`, the insights tables and PET-72's
- * three append-only history tables live here.
+ * `profile`, `categories`, `transactions`, the insights tables, PET-72's
+ * three append-only history tables and PET-73's two assistant tables live here.
  * Adding a migration upgrades every existing user database the next time it
  * opens, so a user-scope migration must be safe to apply to live data.
  */
@@ -508,3 +508,114 @@ export const insights = sqliteTable(
 
 export type InsightRow = typeof insights.$inferSelect;
 export type NewInsightRow = typeof insights.$inferInsert;
+
+/**
+ * One assistant conversation: the header of a chat the user held about their
+ * own spending (PET-73).
+ *
+ * The parent-child pair below copies `insight_sets`/`insights` structurally and
+ * differs from it in four deliberate ways, each of which is a consequence of a
+ * turn being **synchronous and request-scoped** where a generation run is
+ * asynchronous and single-flight.
+ *
+ * **No `status` and no partial unique index.** `insight_sets_generating_idx`
+ * exists because a run is in flight across requests and at most one may be; a
+ * turn either completes inside its request or writes nothing at all, so there is
+ * no in-flight row to guard and nothing to reclaim past a staleness cutoff.
+ *
+ * **No `updated_at`**, which `insight_sets` also does without. The only mutation
+ * a session takes is `last_message_at` moving, and that column *is* the record
+ * of it.
+ *
+ * **Nothing here is exempt from the tombstone convention.** `backend/CLAUDE.md`
+ * names exactly two exemptions - the empty-account placeholder removal and the
+ * completed-run prune - and this is neither: nothing hard-deletes and nothing
+ * prunes, because growth is bounded by how much a human types rather than by how
+ * much they spend. `DELETE /sessions/:id` is deferred for the same reason; see
+ * docs/TODO.md.
+ */
+export const assistantSessions = sqliteTable(
+  'assistant_sessions',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // Derived from the first user message at creation and never rewritten,
+    // which is why this table carries no `updated_at`. It is a label for the
+    // History list, not content.
+    title: text('title').notNull(),
+
+    // Moved by every completed turn. The History list orders on it, so it is
+    // "when this conversation was last alive" rather than when it started.
+    lastMessageAt: integer('last_message_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+
+    // Tombstone, like every table here. Every read filters isNull(deletedAt).
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object. Serves the
+  // History list's one query, which is this table's only read that is not by id.
+  (table) => [
+    index('assistant_sessions_last_message_at_idx').on(table.lastMessageAt),
+  ],
+);
+
+export type AssistantSessionRow = typeof assistantSessions.$inferSelect;
+export type NewAssistantSessionRow = typeof assistantSessions.$inferInsert;
+
+/**
+ * One message in a conversation, user or assistant, in render order.
+ *
+ * **A stored message is by definition part of a completed turn**, which is the
+ * deliberate contrast with `insight_sets` and the reason this table needs no
+ * status column and no lifecycle at all: the session row, the question and the
+ * answer are written together in one `db.transaction()` *after* the model has
+ * answered. A failed or cancelled turn leaves nothing behind, so there is no
+ * half-written state for a read to interpret and no orphan for anything to
+ * reclaim. What it costs is that a failed call loses the question, which the
+ * composer holds client-side and puts back.
+ */
+export const assistantMessages = sqliteTable(
+  'assistant_messages',
+  {
+    // Same primary-key caveat as everywhere else; see docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // No .references(): the schema is FK-less throughout, exactly like
+    // `insights.set_id`. The index below serves the by-session read; integrity
+    // is the service's, since a session and its messages are only ever written
+    // together in one transaction.
+    sessionId: text('session_id').notNull(),
+
+    // `user` | `assistant`. A plain text column for the same reason
+    // `insight_sets.status` is one: this repo constrains closed sets in
+    // TypeScript rather than in SQLite.
+    role: text('role').notNull(),
+
+    content: text('content').notNull(),
+
+    // Copying `insights.sort_order` and adding a reason of its own: the two
+    // messages of a turn are written inside one transaction and therefore share
+    // a millisecond, so `created_at` is not a tiebreak between a question and
+    // its own answer.
+    sortOrder: integer('sort_order').notNull(),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+
+  // The v1 RC third argument returns an ARRAY, not an object.
+  (table) => [index('assistant_messages_session_id_idx').on(table.sessionId)],
+);
+
+export type AssistantMessageRow = typeof assistantMessages.$inferSelect;
+export type NewAssistantMessageRow = typeof assistantMessages.$inferInsert;

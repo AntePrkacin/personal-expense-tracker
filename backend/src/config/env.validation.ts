@@ -100,12 +100,14 @@ export const envValidationSchema = Joi.object({
   AUTH_RATE_IP_LIMIT: Joi.number().integer().positive().default(30),
   AUTH_RATE_TTL_S: Joi.number().integer().positive().default(900),
 
-  // Google AI Studio API key for receipt-scanning extraction (gemini-3.6-flash
-  // via @google/genai). Optional and unpaired: unlike the Turso and mail pairs,
-  // there is nothing else to pair it with, and its absence has a defined
-  // answer - POST /api/transactions/scan responds 503 - rather than a fallback
-  // mode, so CI and the e2e suite (which have no key and no browser) boot
-  // exactly as they do today.
+  // Google AI Studio API key, shared by the two features that call Gemini
+  // (gemini-3.6-flash via @google/genai): receipt-scanning extraction, and
+  // PET-73's assistant chat. Optional and unpaired: unlike the Turso and mail
+  // pairs, there is nothing else to pair it with, and its absence has a defined
+  // answer on both - POST /api/transactions/scan and POST
+  // /api/assistant/messages each respond 503 - rather than a fallback mode, so
+  // CI and the e2e suite (which have no key and no browser) boot exactly as
+  // they do today.
   GEMINI_API_KEY: Joi.string(),
 
   // Rate limit on POST /api/transactions/scan, per session user id rather than
@@ -114,6 +116,17 @@ export const envValidationSchema = Joi.object({
   // limits are, so a spec can trip it without waiting out the real window.
   SCAN_RATE_LIMIT: Joi.number().integer().positive().default(10),
   SCAN_RATE_TTL_S: Joi.number().integer().positive().default(3600),
+
+  // Rate limit on POST /api/assistant/messages, keyed per session user id like
+  // the scan limiter and protecting the same shared Gemini quota. A fourth
+  // named throttler rather than a share of `scan`, because the two budgets
+  // differ by an order of magnitude in opposite directions - see AppModule.
+  // Deliberately low: one chat turn costs roughly 40k input tokens with nothing
+  // cached, so a single account can reach the free tier's tokens-per-minute
+  // ceiling in a way scanning never made possible. Exposed as configuration so
+  // a spec can trip it without waiting out the real window.
+  CHAT_RATE_LIMIT: Joi.number().integer().positive().default(20),
+  CHAT_RATE_TTL_S: Joi.number().integer().positive().default(3600),
 
   // How many reverse proxies sit in front of this process, which is what Express
   // needs to know before req.ip can mean the caller rather than the proxy. The

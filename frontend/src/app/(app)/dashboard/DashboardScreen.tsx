@@ -39,8 +39,27 @@ type DashboardScreenProps = {
   donutCard: React.ReactNode;
   /** DSH-7. PET-24's `RecentTransactionsCard`. */
   recentTransactionsCard: React.ReactNode;
-  /** DSH-8. PET-25's `InsightTeaserCard`. */
-  insightCard: React.ReactNode;
+  /**
+   * The summary banner, at the top of the wide column. PET-73's `InsightSummarySlot`.
+   *
+   * **This replaces `insightCard` and moves across the grid**, which is the shape of PET-73 on
+   * this screen. That slot held `InsightTeaserCard`, whose whole job was rendering the same
+   * headline and body from a different endpoint and linking to the page that repeated them; the
+   * cards themselves live here now, and the banner absorbed the teaser's `card-actions` footer
+   * along with its two copy states.
+   */
+  insightSummary: React.ReactNode;
+  /**
+   * The rule-based insight cards, under the donut in the narrow column. PET-73's
+   * `InsightCardsSlot`.
+   *
+   * **Required like every other slot, and it renders nothing in three of its states** - a
+   * zero-card ready set, an empty account, and any period navigated back to. That is deliberately
+   * the component's decision rather than an optional prop: this file's own rule is that an
+   * optional slot would let a call site quietly test a dashboard with a card missing, and
+   * `CategoryDonut` already guards on its own input for the same reason.
+   */
+  insightCards: React.ReactNode;
   /**
    * The period every figure on this screen belongs to, from the dashboard response's own
    * `period` object.
@@ -64,7 +83,8 @@ export function DashboardScreen({
   trendCard,
   donutCard,
   recentTransactionsCard,
-  insightCard,
+  insightSummary,
+  insightCards,
   period,
   periods,
 }: DashboardScreenProps) {
@@ -94,13 +114,16 @@ export function DashboardScreen({
       <main className="flex-1 pb-10">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_1fr]">
           <div className="flex flex-col gap-5">
+            {/* The banner leads the wide column since PET-73: it is the month's analysis in
+                prose, which is what the rest of this column then breaks down. */}
+            {insightSummary}
             {budgetCard}
             {trendCard}
             {recentTransactionsCard}
           </div>
           <div className="flex flex-col gap-5">
             {donutCard}
-            {insightCard}
+            {insightCards}
           </div>
         </div>
       </main>

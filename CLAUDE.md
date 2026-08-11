@@ -35,6 +35,33 @@ scoped file's `## Not built here` section carry what is and is not built, and gi
 how it got there; a running ledger of it kept in this section went stale twice before it was
 removed.
 
+**"What is still missing is what the one remaining unbuilt screen *shows*" is stale, and has been
+since PET-46.** All four routed views render content below their header and all four fetch. What
+remains unbuilt is that one Settings card, and - as of PET-73 - nothing else on any of the four.
+
+**PET-73 is the sixteenth thing that works, and it is the one that moves a screen's contents to
+another screen.** `/insights` rendered three cards from two deterministic rule detectors - the "AI"
+was branding, and rules-over-LLM is a recorded decision - while the Dashboard carried a teaser whose
+whole job was rendering the same headline and body from a *different* endpoint and linking to the
+page that repeated them. One fact, two DTOs, two components, three overlapping "nothing here yet"
+copies. So the cards **move to the Dashboard**, where summarising the month is already the job, and
+`/insights` becomes a **chat over the user's own transactions** on the Gemini key receipt scanning
+already uses - the app's second AI feature and the first that is actually a model rather than a
+label. `DashboardResponseDto.insight` is deleted with the teaser. The rule-based generator, both
+tables and both insight endpoints survive untouched: the chat generates nothing, so "No LLM behind
+the insights" stays literally true. Four things about it reach past those two screens. The send is
+`app/api/assistant/messages/route.ts`, the app's **fourth route handler and the first the browser
+POSTs to**, because a turn costs roughly 40k input tokens and tens of seconds and the user must be
+able to **stop** one - a Server Action exposes no `AbortController`, so cancellation travels three
+hops from the composer to Gemini and `docs/explainers/cancelling-an-ai-request.md` explains it in
+plain language. A **fourth named throttler** joins the three that existed. A category write now
+regenerates the insight set through a new `CATEGORY_CHANGED` event, so the same user action behaves
+the same whichever modal performed it. And a burst of writes no longer leaves a stale set: a
+**bounded** dirty flag makes N writes produce at most two runs. The Dashboard's period navigation
+forced one decision worth knowing - insights are generated for the current period only, so the
+banner and both cards **render nothing on a period navigated back to** rather than putting October's
+analysis over September's figures.
+
 **PET-72 is the fifteenth thing that works, and it is the one that changes what the other fourteen
 *mean*.** Budget, category caps and the day a period starts on were single settings, so changing any
 of them silently rewrote every period the account had ever had: raising the budget in 2026 re-priced

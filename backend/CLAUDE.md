@@ -1060,6 +1060,21 @@ year of history. And the label is the backend's to compute for every consumer, b
 schedule change stretched spans two calendar months and no client-side arithmetic over a start day
 can name it.
 
+## The assistant
+
+**PET-73's AI assistant chat has its own file**, `backend/src/assistant/CLAUDE.md`, which loads
+whenever the work is under `backend/src/assistant/`. It is the authority for the three endpoints, the
+prompt and its ceilings, the one-transaction-per-turn write, the abort chain's third hop, and - the
+reason it is a file rather than a section here - the `### What crosses the wire` inventory for the
+**second** place in this app that sends a user's data to a third party.
+
+Two things about it belong here rather than there, because they are claims about the rest of the
+backend. **It generates nothing**: `INSIGHT_GENERATOR` is still bound to
+`RuleBasedInsightGenerator` and the "No LLM behind the insights" bullet below is still literally
+true. And **`chat` is a fourth named throttler** beside `email`, `ip` and `scan`, registered in the
+one `ThrottlerModule.forRootAsync` in `app.module.ts` - so every guarded route now skips three
+throttlers it is not named by rather than two.
+
 ## Persistence
 
 The persistence layer has its own file, `backend/src/database/CLAUDE.md`, which loads

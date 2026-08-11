@@ -2,7 +2,6 @@ import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
 import * as BudgetCard from './dashboard/BudgetCard.stories';
-import * as InsightTeaserCard from './dashboard/InsightTeaserCard.stories';
 import * as RecentTransactionsCard from './dashboard/RecentTransactionsCard.stories';
 import * as TrendCard from './dashboard/TrendCard.stories';
 import * as DeleteTransactionDialog from './DeleteTransactionDialog.stories';
@@ -48,7 +47,6 @@ const MODULES: [name: string, module: StoryModule][] = [
   ['BudgetCard', BudgetCard as StoryModule],
   ['TrendCard', TrendCard as StoryModule],
   ['RecentTransactionsCard', RecentTransactionsCard as StoryModule],
-  ['InsightTeaserCard', InsightTeaserCard as StoryModule],
   // **Both delete dialogs, and neither was registered in any suite** - `docs/TODO.md` carried them as
   // "the two story modules with no gate behind them at all", since `build-storybook` bundles a story
   // without running it. Found again while PET-70 was registering its own module next door, and closed

@@ -2044,6 +2044,18 @@ completing run re-reads and re-runs from, or a debounce - and generation is sub-
 window is small and the manual escape is one click. It is the same fix the `LlmInsightGenerator`
 entry below already needs before that swap, and it should be built once, for both.
 
+**PET-73 fixed it, and the paragraph above was wrong about one word: a re-entrant loop is not the
+only honest fix, a *bounded* one is.** `InsightsService.dirty` is a per-user flag the listener sets
+on the 409 it used to only log; `runGeneration` **clears it as its own run starts**, and on the
+success path a flag that is set again starts exactly one more run. Because each run clears the flag
+on entry, a burst of N writes produces **at most two runs**, and there is no path that schedules a
+third from the second - the follow-up clears it too, and by then the burst has settled. Only the
+success path schedules: a failed or reclaimed run has not settled the state it would be scheduling
+against, and chaining off one is how a bounded retry becomes an unbounded one. The flag is in memory
+rather than in a column for the same reason `inFlight` is - it is process state about a floated run,
+and a single instance is a deployment invariant. What this entry still points at for the
+`LlmInsightGenerator` swap is **debouncing**, which is a different thing and is still owed.
+
 ### Generate-on-write was argued against here, and PET-42-43-44 reversed it
 
 **This entry used to say a write path firing generation was "the tempting shortcut" and "the wrong
@@ -2077,6 +2089,69 @@ sign-off with the rest. And `Screens/04 Dashboard` fixtures the ready state beca
 being diffed against node 21:4 - that is now a state the running app really produces, so the
 story's comment saying otherwise is dated.
 
+**A second reversal belongs here, PET-73's, because it is the same shape and about the same
+field.** PET-25 argued that "PET-20's endpoint exists so that one call serves the whole screen" and
+rejected the Dashboard making a second read for its insight content on those grounds. PET-73
+reversed it: `DashboardResponseDto.insight` is **removed**, and the Dashboard reads
+`GET /api/insights` directly. Two things answer the original argument. The dashboard summary is a
+**snapshot with no way to update itself**, so an `insight` field on it goes stale exactly where the
+poll's whole purpose is to not be - a set generating in the background would need a route refresh to
+appear, on the one card whose entire job is to resolve without one. And PET-72 had already spent
+that argument itself, by adding `readPeriods()` beside `readDashboard()` for the header's period
+select; the screen was already making two reads before this one made it three. PET-25's argument is
+kept above rather than deleted, which is this repo's convention for an argument that turned out to be
+wrong.
+
+### The assistant chat scrolls the page rather than a bounded message region
+
+PET-73's plan assumed a fixed-height message list pinned between the tab bar and the composer, and
+that is not what shipped. **What the chat does do** is scroll to its newest turn after every send,
+failure and cancel - `insights/chatScroll.ts`, one `scrollTop` write on `document.scrollingElement`
+and emphatically not `scrollIntoView`, for the reason `lib/pickerScroll.ts` records - so the newest
+bubble and the composer are always in view. What it does **not** have is a region of its own.
+
+The reason is the shell rather than the screen. The root layout is `flex min-h-full flex-col` and
+`(app)/layout.tsx` is `flex flex-1 flex-col` on top of it, so **nothing in the chain has a definite
+height**: a `flex-1 min-h-0 overflow-y-auto` child resolves against its content and never overflows,
+which would make the `overflow` decoration and the scrollbar never appear. Bounding it means giving
+the chain a real height, and that bounds the other three routed views too - each of which wants to
+grow. So this is a layout decision for a screen with no Figma frame, and it wants designing rather
+than guessing.
+
+What it costs today: a very long conversation makes a very long page, and the tab bar scrolls away
+with it. `chatScroll.ts` is where the rule lives if that changes - the one `scrollTop` write applies
+to a bounded region exactly as it applies to the document.
+
+### Deleting an assistant conversation is deferred, and the reason is not the endpoint
+
+PET-73 ships `assistant_sessions` and `assistant_messages` with `deleted_at` on both and every read
+filtering it, and **no** `DELETE /api/assistant/sessions/{id}` and no prune. That is a decision
+rather than an omission, and the contrast with `insight_sets` is the whole of it: that table needed a
+prune because a row was written per *transaction write*, so its growth tracked how much the user
+spent - roughly 1,800 set rows a year at five expenses a day, in the user's own replica, every one
+carried to Turso Cloud by the shutdown push. A conversation only exists because a human typed it, so
+growth is bounded by use.
+
+What it would take when somebody asks for it: a service method tombstoning the session (its messages
+can stay, since every read joins from the session), a route, a `lib/` write with its taxonomy, and a
+confirmation dialog - `(app)/ConfirmDeleteDialog.tsx` is the shared one, and `DeleteCategoryProvider`
+is the screen-scoped provider shape a History list with N rows on one route would want. No schema
+change, which is why deferring it costs nothing later.
+
+### The assistant cannot answer a question about a past period's budget or caps
+
+The prompt quotes the **current** period's budget and per-category caps, and deliberately not the
+history behind them. Both are effective-dated since PET-72, so the honest alternative is sending
+`budget_history` and `category_cap_history` too - and that is a second dataset with a join the model
+has to perform in prose, against transaction rows that carry no period attribution of their own. The
+prompt header names which period its figures are for, so the model does not silently answer a
+question about last March with this month's limits; what it cannot do is answer that question at all.
+
+The cheap version, if this turns out to matter, is not the histories: it is attributing each
+transaction row to a period **in the digest**, one extra field per row, which lets the model group
+without joining anything. That costs tokens on every turn for a question most users will not ask,
+which is why it is here rather than shipped.
+
 ### An LLM generator needs a debounce before it can be bound
 
 The write-path trigger above is safe because `RuleBasedInsightGenerator` settles in well under a
@@ -2091,6 +2166,14 @@ single delayed run collapse a burst, rather than starting one per write. The rea
 `hasRunInFlight`'s staleness cutoff is already generous enough for a slow generator, which is what
 it was sized for.
 
+**PET-73 narrows this without closing it, and the distinction matters.** The dirty flag exists now,
+so a burst no longer *loses* a write's data - but it bounds the loop rather than delaying it, and
+what a slow generator needs is the delay: two runs per burst is fine at sub-second and expensive at
+multi-second. **The debounce is still owed.** What that ticket does settle is that this entry
+**blocks nothing it used to**: its chat is a separate module binding no generator, so
+`INSIGHT_GENERATOR` is untouched and PET-73's `CATEGORY_CHANGED` needed no debounce either - the
+objection there was "an LLM run per cap change is not cheap", and no LLM is bound.
+
 ### If `/insights` becomes a chat, the module boundary is the thing to get right
 
 A plausible next shape for this feature moves the cards onto the Dashboard and turns `/insights`
@@ -2104,6 +2187,16 @@ lifecycle, different storage, different failure modes, and `INSIGHT_GENERATOR` i
 producing a stored set rather than for turning a question into an answer. A chat wants its own
 module and its own segment name. `frontend/CLAUDE.md`'s Not built here already reserves an
 `/api/chat` route handler, and it deliberately declares no model-provider key.
+
+**PET-73 executed this, and the entry is kept as the record of why rather than deleted.** The
+forecast held almost exactly: the cards moved to the Dashboard, `InsightsService` and both tables
+are untouched, and the chat is `src/assistant/` - a separate module binding no generator, which is
+the one thing this entry insisted on. Two details came out differently. It was **not** "a DTO field
+plus UI work": `DashboardResponseDto.insight` was *removed* rather than kept, because the dashboard
+summary is a snapshot with no way to update itself and the poll behind those cards exists precisely
+to not be one - so the Dashboard reads `GET /api/insights` directly. And the reserved `/api/chat`
+handler landed as `/api/assistant/messages`, for a reason this entry could not have known: it exists
+so a turn can be **cancelled**, not merely because a browser has to call something.
 
 ### PET-26's five empty-state strings are designed copy, not A29's
 
@@ -2474,6 +2567,15 @@ The clean version is a single `CATEGORY_CHANGED` event emitted from `create`, `u
 call would close the cycle the emitter exists to avoid. It wants building **with** the debounce or
 dirty flag the `LlmInsightGenerator` swap already owes, above: a rule-based run per cap change is
 cheap, and an LLM run per cap change is not.
+
+**PET-73 built exactly that, and the last sentence turned out not to apply.** The event is emitted
+from all four writes and `insights/insight-triggers.listener.ts` - renamed from
+`transaction-changed.listener.ts`, because a file named after one of two events it handles is a
+filename that lies - handles both through one private helper. **No debounce was owed after all**:
+the objection was that an LLM run per cap change is not cheap, and no LLM is bound; the bulk cap
+write is also one statement per modal save rather than one per keystroke. What the same ticket did
+build is the bounded dirty flag above, which is why a cap change landing during a run no longer
+loses its data either.
 
 ### The Allocate modal's copy is invented end to end, and three decisions inside it want a look
 

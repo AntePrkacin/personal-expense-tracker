@@ -4,7 +4,7 @@ import { AddTransactionProvider } from '../AddTransactionProvider';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
-import { InsightTeaserCard } from './InsightTeaserCard';
+import { SummaryBanner, UNLOCK_COPY } from './SummaryBanner';
 import { RecentTransactionsCard } from './RecentTransactionsCard';
 import { TrendCard } from './TrendCard';
 
@@ -91,7 +91,12 @@ export const Empty: Story = {
               isEmpty={true}
             />
           }
-          insightCard={<InsightTeaserCard insight={null} isEmpty={true} />}
+          // Frame 44:706's own copy, straight off the exported constant so this story cannot
+          // restate a shipped string. The trigger is omitted rather than stubbed: it needs
+          // `AddTransactionProvider`, which this story already mounts, and the button is
+          // `InsightSummarySlot`'s to choose.
+          insightSummary={<SummaryBanner {...UNLOCK_COPY} />}
+          insightCards={null}
         />
       </div>
     </AddTransactionProvider>

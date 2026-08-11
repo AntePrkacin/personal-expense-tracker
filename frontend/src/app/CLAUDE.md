@@ -1741,6 +1741,79 @@ from the story; `update` ships with one; and `create` is threaded to `AddCategor
 to a provider, because that component owns its own modal. `CategoriesScreen.stories.tsx` defaults all
 three in its shared `Frame`, so a story added later cannot forget one.
 
+**PET-73 replaces `/insights` with an assistant chat and moves its cards onto the Dashboard, which
+dates several paragraphs above and adds three mechanisms worth reading before touching either
+screen.**
+
+**The Dashboard's fifth slot became two, and both render nothing on a period navigated back to.**
+`InsightTeaserCard` is deleted with `DashboardResponseDto.insight` - it rendered the same headline
+and body from a different endpoint and linked to the page that repeated them. `InsightSummarySlot`
+leads the wide column and `InsightCardsSlot` sits under the donut, both reading `GET /api/insights`
+through **one** `InsightPollProvider` - `transactions/FilterNavigation.tsx`'s shape, and for
+`FilterNavigation`'s own reason: two client pieces on opposite sides of a server-rendered boundary
+need one owner, and two timers on one screen double the requests and can disagree about which set is
+current. The whole poll relocated intact from `InsightsScreen`: the backoff, the 5.5-minute ceiling,
+the `stalled` fallback, the render-phase prop adoption and the 409-as-success path are all unchanged
+in substance. **`isCurrentPeriod` is the screen's second condition**, resolved once in `page.tsx`
+beside `isEmpty` and threaded as a boolean - PET-26's rule - because insights are generated for the
+**current period only** and `GET /api/insights` publishes no period at all. Without it, navigating
+back a period puts October's analysis over September's figures on a screen where every other number
+is right, which is the failure this repo has already paid for three times. The **components** decide
+to render nothing rather than the slots being optional, exactly as `CategoryDonut` guards on its own
+input: `DashboardScreen`'s own rule is that an optional slot would let a call site quietly test a
+dashboard with a card missing.
+
+**`SummaryBanner` absorbed the teaser's three copy states and grew an `action` slot.** On
+`/insights` it only ever rendered under `state === 'ready'`, because the screen around it drew a
+whole empty card for the other cases; on the Dashboard it is the topmost card _and_ carries the
+primary control, so it has to say something in every state. `UNLOCK_COPY` and `PENDING_COPY` moved
+with it and stay exported, so no test or story restates a shipped string. The control goes in
+`card-actions` rather than directly in `card-body` - that component declares no `align-items`, so
+daisyUI's default `stretch` makes a `btn` child span the whole card, which is the trap the teaser
+already recorded against `frontend/node_modules/daisyui/components/card.css`.
+
+**The assistant is two routes under one tab bar, and resuming is a query parameter.**
+`insights/page.tsx` is the Chat view and `insights/history/page.tsx` the History list, both under
+`InsightsTabs` - `TransactionTabs` structurally, down to the hand-written dimming and the
+`aria-hidden` underline, with **no count badges** because a badge on Chat would force the bare route
+to fetch a count. `INSIGHTS_TAB_HREFS` is the app's **fourth** route declaration and is built from
+`SIDEBAR_HREFS.insights` so the nesting cannot drift; a sibling route would match none of the four
+sidebar hrefs and light **Dashboard** while this bar said Insights. An `/insights/[sessionId]` route
+was rejected because the bar would then have to decide which tab a uuid belongs to, so a conversation
+is resumed with `?session=` - and an id naming nothing **drops the parameter and renders an empty
+chat with a `role="status"` line** rather than `notFound()`, the call `transactions/[id]/page.tsx`
+already makes about an invalid `?sort=`. The **title is "Assistant" and the sidebar label is not**:
+`ui/Sidebar` renders "Insights" under a section heading "ASSISTANT", so renaming the item would
+repeat that heading directly above it. That amends INS-1 again.
+
+**Cancellation is the reason the send is a route handler, and it travels three hops.** The composer
+owns an `AbortController` and "Stop" replaces "Send" while a turn is in flight; the handler passes
+`request.signal` through; the backend combines the dropped connection with its own timeout. **An
+`AbortError` must be distinguished from a real failure before the taxonomy is reached**, or a
+deliberate cancel renders an error message - which is the same mistake as the no-results copy
+claiming an account is empty. A cancel removes the optimistic message and restores the text, exactly
+as a failure does, and renders nothing. `docs/explainers/cancelling-an-ai-request.md` is the
+plain-language account, and `docs/TODO.md` carries the same retrofit for the receipt scanner's
+"Cancel scan", which does not cancel anything either.
+
+**Three smaller things on those screens are decisions rather than shape.** The composer is a real
+`<form noValidate onSubmit>` with a `<textarea>`, so **Enter submits and Shift+Enter inserts a
+newline** - which needs an explicit keydown handler, the mirror image of `IconSelect` where `Modal`
+wraps its body in a real form and Enter submitting had to be _stopped_. The typing indicator is
+**mounted from the first render and only its text changes**, which is the Allocate modal's review
+finding transferring verbatim: a polite live region created in the same commit as its content is
+generally not announced at all, and `getByRole('status')` cannot tell that apart from a working one -
+so its suite asserts the region's **text**. And the send is **injected as a prop rather than
+imported**, the precedent both transaction modals set; one of the original reasons has gone away now
+it is a `fetch` rather than an action, and the rest are enough on their own.
+
+**Both screens have no Figma frame at all**, which makes them the third and fourth in the app after
+the verify-failure screen and the error boundary. Every string on them is invented - both tab
+labels, the composer's label and placeholder, the typing indicator, the disclosure, the truncation
+notice, both empty states, the "conversation no longer available" line and each of the seven failure
+arms - and all of them join what A29 owes a designer. The stories exist to put them in front of one
+at once.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

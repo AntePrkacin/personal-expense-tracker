@@ -29,7 +29,6 @@ import {
 import type {
   InsightCardDto,
   InsightSetResponseDto,
-  InsightSummaryDto,
 } from './dto/insight-set-response.dto';
 import { INSIGHT_GENERATOR, type InsightGenerator } from './insight-generator';
 
@@ -60,8 +59,8 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
 // rows and 3,600 card rows a year in their own replica, all of which the
 // shutdown push carries to Turso Cloud.
 //
-// **Only the newest `ready` set is ever read**, by `latestReadySet` and by the
-// dashboard teaser through it, so the retained remainder is for reading a recent
+// **Only the newest `ready` set is ever read**, by `latestReadySet`, so the
+// retained remainder is for reading a recent
 // run's history by hand rather than for anything the API serves. Three is enough
 // to see the run before last and small enough that `latestReadySet`'s
 // `ORDER BY generated_at` sorts a handful of rows - which is why that column
@@ -82,14 +81,19 @@ const SETTLED_SET_RETENTION = 3;
  * because a run only ever becomes visible content once it reaches `ready`.
  *
  * **The content the read returns is always the latest `ready` set, independent of
- * the state.** On a regenerate the page renders skeletons off `state` while this
- * same response still carries the last good content, which is what lets the
- * dashboard teaser keep showing something rather than blanking mid-run.
+ * the state.** On a regenerate the cards render skeletons off `state` while this
+ * same response still carries the last good content, so the summary banner keeps
+ * showing something rather than blanking mid-run.
  *
  * **Cross-user isolation is structural, like every other feature here.** Every
  * method opens the caller's own database, so there is no `user_id` column and no
- * `WHERE` to forget. `InsightsService` is exported from `InsightsModule` so the
- * dashboard composes it rather than re-query these tables.
+ * `WHERE` to forget.
+ *
+ * **Nothing composes this service since PET-73.** `DashboardService` did, for the
+ * teaser card's summary; that card is gone and the insight cards themselves moved
+ * onto the Dashboard, reading `GET /api/insights` directly so the poll behind them
+ * keeps them current. It is still exported from `InsightsModule`, which costs
+ * nothing and is one line to un-need.
  */
 @Injectable()
 export class InsightsService implements OnApplicationShutdown {
@@ -109,6 +113,33 @@ export class InsightsService implements OnApplicationShutdown {
    * transactions without ever reading an insight.
    */
   private readonly inFlight = new Set<Promise<void>>();
+
+  /**
+   * Users whose data moved while a run was already in flight.
+   *
+   * **The bounded dirty flag** (PET-73), and "bounded" is the entire argument for
+   * having one at all. `docs/TODO.md` recorded that a burst of writes leaves a
+   * stale set - writes 2..N all lose the single-run 409, so the surviving set is
+   * whatever the first run read part-way through the burst - and observed that
+   * every honest fix looks like a re-entrant loop on the write path. This one is
+   * not, by construction:
+   *
+   * 1. A 409 in `InsightTriggersListener` calls {@link markDirty} instead of only
+   *    logging.
+   * 2. {@link runGeneration} clears the flag **as its own run starts**, so it can
+   *    only ever be re-set by a write that landed after that read began.
+   * 3. On the success path, a flag that is set again starts **exactly one** more
+   *    run.
+   *
+   * Because each run clears the flag as it starts, a burst of N writes produces
+   * **at most two runs**, and there is no path that schedules a third from the
+   * second: the follow-up run clears the flag on entry too, and by then the burst
+   * has settled. The set kept in memory rather than in a column for the same
+   * reason `inFlight` is - it is process state about a floated run, not a fact
+   * about the account, and a single instance is a deployment invariant (see
+   * `backend/CLAUDE.md`, Deployment).
+   */
+  private readonly dirty = new Set<string>();
 
   constructor(
     private readonly userDatabases: UserDatabaseService,
@@ -212,6 +243,17 @@ export class InsightsService implements OnApplicationShutdown {
   }
 
   /**
+   * Records that this user's data moved while a run was already in flight, so
+   * the run that is generating starts exactly one more when it completes.
+   *
+   * Called by `InsightTriggersListener` on the 409 it used to only log. See
+   * {@link dirty} for why exactly one, and why that cannot become two.
+   */
+  markDirty(userId: string): void {
+    this.dirty.add(userId);
+  }
+
+  /**
    * The floated body of a run: generate, then persist or fail.
    *
    * On success the `generating` row becomes `ready`, its cards are inserted and
@@ -234,6 +276,12 @@ export class InsightsService implements OnApplicationShutdown {
    * `failed`; see docs/TODO.md.
    */
   private async runGeneration(userId: string, runId: string): Promise<void> {
+    // Cleared **as this run starts**, before the generator reads anything. That
+    // ordering is what bounds the loop: only a write that lands after this point
+    // can set it again, so the follow-up run below is guaranteed to be reading
+    // data this one could not have seen. See {@link dirty}.
+    this.dirty.delete(userId);
+
     try {
       const set = await this.generator.generate(userId);
       const db = await this.userDatabases.getUserDb(userId);
@@ -326,6 +374,32 @@ export class InsightsService implements OnApplicationShutdown {
           `Insight generation ${runId} for user ${userId} was reclaimed as ` +
             `abandoned while still running; its result was discarded`,
         );
+        return;
+      }
+
+      // A write landed while this run was reading, so the set it just wrote is
+      // already stale. Start exactly one more, and only from the success path -
+      // a run that failed or was reclaimed has not settled the state it would be
+      // scheduling against, and chaining off it is how a bounded retry becomes an
+      // unbounded one. `generate` is called rather than `runGeneration`, so the
+      // follow-up takes the same placeholder row, the same 409 guard and the same
+      // shutdown tracking as any other run; its own start clears the flag again.
+      if (this.dirty.has(userId)) {
+        this.logger.debug(
+          `Insight set for user ${userId} was superseded while run ${runId} ` +
+            `was in flight; starting one more run.`,
+        );
+        await this.generate(userId).catch((error) => {
+          // A 409 here means yet another run beat this one to it, which is the
+          // benign outcome: something newer is already generating.
+          if (error instanceof ConflictException) {
+            return;
+          }
+          this.logger.error(
+            `The follow-up insight run for user ${userId} could not be started`,
+            error instanceof Error ? error.stack : String(error),
+          );
+        });
       }
     } catch (error) {
       const db = await this.userDatabases.getUserDb(userId);
@@ -380,27 +454,14 @@ export class InsightsService implements OnApplicationShutdown {
   }
 
   /**
-   * The latest ready set's summary, for the dashboard teaser.
-   *
-   * `DashboardResponseDto.insight` widened to `InsightSummaryDto | null` at
-   * PET-25, the first ticket to render the body as well as the headline. Null
-   * whenever there is no ready set, including while the first run is still
-   * generating.
+   * **`latestReadySummary` lived here until PET-73 and is gone with the field it
+   * served.** It fed `DashboardResponseDto.insight`, the teaser card's headline
+   * and body; that card is deleted and the insight cards themselves moved onto
+   * the Dashboard, where they read `GET /api/insights` directly so the poll can
+   * keep them current. Nothing composes this service any more, and
+   * `InsightsService` stays exported only because `InsightsModule` has always
+   * exported it - see that module.
    */
-  async latestReadySummary(userId: string): Promise<InsightSummaryDto | null> {
-    const db = await this.userDatabases.getUserDb(userId);
-    const ready = await this.latestReadySet(db);
-
-    if (
-      !ready ||
-      ready.summaryHeadline === null ||
-      ready.summaryBody === null
-    ) {
-      return null;
-    }
-
-    return { headline: ready.summaryHeadline, body: ready.summaryBody };
-  }
 
   /** The newest completed set, or null if none has ever completed. */
   private async latestReadySet(

@@ -5,8 +5,8 @@ import { TransactionsModule } from '../transactions/transactions.module';
 import { INSIGHT_GENERATOR } from './insight-generator';
 import { InsightsController } from './insights.controller';
 import { InsightsService } from './insights.service';
+import { InsightTriggersListener } from './insight-triggers.listener';
 import { RuleBasedInsightGenerator } from './rule-based-insight.generator';
-import { TransactionChangedListener } from './transaction-changed.listener';
 
 /**
  * Insight set storage, the read, and asynchronous generation.
@@ -26,19 +26,21 @@ import { TransactionChangedListener } from './transaction-changed.listener';
  * (DSH-9), the same reason `CategoriesModule` and `TransactionsModule` export
  * theirs.
  *
- * **`TransactionChangedListener` is what regenerates on a write, and the
+ * **`InsightTriggersListener` is what regenerates on a write, and the
  * direction of the dependency is the whole point.** It listens here rather than
- * `TransactionsModule` calling `InsightsService`, because the import above
- * already runs the other way and a direct call would close the loop into a
- * circular module dependency. Nothing is exported for it: the emitter is the
- * only coupling.
+ * `TransactionsModule` or `CategoriesModule` calling `InsightsService`, because
+ * both imports above already run the other way and a direct call would close the
+ * loop into a circular module dependency. Nothing is exported for it: the emitter
+ * is the only coupling. It handles **two** events since PET-73 -
+ * `TRANSACTION_CHANGED` and `CATEGORY_CHANGED` - which is why it is no longer
+ * named after one of them.
  */
 @Module({
   imports: [CategoriesModule, PeriodsModule, TransactionsModule],
   controllers: [InsightsController],
   providers: [
     InsightsService,
-    TransactionChangedListener,
+    InsightTriggersListener,
     { provide: INSIGHT_GENERATOR, useClass: RuleBasedInsightGenerator },
   ],
   exports: [InsightsService],

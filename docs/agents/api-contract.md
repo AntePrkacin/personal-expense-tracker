@@ -122,12 +122,32 @@ session differently - which is what the categories one solved by leaving the pol
 site. The same branch narrows `InsightCardDto`'s tone enum, so it is a DTO change and a route
 handler in one, and both halves went through `npm run api:sync`.
 
-**There are four verbs in `lib/session.ts` now**: `authorizedGet`, `authorizedPost`,
-PET-33's `authorizedDelete` and PET-32's `authorizedPatch`. The three writes share one
-`AuthorizedWriteResult` rather than growing shapes of their own, and each new one is a handful of
-lines because the cookie-to-bearer lift, `cache: 'no-store'` and the status-passing convention are
-already settled. None of them may become a Server Action: they take a `path`, and `'use server'`
-would publish an endpoint accepting an arbitrary one.
+**And PET-73 gives that shape a third reason to exist, which the two above did not cover.** The
+categories handler exists for a **read a modal makes while it is open**, and the insights one for a
+**browser timer's poll**; `app/api/assistant/messages/route.ts` is neither. It is a **cancellable
+long write** - the first handler the browser POSTs to - and the reason it is not a Server Action is
+that a client component calling one has **no `AbortController` to reach**: the RPC is opaque and
+takes no `signal`, which is why the receipt scan settled for a generation-counter ref that discards
+a late result while the request runs to completion server-side. At roughly 40k input tokens and tens
+of seconds per turn, that was the wrong trade. A route handler makes the send an ordinary `fetch`,
+and an ordinary `fetch` takes a `signal` - which this handler passes through as `request.signal`,
+the second of three hops that end at the Gemini call. Everything else it shares with the other two:
+no-store at both hops, the 401 travelling through unchanged rather than becoming a redirect, and a
+module (`lib/assistant.ts`) exporting both redirecting reads for the two `page.tsx` callers and a
+non-redirecting send for this one. `docs/explainers/cancelling-an-ai-request.md` is the
+plain-language account.
+
+**There are six verbs in `lib/session.ts` now**: `authorizedGet`, `authorizedPost`,
+PET-33's `authorizedDelete`, PET-32's `authorizedPatch`, PET-59's `authorizedPostFormData` and
+PET-73's `authorizedPostJson`. **Four of them discard the response body and share
+`AuthorizedWriteResult`**; the two whose body *is* the point - the receipt scan's extracted fields
+and the assistant's reply - share `AuthorizedBodyResult`, which was `AuthorizedFormDataResult` until
+PET-73 gave it a second, JSON-bodied caller and the name stopped describing what the type means.
+Each new verb is a handful of lines because the cookie-to-bearer lift, `cache: 'no-store'` and the
+status-passing convention are already settled. `authorizedPostJson` alone takes an optional
+`signal`, threaded into its `fetch` and nothing else, so the widening costs the other five nothing.
+None of them may become a Server Action: they take a `path`, and `'use server'` would publish an
+endpoint accepting an arbitrary one.
 
 **A status can be ambiguous, and the caller narrows it from the request rather than from the error
 prose.** `PATCH /api/transactions/:id` is the first place this bites: it answers 404 both for a

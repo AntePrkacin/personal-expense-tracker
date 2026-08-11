@@ -238,28 +238,22 @@ describe('Dashboard (e2e)', () => {
       expect(body.recentTransactions.length).toBeLessThanOrEqual(3);
     });
 
-    it('answers the teaser from the set the writes above generated', async () => {
-      // This asserted `insight: null` until PET-42-43-44, on the grounds that
-      // nothing in either app generated a set. The four rows in `beforeAll` go
-      // through `POST /api/transactions`, and every such write now regenerates,
-      // so the teaser is the summary of what those writes produced. Asserting
-      // null here would not merely be wrong, it would be *flakily* wrong: it
-      // races the floated run.
-      // Polled rather than read once, because the run is floated: the teaser is
-      // null for as long as it is still in flight, and a bare read would be the
-      // same race in the other direction.
-      let insight: DashboardResponseDto['insight'] = null;
-      for (let attempt = 0; attempt < 50 && insight === null; attempt++) {
-        insight = dashboardBody(await dashboard(bearer).expect(200)).insight;
-        if (insight === null) {
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-      }
+    it(
+      'carries no insight teaser, which is now GET /api/insights' +
+        "'" +
+        's job',
+      async () => {
+        // This polled for a non-null teaser until PET-73. The field is gone: the
+        // insight cards moved onto the Dashboard and read `GET /api/insights`
+        // directly, because this response is a snapshot with no way to update
+        // itself and the poll behind those cards exists precisely to not be one.
+        // Asserted as an absent key rather than deleted, so the removal is pinned
+        // from the response side as well as from the schema.
+        const body = dashboardBody(await dashboard(bearer).expect(200));
 
-      expect(insight).not.toBeNull();
-      expect(insight!.headline).toBeTruthy();
-      expect(insight!.body).toBeTruthy();
-    });
+        expect(body).not.toHaveProperty('insight');
+      },
+    );
 
     it('shows another account nothing of this one’s', async () => {
       const other = await provision();
@@ -324,10 +318,11 @@ describe('Dashboard (e2e)', () => {
       expect(body.categories).toEqual([]);
       expect(body.topCategory).toBeNull();
       expect(body.recentTransactions).toEqual([]);
-      // Load-bearing since PET-42-43-44 made a write regenerate: this account
-      // posts nothing, so it is the one place a null teaser is still guaranteed
-      // rather than a race against a floated run.
-      expect(body.insight).toBeNull();
+      // PET-73 removed the teaser field entirely, so there is nothing here to
+      // be null. The paragraph this replaces explained why this was the one
+      // account where a null teaser was guaranteed rather than a race against a
+      // floated run - which stopped mattering when the field went.
+      expect(body).not.toHaveProperty('insight');
     });
 
     it('still reports days left in the period rather than failing', async () => {

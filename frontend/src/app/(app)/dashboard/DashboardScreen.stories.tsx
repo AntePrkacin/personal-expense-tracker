@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
+import { Button } from '@/components/ui/Button';
 import { addDays } from '@/lib/calendar';
 import { todayIsoDate } from '@/lib/date';
 
@@ -8,8 +9,9 @@ import { PreferencesProvider } from '../PreferencesProvider';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
-import { InsightTeaserCard } from './InsightTeaserCard';
+import { InsightCard } from './InsightCard';
 import { RecentTransactionsCard } from './RecentTransactionsCard';
+import { SummaryBanner } from './SummaryBanner';
 import { TrendCard } from './TrendCard';
 
 // 04 Dashboard (Figma node 21:4), diffed against the frame's own numbers (node 22:55).
@@ -211,14 +213,30 @@ export const Default: Story = {
                 isEmpty={false}
               />
             }
-            insightCard={
-              <InsightTeaserCard
-                insight={{
-                  headline: 'You are on track this month',
-                  body: "You've spent $1,240 of your $2,000 budget with 11 days to go.",
-                }}
-                isEmpty={false}
+            // The banner and the cards are handed in as literals rather than through
+            // `InsightPollProvider`: this story exists to diff the *grid* against node 21:4, and
+            // the poll's own states are `InsightPoll.test.tsx`'s to cover.
+            insightSummary={
+              <SummaryBanner
+                overline="October 2025 summary"
+                headline="You are on track this month"
+                body="You've spent $1,240 of your $2,000 budget with 11 days to go."
+                action={<Button label="Ask about your spending →" href="/insights" />}
               />
+            }
+            insightCards={
+              <>
+                <InsightCard
+                  tone="warning"
+                  title="Dining out is over budget"
+                  body="$312 of $300 - $12 over"
+                />
+                <InsightCard
+                  tone="positive"
+                  title="Transport is down 22%"
+                  body="You spent $63 less than September"
+                />
+              </>
             }
           />
         </div>

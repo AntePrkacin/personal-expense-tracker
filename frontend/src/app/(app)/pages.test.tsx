@@ -172,15 +172,14 @@ beforeEach(() => {
     weeklyBuckets: [],
     categories: [],
     recentTransactions: [],
-    insight: null,
     period: PERIOD,
   });
 
-  // A `ready` set rather than an empty one, because this file asserts the header and the
-  // Regenerate button is absent in the empty state by design (INS-1). One card, which is enough
-  // to keep the grid from being the subject here - `InsightsScreen.test.tsx` owns the three
-  // states. Like `readDashboard`, `requireInsights` redirects or throws rather than returning a
-  // wrapper, so there is no `{ ok }` to mock.
+  // A `ready` set rather than an empty one. One card, which is enough to keep the grid from being
+  // the subject here - `dashboard/InsightPoll.test.tsx` owns the four states. Like
+  // `readDashboard`, `requireInsights` redirects or throws rather than returning a wrapper, so
+  // there is no `{ ok }` to mock. **PET-73 moved this read onto the Dashboard**; this file's
+  // assistant cases no longer depend on it at all, and the empty-state case below overrides it.
   (requireInsights as jest.Mock).mockResolvedValue({
     state: 'ready',
     monthLabel: 'October 2025',
@@ -234,7 +233,12 @@ const SCREENS = [
   // The overline is the period rather than INS-1's "Your money assistant", decided at the
   // 2026-08-08 review so the four routed views read consistently. The Jira ticket carries the
   // amendment.
-  ['AI Insights', InsightsPage, 'October 2025', 'AI Insights'],
+  //
+  // **The title is "Assistant" as of PET-73, which amends INS-1 again.** The screen is a chat over
+  // the account's own transactions now; the insight cards moved to the Dashboard. The **sidebar**
+  // label is deliberately unchanged - `ui/Sidebar` renders "Insights" under a section heading
+  // "ASSISTANT", so renaming the item would repeat that heading directly above it.
+  ['Assistant', InsightsPage, 'October 2025', 'Assistant'],
   ['Settings', SettingsPage, 'Manage your account', 'Settings'],
 ] as const;
 
@@ -304,11 +308,19 @@ describe('the header action, which differs on every screen', () => {
     expect(within(header).queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('AI Insights offers Regenerate', async () => {
-    // Absent from the ticket text, present in INS-1 and in node 38:542.
+  it('the assistant offers New chat, and no longer Regenerate', async () => {
+    // **Regenerate moved to the Dashboard with the cards it regenerates** (PET-73). This header
+    // used to carry it, which INS-1 and node 38:542 both draw; there is nothing on this screen for
+    // it to act on any more. What replaces it is a navigation rather than state, which is what
+    // keeps this header a Server Component and drops the `?session=` parameter for free.
     await renderScreen(InsightsPage);
 
-    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('link', { name: 'New chat' })).toHaveAttribute(
+      'href',
+      '/insights',
+    );
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
   });
 
   it('Settings offers no header action at all', async () => {
@@ -424,7 +436,8 @@ describe('the inert header controls', () => {
 
 describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
   // `page.tsx` resolves `isEmpty` once, off `transactionCount`, and threads the same boolean to
-  // `BudgetCard`, `TrendCard`, `RecentTransactionsCard` and `InsightTeaserCard`. The risk this
+  // `BudgetCard`, `TrendCard`, `RecentTransactionsCard` and - since PET-73 replaced
+  // `InsightTeaserCard` - `InsightPollProvider`, which hands it to the summary banner. The risk this
   // pins against is a page that computed the flag five different ways - `spent === 0` for one
   // card, the card's own array length for another - which can disagree in principle even though
   // they happen to agree on every response the backend can send today. So this fixture is
@@ -459,8 +472,17 @@ describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
           updatedAt: '2025-10-08T12:00:00.000Z',
         },
       ],
-      insight: null,
       period: PERIOD,
+    });
+
+    // The banner draws its unlock copy only over an `empty` set, which is what a genuinely new
+    // account has: the shared mock above returns a `ready` one so the other cases have content.
+    (requireInsights as jest.Mock).mockResolvedValue({
+      state: 'empty',
+      monthLabel: null,
+      summary: null,
+      insights: [],
+      generatedAt: null,
     });
 
     await renderScreen(DashboardPage);
@@ -468,6 +490,11 @@ describe("Dashboard's empty state is one condition, not five (PET-26)", () => {
     expect(screen.getByText('Full month ahead')).toBeInTheDocument();
     expect(screen.getByText('No spending to chart yet')).toBeInTheDocument();
     expect(screen.getByText('No transactions yet')).toBeInTheDocument();
+    // **The fourth card is the summary banner now, not `InsightTeaserCard`** (PET-73), and it
+    // reads the same `isEmpty` this case is about - so the unlock copy still proves the shared
+    // condition reached a fourth card. What changed is where the copy lives (`SummaryBanner`'s
+    // exported `UNLOCK_COPY`) and where the set comes from (`GET /api/insights`, not the dashboard
+    // response's deleted `insight` field).
     expect(
       screen.getByRole('heading', { name: 'Insights unlock after your first expense.' }),
     ).toBeInTheDocument();
@@ -502,7 +529,6 @@ describe("the profile's currency reaches the figures (PET-47)", () => {
       weeklyBuckets: [],
       categories: [],
       recentTransactions: [],
-      insight: null,
       period: PERIOD,
     });
 
@@ -578,7 +604,6 @@ describe("the period's label reaches the header, from the read rather than the p
       weeklyBuckets: [],
       categories: [],
       recentTransactions: [],
-      insight: null,
       period: STRETCHED,
     });
 

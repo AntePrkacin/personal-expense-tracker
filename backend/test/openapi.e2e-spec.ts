@@ -72,6 +72,9 @@ const ERROR_REF = '#/components/schemas/ErrorResponseDto';
 describe('openapi.json', () => {
   it('keys every path with the global prefix', () => {
     expect(Object.keys(spec.paths).sort()).toEqual([
+      `/${API_PREFIX}/assistant/messages`,
+      `/${API_PREFIX}/assistant/sessions`,
+      `/${API_PREFIX}/assistant/sessions/{id}`,
       `/${API_PREFIX}/auth/login-link`,
       `/${API_PREFIX}/auth/register`,
       `/${API_PREFIX}/auth/session`,
@@ -846,16 +849,16 @@ describe('openapi.json', () => {
         path().get.responses['200'].content?.['application/json'].schema?.$ref,
       ).toBe('#/components/schemas/DashboardResponseDto');
 
-      // All twelve fields, including the two nullable ones: nullable is not
-      // optional in this codebase's convention (TransactionResponseDto.note is
-      // the precedent), so a null topCategory or insight is still a present
-      // key rather than an absent one. `period` is PET-72's, and says which period
-      // every other figure here is for.
+      // All eleven fields, including the nullable one: nullable is not optional
+      // in this codebase's convention (TransactionResponseDto.note is the
+      // precedent), so a null topCategory is still a present key rather than an
+      // absent one. `period` is PET-72's, and says which period every other
+      // figure here is for. **`insight` was a twelfth until PET-73 removed it** -
+      // see the assertion below, which is the inverse of the one it replaces.
       expect(schema('DashboardResponseDto').required!.slice().sort()).toEqual([
         'averagePerDay',
         'categories',
         'daysLeft',
-        'insight',
         'monthlyBudget',
         'period',
         'recentTransactions',
@@ -867,19 +870,15 @@ describe('openapi.json', () => {
       ]);
     });
 
-    it('publishes insight as a nullable reference to the summary, not a bare string', () => {
-      const insight = schema('DashboardResponseDto').properties!.insight as {
-        $ref?: string;
-        allOf?: { $ref?: string }[];
-        nullable?: boolean;
-        description?: string;
-      };
-
-      expect(insight.$ref ?? insight.allOf?.[0]?.$ref).toBe(
-        '#/components/schemas/InsightSummaryDto',
+    it('publishes no insight field at all, because the teaser card is gone', () => {
+      // The inverse of the assertion this replaces, and it is worth keeping in
+      // that shape rather than deleting: PET-25 widened `insight` from a string
+      // to a nullable `$ref`, and PET-73 removed it - the insight cards moved
+      // onto this screen and read `GET /api/insights` directly, so a field on a
+      // snapshot that cannot update itself would publish a set nothing reads.
+      expect(schema('DashboardResponseDto').properties).not.toHaveProperty(
+        'insight',
       );
-      expect(insight.nullable).toBe(true);
-      expect(insight.description).toMatch(/insight set/i);
     });
 
     it('publishes topCategory as a nullable reference, not a bare object', () => {
