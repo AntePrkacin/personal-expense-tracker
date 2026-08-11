@@ -85,8 +85,21 @@ export function AssistantMessageList({ messages }: { messages: readonly Assistan
               PET-76, where a walk found the row labels too small to read as the names of the two
               speakers. The tone stays `base-content/60`, which is a **composited** alpha: whether
               14px at 60% clears 4.5:1 over the canvas is a measurement rather than a deduction, so
-              it is read off a painted pixel in the walk. */}
-          <div className="chat-header text-base-content/60 flex items-center gap-1 text-sm">
+              it is read off a painted pixel in the walk.
+
+              **`mb-1` because `.chat` declares no row gap at all**, which is what made the larger
+              label read as crowding rather than as a heading. That class is a grid with
+              `column-gap: .75rem` and `grid-auto-rows: min-content` and nothing between its rows -
+              the header is row 1 and the bubble row 2 - so at `text-xs` the label merely sat close
+              to the bubble and at `text-sm` it sat on it. The margin goes on the header rather than
+              a `row-gap` on the row, because the row's other gap belongs to `chat-footer`, which
+              this list does not draw and should not be spaced for in advance.
+
+              **4px is chosen against the 8px between turns rather than as a bare minimum.** `.chat`
+              carries `padding-block: .25rem`, so consecutive rows sit 8px apart; half of that binds
+              a label to its own bubble more tightly than the turns are bound to each other, which
+              is the grouping that makes it read as the name of the message under it. */}
+          <div className="chat-header text-base-content/60 mb-1 flex items-center gap-1 text-sm">
             {message.role === 'assistant' ? (
               <Sparkle className="size-4" aria-hidden="true" />
             ) : null}

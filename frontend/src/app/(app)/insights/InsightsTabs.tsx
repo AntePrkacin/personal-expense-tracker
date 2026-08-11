@@ -83,7 +83,25 @@ export function InsightsTabs({ active }: InsightsTabsProps) {
   return (
     // The rule under the whole bar is the container's own border - the active tab's underline
     // sits *on* it rather than replacing it. `gap-7` matches the transactions bar's designed 28px.
-    <nav aria-label="Assistant views" className="border-base-300 flex items-end gap-7 border-b">
+    //
+    // **`mb-5` is where this bar differs from `TransactionTabs`, and the difference is a fact about
+    // its parent rather than about the bar.** That one carries no bottom margin because it is a
+    // *child* of `<main className="... gap-5">`, so the designed 20px between the tabs and whatever
+    // comes next is the main column's own row gap. Here the bar is a **sibling** of `<main>` - the
+    // tabs are the page's, the `<main>` is inside `ChatSlot` - and `(app)/layout.tsx`'s content
+    // column declares no gap at all, only `px-*`. So nothing separated the two: the active tab's
+    // 2px underline sits at `-bottom-px`, and the card below started on the very next pixel, which
+    // read as the marker touching the box. `PageHeader`'s own `pb-5` is why the gap *above* the bar
+    // looked right and only this one did not.
+    //
+    // It goes on the shared component rather than on the two pages, because both routes want the
+    // identical 20px and a margin written twice is a margin that stops matching. Do not "unify"
+    // this with `TransactionTabs` by deleting it: the two are the same 20px expressed against
+    // different parents, and that bar's own comment says where its copy comes from.
+    <nav
+      aria-label="Assistant views"
+      className="border-base-300 mb-5 flex items-end gap-7 border-b"
+    >
       {INSIGHTS_TABS.map((tab) => {
         const state = tab === active ? 'active' : 'inactive';
 
