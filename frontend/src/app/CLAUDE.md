@@ -114,6 +114,18 @@ current, because `GET /api/insights` publishes no period and its `monthLabel` na
 generated _in_. `lib/format.ts`'s `periodOverline` and `periodLabel` are deleted with the derivation
 they were - `frontend/CLAUDE.md` carries that argument in full.
 
+**PET-76 makes that three headers rather than four, and the clause about `/insights` is history.**
+Both assistant routes draw the fixed overline "Your very own personal" over the title "AI Assistant"
+and read no period at all. The paragraph above is the argument for why that one was different, and it
+is also the argument against it: `/insights` was the only header whose label rode on **neither** its
+own response nor a clock, so `GET /api/periods` was requested for a string and nothing else - one
+request per view on each of the two routes, naming a period over a conversation that belongs to none.
+`lib/periods.ts`'s `currentPeriod` went with them, having had exactly those two callers, and its
+absence is the thing to know before writing a fourth header: a screen that needs the current period
+takes it off the read whose figures it is labelling, which is what the other three do. What stays
+true is the rule the deletion of `periodOverline` established - **no period name is ever derived on
+this side** - reached here by not naming one.
+
 **`export const dynamic = 'force-dynamic'` was on the layout and is deliberately gone.** It
 existed because the pages read `new Date()` for the overline, and without it Next prerendered
 them and every screen showed whatever month the build ran in - a bug that only appears a month
@@ -1805,6 +1817,18 @@ already makes about an invalid `?sort=`. The **title is "Assistant" and the side
 `ui/Sidebar` renders "Insights" under a section heading "ASSISTANT", so renaming the item would
 repeat that heading directly above it. That amends INS-1 again.
 
+**That last sentence is PET-76's, reversed: both say "AI Assistant" now, and the heading above the
+item says "INSIGHTS".** The reasoning it replaces was sound and cheap, and what it bought was the one
+item in the navigation naming something different from the page it opens - so the sidebar moved
+instead of the argument being extended, which **amends INS-1 a third time**. The item's `key` stays
+`'insights'`, so `SIDEBAR_ITEMS`, `SIDEBAR_HREFS`, `INSIGHTS_TAB_HREFS` and the route folder are all
+untouched and the URL is still `/insights`. Two consequences worth knowing. A section called INSIGHTS
+now holds a chat while the screen that shows insights sits under MENU, which the product owner
+accepted and `ui/Sidebar.tsx` records. And **"AI Assistant" names two things on one screen** - the
+`h1` and every assistant chat row - so `getByText('AI Assistant')` is a trap: `pages.test.tsx` queries
+the heading **by role** and `AssistantChatScreen.test.tsx` scopes the row label to the log region. No
+tree holds both today, which is what keeps that a precaution rather than a fix.
+
 **Cancellation is the reason the send is a route handler, and it travels three hops.** The composer
 owns an `AbortController` and "Stop" replaces "Send" while a turn is in flight; the handler passes
 `request.signal` through; the backend combines the dropped connection with its own timeout. **An
@@ -1891,6 +1915,179 @@ date out of it while `today` defaults to the frontend host's zone - a second zon
 host-versus-`APP_TIMEZONE` gap that screen already documents, so at UTC+2 a conversation from
 minutes ago read "Yesterday". Both sides are read in one zone now, which leaves only the documented
 gap.
+
+**PET-76 is eight fixups on those two screens, and what it adds to this file is one class of defect
+plus one dependency.** None of it is a missing feature and not one item could fail a gate - every one
+of them passed `build`, `lint` and every Jest suite on `main` - which is why they were found by using
+the finished screens with real data rather than by reviewing them. Six of the eight are one-line
+changes documented where they happen; three things reach past that.
+
+**Two root causes account for five of the eight, and both are `frontend/CLAUDE.md`'s to carry rather
+than this file's** - they are in its Where daisyUI and Tailwind fight list, which is the home for
+exactly this shape: a class present in the markup that paints the wrong thing. In one sentence each,
+because they explain why these screens specifically: the page canvas is `bg-base-200` and so is
+daisyUI's fill for a **disabled `textarea`** and for a **plain `.btn`**, so the composer's message box
+vanished for the whole of a turn and "New chat" had no visible box at all; and `loading-*` is SMIL
+inside a `mask-image` data-URI SVG rather than CSS, so the typing indicator's 3-second cycle with only
+57% of its timeline in motion could not be sped up by any class. The composer is on a
+`card bg-base-100` now and the dots are real CSS animation. **The assistant composer was the app's
+only form not on a card**, which is why this bit here and nowhere else, and it is the thing to check
+before putting a new control directly on the canvas.
+
+**The reply renders its markdown, which is this ticket's one substantive addition.** Gemini answered
+in markdown from the day the chat shipped and the bubble printed the asterisks; the prompt had asked
+for plain prose, and a model asked not to emit markup emits it anyway. So
+`insights/AssistantMarkdown.tsx` renders it with **`react-markdown` + `remark-gfm`**, the app's
+seventh and eighth runtime dependencies, and the backend's rule is reversed in the same change -
+`backend/src/assistant/CLAUDE.md` carries that half, and the two are **one decision stated in two
+apps**. Four things about it not to undo. It renders to **React elements, never through
+`dangerouslySetInnerHTML`**, and with **no `rehype-raw`**: a reply is a model's output over the user's
+own merchant names and is not trusted input, and without that plugin react-markdown turns raw HTML
+into a **text** node, so a tag arrives as visible characters. `skipHtml` is deliberately also unset,
+because that one deletes the text instead of showing it and would silently swallow part of an answer.
+The class map holds **whole Tailwind literals per tag**, the `ui/categoryColour.ts` convention, since
+the scanner reads source as raw text - and every tag needs one, because preflight resets heading
+sizes, list markers and margins to nothing, so an unmapped `<h2>` renders as a paragraph that lost its
+full stop. **A table gets an `overflow-x-auto` wrapper**, which is the one structural requirement
+permitting tables creates: a `chat-bubble` is sized by its content, so a wide table would push the
+chat column sideways and take the page's own horizontal scrollbar with it. And the **user's** bubble
+keeps `whitespace-pre-wrap` and renders no markdown, so somebody typing `**hi**` sees their own
+asterisks rather than watching them be interpreted.
+
+**It cost a `jest.config.ts` that post-processes next/jest's own config, and the obvious version of
+that fix does nothing.** The unified ecosystem behind those two packages is **85 ESM-only packages**,
+which Jest's default transform never touches - so the first `import` dies on
+`SyntaxError: Unexpected token 'export'`. next/jest says in a comment that custom config "can append
+to transformIgnorePatterns but not modify it", and a pattern list is a set of things to **skip**, so a
+permissive pattern added beside `/node_modules/` changes nothing at all: a `jest.config.ts` that only
+widened the array looks like a fix and still fails. `transpilePackages` in `next.config.ts` is the
+other lever next/jest reads and is the wrong one, because it makes the **application** build transpile
+85 packages it already handles natively to fix a problem only Jest has. That file carries the whole
+account, including why it throws when it rewrites nothing and why `escape-string-regexp` is on a list
+it looks like it should not be on.
+
+**Both assistant headers lose their period, which takes a `lib/` function with them** - see the
+Two-of-the-four-headers paragraph above, where that amendment lives, since it is a claim about all
+four screens rather than about these two.
+
+**A code review of PR #88 found six things, and what they have in common is the interesting part:
+five of the six are costs the markdown rendering created rather than defects in it.** Permitting
+one new capability moved four separate questions from "cannot happen" to "happens on ordinary
+data", and none of the six could fail a gate. Each is documented where it happens; three reach past
+their own file.
+
+**The reply's parse is memoized, and before that every keystroke re-parsed the whole conversation.**
+The bubble was a bare `string` until this ticket, so a re-render of the list cost nothing;
+react-markdown caches nothing at all - it builds a fresh processor and re-parses on every render -
+and the composer's `draft` is state on `AssistantChatScreen`, three components above the bubbles. So
+a resumed twenty-turn conversation paid twenty full unified parses **per character typed**, on the
+one control the user is interacting with. `AssistantMarkdown` is wrapped in `memo` and its
+`remarkPlugins` array is hoisted to module scope, which is the other half: a fresh array is a changed
+prop and would have defeated the memo from inside. The general form is worth carrying, because this
+app now has three components whose render is genuinely expensive: **a component whose props are one
+primitive memoizes exactly, and the moment a cheap child becomes an expensive one, every ancestor's
+state becomes its problem.** The assertion for it is structural - `memo`'s effect is a render that
+does not happen, which no DOM query can see - so `AssistantChatScreen.test.tsx` pins the wrapper the
+way `layout.test.tsx` pins the _absence_ of a `force-dynamic` export, and for the same reason.
+
+**`img` was missing from the tag map, and it is the one element that acts before the user does.**
+The file's stated rule is that a state a caller cannot produce is still a state to handle, and it
+applied that to the anchor - which needs a click, so an odd one costs nothing until asked for. An
+image fires a request from the user's browser the moment the bubble paints, and
+`defaultUrlTransform` filters protocols while saying nothing about hosts: a
+`![](https://third-party/x.png)` echoed out of a merchant name the user controls is a beacon
+carrying their IP, their agent string and the fact that they are reading this screen. It renders the
+**alt text** in place of the mark rather than dropping the node, which is the same argument that
+refuses `skipHtml` two paragraphs up in that file - swallowing part of an answer in silence is the
+worse failure. **This is the entry to read before adding a tag to that map**: the question is not
+only how a tag should look, it is whether rendering it does anything.
+
+**And the composer's send button sat on the textarea's scrollbar, which is the unfixed half of the
+trap `resize-none` was added for.** That class was added because the user agent's resize handle
+occupies the corner the button moved into; the **vertical scrollbar** occupies the same inline-end
+edge, appears the moment a question outgrows `h-24`, and is neither optional nor something trailing
+padding can move - `pe-*` insets the text and the scrollbar lives outside the content box. The
+button is inset past the gutter (`end-5`, with `pe-17` keeping the same half-rem of air) rather than
+being moved out of the field, which would have changed a design decision to fix a geometry one.
+Measured in the walk rather than reasoned, with the old placement probed in the same run: **15px of
+gutter behind a 1px border, so its inner edge is 16px from the field's outer edge; the button now
+starts at 20px and `end-2` started at 8px**, i.e. 8px inside the track. The lesson is the general
+one this file keeps paying for from new directions - **a control placed over a scrollable element's
+corner is competing with two widgets the user agent draws there, and jsdom can see neither.**
+
+The other three are local. A markdown table's column alignment was being discarded, which matters
+because the prompt asks for a table when comparing categories or periods - so the common table here
+is a money table the model right-aligns, and `th` hard-coded `text-left` while both cells dropped
+every prop react-markdown passes. The `Markdown` story's own table used no alignment at all, so the
+review surface could not have shown it; it right-aligns its three money columns now. The stories'
+default `send` answered a constant carrying fixed message ids, so a **second** press appended ids the
+list was already keyed on - `key={message.id}` collided, React logged it and reconciled the wrong
+rows, in exactly the flow this ticket made pressable for the first time; it is a function of the
+submitted text over a counter now. And `jest.config.ts` said the ESM closure was 84 packages where
+`frontend/src/app/CLAUDE.md` said 85: it is **85 of 100**, measured against the installed tree, and
+that file now records how to re-derive both figures rather than asserting a number nobody can check.
+Its comment about the `.pnpm` sibling was also right about the behaviour and wrong about the reason,
+which is worth fixing rather than leaving because the two reasons expire differently - see the
+comment itself.
+
+**A second round of PET-76, from using the finished screens, added three more and two of them are
+features rather than fixes.** Taken in this ticket at the product owner's direction rather than filed
+as their own, because it lands with the pre-launch push. The three spacing and affordance fixes are
+documented where they happen; what reaches past their own files is below.
+
+**The two spacing defects had one shape and it is worth naming: a gap that was never declared.**
+`.chat` is a grid with `column-gap` and `grid-auto-rows: min-content` and **no row gap at all**, so
+the row label sat flush on its bubble the moment PET-76 grew it from `text-xs` to `text-sm` - the
+class that made the label legible is what made the crowding visible. And `(app)/layout.tsx`'s content
+column declares no gap either, only `px-*`: `PageHeader` supplies the space above the tab bar with
+its own `pb-5`, and nothing supplied the space below it, so the active tab's `-bottom-px` underline
+started on the very pixel the card below began. **`TransactionTabs` escaped both by being a child of
+`<main className="... gap-5">` rather than a sibling of `<main>`** - which is the general lesson:
+this shell has no vertical rhythm of its own, so **every gap between two of a page's top-level
+children is somebody's explicit margin**, and a component that looks spaced on one route because of
+its parent will be flush on another.
+
+**The History tab has a count badge now, which reverses a PET-73 decision rather than extending
+it.** That bar shipped with none "because a badge on Chat would force the bare route to fetch a
+count", and the reasoning was sound about the count that existed: the only way to get one was
+`GET /api/assistant/sessions`, a whole list transferred and discarded for its length, on the route
+PET-76 had just made fetch nothing at all. So the backend grew
+**`GET /api/assistant/sessions/count`**, which answers `{ total }` and nothing else - and the
+decision to read before copying it is that the two endpoints **share one predicate** in
+`assistant.service.ts` rather than one query, because they publish the same field name and a second
+hand-written `isNull(deletedAt)` is how one of them silently starts counting tombstones.
+`docs/TODO.md` carries the question of whether `/transactions` should follow, and the reason it
+probably should not: its categories read has another caller, where the assistant's would not have.
+
+Two things about the badge itself. **`null` draws no badge and `0` draws a `0`**, which are different
+facts: `readSessionCount` **degrades** rather than throwing - `lib/palette.ts`'s policy, not
+`requireSessions`' - because a badge is chrome and a count that cannot be read must not replace a
+working conversation with the error boundary. And the Chat tab carries no badge at all, because
+nothing behind it is countable; a pill invented for symmetry would have to say something.
+
+**And each chat row now carries its own timestamp, which cost a new client component for a reason
+that generalises past this screen.** `MessageTime.tsx` renders the formatted time **only after
+hydration**, and the version that did not is the more instructive artifact: `AssistantMessageList`
+renders inside a client component, so a resumed conversation is server-rendered first, and a
+locale-formatted time is computed in the **server's** zone there and the **reader's** zone on
+hydration. `suppressHydrationWarning` is the obvious tool and is the wrong one - a walk with the
+frontend under `TZ=UTC` against a `Europe/Zagreb` browser measured an instant of `18:36:47Z`
+rendering as "6:36 PM" and **staying** so, where the reader's own clock says 8:36 PM. The attribute
+silences the warning and keeps the server's text rather than correcting it, so what it buys is every
+timestamp in the app quietly wrong by the reader's UTC offset, with a clean console and every gate
+green. **The rule to carry: a value that depends on the viewer's locale or zone cannot be
+server-rendered inside a client component at all** - render it after hydration through
+`useSyncExternalStore`, which is the same hook `app/setup/SetupDraftProvider.tsx` reaches for and for
+the same hydration-correctness reason, and keep the machine-readable value in the markup
+(`<time dateTime>`) so only the human-readable half waits. `MessageTime.test.tsx` renders the
+component through **two** renderers for that reason: a defect that is a disagreement between the
+server pass and the client pass is invisible to a suite that only performs one.
+
+Its formatter is `lib/format.ts`'s `formatMessageTimestamp`, built on **`calendarDateOfInstant`** -
+which is the instant-to-calendar-date conversion `insights/AssistantHistoryScreen.tsx` held privately
+after a review of PET-73 found its zone bug, lifted here at its **second** consumer rather than its
+third. That is `lib/pickerScroll.ts`'s exception restated: two copies of markup are cheap, and two
+copies of a _fix_ are a divergence waiting for the next reviewer who corrects only one of them.
 
 ## Not built here
 

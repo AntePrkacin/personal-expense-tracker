@@ -3,8 +3,7 @@ import Link from 'next/link';
 
 import { EmptyState } from '@/components/EmptyState';
 import type { AssistantSession } from '@/lib/assistant';
-import { todayIsoDate } from '@/lib/date';
-import { formatRelativeDate } from '@/lib/format';
+import { calendarDateOfInstant, formatRelativeDate } from '@/lib/format';
 
 import { INSIGHTS_TAB_HREFS } from './InsightsTabs';
 
@@ -40,23 +39,10 @@ export const HISTORY_EMPTY_COPY = {
   action: 'Start a conversation',
 };
 
-/**
- * The calendar date an ISO **instant** falls on, in the zone `today` is read in.
- *
- * **`lastMessageAt` is a timestamp, not a `YYYY-MM-DD` column**, which is the one respect this
- * caption differs from `RecentTransactionsCard`'s and the reason a review of PET-73 added this
- * function. `slice(0, 10)` takes the **UTC** date out of that instant, while `today` defaults to
- * the frontend host's own zone - so at UTC+2 a message sent at 00:30 local is 22:30 UTC the
- * previous day and a conversation from minutes ago read "Yesterday". That is a second and
- * independent error on top of the host-zone-versus-`APP_TIMEZONE` gap the prop's own docblock
- * cites; both sides are now read in one zone, which leaves only the documented gap.
- *
- * `todayIsoDate` is the right tool despite its name: it formats a moment as the calendar date it
- * falls on using local getters, and "today" is only what its default argument means.
- */
-function calendarDateOf(instant: string): string {
-  return todayIsoDate(new Date(instant));
-}
+// The instant-to-calendar-date conversion this file used to hold privately now lives in
+// `lib/format.ts` as `calendarDateOfInstant`, because PET-76 gave the chat rows a timestamp of their
+// own and needed the identical fix. That function carries the full account of the zone bug a review
+// of PET-73 found here; nothing about this caption changed.
 
 /** Where a row links back to: the Chat view, carrying the session to resume. */
 export function conversationHref(sessionId: string): string {
@@ -72,7 +58,7 @@ export type AssistantHistoryScreenProps = {
    * every helper in `lib/date.ts` already take, so a story and a suite can pin "Today" without
    * faking a timer. It inherits the frontend-host-zone gap `RecentTransactionsCard` documents at
    * length; `docs/TODO.md` carries it. What it no longer carries is a **second** zone on top of
-   * that one - see {@link calendarDateOf}.
+   * that one - see {@link calendarDateOfInstant}.
    */
   today?: string;
 };
@@ -110,7 +96,8 @@ export function AssistantHistoryScreen({ sessions, today }: AssistantHistoryScre
               {/* The caption is outside the link, so the link's accessible name stays the title
                   alone. `formatRelativeDate` gives "Today", "Yesterday" or a short date. */}
               <div className="text-base-content/60 text-xs">
-                Last active {formatRelativeDate(calendarDateOf(session.lastMessageAt), today)}
+                Last active{' '}
+                {formatRelativeDate(calendarDateOfInstant(session.lastMessageAt), today)}
               </div>
             </div>
           </li>

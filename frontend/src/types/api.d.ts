@@ -429,6 +429,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assistant/sessions/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How many conversations you have.
+         * @description The same figure `GET /assistant/sessions` publishes as `total`, over the same predicate, without the rows. Exists so a screen that wants only the number does not read the list to get it.
+         */
+        get: operations["AssistantController_sessionCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assistant/sessions/{id}": {
         parameters: {
             query?: never;
@@ -1176,6 +1196,13 @@ export interface components {
             sessions: components["schemas"]["AssistantSessionDto"][];
             /**
              * @description How many conversations there are. Equal to `sessions.length` while there is no pagination, and returned as its own field so a future page size cannot silently turn it into a page count - the reasoning `GET /transactions` already records for its own `total`.
+             * @example 3
+             */
+            total: number;
+        };
+        AssistantSessionCountResponseDto: {
+            /**
+             * @description How many live conversations there are. The same figure `GET /assistant/sessions` publishes as `total`, over the same predicate, without the rows.
              * @example 3
              */
             total: number;
@@ -2340,6 +2367,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssistantSessionsResponseDto"];
+                };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AssistantController_sessionCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSessionCountResponseDto"];
                 };
             };
             /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */

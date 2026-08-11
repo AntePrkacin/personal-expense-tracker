@@ -67,6 +67,34 @@ export async function requireSessions(): Promise<AssistantSessions> {
   throw new Error('Could not load your conversations: the backend did not answer.');
 }
 
+/** `GET /api/assistant/sessions/count`'s 200. */
+export type AssistantSessionCount =
+  operations['AssistantController_sessionCount']['responses'][200]['content']['application/json'];
+
+/**
+ * How many conversations there are, for the tab bar's badge, or `null` if it could not be asked
+ * (PET-76).
+ *
+ * **A fourth failure policy, and it is `lib/palette.ts`'s rather than `requireSessions`' above.**
+ * That read is the *contents* of the History screen, so an unanswerable backend has to reach
+ * `app/error.tsx`; this one is a number on a chrome element that both routes draw. Throwing would
+ * replace a working chat - a screen whose own data is already in hand - because a badge could not
+ * be numbered, which is the trade `lib/transactions.ts` gets right in the other direction.
+ *
+ * **And it deliberately does not decide whether the session is alive**, the clause
+ * `lib/palette.ts` carries in as many words. `(app)/layout.tsx`'s `requireProfile()` has already
+ * answered that for every route below it, and a second opinion about a dead cookie is the shape the
+ * `/dashboard` to `/login` loop came out of. So a 401 here degrades like anything else: no badge.
+ *
+ * The consequence to know is that **a missing badge is not "no conversations"** - zero renders as a
+ * `0`, and `null` renders nothing at all. `InsightsTabs` is where that distinction is drawn.
+ */
+export async function readSessionCount(): Promise<number | null> {
+  const result = await authorizedGet<AssistantSessionCount>('/api/assistant/sessions/count');
+
+  return result.ok ? result.data.total : null;
+}
+
 /**
  * `8-4-4-4-12` hex and nothing else, matching what `ParseUUIDPipe` accepts.
  *

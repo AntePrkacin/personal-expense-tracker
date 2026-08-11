@@ -94,11 +94,26 @@ export function NewChatProvider({ children }: { children: React.ReactNode }) {
   return <NewChatContext.Provider value={value}>{children}</NewChatContext.Provider>;
 }
 
-/** The header action. Secondary, because the page's emphasized control is the composer's Send. */
+/**
+ * The header action.
+ *
+ * **`primary`, and it shipped as `secondary` on an argument that was sound and produced an
+ * invisible button.** That reasoning was that the page's emphasized control is the composer's Send,
+ * so this one should step back - true about emphasis, and `ui/Button`'s `secondary` maps to a bare
+ * `.btn`, which daisyUI fills with **`base-200`**. The page canvas is `base-200` too, so the button
+ * had no visible box at all and read as bold text somebody had failed to link. Same root cause as
+ * the composer's vanishing disabled field, one component over; `AssistantComposer.tsx` carries the
+ * account and `frontend/CLAUDE.md` carries the general form.
+ *
+ * Fixed by matching `AddTransactionButton`'s default rather than by inventing a bordered variant,
+ * which is what the product owner asked this control to look like. The emphasis argument is
+ * genuinely given up rather than worked around: there are two primary-coloured controls on the
+ * screen now, in different regions.
+ */
 export function NewChatButton() {
   const { start } = useNewChat();
 
-  return <Button label="New chat" variant="secondary" onClick={start} />;
+  return <Button label="New chat" variant="primary" onClick={start} />;
 }
 
 /**

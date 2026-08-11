@@ -249,6 +249,74 @@ rules and they answer these questions in one grep.
   sets a property daisyUI never touches, so there is nothing to outrank. Keep the
   `justify-between`: it is what positions the boxes the moment either child stops growing.
 
+- **The page canvas is `bg-base-200`, and `base-200` is also what daisyUI paints its two neutral
+  surfaces - so a control on the canvas can be invisible with no class of its own being wrong.**
+  `app/layout.tsx` paints the canvas; `textarea.css` fills **and borders** a disabled `textarea`
+  with `base-200`, and `button.css` sets `--btn-bg` to `var(--btn-color, var(--color-base-200))`, so
+  a `.btn` with no colour modifier fills with it too. **The Expensa themes are what make the button
+  half total rather than faint**, and it is worth knowing which half is the theme's: `--btn-border`
+  is `color-mix(in oklab, base-200, #000 calc(var(--depth) * 5%))`, and both theme blocks set
+  `--depth: 0` because the design is flat - so the border resolves to `base-200` exactly and there
+  is no hairline left to see the button by. Under a theme with depth it would have been a faint box
+  rather than nothing. The disabled `textarea` needs no such help, setting `border-color` to
+  `base-200` outright. daisyUI assumes both sit on a
+  `base-100` card, which every form in this app did until the assistant composer floated directly
+  on the canvas. Two defects, one cause, both PET-76's: the composer's message box **vanished
+  outright for the whole of a turn** - fill, border and all, on the one control the user is waiting
+  on - and "New chat" had no visible box at all and read as bold text somebody forgot to link.
+  Note what makes this class of defect worse than the ones above: there is no losing class to find
+  in the attribute, because nothing is wrong with the markup in isolation. **Fix it by putting the
+  control on a `base-100` card**, which is what `insights/AssistantComposer.tsx` does, or by giving
+  it a colour of its own (`NewChat.tsx`'s `variant="primary"`). Do **not** reach for
+  `disabled:bg-base-100`: that lands at equal specificity against daisyUI's own rule and is resolved
+  by emission order rather than by the attribute, which is the fight the first entry in this list
+  describes. **PET-76's walk measured that override rather than trusting the prediction, and the
+  prediction was wrong in a way worth keeping**: `disabled:bg-base-100` **does** apply - Tailwind
+  emits it unlayered inside `utilities` where daisyUI's rule sits in a nested sub-layer, which is the
+  precedence `ui/Sidebar.tsx` already records winning - and what it wins is a field filled with the
+  card's own colour, measured at **1.000:1** against it. So the advice stands and its reason
+  inverts: not "the override loses" but "the override applies and re-creates the defect". The
+  general rule to carry: **before styling anything that sits directly on the canvas,
+  check what daisyUI's default fill for it is** - `secondary` in `ui/Button.tsx` maps to a bare
+  `.btn`, so any `secondary` button on a canvas has this bug by construction. There is no other one
+  in the app today, which is why PET-76 fixed one call site rather than sweeping.
+
+  **The measured figures, because the fix is judged against the design rather than against a
+  threshold.** On its card the disabled field reads **1.075:1** in light and **1.099:1** in dark, and
+  those are not weak numbers needing an excuse - they are _exactly_ the ratio this design separates
+  every `base-100` card from the `base-200` canvas with, on every screen. A floor invented above them
+  would condemn the app's own card edges. What changed is the other end: on the canvas the disabled
+  field measured **1.000:1**, fill and border both, byte-identical to what was behind it. The plain
+  `.btn` measured the same 1.000:1, against **5.851:1** for `btn-primary`. So the check to write for
+  this class of defect is "is it distinct at all, and by the design's own step", never a WCAG floor -
+  a disabled control is exempt from 1.4.11 anyway, and `cursor: not-allowed` plus the dimmed
+  placeholder carry the state beside the fill.
+
+- **`loading-*` is not a CSS animation and cannot be tuned from CSS at all.** It reads exactly like
+  a class whose speed an `animation-duration` beside it would change, and that utility reaches
+  nothing: `loading.css` implements the mark as a `mask-image` **data-URI SVG** carrying SMIL
+  `<animate>` elements, so the timing lives inside a URL where no class, no theme variable and no
+  utility can touch it. `loading-dots` runs `dur='3s'` with `keyTimes='0;0.286;0.571;1'`, which
+  means each dot hops once inside the first 57% of the timeline and then holds still for roughly 1.3
+  seconds - so the assistant's typing indicator read as a decoration rather than as activity, and
+  the obvious fix was unreachable. `loading-*` also carries a **size** (`loading-sm` and friends)
+  that a `size-*` utility does not override, for the same reason. **Replace it with real CSS
+  animation when the timing matters**, which `insights/TypingIndicator.tsx` does with three
+  `animate-bounce` spans staggered by negative `[animation-delay]`. One arithmetic trap in doing so:
+  Tailwind's `bounce` keyframes translate by `-25%` of the **element's own height**, so a 6px dot
+  travels 1.5px and reproduces the static-looking indicator from the other direction - daisyUI's own
+  mark travels a full dot diameter, which is why that file animates a `size-4` box around a
+  `size-1.5` dot. Measured: **3.88px of travel against the 4.00px the keyframes promise**, on all
+  three dots, where a bare dot would have managed 1.50px.
+
+  **Measuring an animation needs frame sampling, not a timer**, which is worth knowing before writing
+  the check rather than after. PET-76's walk first sampled every 80ms over a 960ms cycle and reported
+  2.84px of travel; at 35ms it reported 3.58px. Both were facts about the sampling interval straddling
+  a dot's phase rather than about the animation, and both looked exactly like a real defect. Sample
+  inside `requestAnimationFrame` for longer than one full cycle - roughly 74 composited frames here -
+  and assert against the amplitude the keyframes promise for that box rather than against a pixel
+  floor somebody chose.
+
 **The daisyUI Blueprint MCP is this repo's method for writing that markup, and its three stages
 earn three different levels of trust** - follow the syntax stage verbatim, adjudicate the quality
 inspector's findings rather than applying them, and treat the browser walk as the real output.

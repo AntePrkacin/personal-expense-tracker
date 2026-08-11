@@ -26,6 +26,7 @@ import { abortOnClientDisconnect } from '../common/request-abort';
 import { AssistantService } from './assistant.service';
 import {
   AssistantConversationResponseDto,
+  AssistantSessionCountResponseDto,
   AssistantSessionsResponseDto,
 } from './dto/assistant-sessions-response.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -111,10 +112,35 @@ export class AssistantController {
   }
 
   /**
-   * Declared below the literal `sessions` above, which costs nothing here (the
-   * paths differ in segment count) and keeps the ordering rule
-   * `TransactionsController` states visible where the next literal sibling would
-   * be added.
+   * How many conversations there are, for the tab bar's badge (PET-76).
+   *
+   * **The ordering rule the comment below anticipated is now load-bearing rather
+   * than decorative.** `sessions/count` and `sessions/:id` have the same segment
+   * count, so Nest matches whichever is declared first - and declared after,
+   * every request for this route would be handled by `conversation()` instead.
+   * It would not even fail quietly: `ParseUUIDPipe` answers **400** for the
+   * literal `count`, so the symptom would be a badge that never renders and a
+   * 400 in the log naming a validation rule nobody violated. Add any further
+   * literal `sessions/*` route above `sessions/:id` too.
+   */
+  @Get('sessions/count')
+  @ApiOperation({
+    summary: 'How many conversations you have.',
+    description:
+      'The same figure `GET /assistant/sessions` publishes as `total`, over the same predicate, without the rows. Exists so a screen that wants only the number does not read the list to get it.',
+  })
+  @ApiOkResponse({ type: AssistantSessionCountResponseDto })
+  @ApiErrorResponse(HttpStatus.UNAUTHORIZED)
+  sessionCount(
+    @CurrentUser() user: SessionPrincipal,
+  ): Promise<AssistantSessionCountResponseDto> {
+    return this.assistant.sessionCount(user.userId);
+  }
+
+  /**
+   * Declared below the literal `sessions` and `sessions/count` above. The first
+   * of those costs nothing (the paths differ in segment count); the second does
+   * not, and its own comment carries why.
    */
   @Get('sessions/:id')
   @ApiOperation({

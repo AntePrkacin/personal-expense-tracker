@@ -94,6 +94,11 @@ describe('Assistant endpoints (e2e)', () => {
       .get('/api/assistant/sessions')
       .set('Authorization', `Bearer ${token}`);
 
+  const sessionCount = (token = bearer) =>
+    request(app.getHttpServer())
+      .get('/api/assistant/sessions/count')
+      .set('Authorization', `Bearer ${token}`);
+
   const conversation = (id: string, token = bearer) =>
     request(app.getHttpServer())
       .get(`/api/assistant/sessions/${id}`)
@@ -482,6 +487,51 @@ describe('Assistant endpoints (e2e)', () => {
       expect(
         sessionsBody(await sessions(otherBearer).expect(200)).sessions,
       ).toEqual([]);
+    });
+  });
+
+  describe('GET /api/assistant/sessions/count', () => {
+    it('refuses a request with no bearer', async () => {
+      await request(app.getHttpServer())
+        .get('/api/assistant/sessions/count')
+        .expect(401);
+    });
+
+    it('is zero before anything is asked', async () => {
+      expect((await sessionCount().expect(200)).body).toEqual({ total: 0 });
+    });
+
+    it('agrees with the list’s own total, which is the whole point of it', async () => {
+      await send({ message: 'One' }).expect(201);
+      await send({ message: 'Two' }).expect(201);
+
+      const listed = sessionsBody(await sessions().expect(200));
+
+      // Two endpoints publishing one fact. They share a predicate rather than a
+      // query, so this is the assertion that would catch them drifting - and
+      // drift is exactly what a hand-copied `isNull(deletedAt)` would produce,
+      // with both numbers staying individually plausible.
+      expect((await sessionCount().expect(200)).body).toEqual({
+        total: listed.total,
+      });
+      expect(listed.total).toBe(2);
+    });
+
+    it('is not swallowed by the :id route below it', async () => {
+      // **The regression test for a declaration-order bug**, which is why it
+      // asserts a 200 rather than a number. Declared after `sessions/:id`, this
+      // path is matched by that route instead and `ParseUUIDPipe` answers 400
+      // for the literal `count` - so the symptom is a badge that never renders
+      // and a validation error naming a rule nobody broke.
+      await sessionCount().expect(200);
+    });
+
+    it('counts only the caller’s own conversations', async () => {
+      await send({ message: 'Private' }).expect(201);
+
+      expect((await sessionCount(otherBearer).expect(200)).body).toEqual({
+        total: 0,
+      });
     });
   });
 

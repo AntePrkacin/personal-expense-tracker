@@ -57,16 +57,13 @@ export async function readPeriods(): Promise<PeriodsView> {
   throw new Error('Could not load your budgeting periods: the backend did not answer.');
 }
 
-/**
- * The period containing today, which is the one exactly one entry in the list is flagged as.
- *
- * **A find rather than `periods[0]`**, even though the contract documents the list as newest first
- * and index 0 as the current one. Two facts about one thing, and the flag is the one the backend
- * states per row - so reading the flag cannot disagree with it, where an index can if the ordering
- * ever changes underneath. The fallback is the first entry for the same reason a fallback exists at
- * all: `/insights` names a period in its header whatever the list turns out to hold, and a header
- * with no name at all is worse than the newest one.
- */
-export function currentPeriod(view: PeriodsView): Period | undefined {
-  return view.periods.find((period) => period.current) ?? view.periods[0];
-}
+// **`currentPeriod(view)` used to sit here and PET-76 deleted it**, which is worth a line because
+// what it did looks like something this module should still offer. It answered "the period
+// containing today" by finding the entry the backend flags `current`, falling back to the first -
+// and its only two callers were the assistant's two page headers, which named the current period
+// over a conversation that belongs to no period. Both are fixed literals now, so the function had
+// zero callers. It is deleted rather than left available, because the two screens that legitimately
+// want a period - the dashboard and the categories tab - read the one their **own** response
+// resolved, and a helper that derives it from a second request is how those two figures come to
+// disagree. A screen that needs the current period should take it off the read whose figures it is
+// labelling.

@@ -207,7 +207,22 @@ export function buildPrompt(context: AssistantPromptContext): string {
       'If the data does not answer the question, say so plainly rather than estimating.',
       'You have no way to add, edit or delete anything - if the user asks you to, tell them which screen does it.',
       "Decline anything that is not about this account's spending, and do not give regulated financial, tax or investment advice.",
-      'Answer in plain prose. Do not use markdown tables or headings; short paragraphs and, at most, simple dashed lists.',
+      // PET-76 reversed this rule. It read "Answer in plain prose. Do not use
+      // markdown tables or headings; short paragraphs and, at most, simple
+      // dashed lists." - and the model emitted markdown anyway, which is a fact
+      // about models rather than about the wording. The bubble rendered it
+      // literally, so `**July 2026**` reached the user as four asterisks and a
+      // month. The frontend renders markdown now
+      // (`frontend/src/app/(app)/insights/AssistantMarkdown.tsx`), so the
+      // instruction that was being ignored is replaced by one that is true.
+      //
+      // It says what is rendered rather than merely permitting markdown: GFM
+      // tables are supported, so saying so is what makes a per-category
+      // breakdown come back as a table instead of as a paragraph listing
+      // figures. Raw HTML is never parsed on the way out - it is escaped and
+      // shown as characters - so asking for none of it keeps a reply from
+      // arriving full of visible tags.
+      'Answer in GitHub-flavoured markdown, which is rendered: use short paragraphs, bold for figures worth emphasising, bulleted or numbered lists, and a table when you are comparing several categories or periods. Keep it brief, use no headings above level three, and write no raw HTML.',
     ].join(' '),
   ].join('\n\n');
 }

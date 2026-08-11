@@ -74,16 +74,64 @@ const LABEL_CLASS: Record<'active' | 'inactive', string> = {
   inactive: 'text-base-content/50',
 };
 
+/**
+ * The count pill per state, copied from `TransactionTabs` rather than re-decided (PET-76).
+ *
+ * Both entries there are the survivors of a measurement the browser settled, and neither reason has
+ * anything to do with which screen the bar is on - so copying the two literals is copying the
+ * finding. `badge-primary` is solid because `badge-soft badge-primary` measured **3.16:1** in dark,
+ * under AA for text this size, where solid pairs `primary` with `primary-content` at 4.13:1. And the
+ * inactive pill is `badge-soft` with **no** colour modifier because `badge-ghost` is
+ * `background-color: var(--color-base-200)`, which is exactly the surface this bar sits on - it
+ * measured 1.000:1 against its own background, invisible rather than subtle.
+ *
+ * That file is the home for both arguments; if either tone changes, change it there and copy again.
+ */
+const BADGE_CLASS: Record<'active' | 'inactive', string> = {
+  active: 'badge badge-primary badge-sm',
+  inactive: 'badge badge-soft badge-sm',
+};
+
 type InsightsTabsProps = {
   /** Which route is being rendered. Drives `aria-current` and therefore the underline. */
   active: InsightsTab;
+  /**
+   * How many conversations the account holds, or `null` when the count could not be read.
+   *
+   * **`null` draws no badge, and `0` draws a `0`.** They are different facts and the pill must not
+   * conflate them: `lib/assistant.ts`'s `readSessionCount` degrades to `null` rather than throwing,
+   * because a badge is chrome and must not replace a working chat - so a badge reading `0` over a
+   * real conversation would be the read failing while asserting an empty account.
+   *
+   * Only History carries one. The Chat tab has nothing countable behind it - a conversation not yet
+   * started has no number - and a pill invented for symmetry would have to say something.
+   */
+  historyCount: number | null;
 };
 
-export function InsightsTabs({ active }: InsightsTabsProps) {
+export function InsightsTabs({ active, historyCount }: InsightsTabsProps) {
   return (
     // The rule under the whole bar is the container's own border - the active tab's underline
     // sits *on* it rather than replacing it. `gap-7` matches the transactions bar's designed 28px.
-    <nav aria-label="Assistant views" className="border-base-300 flex items-end gap-7 border-b">
+    //
+    // **`mb-5` is where this bar differs from `TransactionTabs`, and the difference is a fact about
+    // its parent rather than about the bar.** That one carries no bottom margin because it is a
+    // *child* of `<main className="... gap-5">`, so the designed 20px between the tabs and whatever
+    // comes next is the main column's own row gap. Here the bar is a **sibling** of `<main>` - the
+    // tabs are the page's, the `<main>` is inside `ChatSlot` - and `(app)/layout.tsx`'s content
+    // column declares no gap at all, only `px-*`. So nothing separated the two: the active tab's
+    // 2px underline sits at `-bottom-px`, and the card below started on the very next pixel, which
+    // read as the marker touching the box. `PageHeader`'s own `pb-5` is why the gap *above* the bar
+    // looked right and only this one did not.
+    //
+    // It goes on the shared component rather than on the two pages, because both routes want the
+    // identical 20px and a margin written twice is a margin that stops matching. Do not "unify"
+    // this with `TransactionTabs` by deleting it: the two are the same 20px expressed against
+    // different parents, and that bar's own comment says where its copy comes from.
+    <nav
+      aria-label="Assistant views"
+      className="border-base-300 mb-5 flex items-end gap-7 border-b"
+    >
       {INSIGHTS_TABS.map((tab) => {
         const state = tab === active ? 'active' : 'inactive';
 
@@ -97,9 +145,20 @@ export function InsightsTabs({ active }: InsightsTabsProps) {
             // rule sets `--tw-outline-style: none` and Tailwind's `outline-2` reads that variable,
             // so a ring declared by width alone computes to `2px none` and paints nothing - a WCAG
             // 2.4.7 failure invisible to every gate.
-            className={`focus-visible:outline-primary relative flex items-center rounded-sm pb-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-solid ${LABEL_CLASS[state]}`}
+            // `gap-1.75` is the 7px `TransactionTabs` puts between a label and its count, so the two
+            // bars read as one control at two places in the app rather than as near-copies.
+            className={`focus-visible:outline-primary relative flex items-center gap-1.75 rounded-sm pb-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-solid ${LABEL_CLASS[state]}`}
           >
             <span>{TAB_LABELS[tab]}</span>
+
+            {/* **Only History, and only when the count was actually read.** The Chat tab has
+                nothing countable behind it, and `null` means the read failed rather than that the
+                account has no conversations - see the prop's own note. A bare `<span>` inside the
+                link, `TransactionTabs`' shape, so the tab announces as "History 3" and the number
+                is not a second tab stop. */}
+            {tab === 'history' && historyCount !== null ? (
+              <span className={BADGE_CLASS[state]}>{historyCount}</span>
+            ) : null}
 
             {/* The active rule, `aria-hidden` because `aria-current` already says which tab is
                 current - an unlabelled 2px box would announce as an empty generic. `-bottom-px`

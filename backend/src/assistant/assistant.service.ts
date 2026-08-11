@@ -33,6 +33,7 @@ import type {
 } from './dto/assistant-message-response.dto';
 import type {
   AssistantConversationResponseDto,
+  AssistantSessionCountResponseDto,
   AssistantSessionsResponseDto,
 } from './dto/assistant-sessions-response.dto';
 import type { SendMessageDto } from './dto/send-message.dto';
@@ -40,6 +41,16 @@ import type { SendMessageResponseDto } from './dto/send-message-response.dto';
 
 const NOT_CONFIGURED = 'The assistant is not configured.';
 const NO_SESSION = 'No such conversation.';
+
+/**
+ * What makes a conversation live, written once (PET-76).
+ *
+ * Both `sessionCount()` and `sessions()` publish a `total` over this condition,
+ * and the two have to agree. A second hand-written `isNull(deletedAt)` is how one
+ * of them silently starts counting tombstones - the failure mode nothing would
+ * catch, because both numbers stay plausible.
+ */
+const LIVE_SESSION = isNull(assistantSessions.deletedAt);
 const NO_PROFILE = (userId: string) =>
   `No profile row for user ${userId}; verification inserts one for every account.`;
 
@@ -182,6 +193,38 @@ export class AssistantService {
     };
   }
 
+  /**
+   * How many live conversations there are, without reading them.
+   *
+   * **One `count(*)` rather than a list whose length is taken**, because its
+   * caller is the tab bar on the *Chat* route, which wants the number and has no
+   * use for the rows. `dto/assistant-sessions-response.dto.ts` carries why that
+   * is worth an endpoint of its own.
+   *
+   * **It shares its predicate with `sessions()` below rather than restating
+   * it.** The two figures are published as the same field name and have to mean
+   * the same thing, and a second hand-written `isNull(deletedAt)` is how one of
+   * them silently starts counting tombstones. `sessions()` keeps deriving its
+   * own `total` from the rows it already holds - counting again in SQL there
+   * would be a second round trip for a number in hand - so what is single-
+   * sourced is the **condition**, which is the half that can drift.
+   */
+  async sessionCount(
+    userId: string,
+  ): Promise<AssistantSessionCountResponseDto> {
+    const db = await this.userDatabases.getUserDb(userId);
+
+    const [row] = await db
+      .select({ total: count() })
+      .from(assistantSessions)
+      .where(LIVE_SESSION);
+
+    // Defensive rather than reachable: an aggregate with no GROUP BY always
+    // returns exactly one row. A missing one would be a driver fault, and
+    // answering 0 is the honest reading of "no conversations counted".
+    return { total: row?.total ?? 0 };
+  }
+
   /** Every live conversation, newest activity first. */
   async sessions(userId: string): Promise<AssistantSessionsResponseDto> {
     const db = await this.userDatabases.getUserDb(userId);
@@ -194,7 +237,7 @@ export class AssistantService {
         createdAt: assistantSessions.createdAt,
       })
       .from(assistantSessions)
-      .where(isNull(assistantSessions.deletedAt))
+      .where(LIVE_SESSION)
       .orderBy(
         desc(assistantSessions.lastMessageAt),
         desc(assistantSessions.id),

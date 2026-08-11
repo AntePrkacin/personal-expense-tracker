@@ -74,6 +74,10 @@ describe('openapi.json', () => {
     expect(Object.keys(spec.paths).sort()).toEqual([
       `/${API_PREFIX}/assistant/messages`,
       `/${API_PREFIX}/assistant/sessions`,
+      // Sorts before `{id}` here and is declared before it in the controller too - which is a
+      // coincidence of alphabet rather than the reason. `AssistantController` carries why the
+      // declaration order is load-bearing (PET-76).
+      `/${API_PREFIX}/assistant/sessions/count`,
       `/${API_PREFIX}/assistant/sessions/{id}`,
       `/${API_PREFIX}/auth/login-link`,
       `/${API_PREFIX}/auth/register`,

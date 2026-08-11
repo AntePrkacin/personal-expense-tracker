@@ -26,7 +26,9 @@ const PROFILE = { fullName: 'Ada Lovelace', email: 'ada@example.com' };
 const LABELS: Record<(typeof SIDEBAR_ITEMS)[number], string> = {
   dashboard: 'Dashboard',
   transactions: 'Transactions',
-  insights: 'Insights',
+  // "AI Assistant" since PET-76. The key is still `insights`, so nothing about the matching
+  // this file is really about moved with the label.
+  insights: 'AI Assistant',
   settings: 'Settings',
 };
 

@@ -1,10 +1,10 @@
 'use client';
 
-import { Send, Square } from 'lucide-react';
+import { SendHorizontal, Square } from 'lucide-react';
 
 import { MAX_MESSAGE_CHARS } from './assistantChat';
 
-// The composer: a multiline field, a submit that becomes "Stop", and the disclosure beside it.
+// The composer: a multiline field with its send inside it, and the disclosure beneath.
 //
 // **A real `<form noValidate onSubmit>` with `preventDefault()` and a `type="submit"` button**,
 // per the three silent failures `app/setup/BudgetForm.tsx` records: a form with no `action` GETs
@@ -28,6 +28,33 @@ import { MAX_MESSAGE_CHARS } from './assistantChat';
 // **The character cap is restated here as a literal.** `maxLength` reaches no generated type, so
 // there is nothing to read it out of - the `MAX_CAP_ROWS` precedent - and the 400 it would
 // otherwise produce is advice the user cannot act on. `assistantChat.ts` names the DTO it mirrors.
+//
+// **PET-76 moved this whole thing into a `card bg-base-100`, and it is a fix at the cause rather
+// than a treatment.** The composer floated directly on the page canvas, which
+// `app/layout.tsx` paints `bg-base-200` - and `base-200` is also exactly what daisyUI fills and
+// borders a **disabled** `textarea` with. So the box the user is waiting on vanished into the page
+// for the whole of a turn: fill, border and all, with every gate green. daisyUI assumes a field
+// sits on a `base-100` card, which every other form in this app does, so putting this one there
+// makes the enabled state a bordered field on white and the disabled state a grey plate, both for
+// free. A `disabled:bg-base-100` override was the obvious alternative and is the wrong one - it
+// lands at equal specificity against daisyUI's own rule and is resolved by emission order rather
+// than by the attribute, which is the fight `frontend/CLAUDE.md` records losing three times.
+//
+// **The send moved inside the box in the same change**, the messaging-app arrangement, as a
+// glyph-only circular button in the bottom-right corner. Two things about that are load-bearing.
+// The textarea takes trailing padding, or a long question runs underneath the button; and it takes
+// `resize-none`, because the user agent's own resize handle occupies exactly the corner the button
+// now sits in. The accessible names are unchanged - `aria-label` carries what the visible label
+// used to - so every existing assertion still passes, which is the point of naming them that way.
+//
+// **The resize handle is not the only thing in that corner, which is what a review of PR #88 found
+// and is the unfixed half of the trap above.** A `textarea`'s **vertical scrollbar** occupies the
+// same inline-end edge, and it appears the moment a question outgrows `h-24` - so a button flush in
+// the corner sits on top of the bottom of the scroll track, and that part of it cannot be dragged.
+// `resize-none` cannot help: the scrollbar is not the handle and is not optional. Trailing padding
+// cannot either, because it insets the **text** and the scrollbar is outside the content box. So
+// the button is inset past the gutter instead rather than being moved out of the field, which would
+// have changed a design decision to fix a geometry one - see the measurement on the class below.
 
 /**
  * **The disclosure, and it is categorically larger than receipt scanning's.**
@@ -77,52 +104,101 @@ export function AssistantComposer({
           onSubmit();
         }
       }}
-      className="flex flex-col gap-2"
+      // The card is the fix for the disappearing disabled field - see the header comment. `gap` is
+      // deliberately absent: `card-body` ships its own `gap: .5rem`, which is the `gap-2` this
+      // markup used to write out by hand.
+      className="card bg-base-100 shadow-sm"
     >
-      {/* The label is visible rather than `sr-only`: this is the screen's one input and naming it
-          costs a line that also tells a first-time visitor what the field is for. */}
-      <label className="label text-sm font-medium" htmlFor="assistant-message">
-        Ask about your spending
-      </label>
+      <div className="card-body">
+        {/* The label is visible rather than `sr-only`: this is the screen's one input and naming it
+            costs a line that also tells a first-time visitor what the field is for. It stays
+            visible now the send is a glyph, which matters more rather than less - it is the only
+            text on the control. */}
+        <label className="label text-sm font-medium" htmlFor="assistant-message">
+          Ask about your spending
+        </label>
 
-      <div className="flex items-end gap-2">
-        <textarea
-          id="assistant-message"
-          className="textarea h-24 w-full"
-          placeholder="How much did I spend on groceries last month?"
-          maxLength={MAX_MESSAGE_CHARS}
-          value={value}
-          disabled={pending}
-          onChange={(event) => onChange(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            // Enter submits, Shift+Enter inserts a newline. A textarea does the opposite by
-            // default, and the difference is invisible until somebody tries the keyboard.
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              if (!pending && canSend) {
-                onSubmit();
+        {/* `relative`, so the button below can be positioned against the field rather than laid out
+            beside it. */}
+        <div className="relative">
+          <textarea
+            id="assistant-message"
+            // `pe-17` clears the button in the corner: `btn-circle` is 2.5rem wide and sits at
+            // `end-5`, so 4.25rem of trailing padding leaves half a rem of air. Both are logical
+            // properties (`pe`, `end`) rather than `pr`/`right`, so the pair stays correct if this
+            // app is ever laid out right-to-left. `resize-none`
+            // because the user agent's resize handle occupies that exact corner otherwise, and a
+            // grab handle under a button is a control the user cannot reach.
+            //
+            // **`end-5` rather than the `end-2` this shipped at, and the extra 12px is the
+            // scrollbar's** - see the header comment. A classic vertical scrollbar is 12px to 17px
+            // wide depending on the platform, plus the field's 1px border, so 1.25rem of inset is
+            // the first step on Tailwind's scale that clears the widest of them.
+            //
+            // **Measured rather than reasoned, and the old placement was probed in the same run.**
+            // The walk fills the field until it scrolls and derives the gutter from
+            // `offsetWidth - clientWidth` less the two borders, which is the only definition of
+            // "outside the gutter" that does not hard-code a scrollbar width: **15px of gutter
+            // behind a 1px border, so its inner edge is 16px from the field's outer edge**. The
+            // button's inline-end edge now sits at **20px**, clearing it by 4, where `end-2` put it
+            // at **8px** - 8px inside the track, which is the control this check needs to have been
+            // seen failing. Trailing padding measures 68px against the button's 20px + 40px, so the
+            // half-rem of air above is the same half-rem as before. Under overlay scrollbars (macOS)
+            // the gutter has no layout width at all and the inset is simply a slightly wider gap.
+            className="textarea h-24 w-full resize-none pe-17"
+            placeholder="How much did I spend on groceries last month?"
+            maxLength={MAX_MESSAGE_CHARS}
+            value={value}
+            disabled={pending}
+            onChange={(event) => onChange(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Enter submits, Shift+Enter inserts a newline. A textarea does the opposite by
+              // default, and the difference is invisible until somebody tries the keyboard.
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (!pending && canSend) {
+                  onSubmit();
+                }
               }
-            }
-          }}
-        />
+            }}
+          />
 
-        {/* Two buttons rather than one whose label changes, so the submit stays a real
-            `type="submit"` - the thing that makes Enter work - and Stop is never a submit that
-            has to be intercepted. Exactly one is rendered at a time. */}
-        {pending ? (
-          <button type="button" className="btn btn-error" onClick={onStop}>
-            <Square className="size-4" aria-hidden="true" />
-            Stop
-          </button>
-        ) : (
-          <button type="submit" className="btn btn-primary" disabled={!canSend}>
-            <Send className="size-4" aria-hidden="true" />
-            Send
-          </button>
-        )}
+          {/* Two buttons rather than one whose label changes, so the submit stays a real
+              `type="submit"` - the thing that makes Enter work - and Stop is never a submit that
+              has to be intercepted. Exactly one is rendered at a time.
+
+              **Glyph-only, so each carries its name in an `aria-label`** and the glyph inside is
+              `aria-hidden`, which is `frontend/CLAUDE.md`'s rule for every lucide mark in this app.
+              The names are the strings the visible labels used to be, so the accessible names did
+              not change and neither did a single assertion in `AssistantChatScreen.test.tsx`.
+
+              `SendHorizontal` rather than the `Send` this imported: the closer mark for a chat
+              send, and an **outline** plane rather than the solid one a messaging app usually
+              draws, because lucide is stroke-based throughout and a filled mark would mean a
+              hand-traced SVG - which the same file forbids outright. */}
+          {pending ? (
+            <button
+              type="button"
+              aria-label="Stop"
+              className="btn btn-circle btn-error absolute end-5 bottom-2"
+              onClick={onStop}
+            >
+              <Square className="size-4" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              aria-label="Send"
+              className="btn btn-circle btn-primary absolute end-5 bottom-2"
+              disabled={!canSend}
+            >
+              <SendHorizontal className="size-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+
+        <p className="text-base-content/60 text-xs">{DISCLOSURE}</p>
       </div>
-
-      <p className="text-base-content/60 text-xs">{DISCLOSURE}</p>
     </form>
   );
 }
