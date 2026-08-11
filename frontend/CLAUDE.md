@@ -11,9 +11,12 @@ in `docs/guides/configuration.md`.
 Figma-token layer. `frontend/src/app/globals.css` holds the Tailwind import, the daisyUI plugin
 registration, the two **Expensa theme blocks** PET-74 authored from the design tokens -
 `expensa-light` the default, `expensa-dark` selected automatically from the OS - the two font
-tokens, and the field-focus rules that swap daisyUI's double focus ring for Claude Design's
-single accent one. Its comments are the authority for where every value came from and which four
-are derivations. There is no `tailwind.config`; Tailwind v4 is configured CSS-first.
+tokens, the field-focus rules that swap daisyUI's double focus ring for Claude Design's
+single accent one, and the three `-orange` status modifiers PET-74's sixth addendum added
+beside them (daisyUI ships no orange, and the budget banding's "Full" band wants one between
+`warning` and `error` - the theme blocks define the `--color-orange` pair and those rules are
+daisyUI's own `-warning` modifiers transcribed for it). Its comments are the authority for
+where every value came from and which four are derivations. There is no `tailwind.config`; Tailwind v4 is configured CSS-first.
 
 ### Figma against daisyUI: the division of authority
 
@@ -50,10 +53,11 @@ violated once by somebody working from the design file in good faith.
    sentence that stood here. What that rule forbade narrowed rather than died: **never re-theme
    at a call site, and never eyedrop a value from the dead Figma pages** - a colour changes by
    editing the theme blocks and re-running the guard below, nowhere else. `globals.css` holds
-   the two `@plugin 'daisyui/theme'` blocks, the two font variables and the field-focus rules
+   the two `@plugin 'daisyui/theme'` blocks, the two font variables, the field-focus rules
    (PET-74's fourth addendum: daisyUI's border-plus-offset-outline focus read as a double
    border, and Claude Design's single accent ring replaces it - the file's own comment carries
-   the account, including why an error field's ring stays error-coloured), and that is still the
+   the account, including why an error field's ring stays error-coloured) and the sixth
+   addendum's `-orange` status modifiers, and that is still the
    whole of what it may ever contain. The colour rule below is the same prohibition from the
    other end, because a raw `text-red-600` is re-theming by hand, one element at a time.
 
@@ -75,7 +79,12 @@ Four rules keep the rest coherent:
   `success`, `warning` and `error`, each with a `-content` pair for what sits on it. Tailwind's
   full palette is back, so `text-red-600` now compiles and quietly bypasses the theme - the
   exact inversion of the old failure, where a wrong class generated nothing. The compile-time
-  check died with the token layer, so this rests on review.
+  check died with the token layer, so this rests on review. `orange` is the one app-authored
+  name beside daisyUI's own, PET-74's "Full" band hue: the theme blocks define the
+  `--color-orange` pair, and `badge-orange`, `status-orange` and `progress-orange` in
+  `globals.css` are its only three classes. Reach for those rather than minting a fourth, and
+  note Tailwind's own `orange-50` to `orange-950` scale stays as forbidden as the rest of the
+  raw palette - `text-orange-600` is not the theme's orange, however close it looks.
 
 - **Never write a `dark:` variant.** Semantic colours resolve through the active theme, so dark
   mode needs nothing from markup, and a `dark:` override would fight the theme instead of

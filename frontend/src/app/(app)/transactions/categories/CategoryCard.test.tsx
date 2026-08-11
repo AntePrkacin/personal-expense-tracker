@@ -138,9 +138,11 @@ describe('the status chip and the footer figure (AC3)', () => {
   });
 
   it('does not carry the band by colour alone', () => {
-    // `near` and `full` share `warning`, so the label is the only thing separating them. Both
-    // are real text in the badge, which is what keeps that legitimate - this asserts the two
-    // words differ rather than asserting a class, per the standing rule about class strings.
+    // `near` and `full` shared `warning` when this was written, and the labels were the only
+    // thing separating them - which is what this pins, and it stays load-bearing now that
+    // PET-74 gave `full` its own orange: the words are real text in the badge, so the
+    // distinction survives for a reader who cannot see either hue. Labels rather than classes,
+    // per the standing rule about class strings.
     const { unmount } = render(
       <CategoryCard currency="USD" category={category({ status: 'near' })} />,
     );

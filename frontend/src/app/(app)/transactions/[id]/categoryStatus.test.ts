@@ -40,7 +40,7 @@ describe('chipFor', () => {
   it.each([
     ['on_track', 12.5, 'badge badge-sm badge-success', '12% used'],
     ['near', 79.4, 'badge badge-sm badge-warning', '79% used'],
-    ['full', 100, 'badge badge-sm badge-warning', '100% used'],
+    ['full', 100, 'badge badge-sm badge-orange', '100% used'],
     ['over', 137.9, 'badge badge-sm badge-error', '137% used'],
   ] as const)('maps %s to its own chip', (status, percentUsed, className, label) => {
     // Semantic state, not the mock's hue: the frame's amber at 79% is `near`, and this pins

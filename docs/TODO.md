@@ -588,6 +588,18 @@ the design never states as if it were designed. Joins the running set of copy an
 app ships without a frame behind it, alongside A15's no-results string and A29's inline error
 copy: real until a designer looks at it, not a placeholder.
 
+**Answered 2026-08-11 on PET-74, by adoption rather than invention.** The threshold this item
+refused to pick already existed elsewhere in the product: PET-35 bands every category at 75% of
+its cap, on cents, and the category cards follow that `status` off the API - so the product call
+is that the whole budget bands the same way, rather than a summary bar sitting green beside a
+wall of amber category bars describing the same money. `frontend/src/lib/budgetStatus.ts`
+mirrors the backend's `statusFor` and is shared by `BudgetCard` and the Categories tab's
+`SpendingSummaryCard`, so the two screens cannot answer the one question differently; both chips
+now carry four tones (`On track` / `Near` / `Full` / `Over budget`) and both bars follow their
+chip. What this does *not* answer is the designer's half: 75% is the backend's number, adopted
+for consistency, and a designed threshold - or a pace-relative one - would replace it in one
+place.
+
 ### The trend chart draws a week that has not happened yet, and no frame says how
 
 `weeklyBucketsOf` tiles the whole budgeting period regardless of where today falls, so most of
@@ -596,7 +608,8 @@ answers this nowhere, and until PET-22's review nothing distinguished them: an u
 AC5's genuinely spend-free week were the same `$0` label over the same minimum bar. `TrendCard`
 now mutes everything after the current week and names both states with an `sr-only` line -
 "Current week" and "Upcoming week" - so two more strings and one more visual state join what A29
-owes a designer, alongside A15's no-results copy and `BudgetCard`'s two badge tones above.
+owes a designer, alongside A15's no-results copy and `BudgetCard`'s badge tones above (two when
+this was written; four since PET-74, and the sign-off owed is unchanged).
 
 **What is owed is a decision, not a fix.** Muting is one answer; omitting the future buckets
 entirely is another, and it is the one a designer might well prefer, since a chart that grows

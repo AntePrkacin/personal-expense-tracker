@@ -6,7 +6,6 @@ import { BudgetCard } from './BudgetCard';
 const ON_TRACK = {
   spent: 1240,
   monthlyBudget: 2000,
-  remaining: 760,
   daysLeft: 8,
   transactionCount: 38,
   averagePerDay: 54,
@@ -90,7 +89,7 @@ describe('the two whole-dollar figures, which have to agree with each other', ()
   it('derives the remainder from the rounded spend rather than rounding it separately', () => {
     // 1240.50 and 759.50 each round up on their own, so three independent `formatWhole` calls
     // print "$1,241 of $2,000" beside "$760 left" - 2001 on a 2000 budget.
-    render(<BudgetCard currency="USD" {...ON_TRACK} spent={1240.5} remaining={759.5} />);
+    render(<BudgetCard currency="USD" {...ON_TRACK} spent={1240.5} />);
 
     expect(screen.getByText('$1,241')).toBeInTheDocument();
     expect(screen.getByText('of $2,000')).toBeInTheDocument();
@@ -127,7 +126,6 @@ describe('the empty state (AC2, PET-26)', () => {
         isEmpty={true}
         daysLeft={31}
         spent={0}
-        remaining={2000}
         transactionCount={0}
         averagePerDay={0}
         topCategory={null}
@@ -180,8 +178,57 @@ describe('the empty state (AC2, PET-26)', () => {
   });
 });
 
+describe("the middle bands, which are the category cards' own (PET-74)", () => {
+  it('turns the chip amber at exactly 75% of the budget', () => {
+    // The band is the backend's category banding adopted for the budget - see
+    // `lib/budgetStatus.ts` for why it is not an invented threshold - and 75% exactly is
+    // inside it, because the backend compares `spentCents >= capCents * 0.75`.
+    render(<BudgetCard currency="USD" {...ON_TRACK} spent={1500} />);
+
+    expect(screen.getByText('Near')).toBeInTheDocument();
+    expect(screen.queryByText('On track')).not.toBeInTheDocument();
+  });
+
+  it('stays green one cent below the band', () => {
+    render(<BudgetCard currency="USD" {...ON_TRACK} spent={1499.99} />);
+
+    expect(screen.getByText('On track')).toBeInTheDocument();
+    expect(screen.queryByText('Near')).not.toBeInTheDocument();
+  });
+
+  it('reads "Full" at exactly the budget, which has not gone wrong yet', () => {
+    render(<BudgetCard currency="USD" {...ON_TRACK} spent={2000} />);
+
+    expect(screen.getByText('Full')).toBeInTheDocument();
+    expect(screen.queryByText('Over budget')).not.toBeInTheDocument();
+  });
+
+  it('gives the bar the same tone as the chip in every band', () => {
+    // **A class assertion, which this repo otherwise avoids** - daisyUI's state classes are the
+    // documented exception, as the visible half of the chip the same test pins. The defect this
+    // guards is the one this card shipped with: a bar that stayed `progress-primary` under a
+    // chip that had already changed colour.
+    const bands = [
+      { spent: 1240, label: 'On track', bar: 'progress-success' },
+      { spent: 1500, label: 'Near', bar: 'progress-warning' },
+      { spent: 2000, label: 'Full', bar: 'progress-orange' },
+      { spent: 2240, label: 'Over budget', bar: 'progress-error' },
+    ];
+
+    for (const band of bands) {
+      const { unmount } = render(<BudgetCard currency="USD" {...ON_TRACK} spent={band.spent} />);
+
+      expect(screen.getByText(band.label)).toBeInTheDocument();
+      expect(screen.getByRole('progressbar', { name: 'Monthly budget spent' })).toHaveClass(
+        band.bar,
+      );
+      unmount();
+    }
+  });
+});
+
 describe('the overspent state, which the frame does not draw', () => {
-  const OVER_BUDGET = { ...ON_TRACK, spent: 2240, remaining: -240 };
+  const OVER_BUDGET = { ...ON_TRACK, spent: 2240 };
 
   it('flips the chip to "Over budget"', () => {
     render(<BudgetCard currency="USD" {...OVER_BUDGET} />);
@@ -198,7 +245,7 @@ describe('the overspent state, which the frame does not draw', () => {
     expect(bar).toHaveAttribute('max', '2000');
   });
 
-  it('shows the magnitude of remaining rather than a formatted negative', () => {
+  it('shows the magnitude of the remainder rather than a formatted negative', () => {
     // "−$240 left" would read as a double negative once the chip already says "Over budget".
     render(<BudgetCard currency="USD" {...OVER_BUDGET} />);
 

@@ -1,4 +1,5 @@
 import { moneyFormatters } from '@/lib/money';
+import { BUDGET_TONE, budgetStatus } from '@/lib/budgetStatus';
 import type { Allocation, Category } from '@/lib/categories';
 import type { Period } from '@/lib/periods';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
@@ -27,40 +28,6 @@ import { BannerCardBody } from './CardBanner';
 // banner. The alternative was hoisting the banner into `CategoriesScreen`, which the overlap effect
 // forbids: the strip has to be a sibling of the card body inside this file's own `<section>`.
 // `AllocateBanner.tsx` carries the rest of that argument.
-
-/**
- * The chip's two tones, complete literal class strings per key.
- *
- * **Two tones rather than the four the Claude Design system draws, and this is deliberate.**
- * That version bands at 80% of the budget, and `dashboard/BudgetCard.tsx` refused to invent
- * exactly that threshold for exactly this figure: a "getting close" tone needs a cutoff - 80%?
- * 90%? pace-relative? - that no design specifies, and `docs/TODO.md` already carries it as owed
- * rather than guessed. Inventing one here would also put two different answers on two screens
- * describing the same monthly budget, which is the failure the category cards avoid by reading
- * `status` off the API.
- *
- * So the split is the one the data really supports: the budget is either overspent or it is
- * not. Duplicated from `BudgetCard` rather than shared, per the rule of three - a third
- * consumer is the signal to lift it, and there are two.
- *
- * **`bg-base-300` on each bar pins the track neutral**, for the reason `categoryCardStatus.ts`
- * records in full: daisyUI derives a `<progress>`'s track from the fill colour, so without it an
- * unspent budget drew as one solid green pill.
- */
-const CHIP = {
-  onTrack: {
-    badge: 'badge badge-soft badge-success',
-    dot: 'status status-success',
-    bar: 'progress progress-success bg-base-300 w-full',
-    label: 'On track',
-  },
-  overBudget: {
-    badge: 'badge badge-soft badge-error',
-    dot: 'status status-error',
-    bar: 'progress progress-error bg-base-300 w-full',
-    label: 'Over budget',
-  },
-} as const;
 
 type SpendingSummaryCardProps = {
   /** The period's spend, summed from the categories. See `CategoriesScreen` for why that sum is sound. */
@@ -125,7 +92,14 @@ export function SpendingSummaryCard({
   const spentWhole = Math.round(spent);
   const budgetWhole = Math.round(monthlyBudget);
 
-  const tone = spentWhole > budgetWhole ? CHIP.overBudget : CHIP.onTrack;
+  // **The tone is the category cards' banding applied to the budget, decided on cents** -
+  // `lib/budgetStatus.ts` carries the account, including why it mirrors the backend's
+  // `statusFor` rather than inventing a threshold, and why it is shared with `BudgetCard` at
+  // two consumers. On the raw figures rather than the rounded pair above, which is what lets
+  // the chip read "Near" while the card prints "$2,000 of $2,000" - the same band-edge honesty
+  // `categoryCardStatus.ts` restates for the cards below, where 99.6% is `near` and floors to
+  // 99 rather than rounding to 100 beside the word for "not there yet".
+  const tone = BUDGET_TONE[budgetStatus(spent, monthlyBudget)];
 
   // **`max` is floored at 1, because a rounded budget can legitimately be 0 and `max="0"` is
   // invalid HTML.** `RegisterDto.monthlyBudget` is only `@IsPositive()`, so `0.40` is an

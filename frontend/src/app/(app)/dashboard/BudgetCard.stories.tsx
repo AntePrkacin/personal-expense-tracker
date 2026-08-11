@@ -5,7 +5,8 @@ import { BudgetCard } from './BudgetCard';
 // The card itself (Figma node 22:55), filed under Shell rather than Screens: a card is one
 // band of the dashboard rather than a whole frame, the same distinction `Shell/Page header`
 // draws against the four screens it appears on. `Screens/04 Dashboard` is where the whole
-// frame is diffed; this is where the card's two chip tones are.
+// frame is diffed; this is where the card's four chip tones are - the category cards' own
+// banding, applied to the budget as of PET-74 via `lib/budgetStatus.ts`.
 //
 // No provider and no `nextjs` parameter: nothing here is interactive, so it needs neither.
 
@@ -30,7 +31,6 @@ export const OnTrack: Story = {
   args: {
     spent: 1240,
     monthlyBudget: 2000,
-    remaining: 760,
     daysLeft: 8,
     transactionCount: 38,
     averagePerDay: 54,
@@ -45,15 +45,39 @@ export const OnTrack: Story = {
 };
 
 /**
+ * The amber band, which no frame draws: 75% of the budget spent, the category cards' own
+ * "getting close" threshold applied to the whole budget. The bar follows the chip.
+ */
+export const Near: Story = {
+  args: {
+    ...OnTrack.args,
+    spent: 1500,
+    daysLeft: 5,
+  },
+};
+
+/**
+ * Exactly on the budget, which has not gone wrong yet - `over` is what has. The chip reads
+ * "Full" in the theme's own orange, one step hotter than `Near`'s amber and one cooler than
+ * `OverBudget`'s red, exactly as the state sits between them.
+ */
+export const Full: Story = {
+  args: {
+    ...OnTrack.args,
+    spent: 2000,
+    daysLeft: 3,
+  },
+};
+
+/**
  * The overspent state, which the frame does not draw. The chip flips to "Over budget", the
  * bar clamps to full rather than overflowing its track, and the "left" caption shows the
- * magnitude of `remaining` rather than a formatted negative colliding with the chip.
+ * magnitude of the remainder rather than a formatted negative colliding with the chip.
  */
 export const OverBudget: Story = {
   args: {
     spent: 2240,
     monthlyBudget: 2000,
-    remaining: -240,
     daysLeft: 3,
     transactionCount: 44,
     averagePerDay: 80,
@@ -73,7 +97,6 @@ export const NoTopCategory: Story = {
   args: {
     ...OnTrack.args,
     spent: 0,
-    remaining: 2000,
     transactionCount: 0,
     averagePerDay: 0,
     topCategory: null,

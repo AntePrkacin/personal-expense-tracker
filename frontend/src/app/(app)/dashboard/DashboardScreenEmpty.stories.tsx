@@ -74,7 +74,6 @@ export const Empty: Story = {
               currency="USD"
               spent={0}
               monthlyBudget={2000}
-              remaining={2000}
               daysLeft={31}
               transactionCount={0}
               averagePerDay={0}

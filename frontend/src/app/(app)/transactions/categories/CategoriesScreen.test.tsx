@@ -307,6 +307,44 @@ describe('the spending summary (AC4)', () => {
     expect(screen.queryByText('On track')).not.toBeInTheDocument();
   });
 
+  it("turns the chip amber at the category cards' own 75% band (PET-74)", () => {
+    // The band is the backend's category banding adopted for the whole budget - see
+    // `lib/budgetStatus.ts` - so the summary cannot sit green over amber category bars
+    // describing the same money. 1500 is exactly 75% of the 2000 budget, and exactly-75 is
+    // inside the band because the backend compares `spentCents >= capCents * 0.75`.
+    renderScreen({
+      categories: [
+        category({
+          spent: 1500,
+          monthlyCap: null,
+          percentUsed: null,
+          remaining: null,
+          status: 'uncapped',
+        }),
+      ],
+    });
+
+    expect(within(summaryCard()).getByText('Near')).toBeInTheDocument();
+    expect(within(summaryCard()).queryByText('On track')).not.toBeInTheDocument();
+  });
+
+  it('reads "Full" at exactly the budget, which has not gone wrong yet', () => {
+    renderScreen({
+      categories: [
+        category({
+          spent: 2000,
+          monthlyCap: null,
+          percentUsed: null,
+          remaining: null,
+          status: 'uncapped',
+        }),
+      ],
+    });
+
+    expect(within(summaryCard()).getByText('Full')).toBeInTheDocument();
+    expect(within(summaryCard()).queryByText('Over budget')).not.toBeInTheDocument();
+  });
+
   it('never hands the bar a max of zero, however small the budget', () => {
     // **`monthlyBudget` is only `@IsPositive()`, so $0.40 is a real budget** and rounds to zero.
     // `<progress max="0">` is invalid: the spec says fall back to max=1, so the bar rendered
@@ -332,25 +370,37 @@ describe('the spending summary (AC4)', () => {
     expect(bars[0]).toHaveAttribute('aria-label', 'Monthly budget spent');
   });
 
-  it('gives the summary bar the same tone as its chip', () => {
+  it('gives the summary bar the same tone as its chip, in every band', () => {
     // **A class assertion, which this repo otherwise avoids** - the standing rule is to assert
     // behaviour and semantics, with daisyUI's state classes the documented exception. This is
     // that exception: the tone *is* the state, it is the visible half of the chip beside it, and
     // the bar has no accessible property that carries which colour it took. The defect this
     // pins shipped once - the bar stayed `progress-primary` while the chip went green - and
     // nothing but a colour check could have seen it.
-    const { unmount } = renderScreen();
+    const bands = [
+      { spent: 932, label: 'On track', bar: 'progress-success' },
+      { spent: 1500, label: 'Near', bar: 'progress-warning' },
+      { spent: 2000, label: 'Full', bar: 'progress-orange' },
+      { spent: 2400, label: 'Over budget', bar: 'progress-error' },
+    ];
 
-    expect(within(summaryCard()).getByRole('progressbar')).toHaveClass('progress-success');
-    expect(within(summaryCard()).getByText('On track')).toBeInTheDocument();
-    unmount();
+    for (const band of bands) {
+      const { unmount } = renderScreen({
+        categories: [
+          category({
+            spent: band.spent,
+            monthlyCap: null,
+            percentUsed: null,
+            remaining: null,
+            status: 'uncapped',
+          }),
+        ],
+      });
 
-    renderScreen({
-      categories: [category({ spent: 2400, monthlyCap: 2500, percentUsed: 96, remaining: 100 })],
-    });
-
-    expect(within(summaryCard()).getByRole('progressbar')).toHaveClass('progress-error');
-    expect(within(summaryCard()).getByText('Over budget')).toBeInTheDocument();
+      expect(within(summaryCard()).getByRole('progressbar')).toHaveClass(band.bar);
+      expect(within(summaryCard()).getByText(band.label)).toBeInTheDocument();
+      unmount();
+    }
   });
 });
 

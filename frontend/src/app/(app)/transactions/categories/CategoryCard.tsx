@@ -69,10 +69,14 @@ function transactionCountLabel(count: number): string {
  * `over` is null unless the status is `over`, so the `full` case supplies the zero as a literal
  * rather than formatting a field that is not there.
  *
- * Both "over" readings take `text-error`, which is what the frame draws on Housing as well as
- * on Dining out. The chip disagrees on Housing - `full` is a warning chip over an error-toned
- * figure - and that is the frame's own pairing rather than an accident here: the chip reports
- * the band, the figure reports that the cap has been reached.
+ * The two "over" readings take two colours as of PET-74's sixth addendum, and that amends the
+ * frame. Node 36:423 draws `text-error` on Housing's "$0 over" as well as on Dining out's real
+ * overspend - a warning chip over an error-toned figure, the frame's own pairing - and the
+ * product owner's call is that a zero is not an alarm: `full`'s figure goes muted, the same
+ * `text-base-content/60` as the cap caption above it, keeping `font-medium` so it still reads
+ * as a figure. Red is reserved for money actually gone over, which also stops the card from
+ * disagreeing with its own chip - orange band, red figure was the frame's pairing, not this
+ * card's.
  */
 function footerFigure(
   category: Category,
@@ -86,7 +90,7 @@ function footerFigure(
   }
 
   if (category.status === 'full') {
-    return { label: `${formatWhole(0)} over`, className: 'text-error font-medium' };
+    return { label: `${formatWhole(0)} over`, className: 'text-base-content/60 font-medium' };
   }
 
   return { label: `${formatWhole(category.remaining ?? 0)} left`, className: 'font-medium' };

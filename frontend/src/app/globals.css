@@ -93,6 +93,17 @@
   --color-error: #dc2626;
   --color-error-content: #3f0b0b;
 
+  /* A fourth status hue daisyUI does not ship, between warning's amber and
+     error's red: the "Full" band of the budget banding (PET-74's sixth
+     addendum), so exactly-at-the-limit reads one step hotter than "getting
+     close" instead of sharing its amber. Not one of the seventeen picker
+     colours, so the category-palette guard does not measure it. The custom
+     property alone paints nothing - the three `.{badge,status,progress}-orange`
+     rules after the theme blocks are what daisyUI's own modifiers would have
+     been, and both live or die together. Measured 3.56:1 against this card. */
+  --color-orange: #ea580c;
+  --color-orange-content: #431407;
+
   /* Foundations radius sm/md/lg. */
   --radius-selector: 0.5rem;
   --radius-field: 0.75rem;
@@ -148,6 +159,11 @@
   --color-warning-content: #64490a;
   --color-error: #dc2626;
   --color-error-content: #3f0b0b;
+
+  /* The light theme's own comment carries the account; theme-invariant like
+     the rest of the status ramp. Measured 4.61:1 against this card (#18202b). */
+  --color-orange: #ea580c;
+  --color-orange-content: #431407;
 
   --radius-selector: 0.5rem;
   --radius-field: 0.75rem;
@@ -216,4 +232,30 @@
 .select-error:open {
   --input-color: var(--color-error);
   box-shadow: inset 0 0 0 1px var(--color-error);
+}
+
+/* The orange status modifiers (PET-74's sixth addendum, the product owner's
+   decision): the "Full" band of the budget banding, one step hotter than
+   warning's amber. daisyUI ships no orange, so these are its own modifiers
+   transcribed for the `--color-orange` pair the theme blocks define - each is
+   byte-for-byte the body of its `-warning` sibling in
+   node_modules/daisyui/components/{badge,status,progress}.css with the token
+   swapped, and nothing more. Unlayered for the reason the focus rules above
+   are, though nothing here needs to *win*: no daisyUI rule sets these
+   properties on these class names, so layering is moot and consistency with
+   the block above is the only reason for the placement. `.badge-soft` reads
+   `--badge-color` for its wash, so `badge badge-soft badge-orange` composes
+   exactly as `badge-soft badge-warning` does. */
+.badge-orange {
+  --badge-color: var(--color-orange);
+  --badge-fg: var(--color-orange-content);
+}
+
+.status-orange {
+  background-color: var(--color-orange);
+  color: var(--color-orange);
+}
+
+.progress-orange {
+  color: var(--color-orange);
 }

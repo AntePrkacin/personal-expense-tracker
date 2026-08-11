@@ -33,12 +33,12 @@ type CappedStatus = Exclude<CategoryStatus, 'uncapped'>;
  *
  * Semantic state rather than the mock's hue, which is the rule `frontend/CLAUDE.md` sets. The
  * frame draws amber at 79% and 79% is `near`, so this maps a meaning the backend already
- * decided. `full` shares `warning` with `near` because sitting exactly on the cap has not gone
- * wrong yet - `over` is what has.
- *
- * **`near` and `full` therefore share a colour, and the label is what separates them.** That is
- * not a colour-only signal: both words are real text in the badge, so the distinction survives
- * for a reader who cannot see the hue.
+ * decided. `full` sat one band further in `warning` too until PET-74's sixth addendum, on the
+ * argument that exactly-at-the-cap has not gone wrong yet - `over` is what has; the product
+ * owner's call there is that it still deserves its own colour, so `full` is the `orange`
+ * status hue that addendum added to the theme, between warning's amber and error's red exactly
+ * as the state sits between them. The labels are real text in the badge as well, so the
+ * distinction never rested on hue alone and does not now.
  *
  * The soft badge with a `status` dot is `dashboard/BudgetCard.tsx`'s treatment, matched
  * deliberately - both are "how is this budget doing" chips, and two chips answering the same
@@ -59,8 +59,8 @@ const CHIP: Record<CappedStatus, { badge: string; dot: string; label: string }> 
     label: 'Near',
   },
   full: {
-    badge: 'badge badge-soft badge-warning',
-    dot: 'status status-warning',
+    badge: 'badge badge-soft badge-orange',
+    dot: 'status status-orange',
     label: 'Full',
   },
   over: {
@@ -91,7 +91,7 @@ const CHIP: Record<CappedStatus, { badge: string; dot: string; label: string }> 
 const BAR: Record<CappedStatus, string> = {
   on_track: 'progress progress-success bg-base-300 w-full',
   near: 'progress progress-warning bg-base-300 w-full',
-  full: 'progress progress-warning bg-base-300 w-full',
+  full: 'progress progress-orange bg-base-300 w-full',
   over: 'progress progress-error bg-base-300 w-full',
 };
 

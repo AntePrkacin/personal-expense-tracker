@@ -22,8 +22,11 @@ type CategoryStatus = CategoryContext['status'];
  *
  * Semantic state rather than the mock's hue, which is the rule `frontend/CLAUDE.md` sets: the
  * frame draws amber at 79% and 79% is `near`, so this is a mapping from a meaning the backend
- * already decided, not a colour picked to match a screenshot. `full` shares `warning` with
- * `near` because being exactly at the cap has not gone wrong yet - `over` is what has.
+ * already decided, not a colour picked to match a screenshot. `full` shared `warning` with
+ * `near` until PET-74's sixth addendum, on the argument that being exactly at the cap has not
+ * gone wrong yet - `over` is what has; it is the theme's `orange` status hue now, between
+ * amber and red exactly as the state sits, the same product call every other `full` mark in
+ * the app follows.
  *
  * `uncapped` has no entry at all. It is not a chip with no colour, it is no chip, which
  * `chipFor` returns null to express.
@@ -31,7 +34,7 @@ type CategoryStatus = CategoryContext['status'];
 const CHIP_CLASSES: Record<Exclude<CategoryStatus, 'uncapped'>, string> = {
   on_track: 'badge badge-sm badge-success',
   near: 'badge badge-sm badge-warning',
-  full: 'badge badge-sm badge-warning',
+  full: 'badge badge-sm badge-orange',
   over: 'badge badge-sm badge-error',
 };
 

@@ -334,3 +334,63 @@ cell-padding from the border, measured headlessly at 16px with a 64px cell aroun
 - [ ] `w-0` on the actions column header in `TransactionsTable.tsx`, with the comment carrying
       the arithmetic
 - [ ] Gates, plus the headless measurement of the button-to-border gap
+
+## Sixth addendum: the budget bands like a category (2026-08-11)
+
+Reported by the product owner: the Categories tab's summary bar does not change colour the way
+the category bars under it do, and it should follow the same logic. It could not - the category
+bars follow the backend's four-band `status` (green below 75% of the cap, amber from 75%
+through 100%, red past it, banded on cents by PET-35), while the summary card and the
+dashboard's budget card each shipped a deliberate two-tone split, overspent or not, because a
+"getting close" threshold was a designer question `docs/TODO.md` carried rather than guessed.
+The product call closing it: the budget adopts the category banding, badge and bar both, on
+both cards - a summary chip that stayed green over an amber bar, or a Categories summary that
+banded while the Dashboard's card describing the same budget did not, would each reintroduce
+the disagreement this fix removes.
+
+No response publishes an account-level status - the Categories tab even sums `spent` from the
+category rows itself - so `frontend/src/lib/budgetStatus.ts` derives it, mirroring the
+backend's `statusFor` on rounded cents, and carries the tone map (`On track` / `Near` / `Full`
+/ `Over budget`). Shared at two
+consumers, one short of the rule of three, deliberately: the two cards describe the same
+monthly budget on two screens, so drift between copies is the defect itself, the same job the
+API's `status` does for the category cards. The dashboard bar also stops being
+`progress-primary` and follows its chip, which the category cards and the summary card already
+did. `docs/TODO.md`'s two-tone entry gets its answer recorded in place; the designer sign-off
+it names stays owed, since 75% is adopted from the backend rather than designed.
+
+A follow-up product call in the same review: `near` and `full` first shared amber exactly as
+the category chips did, and the owner wants `full` its own colour - orange if possible. The
+theme has no orange and daisyUI ships none, so the theme blocks gain a `--color-orange` pair
+(#ea580c / #431407, theme-invariant like the rest of the status ramp; measured 3.56:1 on the
+light card and 4.61:1 on the dark, between amber and red on each) and `globals.css` gains the
+three modifiers daisyUI would have shipped - `badge-orange`, `status-orange`,
+`progress-orange`, each transcribed from its `-warning` sibling in the plugin's own CSS. It
+applies everywhere `full` is drawn, by the owner's decision, not only to the budget cards: the
+category card chips and bars (`categoryCardStatus.ts`) and the transaction detail's "100% used"
+chip (`[id]/categoryStatus.ts`) follow, so at-the-cap is one colour across the app. Orange is
+not a picker colour, so the category-palette guard is untouched.
+
+### Sixth addendum follow-up tasks
+
+- [ ] `--color-orange`/`--color-orange-content` in both theme blocks, the three `-orange`
+      modifiers beside the focus rules, contrast measured rather than reasoned
+- [ ] `full` onto the orange tone in `lib/budgetStatus.ts`, `categoryCardStatus.ts` and
+      `[id]/categoryStatus.ts`, with the shared-amber docblocks rewritten
+- [ ] The four suites pinning `full` classes updated; `frontend/CLAUDE.md`'s `globals.css`
+      charter and semantic-colour rule amended
+- [ ] The full card's "$0 over" figure muted to the cap caption's `text-base-content/60`
+      (keeping `font-medium`), red reserved for a real overspend - the owner's call, amending
+      the frame's error-on-Housing pairing that CTG-6 pinned
+
+### Sixth addendum tasks
+
+- [ ] `lib/budgetStatus.ts` - the cents banding mirroring `statusFor`, the four-tone map, and a
+      unit suite pinning the band edges
+- [ ] `SpendingSummaryCard.tsx` and `BudgetCard.tsx` onto the shared tone, bar following badge
+      on both
+- [ ] Both suites gain the amber bands and a four-band bar-follows-chip check; `BudgetCard`
+      stories gain `Near` and `Full`
+- [ ] `docs/TODO.md`: the two-tone entry answered in place, the trend entry's cross-reference
+      amended
+- [ ] Gates: frontend jest, `npx tsc --noEmit`, both builds' frontend half, `docs:check`
