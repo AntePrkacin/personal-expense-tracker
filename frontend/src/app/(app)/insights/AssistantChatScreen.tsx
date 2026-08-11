@@ -121,6 +121,23 @@ export function AssistantChatScreen({
     scrollToLatest(document.scrollingElement);
   }, [messages.length, pending]);
 
+  // **A turn in flight is aborted when this screen goes away**, and a review of the "New chat" fix
+  // is why this exists. That control resets by **remounting** this component, which throws the
+  // controller away - so without this cleanup the `fetch`, the route handler and the ~40k-token
+  // Gemini call all ran to completion, the reply was persisted into the conversation the user had
+  // just abandoned, and the `chat` throttler bucket was spent for an answer nobody would see. The
+  // fresh mount starts with `pending: false`, so a second question could be sent straight away and
+  // two turns would run at once against a per-hour budget.
+  //
+  // It covers **every** unmount rather than only that one, which is the reason it lives here and
+  // not in `NewChat.tsx`'s `start()`: navigating to History or to another route mid-turn abandons
+  // the answer just as completely, and being able to actually stop a turn is the whole reason the
+  // send is a route handler rather than a Server Action.
+  //
+  // Empty deps, so it runs on unmount alone; the ref is read in the cleanup rather than captured,
+  // because the controller that matters is whichever one is live at that moment.
+  useEffect(() => () => controllerRef.current?.abort(), []);
+
   const submit = async () => {
     const message = draft.trim();
     if (message.length === 0 || pending) {

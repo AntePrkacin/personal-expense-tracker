@@ -330,6 +330,27 @@ describe('cancellation', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument());
   });
 
+  it('aborts a turn in flight when the screen goes away', async () => {
+    // **The regression the "New chat" fix introduced.** That control resets by remounting this
+    // component, which throws the controller away - so an unaborted turn ran to completion, was
+    // billed, and was persisted into the conversation the user had just left. The cleanup covers
+    // every unmount, so navigating to History mid-turn abandons the request rather than paying for
+    // an answer nobody will read.
+    const user = userEvent.setup();
+    const { promise, settle } = deferred();
+    const send = jest.fn().mockReturnValue(promise);
+    const { unmount } = renderScreen(send);
+
+    await ask(user, 'Hello');
+    const signal = send.mock.calls[0][1] as AbortSignal;
+    expect(signal.aborted).toBe(false);
+
+    unmount();
+
+    expect(signal.aborted).toBe(true);
+    settle({ ok: false, aborted: true });
+  });
+
   it('renders no error line at all, and restores the composer', async () => {
     // The eighth outcome. A cancel is a deliberate act, so folding it into the generic arm would
     // show a failure message for something the user chose.

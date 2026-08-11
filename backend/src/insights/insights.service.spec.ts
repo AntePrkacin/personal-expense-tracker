@@ -456,6 +456,10 @@ describe('InsightsService', () => {
 
     beforeEach(() => {
       db.select.mockReturnValue(queryChain([]));
+      // The placeholder delete is read back now, and an empty result means the row was reclaimed -
+      // so a run that really does own its row has to say so here, or every empty-account case in
+      // this block would take the reclaimed path instead.
+      db.delete.mockReturnValue(queryChain([{ id: 'run-1' }]));
       claimingTransaction();
     });
 
@@ -527,6 +531,22 @@ describe('InsightsService', () => {
       await settle();
 
       expect(generatorGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('schedules no follow-up from an empty run that lost its claim', async () => {
+      // The other half of the case above, and the one the first version of that fix got wrong. The
+      // placeholder delete matched nothing, so this run settled nothing at all - a newer run owns
+      // the state, including the right to decide what generates next.
+      db.delete.mockReturnValue(queryChain([]));
+      generatorGenerate.mockImplementationOnce(() => {
+        service.markDirty('user-id');
+        return Promise.resolve(null);
+      });
+
+      await service.generate('user-id');
+      await settle();
+
+      expect(generatorGenerate).toHaveBeenCalledTimes(1);
     });
 
     it('starts nothing extra when no write landed during the run', async () => {

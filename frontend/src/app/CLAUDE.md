@@ -1845,6 +1845,27 @@ id's **shape** before asking now, `lib/periodParams.ts`'s call applied to a seco
 validate and do not canonicalise, so a well-formed id the account does not have is still forwarded
 and still answered by the 404 arm. The suite had pinned the throw, which is why no gate caught it.
 
+**A second review, of the fix commit itself, found three more, and the first was introduced by the
+fix above.** Worth keeping in that order, because it is the shape of mistake this file exists to
+record: a correct fix reached through a mechanism with a cost nobody priced. **A remount throws away
+the `AbortController` holding the turn in flight**, and `AssistantChatScreen` had no unmount cleanup
+
+- so pressing "New chat" mid-turn left the `fetch`, the route handler and the ~40k-token Gemini call
+  running to completion, persisted the reply into the conversation the user had just abandoned, and
+  spent the `chat` bucket on an answer nobody would see, with the fresh mount's `pending: false`
+  letting a second turn start beside it. It was **newly reachable**: before that commit "New chat"
+  reconciled rather than remounted, so the controller and `pending` survived and the turn landed
+  normally. The cleanup lives in `AssistantChatScreen` rather than in `start()` because navigating to
+  History mid-turn abandons a turn just as completely, and cancellation is the whole reason that send
+  is a route handler. The other two are smaller and of a kind. `runGeneration`'s empty-account path
+  **discarded the result of its own conditional delete**, so a run reclaimed as abandoned scheduled a
+  follow-up anyway - the thing `startFollowUpIfDirty`'s docblock says the unsettled paths must not do,
+  and one way past the "at most two runs" bound. And the chat's `key` used **a sentinel drawn from the
+  parameter's own value space**, so `?session=new` keyed identically to no parameter at all and the
+  reconciliation the key exists to prevent came back for that pair; it is namespaced now. The draft is
+  what makes a remount assertable in `insights/page.test.tsx` - client state survives a reconcile and
+  cannot survive a remount - and both new frontend cases were seen to fail with their fix reverted.
+
 **The third is the History caption's zone.** `lastMessageAt` is an ISO **instant** where
 `RecentTransactionsCard` is handed a real `YYYY-MM-DD` column, and `slice(0, 10)` took the **UTC**
 date out of it while `today` defaults to the frontend host's zone - a second zone on top of the

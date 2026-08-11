@@ -37,6 +37,13 @@ import { INSIGHTS_TAB_HREFS } from './InsightsTabs';
 // render-phase adjustment inside it would have to enumerate five setters and grow a sixth the next
 // time a piece of state is added.
 //
+// **What a remount costs, and where that is paid.** It throws away the `AbortController` holding
+// the turn in flight, so a review of this file found that pressing "New chat" mid-turn left the
+// request running to completion - billed, persisted into the abandoned conversation, and invisible.
+// The fix is an unmount cleanup in `AssistantChatScreen` rather than an `abort()` in `start()`
+// below, because every other way this screen goes away abandons a turn just as completely; that
+// component carries the account.
+//
 // **The URL half is still a navigation, and both halves are needed.** `start()` also replaces the
 // URL, so a `?session=` stops naming a conversation the screen is no longer showing - otherwise a
 // reload would resume it. And `page.tsx` keys this component on the requested session, which is

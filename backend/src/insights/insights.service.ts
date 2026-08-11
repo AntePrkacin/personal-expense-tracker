@@ -292,7 +292,24 @@ export class InsightsService implements OnApplicationShutdown {
         // Hard delete, not a tombstone: this placeholder never reached `ready`,
         // so it holds no content to audit and nothing a soft-delete would keep.
         // The one row in this database exempt from the tombstone convention.
-        await db.delete(insightSets).where(this.stillRunning(runId));
+        // `.returning()` for the same reason the completion transaction reads its own `UPDATE`
+        // back: the `WHERE` is conditional on this run still owning the row, so an empty result
+        // means it was reclaimed as abandoned while the generator was working. A review caught the
+        // first version discarding it and scheduling a follow-up anyway, which is precisely what
+        // {@link startFollowUpIfDirty} says the two unsettled paths must not do - and past the
+        // stale cutoff it could put a third run in flight against the bound the flag promises.
+        const [removed] = await db
+          .delete(insightSets)
+          .where(this.stillRunning(runId))
+          .returning({ id: insightSets.id });
+
+        if (!removed) {
+          this.logger.warn(
+            `Insight generation ${runId} for user ${userId} was reclaimed as ` +
+              `abandoned before it could remove its placeholder; nothing was written`,
+          );
+          return;
+        }
 
         // **This path schedules a follow-up too, and a review of PET-73 is why.**
         // It read as the account having nothing to say, so nothing to chase - but

@@ -914,6 +914,14 @@ transaction, then create one before that run returns - and the consequence was t
 the flag exists to close. Both settling paths schedule one now; the two that settle nothing (a
 failed run, a run reclaimed as abandoned) still deliberately do not.
 
+**And a review of that fix found it had left a fourth path**, which is worth one sentence because it
+is the same class of mistake twice: the empty-account delete is conditional on the row still being
+this run's, and the first version **discarded the result**, so a reclaimed run whose generator
+answered `null` deleted nothing and scheduled a follow-up regardless. It reads the delete back with
+`.returning()` now and returns early when it matched nothing, exactly as the completion transaction
+already read its own `UPDATE` back - so "settled the state" means the write actually landed rather
+than merely having been attempted.
+
 ## Templates
 
 **`src/templates/` serves the admin-managed data behind onboarding and the category picker, and

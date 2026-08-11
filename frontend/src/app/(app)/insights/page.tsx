@@ -84,12 +84,17 @@ export default async function AssistantChatPage({
           chat rather than leave the previous one on screen still posting its own id. "New chat" on
           the current URL is the case a key cannot see; `ChatSlot` is where that half lives.
 
+          **The sentinel is namespaced, and a review of the first version is why.** `requested` is
+          the raw query value, so a bare `'new'` for "no parameter" shared its key with a literal
+          `?session=new` - and the reconciliation this key exists to prevent came back for exactly
+          that pair. A prefix costs nothing and cannot collide with a value at all.
+
           **No `send` prop.** It defaults inside the client bundle, because `sendAssistantMessage`
           is an ordinary browser function rather than a Server Action and React cannot serialise
           one across this boundary - passing it here is a 500 on every load of this route, which is
           how the browser walk found it. `AssistantChatScreen` carries the full account. */}
       <ChatSlot
-        key={requested ?? 'new'}
+        key={`session:${requested ?? ''}`}
         conversation={conversation}
         missingSession={requested !== undefined && conversation === null}
       />

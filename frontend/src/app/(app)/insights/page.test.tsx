@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { readConversation } from '../../../lib/assistant';
 import type { AssistantConversation } from '../../../lib/assistant';
@@ -112,6 +113,23 @@ describe('the session parameter', () => {
 
     expect(screen.getByText('And on coffee?')).toBeInTheDocument();
     expect(screen.queryByText('Where did my money go?')).not.toBeInTheDocument();
+  });
+
+  it('does not confuse a literal ?session=new with no parameter at all', async () => {
+    // The key's sentinel used to be a bare `'new'`, drawn from the same value space as the
+    // parameter it stands in for, so this pair keyed identically and the reconciliation the key
+    // exists to prevent came back for it. The draft is what makes a remount observable here: it is
+    // client state, so it survives a reconcile and cannot survive a remount.
+    const user = userEvent.setup();
+    const { rerender } = render(await page({ session: 'new' }));
+    await waitFor(() =>
+      expect(screen.getByLabelText('Ask about your spending')).toBeInTheDocument(),
+    );
+    await user.type(screen.getByLabelText('Ask about your spending'), 'a half-typed question');
+
+    rerender(await page());
+
+    expect(screen.getByLabelText('Ask about your spending')).toHaveValue('');
   });
 
   it('empties the chat when the parameter goes away', async () => {
