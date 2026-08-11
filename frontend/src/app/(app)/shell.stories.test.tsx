@@ -7,6 +7,7 @@ import * as TrendCard from './dashboard/TrendCard.stories';
 import * as DeleteTransactionDialog from './DeleteTransactionDialog.stories';
 import * as Modal from './Modal.stories';
 import * as PageHeader from './PageHeader.stories';
+import * as Toast from './Toast.stories';
 import * as DeleteCategoryDialog from './transactions/categories/DeleteCategoryDialog.stories';
 
 // Smoke-tests the shell's stories, the same job src/components/ui/ui.stories.test.tsx
@@ -58,6 +59,10 @@ const MODULES: [name: string, module: StoryModule][] = [
   // are confirmation boxes, not whole frames.
   ['DeleteTransactionDialog', DeleteTransactionDialog as StoryModule],
   ['DeleteCategoryDialog', DeleteCategoryDialog as StoryModule],
+  // Registered in the same commit as the module, which the entry above records this harness once
+  // failing to do for two of them. It matters more here than for most: A29 designs no toast, so
+  // these stories are the only review the treatment gets at all.
+  ['Toast', Toast as StoryModule],
 ];
 
 const stories = MODULES.flatMap(([moduleName, module]) => {
