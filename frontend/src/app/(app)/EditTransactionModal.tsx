@@ -16,8 +16,10 @@ import type { UpdateTransactionResult } from '@/lib/updateTransaction';
 import type { components } from '@/types/api';
 
 import { DateField } from './DateField';
+import { isToastedFailure } from './failureReporting';
 import { Modal, type ModalHandle } from './Modal';
 import { useCurrency } from './PreferencesProvider';
+import { useToast } from './ToastProvider';
 import {
   invalidFields,
   toTransactionFormValues,
@@ -68,6 +70,14 @@ import {
  * for. The common case gets the plain sentence, and only a patch that really did change the
  * category gets the hedged one.
  */
+/**
+ * What the toast region says when the save lands (PET-77).
+ *
+ * "saved" rather than "added", which is the only word separating this from `AddTransactionModal`'s:
+ * a user who edits a row and reads "Transaction added." has been told they created a second one.
+ */
+const TOAST_SAVED = 'Transaction saved.';
+
 const MESSAGES = {
   amount: 'Enter an amount greater than 0.',
   categoryId: 'Choose a category.',
@@ -150,6 +160,7 @@ export function EditTransactionModal({
   // The prefix glyph for `ui/Input`'s currency variant, which drew a literal `$` until PET-47's
   // review. See `useCurrency` for why the symbol is a prop rather than read inside the primitive.
   const currency = useCurrency();
+  const { post } = useToast();
   const modalRef = useRef<ModalHandle>(null);
 
   /**
@@ -248,9 +259,22 @@ export function EditTransactionModal({
 
     if (!result.ok) {
       setPending(false);
-      setFailure(MESSAGES[result.reason]);
+
+      // Two of the five arms leave this form (PET-77) - `failureReporting.ts` owns the rule. The
+      // three that stay are the ones the user can act on here: a body they can fix, and the two
+      // `missing` arms whose copy asks them to close and see the current list.
+      if (isToastedFailure(result.reason)) {
+        post({ kind: 'failure', message: MESSAGES[result.reason] });
+      } else {
+        setFailure(MESSAGES[result.reason]);
+      }
+
       return;
     }
+
+    // Posted before the close, because that close unmounts this component - see
+    // `AddTransactionModal` for the full account. The region is on the layout and outlives it.
+    post({ kind: 'success', message: TOAST_SAVED });
 
     // **Refresh before closing, and close through the dialog rather than by unmounting.**
     // `router.refresh()` re-runs the Server Components of whichever route the user is on, which

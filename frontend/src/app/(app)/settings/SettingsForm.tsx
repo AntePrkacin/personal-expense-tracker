@@ -13,6 +13,9 @@ import type { ThemePref } from '@/lib/theme';
 import type { components } from '@/types/api';
 import { updateProfile, type UpdateProfileResult } from '@/lib/updateProfile';
 
+import { isToastedFailure } from '../failureReporting';
+import { useToast } from '../ToastProvider';
+
 import type { CategoriesSummary } from './categoriesSummary';
 import { CategoriesSummaryCard } from './CategoriesSummaryCard';
 import { PaycheckMonthDialog } from './PaycheckMonthDialog';
@@ -121,21 +124,25 @@ const MESSAGES = {
   // reader a real control rather than advice that cannot be taken.
   unauthenticated: 'Your session has expired. Log in again in a new tab, then save.',
   failed: "We couldn't save your changes. Please try again.",
-  saved: 'Changes saved',
+  saved: 'Changes saved.',
+  // The one message no other screen in this app needs - see `partialOrPlain` for why this screen is
+  // the only one that can half-succeed.
+  partial: 'Your pay schedule was saved, but your profile changes were not.',
 } as const;
 
 /**
- * How long "Changes saved" stays up.
+ * The two writes' shared failure sentence when the first of them already landed (PET-77).
  *
- * A confirmation describes a moment rather than a state, so it retires itself instead of sitting
- * there until the next keystroke - which on this form could be the rest of the session, since the
- * page does not navigate after a save. Long enough to be read without hunting for it, short enough
- * that it is gone before it starts describing something stale.
- *
- * It is the only timer on this screen, and clearing it is what makes that safe: without the
- * cleanup, a save immediately before unmount would set state on a component that is gone.
+ * **This screen is the only one in the app that can half-succeed**, because its one "Save changes"
+ * is two requests to two endpoints with no transaction across them - the schedule write first,
+ * deliberately, because it is the one the user was asked a question about. So a bare "we couldn't
+ * save" would be false in the one direction that matters: it would invite a retry of a change that
+ * has already been applied. The old inline line hedged with "check the values"; naming what landed
+ * is what the region makes possible.
  */
-const SAVED_VISIBLE_MS = 5_000;
+function partialOrPlain(message: string, scheduleLanded: boolean): string {
+  return scheduleLanded ? MESSAGES.partial : message;
+}
 
 /** The inline message for one problem, which is why `emailProblem` reports a reason rather than a boolean. */
 function messageFor(field: SettingsFormField, reason: 'required' | 'format'): string {
@@ -229,6 +236,7 @@ export function SettingsForm({
   themePref,
 }: SettingsFormProps) {
   const router = useRouter();
+  const { post } = useToast();
 
   const [values, setValues] = useState<SettingsFormValues>(() => toSettingsFormValues(profile));
   const [errors, setErrors] = useState<Partial<Record<SettingsFormField, string>>>({});
@@ -236,7 +244,6 @@ export function SettingsForm({
   // The 401 arm alone, because it is the one failure whose message needs a control beside it and
   // therefore cannot be a bare string in `FormError`. See the alert it renders, below.
   const [expired, setExpired] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
 
   /**
@@ -403,24 +410,6 @@ export function SettingsForm({
   }, [pending]);
 
   /**
-   * The confirmation retires itself after `SAVED_VISIBLE_MS`.
-   *
-   * Keyed on `saved` and cleaned up, so a second save restarts the clock rather than inheriting the
-   * first one's remaining time - which holds because a second save is only reachable through an
-   * edit, and `change()` clears `saved` on the way, so the flag really does go false and back.
-   *
-   * **Emptying the live region announces nothing**, which is what makes this safe to do behind the
-   * reader's back: `aria-relevant` defaults to additions and text, so a removal is not reported.
-   * `AllocateBudgetModal` records the same property for its own reverting message.
-   */
-  useEffect(() => {
-    if (!saved) return;
-
-    const timer = setTimeout(() => setSaved(false), SAVED_VISIBLE_MS);
-    return () => clearTimeout(timer);
-  }, [saved]);
-
-  /**
    * One keystroke.
    *
    * Clears **that field's** message and never another's, which is the rule every form in this app
@@ -435,7 +424,6 @@ export function SettingsForm({
     setErrors((current) => ({ ...current, [field]: undefined }));
     setFailure(null);
     setExpired(false);
-    setSaved(false);
 
     // **A keystroke abandons a pending resync, and that window is real rather than theoretical.**
     // `router.refresh()` resolves asynchronously while `setPending(false)` re-enables the fields
@@ -513,7 +501,6 @@ export function SettingsForm({
     if (scheduleChanged(syncedProfile, values)) {
       setFailure(null);
       setExpired(false);
-      setSaved(false);
       // **The stored day and the form's day, both, and neither is redundant.** The month depends on
       // which paycheck is the obvious one to start from, and that differs by whether the pay day
       // itself moved - `defaultPaycheckMonth` owns the argument. Passing only one of them is how the
@@ -550,7 +537,6 @@ export function SettingsForm({
 
     setFailure(null);
     setExpired(false);
-    setSaved(false);
 
     // Captured *before* `setPending(true)`, because that commit is what disables the control the
     // user is standing on and blurs it. The effect above puts them back.
@@ -564,16 +550,20 @@ export function SettingsForm({
     // **rejects** rather than resolving to a result. A rejection escaping this handler skips every
     // line below, so `pending` stays true, the submit button stays disabled for good (which also
     // kills Enter), and nothing on screen says why.
+    // **Whether the first of the two writes landed, which is what makes the partial arm sayable.**
+    // A local rather than state: nothing renders from it and it is read once, three lines later.
+    let scheduleLanded = false;
+
     if (month !== null) {
       let schedule: ChangeScheduleResult;
 
       try {
         schedule = await saveSchedule(toChangeScheduleBody(values, month));
       } catch {
-        // The dialog stays open: `failure` renders inside it, and the picked
-        // month survives for the retry the message invites.
+        // The dialog stays open: the picked month survives for the retry the message invites, and a
+        // toast is what carries the message now that nothing here can act on it (PET-77).
         setPending(false);
-        setFailure(MESSAGES.failed);
+        post({ kind: 'failure', message: MESSAGES.failed });
         return;
       }
 
@@ -589,9 +579,17 @@ export function SettingsForm({
           return;
         }
 
-        setFailure(MESSAGES[schedule.reason]);
+        // The reason split (PET-77): `invalid` is a body the fields can fix, so it stays inline.
+        if (isToastedFailure(schedule.reason)) {
+          post({ kind: 'failure', message: MESSAGES[schedule.reason] });
+        } else {
+          setFailure(MESSAGES[schedule.reason]);
+        }
+
         return;
       }
+
+      scheduleLanded = true;
     }
 
     // **Skipped when nothing else moved**, which is the ordinary case for a budget-only save: the
@@ -603,7 +601,7 @@ export function SettingsForm({
         result = await save(body);
       } catch {
         setPending(false);
-        setFailure(MESSAGES.failed);
+        post({ kind: 'failure', message: partialOrPlain(MESSAGES.failed, scheduleLanded) });
         return;
       }
 
@@ -619,7 +617,17 @@ export function SettingsForm({
           return;
         }
 
-        setFailure(MESSAGES[result.reason]);
+        // The reason split (PET-77). `invalid` and `taken` both name something the fields in front
+        // of the user can fix - `taken` names the address that is in use - so they stay inline.
+        if (isToastedFailure(result.reason)) {
+          post({
+            kind: 'failure',
+            message: partialOrPlain(MESSAGES[result.reason], scheduleLanded),
+          });
+        } else {
+          setFailure(MESSAGES[result.reason]);
+        }
+
         return;
       }
     }
@@ -643,7 +651,7 @@ export function SettingsForm({
     router.refresh();
     setAwaitingSaved(true);
     setPending(false);
-    setSaved(true);
+    post({ kind: 'success', message: MESSAGES.saved });
   }
 
   return (
@@ -731,32 +739,16 @@ export function SettingsForm({
       )}
 
       <div className="flex items-center justify-end gap-4">
-        {/* **Mounted from the first render, empty, with only its text changing** - which
-            `AllocateBudgetModal.tsx` records the reason for: a polite region created in the same
-            commit as its content is generally not announced at all, because assistive technology
-            registers regions and then watches them. `getByRole('status')` cannot tell a working one
-            from a broken one, which is why the suite asserts this region's *text*. An empty block
-            element has no line box, so it takes no space while it says nothing.
+        {/* **The "Changes saved" badge is gone (PET-77, AC13).** It was the app's only success
+            message and it existed only because this screen has no dialog to close - which is
+            precisely the gap the shared region now fills, for every write rather than for this one.
+            Its live-region rule did not go with it: `(app)/ToastRegion.tsx` mounts two announcers
+            empty for the same reason this one was mounted empty, and its measurement did not either
+            - the toast is `alert alert-success`, the same fill-plus-content pairing this badge used
+            rather than the `text-success` that composites to 1.96:1 on a light card.
 
-            `role="status"` and not `FormError`'s `role="alert"`: this is a success after a round
-            trip, so polite is right and assertive would interrupt.
-
-            **Green, and a filled `badge` rather than green text, which is a measurement rather
-            than a flourish.** The obvious `text-success` composites to **1.96:1** against the card
-            in the light theme - not marginal, effectively invisible - because daisyUI's `success`
-            is a *fill* colour that expects `success-content` on top of it, not a body-text colour.
-            Dark measures 8.08:1, so this is the failure mode a dark-only check waves through.
-            `badge badge-success` uses the pair the token was designed for and measures above AA in
-            both themes; a raw `text-green-700` would have been legible and is exactly the
-            bypass-the-theme move `frontend/CLAUDE.md` forbids.
-
-            The empty string still renders, so the region keeps its line box and the layout does not
-            move when the badge retires - and daisyUI's `badge` has no content of its own to draw
-            when the label is empty. */}
-        <p role="status" className={saved ? 'badge badge-success badge-sm' : 'text-sm'}>
-          {saved ? MESSAGES.saved : ''}
-        </p>
-
+            The row keeps its `justify-end`, and with nothing to its left the Save button sits where
+            it always did. */}
         {/* **`type="submit"` is mandatory.** `ui/Button` defaults `type` to `button`, so without it
             this form silently never submits and Enter inside a field does nothing - with nothing on
             screen to explain it. `SettingsForm.test.tsx` pins the Enter case for exactly that.

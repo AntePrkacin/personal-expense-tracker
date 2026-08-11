@@ -1,4 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+
+// `render` comes from the shell wrapper: the chat posts into the toast region as of PET-77, and
+// `useToast()` throws outside its provider by design. See `(app)/shellRender.tsx`.
+import { render } from '../shellRender';
+import { toastMessages } from '../toastQueries';
 import userEvent from '@testing-library/user-event';
 
 import type { AssistantConversation } from '../../../lib/assistant';
@@ -241,27 +246,49 @@ describe('a turn', () => {
 });
 
 describe('a failure', () => {
-  it.each([
-    ['invalid'],
-    ['unauthenticated'],
-    ['rateLimited'],
-    ['unavailable'],
-    ['timedOut'],
-    ['failed'],
-  ] as const)('renders the %s line and restores the question', async (reason) => {
-    const user = userEvent.setup();
-    renderScreen(jest.fn().mockResolvedValue({ ok: false, reason }));
+  // **PET-77 split the seven arms by where they report.** The five that keep the in-thread line all
+  // name something to do differently - shorten it, wait a minute, send it again - and belong beside
+  // the composer the user will do it in. `unauthenticated` and `failed` name nothing this screen can
+  // act on. Either way the optimistic message goes and the question comes back.
+  it.each([['invalid'], ['rateLimited'], ['unavailable'], ['timedOut']] as const)(
+    'renders the %s line and restores the question',
+    async (reason) => {
+      const user = userEvent.setup();
+      renderScreen(jest.fn().mockResolvedValue({ ok: false, reason }));
 
-    await ask(user, 'Where did my money go?');
+      await ask(user, 'Where did my money go?');
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(FAILURE_COPY[reason]));
-    // The optimistic message is removed: the backend persists nothing unless the reply arrives, so
-    // leaving it would assert a stored turn that does not exist. Asserted as the log region being
-    // gone rather than as the text being absent - the restored draft is the textarea's own value,
-    // which `queryByText` also matches.
-    expect(screen.queryByRole('log')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Ask about your spending')).toHaveValue('Where did my money go?');
-  });
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(FAILURE_COPY[reason]),
+      );
+      expect(toastMessages()).toEqual([]);
+      // The optimistic message is removed: the backend persists nothing unless the reply arrives, so
+      // leaving it would assert a stored turn that does not exist. Asserted as the log region being
+      // gone rather than as the text being absent - the restored draft is the textarea's own value,
+      // which `queryByText` also matches.
+      expect(screen.queryByRole('log')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Ask about your spending')).toHaveValue(
+        'Where did my money go?',
+      );
+    },
+  );
+
+  it.each([['unauthenticated'], ['failed']] as const)(
+    'reports %s in the toast region and restores the question',
+    async (reason) => {
+      const user = userEvent.setup();
+      renderScreen(jest.fn().mockResolvedValue({ ok: false, reason }));
+
+      await ask(user, 'Where did my money go?');
+
+      await waitFor(() => expect(toastMessages()).toEqual([FAILURE_COPY[reason]]));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('log')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Ask about your spending')).toHaveValue(
+        'Where did my money go?',
+      );
+    },
+  );
 
   it('drops the session id on a missing conversation, so the retry starts a new one', async () => {
     const user = userEvent.setup();
@@ -293,7 +320,8 @@ describe('a failure', () => {
 
     await ask(user, 'Hello');
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(FAILURE_COPY.failed));
+    // Classified as `failed`, so it reports where `failed` reports (PET-77).
+    await waitFor(() => expect(toastMessages()).toEqual([FAILURE_COPY.failed]));
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
     expect(screen.getByLabelText('Ask about your spending')).toBeEnabled();
   });
@@ -329,6 +357,24 @@ describe('cancellation', () => {
 
     settle({ ok: false, aborted: true });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument());
+  });
+
+  // **AC9's second half (PET-77).** A stop used to leave no trace: the composer swapped back and the
+  // question reappeared in the box, which is exactly what a failure does - so the two were
+  // indistinguishable. It carries no in-thread line, because a cancel is not a failure of the
+  // conversation and the thread is where the conversation lives.
+  it('reports a stopped turn in the toast region and nowhere in the thread', async () => {
+    const user = userEvent.setup();
+    const { promise, settle } = deferred();
+    renderScreen(jest.fn().mockReturnValue(promise));
+
+    await ask(user, 'Hello');
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
+    settle({ ok: false, aborted: true });
+
+    await waitFor(() => expect(toastMessages()).toEqual(['Response stopped.']));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Ask about your spending')).toHaveValue('Hello');
   });
 
   it('aborts a turn in flight when the screen goes away', async () => {

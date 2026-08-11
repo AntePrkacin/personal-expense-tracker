@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
-import { PreferencesProvider } from '../PreferencesProvider';
+import { ShellStory } from '../shellStory';
 import { TrendCard as Card } from './TrendCard';
 
 /**
@@ -13,9 +13,9 @@ import { TrendCard as Card } from './TrendCard';
  */
 function TrendCard(props: React.ComponentProps<typeof Card>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <Card {...props} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 

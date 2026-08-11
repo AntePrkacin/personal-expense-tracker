@@ -126,6 +126,9 @@ export function deleteTransactionBody(
   return `This permanently removes "${merchant} - ${formatCurrency(amount)}" (${formatIsoDayMonth(date)}) from your records. This can't be undone.`;
 }
 
+/** What the toast region says once the row is gone (PET-77). See the call site for why it is bare. */
+const TOAST_DELETED = 'Transaction deleted.';
+
 export const DELETE_TRANSACTION_TITLE = 'Delete this transaction?';
 
 export function DeleteTransactionDialog({
@@ -152,6 +155,11 @@ export function DeleteTransactionDialog({
     <ConfirmDeleteDialog
       title={DELETE_TRANSACTION_TITLE}
       body={deleteTransactionBody(target, money)}
+      // **It does not quote the merchant, deliberately (PET-77).** The body above already named
+      // what was about to go, and this is read after the dialog has gone - often from another
+      // screen, since deleting from the detail page navigates. A confirmation naming a row the
+      // user can no longer see invites them to look for it.
+      confirmation={TOAST_DELETED}
       messages={MESSAGES}
       // Bound here, so the shared component never learns what a transaction is.
       remove={() => remove(target.id)}

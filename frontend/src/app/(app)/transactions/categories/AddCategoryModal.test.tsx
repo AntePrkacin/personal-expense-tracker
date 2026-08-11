@@ -6,6 +6,7 @@ import { render } from '../../shellRender';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 
+import { toastMessages } from '../../toastQueries';
 import { CATEGORY_DOT, CATEGORY_TILE } from '../../../../components/ui/categoryColour';
 import type { CreateCategoryResult } from '../../../../lib/createCategory';
 import type { Palette } from '../../../../lib/palette';
@@ -537,11 +538,31 @@ describe('AC4: a successful save', () => {
 describe('when the save is rejected', () => {
   // One reason per arm of CreateCategoryResult, and `invalid` must not say "try again": a body the
   // DTO rejects will be rejected again forever.
+  //
+  // **PET-77 split the three by where they are reported, and these assertions had to get sharper to
+  // see it.** They used to be one `findByText` per arm, which passes either way now - the toast puts
+  // the same sentence in the DOM - so each case says which surface it expects and asserts the
+  // other is empty. A test that cannot fail is the thing this ticket kept finding.
+  it('keeps the invalid line beside the form, where the user can act on it', async () => {
+    const u = user();
+    create.mockResolvedValue({ ok: false, reason: 'invalid' });
+    open();
+
+    await u.type(name(), 'Subscriptions');
+    await u.click(submit());
+
+    expect(
+      await screen.findByText(
+        "We couldn't add this category. Please check the values and try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(toastMessages()).toEqual([]);
+  });
+
   it.each([
-    ['invalid', "We couldn't add this category. Please check the values and try again."],
     ['unauthenticated', 'Your session has expired. Log in again to save this.'],
     ['failed', "We couldn't add this category. Please try again."],
-  ] as const)('shows the %s line', async (reason, message) => {
+  ] as const)('reports %s in the toast region instead', async (reason, message) => {
     const u = user();
     create.mockResolvedValue({ ok: false, reason });
     open();
@@ -549,7 +570,8 @@ describe('when the save is rejected', () => {
     await u.type(name(), 'Subscriptions');
     await u.click(submit());
 
-    expect(await screen.findByText(message)).toBeInTheDocument();
+    await waitFor(() => expect(toastMessages()).toEqual([message]));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('neither closes nor refreshes, so nothing typed is lost', async () => {
@@ -560,7 +582,7 @@ describe('when the save is rejected', () => {
     await u.type(name(), 'Subscriptions');
     await u.click(submit());
 
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
     expect(onClose).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
     expect(submit()).not.toBeDisabled();

@@ -8,6 +8,7 @@ import type { UpdateProfileResult } from '@/lib/updateProfile';
 // throws outside `PreferencesProvider` by design. One import swap rather than a wrapper at every
 // call site; `shellRender.tsx` carries the reasoning.
 import { render } from '../shellRender';
+import { politeAnnouncement, toastMessages } from '../toastQueries';
 
 import type { CategoriesSummary } from './categoriesSummary';
 import { SUMMARY_UNAVAILABLE } from './CategoriesSummaryCard';
@@ -361,35 +362,40 @@ describe('AC5: a valid save', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   });
 
-  it('confirms the save in the polite live region', async () => {
-    // Asserted by the region's *text* rather than its presence: the region ships mounted and
-    // empty, because a polite region created in the same commit as its content is generally not
-    // announced at all, and `getByRole('status')` cannot tell that apart from a working one.
+  // **The confirmation is a toast now (PET-77), and this screen's own badge is deleted.** It was the
+  // app's only success message and existed only because Settings has no dialog to close - which is
+  // the gap the shared region fills for every write. The live-region rule it demonstrated moved with
+  // it: `(app)/ToastRegion.tsx` mounts its announcers empty for the same reason, and its suites
+  // assert their text rather than their presence.
+  it('confirms the save in the toast region', async () => {
     const user = userEvent.setup();
     renderForm();
 
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(politeAnnouncement()).toBe('');
 
     await user.clear(screen.getByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
+    await waitFor(() => expect(toastMessages()).toEqual(['Changes saved.']));
+    expect(politeAnnouncement()).toBe('Changes saved.');
   });
 
-  it('clears the confirmation on the next edit', async () => {
-    // "Changes saved" over a form that has since been edited is the one lie this form could tell.
+  // **The "clears on the next edit" rule is gone with the badge, and that is a real change rather
+  // than an omission.** It existed because the badge sat on the form until something replaced it,
+  // so "Changes saved" could end up describing a form the user had since edited. A toast retires
+  // itself on a timer and is not attached to the form at all, so it can no longer make that claim -
+  // there is nothing left to clear.
+  it('leaves no confirmation on the form itself', async () => {
     const user = userEvent.setup();
     renderForm();
 
     await user.clear(screen.getByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
+    await waitFor(() => expect(toastMessages()).toEqual(['Changes saved.']));
 
-    await user.type(screen.getByLabelText('Display name'), 'x');
-
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('sends a changed address with the casing the user typed', async () => {
@@ -739,7 +745,7 @@ describe('the clean form', () => {
 
     expect(save).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(toastMessages()).toEqual([]);
   });
 
   it('disables Save until something has changed', async () => {
@@ -814,12 +820,16 @@ describe('the clean form', () => {
   });
 });
 
+// **PET-77 split these four, and this screen keeps one more of them inline than any other.** The
+// rule is "can the user act on this here": `invalid` and `taken` name a field they can correct, and
+// **`unauthenticated` stays inline too** - uniquely on this screen, because its treatment carries a
+// "Log in again" link, which is the one recovery control in the app attached to that reason. A
+// toast would replace an actionable line with a sentence that expires. Only `failed` leaves.
 describe('the four failures', () => {
   it.each([
     ['invalid', "We couldn't save your changes. Please check the values and try again."],
     ['taken', 'That email address already belongs to another account.'],
     ['unauthenticated', 'Your session has expired. Log in again in a new tab, then save.'],
-    ['failed', "We couldn't save your changes. Please try again."],
   ])('renders the %s copy on an assertive line', async (reason, message) => {
     const user = userEvent.setup();
     const save = renderForm(
@@ -832,6 +842,62 @@ describe('the four failures', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(message));
     expect(save).toHaveBeenCalledTimes(1);
+    expect(toastMessages()).toEqual([]);
+  });
+
+  // **The arm no other screen in this app has (PET-77).** One "Save changes" is two requests to two
+  // endpoints with no transaction across them, schedule first - so the second can fail after the
+  // first has landed, and a bare "we couldn't save your changes" would invite a retry of a change
+  // that is already applied. Reachable by moving the pay day and the display name in one press.
+  it('says what landed when the profile write fails after the schedule one succeeded', async () => {
+    const user = userEvent.setup();
+    saveSchedule.mockResolvedValue({ ok: true });
+    const save = jest.fn().mockResolvedValue({ ok: false, reason: 'failed' });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
+    await user.click(screen.getByRole('button', { name: '15th of the month' }));
+    await saveThroughDialog(user);
+
+    await waitFor(() =>
+      expect(toastMessages()).toEqual([
+        'Your pay schedule was saved, but your profile changes were not.',
+      ]),
+    );
+    expect(saveSchedule).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('says the plain thing when the schedule write is the one that failed', async () => {
+    // Nothing landed in this direction, because the schedule write goes first and returns early -
+    // so the partial sentence would be false.
+    const user = userEvent.setup();
+    saveSchedule.mockResolvedValue({ ok: false, reason: 'failed' });
+    const save = jest.fn().mockResolvedValue({ ok: true });
+    renderForm(save);
+
+    await user.click(screen.getByRole('button', { name: '15th of the month' }));
+    await saveThroughDialog(user);
+
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't save your changes. Please try again."]),
+    );
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('reports failed in the toast region, which has no field to attach to', async () => {
+    const user = userEvent.setup();
+    renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'failed' }));
+
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Ana');
+    await user.click(saveButton());
+
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't save your changes. Please try again."]),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('does not refresh or confirm on a failure', async () => {
@@ -844,7 +910,7 @@ describe('the four failures', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(refresh).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(toastMessages()).toEqual([]);
   });
 
   it('keeps what was typed after a rejected address', async () => {
@@ -872,24 +938,26 @@ describe('the four failures', () => {
     await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
+    // Classified as `failed`, so it reports in the toast region (PET-77) - there is nothing on this
+    // form for the user to correct.
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        "We couldn't save your changes. Please try again.",
-      ),
+      expect(toastMessages()).toEqual(["We couldn't save your changes. Please try again."]),
     );
     expect(saveButton()).toBeEnabled();
   });
 
   it('clears a failure on the next keystroke', async () => {
+    // `taken` rather than `failed`: after PET-77 only the arms the user can act on here render an
+    // inline line at all, and the line is what this test is about.
     const user = userEvent.setup();
-    renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'failed' }));
+    renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'taken' }));
 
-    await user.clear(screen.getByLabelText('Display name'));
-    await user.type(screen.getByLabelText('Display name'), 'Ana');
+    await user.clear(screen.getByLabelText('Email'));
+    await user.type(screen.getByLabelText('Email'), 'taken@email.com');
     await user.click(saveButton());
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
 
-    await user.type(screen.getByLabelText('Display name'), 'x');
+    await user.type(screen.getByLabelText('Email'), 'x');
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -1130,7 +1198,9 @@ describe('focus', () => {
     await user.clear(screen.getByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Ana{Enter}');
 
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    // The rejection reports in the toast region now (PET-77), so that is what says the round trip
+    // is over; the focus restore this test is about is unchanged.
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
     expect(screen.getByLabelText('Display name')).toHaveFocus();
   });
 });
@@ -1139,7 +1209,7 @@ describe('a form nobody touched', () => {
   it('sends nothing even when the stored name carries whitespace', async () => {
     // The diff cannot answer this on its own: `toUpdateProfileBody` trims on the way out and
     // compares against the untrimmed stored value, so `"  Marko  "` differs from itself and an
-    // untouched form fired a PATCH announcing "Changes saved" for an edit nobody made.
+    // untouched form fired a PATCH confirming "Changes saved." for an edit nobody made.
     const user = userEvent.setup();
     const save = jest.fn().mockResolvedValue({ ok: true });
     render(
@@ -1156,7 +1226,7 @@ describe('a form nobody touched', () => {
 
     expect(save).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(toastMessages()).toEqual([]);
   });
 
   it('still normalises that whitespace on a save that changes something else', async () => {
@@ -1278,24 +1348,16 @@ describe('after a successful save', () => {
     land({ fullName: 'Ana' });
 
     expect(saveButton()).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('Changes saved');
+    expect(toastMessages()).toEqual(['Changes saved.']);
   });
 
-  it('shows the confirmation in the success colour, not the muted caption one', async () => {
-    // One of the two places this repo allows a class assertion: a daisyUI state class that is the
-    // visible half of what the live region says.
-    const user = userEvent.setup();
-    renderForm();
-
-    await user.clear(screen.getByLabelText('Display name'));
-    await user.type(screen.getByLabelText('Display name'), 'Ana');
-    await user.click(saveButton());
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
-    expect(screen.getByRole('status')).toHaveClass('badge-success');
-  });
-
-  it('re-enables Save and clears the confirmation on the next edit', async () => {
+  // **The colour assertion moved with the badge (PET-77).** It was one of the two places this repo
+  // allows a class assertion, because the daisyUI state class was the visible half of what the live
+  // region said - and the argument transferred rather than expired: `ToastRegion.test.tsx` pins
+  // `alert-success` against `alert-error` for the same reason. The measurement behind it also
+  // transferred: `alert-success` is the fill-plus-content pairing this badge used, not the
+  // `text-success` that composites to 1.96:1 on a light card.
+  it('re-enables Save on the next edit', async () => {
     const user = userEvent.setup();
     const { land } = renderWithRefresh();
 
@@ -1308,110 +1370,15 @@ describe('after a successful save', () => {
     await user.type(screen.getByLabelText('Display name'), 'x');
 
     expect(saveButton()).toBeEnabled();
-    expect(screen.getByRole('status')).toHaveTextContent('');
   });
 });
 
-describe('the confirmation retires itself', () => {
-  // Fake timers only in this block: `userEvent` schedules its own work on real ones, so it needs
-  // the advance-aware setup rather than the default.
-  function withTimers() {
-    jest.useFakeTimers();
-    return userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-  }
+// **`describe('the confirmation retires itself')` is deleted with the badge it covered (PET-77).**
+// Its four cases were about a five-second timer, its restart on a second save, its cleanup on
+// unmount and the region staying mounted between saves. All four moved to the shared region and are
+// pinned in `(app)/ToastProvider.test.tsx`, which owns the timers now - including the two-durations
+// rule this screen never had.
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('clears "Changes saved" after five seconds', async () => {
-    const user = withTimers();
-    renderForm();
-
-    await user.clear(screen.getByLabelText('Display name'));
-    await user.type(screen.getByLabelText('Display name'), 'Ana');
-    await user.click(saveButton());
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
-
-    await act(async () => {
-      jest.advanceTimersByTime(5_000);
-    });
-
-    expect(screen.getByRole('status')).toHaveTextContent('');
-  });
-
-  it('keeps it up until then', async () => {
-    const user = withTimers();
-    renderForm();
-
-    await user.clear(screen.getByLabelText('Display name'));
-    await user.type(screen.getByLabelText('Display name'), 'Ana');
-    await user.click(saveButton());
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
-
-    await act(async () => {
-      jest.advanceTimersByTime(4_900);
-    });
-
-    expect(screen.getByRole('status')).toHaveTextContent('Changes saved');
-  });
-
-  it('leaves the region mounted, so the next save is still announced', async () => {
-    // The whole reason it ships empty rather than conditionally rendered: a live region created in
-    // the same commit as its content is generally not announced at all.
-    const user = withTimers();
-    renderForm();
-
-    await user.clear(screen.getByLabelText('Display name'));
-    await user.type(screen.getByLabelText('Display name'), 'Ana');
-    await user.click(saveButton());
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
-
-    await act(async () => {
-      jest.advanceTimersByTime(5_000);
-    });
-
-    expect(screen.getByRole('status')).toBeInTheDocument();
-  });
-
-  it('does not set state after the form has gone', async () => {
-    // Without the cleanup, a save immediately before an unmount updates a component that is no
-    // longer there. React logs rather than throws, so the assertion is on the console.
-    const user = withTimers();
-    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const view = render(
-      <SettingsForm
-        profile={PROFILE}
-        summary={SUMMARY}
-        canManage
-        save={jest.fn().mockResolvedValue({ ok: true })}
-        themePref="system"
-      />,
-    );
-
-    await user.clear(screen.getByLabelText('Display name'));
-    await user.type(screen.getByLabelText('Display name'), 'Ana');
-    await user.click(saveButton());
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Changes saved'));
-
-    view.unmount();
-    await act(async () => {
-      jest.advanceTimersByTime(5_000);
-    });
-
-    expect(errors).not.toHaveBeenCalled();
-    errors.mockRestore();
-  });
-});
-
-// The Categories summary card (PET-48), frame 17's third and last.
-//
-// Covered here rather than in a `CategoriesSummaryCard.test.tsx`, which is the shape PET-46 and
-// PET-47 set: neither `ProfileCard` nor `PreferencesCard` has a suite of its own, because the thing
-// worth asserting is the card inside the form it ships in. The arithmetic behind the sentence is
-// `categoriesSummary.test.ts`'s, with no DOM at all.
 describe('the Categories summary card (PET-48)', () => {
   it('files the card under a Categories heading', () => {
     renderForm();

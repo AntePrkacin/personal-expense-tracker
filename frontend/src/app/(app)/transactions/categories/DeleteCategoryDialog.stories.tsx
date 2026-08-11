@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { DeleteCategoryResult } from '@/lib/deleteCategory';
 
+import { ShellStory } from '../../shellStory';
 import { DeleteCategoryDialog, type DeleteCategoryTarget } from './DeleteCategoryDialog';
 
 // 20 Delete confirmation for category (node 102:1078).
@@ -81,12 +82,14 @@ const never = () => new Promise<DeleteCategoryResult>(() => {});
  */
 export const Open: Story = {
   render: () => (
-    <DeleteCategoryDialog
-      target={TARGET}
-      fallbackName={FALLBACK}
-      remove={async () => ({ ok: true })}
-      onClose={() => {}}
-    />
+    <ShellStory>
+      <DeleteCategoryDialog
+        target={TARGET}
+        fallbackName={FALLBACK}
+        remove={async () => ({ ok: true })}
+        onClose={() => {}}
+      />
+    </ShellStory>
   ),
 };
 
@@ -100,12 +103,14 @@ export const Open: Story = {
  */
 export const NoTransactionsThisMonth: Story = {
   render: () => (
-    <DeleteCategoryDialog
-      target={{ ...TARGET, name: 'Subscriptions', transactionCount: 0 }}
-      fallbackName={FALLBACK}
-      remove={async () => ({ ok: true })}
-      onClose={() => {}}
-    />
+    <ShellStory>
+      <DeleteCategoryDialog
+        target={{ ...TARGET, name: 'Subscriptions', transactionCount: 0 }}
+        fallbackName={FALLBACK}
+        remove={async () => ({ ok: true })}
+        onClose={() => {}}
+      />
+    </ShellStory>
   ),
 };
 
@@ -117,12 +122,14 @@ export const NoTransactionsThisMonth: Story = {
  */
 export const LongName: Story = {
   render: () => (
-    <DeleteCategoryDialog
-      target={{ ...TARGET, name: 'Household bills and utilities', transactionCount: 137 }}
-      fallbackName={FALLBACK}
-      remove={async () => ({ ok: true })}
-      onClose={() => {}}
-    />
+    <ShellStory>
+      <DeleteCategoryDialog
+        target={{ ...TARGET, name: 'Household bills and utilities', transactionCount: 137 }}
+        fallbackName={FALLBACK}
+        remove={async () => ({ ok: true })}
+        onClose={() => {}}
+      />
+    </ShellStory>
   ),
 };
 
@@ -136,12 +143,14 @@ export const LongName: Story = {
  */
 export const Deleting: Story = {
   render: () => (
-    <DeleteCategoryDialog
-      target={TARGET}
-      fallbackName={FALLBACK}
-      remove={never}
-      onClose={() => {}}
-    />
+    <ShellStory>
+      <DeleteCategoryDialog
+        target={TARGET}
+        fallbackName={FALLBACK}
+        remove={never}
+        onClose={() => {}}
+      />
+    </ShellStory>
   ),
 };
 
@@ -154,23 +163,27 @@ export const Deleting: Story = {
  */
 export const Failed: Story = {
   render: () => (
-    <DeleteCategoryDialog
-      target={TARGET}
-      fallbackName={FALLBACK}
-      remove={async () => ({ ok: false, reason: 'failed' })}
-      onClose={() => {}}
-    />
+    <ShellStory>
+      <DeleteCategoryDialog
+        target={TARGET}
+        fallbackName={FALLBACK}
+        remove={async () => ({ ok: false, reason: 'failed' })}
+        onClose={() => {}}
+      />
+    </ShellStory>
   ),
 };
 
 export const AlreadyGone: Story = {
   render: () => (
-    <DeleteCategoryDialog
-      target={TARGET}
-      fallbackName={FALLBACK}
-      remove={async () => ({ ok: false, reason: 'missing' })}
-      onClose={() => {}}
-    />
+    <ShellStory>
+      <DeleteCategoryDialog
+        target={TARGET}
+        fallbackName={FALLBACK}
+        remove={async () => ({ ok: false, reason: 'missing' })}
+        onClose={() => {}}
+      />
+    </ShellStory>
   ),
 };
 
@@ -183,22 +196,26 @@ export const AlreadyGone: Story = {
  */
 export const CannotDeleteTheFallback: Story = {
   render: () => (
-    <DeleteCategoryDialog
-      target={{ ...TARGET, name: FALLBACK, transactionCount: 6 }}
-      fallbackName={FALLBACK}
-      remove={async () => ({ ok: false, reason: 'fallback' })}
-      onClose={() => {}}
-    />
+    <ShellStory>
+      <DeleteCategoryDialog
+        target={{ ...TARGET, name: FALLBACK, transactionCount: 6 }}
+        fallbackName={FALLBACK}
+        remove={async () => ({ ok: false, reason: 'fallback' })}
+        onClose={() => {}}
+      />
+    </ShellStory>
   ),
 };
 
 export const SessionExpired: Story = {
   render: () => (
-    <DeleteCategoryDialog
-      target={TARGET}
-      fallbackName={FALLBACK}
-      remove={async () => ({ ok: false, reason: 'unauthenticated' })}
-      onClose={() => {}}
-    />
+    <ShellStory>
+      <DeleteCategoryDialog
+        target={TARGET}
+        fallbackName={FALLBACK}
+        remove={async () => ({ ok: false, reason: 'unauthenticated' })}
+        onClose={() => {}}
+      />
+    </ShellStory>
   ),
 };

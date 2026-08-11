@@ -24,10 +24,18 @@ export type ButtonVariant =
 // modifier and `btn-error` a colour one, which is the pairing frontend/CLAUDE.md
 // records as supported - two *style* modifiers is the mistake, and the reason
 // `btn-ghost btn-outline` draws no border.
+//
+// **`danger` carries `text-white`, which is a literal colour in a repo that forbids them, and it is
+// the same carve-out `(app)/ToastRegion.tsx` documents (PET-77).** The rule exists because a raw
+// palette value does not follow the theme; `--color-error` is the *same* fill in both Expensa
+// themes, so nothing here is theme-aware and the token that would have followed the theme -
+// `--color-error-content`, a near-black red - is the one that reads as dark text on a red button.
+// It is scoped to this variant on purpose: `dangerSoft` is a tinted surface where the same white
+// would be illegible, and `textDanger` is red text on the page's own background.
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'btn btn-primary',
   secondary: 'btn',
-  danger: 'btn btn-error',
+  danger: 'btn btn-error text-white',
   dangerSoft: 'btn btn-soft btn-error',
   text: 'btn btn-ghost',
   textDanger: 'btn btn-ghost text-error',

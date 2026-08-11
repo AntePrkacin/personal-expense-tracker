@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
-import { PreferencesProvider } from '../PreferencesProvider';
+import { ShellStory } from '../shellStory';
 import { CategoryDonut as Donut } from './CategoryDonut';
 
 /**
@@ -13,9 +13,9 @@ import { CategoryDonut as Donut } from './CategoryDonut';
  */
 function CategoryDonut(props: React.ComponentProps<typeof Donut>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <Donut {...props} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 

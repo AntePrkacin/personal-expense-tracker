@@ -1,19 +1,14 @@
-import { act, screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 
 import { render } from '../../shellRender';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 
+import { toastMessages } from '../../toastQueries';
 import type { Allocation, Category } from '@/lib/categories';
-import { moneyFormatters } from '@/lib/money';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
-import {
-  ALLOCATE_EMPTY,
-  ALLOCATE_HINT,
-  AllocateBudgetModal,
-  cappedMessage,
-} from './AllocateBudgetModal';
+import { ALLOCATE_EMPTY, ALLOCATE_HINT, AllocateBudgetModal } from './AllocateBudgetModal';
 import { MAX_CAP_ROWS, type toAllocateBody } from './allocateForm';
 import {
   category,
@@ -23,7 +18,6 @@ import {
 } from './categoryFixture';
 
 /** The formatters the shell's provider would hand the modal; see `PreferencesProvider`. */
-const USD = moneyFormatters('USD');
 
 // The Allocate budget modal. The arithmetic is `allocateForm.test.ts`'s, driven with no DOM at all;
 // what is here is the wiring - the fields, the messages, the save and its five arms.
@@ -43,8 +37,6 @@ const refresh = jest.fn();
 // MANDATORY with fake timers on: without `advanceTimers` every `userEvent` call waits on a real
 // clock this suite has stopped, and the failure is a five-second timeout rather than an assertion.
 const user = () => userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-
-const SNAP_MS = 3_400;
 
 /** Budget 2,000 with 1,150 already capped, so 850 is genuinely unassigned. */
 const ALLOCATION: Allocation = { monthlyBudget: 2000, allocated: 1150, unallocated: 850 };
@@ -105,7 +97,6 @@ const confirmAnchor = () =>
  * message has to read its text rather than its presence, and `queryByRole('status')` can no longer
  * say anything about whether a snap happened.
  */
-const snapMessage = () => screen.getByRole('status').textContent;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -165,15 +156,14 @@ describe('AC1-AC4: the modal opens on the current allocation', () => {
     expect(screen.getByText('$100 spent · $0.01 over this cap')).toBeInTheDocument();
   });
 
-  it('mounts the snap region empty rather than creating it with its message', () => {
-    // **The one assertion here that is about assistive technology rather than about text.** A polite
-    // live region inserted in the same commit as its content is generally not announced: the region
-    // has to exist first and then mutate. So it ships mounted and empty, and this pins that - which
-    // `queryByRole('status')` returning null cannot distinguish from the defect.
+  // **The snap's live region is deleted (PET-77, AC13), and this asserts its absence rather than its
+  // emptiness.** The rule it was the worked example of has not gone anywhere: it moved to
+  // `(app)/ToastRegion.tsx`, whose two announcers mount empty for exactly this reason and whose
+  // suites assert their text rather than their presence.
+  it('draws no live region of its own any more', () => {
     renderModal();
 
-    expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(snapMessage()).toBe('');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });
 
@@ -216,7 +206,12 @@ describe('AC11: Uncategorized is not a row', () => {
 });
 
 describe('AC5-AC7: the caps can never sum above the monthly budget', () => {
-  it('snaps a field down to what is left and says why', async () => {
+  // **The clamp is asserted and its announcement is not, because PET-77 deleted the line.** AC13
+  // removed the modal's `role="status"` snap message as one of the four unrelated ways a write used
+  // to report itself. The arithmetic and the copy survive in `allocateForm.ts` with their own suite;
+  // what is gone is the announcement, and `docs/TODO.md` records what that costs a screen-reader
+  // user. The clamp itself is what this test is about and is unchanged.
+  it('snaps a field down to what is left', async () => {
     renderModal();
 
     // Groceries may hold 2000 - (300 + 350) = 1,350 at most.
@@ -224,7 +219,6 @@ describe('AC5-AC7: the caps can never sum above the monthly budget', () => {
     await user().type(capField('Groceries'), '4000');
 
     expect(capField('Groceries')).toHaveValue('1,350.00');
-    expect(snapMessage()).toBe(cappedMessage(135000, 200000, USD));
   });
 
   it('never lets the remainder go negative or turn red', async () => {
@@ -274,7 +268,6 @@ describe('AC5-AC7: the caps can never sum above the monthly budget', () => {
     await user().type(capField('Subscriptions'), '5');
 
     expect(capField('Subscriptions')).toHaveValue('');
-    expect(snapMessage()).toContain('Nothing left to assign');
     // And the form is still saveable rather than poisoned by a zero nobody typed.
     expect(screen.queryByText(/greater than 0/)).not.toBeInTheDocument();
   });
@@ -291,62 +284,10 @@ describe('AC5-AC7: the caps can never sum above the monthly budget', () => {
   });
 });
 
-describe('the capped message', () => {
-  const snap = async () => {
-    await user().clear(capField('Groceries'));
-    await user().type(capField('Groceries'), '4000');
-  };
-
-  it('reverts to the hint after roughly 3.4 seconds', async () => {
-    renderModal();
-    await snap();
-
-    expect(snapMessage()).not.toBe('');
-
-    act(() => {
-      jest.advanceTimersByTime(SNAP_MS);
-    });
-
-    // The region stays mounted and empties. Removal from a live region announces nothing, which is
-    // what keeps the revert silent.
-    expect(snapMessage()).toBe('');
-    expect(screen.getByText(ALLOCATE_HINT)).toBeInTheDocument();
-  });
-
-  it('restarts the window when a second snap lands inside it', async () => {
-    renderModal();
-    await snap();
-
-    act(() => {
-      jest.advanceTimersByTime(3_000);
-    });
-
-    // A second snap on another row, 3s into the first message's window.
-    await user().clear(capField('Transport'));
-    await user().type(capField('Transport'), '9999');
-
-    act(() => {
-      jest.advanceTimersByTime(1_000);
-    });
-
-    // Still there: the identity change restarted the timer rather than inheriting 400ms.
-    expect(snapMessage()).not.toBe('');
-  });
-
-  it('quotes the capped amount to the cent and the budget whole', async () => {
-    // Mixed precision on purpose: the capped figure must match the field beside it, which routinely
-    // carries cents, while the budget must match the summary card behind the modal.
-    renderModal({
-      allocation: { monthlyBudget: 2000.5, allocated: 1150, unallocated: 850.5 },
-    });
-
-    await user().clear(capField('Groceries'));
-    await user().type(capField('Groceries'), '4000');
-
-    expect(snapMessage()).toContain('$1,350.50');
-    expect(snapMessage()).toContain('$2,001');
-  });
-});
+// **`describe('the capped message')` is deleted with the line it covered (PET-77, AC13).** Its three
+// cases - the quoted figure, the 3.4s revert and the restart on a second snap - were all about the
+// message and its timer, and none of that exists here now. The figure's arithmetic and its copy are
+// still `allocateForm.ts`'s, and `allocateForm.test.ts` still pins both.
 
 describe('the ledger column adds up', () => {
   it('derives the remainder from the rounded pair rather than rounding it too', () => {
@@ -446,6 +387,22 @@ describe('AC9-AC10: the save', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  // **One toast for one write, however many caps moved (PET-77).** This is the app's only bulk write,
+  // so it is the one place a per-row confirmation would have been tempting and wrong: the user
+  // pressed Save once. "limits" is the word the card's own control uses ("Set limit").
+  it('confirms the write once in the toast region', async () => {
+    renderModal();
+
+    await user().clear(capField('Transport'));
+    await user().type(capField('Transport'), '250');
+    await user().clear(capField('Groceries'));
+    await user().type(capField('Groceries'), '400');
+    await user().click(saveButton());
+    await confirmAnchor();
+
+    await waitFor(() => expect(toastMessages()).toEqual(['Category limits saved.']));
+  });
+
   it('disables Save until a cap really changed', async () => {
     renderModal();
 
@@ -538,28 +495,52 @@ describe('the four failures', () => {
     await confirmAnchor();
   };
 
+  // **PET-77 split the four by where they report.** `invalid` and `missing` both name something the
+  // user does from here - correct an amount, or close and look at the current list - so they keep the
+  // inline line. The other two name nothing this screen can act on, so they leave it.
   it.each([
     ['invalid', /check the amounts/i],
     ['missing', /no longer exists/i],
+  ] as const)(
+    'reports %s beside the form without refreshing behind itself',
+    async (reason, copy) => {
+      renderModal();
+      save.mockResolvedValue({ ok: false, reason });
+
+      await submitChange();
+
+      // `findBy`, not `getBy`: the handler awaits the action, so the state this asserts on lands a
+      // microtask after `click` resolves. The sibling modal suites use `waitFor` for the same reason.
+      expect(await screen.findByRole('alert')).toHaveTextContent(copy);
+      expect(toastMessages()).toEqual([]);
+      // The modal stays open on every arm: the user has a screen of edits in front of them and this
+      // line is what explains why they could not be saved.
+      expect(onClose).not.toHaveBeenCalled();
+      // **No arm refreshes while the dialog is open, `missing` included.** A review of PET-70 found the
+      // refresh it used to fire here able to unmount this dialog through the banner's own
+      // `unallocated > 0` gate - taking the message it had just set and every unsaved cap with it.
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     ['unauthenticated', /session has expired/i],
     ['failed', /try again/i],
-  ] as const)('reports %s without refreshing behind itself', async (reason, copy) => {
-    renderModal();
-    save.mockResolvedValue({ ok: false, reason });
+  ] as const)(
+    'reports %s in the toast region without refreshing behind itself',
+    async (reason, copy) => {
+      renderModal();
+      save.mockResolvedValue({ ok: false, reason });
 
-    await submitChange();
+      await submitChange();
 
-    // `findBy`, not `getBy`: the handler awaits the action, so the state this asserts on lands a
-    // microtask after `click` resolves. The sibling modal suites use `waitFor` for the same reason.
-    expect(await screen.findByRole('alert')).toHaveTextContent(copy);
-    // The modal stays open on every arm: the user has a screen of edits in front of them and this
-    // line is what explains why they could not be saved.
-    expect(onClose).not.toHaveBeenCalled();
-    // **No arm refreshes while the dialog is open, `missing` included.** A review of PET-70 found the
-    // refresh it used to fire here able to unmount this dialog through the banner's own
-    // `unallocated > 0` gate - taking the message it had just set and every unsaved cap with it.
-    expect(refresh).not.toHaveBeenCalled();
-  });
+      await waitFor(() => expect(toastMessages()).toHaveLength(1));
+      expect(toastMessages()[0]).toMatch(copy);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
 
   it('disables Save after a stale-list failure, so the same payload cannot 404 twice', async () => {
     // The draft is read once on open and never resynced, so the retry the copy invites re-sends the
@@ -599,7 +580,7 @@ describe('the four failures', () => {
     save.mockResolvedValue({ ok: false, reason: 'failed' });
 
     await submitChange();
-    await screen.findByRole('alert');
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
     await user().click(cancelButton());
 
     expect(refresh).not.toHaveBeenCalled();
@@ -658,7 +639,9 @@ describe('the four failures', () => {
 
     await submitChange();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/try again/i);
+    // Classified as `failed`, so it reports where `failed` reports (PET-77).
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
+    expect(toastMessages()[0]).toMatch(/try again/i);
     expect(saveButton()).toBeEnabled();
   });
 });

@@ -10,6 +10,7 @@ import type { Transaction } from '../../lib/transactions';
 import type { UpdateTransactionResult } from '../../lib/updateTransaction';
 
 import { EditTransactionModal } from './EditTransactionModal';
+import { politeAnnouncement, toastMessages } from './toastQueries';
 
 // PET-32's acceptance suite. AC1 and AC2 to AC6 live here; AC1's focus style, AC5's Escape and
 // backdrop arms and AC3's dashboard half are not observable in jsdom and are named in the plan's
@@ -218,6 +219,19 @@ describe('AC3: a successful save', () => {
     await u.click(save());
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  // **"saved", not "added" (PET-77).** One word separates this from the create modal's, and it is
+  // the word that decides whether a user believes they have just made a second transaction.
+  it('confirms the save in the toast region', async () => {
+    const u = user();
+    open();
+
+    await u.type(merchant(), ' Market');
+    await u.click(save());
+
+    await waitFor(() => expect(toastMessages()).toEqual(['Transaction saved.']));
+    expect(politeAnnouncement()).toBe('Transaction saved.');
   });
 
   it('refreshes before closing, so the list is already re-reading', async () => {
@@ -501,6 +515,10 @@ describe('AC6: the delete action', () => {
   });
 });
 
+// **PET-77 split these five in two, per reason rather than per surface.** The three that keep the
+// inline line are the ones the user can act on here - a body they can fix, and the two `missing`
+// arms whose copy asks them to close and see the current list. `unauthenticated` and `failed` can
+// be acted on nowhere on this screen, so they leave the form. `(app)/failureReporting.ts` owns it.
 describe('the five failure lines', () => {
   async function submitAndRead(result: UpdateTransactionResult) {
     update.mockResolvedValue(result);
@@ -511,6 +529,19 @@ describe('the five failure lines', () => {
     await u.click(save());
 
     return screen.findByRole('alert');
+  }
+
+  /** The same submit, for the two arms that now report in the toast region instead. */
+  async function submitAndReadToast(result: UpdateTransactionResult) {
+    update.mockResolvedValue(result);
+    const u = user();
+    open();
+
+    await u.type(merchant(), ' Market');
+    await u.click(save());
+
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
+    return toastMessages()[0];
   }
 
   it('says to check the values on a 400, never to try again', async () => {
@@ -540,19 +571,21 @@ describe('the five failure lines', () => {
   });
 
   it('says the session expired on a 401, without navigating anywhere', async () => {
-    const line = await submitAndRead({ ok: false, reason: 'unauthenticated' });
+    const message = await submitAndReadToast({ ok: false, reason: 'unauthenticated' });
 
-    expect(line).toHaveTextContent('Your session has expired. Log in again to save this.');
+    expect(message).toBe('Your session has expired. Log in again to save this.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('says to try again on anything else', async () => {
-    const line = await submitAndRead({ ok: false, reason: 'failed' });
+    const message = await submitAndReadToast({ ok: false, reason: 'failed' });
 
-    expect(line).toHaveTextContent("We couldn't save this transaction. Please try again.");
+    expect(message).toBe("We couldn't save this transaction. Please try again.");
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('stays open with the edits intact after a failure', async () => {
-    await submitAndRead({ ok: false, reason: 'failed' });
+    await submitAndReadToast({ ok: false, reason: 'failed' });
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
@@ -561,7 +594,7 @@ describe('the five failure lines', () => {
   });
 
   it('re-enables Save after a failure, so the user can retry', async () => {
-    await submitAndRead({ ok: false, reason: 'failed' });
+    await submitAndReadToast({ ok: false, reason: 'failed' });
 
     expect(save()).toBeEnabled();
   });
@@ -577,14 +610,15 @@ describe('the five failure lines', () => {
     await u.type(merchant(), ' Market');
     await u.click(save());
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      "We couldn't save this transaction. Please try again.",
+    // A rejection is classified as `failed`, so it reports where `failed` reports (PET-77).
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't save this transaction. Please try again."]),
     );
     expect(save()).toBeEnabled();
   });
 
   it('clears a stale failure when the next attempt starts', async () => {
-    update.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    update.mockResolvedValueOnce({ ok: false, reason: 'invalid' });
     const u = user();
     open();
     await u.type(merchant(), ' Market');
@@ -598,7 +632,9 @@ describe('the five failure lines', () => {
   });
 
   it('clears a stale failure as soon as a field is edited', async () => {
-    await submitAndRead({ ok: false, reason: 'failed' });
+    // `invalid` rather than `failed`: after PET-77 only the three actionable arms render an inline
+    // line at all, and this test is about that line.
+    await submitAndRead({ ok: false, reason: 'invalid' });
 
     await user().type(merchant(), '!');
 

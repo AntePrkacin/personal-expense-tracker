@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { Allocation, Category } from '@/lib/categories';
 
-import { PreferencesProvider } from '../../PreferencesProvider';
+import { ShellStory } from '../../shellStory';
 import { AllocateBudgetModal as Modal } from './AllocateBudgetModal';
 import {
   category,
@@ -22,9 +22,9 @@ import {
  */
 function AllocateBudgetModal(props: React.ComponentProps<typeof Modal>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <Modal {...props} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 

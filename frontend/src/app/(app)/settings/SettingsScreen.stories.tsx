@@ -5,7 +5,7 @@ import type { Allocation, Category } from '@/lib/categories';
 import type { Profile } from '@/lib/profile';
 import type { UpdateProfileResult } from '@/lib/updateProfile';
 
-import { PreferencesProvider } from '../PreferencesProvider';
+import { ShellStory } from '../shellStory';
 import { category, FALLBACK_CATEGORY } from '../transactions/categories/categoryFixture';
 
 import { SettingsScreen } from './SettingsScreen';
@@ -93,9 +93,9 @@ const PERIODS = [{ start: '2026-08-01', end: '2026-09-01', label: 'August 2026',
  */
 function Frame(args: React.ComponentProps<typeof SettingsScreen>) {
   return (
-    <PreferencesProvider currency={args.profile.currency}>
+    <ShellStory currency={args.profile.currency}>
       <SettingsScreen {...args} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 

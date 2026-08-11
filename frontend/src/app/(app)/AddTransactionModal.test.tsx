@@ -11,6 +11,7 @@ import { compressReceiptFiles, type ReceiptCompressionResult } from '../../lib/r
 import type { ScanReceiptFailureReason, ScanReceiptResult } from '../../lib/scanReceipt';
 
 import { AddTransactionModal } from './AddTransactionModal';
+import { assertiveAnnouncement, politeAnnouncement, toastMessages } from './toastQueries';
 import type { ScannedTransactionFields } from './transactionForm';
 
 // A relative specifier, because `jest.mock('@/lib/receiptCompression')` cannot resolve the
@@ -304,6 +305,26 @@ describe('AC5: a successful save', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
+  // **The whole point of PET-77 on this screen.** The modal closing used to be the entire
+  // confirmation, so a save whose row landed outside the current period or filter was confirmed by
+  // nothing at all. The post happens before the close, because this component is unmounted by it.
+  it('confirms the save in the toast region, which outlives this modal', async () => {
+    const u = user();
+    open();
+    await fill(u);
+
+    await u.click(submit());
+
+    // **Waited on the toast rather than on `onClose`, and that ordering is the whole trick.** The
+    // close fires synchronously inside the submit handler, so a `waitFor` on the mock passes on its
+    // first check - before React has flushed the post's state update, which happens in the same
+    // batch. Asserting the region then reads a DOM one commit behind and finds nothing. Waiting on
+    // the thing under test is what makes the check honest.
+    await waitFor(() => expect(toastMessages()).toEqual(['Transaction added.']));
+    expect(politeAnnouncement()).toBe('Transaction added.');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes the page, which is what makes the tab badge tick up', async () => {
     // AC5's testable half. PET-30's TransactionTabs reads `total` from readTransactionsView, so
     // re-running the route's Server Components is what increments the badge. The list itself is
@@ -346,7 +367,13 @@ describe('AC5: a successful save', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
 
-    settle({ ok: true });
+    // **Awaited rather than fired and forgotten (PET-77).** These three tests hold the request in
+    // flight on purpose and then let it go at the end; the success path now posts a toast, so the
+    // resolution carries three state updates on a provider above this modal. Left unawaited they
+    // land after the test has finished, which React reports as an update outside `act`.
+    await act(async () => {
+      settle({ ok: true });
+    });
   });
 
   it('can still be cancelled while the request is out', async () => {
@@ -363,7 +390,13 @@ describe('AC5: a successful save', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    settle({ ok: true });
+    // **Awaited rather than fired and forgotten (PET-77).** These three tests hold the request in
+    // flight on purpose and then let it go at the end; the success path now posts a toast, so the
+    // resolution carries three state updates on a provider above this modal. Left unawaited they
+    // land after the test has finished, which React reports as an update outside `act`.
+    await act(async () => {
+      settle({ ok: true });
+    });
   });
 
   it('cannot be submitted twice', async () => {
@@ -378,7 +411,13 @@ describe('AC5: a successful save', () => {
 
     expect(create).toHaveBeenCalledTimes(1);
 
-    settle({ ok: true });
+    // **Awaited rather than fired and forgotten (PET-77).** These three tests hold the request in
+    // flight on purpose and then let it go at the end; the success path now posts a toast, so the
+    // resolution carries three state updates on a provider above this modal. Left unawaited they
+    // land after the test has finished, which React reports as an update outside `act`.
+    await act(async () => {
+      settle({ ok: true });
+    });
   });
 });
 
@@ -460,13 +499,15 @@ describe('AC7: closing without saving', () => {
   // rather than the browser. It is a manual and Storybook check, recorded in the plan.
 });
 
+// **PET-77 split these four in two, and the split is per reason rather than per surface.**
+// `invalid` and `categoryMissing` name something the user can fix in the fields in front of them,
+// so they keep the inline line; `failed` and `unauthenticated` do not, so they leave the form and
+// become a notification. `(app)/failureReporting.ts` owns the rule and the argument for it.
 describe('the four failure lines', () => {
   it.each([
     ['invalid', "We couldn't add this transaction. Please check the values and try again."],
     ['categoryMissing', 'That category no longer exists. Pick another one.'],
-    ['unauthenticated', 'Your session has expired. Log in again to save this.'],
-    ['failed', "We couldn't add this transaction. Please try again."],
-  ] as const)('shows its own message for %s', async (reason, message) => {
+  ] as const)('keeps %s beside the form, where the user can act on it', async (reason, message) => {
     create.mockResolvedValue({ ok: false, reason });
 
     const u = user();
@@ -476,11 +517,31 @@ describe('the four failure lines', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(message);
+    expect(toastMessages()).toEqual([]);
   });
 
-  it('announces the failure, where a field message deliberately does not', async () => {
-    // role="alert" because this appears after a network round trip with nothing else on screen
-    // changing. ui/FieldShell omits it because its message appears beside the field just left.
+  it.each([
+    ['unauthenticated', 'Your session has expired. Log in again to save this.'],
+    ['failed', "We couldn't add this transaction. Please try again."],
+  ] as const)('reports %s in the toast region instead', async (reason, message) => {
+    create.mockResolvedValue({ ok: false, reason });
+
+    const u = user();
+    open();
+    await fill(u);
+    await u.click(submit());
+
+    await waitFor(() => expect(toastMessages()).toEqual([message]));
+    // The counterpart assertion, and the one that would catch reporting it twice: no inline line is
+    // left behind under the fields for a failure the fields cannot fix.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('announces the failure assertively, where a field message deliberately does not', async () => {
+    // Assertive because this appears after a network round trip with nothing else on screen
+    // changing. ui/FieldShell omits it because its message appears beside the field just left. The
+    // region carries `aria-live` rather than `role="alert"` for the reason `ToastRegion.tsx` gives:
+    // an always-mounted alert would make every query like the one above match two elements.
     create.mockResolvedValue({ ok: false, reason: 'failed' });
 
     const u = user();
@@ -488,7 +549,10 @@ describe('the four failure lines', () => {
     await fill(u);
     await u.click(submit());
 
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(assertiveAnnouncement()).toBe("We couldn't add this transaction. Please try again."),
+    );
+    expect(politeAnnouncement()).toBe('');
   });
 
   it('stays open and re-enables the submit so the user can retry', async () => {
@@ -499,7 +563,7 @@ describe('the four failure lines', () => {
     await fill(u);
     await u.click(submit());
 
-    await screen.findByRole('alert');
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(submit()).toBeEnabled();
     expect(onClose).not.toHaveBeenCalled();
@@ -507,7 +571,9 @@ describe('the four failure lines', () => {
   });
 
   it('clears the failure line on the next edit', async () => {
-    create.mockResolvedValue({ ok: false, reason: 'failed' });
+    // Still `invalid` rather than `failed`: the line this is about is the inline one, and after
+    // PET-77 only the two actionable arms render one at all.
+    create.mockResolvedValue({ ok: false, reason: 'invalid' });
 
     const u = user();
     open();
@@ -896,6 +962,37 @@ describe('the scan controls', () => {
         ),
       ).toBeInTheDocument();
     });
+
+    // **PET-77's AC8, and the note beside it is not a duplicate of it.** The note names *which
+    // fields* are still empty and belongs beside the fields; the toast reports that the round trip
+    // finished at all, which the overlay coming down was otherwise the only sign of.
+    it('confirms a finished scan in the toast region', async () => {
+      scan.mockResolvedValue(found({ merchant: 'Whole Foods', amount: '31.50' }, ['date']));
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      await waitFor(() => expect(toastMessages()).toEqual(['Receipt scanned.']));
+      expect(politeAnnouncement()).toBe('Receipt scanned.');
+    });
+
+    it('reports a scan that read nothing as a failure rather than a success', async () => {
+      // A green "Receipt scanned." over a form nothing was written into is the one lie this control
+      // could tell, so the nothing-extracted row takes the failure tone.
+      scan.mockResolvedValue(found({}, ['merchant', 'amount', 'date', 'categoryId']));
+
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
+
+      await waitFor(() =>
+        expect(toastMessages()).toEqual([
+          'We could not read that receipt. Fill the form in yourself.',
+        ]),
+      );
+      expect(politeAnnouncement()).toBe('');
+    });
   });
 
   describe('the failure lines', () => {
@@ -905,20 +1002,19 @@ describe('the scan controls', () => {
         'tooLarge',
         'That file is too big. Photos can be up to 1.5 MB after compressing, a PDF up to 4 MB.',
       ],
-      ['unauthenticated', 'Your session has expired. Log in again to save this.'],
       [
         'unavailable',
         'Receipt scanning is switched off right now. You can still add the transaction by hand.',
       ],
       ['rateLimited', "You've scanned a lot in a short time. Wait a minute and try again."],
       ['timedOut', 'That scan took too long. Try again, or add the transaction by hand.'],
-      ['failed', "We couldn't read that receipt. Please try again."],
     ] as [ScanReceiptFailureReason, string][])(
       'shows its own message for %s',
       async (reason, message) => {
-        // Seven reasons rather than one, because two of them must not say "try again":
+        // Five reasons rather than one, because two of them must not say "try again":
         // scanning being switched off is not broken, and a rejected file fails identically
-        // forever.
+        // forever. Each names something to do differently, which is what keeps it beside the two
+        // file controls it is about rather than in the toast region (PET-77).
         scan.mockResolvedValue({ ok: false, reason });
 
         const u = user();
@@ -927,6 +1023,27 @@ describe('the scan controls', () => {
 
         expect(await screen.findByRole('alert')).toHaveTextContent(message);
         expect(overlay()).not.toBeInTheDocument();
+        expect(toastMessages()).toEqual([]);
+      },
+    );
+
+    it.each([
+      ['unauthenticated', 'Your session has expired. Log in again to save this.'],
+      ['failed', "We couldn't read that receipt. Please try again."],
+    ] as [ScanReceiptFailureReason, string][])(
+      'reports %s in the toast region instead',
+      async (reason, message) => {
+        // The other two arms of the same taxonomy, and the split is `failureReporting.ts`'s rather
+        // than this screen's: neither names anything the two file controls could do differently.
+        scan.mockResolvedValue({ ok: false, reason });
+
+        const u = user();
+        open();
+        await u.upload(upload(), photo());
+
+        await waitFor(() => expect(toastMessages()).toEqual([message]));
+        expect(overlay()).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       },
     );
 

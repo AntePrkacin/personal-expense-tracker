@@ -11,7 +11,13 @@ import { sendAssistantMessage, type SendMessageResult } from '@/lib/sendAssistan
 import { AssistantComposer } from './AssistantComposer';
 import { AssistantMessageList } from './AssistantMessageList';
 import { TypingIndicator } from './TypingIndicator';
+import { isToastedFailure } from '../failureReporting';
+import { useToast } from '../ToastProvider';
+
 import { FAILURE_COPY, OPTIMISTIC_ID, optimisticMessage, truncationNotice } from './assistantChat';
+
+/** What the toast region says when the user stops a turn (PET-77). See the call site for the tone. */
+const TOAST_STOPPED = 'Response stopped.';
 import { scrollToLatest } from './chatScroll';
 
 // The Chat view's `<main>` (PET-73). The header and the tab bar above it are `page.tsx`'s and stay
@@ -103,6 +109,7 @@ export function AssistantChatScreen({
   const [sessionId, setSessionId] = useState<string | undefined>(conversation?.id);
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState(false);
+  const { post } = useToast();
   const [failure, setFailure] = useState<string | null>(null);
   const [truncation, setTruncation] = useState<string | null>(null);
 
@@ -183,11 +190,29 @@ export function AssistantChatScreen({
       // message for something the user chose.
       if (result.aborted) {
         restore();
+        // **AC9's second half: a stop is reported rather than silent (PET-77).** It used to leave no
+        // trace at all - the composer swapped back and the question reappeared in the box, which is
+        // the same thing a failure does, so the two were indistinguishable from across the room.
+        //
+        // **It takes the failure tone, which is the ticket's decision and not this file's.** With
+        // `info` dropped there are two kinds, and neither fits a deliberate cancel: green would
+        // claim something worked and red says something went wrong. It is also announced
+        // assertively, to a user who just pressed Stop and knows. `docs/TODO.md` carries it as the
+        // one place the two-kind scheme is visibly short a kind.
+        post({ kind: 'failure', message: TOAST_STOPPED });
         return;
       }
 
       restore();
-      setFailure(FAILURE_COPY[result.reason]);
+
+      // Two of the seven arms leave the thread (PET-77); `failureReporting.ts` owns the rule. The
+      // five that stay all name something to do differently - shorten it, wait a minute, send it
+      // again - and they belong next to the composer the user will do it in.
+      if (isToastedFailure(result.reason)) {
+        post({ kind: 'failure', message: FAILURE_COPY[result.reason] });
+      } else {
+        setFailure(FAILURE_COPY[result.reason]);
+      }
 
       // A conversation that is gone must not be sent to again, or every retry 404s forever. The
       // text is kept, so the next send starts a new conversation with the same question - which
@@ -197,9 +222,9 @@ export function AssistantChatScreen({
       }
     } catch {
       // A rejected `fetch` this module did not classify. Uncaught it would leave the composer on
-      // "Stop" forever.
+      // "Stop" forever. Classified as `failed`, so it reports where `failed` reports.
       restore();
-      setFailure(FAILURE_COPY.failed);
+      post({ kind: 'failure', message: FAILURE_COPY.failed });
     } finally {
       setPending(false);
       controllerRef.current = null;
