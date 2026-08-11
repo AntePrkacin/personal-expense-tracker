@@ -136,6 +136,32 @@ describe('the summary island', () => {
     expect(screen.queryByText('$850')).not.toBeInTheDocument();
   });
 
+  // **The state `toAllocateTotals`' clamp hides, which a review found reachable here although it is
+  // not next door.** Caps over budget are legal (A43) and this modal has no `unallocated > 0` gate.
+  it('reports an overage instead of clamping it to a zero remainder', () => {
+    renderModal([GROCERIES, TRANSPORT, FALLBACK_CATEGORY], {
+      monthlyBudget: 500,
+      allocated: 850,
+      unallocated: -350,
+    });
+
+    expect(screen.getByText('Over budget')).toBeInTheDocument();
+    expect(screen.getByText('$350')).toBeInTheDocument();
+    expect(screen.queryByText('Unassigned')).not.toBeInTheDocument();
+  });
+
+  it('draws no allocation bar while over budget, because its segments would sum past 100%', () => {
+    const { container } = renderModal([GROCERIES, TRANSPORT, FALLBACK_CATEGORY], {
+      monthlyBudget: 500,
+      allocated: 850,
+      unallocated: -350,
+    });
+
+    expect(
+      container.querySelector('[aria-hidden="true"][class*="flex"] > [style*="width"]'),
+    ).toBeNull();
+  });
+
   it('counts only the drawn rows as having no limit', () => {
     // `FALLBACK_CATEGORY` is uncapped on every account, so a count taken before the filter reads one
     // high for everybody. `manageCategories.test.ts` pins the arithmetic; this pins the wiring.

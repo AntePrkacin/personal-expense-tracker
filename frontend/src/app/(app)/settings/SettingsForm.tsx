@@ -179,6 +179,14 @@ type SettingsFormProps = {
    */
   summary: CategoriesSummary | null;
   /**
+   * Whether the Manage categories modal has everything it needs to open.
+   *
+   * Resolved by `SettingsScreen`, which is where both reads it depends on arrive - see `canManage`
+   * there for why a missing period list disables the button rather than being carried on without.
+   * Threaded rather than derived, because this form can see neither read.
+   */
+  canManage: boolean;
+  /**
    * Injected with a default, which is `AddCategoryButton`'s rule and not a testing convenience.
    * Storybook's Vite build has no notion of `'use server'`, so it bundles the action as an ordinary
    * module and a press in a story would reach `cookies()` from `next/headers` in the browser. It
@@ -214,6 +222,7 @@ type SettingsFormProps = {
 export function SettingsForm({
   profile,
   summary,
+  canManage,
   save = updateProfile,
   saveSchedule = changeSchedule,
   today = todayIso(),
@@ -657,13 +666,25 @@ export function SettingsForm({
 
       {/* **The third card, and the one that carries nothing into the save.** It sits inside the
           `<form>` because the frame puts it above "Save changes", not because it has anything to
-          submit - so it takes no `disabled`, and a save in flight leaves it alone. Its one control
-          is inert by product decision and `type="button"`, which is what keeps it out of this
-          form's submit path; `CategoriesSummaryCard.tsx` carries both arguments.
+          submit - so its fields, of which it has none, take no `disabled`.
 
-          This replaces the placeholder comment PET-46 left here, which named PET-47 as the ticket
-          that would fill it. It was PET-48's. */}
-      <CategoriesSummaryCard summary={summary} />
+          **Its one control is live as of PET-48's follow-up**, and this comment said the opposite
+          until a review caught it: "Manage" opens the Manage categories modal.
+          `CategoriesSummaryCard.tsx` carries the argument, including why `type="button"` is what
+          keeps it out of this form's submit path.
+
+          **It *does* freeze while a save is in flight, which reverses what this card shipped with.**
+          The original decision - a save freezes every field and deliberately not this card - was
+          taken when nothing behind the button could write. The modal's three sub-modals each call
+          `router.refresh()`, and this form's resync docblock names "nothing on this route calls
+          `router.refresh()` but this form" as the condition making its identity guard safe. Pressing
+          Manage mid-save is what breaks that condition, so the button is closed for exactly as long
+          as the form is waiting on its own refresh - `pending` covers the request, `awaitingSaved`
+          the window between it returning and the refreshed profile arriving. */}
+      <CategoriesSummaryCard
+        summary={summary}
+        canManage={canManage && !pending && !awaitingSaved}
+      />
 
       {/* **The 401 is the one failure that carries a control, so it does not go through
           `FormError`.** That component renders a bare string by design, and this arm needs a link

@@ -12,6 +12,7 @@ import * as CategoriesScreen from './(app)/transactions/categories/CategoriesScr
 import * as EditCategoryModal from './(app)/transactions/categories/EditCategoryModal.stories';
 import * as AssistantChatScreen from './(app)/insights/AssistantChatScreen.stories';
 import * as AssistantHistoryScreen from './(app)/insights/AssistantHistoryScreen.stories';
+import * as ManageCategoriesModal from './(app)/settings/ManageCategoriesModal.stories';
 import * as SettingsScreen from './(app)/settings/SettingsScreen.stories';
 import * as MonthStartField from './(app)/settings/MonthStartField.stories';
 import * as ThemeField from './(app)/settings/ThemeField.stories';
@@ -68,6 +69,11 @@ type Meta = { title?: string; component?: React.ElementType; args?: Args };
 type StoryModule = Record<string, unknown> & { default: Meta };
 
 const MODULES: [name: string, module: StoryModule][] = [
+  // Added when a review found it registered nowhere. `Screens/Manage categories` has no Figma frame,
+  // so its stories are the only surface that modal can be reviewed on at all - and a story that
+  // throws under Jest would have shipped green, because `build-storybook` bundles stories without
+  // running one. The same gap `MonthStartField.stories` was found in.
+  ['ManageCategoriesModal', ManageCategoriesModal],
   ['WelcomeScreen', WelcomeScreen as StoryModule],
   ['SetupBudgetScreen', SetupBudgetScreen as StoryModule],
   ['SetupCategoriesScreen', SetupCategoriesScreen as StoryModule],

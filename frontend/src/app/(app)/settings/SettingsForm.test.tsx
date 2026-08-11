@@ -73,6 +73,7 @@ function renderForm(save: jest.Mock = jest.fn().mockResolvedValue({ ok: true }))
     <SettingsForm
       profile={PROFILE}
       summary={SUMMARY}
+      canManage
       save={save}
       saveSchedule={saveSchedule}
       today={TODAY}
@@ -116,6 +117,7 @@ function renderWithRefresh(save: jest.Mock = jest.fn().mockResolvedValue({ ok: t
     <SettingsForm
       profile={PROFILE}
       summary={SUMMARY}
+      canManage
       save={save}
       saveSchedule={saveSchedule}
       today={TODAY}
@@ -130,6 +132,7 @@ function renderWithRefresh(save: jest.Mock = jest.fn().mockResolvedValue({ ok: t
         <SettingsForm
           profile={{ ...PROFILE, ...next }}
           summary={SUMMARY}
+          canManage
           save={save}
           saveSchedule={saveSchedule}
           today={TODAY}
@@ -196,7 +199,13 @@ describe('AC2: the avatar', () => {
   it('offers no upload control of any kind', () => {
     // SET-2: the initials are derived and never stored, so there is nothing to replace them with.
     const { container } = render(
-      <SettingsForm profile={PROFILE} summary={SUMMARY} save={jest.fn()} themePref="system" />,
+      <SettingsForm
+        profile={PROFILE}
+        summary={SUMMARY}
+        canManage
+        save={jest.fn()}
+        themePref="system"
+      />,
     );
 
     expect(container.querySelector('input[type="file"]')).toBeNull();
@@ -506,6 +515,7 @@ describe('the Preferences card (PET-47)', () => {
         <SettingsForm
           profile={{ ...PROFILE, monthStartDay: 15 }}
           summary={SUMMARY}
+          canManage
           save={save}
           saveSchedule={saveSchedule}
           today={TODAY}
@@ -761,6 +771,7 @@ describe('the clean form', () => {
       <SettingsForm
         profile={{ ...PROFILE, fullName: '  Marko  ' }}
         summary={SUMMARY}
+        canManage
         save={jest.fn()}
         themePref="system"
       />,
@@ -925,7 +936,13 @@ describe('the form element', () => {
     // Without it the user agent's own validation fires on the `required` email and the designed
     // message never renders. daisyUI's `validator` class is unused for the same reason.
     const { container } = render(
-      <SettingsForm profile={PROFILE} summary={SUMMARY} save={jest.fn()} themePref="system" />,
+      <SettingsForm
+        profile={PROFILE}
+        summary={SUMMARY}
+        canManage
+        save={jest.fn()}
+        themePref="system"
+      />,
     );
 
     expect(container.querySelector('form')).toHaveAttribute('novalidate');
@@ -1129,6 +1146,7 @@ describe('a form nobody touched', () => {
       <SettingsForm
         profile={{ ...PROFILE, fullName: '  Marko  ' }}
         summary={SUMMARY}
+        canManage
         save={save}
         themePref="system"
       />,
@@ -1150,6 +1168,7 @@ describe('a form nobody touched', () => {
       <SettingsForm
         profile={{ ...PROFILE, fullName: '  Marko Kovač  ' }}
         summary={SUMMARY}
+        canManage
         save={save}
         saveSchedule={saveSchedule}
         today={TODAY}
@@ -1366,6 +1385,7 @@ describe('the confirmation retires itself', () => {
       <SettingsForm
         profile={PROFILE}
         summary={SUMMARY}
+        canManage
         save={jest.fn().mockResolvedValue({ ok: true })}
         themePref="system"
       />,
@@ -1410,6 +1430,7 @@ describe('the Categories summary card (PET-48)', () => {
       <SettingsForm
         profile={PROFILE}
         summary={{ count: 1, allocated: 200, monthlyBudget: 2000 }}
+        canManage
         save={jest.fn()}
         themePref="system"
       />,
@@ -1425,6 +1446,7 @@ describe('the Categories summary card (PET-48)', () => {
       <SettingsForm
         profile={PROFILE}
         summary={{ count: 3, allocated: 1800.25, monthlyBudget: 2000.5 }}
+        canManage
         save={jest.fn()}
         themePref="system"
       />,
@@ -1465,6 +1487,23 @@ describe('the Categories summary card (PET-48)', () => {
     expect(screen.queryByRole('link', { name: 'Manage' })).not.toBeInTheDocument();
   });
 
+  it('is disabled when the screen says the modal cannot open', () => {
+    // The gate `SettingsScreen` resolves: a failed categories read, or a missing period list.
+    render(
+      <SettingsForm
+        profile={PROFILE}
+        summary={SUMMARY}
+        canManage={false}
+        save={jest.fn()}
+        saveSchedule={saveSchedule}
+        today={TODAY}
+        themePref="system"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeDisabled();
+  });
+
   it('opens the Manage categories modal when pressed', async () => {
     const user = userEvent.setup();
     renderForm();
@@ -1489,8 +1528,13 @@ describe('the Categories summary card (PET-48)', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('stays live while a save is out, because it carries nothing into the save', async () => {
-    // Every field and the submit button freeze for the round trip; this control is not part of it.
+  // **Reversed by a review, and the case is kept rather than deleted so the reversal is visible.**
+  // This used to assert the opposite - that Manage stays live through a save, because the card
+  // carries nothing into it. True of the card and false of the button, once the modal behind it
+  // could write: its three sub-modals each call `router.refresh()`, and `SettingsForm`'s resync
+  // guard documents "nothing on this route calls `router.refresh()` but this form" as the condition
+  // that makes it safe. Pressing Manage mid-save is exactly how that condition breaks.
+  it('freezes while a save is out, because the modal behind it can refresh the route', async () => {
     const user = userEvent.setup();
     let resolve: (result: UpdateProfileResult) => void = () => {};
     const save = jest.fn(
@@ -1500,14 +1544,16 @@ describe('the Categories summary card (PET-48)', () => {
         }),
     );
 
-    render(<SettingsForm profile={PROFILE} summary={SUMMARY} save={save} themePref="system" />);
+    render(
+      <SettingsForm profile={PROFILE} summary={SUMMARY} canManage save={save} themePref="system" />,
+    );
 
     await user.clear(screen.getByLabelText('Display name'));
     await user.type(screen.getByLabelText('Display name'), 'Ana');
     await user.click(saveButton());
 
     await waitFor(() => expect(saveButton()).toBeDisabled());
-    expect(screen.getByRole('button', { name: 'Manage' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeDisabled();
 
     await act(async () => {
       resolve({ ok: true });
@@ -1516,7 +1562,15 @@ describe('the Categories summary card (PET-48)', () => {
 
   describe('when the categories read failed', () => {
     const renderDegraded = () =>
-      render(<SettingsForm profile={PROFILE} summary={null} save={jest.fn()} themePref="system" />);
+      render(
+        <SettingsForm
+          profile={PROFILE}
+          summary={null}
+          canManage
+          save={jest.fn()}
+          themePref="system"
+        />,
+      );
 
     it('says the totals are unavailable rather than drawing a figure', () => {
       renderDegraded();
@@ -1536,7 +1590,9 @@ describe('the Categories summary card (PET-48)', () => {
       const user = userEvent.setup();
       const save = jest.fn().mockResolvedValue({ ok: true });
 
-      render(<SettingsForm profile={PROFILE} summary={null} save={save} themePref="system" />);
+      render(
+        <SettingsForm profile={PROFILE} summary={null} canManage save={save} themePref="system" />,
+      );
 
       await user.clear(screen.getByLabelText('Display name'));
       await user.type(screen.getByLabelText('Display name'), 'Ana');

@@ -6,8 +6,32 @@ import { readPeriods } from '@/lib/periods';
 import { requireProfile } from '@/lib/profile';
 import { parseThemePref, THEME_COOKIE } from '@/lib/theme';
 
-import { toCategoriesSummary } from './categoriesSummary';
 import { SettingsScreen } from './SettingsScreen';
+
+/**
+ * How long this page will wait for the period list before rendering without it.
+ *
+ * A bound rather than a policy change: `lib/periods.ts` still rejects on failure, and this page
+ * still degrades, but a read that never settles is not a failure the `.catch` below can see.
+ * `lib/palette.ts` carries its own for the same reason and names the same hazard.
+ */
+const PERIODS_TIMEOUT_MS = 3_000;
+
+/** Resolves to `fallback` if the promise rejects, or if it has not settled in `ms`. */
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise.catch(() => fallback),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // 17 Settings (Figma node 40:630).
 //
@@ -60,22 +84,31 @@ export default async function SettingsPage() {
 
   // **Three reads in parallel as of PET-48's Manage modal, and `transactions/categories/page.tsx`
   // is the shape being copied** - including its warning that "a third adds no latency" holds only
-  // for a *fast* third, which is why `readPalette` carries its own timeout and the two beside it
-  // deliberately do not.
+  // for a *fast* third. Both of the new ones are bounded for that reason: `readPalette` carries its
+  // own timeout, and `readPeriods` is wrapped in one here, because a `Promise.all` renders at the
+  // speed of its slowest entry and an endpoint that *hangs* rather than refusing would otherwise
+  // hold the whole Settings page - the profile form included - for the lifetime of the socket, for
+  // a dialog nobody opened. A review of this PR found that edge; the bound is the answer to it.
   const [categories, palette, periods] = await Promise.all([
     readCategoriesView(),
     readPalette(),
-    // **Degraded to `[]` rather than allowed to throw, which departs from `lib/periods.ts`'s own
-    // policy on purpose.** There, periods back a header select that *is* the screen's content, so a
-    // failure that rendered a period-less header over period-scoped figures would be a screen that
-    // lies. Here they back one question inside a modal nobody has opened, and this route's rule -
-    // set by the summary card - is that `requireProfile()` is the only read with an opinion about
-    // whether the session is alive. It is safe rather than merely convenient: `EditCategoryModal`
-    // already guards an absent current period and falls back to sending the cap with no anchor,
-    // which its own comment calls "the honest fallback".
-    readPeriods()
-      .then((view) => view.periods)
-      .catch(() => []),
+    // **Degraded rather than allowed to throw, which departs from `lib/periods.ts`'s own policy on
+    // purpose** - but the consequence of the degrade is now *visible*, which is the half that was
+    // missing. On `/transactions/categories` periods back a header select that is the screen's
+    // content, so a failure there must throw. Here they back the cap-anchor question inside a
+    // modal, and this route's rule is that `requireProfile()` is the only read with an opinion
+    // about whether the session is alive.
+    //
+    // **An empty list no longer means "carry on without the question".** A review of this PR found
+    // that `EditCategoryModal` falls through to an unanchored `send()` when it can find no current
+    // period - so a cap raised from Settings during a periods outage silently re-priced the period
+    // already in progress, which is the exact rewriting PET-72 exists to prevent. The list is still
+    // degraded, and `SettingsScreen` now refuses to open the modal without it.
+    withTimeout(
+      readPeriods().then((view) => view.periods),
+      PERIODS_TIMEOUT_MS,
+      [],
+    ),
   ]);
 
   // **Every failure degrades to `null`, a 401 included, and that last part is the load-bearing
@@ -89,25 +122,23 @@ export default async function SettingsPage() {
   // version worth drawing. Here it is one sentence on the third of three cards: throwing would
   // replace a working, saveable profile form with an error page. `lib/palette.ts` is the precedent
   // - a failed secondary read is `null` and a degraded control, never an error boundary.
-  const summary = categories.ok
-    ? toCategoriesSummary(categories.data.categories, categories.data.allocation)
-    : null;
-
   return (
     <SettingsScreen
       profile={profile}
-      summary={summary}
       themePref={themePref}
-      // **The modal's rows come from the same response the summary above was reduced from**, so the
-      // card's sentence and the list behind its button cannot disagree about one account. An empty
-      // list is what a degraded read leaves, and the modal draws its empty state from it - a
-      // different fact from `summary: null`, which is the read having failed.
-      categories={categories.ok ? categories.data.categories : []}
-      allocation={
-        categories.ok
-          ? categories.data.allocation
-          : { monthlyBudget: 0, allocated: 0, unallocated: 0 }
-      }
+      // **One prop carrying the whole read, rather than three derived from it**, which a review of
+      // this PR is the reason for. The card's figures and the modal's rows come from one response,
+      // and passing them as `summary` / `categories` / `allocation` let a call site hand the two
+      // halves data about different accounts - which the suite and the stories on this branch were
+      // both doing, showing a card and a modal that disagreed with no gate objecting. Derived
+      // inside `SettingsScreen` now, so they cannot diverge by construction instead of by prose.
+      //
+      // **`null` is the read having failed, and it is deliberately not an empty account.** The
+      // first version passed `[]` and a zeroed allocation on failure, so pressing "Manage" during
+      // an outage drew "Monthly budget $0" over "You have no categories to manage yet" - an outage
+      // stated as a fact about the account, on an account with twelve categories. That is the
+      // empty-state-that-lies failure this repo has already paid for three times.
+      categories={categories.ok ? categories.data : null}
       palette={palette.ok ? palette.data : null}
       periods={periods}
     />

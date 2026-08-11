@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import type { Profile } from '@/lib/profile';
 
@@ -8,7 +9,6 @@ import { render } from '../shellRender';
 
 import { category, FALLBACK_CATEGORY } from '../transactions/categories/categoryFixture';
 
-import type { CategoriesSummary } from './categoriesSummary';
 import { SettingsScreen } from './SettingsScreen';
 
 // Thin on purpose. The form's behaviour is `SettingsForm.test.tsx`'s and the diff is
@@ -26,24 +26,23 @@ const PROFILE: Profile = {
   monthStartDay: 1,
 };
 
-const SUMMARY: CategoriesSummary = { count: 8, allocated: 1800, monthlyBudget: 2000 };
-
 /** Two managed rows and the fallback, which is what the Manage modal's own filter is about. */
 const CATEGORIES = [category(), category({ id: 'b', name: 'Transport' }), FALLBACK_CATEGORY];
 
 const ALLOCATION = { monthlyBudget: 2000, allocated: 1800, unallocated: 200 };
 
+/** One period, flagged current, which is what the Manage button needs to be enabled at all. */
+const PERIODS = [{ start: '2026-08-01', end: '2026-09-01', label: 'August 2026', current: true }];
+
 function renderScreen() {
   return render(
     <SettingsScreen
       profile={PROFILE}
-      summary={SUMMARY}
       save={jest.fn()}
       themePref="system"
-      categories={CATEGORIES}
-      allocation={ALLOCATION}
+      categories={{ categories: CATEGORIES, allocation: ALLOCATION }}
       palette={null}
-      periods={[]}
+      periods={PERIODS}
     />,
   );
 }
@@ -92,5 +91,60 @@ describe('SettingsScreen', () => {
     expect(main).not.toBeNull();
     expect(main!.querySelector('form')).not.toBeNull();
     expect(screen.getAllByRole('button', { name: 'Save changes' })).toHaveLength(1);
+  });
+});
+
+// **The one invariant `ManageCategoriesProvider` exists for, which had no assertion until a review
+// said so.** The dialogs it and the two category providers mount must render as *siblings* of
+// `SettingsForm`'s `<form>`, never inside it: `AddCategoryModal` and `EditCategoryModal` both pass
+// `onSubmit`, so `Modal` wraps their bodies in a real `<form>`, and a `<dialog>` does not break form
+// association. Nested, pressing Enter in the new category's Name field would submit the profile form
+// instead of creating the category.
+//
+// This is the only place it can be pinned. `SettingsForm.test.tsx` mocks the provider module away
+// and `ManageCategoriesProvider.test.tsx` mounts it around a synthetic trigger with no form in
+// sight, so both would survive the modal being moved back inside the card.
+describe('the Manage modal is mounted outside the page form', () => {
+  it('renders the dialog as a sibling of the form rather than a descendant', async () => {
+    const user = userEvent.setup();
+    const { container } = renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Manage' }));
+
+    const dialog = container.querySelector('dialog');
+
+    expect(dialog).not.toBeNull();
+    expect(container.querySelector('form')).not.toBeNull();
+    expect(dialog!.closest('form')).toBeNull();
+  });
+
+  it('disables Manage when the categories read failed, rather than opening onto zeroes', () => {
+    render(
+      <SettingsScreen
+        profile={PROFILE}
+        save={jest.fn()}
+        themePref="system"
+        categories={null}
+        palette={null}
+        periods={PERIODS}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeDisabled();
+  });
+
+  it('disables Manage when the period list is missing, because a cap edit would go unanchored', () => {
+    render(
+      <SettingsScreen
+        profile={PROFILE}
+        save={jest.fn()}
+        themePref="system"
+        categories={{ categories: CATEGORIES, allocation: ALLOCATION }}
+        palette={null}
+        periods={[]}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeDisabled();
   });
 });

@@ -693,8 +693,9 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   chasing the wrong ticket learns nothing. `settings/CategoriesSummaryCard.tsx` draws the count, the
   sum of the caps and the monthly budget over a secondary "Manage", from a second guarded read in
   `settings/page.tsx`. So **every card on frame 17 exists and this bullet's Settings half is
-  closed**; what keeps the bullet alive is two inert controls, which is what to read the paragraphs
-  above for. The prediction that the third card would be another sibling of `ProfileCard` did **not**
+  closed**; what kept the bullet alive at that point was this card's own inert "Manage", which the
+  paragraph below closes. (An earlier draft said "two inert controls" and counted the Dashboard's
+  month select among them, which PET-72 had already made real.) The prediction that the third card would be another sibling of `ProfileCard` did **not**
   hold: it reads rather than writes, so it takes one `summary` object instead of the shared four
   props, touches `settingsForm.ts` nowhere, and carries no `disabled` - a save in flight freezes
   every field on the page and deliberately not this card.
@@ -709,8 +710,13 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   written against. Recorded here rather than argued: PET-48's AC3 is amended on the ticket and
   `docs/TODO.md` carries the reasoning and the fix. Do not copy the pattern; copy the doctrine it
   departs from.
-  **PET-48's follow-up made it live, so the paragraph above is history and this bullet is down to one
-  inert control, the Dashboard's month select.** "Manage" opens
+  **PET-48's follow-up made it live, so the paragraph above is history and this bullet names no
+  inert control at all.** An earlier draft of this sentence said the list was "down to one, the
+  Dashboard's month select" - which was wrong rather than dated, and a review caught it: PET-72
+  replaced `MonthPill` with a real routing `PeriodSelect`, so that control had already been live for
+  two tickets, and the root `CLAUDE.md` paragraph added in the same commit said so. Two authority
+  files disagreeing about the same control is the failure this file exists to prevent, and it is
+  worth leaving the correction visible rather than editing it out. "Manage" opens
   `settings/ManageCategoriesModal.tsx`, the Spendifico Design System's own
   `ui_kits/spendifico-app/ManageCategoriesModal.jsx` rebuilt on daisyUI - a scrolling list of the
   account's categories with Edit and Delete on each, over a summary island and an "Add category". So

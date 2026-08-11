@@ -2,7 +2,7 @@
 
 import { createContext, use, useMemo, useState } from 'react';
 
-import type { Allocation, Category } from '@/lib/categories';
+import type { CategoriesView } from '@/lib/categories';
 import type { CreateCategoryResult } from '@/lib/createCategory';
 import type { Palette } from '@/lib/palette';
 import type { components } from '@/types/api';
@@ -58,15 +58,19 @@ export function useManageCategories(): ManageCategories {
 
 type ManageCategoriesProviderProps = {
   /**
-   * The account's categories and their allocation, threaded from `settings/page.tsx`.
+   * The categories read's payload, or `null` when that read failed.
    *
-   * **Passed whole and re-read on every render, which is the modal's own resync rule reaching one
-   * level up.** A delete lands, `router.refresh()` re-runs the route, new props arrive here and the
-   * open modal drops the dead row. Holding these in state on open - `AllocateBudgetModal`'s call -
+   * **Passed whole and re-read on every render**, which is the modal's own resync rule reaching one
+   * level up: a delete lands, `router.refresh()` re-runs the route, new props arrive here and the
+   * open modal drops the dead row. Holding it in state on open - `AllocateBudgetModal`'s call -
    * would freeze the list against the writes its own buttons perform.
+   *
+   * **`null` renders no modal at all**, rather than one drawing zeroes. `SettingsScreen` already
+   * refuses to enable the trigger in that state, so this is the second half of one decision rather
+   * than a state a user can reach; it is here so the component cannot be made to lie by a future
+   * call site that forgets the gate.
    */
-  categories: Category[];
-  allocation: Allocation;
+  view: CategoriesView | null;
   /** For both sub-modals' pickers. `null` is a failed read, which they already model as disabled. */
   palette: Palette | null;
   /** The create action, injected so a story can press "Add category" without reaching `cookies()`. */
@@ -75,8 +79,7 @@ type ManageCategoriesProviderProps = {
 };
 
 export function ManageCategoriesProvider({
-  categories,
-  allocation,
+  view,
   palette,
   create,
   children,
@@ -94,10 +97,10 @@ export function ManageCategoriesProvider({
           and `queryAllByLabelText` **can** - so an always-mounted modal would put a row per category
           into the Settings tree forever and make every text query on that screen ambiguous.
           `(app)/pages.test.tsx` depends on this, and `AllocateBanner` records the same rule. */}
-      {open ? (
+      {open && view !== null ? (
         <ManageCategoriesModal
-          categories={categories}
-          allocation={allocation}
+          categories={view.categories}
+          allocation={view.allocation}
           palette={palette}
           create={create}
           onClose={() => setOpen(false)}

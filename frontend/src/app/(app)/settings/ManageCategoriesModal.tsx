@@ -122,6 +122,19 @@ export function ManageCategoriesModal({
   const ledger = toAllocateLedger(allocation, categories);
   const totals = toAllocateTotals(draft, ledger);
 
+  // **Whether the caps have been allowed to exceed the budget, which `toAllocateTotals` cannot
+  // tell you.** That function clamps the remainder at zero, and a review of this modal found the
+  // clamp unsafe *here* although it is correct next door: `AllocateBudgetModal` only ever renders
+  // behind `AllocateBanner`'s `unallocated > 0` gate and snaps every field so the sum cannot pass
+  // the budget, and this modal has neither. `AllocationResponseDto.unallocated` is documented as
+  // negative-capable (A43), reachable by lowering the budget in the Preferences card above or by
+  // setting caps one at a time through `EditCategoryModal`, which never sees the budget.
+  //
+  // Unclamped, so the row below can report the overage instead of printing "Unassigned €0" under a
+  // rule drawn to say the column sums.
+  const overWhole = totals.assignedWhole - totals.budgetWhole;
+  const isOverAllocated = overWhole > 0;
+
   return (
     <Modal
       title="Manage categories"
@@ -171,14 +184,28 @@ export function ManageCategoriesModal({
                 emphasis; here the three figures are peers describing an account, and a bolder
                 "Unassigned" reads as a warning about a number that is merely a fact. The rule
                 above it stays, because that is what says the column sums. */}
+            {/* **The over-allocated account gets its own row rather than a clamped zero**, which is
+                a review finding: "Unassigned €0" beside an assigned figure larger than the budget is
+                the column contradicting the rule above it. `text-error` because this one *is* a
+                state worth marking, unlike the ordinary remainder beside it. */}
             <div className="border-base-300 flex justify-between gap-4 border-t pt-1.5">
-              <dt className="text-base-content/60">Unassigned</dt>
-              <dd className="font-medium">{formatWhole(totals.unassignedWhole)}</dd>
+              <dt className={isOverAllocated ? 'text-error' : 'text-base-content/60'}>
+                {isOverAllocated ? 'Over budget' : 'Unassigned'}
+              </dt>
+              <dd className={isOverAllocated ? 'text-error font-medium' : 'font-medium'}>
+                {formatWhole(isOverAllocated ? overWhole : totals.unassignedWhole)}
+              </dd>
             </div>
           </dl>
         </div>
 
-        <AllocationBar draft={draft} ledger={ledger} />
+        {/* **Drawn only while the caps fit the budget**, because `AllocationBar`'s own comment says
+            its segments are flex children whose correctness depends on "Keeping Σ ≤ 100". Over
+            budget they sum past 100%, every segment is flex-shrunk, and an over-allocated account
+            renders pixel-identical to a perfectly allocated one - a bar that cannot show the one
+            fact the row above it now reports. Suppressed rather than fixed here: the fix belongs to
+            that component, and drawing nothing is honest where drawing it is not. */}
+        {isOverAllocated ? null : <AllocationBar draft={draft} ledger={ledger} />}
 
         {/* Counted over the listed rows, so the fallback - uncapped on every account - cannot make
             this read one high for everybody. `manageCategories.ts` owns both halves. */}

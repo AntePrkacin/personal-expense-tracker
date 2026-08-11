@@ -1,4 +1,4 @@
-import type { Allocation, Category } from '@/lib/categories';
+import type { CategoriesView } from '@/lib/categories';
 import type { createCategory, CreateCategoryResult } from '@/lib/createCategory';
 import type { deleteCategory, DeleteCategoryResult } from '@/lib/deleteCategory';
 import type { Palette } from '@/lib/palette';
@@ -12,7 +12,7 @@ import { PageHeader } from '../PageHeader';
 import { DeleteCategoryProvider } from '../transactions/categories/DeleteCategoryProvider';
 import { EditCategoryProvider } from '../transactions/categories/EditCategoryProvider';
 
-import type { CategoriesSummary } from './categoriesSummary';
+import { toCategoriesSummary } from './categoriesSummary';
 import { ManageCategoriesProvider } from './ManageCategoriesProvider';
 import { SettingsForm } from './SettingsForm';
 
@@ -29,21 +29,14 @@ import { SettingsForm } from './SettingsForm';
 // views with no header control at all, because "Save changes" lives at the foot of the form. An
 // omitted prop is what makes the header render nothing on the right rather than an empty box.
 //
-// **Two props rather than one as of PET-48**, and the second is not a second profile. `summary` is
-// the Categories card's three figures, which come from a different endpoint and a different failure
-// policy - `page.tsx` is where both of those are decided. This screen only threads it.
+// **It takes the categories read whole as of PET-48, and reduces it here.** The card's three
+// figures and the Manage modal's rows come from one response, so this screen derives the first from
+// the second rather than taking both - which a review found let a call site hand the card and the
+// modal data about different accounts. The failure policy is still `page.tsx`'s; what arrives here
+// is either the response or `null`.
 
 type SettingsScreenProps = {
   profile: Profile;
-  /**
-   * The Categories card's figures, or `null` when that read failed - passed straight through to the
-   * form, which is where the reasoning lives.
-   *
-   * Required rather than defaulted to `null`, for the reason `TransactionsScreen`'s `filters` is:
-   * `npm run build` never typechecks `*.test.tsx`, so a default would let a call site quietly test
-   * a screen whose third card is permanently in its failure state.
-   */
-  summary: CategoriesSummary | null;
   /**
    * Threaded through to the form, which is where the reasoning lives: Storybook bundles a
    * `'use server'` module as an ordinary one, so a story pressing Save would reach `cookies()` in
@@ -59,17 +52,21 @@ type SettingsScreenProps = {
    */
   themePref: ThemePref;
   /**
-   * The account's categories whole, and their allocation, for the Manage categories modal.
+   * The account's categories and their allocation as `GET /api/categories` answered, or `null` when
+   * that read failed.
    *
-   * **Separate from `summary` rather than replacing it**, though the summary is derivable from these
-   * two. The card's three figures are a *different* fact with a different failure mode: `summary` is
-   * `null` when the read failed and the card says so, while an empty `categories` is a real account
-   * the modal draws an empty state for. Collapsing them would make "the read failed" and "you have
-   * no categories" one value again, which is the mistake `TransactionsScreen`'s no-results copy and
-   * `InsightTeaserCard`'s third state each paid for separately.
+   * **One prop rather than the three this shipped with**, which a review of PET-48 is the reason
+   * for. `summary`, `categories` and `allocation` were all derived from one response and passed
+   * separately, so nothing stopped a caller handing the card figures for one account and the modal
+   * rows for another - and the suite and the stories were both doing exactly that. The reduction to
+   * the card's three figures happens below instead, so the two cannot disagree by construction.
+   *
+   * **`null` is the read having failed, and it is not the same fact as an empty list.** An account
+   * with only the fallback is a real account the modal draws an empty state for; a failed read is
+   * an outage, and drawing it as an empty account is the mistake this repo has paid for three times
+   * already. See `canManage` below for what it costs the button.
    */
-  categories: Category[];
-  allocation: Allocation;
+  categories: CategoriesView | null;
   /** The colours and icons both sub-modals offer, or `null` when that read failed. */
   palette: Palette | null;
   /** Every period, for the cap-anchor question `EditCategoryModal` asks. `[]` is a failed read. */
@@ -93,22 +90,41 @@ type SettingsScreenProps = {
 
 export function SettingsScreen({
   profile,
-  summary,
   save,
   themePref,
   categories,
-  allocation,
   palette,
   periods,
   createCategoryAction,
   updateCategoryAction,
   deleteCategoryAction,
 }: SettingsScreenProps) {
+  // **The card's three figures, derived here from the one response the modal also draws from.**
+  // `null` when the read failed, which is what makes the card say so rather than print zeroes.
+  const summary =
+    categories === null ? null : toCategoriesSummary(categories.categories, categories.allocation);
+
+  // **Whether "Manage" can open at all, and both halves are review findings.**
+  //
+  // Without `categories` the modal has nothing true to say: it would draw a $0 budget over "you
+  // have no categories" during an outage. Without `periods` it is worse than uninformative -
+  // `EditCategoryModal` falls through to an unanchored cap write when it can find no current
+  // period, so a cap raised here would silently re-price the period already in progress, which is
+  // the rewriting PET-72 exists to prevent. A `palette` of `null` is **not** in this list: both
+  // sub-modals already model that as disabled pickers with a line saying why, which is a degraded
+  // control rather than a wrong one.
+  //
+  // The card above the button already explains the failure, so the button is `disabled` rather than
+  // announcing a reason of its own - the treatment "Save changes" uses for the same shape of
+  // temporary unavailability, and deliberately not the `aria-disabled` this repo reserves for
+  // drawn-but-unbuilt controls. There is nothing unbuilt here; there is something unavailable.
+  const canManage = categories !== null && periods.length > 0;
+
   // **The fallback's name comes off the response rather than being written here**, which is
   // `CategoriesScreen`'s rule: that row's name is the backend's to choose, and the delete
-  // confirmation quotes it. The `??` covers a categories read that degraded to an empty list, where
-  // no dialog can open anyway because the modal has no rows to open one from.
-  const fallbackName = categories.find((category) => category.isFallback)?.name ?? 'Uncategorized';
+  // confirmation quotes it.
+  const fallbackName =
+    categories?.categories.find((category) => category.isFallback)?.name ?? 'Uncategorized';
 
   return (
     // **The nesting order is a requirement rather than tidiness.** `EditCategoryProvider` calls
@@ -123,15 +139,16 @@ export function SettingsScreen({
     // argument in full; it is innermost only because it is the one that consumes the other two.
     <DeleteCategoryProvider fallbackName={fallbackName} remove={deleteCategoryAction}>
       <EditCategoryProvider palette={palette} periods={periods} update={updateCategoryAction}>
-        <ManageCategoriesProvider
-          categories={categories}
-          allocation={allocation}
-          palette={palette}
-          create={createCategoryAction}
-        >
+        <ManageCategoriesProvider view={categories} palette={palette} create={createCategoryAction}>
           <PageHeader overline="Manage your account" title="Settings" />
           <main className="flex-1 pb-10">
-            <SettingsForm profile={profile} summary={summary} save={save} themePref={themePref} />
+            <SettingsForm
+              profile={profile}
+              summary={summary}
+              canManage={canManage}
+              save={save}
+              themePref={themePref}
+            />
           </main>
         </ManageCategoriesProvider>
       </EditCategoryProvider>

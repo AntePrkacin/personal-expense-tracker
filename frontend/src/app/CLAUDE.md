@@ -2861,6 +2861,20 @@ calls `useDeleteCategory()`.
 `transactions/categories/page.tsx`. The periods one is the departure worth knowing: `lib/periods.ts`
 throws by design, because on that page a period-less header over period-scoped figures is a screen
 that lies - here the periods back one question inside a modal nobody has opened, and
-`EditCategoryModal` already guards an absent current period by sending the cap with no anchor, which
-its own comment calls "the honest fallback". `(app)/pages.test.tsx` pins both degraded arms, and the
-periods case is written as a **rejection** so it fails if the `.catch` is ever removed.
+`EditCategoryModal` guards an absent current period by sending the cap with no anchor, which its own
+comment calls "the honest fallback". `(app)/pages.test.tsx` pins both degraded arms, and the periods
+case is written as a **rejection** so it fails if the `.catch` is ever removed.
+
+**A review of that arrangement found the periods half unsafe as first written, and the fix is worth
+knowing before copying the shape.** "The honest fallback" is honest for a caller that has no anchor
+to offer; it is not honest for one that simply failed to load the list. A cap raised from Settings
+during a periods outage was sent unanchored, so the backend dated it at the current period and
+**retroactively re-priced the period already in progress** - the exact rewriting PET-72 exists to
+prevent, with no dialog and nothing on screen to say the anchor had been dropped. So the degrade
+stays and its consequence is now **visible**: `SettingsScreen` resolves a `canManage` flag and the
+card's "Manage" is `disabled` when either the categories or the periods read is missing. The general
+rule that leaves is worth stating - **a read may only be degraded to a value the UI can tell apart
+from a real one**, and where it cannot, the control that would consume it closes instead. The same
+review found the categories half degrading to an empty list plus a zeroed allocation, which the
+modal drew as "you have no categories" over a $0 budget: an outage stated as a fact about the
+account. It is `null` now, and `null` renders no modal at all.

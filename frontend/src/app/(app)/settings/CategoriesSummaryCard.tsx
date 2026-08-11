@@ -37,9 +37,21 @@ type CategoriesSummaryCardProps = {
    * bargain. `lib/palette.ts` makes the identical call for the same shape of reason.
    */
   summary: CategoriesSummary | null;
+  /**
+   * Whether "Manage" can open the modal.
+   *
+   * **False is an unavailable control, not an unbuilt one**, which is why it renders `disabled`
+   * rather than the `aria-disabled` this repo reserves for drawn-but-unbuilt affordances. Two
+   * reviews' worth of reasons, both resolved one level up in `SettingsScreen`: without the
+   * categories read the modal would state a $0 budget over "you have no categories" during an
+   * outage, and without the period list a cap edited through it would silently re-price the period
+   * already in progress. The line above this button already says the totals are unavailable, so the
+   * disabled control has its explanation beside it rather than needing one of its own.
+   */
+  canManage: boolean;
 };
 
-export function CategoriesSummaryCard({ summary }: CategoriesSummaryCardProps) {
+export function CategoriesSummaryCard({ summary, canManage }: CategoriesSummaryCardProps) {
   // The Manage modal's seam. A hook rather than a prop threaded through `SettingsForm`, because the
   // modal has to be mounted outside this card's `<form>` and the state therefore lives above it -
   // `ManageCategoriesProvider` is where that is argued.
@@ -124,7 +136,13 @@ export function CategoriesSummaryCard({ summary }: CategoriesSummaryCardProps) {
               `submit` and "Manage" saves the profile instead of opening the modal. That was true
               while the button did nothing and it is more reachable now that it does something -
               `SettingsForm`'s suite still pins that pressing it sends no PATCH. */}
-          <Button variant="secondary" label="Manage" type="button" onClick={openManage} />
+          <Button
+            variant="secondary"
+            label="Manage"
+            type="button"
+            disabled={!canManage}
+            onClick={openManage}
+          />
         </div>
       </div>
     </section>

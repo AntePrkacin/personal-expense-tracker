@@ -8,7 +8,6 @@ import type { UpdateProfileResult } from '@/lib/updateProfile';
 import { PreferencesProvider } from '../PreferencesProvider';
 import { category, FALLBACK_CATEGORY } from '../transactions/categories/categoryFixture';
 
-import type { CategoriesSummary } from './categoriesSummary';
 import { SettingsScreen } from './SettingsScreen';
 
 // The import above is type-only on purpose. Importing any *value* from Storybook breaks the story
@@ -64,9 +63,6 @@ const PROFILE: Profile = {
   monthStartDay: 1,
 };
 
-/** Frame `40:722`'s own figures, with the fallback already excluded from the count. */
-const SUMMARY: CategoriesSummary = { count: 8, allocated: 1800, monthlyBudget: 2000 };
-
 const accept = async (): Promise<UpdateProfileResult> => ({ ok: true });
 
 /**
@@ -84,6 +80,9 @@ const CATEGORIES: Category[] = [
 ];
 
 const ALLOCATION: Allocation = { monthlyBudget: 2000, allocated: 850, unallocated: 1150 };
+
+/** One current period, which is what enables the card's "Manage". */
+const PERIODS = [{ start: '2026-08-01', end: '2026-09-01', label: 'August 2026', current: true }];
 
 /**
  * The screen inside the one piece of the shell it cannot do without.
@@ -107,13 +106,14 @@ const meta: Meta<typeof SettingsScreen> = {
   parameters: { layout: 'fullscreen', nextjs: { appDirectory: true } },
   args: {
     profile: PROFILE,
-    summary: SUMMARY,
     save: accept,
     themePref: 'system',
-    categories: CATEGORIES,
-    allocation: ALLOCATION,
+    // One prop, so the card's figures and the modal's rows cannot describe different accounts -
+    // which is what this file was doing before a review caught it: `SUMMARY` claimed eight
+    // categories beside a `CATEGORIES` holding two and the fallback.
+    categories: { categories: CATEGORIES, allocation: ALLOCATION },
     palette: null,
-    periods: [],
+    periods: PERIODS,
   },
   // On `meta` for the browser, and repeated on every story below because the smoke harness reads
   // `story.render` or `meta.component` and never `meta.render`. Both are needed: without this one
@@ -167,7 +167,12 @@ export const LongValues: Story = {
  * with one row plus the fallback this card does not count.
  */
 export const SingleCategory: Story = {
-  args: { summary: { count: 1, allocated: 200, monthlyBudget: 2000 } },
+  args: {
+    categories: {
+      categories: [category({ name: 'Groceries', monthlyCap: 200, spent: 120 }), FALLBACK_CATEGORY],
+      allocation: { monthlyBudget: 2000, allocated: 200, unallocated: 1800 },
+    },
+  },
   render: (args) => <Frame {...args} />,
 };
 
@@ -179,7 +184,12 @@ export const SingleCategory: Story = {
  * is what to put in front of a designer for it, alongside the unavailable line below.
  */
 export const NoCategories: Story = {
-  args: { summary: { count: 0, allocated: 0, monthlyBudget: 2000 } },
+  args: {
+    categories: {
+      categories: [FALLBACK_CATEGORY],
+      allocation: { monthlyBudget: 2000, allocated: 0, unallocated: 2000 },
+    },
+  },
   render: (args) => <Frame {...args} />,
 };
 
@@ -192,7 +202,9 @@ export const NoCategories: Story = {
  * throwing. Its one sentence is invented copy and owes A29 a sign-off with the rest.
  */
 export const CategoriesUnavailable: Story = {
-  args: { summary: null },
+  // The failed read. The card says so and "Manage" is disabled, because a modal drawing zeroes over
+  // "you have no categories" would state an outage as a fact about the account.
+  args: { categories: null },
   render: (args) => <Frame {...args} />,
 };
 

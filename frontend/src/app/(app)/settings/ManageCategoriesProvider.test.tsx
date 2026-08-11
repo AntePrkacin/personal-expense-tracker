@@ -33,7 +33,10 @@ function Trigger() {
 
 function renderProvider() {
   return render(
-    <ManageCategoriesProvider categories={CATEGORIES} allocation={ALLOCATION} palette={null}>
+    <ManageCategoriesProvider
+      view={{ categories: CATEGORIES, allocation: ALLOCATION }}
+      palette={null}
+    >
       <Trigger />
     </ManageCategoriesProvider>,
   );
@@ -70,6 +73,22 @@ describe('ManageCategoriesProvider', () => {
 
   // The call `AddTransactionProvider` and `useFilterNavigation` both make: a control that quietly
   // stops opening is a bug that looks like a slow render, so the seam is loud outside its provider.
+  // The half added after a review: `null` is a failed read, and the modal must not open on it at
+  // all rather than opening onto zeroes.
+  it('opens nothing when the categories read failed', async () => {
+    const user = userEvent.setup();
+    render(
+      <ManageCategoriesProvider view={null} palette={null}>
+        <Trigger />
+      </ManageCategoriesProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Manage' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Manage categories')).not.toBeInTheDocument();
+  });
+
   it('throws outside the provider rather than returning a no-op', () => {
     const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
 
