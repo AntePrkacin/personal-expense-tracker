@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
 
 import { readCategoriesView } from '@/lib/categories';
+import { readPalette } from '@/lib/palette';
+import { readPeriods } from '@/lib/periods';
 import { requireProfile } from '@/lib/profile';
 import { parseThemePref, THEME_COOKIE } from '@/lib/theme';
 
@@ -56,7 +58,25 @@ export default async function SettingsPage() {
   // costs nothing.
   const themePref = parseThemePref((await cookies()).get(THEME_COOKIE)?.value);
 
-  const categories = await readCategoriesView();
+  // **Three reads in parallel as of PET-48's Manage modal, and `transactions/categories/page.tsx`
+  // is the shape being copied** - including its warning that "a third adds no latency" holds only
+  // for a *fast* third, which is why `readPalette` carries its own timeout and the two beside it
+  // deliberately do not.
+  const [categories, palette, periods] = await Promise.all([
+    readCategoriesView(),
+    readPalette(),
+    // **Degraded to `[]` rather than allowed to throw, which departs from `lib/periods.ts`'s own
+    // policy on purpose.** There, periods back a header select that *is* the screen's content, so a
+    // failure that rendered a period-less header over period-scoped figures would be a screen that
+    // lies. Here they back one question inside a modal nobody has opened, and this route's rule -
+    // set by the summary card - is that `requireProfile()` is the only read with an opinion about
+    // whether the session is alive. It is safe rather than merely convenient: `EditCategoryModal`
+    // already guards an absent current period and falls back to sending the cap with no anchor,
+    // which its own comment calls "the honest fallback".
+    readPeriods()
+      .then((view) => view.periods)
+      .catch(() => []),
+  ]);
 
   // **Every failure degrades to `null`, a 401 included, and that last part is the load-bearing
   // half.** `requireProfile()` above is the read that decides whether the session is alive; two
@@ -73,5 +93,23 @@ export default async function SettingsPage() {
     ? toCategoriesSummary(categories.data.categories, categories.data.allocation)
     : null;
 
-  return <SettingsScreen profile={profile} summary={summary} themePref={themePref} />;
+  return (
+    <SettingsScreen
+      profile={profile}
+      summary={summary}
+      themePref={themePref}
+      // **The modal's rows come from the same response the summary above was reduced from**, so the
+      // card's sentence and the list behind its button cannot disagree about one account. An empty
+      // list is what a degraded read leaves, and the modal draws its empty state from it - a
+      // different fact from `summary: null`, which is the read having failed.
+      categories={categories.ok ? categories.data.categories : []}
+      allocation={
+        categories.ok
+          ? categories.data.allocation
+          : { monthlyBudget: 0, allocated: 0, unallocated: 0 }
+      }
+      palette={palette.ok ? palette.data : null}
+      periods={periods}
+    />
+  );
 }

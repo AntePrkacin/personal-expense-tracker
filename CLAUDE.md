@@ -88,12 +88,24 @@ screen, and no card on any of the four routed views is missing. Two things about
 rather than shape, and both were the product owner's. The count **excludes the `Uncategorized`
 fallback**, so this card reads one lower than the Transactions tab badge on the same account -
 deliberate, because the card is about the categories a user manages and the fallback is the one they
-cannot. And **"Manage" is inert**, with no `disabled` and no `aria-disabled`, though the Categories
-tab it would open exists and is complete: the ticket's AC3 is amended and `docs/TODO.md` carries the
-gap. That makes it the app's only silently inert control, so **PET-72's "the app has no inert
-control anywhere" above is true of everything except this one button** - read that clause as narrowed
-rather than as still holding. Worth knowing before copying it, because every other drawn-but-unbuilt
-control here announces its state, and PET-70 had cleared the last of them.
+cannot. The second was that **"Manage" shipped inert**, with no `disabled` and no `aria-disabled`,
+which made it the app's only silently inert control and narrowed PET-72's "the app has no inert
+control anywhere" to everything except one button.
+
+**That second decision is superseded, and PET-72's clause holds again without an exception.**
+"Manage" opens the **Manage categories modal**, which the Spendifico Design System drew
+(`ui_kits/spendifico-app/ManageCategoriesModal.jsx`) and which frame 17 does not: the account's
+categories in a scrolling list, each with Edit and Delete, over a summary island and an "Add
+category". So AC3 is superseded rather than amended - the button opens a dialog and never navigates
+to the Categories tab - and **this app once again ships no control that looks operable and is not.**
+Three things about it are worth knowing before touching either screen. The modal **performs no write
+of its own**: `AddCategoryModal`, `EditCategoryModal` and `DeleteCategoryDialog` already owned every
+one and all three open over it, so this was assembly rather than new behaviour and needed no
+`api:sync`. It **excludes `Uncategorized`** where the design draws its "Other" like any other row,
+which is `allocatableCategories`' existing call from PET-70 rather than a new rule. And the Settings
+route grew two reads for it - the palette and the periods - both of which **degrade rather than
+throw**, because `requireProfile()` stays the only read on that page with an opinion about whether
+the session is alive.
 
 ## Repository map
 

@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { useEffect, useRef } from 'react';
 
+import type { Allocation, Category } from '@/lib/categories';
 import type { Profile } from '@/lib/profile';
 import type { UpdateProfileResult } from '@/lib/updateProfile';
 
 import { PreferencesProvider } from '../PreferencesProvider';
+import { category, FALLBACK_CATEGORY } from '../transactions/categories/categoryFixture';
 
 import type { CategoriesSummary } from './categoriesSummary';
 import { SettingsScreen } from './SettingsScreen';
@@ -41,9 +43,10 @@ import { SettingsScreen } from './SettingsScreen';
 // Two deliberate differences from the frame in the second card, both recorded where they are
 // decided: currency is the budget field's left segment rather than a row of its own
 // (`components/BudgetField.tsx`), and there is no "On track" status chip in the header, because
-// Settings fetches no dashboard data to put behind one (`settings/PreferencesCard.tsx`). One in the
-// third: its "Manage" is inert by product decision, so the story's button navigates nowhere
-// (`settings/CategoriesSummaryCard.tsx`).
+// Settings fetches no dashboard data to put behind one (`settings/PreferencesCard.tsx`). The third
+// card's "Manage" is live as of PET-48's follow-up and opens the Manage categories modal, which
+// **these stories cannot show**: it is provider state, so pressing the button here opens the real
+// dialog over the screen. Its own states are `Screens/Manage categories`.
 //
 // **Every story goes through `Frame` and none may render `SettingsScreen` directly.** The Categories
 // card calls `useMoney()`, which throws outside `PreferencesProvider` - and the provider cannot live
@@ -67,6 +70,22 @@ const SUMMARY: CategoriesSummary = { count: 8, allocated: 1800, monthlyBudget: 2
 const accept = async (): Promise<UpdateProfileResult> => ({ ok: true });
 
 /**
+ * The account behind the Categories card's "Manage", which opens the Manage categories modal.
+ *
+ * Present in every story because the props are required, and required for `TransactionsScreen`'s
+ * documented reason: `npm run build` never typechecks `*.tsx` tests or stories' arg objects deeply
+ * enough to catch a screen quietly rendered with no categories behind its one modal.
+ * `Screens/Manage categories` is where that modal's own states are reviewed.
+ */
+const CATEGORIES: Category[] = [
+  category({ name: 'Groceries', monthlyCap: 500, spent: 397 }),
+  category({ id: 'b', name: 'Transport', color: 'info', icon: 'bus', monthlyCap: 350, spent: 223 }),
+  FALLBACK_CATEGORY,
+];
+
+const ALLOCATION: Allocation = { monthlyBudget: 2000, allocated: 850, unallocated: 1150 };
+
+/**
  * The screen inside the one piece of the shell it cannot do without.
  *
  * The provider's currency is read off the story's own profile rather than pinned to `USD`, so a
@@ -86,7 +105,16 @@ const meta: Meta<typeof SettingsScreen> = {
   component: SettingsScreen,
   tags: ['autodocs'],
   parameters: { layout: 'fullscreen', nextjs: { appDirectory: true } },
-  args: { profile: PROFILE, summary: SUMMARY, save: accept, themePref: 'system' },
+  args: {
+    profile: PROFILE,
+    summary: SUMMARY,
+    save: accept,
+    themePref: 'system',
+    categories: CATEGORIES,
+    allocation: ALLOCATION,
+    palette: null,
+    periods: [],
+  },
   // On `meta` for the browser, and repeated on every story below because the smoke harness reads
   // `story.render` or `meta.component` and never `meta.render`. Both are needed: without this one
   // Storybook's own docs page would render the bare component, and without the per-story ones the

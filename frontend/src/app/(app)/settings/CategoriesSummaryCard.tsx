@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { useMoney } from '../PreferencesProvider';
 
 import { categoryCountLabel, type CategoriesSummary } from './categoriesSummary';
+import { useManageCategories } from './ManageCategoriesProvider';
 
 // The "Categories" card on 17 Settings (SET-4, frame `40:722`): how the account's categories add up,
 // and the way through to where they are edited.
@@ -39,6 +40,11 @@ type CategoriesSummaryCardProps = {
 };
 
 export function CategoriesSummaryCard({ summary }: CategoriesSummaryCardProps) {
+  // The Manage modal's seam. A hook rather than a prop threaded through `SettingsForm`, because the
+  // modal has to be mounted outside this card's `<form>` and the state therefore lives above it -
+  // `ManageCategoriesProvider` is where that is argued.
+  const { open: openManage } = useManageCategories();
+
   // Reads the *saved* currency, off the profile `(app)/layout.tsx` handed the provider - which is
   // deliberately not the one the Preferences card above may be mid-edit. Every figure on this card
   // is a saved figure, so a symbol from an unsaved edit would be the one lie the card could tell.
@@ -98,21 +104,27 @@ export function CategoriesSummaryCard({ summary }: CategoriesSummaryCardProps) {
             )}
           </div>
 
-          {/* **Inert by product decision, and deliberately neither `disabled` nor
-              `aria-disabled`.** AC3 asks this to open the Categories tab, and that route exists -
-              `TAB_HREFS.categories` is the destination and `<Button href>` is the whole change -
-              so this is a decision rather than a blocker, and the ticket carries the amendment.
+          {/* **Live as of PET-48's follow-up, and the third answer this control has had.** It
+              shipped inert by a product decision - no `disabled`, no `aria-disabled`, the app's one
+              silently dead control - over an AC3 that asked it to open the Categories tab. The
+              product owner's answer is now neither: it opens the **Manage categories modal**, which
+              the design system drew (`ui_kits/spendifico-app/ManageCategoriesModal.jsx`). So AC3 is
+              superseded rather than met, and this button never navigates.
 
-              It knowingly departs from this repo's own convention: every drawn-but-unbuilt control
-              here announces `aria-disabled` so a reader is told rather than left pressing, and
-              PET-70 had cleared the last of them. `docs/TODO.md` records the gap.
+              **It opens through a provider rather than owning the modal**, which is not the shape
+              `AddCategoryButton`'s one-trigger-one-route rule would pick. This card sits inside
+              `SettingsForm`'s `<form>`, and the modals that one opens over itself have forms of
+              their own - so a dialog rendered from here would nest a `<form>` inside the page's.
+              `ManageCategoriesProvider` mounts it as a sibling of the form instead, and carries the
+              full argument.
 
-              **`type="button"` is the one part that is not optional.** `ui/Button` defaults `type`
-              to `button` already, and it is passed explicitly anyway because this control sits
-              inside the page's `<form>`: the day somebody replaces it with a bare `<button>`, the
-              default flips to `submit` and "Manage" starts saving the profile. `SettingsForm`'s
-              suite pins the press sending nothing. */}
-          <Button variant="secondary" label="Manage" type="button" />
+              **`type="button"` stays, and it is still not optional.** `ui/Button` defaults `type` to
+              `button`, and it is passed explicitly anyway because this control is inside the page's
+              `<form>`: the day somebody replaces it with a bare `<button>`, the default flips to
+              `submit` and "Manage" saves the profile instead of opening the modal. That was true
+              while the button did nothing and it is more reachable now that it does something -
+              `SettingsForm`'s suite still pins that pressing it sends no PATCH. */}
+          <Button variant="secondary" label="Manage" type="button" onClick={openManage} />
         </div>
       </div>
     </section>

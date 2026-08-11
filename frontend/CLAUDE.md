@@ -709,6 +709,18 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   written against. Recorded here rather than argued: PET-48's AC3 is amended on the ticket and
   `docs/TODO.md` carries the reasoning and the fix. Do not copy the pattern; copy the doctrine it
   departs from.
+  **PET-48's follow-up made it live, so the paragraph above is history and this bullet is down to one
+  inert control, the Dashboard's month select.** "Manage" opens
+  `settings/ManageCategoriesModal.tsx`, the Spendifico Design System's own
+  `ui_kits/spendifico-app/ManageCategoriesModal.jsx` rebuilt on daisyUI - a scrolling list of the
+  account's categories with Edit and Delete on each, over a summary island and an "Add category". So
+  AC3 is **superseded** rather than amended, because the answer turned out to be neither the inert
+  button nor the `<Button href>` this list kept nominating, and **this app ships no silently inert
+  control again**. Keep reading the paragraph above for the doctrine; the one sentence in it that is
+  now false is the one calling this the app's only such control. Two things about the modal belong on
+  _this_ list rather than in the route file: it **performs no write of its own**, so the three
+  category modals it opens over itself are where every write still lives, and it needed **no
+  `api:sync`** for the same reason.
 - **Every read a screen needs for its own data, bar the transactions list, the dashboard summary
   and the categories.** PET-52 ended the "nothing reads at all" era: `lib/session.ts` calls
   `GET /api/auth/session` and `lib/profile.ts` calls `GET /api/profile`, both lifting the session

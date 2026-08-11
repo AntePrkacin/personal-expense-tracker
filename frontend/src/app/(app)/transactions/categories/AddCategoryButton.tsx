@@ -2,14 +2,16 @@
 
 import { useState } from 'react';
 
-import { Button } from '@/components/ui/Button';
+import { Button, type ButtonVariant } from '@/components/ui/Button';
 import { createCategory, type CreateCategoryResult } from '@/lib/createCategory';
 import type { Palette } from '@/lib/palette';
 import type { components } from '@/types/api';
 
 import { AddCategoryModal } from './AddCategoryModal';
 
-// The Categories tab's header action (CTG-1, CED-3), and the only trigger this feature has.
+// The Categories tab's header action (CTG-1, CED-3), and as of PET-48 also the Manage categories
+// modal's footer action - so "the only trigger this feature has", which this line said until then,
+// is now two on two routes.
 //
 // **It replaces the inert `<button aria-disabled>` PET-36 shipped inside `CategoriesScreen`**, which
 // that file's own note said PET-37 would swap for "a provider-backed trigger shaped like
@@ -19,8 +21,10 @@ import { AddCategoryModal } from './AddCategoryModal';
 // component exists because ADD-1 lists five triggers across three routes and two of them sit on the
 // same page - so a component owning its own modal would mount two `<dialog>` elements with two focus
 // traps and two copies of every field id, which `ui/FieldShell` requires as literal props precisely
-// because `useId` would force `'use client'` onto the field layer. "Add category" is one button on
-// one route. A context with a single consumer expresses no choice, and `useAddCategory` would be a
+// because `useId` would force `'use client'` onto the field layer. "Add category" was one button on one route
+// until PET-48 added the Manage categories modal's footer, and two triggers that never share a
+// screen still want no context between them - each owns its own modal, and neither can observe the
+// other's. A context with a single consumer expresses no choice, and `useAddCategory` would be a
 // seam nothing else could ever enter through. PET-38's Edit modal does not change that: it opens
 // from a card kebab, per-card, which is a different trigger with different state rather than a second
 // entry point into this one.
@@ -53,14 +57,31 @@ type AddCategoryButtonProps = {
    * `<AddCategoryButton palette={palette} />`.
    */
   create?: (body: components['schemas']['CreateCategoryDto']) => Promise<CreateCategoryResult>;
+  /**
+   * How the trigger is drawn, because it is no longer one button on one route.
+   *
+   * **PET-48's Manage categories modal is the second consumer**, and it needs `secondary`: the
+   * source draws "Add category" against a primary "Done", and a screen - or a dialog - has one
+   * emphasized action. The Categories tab's header keeps the default, so its call site is unchanged.
+   *
+   * A prop rather than a second component, because what would be duplicated is the pairing of this
+   * trigger with the modal it owns, which is the whole of what this file is. Note this widens a
+   * *feature* component for a second consumer, which is a different thing from widening a `ui/`
+   * primitive for one - the move `frontend/src/components/CLAUDE.md` warns about.
+   */
+  variant?: ButtonVariant;
 };
 
-export function AddCategoryButton({ palette, create = createCategory }: AddCategoryButtonProps) {
+export function AddCategoryButton({
+  palette,
+  create = createCategory,
+  variant = 'primary',
+}: AddCategoryButtonProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button label="Add category" onClick={() => setOpen(true)} />
+      <Button label="Add category" variant={variant} onClick={() => setOpen(true)} />
 
       {/* Rendered only while open, and that is load-bearing rather than an optimisation. A closed
           `<dialog>` is `display: none`, so `queryByRole` cannot see inside it - but `queryAllByText`

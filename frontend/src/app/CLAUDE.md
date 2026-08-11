@@ -2805,13 +2805,16 @@ one lower than the Transactions tab badge on the same account - measured in a br
 against 14. Accepted, because this card is about the categories a user manages and the fallback is
 the one they cannot; the seam it leaves is that `allocation.allocated` is used verbatim and would
 include a cap on that row if one were ever set through the API, which no screen offers.
-And **"Manage" is inert with no `disabled` and no `aria-disabled`**, though
-`/transactions/categories` exists and `<Button href={TAB_HREFS.categories}>` is the whole change.
-That amends AC3 and it is the one place this app now ships a control that looks operable and is not
+And **"Manage" shipped inert with no `disabled` and no `aria-disabled`**, which amended AC3 and made
+it the one place this app shipped a control that looks operable and is not - the exact failure every
+`aria-disabled` on the Categories tab was added to avoid, and which PET-70 had finished clearing.
 
-- the exact failure every `aria-disabled` on the Categories tab was added to avoid, and which PET-70
-  had finished clearing. `type="button"` is what keeps it out of the form's submit path, and both the
-  suite and the browser walk pin that pressing it sends nothing; `docs/TODO.md` carries the rest.
+**That second decision is superseded, and the paragraph above is history on its second half only.**
+"Manage" opens the **Manage categories modal**, so AC3 is superseded rather than amended - the button
+opens a dialog and never navigates - and this app ships no silently inert control again. The
+fallback-exclusion half stands unchanged and is still the one to cite. `type="button"` also stands,
+and it is _more_ load-bearing than before: it was guarding a press nobody made, and it now guards the
+ordinary path a user takes to open the modal.
 
 **Two suites and the story file changed shape for it, and the reason is `useMoney()`.**
 `SettingsForm.test.tsx` and `SettingsScreen.test.tsx` import `render` from `(app)/shellRender`
@@ -2821,3 +2824,43 @@ renders through a local `Frame` that mounts the provider **inside `render`**, ne
 `decorators` array, since the story smoke harness builds each story from `render` or
 `meta.component` and never applies a meta's decorators. A decorator there works in the browser and
 throws under Jest.
+
+**PET-48's follow-up makes "Manage" real, and the modal behind it is the design system's rather than
+Figma's.** `settings/ManageCategoriesModal.tsx` is
+`ui_kits/spendifico-app/ManageCategoriesModal.jsx` rebuilt on daisyUI: a summary island over a
+scrolling list with Edit and Delete per row, an "Add category" against a "Done", and no Figma frame
+anywhere behind it. Four things about it reach past that one file.
+
+**It is `AllocateBudgetModal`'s counterpart and not its reuse, which the source says in its own
+header** - same canvas shell and two-island structure, but "the list island trades the cap field for
+Edit / Delete icon actions". Reusing the Allocate modal unchanged was considered and rejected on
+that basis: it edits caps inline and can neither rename nor delete. **This modal performs no write of
+its own**, which is the most important thing about it: `AddCategoryModal`, `EditCategoryModal` and
+`DeleteCategoryDialog` own every one, all three already existed, and all three open _over_ it - so
+there is no action prop, no `pending`, no failure taxonomy and no `role="alert"` in it at all.
+
+**It reads from props and resyncs, which is deliberately the opposite of the Allocate modal's rule.**
+That one reads once on open and never resyncs, because it holds a draft a background refresh would
+rewrite under the user's hands; this one holds no draft, so a delete landing behind it has to take
+the dead row off the list. That also deletes the entire `stale` apparatus its neighbour needs, since
+there is no payload here for the server to refuse.
+
+**`ManageCategoriesProvider` exists for a reason no other modal in this app has, and it is the DOM
+rather than the design.** `AddCategoryButton`'s one-trigger-one-route rule would put the state in the
+card - but the card is inside `SettingsForm`'s `<form>`, and the sub-modals it opens pass `onSubmit`,
+which is what makes `Modal` wrap their bodies in a real `<form>`. A `<dialog>` does not break form
+association, so a modal rendered from the card would nest a form inside the page's - invalid HTML
+that React will happily build via `appendChild` even though a parser would not. So the provider wraps
+the header and `<main>` both and the dialog renders as a **sibling** of the form.
+`transactions/FilterNavigation.tsx`'s shape, reached from the other direction. It must sit **inside**
+`DeleteCategoryProvider` and `EditCategoryProvider`, in that order, because the edit modal's footer
+calls `useDeleteCategory()`.
+
+**Settings reads two more endpoints for it, and both degrade where their own modules throw.**
+`readPalette()` and `readPeriods()` join `readCategoriesView()` in a `Promise.all`, mirroring
+`transactions/categories/page.tsx`. The periods one is the departure worth knowing: `lib/periods.ts`
+throws by design, because on that page a period-less header over period-scoped figures is a screen
+that lies - here the periods back one question inside a modal nobody has opened, and
+`EditCategoryModal` already guards an absent current period by sending the cap with no anchor, which
+its own comment calls "the honest fallback". `(app)/pages.test.tsx` pins both degraded arms, and the
+periods case is written as a **rejection** so it fails if the `.catch` is ever removed.

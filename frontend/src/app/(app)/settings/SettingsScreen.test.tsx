@@ -6,6 +6,8 @@ import type { Profile } from '@/lib/profile';
 // `SettingsForm.test.tsx` made, for the same reason.
 import { render } from '../shellRender';
 
+import { category, FALLBACK_CATEGORY } from '../transactions/categories/categoryFixture';
+
 import type { CategoriesSummary } from './categoriesSummary';
 import { SettingsScreen } from './SettingsScreen';
 
@@ -26,9 +28,23 @@ const PROFILE: Profile = {
 
 const SUMMARY: CategoriesSummary = { count: 8, allocated: 1800, monthlyBudget: 2000 };
 
+/** Two managed rows and the fallback, which is what the Manage modal's own filter is about. */
+const CATEGORIES = [category(), category({ id: 'b', name: 'Transport' }), FALLBACK_CATEGORY];
+
+const ALLOCATION = { monthlyBudget: 2000, allocated: 1800, unallocated: 200 };
+
 function renderScreen() {
   return render(
-    <SettingsScreen profile={PROFILE} summary={SUMMARY} save={jest.fn()} themePref="system" />,
+    <SettingsScreen
+      profile={PROFILE}
+      summary={SUMMARY}
+      save={jest.fn()}
+      themePref="system"
+      categories={CATEGORIES}
+      allocation={ALLOCATION}
+      palette={null}
+      periods={[]}
+    />,
   );
 }
 

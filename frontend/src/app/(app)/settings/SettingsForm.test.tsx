@@ -22,6 +22,18 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: (...args: unknown[]) => refresh(...args) }),
 }));
 
+// **The Manage seam, mocked rather than provided**, which is `CategoryCardMenu.test.tsx`'s shape for
+// exactly this situation: the card under test calls `useManageCategories()`, the provider mounts a
+// whole modal this suite is not about, and what is worth asserting here is that the button reaches
+// the seam. The modal's own behaviour is `ManageCategoriesModal.test.tsx`'s.
+//
+// Relative specifier, because `jest.mock('@/...')` fails with "Cannot find module" from anywhere in
+// this repo - the alias trap `frontend/src/app/CLAUDE.md` records.
+const openManage = jest.fn();
+jest.mock('./ManageCategoriesProvider', () => ({
+  useManageCategories: () => ({ open: openManage }),
+}));
+
 /** Frame 17's own persona, which is also the fixtures'. */
 const PROFILE: Profile = {
   fullName: 'Marko Kovač',
@@ -1433,11 +1445,12 @@ describe('the Categories summary card (PET-48)', () => {
     expect(within(card!).queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  // **AC3 is amended: "Manage" is inert by product decision.** The Categories tab exists, so this
-  // is a decision rather than a blocker, and it deliberately departs from this repo's convention
-  // that a drawn-but-unbuilt control announces `aria-disabled` - see `CategoriesSummaryCard.tsx`.
-  // Both halves are pinned so a later ticket that wires it has to come here and say so.
-  it('offers "Manage" as an available control, neither disabled nor aria-disabled (AC3, amended)', () => {
+  // **AC3 is superseded rather than amended, and this is the third answer the control has had.** It
+  // shipped inert by a product decision over an AC3 asking it to open the Categories tab; it now
+  // opens the Manage categories modal and never navigates. The two cases below used to pin the inert
+  // treatment - "neither disabled nor aria-disabled" and "is not a link" - and both survive as
+  // assertions about what it still must not be.
+  it('offers "Manage" as an available control, neither disabled nor aria-disabled', () => {
     renderForm();
 
     const manage = screen.getByRole('button', { name: 'Manage' });
@@ -1446,16 +1459,26 @@ describe('the Categories summary card (PET-48)', () => {
     expect(manage).not.toHaveAttribute('aria-disabled');
   });
 
-  it('does not navigate, because "Manage" is not a link', () => {
+  it('does not navigate, because "Manage" opens a modal rather than a route', () => {
     renderForm();
 
     expect(screen.queryByRole('link', { name: 'Manage' })).not.toBeInTheDocument();
   });
 
-  // **The assertion that catches a missing `type="button"`.** This card sits inside the page's
-  // `<form>`, where HTML defaults a bare `<button>` to `submit` - so the day somebody replaces
-  // `ui/Button` here with a plain element, pressing "Manage" saves the profile. There is nothing
-  // visible about that failure: the button still looks inert, and the PATCH is silent.
+  it('opens the Manage categories modal when pressed', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(screen.getByRole('button', { name: 'Manage' }));
+
+    expect(openManage).toHaveBeenCalledTimes(1);
+  });
+
+  // **The assertion that catches a missing `type="button"`, and it matters more now than it did.**
+  // This card sits inside the page's `<form>`, where HTML defaults a bare `<button>` to `submit` -
+  // so the day somebody replaces `ui/Button` here with a plain element, pressing "Manage" saves the
+  // profile. While the control was inert that was a silent PATCH from a button nobody pressed; now
+  // it is a silent PATCH on the ordinary path a user takes to open the modal.
   it('does not submit the form when pressed', async () => {
     const user = userEvent.setup();
     const save = renderForm();

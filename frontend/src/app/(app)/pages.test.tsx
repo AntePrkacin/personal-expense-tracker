@@ -7,6 +7,7 @@ import { render } from './shellRender';
 import { readCategoriesView, readCategoryLabels } from '../../lib/categories';
 import { readDashboard } from '../../lib/dashboard';
 import { requireInsights } from '../../lib/insights';
+import { readPalette } from '../../lib/palette';
 import { readPeriods } from '../../lib/periods';
 import { requireProfile } from '../../lib/profile';
 import { readTransactionsView } from '../../lib/transactions';
@@ -68,6 +69,12 @@ jest.mock('../../lib/periods', () => ({
   ...jest.requireActual('../../lib/periods'),
   readPeriods: jest.fn(),
 }));
+
+// **PET-48's Manage modal adds a sixth read, and it has to be mocked or the Settings page reaches a
+// real `fetch`.** `readPalette` is guarded, so outside a request scope it would hit the network,
+// carry its own timeout while doing so, and make this file's runtime depend on a socket. It backs
+// the pickers in the two sub-modals that modal opens, so nothing this suite asserts renders from it.
+jest.mock('../../lib/palette', () => ({ readPalette: jest.fn() }));
 
 // PET-74's addendum gives the Settings page a *direct* `cookies()` call - the theme-preference
 // read - which the lib-level mocks above cannot intercept, so the module itself is mocked: outside
@@ -155,6 +162,11 @@ beforeEach(() => {
   // Dashboard's and AI Insights' select, and the second's overline too. Two entries, so the control
   // has something to offer - `PeriodSelect.test.tsx` owns what it does with them.
   (readPeriods as jest.Mock).mockResolvedValue({ periods: PERIODS });
+
+  // Settings' sixth read. A failed one is the *common* default here deliberately: it is what every
+  // assertion in this file was written against, it needs no fixture, and the pickers it would feed
+  // live inside a modal none of these cases opens.
+  (readPalette as jest.Mock).mockResolvedValue({ ok: false, reason: 'unavailable' });
 
   // An empty list is enough: the rows are `TransactionsTable.test.tsx`'s subject, and this
   // file asserts the header. The read still has to succeed, because the page throws on an
@@ -389,6 +401,32 @@ describe('the header action, which differs on every screen', () => {
     await renderScreen(SettingsPage);
 
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+  });
+
+  // **The two reads PET-48's Manage modal added, and both degrade rather than throw.** The rule this
+  // page follows is that `requireProfile()` is the only read on it with an opinion about whether the
+  // session is alive; everything else feeds a card or a modal and must not be able to take the
+  // profile form down with it.
+  it('Settings still renders when the palette read fails', async () => {
+    (readPalette as jest.Mock).mockResolvedValue({ ok: false, reason: 'unavailable' });
+
+    await renderScreen(SettingsPage);
+
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+  });
+
+  // **The one that would otherwise throw**, which is why it earns a case of its own. `readPeriods`
+  // rejects on failure by design - on `/transactions/categories` a period-less header over
+  // period-scoped figures is a screen that lies - and this page catches it, because here the periods
+  // back one question inside a modal nobody has opened. Written as a rejection rather than an empty
+  // list so it fails if the `.catch` is ever removed.
+  it('Settings still renders when the periods read rejects', async () => {
+    (readPeriods as jest.Mock).mockRejectedValue(new Error('the backend did not answer'));
+
+    await renderScreen(SettingsPage);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
   });
 });
 

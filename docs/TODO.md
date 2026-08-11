@@ -2803,28 +2803,32 @@ why it wants the notification system under HIGH IMPORTANCE above rather than a f
 `role="status"` line on one screen. Until then the honest summary is that the feature is correct
 and unobservable, and A29 owes the copy along with everything else invented on this screen.
 
-### The Settings "Manage" button is inert on purpose, and it is the app's only silent dead control
+### Settings reads the palette and the periods for a modal most visits never open
 
-PET-48 built the Categories summary card and shipped its "Manage" doing nothing, on the product
-owner's instruction, and deliberately **without** `disabled` or `aria-disabled`. PET-48's AC3 says
-the button opens the Categories tab of the Transactions page; that is amended on the ticket.
+PET-48's follow-up made the Categories card's "Manage" open the Manage categories modal, and the two
+sub-modals behind it need a colour/icon palette and a period list. So `settings/page.tsx` now awaits
+`readPalette()` and `readPeriods()` alongside `readCategoriesView()` on **every** visit to Settings,
+for a dialog that most visits never open.
 
-Worth recording rather than leaving as a curiosity, because it reverses a line this repo spent
-several tickets drawing. Every other drawn-but-unbuilt control here announces `aria-disabled` so a
-reader is told rather than left pressing - the Categories tab's kebab, "Set limit", "Allocate", the
-edit menu item - and PET-70 removed the last of them, at which point that screen was described as
-the first in the app with no inert control on it. This one is a control that looks operable, is
-focusable, announces as available, and does nothing.
+This is the same trade `transactions/categories/page.tsx` already took for its own palette, and the
+entry above about that one is the same fact from another side. Both buy away a route handler, a hook,
+and the null-versus-failed-versus-loading triple `AddTransactionModal` has to model for a modal that
+can open from anywhere. Neither is free, and `Promise.all` means the page waits for the slowest -
+which is why `readPalette` carries its own timeout and why adding a read with none to that array is
+the thing to think about rather than the count.
 
-The fix is one line and needs no new declaration: `TAB_HREFS.categories` already exists in
-`app/(app)/transactions/TransactionTabs.tsx`, the route behind it is complete, and `ui/Button`'s
-`href` arm renders the `next/link`. Whoever takes it should also delete the amendment note from
-PET-48 and the paragraph in `frontend/CLAUDE.md`'s gap list.
+The fix, when it is worth taking, is the shape `app/api/categories/route.ts` already sets: a route
+handler the modal fetches from on open. What that costs is the three loading states, which is exactly
+what both pages declined to model.
 
-The one thing not to lose in the meantime: the button is `type="button"`, and that is load-bearing
-rather than tidy. It sits inside the page's `<form>`, where HTML defaults a bare `<button>` to
-`submit` - so replacing it with a plain element makes "Manage" save the profile, silently.
-`SettingsForm.test.tsx` and the browser walk both pin the press sending nothing.
+**Both degrade rather than throw, and the periods one is a deliberate departure.** `lib/periods.ts`
+rejects on failure by design, because on `/transactions/categories` a period-less header over
+period-scoped figures is a screen that lies. Settings catches it, because there the periods back one
+question inside an unopened modal and `requireProfile()` is the only read on that page with an
+opinion about whether the session is alive. It is sound rather than merely convenient -
+`EditCategoryModal` already guards an absent current period by sending the cap with no anchor - but
+it does mean a Settings visit during a periods outage silently loses the "from which paycheck"
+question on a cap edit. `(app)/pages.test.tsx` pins the arm; nothing tells the user.
 
 ### Settings counts categories one lower than the Transactions tab badge, by decision
 
