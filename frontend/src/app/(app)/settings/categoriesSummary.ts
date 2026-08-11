@@ -1,4 +1,5 @@
 import type { Allocation, Category } from '@/lib/categories';
+import { withoutFallback } from '@/lib/fallbackCategory';
 
 // The Categories summary card's one sentence, reduced to the three numbers behind it (SET-4).
 //
@@ -29,12 +30,13 @@ export type CategoriesSummary = {
 /**
  * Every category this card counts, which is every one except the fallback.
  *
- * **`allocateForm.ts` has a byte-identical `allocatableCategories`, and this is a deliberate second
- * copy rather than an import.** That module lives under `transactions/categories/`, and a settings
- * module reaching into another route's folder for a one-line filter inverts the layering rather
- * than sharing it - which is the move `lib/pickerScroll.ts` was lifted out of that same folder to
- * undo. The rule of three says duplicate until a third consumer appears; this is the second, so
- * whichever ticket brings the third lifts both into `lib/`.
+ * **The third consumer arrived and the lift happened, so this delegates to
+ * `lib/fallbackCategory.ts` now.** This docblock used to argue for a deliberate second copy and set
+ * the trigger for undoing it - "the rule of three says duplicate until a third consumer appears;
+ * this is the second, so whichever ticket brings the third lifts both into `lib/`" - and PET-48's
+ * own Manage categories modal is that third. The name stays for `lib/amount.ts`'s reason: these are
+ * the categories a user *manages*, which is what this card counts, and the shared spelling cannot
+ * say that.
  *
  * **The exclusion is a product decision and it costs an off-by-one against the tab badge.**
  * `TransactionTabs`' `categoryCount` is `categories.length`, the fallback included, and documents
@@ -44,7 +46,7 @@ export type CategoriesSummary = {
  * `frontend/CLAUDE.md` records that it can be neither renamed nor capped from the UI.
  */
 function managedCategories(categories: Category[]): Category[] {
-  return categories.filter((category) => !category.isFallback);
+  return withoutFallback(categories);
 }
 
 /**

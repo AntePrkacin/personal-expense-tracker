@@ -11,10 +11,12 @@ import { categoryCountLabel, toCategoriesSummary } from './categoriesSummary';
 // No jsdom anywhere in this file, which is the point of the module existing: the fallback rule and
 // the pass-through are provable without rendering a card.
 //
-// **The fixture is imported across route folders, where `categoriesSummary.ts` deliberately
-// duplicates that folder's one-line filter rather than importing it.** The two calls are not
-// inconsistent. A filter is forty characters that a reader can verify at a glance, and sharing it
-// would point a settings module at another route's source. `categoryFixture.ts` is a thirteen-field
+// **The fixture is imported across route folders, and as of PET-48 the filter is not duplicated
+// either** - it moved to `lib/fallbackCategory.ts` when the Manage modal became its third consumer,
+// which is the trigger `categoriesSummary.ts`'s own docblock had set. Read the paragraph this
+// replaces as closed rather than reversed: it argued that forty characters a reader can verify at a
+// glance are not worth pointing a settings module at another route's source, and that is still why
+// the shared copy lives in `lib/` rather than in `transactions/categories/`. `categoryFixture.ts` is a thirteen-field
 // mirror of `CategoryResponseDto`, and its own docblock names the failure a second copy causes:
 // `npm run build` does not typecheck `*.test.ts`, so a contract field added upstream leaves one
 // copy asserting against a shape the app never receives, with every gate green. One owner is the
