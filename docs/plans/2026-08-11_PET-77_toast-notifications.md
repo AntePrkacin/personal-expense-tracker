@@ -50,13 +50,27 @@ at mount is *below* every dialog opened afterwards. So `showPopover()` fires **o
 then show when it is already open - which puts the region above whatever dialog is currently up. It
 is the only spelling that works for a toast raised from inside a modal, which is most of them.
 
-**Inertness is the open question.** A modal dialog makes the rest of the document inert, and whether
-a top-layer popover shown *after* the dialog is exempt is exactly the sort of thing this repo has
-twice found by walking Chrome rather than by reading a spec. If it is exempt, AC10 is satisfied as
-written. If it is not, the toast paints correctly and its dismiss button does not respond while a
-modal is open, and the fallback is to let the auto-dismiss carry those cases and say so in the
-component - **not** to move the region inside the dialog, which would put one region per modal back
-into a ticket whose whole point is one region.
+**Inertness was the open question, and the walk answered it: not exempt.** Chrome 4-case probe, run
+before the component was written, against a bare `<dialog>` opened with `showModal()` and a
+`popover="manual"` region carrying daisyUI's own `.toast` rule set:
+
+| Case | Result |
+| --- | --- |
+| Popover shown **after** the dialog | Paints **above** it - bright over the dimmed `::backdrop` |
+| Popover shown **before** the dialog | Paints **under** it - visibly dimmed by the same backdrop |
+| Its dismiss button, while the dialog is open | **Inert.** `elementFromPoint` resolves to the dialog, and a real click at the button's own coordinates never reached the handler; the toast was still on screen afterwards |
+| The same button, dialog closed | Hit-testable, click received - so the button is fine and inertness is the cause |
+| A popover that is a **DOM descendant** of the open dialog | Hit-testable **while the dialog is open** |
+
+Two consequences, and they are the reason this walk came first. **The re-show rule is load-bearing
+rather than defensive**: case 2 is what a region shown once at mount looks like for the rest of the
+session, and it is the common case, because most toasts here are raised from inside a modal.
+**AC10's second half is met only when no modal is open.** The toast paints correctly and announces
+correctly in every case; its dismiss button is decorative while a modal is up, and the auto-dismiss
+is what clears it. Case 5 says the only fix is nesting the region inside whichever dialog is
+topmost, which is a React portal into a DOM node owned by one of four providers - a great deal of
+fragility to buy back a control the timer already covers on a surface the user is about to leave.
+Rejected, recorded here, and flagged on the PR rather than settled quietly.
 
 **The popover UA stylesheet has to be undone.** `:popover-open` brings `inset: 0`, `margin: auto`, a
 border, padding, `width/height: fit-content` and `overflow: auto`; daisyUI's `.toast` already zeroes
