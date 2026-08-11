@@ -210,7 +210,7 @@ run = "npx ts-node src/scripts/build-showcase-fixture.ts"
 # mistaken local run deletes a gitignored SQLite file, a mistaken cloud run
 # destroys every account in Turso and the volume under the deployed app. So
 # reaching the cloud has to be typed out here, and the script then asks for the
-# app name on top of that.
+# project name on top of that.
 #
 # `raw = true` on both because the cloud reset reads a confirmation from the
 # terminal, and mise's captured output would swallow the prompt.

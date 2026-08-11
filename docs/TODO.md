@@ -2793,7 +2793,8 @@ than discovered.
 PET-71 turned the manual "wipe everything" sequence into `mise run reset:cloud`
 (`scripts/reset-databases.sh`). What it does not have is a rehearsal: there is no `--dry-run`
 that prints the plan without executing it, so the only preview is the confirmation block
-listing the counts and the app name, and the only guard is having to type that name back. A
+listing the counts and the resolved targets, and the only guard is having to type the project
+name back. A
 dry-run is genuinely useful here because the expensive mistake is running it against the wrong
 Fly app or the wrong Turso organization, and both are read out of files rather than typed - so
 the confirmation shows you what it resolved, but you have to actually read it.
@@ -2808,8 +2809,24 @@ false sense of safety.
 One narrower gap worth naming: the script tolerates a 404 when deleting a database, which is
 what makes it re-runnable after a mid-way failure, but that same tolerance means a typo in the
 derived central database name would delete nothing and still report success on that step. The
-`engine: "tursodb"` assertion on the recreate is what actually catches a wrong name, one step
-later.
+`database_type: "tursodb"` assertion on the recreate is what actually catches a wrong name, one
+step later.
+
+### The cloud reset's failure branches are reviewed, not run
+
+`reset:cloud` was run end to end on 2026-08-11 and its happy path is now exercised twice, but
+the `die` branches that run fixed that day are not covered by either run. They fire only when
+`flyctl` itself fails - a `machine stop` that does not stop, a `machine destroy` that leaves the
+machine, a `volume destroy` that fails while the volume is still attached - and nothing
+available locally makes `flyctl` fail on demand.
+
+This matters more than an ordinary untested-branch note, because two of those branches exist
+specifically to convert a **silent** wrong outcome into a loud one, and their previous versions
+were `|| true`. So the code that stops a reset from quietly not resetting is exactly the code no
+run has entered. Testing it properly needs a fake `flyctl` on `PATH` returning non-zero for a
+chosen subcommand, which is a small harness and a reasonable thing to add the next time this
+script is touched. Until then, treat edits to steps 4 and 9 as unprotected by anything but
+review.
 
 ### A template seed change only reaches an already-seeded central database through a reset
 

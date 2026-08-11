@@ -147,6 +147,22 @@ Everything except the live cloud run is verified:
   `volumes create --yes`, `secrets import --stage`) confirmed present in the installed version,
   and the `RESET_IMAGE` hint command confirmed to return the right digest.
 
-**Not yet run: `reset:cloud` end to end.** It needs a full-access `TURSO_API_TOKEN`, which the
-repo deliberately does not hold, and it destroys the environment it runs against. That is the one
-outstanding item before this leaves draft.
+**`reset:cloud` has now been run end to end, twice, on 2026-08-11.** It was run against the real
+deployment immediately after PET-72 merged, which is what the reset existed for: PET-72 squashed both
+migration ledgers, so the deployed image could not boot against the old central database at all.
+Both runs finished green and the end state was confirmed independently of the script's own report -
+one machine on the pinned image, one fresh volume with no same-name duplicate, one Turso database
+with zero accounts and the templates re-seeded.
+
+**That first run also found four defects, and the section above was wrong to call everything but the
+live run verified.** Three of them made the cloud path impossible to complete and one of them made a
+completed reset report failure, so the honest summary of the original state is that `--cloud` had
+never worked. They are described in the commit that fixes them; what matters here is why the
+pre-existing verification did not catch any of them. Every item listed above tests a path that
+*refuses* to proceed - no flag, no token, a scoped token - and those all worked. Nothing tested the
+path that proceeds. A guard that fires correctly says nothing about the code it guards.
+
+**What is still unverified, precisely.** The happy path is now exercised twice. The failure branches
+added by the fix are not: the `die` calls in steps 4 and 9 only fire when `flyctl` itself fails, and
+nothing available here makes it fail on demand. They are reviewed rather than run. `docs/TODO.md`
+carries this rather than leaving it implied.

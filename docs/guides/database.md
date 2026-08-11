@@ -139,7 +139,9 @@ mise run reset:cloud   # every Turso database and the deployed app's volume
 
 `reset:cloud` **destroys production data**: every account, transaction, category and
 session, with no backup and no undo. It prints what it is about to do and asks you to type
-the app name before touching anything.
+the project name before touching anything. It also refuses to run at all without a real
+terminal to read that confirmation from, so it cannot be driven from CI, from an agent, or
+through a shell that pipes stdin - run it from a terminal window.
 
 **Why the order inside it matters, and why you should not improvise your own.** The Fly
 volume holds embedded *replicas*, not caches, and they sync in both directions - the client
@@ -160,16 +162,32 @@ Tokens, then either export it or add it to `backend/.env.local`, which is gitign
 export TURSO_API_TOKEN=...
 ```
 
+This project's own token is named **`decode-pet-admin`** in the Turso UI, and is scoped to
+the `decode-pet` group rather than to the whole account. That is deliberate and it is
+sufficient: every database the reset touches lives in that group, and the `read` scope is
+what satisfies the list call the app's token cannot make. **Rotate it whenever its value has
+been anywhere it should not have been** - a chat transcript, a screenshot, a paste into an
+issue. Replace the value rather than deleting the line, since the next reset needs it.
+
 It is deliberately absent from `.env.example` and from the Joi schema in
 `backend/src/config/env.validation.ts`. The application must never hold a credential that
 can delete databases, and a variable in that schema is one the app is expected to have.
 
 Two things it does on your behalf that are easy to forget by hand. The central database is
-recreated with the Turso engine rather than the libSQL default, and the script asserts the
-API really reported `engine: "tursodb"` before continuing, because that choice is fixed at
-creation and getting it wrong is silent. And the freshly minted data-plane token is verified
-with a real query, then written to both the Fly secret and every backend env file that
-already carries the key.
+recreated with the Turso engine rather than the libSQL default, and the script reads the new
+database back and asserts `database_type: "tursodb"` before continuing, because that choice
+is fixed at creation and getting it wrong is silent. Note the readback: the create response
+reports the engine under no key at all, so asserting on the create body cannot work. And the
+freshly minted data-plane token is verified with a real query - retried, because the data
+plane 404s a brand-new namespace for the first few seconds - then written to both the Fly
+secret and every backend env file that already carries the key.
+
+**The last step waits, and the wait is not slack.** The app migrates and seeds its local
+embedded replica, and pushes to Turso Cloud only on the `TURSO_SYNC_INTERVAL_S` timer. So for
+up to one interval after the redeploy, the cloud copy holds no application tables - measured
+at 50 seconds on a fresh volume. The script therefore checks the API first, which answers
+immediately, and then polls Turso Cloud for up to three intervals. Reaching that second check
+also proves the replica-to-cloud push works end to end, which nothing else here covers.
 
 **"Every backend env file" means exactly two: `backend/.env` and `backend/.env.local`,** and
 only where the key is already present - the reset never adds `TURSO_CENTRAL_DB_TOKEN` to a

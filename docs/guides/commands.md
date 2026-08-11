@@ -82,7 +82,7 @@ Fly deploy (see [Deployment](deployment.md)).
 | `mise run reset:cloud`        | Destroy every Turso database and the Fly volume, then redeploy       |
 
 `reset:cloud` is destructive and has no undo: it deletes every account in Turso, replaces
-the deployed app's volume and redeploys. It asks for the app name before doing anything,
+the deployed app's volume and redeploys. It asks for the project name before doing anything,
 and needs a `TURSO_API_TOKEN` the app itself does not have. Read
 [Database](database.md#resetting-everything-to-a-clean-state) before running it.
 
