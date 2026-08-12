@@ -35,16 +35,17 @@
  *
  * The `base-100/200/300` surfaces are deliberately absent. They are the page's
  * own backgrounds, so a category painted in one is a category painted in
- * nothing - `base-300` measures 1.15:1 (light) and 1.16:1 (dark) against the
- * card under the Expensa themes, and PET-22 and PET-23 each rejected it by name
- * after measuring the stock value at the same 1.16.
+ * nothing - `base-300` measures between 1.115:1 and 1.178:1 against the card
+ * across all five themes PET-79 registers, and PET-22 and PET-23 each rejected
+ * it by name after measuring the stock value at the same 1.16.
  *
  * **`base-content/50` is the one exception and it is not a surface**, it is the
- * *ink* on those surfaces at half strength - a mid grey in light and a light
- * grey in dark, measured 3.395:1 and 5.076:1 against the card. It is here
- * because the sixteen semantic tokens cannot supply a muted colour that is
- * visible in both themes, which is a measured fact rather than an impression;
- * see the table on `COLOUR_CONTRAST` below.
+ * *ink* on those surfaces at half strength - a mid grey on a light card and a
+ * light grey on a dark one, measured 3.401:1 to 5.107:1 across the five. It is
+ * here because the sixteen semantic tokens cannot supply a muted colour visible
+ * in **every** theme, which is a measured fact rather than an impression: it is
+ * one of only three tokens that clear 3:1 everywhere. See the table on
+ * `COLOUR_CONTRAST` below.
  */
 export const COLOUR_TOKENS = [
   'primary',
@@ -69,64 +70,198 @@ export const COLOUR_TOKENS = [
 export type ColourToken = (typeof COLOUR_TOKENS)[number];
 
 /**
- * What each token measures against the card it is drawn on, light then dark.
+ * The five themes this app registers, in the order the tables below read.
  *
- * **Re-measured for PET-74's Expensa theme pair**, which replaced the stock
- * `light`/`dark` these numbers first described. The themes now author every
- * colour as an exact hex in `frontend/src/app/globals.css`, so each figure is
- * computed from those values directly (the WCAG formula, with `base-content/50`
- * alpha-composited over the card first) and cross-checked in headless Chromium
- * by painting the token over `base-100` and reading the pixel - the method
- * `frontend/CLAUDE.md` requires, kept even though the arithmetic is now exact,
- * because a computed table drifts the moment somebody edits a theme value
- * without re-running the check.
+ * Named here rather than left as tuple positions because PET-79 took the app from
+ * two themes to five, and `[number, number]` meaning "light then dark" was
+ * already the sort of thing a reader has to go and check. The authority for the
+ * list is `frontend/src/app/globals.css`, which registers them, and
+ * `frontend/src/lib/theme.ts`, which maps a stored preference onto one.
+ */
+export const THEME_NAMES = [
+  'expensa-light',
+  'expensa-dark',
+  'light',
+  'dark',
+  'abyss',
+] as const;
+
+export type ThemeName = (typeof THEME_NAMES)[number];
+
+/**
+ * What each token measures against the card it is drawn on, per theme.
  *
- * **Under the stock themes only `primary` and `secondary` cleared 3:1 in both
- * columns; the Expensa values were chosen with this table in the loop, so six
- * now do** - `primary`, `secondary`, `info`, `success`, `error` and
- * `base-content/50`. What has not changed is the shape of the rest: every
- * `-content` token is still deliberately at the opposite end of the lightness
- * range from its base, which is exactly what makes it legible *as a glyph on
- * its own tile* (every pairing measures 3.4:1 or better, both themes) and
+ * **Regenerated for PET-79**, which added stock `light`, `dark` and `abyss`
+ * beside PET-74's Expensa pair and made this table computed rather than
+ * hand-measured. `frontend/src/lib/themeGuard.ts` is what computes it and
+ * `npm run theme:report` prints it; every figure here is that tool's output,
+ * copied once, and `docs/explainers/category-palette/theme-data.json` is the
+ * committed artifact a Jest gate holds it to. Two of PET-74's numbers moved by a
+ * few thousandths in the process (`base-content/50` read 3.395 and 5.076 and now
+ * reads 3.413 and 5.107); the cause is a `.5` rounding tie the browser breaks
+ * downward and `Math.round` breaks upward, not a value changing.
+ *
+ * **Sixteen figures per theme are arithmetic and the seventeenth is a pixel
+ * read**, which is the division `frontend/CLAUDE.md` requires rather than a
+ * convenience. The declared tokens are exact for the values the CSS carries -
+ * validated by painting all one hundred in headless Chromium and reading them
+ * back, where 97 matched byte-for-byte and the other three inside one byte. But
+ * `base-content/50` is an ink and an alpha, so it means nothing until it is
+ * painted: those five come from compositing it over each theme's own card on a
+ * 1x1 canvas, with `base-300` failing at roughly 1.1:1 in the same run as the
+ * control that proves the harness discriminates.
+ *
+ * **Only three of seventeen clear 3:1 in every theme, and that is structural.**
+ * They are `primary`, `secondary` and `base-content/50`; PET-74 recorded six for
+ * the Expensa pair alone, and adding three themes is what took it back down -
+ * `info`, `success` and `error` each fall under in stock `light`. Every
+ * `-content` token sits deliberately at the opposite end of the lightness range
+ * from its base, which is exactly what makes it legible *as a glyph on its own
+ * tile* - every pairing clears 3:1, worst case 3.038:1 in stock `light` - and
  * exactly what makes it near-invisible as a fill on the page's own surface in
- * one theme. That is a property of the pairing, not of any one assignment, so
+ * some theme. That is a property of the pairing rather than of any assignment, so
  * it cannot be fixed by re-picking a colour: seventeen categories cannot all be
- * distinct and all clear 3:1 in both themes.
+ * distinct and all clear 3:1 in five themes. PET-79's gate therefore **pins these figures
+ * against drift and floors only `base-content/50`**, the one token with a
+ * recorded reason to be visible as bare colour, because the backend's orphan fold
+ * routes real money into the donut slice it paints.
  *
- * PET-64 accepted that for the twelve category templates, on the argument its
- * PR records - the ring is `aria-hidden`, the legend names every slice in real
- * text, and every glyph clears 3:1 on its own tile, so colour carries no
- * information WCAG 1.4.11 governs. This table exists so the next person weighing
- * that decision argues with numbers instead of re-deriving them, and so nobody
- * writes "visible in both themes" about a token again without looking.
+ * PET-64 accepted the rest for the category templates, on the argument its PR
+ * records - the ring is `aria-hidden`, the legend names every slice in real text,
+ * and every glyph clears 3:1 on its own tile, so colour carries no information
+ * WCAG 1.4.11 governs. This table exists so the next person weighing that
+ * decision argues with numbers instead of re-deriving them, and so nobody writes
+ * "visible in both themes" about a token again without looking.
  *
  * Not exported to the API and not a runtime check - it is documentation with a
  * type on it, kept beside the list it describes so the two cannot drift.
  *
- * **Every number here is void the moment a theme changes**, which is why
- * `docs/explainers/category-color-palette-preview.html` renders this table beside
- * the marks it describes: a theme is what re-measurement is triggered by, and
- * `frontend/CLAUDE.md`'s Changing or adding a theme is the authority for the
- * check that has to pass before one lands.
+ * **Every number here is void the moment a theme changes.** That used to be a
+ * warning and is now enforced: `frontend/src/lib/themeGuard.test.ts` fails until
+ * `npm run theme:report` is re-run and its artifact committed, and
+ * `frontend/CLAUDE.md`'s Changing or adding a theme is still the authority for
+ * what has to pass before a theme lands.
  */
-export const COLOUR_CONTRAST: Record<ColourToken, [number, number]> = {
-  primary: [6.288, 3.608],
-  'primary-content': [1.175, 14.073],
-  secondary: [4.253, 3.857],
-  'secondary-content': [1.175, 13.953],
-  accent: [2.415, 6.793],
-  'accent-content': [10.13, 1.619],
-  neutral: [18.019, 1.099],
-  'neutral-content': [1.913, 8.574],
-  info: [3.374, 4.861],
-  'info-content': [11.904, 1.378],
-  success: [3.296, 4.977],
-  'success-content': [12.334, 1.33],
-  warning: [2.278, 7.2],
-  'warning-content': [8.402, 1.952],
-  error: [4.829, 3.396],
-  'error-content': [16.613, 1.009],
-  'base-content/50': [3.395, 5.076],
+export const COLOUR_CONTRAST: Record<ColourToken, Record<ThemeName, number>> = {
+  primary: {
+    'expensa-light': 6.288,
+    'expensa-dark': 3.608,
+    light: 8.321,
+    dark: 3.399,
+    abyss: 14.345,
+  },
+  'primary-content': {
+    'expensa-light': 1.175,
+    'expensa-dark': 14.073,
+    light: 1.232,
+    dark: 14.037,
+    abyss: 3.139,
+  },
+  secondary: {
+    'expensa-light': 4.253,
+    'expensa-dark': 3.857,
+    light: 3.67,
+    dark: 4.316,
+    abyss: 10.098,
+  },
+  'secondary-content': {
+    'expensa-light': 1.175,
+    'expensa-dark': 13.953,
+    light: 1.208,
+    dark: 13.109,
+    abyss: 3.036,
+  },
+  accent: {
+    'expensa-light': 2.415,
+    'expensa-dark': 6.793,
+    light: 1.415,
+    dark: 11.192,
+    abyss: 2.139,
+  },
+  'accent-content': {
+    'expensa-light': 10.13,
+    'expensa-dark': 1.619,
+    light: 9.686,
+    dark: 1.635,
+    abyss: 16.238,
+  },
+  neutral: {
+    'expensa-light': 18.019,
+    'expensa-dark': 1.099,
+    light: 19.895,
+    dark: 1.256,
+    abyss: 1.352,
+  },
+  'neutral-content': {
+    'expensa-light': 1.913,
+    'expensa-dark': 8.574,
+    light: 1.759,
+    dark: 9.005,
+    abyss: 12.67,
+  },
+  info: {
+    'expensa-light': 3.374,
+    'expensa-dark': 4.861,
+    light: 2.221,
+    dark: 7.13,
+    abyss: 7.764,
+  },
+  'info-content': {
+    'expensa-light': 11.904,
+    'expensa-dark': 1.378,
+    light: 14.073,
+    dark: 1.125,
+    abyss: 1.062,
+  },
+  success: {
+    'expensa-light': 3.296,
+    'expensa-dark': 4.977,
+    light: 1.959,
+    dark: 8.084,
+    abyss: 9.69,
+  },
+  'success-content': {
+    'expensa-light': 12.334,
+    'expensa-dark': 1.33,
+    light: 10.034,
+    dark: 1.578,
+    abyss: 1.182,
+  },
+  warning: {
+    'expensa-light': 2.278,
+    'expensa-dark': 7.2,
+    light: 1.763,
+    dark: 8.983,
+    abyss: 10.433,
+  },
+  'warning-content': {
+    'expensa-light': 8.402,
+    'expensa-dark': 1.952,
+    light: 9.245,
+    dark: 1.713,
+    abyss: 2.28,
+  },
+  error: {
+    'expensa-light': 4.829,
+    'expensa-dark': 3.396,
+    light: 2.879,
+    dark: 5.501,
+    abyss: 4.851,
+  },
+  'error-content': {
+    'expensa-light': 16.613,
+    'expensa-dark': 1.013,
+    light: 15.702,
+    dark: 1.009,
+    abyss: 1.314,
+  },
+  'base-content/50': {
+    'expensa-light': 3.413,
+    'expensa-dark': 5.107,
+    light: 3.401,
+    dark: 4.769,
+    abyss: 4.025,
+  },
 };
 
 /**
