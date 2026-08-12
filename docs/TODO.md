@@ -65,6 +65,26 @@ the app, and it is the first thing here that renders outside a route's own tree.
 These were decided against deliberately. Reasons are recorded so the decision is not
 relitigated by accident.
 
+### The Dashboard summary banner no longer says which period it describes
+
+PET-78 deleted the banner's uppercase eyebrow at the product owner's request, because the
+Dashboard stated the period three times: the page header's overline, the period select beside it,
+and "AUGUST 2026 SUMMARY" as the banner's own first line.
+
+What that gives up is precise and worth stating rather than discovering. The eyebrow was the only
+place the card named the period its analysis covers, and **a set can outlive its own period**:
+`GET /api/insights` serves the latest **ready** set whatever today is, so an account that writes
+nothing after a period rolls over sees last period's analysis on this period's Dashboard.
+`isCurrentPeriod` does not cover it - that flag asks which period the *screen* is showing, not when
+the set was generated - so the banner is silently one period stale rather than absent.
+
+Restoring the eyebrow is the wrong fix, because the defect is **staleness rather than a missing
+name**: a card labelled "July 2026 summary" on the August Dashboard is honest and still useless. The
+fix is a "generated {date}" line, or suppressing the banner when the set's own period is not the
+current one - which needs `GET /api/insights` to publish a period, which it does not. Filed here
+rather than as a bug because no account reaches it without a full period of inactivity, and the
+first write of the new period clears it.
+
 ### The verify page's inherited constraints, now that it exists
 
 PET-52 built the frontend half: `app/auth/verify/route.ts` spends the emailed link,

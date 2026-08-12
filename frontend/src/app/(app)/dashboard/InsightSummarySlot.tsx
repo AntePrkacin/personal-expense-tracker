@@ -1,5 +1,7 @@
 'use client';
 
+import { Sparkle } from 'lucide-react';
+
 import { Button } from '@/components/ui/Button';
 import { SIDEBAR_HREFS } from '@/components/ui/Sidebar';
 
@@ -18,12 +20,16 @@ import { PENDING_COPY, SummaryBanner, SummaryBannerSkeleton, UNLOCK_COPY } from 
 //
 // **The four states and their controls**, which is the table the plan settled:
 //
-// | Condition                 | Copy                        | Control                        |
-// | ------------------------- | --------------------------- | ------------------------------ |
-// | `ready`                   | the set's own prose         | "Ask about your spending"      |
-// | `generating`              | `SummaryBannerSkeleton`     | none while the skeletons are up |
-// | `empty` and `isEmpty`     | `UNLOCK_COPY`               | `AddTransactionButton`         |
-// | `empty` and not `isEmpty` | `PENDING_COPY`              | "Ask about your spending"      |
+// | Condition                 | Copy                    | Control                              |
+// | ------------------------- | ----------------------- | ------------------------------------ |
+// | `ready`                   | the set's own prose     | the assistant link                   |
+// | `generating`              | `SummaryBannerSkeleton` | none while the skeletons are up      |
+// | `empty` and `isEmpty`     | `UNLOCK_COPY`           | `AddTransactionButton`               |
+// | `empty` and not `isEmpty` | `PENDING_COPY`          | the assistant link, plus Regenerate  |
+//
+// plus **Regenerate wherever `stalled` is set**, whichever of those rows the fold lands on. PET-78
+// made that control conditional; the paragraph on `canRegenerate` below is the authority for why,
+// and the table above is only true read together with it.
 //
 // `isEmpty` is `page.tsx`'s existing shared `transactionCount === 0` condition from PET-26, so
 // this adds **no new condition** to the screen - which is the whole point of that ticket resolving
@@ -46,7 +52,8 @@ import { PENDING_COPY, SummaryBanner, SummaryBannerSkeleton, UNLOCK_COPY } from 
 // on its own input for the same reason; this guards on a flag `page.tsx` resolved once.
 
 export function InsightSummarySlot() {
-  const { set, displayState, generating, isCurrentPeriod, isEmpty, regenerate } = useInsightPoll();
+  const { set, displayState, generating, stalled, isCurrentPeriod, isEmpty, regenerate } =
+    useInsightPoll();
 
   if (!isCurrentPeriod) {
     return null;
@@ -61,23 +68,58 @@ export function InsightSummarySlot() {
    * used to sit on: `POST /api/insights/generate` still exists, and this is now the only place
    * the set is drawn.
    *
-   * **Present in every state except `generating`, including `empty`, which amends INS-1.** Frame
-   * 16 draws no control and `/insights` honoured that, on the premise that `empty` had come to
-   * mean "this account has never logged a transaction". Two ordinary accounts reach `empty` with
-   * that premise false - one whose transactions predate the write-path trigger, and one whose
-   * first run failed - and in both the screen was a dead end with no control that could generate
-   * anything.
+   * **It renders only where it can do something, as of PET-78, and the product owner asked the
+   * right question to get there: is this button needed at all, given the set regenerates itself?**
+   * The premise is correct - `insight-triggers.listener.ts` handles `TRANSACTION_CHANGED` **and**
+   * `CATEGORY_CHANGED`, so every transaction and category write starts a run - and on the ordinary
+   * path the button is a second control beside the primary one that restates what the app already
+   * did by itself. So it is gone from the `ready` state, which is every healthy account.
+   *
+   * **Deleting it outright was the other option and it re-creates a dead end**, which is the whole
+   * of why it exists. Three states reach this card with no run coming:
+   *
+   * - an account whose transactions predate the write-path trigger, so no set was ever generated
+   * - an account whose first run **failed**: `runGeneration` marks the row `failed` and the read
+   *   falls back, so a failure and a fresh account render identically
+   * - a run this mount **gave up** on at the 5.5-minute ceiling
+   *
+   * In the first two the only other way to start a run is to go and edit a transaction, which is
+   * advice no copy on this card could reasonably give. So the condition is those three and nothing
+   * else. The third needs `stalled` off the poll rather than `displayState`, which deliberately
+   * folds a stall into `ready` or `empty` - see that field's own note.
+   *
+   * **`isEmpty` is excluded on purpose**: an account with nothing logged has nothing to analyse, so
+   * a run would produce the same empty set it already has. That is the one arm the previous version
+   * got wrong in its own test fixture, which asserted the button in the unlock state while its
+   * comment justified it with the two states above.
    */
-  const regenerateButton = (
+  const canRegenerate = stalled || (displayState === 'empty' && !isEmpty);
+
+  const regenerateButton = canRegenerate ? (
     <Button
       label="Regenerate"
       variant="secondary"
       disabled={generating}
       onClick={() => void regenerate()}
     />
-  );
+  ) : null;
 
-  const askButton = <Button label="Ask about your spending →" href={SIDEBAR_HREFS.insights} />;
+  // **The label names the destination, and drops the arrow.** "Ask about your spending" did not say
+  // where it went, and the arrow was standing in for that - while the same words are the visible
+  // label of the composer it lands on (`insights/AssistantComposer.tsx`), so the button and the
+  // field it leads to read identically. Naming the assistant is what distinguishes them, and the
+  // arrow stops carrying meaning once the sentence does.
+  // The glyph is `aria-hidden` and trailing, so the accessible name is the sentence alone - the
+  // rule `frontend/CLAUDE.md` states for every lucide mark, since the library renders a bare
+  // `<svg>` with no ARIA of its own. `Sparkle` rather than `Sparkles`, which is the app's AI mark
+  // (`ui/Sidebar.tsx` records that) and the one this card drew in its own eyebrow until item 5.2.
+  const askButton = (
+    <Button
+      label="Ask AI Assistant about your spending!"
+      href={SIDEBAR_HREFS.insights}
+      iconEnd={<Sparkle className="size-4 shrink-0" aria-hidden="true" />}
+    />
+  );
 
   if (displayState === 'empty') {
     const copy = isEmpty ? UNLOCK_COPY : PENDING_COPY;
@@ -99,10 +141,12 @@ export function InsightSummarySlot() {
 
   return (
     <SummaryBanner
-      // `ready` implies all three, but the contract types them nullable because the same fields
-      // are null in the empty state. The fallbacks are unreachable rather than defensive, and are
+      // `ready` implies both, but the contract types them nullable because the same fields are
+      // null in the empty state. The fallbacks are unreachable rather than defensive, and are
       // here because narrowing on `state` is not something the type knows.
-      overline={`${set.monthLabel ?? ''} summary`}
+      //
+      // `set.monthLabel` is no longer read by this card - PET-78 deleted the eyebrow it fed, and
+      // `SummaryBanner`'s header records what that gives up.
       headline={set.summary?.headline ?? ''}
       body={set.summary?.body ?? ''}
       action={

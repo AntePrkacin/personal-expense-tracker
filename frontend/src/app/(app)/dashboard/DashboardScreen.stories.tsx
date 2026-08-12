@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+import { Sparkle } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { addDays } from '@/lib/calendar';
@@ -218,10 +219,15 @@ export const Default: Story = {
             // the poll's own states are `InsightPoll.test.tsx`'s to cover.
             insightSummary={
               <SummaryBanner
-                overline="October 2025 summary"
                 headline="You are on track this month"
                 body="You've spent $1,240 of your $2,000 budget with 11 days to go."
-                action={<Button label="Ask about your spending →" href="/insights" />}
+                action={
+                  <Button
+                    label="Ask AI Assistant about your spending!"
+                    href="/insights"
+                    iconEnd={<Sparkle className="size-4 shrink-0" aria-hidden="true" />}
+                  />
+                }
               />
             }
             insightCards={

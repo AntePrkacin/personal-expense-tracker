@@ -80,6 +80,18 @@ type InsightPoll = {
   /** True while a run is in flight and this mount is still watching for it. */
   generating: boolean;
   /**
+   * Whether this mount gave up on a run that never settled.
+   *
+   * **Exposed for PET-78, which made the Regenerate control conditional.** It used to be enough
+   * for `displayState` to fold a stall into `ready` or `empty`, because the button rendered in
+   * both anyway. Now the button appears only where it can do something, and a stall is one of
+   * those places precisely *because* `displayState` hides it: the screen is showing last-good
+   * content or the empty copy, and nothing left on this mount will ever ask about that run again.
+   * Without this flag the fold would make a stalled `ready` indistinguishable from an ordinary
+   * one and leave the user no way to retry.
+   */
+  stalled: boolean;
+  /**
    * Whether the period on screen is the one insights describe.
    *
    * **Resolved once in `page.tsx` and threaded, never re-derived here.** That is PET-26's rule
@@ -223,6 +235,7 @@ export function InsightPollProvider({
       set,
       displayState,
       generating,
+      stalled,
       isCurrentPeriod,
       isEmpty,
       regenerate: async () => {
@@ -256,7 +269,7 @@ export function InsightPollProvider({
         }
       },
     }),
-    [set, displayState, generating, isCurrentPeriod, isEmpty, router],
+    [set, displayState, generating, stalled, isCurrentPeriod, isEmpty, router],
   );
 
   return <InsightPollContext.Provider value={value}>{children}</InsightPollContext.Provider>;
