@@ -217,6 +217,334 @@
           "ratio": 3.440014180664477
         }
       ]
+    },
+    {
+      "name": "light",
+      "origin": "stock",
+      "isDefault": false,
+      "prefersDark": false,
+      "effective": {
+        "primary": "#422ad5",
+        "primary-content": "#e0e7ff",
+        "secondary": "#f43098",
+        "secondary-content": "#f9e4f0",
+        "accent": "#47f1d8",
+        "accent-content": "#084d49",
+        "neutral": "#09090b",
+        "neutral-content": "#c3c3c6",
+        "info": "#00bafe",
+        "info-content": "#042e49",
+        "success": "#00d390",
+        "success-content": "#004c39",
+        "warning": "#fcb700",
+        "warning-content": "#793205",
+        "error": "#ff627d",
+        "error-content": "#4d0218",
+        "base-content/50": "#8c8c8d"
+      },
+      "overrides": [
+        {
+          "token": "accent",
+          "from": "#00d3bb",
+          "to": "#47f1d8"
+        },
+        {
+          "token": "neutral-content",
+          "from": "#e4e4e7",
+          "to": "#c3c3c6"
+        }
+      ],
+      "collisions": [
+        {
+          "a": "accent-content",
+          "b": "success-content",
+          "deltaE": 0.027615103561713636,
+          "grandfathered": true
+        },
+        {
+          "a": "primary-content",
+          "b": "secondary-content",
+          "deltaE": 0.03634279846470719,
+          "grandfathered": true
+        }
+      ],
+      "cardContrast": {
+        "primary": 8.321263723461787,
+        "primary-content": 1.2321178437014828,
+        "secondary": 3.6695324124872415,
+        "secondary-content": 1.2080377638155577,
+        "accent": 1.414940741197544,
+        "accent-content": 9.685973759653683,
+        "neutral": 19.895357656776593,
+        "neutral-content": 1.7585131792686723,
+        "info": 2.2211143293474565,
+        "info-content": 14.073479736122543,
+        "success": 1.9588767310113813,
+        "success-content": 10.034125120659644,
+        "warning": 1.762856527984398,
+        "warning-content": 9.245310267309232,
+        "error": 2.8786024691020087,
+        "error-content": 15.701768405400038,
+        "base-content/50": 3.3594943587648776
+      },
+      "contentLegibility": [
+        {
+          "content": "primary-content",
+          "base": "primary",
+          "ratio": 6.75362650252946
+        },
+        {
+          "content": "secondary-content",
+          "base": "secondary",
+          "ratio": 3.0375974347830925
+        },
+        {
+          "content": "accent-content",
+          "base": "accent",
+          "ratio": 6.845497820252103
+        },
+        {
+          "content": "neutral-content",
+          "base": "neutral",
+          "ratio": 11.313738157510222
+        },
+        {
+          "content": "info-content",
+          "base": "info",
+          "ratio": 6.3362248175028455
+        },
+        {
+          "content": "success-content",
+          "base": "success",
+          "ratio": 5.122387213961624
+        },
+        {
+          "content": "warning-content",
+          "base": "warning",
+          "ratio": 5.24450522237341
+        },
+        {
+          "content": "error-content",
+          "base": "error",
+          "ratio": 5.454649808001543
+        }
+      ]
+    },
+    {
+      "name": "dark",
+      "origin": "stock",
+      "isDefault": false,
+      "prefersDark": false,
+      "effective": {
+        "primary": "#605dff",
+        "primary-content": "#edf1fe",
+        "secondary": "#f43098",
+        "secondary-content": "#f9e4f0",
+        "accent": "#47f1d8",
+        "accent-content": "#084d49",
+        "neutral": "#09090b",
+        "neutral-content": "#c3c3c6",
+        "info": "#00bafe",
+        "info-content": "#042e49",
+        "success": "#00d390",
+        "success-content": "#004c39",
+        "warning": "#fcb700",
+        "warning-content": "#793205",
+        "error": "#ff627d",
+        "error-content": "#4d0218",
+        "base-content/50": "#858e95"
+      },
+      "overrides": [
+        {
+          "token": "accent",
+          "from": "#00d3bb",
+          "to": "#47f1d8"
+        },
+        {
+          "token": "neutral-content",
+          "from": "#e4e4e7",
+          "to": "#c3c3c6"
+        }
+      ],
+      "collisions": [
+        {
+          "a": "accent-content",
+          "b": "success-content",
+          "deltaE": 0.027615103561713636,
+          "grandfathered": true
+        },
+        {
+          "a": "primary-content",
+          "b": "secondary-content",
+          "deltaE": 0.03374838615675996,
+          "grandfathered": true
+        }
+      ],
+      "cardContrast": {
+        "primary": 3.3987929381584605,
+        "primary-content": 14.036904635169995,
+        "secondary": 4.3155496685503705,
+        "secondary-content": 13.108902602867632,
+        "accent": 11.192023047580928,
+        "accent-content": 1.634946550486047,
+        "neutral": 1.2563333929614573,
+        "neutral-content": 9.005362924280174,
+        "info": 7.129776786905268,
+        "info-content": 1.1252405008121487,
+        "success": 8.084250088706652,
+        "success-content": 1.578219246423259,
+        "warning": 8.983175394625372,
+        "warning-content": 1.7128737628675714,
+        "error": 5.501297784749095,
+        "error-content": 1.00855196545874,
+        "base-content/50": 4.7511878809330526
+      },
+      "contentLegibility": [
+        {
+          "content": "primary-content",
+          "base": "primary",
+          "ratio": 4.129967576893782
+        },
+        {
+          "content": "secondary-content",
+          "base": "secondary",
+          "ratio": 3.0375974347830925
+        },
+        {
+          "content": "accent-content",
+          "base": "accent",
+          "ratio": 6.845497820252103
+        },
+        {
+          "content": "neutral-content",
+          "base": "neutral",
+          "ratio": 11.313738157510222
+        },
+        {
+          "content": "info-content",
+          "base": "info",
+          "ratio": 6.3362248175028455
+        },
+        {
+          "content": "success-content",
+          "base": "success",
+          "ratio": 5.122387213961624
+        },
+        {
+          "content": "warning-content",
+          "base": "warning",
+          "ratio": 5.24450522237341
+        },
+        {
+          "content": "error-content",
+          "base": "error",
+          "ratio": 5.454649808001543
+        }
+      ]
+    },
+    {
+      "name": "abyss",
+      "origin": "stock",
+      "isDefault": false,
+      "prefersDark": false,
+      "effective": {
+        "primary": "#bdff00",
+        "primary-content": "#427600",
+        "secondary": "#cebef4",
+        "secondary-content": "#6e5f8f",
+        "accent": "#505050",
+        "accent-content": "#f8f8f8",
+        "neutral": "#003843",
+        "neutral-content": "#ffd6a7",
+        "info": "#00bafe",
+        "info-content": "#00152e",
+        "success": "#01df72",
+        "success-content": "#000700",
+        "warning": "#ffbf00",
+        "warning-content": "#854200",
+        "error": "#f04e4f",
+        "error-content": "#690000",
+        "base-content/50": "#807a68"
+      },
+      "overrides": [
+        {
+          "token": "secondary-content",
+          "from": "#564775",
+          "to": "#6e5f8f"
+        },
+        {
+          "token": "info-content",
+          "from": "#042e49",
+          "to": "#00152e"
+        },
+        {
+          "token": "success-content",
+          "from": "#022d14",
+          "to": "#000700"
+        }
+      ],
+      "collisions": [],
+      "cardContrast": {
+        "primary": 14.3445480962747,
+        "primary-content": 3.139471440910545,
+        "secondary": 10.097551706660584,
+        "secondary-content": 3.0355841231013216,
+        "accent": 2.1387334318098143,
+        "accent-content": 16.238197963257253,
+        "neutral": 1.3522875136274048,
+        "neutral-content": 12.67001017540968,
+        "info": 7.764222125913199,
+        "info-content": 1.0619253312489447,
+        "success": 9.6896337887564,
+        "success-content": 1.1818113070609735,
+        "warning": 10.432803278041881,
+        "warning-content": 2.280143080724246,
+        "error": 4.851419578429874,
+        "error-content": 1.3144569303077809,
+        "base-content/50": 4.025156684008476
+      },
+      "contentLegibility": [
+        {
+          "content": "primary-content",
+          "base": "primary",
+          "ratio": 4.569096539420767
+        },
+        {
+          "content": "secondary-content",
+          "base": "secondary",
+          "ratio": 3.3263949530558103
+        },
+        {
+          "content": "accent-content",
+          "base": "accent",
+          "ratio": 7.592436589685865
+        },
+        {
+          "content": "neutral-content",
+          "base": "neutral",
+          "ratio": 9.369316841078696
+        },
+        {
+          "content": "info-content",
+          "base": "info",
+          "ratio": 8.24502415295076
+        },
+        {
+          "content": "success-content",
+          "base": "success",
+          "ratio": 11.451318772832375
+        },
+        {
+          "content": "warning-content",
+          "base": "warning",
+          "ratio": 4.575503777038453
+        },
+        {
+          "content": "error-content",
+          "base": "error",
+          "ratio": 3.6908166913418086
+        }
+      ]
     }
   ]
 }

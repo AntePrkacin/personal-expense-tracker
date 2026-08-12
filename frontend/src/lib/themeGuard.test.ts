@@ -137,6 +137,29 @@ describe('parsing', () => {
     });
   });
 
+  it('reads every selector in an override list, not just the last before the brace', () => {
+    // The defect the gate found in itself. `light` and `dark` share one override block, and the
+    // single-selector version of the parser saw only `dark` - so the browser applied both while
+    // the guard went on reporting three collisions in `light` that were already fixed.
+    expect(
+      parseThemeOverrides(
+        `[data-theme='light'],\n[data-theme='dark'] {\n  --color-accent: #47f1d8;\n}`,
+      ),
+    ).toEqual({
+      light: { accent: '#47f1d8' },
+      dark: { accent: '#47f1d8' },
+    });
+  });
+
+  it('does not read a selector out of a comment', () => {
+    // `globals.css` explains its own override blocks in prose that names them, so a parser
+    // reading comments would report values nothing paints - the mirror of the bug above.
+    expect(
+      parseThemeOverrides(`/* [data-theme='abyss'] { --color-accent: #000000; } */
+[data-theme='dark'] { --color-accent: #47f1d8; }`),
+    ).toEqual({ dark: { accent: '#47f1d8' } });
+  });
+
   it('ignores a [data-theme] block that declares no colour token', () => {
     // The explainer pages carry such blocks for layout, and a theme entry with an empty
     // override map would report as an override of nothing.

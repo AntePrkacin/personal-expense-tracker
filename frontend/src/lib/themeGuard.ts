@@ -28,6 +28,26 @@ import type { components } from '@/types/api';
 // collisions `components/ui/categoryColour.ts` names, at the ΔE it names them at, which is the
 // calibration that makes the unknown answers worth reading.
 //
+// **An out-of-gamut `oklch()` is clipped per channel, and the tempting correction is wrong.**
+// Several stock themes - `abyss` most of all - carry chroma sRGB cannot express, and there are
+// three different answers for what such a colour becomes: per-channel clipping, CSS Color 4's
+// gamut-mapping algorithm, and the sRGB hex fallback daisyUI's own build emits beside each
+// value. They disagree by up to **ΔE 0.053**, which is half the floor below, and they disagree
+// about verdicts and not only about bytes: measured against daisyUI's fallback, `abyss` has five
+// colliding pairs; against clipping, four. So the difference decides how many overrides a theme
+// costs, and PET-79 was planned on a probe that clipped.
+//
+// **The browser settled it, and it clips.** daisyUI's build emits a hex fallback *and* a
+// `lab()` value; every browser that matters supports `lab()`, so the fallback is dead code and
+// Chromium resolves the `lab()` and clips the out-of-gamut result per channel. Measured over all
+// five themes and twenty tokens each by painting every token on a 1x1 canvas and reading the
+// pixel back - the method `docs/agents/claude-tooling.md` prescribes - this module agrees with
+// what Chromium paints on **97 of 100 tokens exactly** and the other three within one byte,
+// worst case ΔE 0.0019, fifty-four times smaller than the floor. Matching daisyUI's fallback
+// instead would have reported a collision the browser does not have. The lesson generalises past
+// this file: **the sRGB fallback beside a wide-gamut colour is not what paints**, so a check
+// calibrated against it is calibrated against a code path no user reaches.
+//
 // **This module reads the filesystem and must never be imported by a route.** `readThemeSources`
 // is the only function that touches `node:fs`, and it takes the repo root as an argument rather
 // than deriving one - `__dirname` exists under Jest's CommonJS transform and not under `node`,
@@ -310,6 +330,19 @@ export function compositeOver(foreground: string, background: string, alpha: num
 
 const ALL_DECLARABLE: readonly string[] = [...SEMANTIC_TOKENS, ...SURFACE_TOKENS];
 
+/**
+ * Drops CSS comments before anything is matched.
+ *
+ * Not tidiness: `globals.css`'s own comments quote selectors and token names while explaining
+ * them, and every parser below works by regex over the raw text - so a comment naming
+ * `[data-theme='dark']` would otherwise register as a rule overriding that theme. The guard would
+ * then report values nothing paints, which is the same class of wrongness as missing values that
+ * something does.
+ */
+function stripComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
 /** Pulls every `--color-<known token>` declaration out of one CSS block body. */
 function readDeclarations(body: string): TokenValues {
   const values: TokenValues = {};
@@ -330,7 +363,7 @@ function readDeclarations(body: string): TokenValues {
  * `measureThemes` throws on it rather than reporting a theme with no colours.
  */
 export function parseRegisteredStockThemes(globalsCss: string): string[] {
-  const block = /@plugin\s+'daisyui'\s*\{([\s\S]*?)\n\}/.exec(globalsCss);
+  const block = /@plugin\s+'daisyui'\s*\{([\s\S]*?)\}/.exec(stripComments(globalsCss));
   if (!block) return [];
   const themes = /themes:\s*([^;]+);/.exec(block[1]);
   if (!themes) return [];
@@ -351,7 +384,9 @@ export function parseRegisteredStockThemes(globalsCss: string): string[] {
  */
 export function parseAuthoredThemes(globalsCss: string): ThemeSource[] {
   const out: ThemeSource[] = [];
-  for (const block of globalsCss.matchAll(/@plugin\s+'daisyui\/theme'\s*\{([\s\S]*?)\n\}/g)) {
+  for (const block of stripComments(globalsCss).matchAll(
+    /@plugin\s+'daisyui\/theme'\s*\{([^{}]*)\}/g,
+  )) {
     const body = block[1];
     const name = /name:\s*'([^']+)'/.exec(body)?.[1];
     if (!name) continue;
@@ -393,16 +428,24 @@ export function parseStockThemes(themesCss: string): Record<string, TokenValues>
  *
  * The selector is matched with either quote style or none, because all three are valid CSS and
  * a guard that silently missed one would report a collision the browser does not have.
+ *
+ * **It reads every selector in a list, not the last one before the brace**, and that is a fix
+ * rather than a nicety: `light` and `dark` share one override block
+ * (`[data-theme='light'], [data-theme='dark'] { ... }`), and the version of this function that
+ * matched a single selector saw only `dark`. The browser applied both, so the guard reported
+ * three collisions in `light` that were already fixed - it found the defect in itself, which is
+ * the one kind of failure a gate cannot be trusted without.
  */
 export function parseThemeOverrides(globalsCss: string): Record<string, TokenValues> {
   const out: Record<string, TokenValues> = {};
-  for (const block of globalsCss.matchAll(
-    /\[data-theme=(?:'([^']+)'|"([^"]+)"|([a-z0-9-]+))\]\s*\{([^}]*)\}/g,
-  )) {
-    const name = block[1] ?? block[2] ?? block[3];
-    const declared = readDeclarations(block[4]);
+  for (const block of stripComments(globalsCss).matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    const names = [
+      ...block[1].matchAll(/\[data-theme=(?:'([^']+)'|"([^"]+)"|([a-z0-9-]+))\]/g),
+    ].map((match) => match[1] ?? match[2] ?? match[3]);
+    if (names.length === 0) continue;
+    const declared = readDeclarations(block[2]);
     if (Object.keys(declared).length === 0) continue;
-    out[name] = { ...out[name], ...declared };
+    for (const name of names) out[name] = { ...out[name], ...declared };
   }
   return out;
 }

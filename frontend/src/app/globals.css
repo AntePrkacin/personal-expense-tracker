@@ -51,7 +51,7 @@
    Foundations' sm/md/lg (8/12/16px) on daisyUI's three radius slots; the 20px
    xl step has no slot and is dropped. */
 @plugin 'daisyui' {
-  themes: false;
+  themes: light, dark, abyss;
 }
 
 @plugin 'daisyui/theme' {
@@ -174,6 +174,105 @@
   --border: 1px;
   --depth: 0;
   --noise: 0;
+}
+
+/* The seven token overrides that let three daisyUI stock themes join the picker
+   (PET-79). Read this before editing a value in any of the three blocks below,
+   because each one is the output of a constrained search rather than a choice,
+   and re-picking one by eye re-opens a collision the search closed.
+
+   **Why an override rather than a re-picked palette.** This app uses all eight
+   `-content` tokens as *category colours*, on top of their real job as
+   text-on-colour values, and a stock theme has no reason to keep those eight
+   distinguishable from each other. Not one of daisyUI's 35 themes satisfies the
+   guard as authored: counting pairs of the sixteen semantic tokens under the
+   repo's own 0.10 OKLab floor, the best are `aqua` and `abyss` at 4, stock
+   `light` and `dark` at 5, running to `lemonade` at 32 (Expensa sits at 2, both
+   grandfathered). frontend/CLAUDE.md's rule offers two ways out - change
+   `COLOUR_SEED`, or do not ship the theme - and the product owner closed both,
+   on the grounds that every category also carries its own icon. So the third
+   path is this one: override the few colliding values inside the stock themes.
+   Nothing is amended, no seeded category moves, and the picker still offers
+   every colour it offers today.
+
+   **Seven is a minimum, computed rather than estimated.** Two of the collisions
+   in stock `light` and `dark` are the exact two pairs Expensa already ships
+   knowingly (categoryColour.ts names them), so they introduce nothing new and
+   need no override; that leaves 3 new pairs in `light`, 3 in `dark` and 4 in
+   `abyss`. A minimum vertex cover over each of those graphs is 2, 2 and 3, which
+   was verified by brute force rather than by eye.
+
+   **Which token to override is a choice, and it was made on visual impact.** A
+   minimum cover is rarely unique, so it is steered onto `-content` tokens
+   wherever a same-sized one exists, because those paint text on a coloured
+   surface rather than the surface itself. `abyss` has two covers of size three
+   and the numbers, not a preference, chose between them: the one below damages
+   only tokens already near-invisible on that theme's card (`info-content`
+   1.267:1 -> 1.027:1, `success-content` 1.179:1 -> 1.143:1) and lifts
+   `secondary-content` across 3:1 (2.169 -> 3.139), where the alternative
+   (`neutral` + `info-content` + `secondary-content`) pushes `neutral` from
+   1.398:1 to 1.074:1 - and `neutral` is a visible ground in that theme, so
+   merging it into the card is a layout-visible change rather than a dark tile.
+   For `light` and `dark` the cover is `neutral-content` plus one of
+   `accent`/`success`, and `accent` is chosen because `success` is semantically
+   load-bearing here: it is the budget banding's "on track" colour.
+
+   **Every value moves lightness only.** The search is staged - hue and chroma
+   pinned and only lightness free, then hue pinned, then everything - and all
+   seven were solved in the first stage, so every colour stays in its own family
+   and a grey stays a grey. An earlier unstaged search minimised OKLab distance
+   instead and turned `light`'s near-white `neutral-content` into a pale olive;
+   that is what these three stages exist to prevent. Each value is the smallest
+   move from daisyUI's own that clears the floor by a margin and keeps the
+   `-content` value legible on its own base, both figures measured.
+
+   **`light` and `dark` share one pair of values**, because the two stock themes
+   already share every chromatic token and differ only in their surfaces and
+   `primary` - so their collisions are identical and one answer serves both.
+
+   These are plain unlayered rules rather than `@plugin 'daisyui/theme'` blocks,
+   and that is what makes them win: daisyUI's theme rules sit inside nested
+   `@layer` blocks, and unlayered author CSS outranks any layered rule at any
+   specificity - the same mechanism the field-focus rules below rely on, and the
+   reason no `!important` is needed. Registering the three by name in the
+   `@plugin 'daisyui'` block above emits only `[data-theme=...]` selectors for
+   them and no bare `:root`, verified in the built CSS, so `expensa-light` keeps
+   `:where(:root)` and `expensa-dark` keeps `:root:not([data-theme])` - the two
+   arms lib/theme.ts's whole mechanism rests on.
+
+   `frontend/src/lib/themeGuard.ts` measures all of this and
+   `themeGuard.test.ts` is the gate; `npm run theme:report` prints the tables. */
+[data-theme='light'],
+[data-theme='dark'] {
+  /* Was #00d3bb, ΔE 0.0601 from `success` - the tightest pair in either theme.
+     Lightened to clear 0.1171, keeping accent-content at 6.845:1 on it. */
+  --color-accent: #47f1d8;
+
+  /* Was #e4e4e7, colliding with both near-white `primary-content` (0.0312 light,
+     0.0416 dark) and `secondary-content` (0.0322 both). Darkened to a mid grey,
+     which it can afford because it only ever carries text on the very dark
+     `neutral`: 11.314:1 there in light, 11.665:1 in dark. Nearest token now
+     `primary-content` at 0.1157. */
+  --color-neutral-content: #c3c3c6;
+}
+
+[data-theme='abyss'] {
+  /* Was #564775, ΔE 0.0761 from `accent`. Lightened to 0.1163, and this is the
+     one override that improves its own card contrast (2.169:1 -> 3.139:1).
+     3.326:1 on `secondary`. */
+  --color-secondary-content: #6e5f8f;
+
+  /* Was #042e49, colliding with `neutral` (0.0390) and `success-content`
+     (0.0970). Darkened; 8.245:1 on `info`, nearest now `success-content` at
+     0.1155. */
+  --color-info-content: #00152e;
+
+  /* Was #022d14, colliding with `neutral` (0.0823) and `info-content` (0.0970).
+     The largest move of the seven (ΔE 0.1528) and the only direction available:
+     `abyss` sets `success` light, so its content pair must stay dark to keep
+     3:1 against it, and lighter values collide with `success` itself. 11.451:1
+     on `success`, nearest now `info-content` at 0.1154. */
+  --color-success-content: #000700;
 }
 
 /* The two project typefaces, loaded via next/font in src/app/fonts.ts, which
