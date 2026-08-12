@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { Palette } from '@/lib/palette';
 
-import { PreferencesProvider } from '../../PreferencesProvider';
+import { ShellStory } from '../../shellStory';
 import { EditCategoryModal as Wrapped } from './EditCategoryModal';
 
 /**
@@ -15,9 +15,9 @@ import { EditCategoryModal as Wrapped } from './EditCategoryModal';
  */
 function EditCategoryModal(props: React.ComponentProps<typeof Wrapped>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <Wrapped {...props} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 import { category, CATEGORY_PERIODS } from './categoryFixture';

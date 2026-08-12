@@ -8,6 +8,7 @@ import { DRAWER_TOGGLE_ID } from './drawer';
 import { EditTransactionProvider } from './EditTransactionProvider';
 import { PreferencesProvider } from './PreferencesProvider';
 import { SidebarNav } from './SidebarNav';
+import { ToastProvider } from './ToastProvider';
 
 // The app shell: the dark sidebar beside a content column, which every
 // signed-in view renders inside (DSH-1, tech spec section 1 - "four routed views
@@ -124,15 +125,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
             It carries only the currency and the month start day, never the profile - see
             `PreferencesProvider.tsx` for why the names and the email stay props on the two
-            components that already have them. */}
+            components that already have them.
+
+            **`ToastProvider` is outermost of the five (PET-77), and its position is load-bearing
+            for the simplest of the reasons on this list: everything that can post has to be
+            inside it.** That includes the three dialogs the providers below mount, which are React
+            descendants of them rather than of the pages - so a confirmation posting from a delete
+            reaches the same region a save from Settings does. It consumes nothing itself, which is
+            why it can sit outside `PreferencesProvider` where `EditTransactionProvider` must sit
+            inside `DeleteTransactionProvider`. `layout.test.tsx` pins it with a child that posts,
+            because every other assertion in that file would fail for the same reason and none of
+            them would say why.
+
+            It replaces the four unrelated ways a write used to report itself, which `docs/TODO.md`
+            carried as its one HIGH IMPORTANCE entry until this ticket. */}
         <div className="flex flex-1 flex-col px-4 sm:px-6 lg:px-10">
-          <PreferencesProvider currency={profile.currency}>
-            <AddTransactionProvider>
-              <DeleteTransactionProvider>
-                <EditTransactionProvider>{children}</EditTransactionProvider>
-              </DeleteTransactionProvider>
-            </AddTransactionProvider>
-          </PreferencesProvider>
+          <ToastProvider>
+            <PreferencesProvider currency={profile.currency}>
+              <AddTransactionProvider>
+                <DeleteTransactionProvider>
+                  <EditTransactionProvider>{children}</EditTransactionProvider>
+                </DeleteTransactionProvider>
+              </AddTransactionProvider>
+            </PreferencesProvider>
+          </ToastProvider>
         </div>
       </div>
       <div className="drawer-side">

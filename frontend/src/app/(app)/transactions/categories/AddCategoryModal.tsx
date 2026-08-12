@@ -18,10 +18,12 @@ import { reformatAmountInput } from '@/lib/amountField';
 import type { Palette } from '@/lib/palette';
 import type { components } from '@/types/api';
 
+import { isToastedFailure } from '../../failureReporting';
 import { Modal, type ModalHandle } from '../../Modal';
 import { ColourSelect } from './ColourSelect';
 import { IconSelect } from './IconSelect';
 import { useCurrency } from '../../PreferencesProvider';
+import { useToast } from '../../ToastProvider';
 import {
   hasChosenMarks,
   invalidFields,
@@ -76,6 +78,11 @@ import {
  * rather than blaming a request that worked. It deliberately promises nothing the user can do: the
  * lists are not theirs to change, and there is no admin surface to send them to yet.
  */
+/**
+ * What the toast region says when the category exists (PET-77).
+ */
+const TOAST_CREATED = 'Category added.';
+
 const MESSAGES = {
   name: 'Enter a name.',
   monthlyCap: 'Enter a budget greater than 0, or leave it blank for no limit.',
@@ -154,6 +161,7 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
   // The prefix glyph for `ui/Input`'s currency variant, which drew a literal `$` until PET-47's
   // review. See `useCurrency` for why the symbol is a prop rather than read inside the primitive.
   const currency = useCurrency();
+  const { post } = useToast();
   const modalRef = useRef<ModalHandle>(null);
 
   /**
@@ -300,15 +308,27 @@ export function AddCategoryModal({ palette, create, onClose }: AddCategoryModalP
       result = await create(toCreateCategoryBody(values));
     } catch {
       setPending(false);
-      setFailure(MESSAGES.failed);
+      // A rejection is `failed`, which reports in the toast region (PET-77).
+      post({ kind: 'failure', message: MESSAGES.failed });
       return;
     }
 
     if (!result.ok) {
       setPending(false);
-      setFailure(MESSAGES[result.reason]);
+
+      // Two of the three arms leave this form (PET-77); `failureReporting.ts` owns the rule. Only
+      // `invalid` names something the fields in front of the user can fix.
+      if (isToastedFailure(result.reason)) {
+        post({ kind: 'failure', message: MESSAGES[result.reason] });
+      } else {
+        setFailure(MESSAGES[result.reason]);
+      }
+
       return;
     }
+
+    // Posted before the close, which unmounts this component - see `(app)/AddTransactionModal.tsx`.
+    post({ kind: 'success', message: TOAST_CREATED });
 
     // **Refresh before closing, and close through the dialog rather than by unmounting.**
     // `router.refresh()` re-runs this route's Server Components, which is what redraws the card

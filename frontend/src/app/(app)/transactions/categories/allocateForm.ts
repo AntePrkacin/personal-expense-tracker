@@ -1,6 +1,7 @@
 import type { CategoryColour, IconName } from '@/components/ui/categoryColour';
 import { formatAmountInput, parseAmountInput } from '@/lib/format';
 import type { Allocation, Category } from '@/lib/categories';
+import type { MoneyFormatters } from '@/lib/money';
 import { withoutFallback } from '@/lib/fallbackCategory';
 import type { components } from '@/types/api';
 
@@ -349,3 +350,25 @@ export function toAllocateBody(
 export function isDirty(original: AllocateDraft, draft: AllocateDraft): boolean {
   return toAllocateBody(original, draft).categories.length > 0;
 }
+
+/**
+ * The transient message a snap shows. Exported for the same reason.
+ *
+ * **Two sentences, because a ceiling of zero is a different fact.** "Capped at $0.00" would be
+ * technically true and useless: the field was cleared rather than capped, and what the user needs to
+ * know is that there is nothing left to give this category. Reached whenever the budget is fully
+ * assigned, which is an ordinary state rather than an edge - it is where the modal's own snap leaves
+ * you.
+ *
+ * **The formatters are a parameter for `deleteTransactionBody`'s reason**: PET-47 made money follow
+ * the profile's currency through a context, which only a hook can reach, and this is a plain
+ * function so its suite needs no provider around it.
+ */
+export const cappedMessage = (
+  capCents: number,
+  budgetCents: number,
+  { formatCurrency, formatWhole }: MoneyFormatters,
+): string =>
+  capCents === 0
+    ? `Nothing left to assign. Free up budget from another category first.`
+    : `Capped at ${formatCurrency(capCents / 100)} - the rest of your ${formatWhole(budgetCents / 100)} is assigned elsewhere.`;

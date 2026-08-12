@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 
 import type { Transaction } from '@/lib/transactions';
 
-import { PreferencesProvider } from './PreferencesProvider';
+import { ShellStory } from './shellStory';
 import { EditTransactionModal as Wrapped } from './EditTransactionModal';
 
 /**
@@ -16,9 +16,9 @@ import { EditTransactionModal as Wrapped } from './EditTransactionModal';
  */
 function EditTransactionModal(props: React.ComponentProps<typeof Wrapped>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <Wrapped {...props} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 

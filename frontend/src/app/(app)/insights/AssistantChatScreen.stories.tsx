@@ -4,6 +4,7 @@ import type { AssistantConversation } from '@/lib/assistant';
 import type { SendMessageResult } from '@/lib/sendAssistantMessage';
 
 import { AssistantChatScreen } from './AssistantChatScreen';
+import { ShellStory } from '../shellStory';
 import { InsightsTabs } from './InsightsTabs';
 
 // The assistant's Chat view, in every state it has.
@@ -198,17 +199,22 @@ const Frame = ({
   active = 'chat' as const,
   ...props
 }: Partial<React.ComponentProps<typeof AssistantChatScreen>> & { active?: 'chat' | 'history' }) => (
-  <div className="bg-base-200 flex min-h-screen flex-col gap-6 p-10">
-    {/* A plausible count, so the History badge is in the frame for a designer to look at. The real
-        page reads it from `GET /api/assistant/sessions/count`; a story has no session to ask with,
-        and `null` here would review the failed-read state rather than the ordinary one. */}
-    <InsightsTabs active={active} historyCount={4} />
-    <AssistantChatScreen
-      conversation={null}
-      send={async ({ message }) => reply(message)}
-      {...props}
-    />
-  </div>
+  // `ShellStory` rather than a bare div: this screen posts into the toast region as of PET-77, and
+  // `useToast()` throws outside its provider. Mounted here inside `render` rather than in a
+  // `decorators` array, which the story smoke tests never apply - see `(app)/shellStory.tsx`.
+  <ShellStory>
+    <div className="bg-base-200 flex min-h-screen flex-col gap-6 p-10">
+      {/* A plausible count, so the History badge is in the frame for a designer to look at. The real
+          page reads it from `GET /api/assistant/sessions/count`; a story has no session to ask with,
+          and `null` here would review the failed-read state rather than the ordinary one. */}
+      <InsightsTabs active={active} historyCount={4} />
+      <AssistantChatScreen
+        conversation={null}
+        send={async ({ message }) => reply(message)}
+        {...props}
+      />
+    </div>
+  </ShellStory>
 );
 
 /**

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { Allocation, Category } from '@/lib/categories';
 
-import { PreferencesProvider } from '../PreferencesProvider';
+import { ShellStory } from '../shellStory';
 import {
   category,
   FALLBACK_CATEGORY,
@@ -29,13 +29,13 @@ import { ManageCategoriesModal as Modal } from './ManageCategoriesModal';
  */
 function ManageCategoriesModal(props: React.ComponentProps<typeof Modal>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <DeleteCategoryProvider fallbackName="Uncategorized" remove={remove}>
         <EditCategoryProvider palette={null} periods={[]} update={update}>
           <Modal {...props} />
         </EditCategoryProvider>
       </DeleteCategoryProvider>
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 

@@ -1,6 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+
+// `render` comes from the shell wrapper: the confirmation below posts into the toast region as of
+// PET-77, and `useToast()` throws outside its provider by design. See `(app)/shellRender.tsx`.
+import { render } from '../../shellRender';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
+
+import { toastMessages } from '../../toastQueries';
 
 import {
   DeleteCategoryDialog,
@@ -191,6 +197,19 @@ describe('Delete', () => {
     expect(refresh.mock.invocationCallOrder[0]!).toBeLessThan(onClose.mock.invocationCallOrder[0]!);
   });
 
+  // **PET-77, and this confirmation says more than the transaction one deliberately.** A category
+  // delete has two effects and the second is the surprising half: the transactions are reassigned,
+  // not deleted. The fallback's name comes off the list response rather than being assumed.
+  it('confirms the delete in the toast region, naming where the transactions went', async () => {
+    renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() =>
+      expect(toastMessages()).toEqual([`Category deleted. Its transactions moved to ${FALLBACK}.`]),
+    );
+  });
+
   it('disables itself while the request is out, and leaves Cancel enabled', async () => {
     let settle: (result: { ok: true }) => void = () => {};
     const remove = jest.fn().mockReturnValue(
@@ -207,10 +226,17 @@ describe('Delete', () => {
     // when a visible way out matters most, and the centred shape has no X beside it.
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
 
-    settle({ ok: true });
+    // Awaited: the success path posts a toast as of PET-77, and an unawaited resolution lands
+    // after the test has finished, which React reports as an update outside `act`.
+    await act(async () => {
+      settle({ ok: true });
+    });
   });
 });
 
+// **PET-77 split these four by where they are reported**, and this dialog is the clearest case for
+// the rule: `missing` and `fallback` both describe the state of the account and ask the user to look
+// at it, which they do from here, while the other two name nothing this dialog can act on.
 describe('the four failures', () => {
   it.each([
     ['missing', 'That category is already gone. Close this to see the current list.'],
@@ -218,8 +244,6 @@ describe('the four failures', () => {
       'fallback',
       'That category cannot be deleted: it is where deleting any other category moves its transactions.',
     ],
-    ['unauthenticated', 'Your session has expired. Log in again to delete this.'],
-    ['failed', "We couldn't delete this category. Please try again."],
   ])('shows the %s line and keeps the dialog open', async (reason, message) => {
     const { onClose } = renderDialog({
       remove: jest.fn().mockResolvedValue({ ok: false, reason }),
@@ -229,13 +253,30 @@ describe('the four failures', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(message);
     expect(onClose).not.toHaveBeenCalled();
+    expect(toastMessages()).toEqual([]);
   });
+
+  it.each([['failed', "We couldn't delete this category. Please try again."]])(
+    'reports %s in the toast region and keeps the dialog open',
+    async (reason, message) => {
+      const { onClose } = renderDialog({
+        remove: jest.fn().mockResolvedValue({ ok: false, reason }),
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+      await waitFor(() => expect(toastMessages()).toEqual([message]));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
 
   it('re-enables Delete after a failure, so the user can retry', async () => {
     renderDialog({ remove: jest.fn().mockResolvedValue({ ok: false, reason: 'failed' }) });
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
@@ -254,7 +295,7 @@ describe('the four failures', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-      expect(refresh).not.toHaveBeenCalled();
+      await waitFor(() => expect(refresh).not.toHaveBeenCalled());
     },
   );
 });
@@ -268,8 +309,9 @@ describe('when the request itself rejects', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      "We couldn't delete this category. Please try again.",
+    // Classified as `failed`, so it reports where `failed` reports (PET-77).
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't delete this category. Please try again."]),
     );
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });

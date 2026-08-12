@@ -24,10 +24,25 @@ export type ButtonVariant =
 // modifier and `btn-error` a colour one, which is the pairing frontend/CLAUDE.md
 // records as supported - two *style* modifiers is the mistake, and the reason
 // `btn-ghost btn-outline` draws no border.
+//
+// **`danger` carries `text-white`, which is a literal colour in a repo that forbids them, and it is
+// the same carve-out `(app)/ToastRegion.tsx` documents (PET-77).** The rule exists because a raw
+// palette value does not follow the theme; `--color-error` is the *same* fill in both Expensa
+// themes, so nothing here is theme-aware and the token that would have followed the theme -
+// `--color-error-content`, a near-black red - is the one that reads as dark text on a red button.
+// It is scoped to this variant on purpose: `dangerSoft` is a tinted surface where the same white
+// would be illegible, and `textDanger` is red text on the page's own background.
+//
+// **`enabled:` is load-bearing and a review found why.** daisyUI's `.btn:disabled` sets both the
+// fill and the text to `base-content` tints, and those live in its nested `utilities.daisyui.*`
+// sub-layer - so an unlayered `text-white` beats them and a *disabled* Delete drew white on the
+// near-white disabled pill, about 1.1:1. `ConfirmDeleteDialog` disables this button for the whole
+// delete round trip, so the label vanished on every delete rather than in some edge case. The
+// variant restricts the override to the enabled state and leaves the disabled pair alone.
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'btn btn-primary',
   secondary: 'btn',
-  danger: 'btn btn-error',
+  danger: 'btn btn-error enabled:text-white',
   dangerSoft: 'btn btn-soft btn-error',
   text: 'btn btn-ghost',
   textDanger: 'btn btn-ghost text-error',

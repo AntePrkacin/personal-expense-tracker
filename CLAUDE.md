@@ -107,6 +107,25 @@ route grew two reads for it - the palette and the periods - both of which **degr
 throw**, because `requireProfile()` stays the only read on that page with an opinion about whether
 the session is alive.
 
+**PET-77 is the eighteenth thing that works, and it is the one that changes how every other one
+*reports itself*.** Seventeen features had, between them, four unrelated ways of saying "that
+worked": a modal that just closed for every transaction and category write, a `role="status"` badge on
+Settings, a `role="status"` line in the Allocate modal, and nothing whatsoever for anything without a
+form - so a save whose row landed outside the current period or filter was confirmed by nothing at
+all. One **toast region** now replaces all four, mounted once on `(app)/layout.tsx` outermost of the
+five providers, with twelve call sites posting into it and none owning a region. `docs/TODO.md` had
+carried this as its single HIGH IMPORTANCE entry since the product owner marked it, and this ticket
+deletes it. Four things about it are decisions rather than shape. It is a **platform popover**,
+because `Modal` uses the top layer and a `position: fixed` region cannot paint over one at any
+z-index - and `showPopover()` therefore fires on **every post**, since top-layer order is by when an
+element entered it. Its **announcement is two `sr-only` regions** rather than the visible stack,
+because a hidden popover is `display: none` and a live region whose content changed while hidden is
+not announced. **Where a failure is reported is a property of its *reason***, which the app's existing
+per-write failure taxonomies already made expressible: `failed` and `unauthenticated` leave the form,
+everything actionable stays inline, and `components/FormError.tsx` survives for exactly that. And
+there are **two kinds, not three** - a background insight regeneration announces nothing, because it
+fires behind every write and would double every save.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and

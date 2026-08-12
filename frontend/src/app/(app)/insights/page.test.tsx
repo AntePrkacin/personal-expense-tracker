@@ -1,4 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+
+// `render` comes from the shell wrapper: the chat posts into the toast region as of PET-77, and
+// `useToast()` throws outside its provider by design. See `(app)/shellRender.tsx`.
+import { render } from '../shellRender';
 import userEvent from '@testing-library/user-event';
 
 import { readConversation, readSessionCount } from '../../../lib/assistant';

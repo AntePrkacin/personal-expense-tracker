@@ -1,6 +1,8 @@
 import type { Allocation } from '@/lib/categories';
+import { moneyFormatters } from '@/lib/money';
 
 import {
+  cappedMessage,
   allocatableCategories,
   applyCap,
   assignedCents,
@@ -405,5 +407,28 @@ describe('isDirty', () => {
   it('is true once a cap really changed', () => {
     expect(isDirty(draftOf('250'), draftOf('300'))).toBe(true);
     expect(isDirty(draftOf('250'), draftOf(''))).toBe(true);
+  });
+});
+
+// **`cappedMessage` moved here from `AllocateBudgetModal.tsx` (PET-77 review).** PET-77 deleted the
+// snap announcement and, with it, `describe('the capped message')` in the modal's suite - leaving
+// the function exported with no consumer, no coverage, and two documents asserting it lived in this
+// module when it did not. The move makes those documents true and puts the arithmetic and the copy
+// back under a suite that needs no DOM.
+describe('cappedMessage', () => {
+  const money = moneyFormatters('USD');
+
+  it('quotes the capped amount to the cent and the budget whole', () => {
+    expect(cappedMessage(135_000, 200_000, money)).toBe(
+      'Capped at $1,350.00 - the rest of your $2,000 is assigned elsewhere.',
+    );
+  });
+
+  // A ceiling of zero clears the field rather than planting an invalid `0`, so the sentence has to
+  // explain that rather than quote it - the browser finding the modal's own comment records.
+  it('says nothing is left rather than quoting a cap of zero', () => {
+    expect(cappedMessage(0, 200_000, money)).toBe(
+      'Nothing left to assign. Free up budget from another category first.',
+    );
   });
 });

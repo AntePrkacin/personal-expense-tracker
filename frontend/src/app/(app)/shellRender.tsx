@@ -1,9 +1,17 @@
 import { render as rtlRender, type RenderOptions } from '@testing-library/react';
 
 import { PreferencesProvider } from './PreferencesProvider';
+import { ToastProvider } from './ToastProvider';
 
-// A `render` that mounts the shell's `PreferencesProvider` around whatever it is given, for the
-// suites and stories that mount a money-formatting component outside `(app)/layout.tsx`.
+// A `render` that mounts the shell's `PreferencesProvider` and `ToastProvider` around whatever it
+// is given, for the suites and stories that mount a shell component outside `(app)/layout.tsx`.
+//
+// **PET-77 added the second provider, and it widened what this harness is for.** It was "the money
+// one"; it is now "the shell's contexts", because `useToast()` throws outside its provider for the
+// same reason `useMoney()` does - a write whose confirmation silently stops appearing is a bug that
+// looks like a fast network. Twelve components post now, and every suite that mounts one would
+// otherwise wrap it by hand. The exemption below applies unchanged to both: `layout.test.tsx`
+// proves the layout really mounts them, so it must not render through this.
 //
 // **This is Testing Library's own "custom render" pattern, and it is here to be imported instead
 // of `render`, not alongside it.** Nine suites mount a component that calls `useMoney()`, several
@@ -28,7 +36,15 @@ import { PreferencesProvider } from './PreferencesProvider';
 const TEST_CURRENCY = 'USD';
 
 function ShellPreferences({ children }: { children: React.ReactNode }) {
-  return <PreferencesProvider currency={TEST_CURRENCY}>{children}</PreferencesProvider>;
+  // Same order as `(app)/layout.tsx`: the toast region outermost, because everything that can post
+  // is inside it. Nothing here depends on that ordering the way the app does - neither provider
+  // reads the other - and it matches anyway, so a suite is never testing an arrangement the app
+  // does not have.
+  return (
+    <ToastProvider>
+      <PreferencesProvider currency={TEST_CURRENCY}>{children}</PreferencesProvider>
+    </ToastProvider>
+  );
 }
 
 /**

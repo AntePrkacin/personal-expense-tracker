@@ -1,10 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { generateInsights } from '@/lib/generateInsights';
 import type { InsightSet } from '@/lib/insights';
+
+import { useToast } from '../ToastProvider';
 
 // The insight set's client owner: one read, one timer, two visual consumers.
 //
@@ -32,6 +34,15 @@ import type { InsightSet } from '@/lib/insights';
 
 /** The frontend's own route handler. One half of a contract; the suite pins the other. */
 const POLL_PATH = '/api/insights';
+
+/**
+ * What the toast region says for the two runs the user can see the result of (PET-77).
+ *
+ * There is deliberately no message for a run that fires behind a write, and none for one that
+ * stalls - see the poll and the ceiling for why each is silent rather than unfinished.
+ */
+const TOAST_UPDATED = 'Insights updated.';
+const TOAST_FAILED = "We couldn't update your insights. Please try again.";
 
 /**
  * The poll's backoff, in milliseconds.
@@ -116,6 +127,7 @@ export function InsightPollProvider({
   children,
 }: InsightPollProviderProps) {
   const router = useRouter();
+  const { post } = useToast();
   const [set, setSet] = useState(fromServer);
 
   /**
@@ -162,6 +174,35 @@ export function InsightPollProvider({
     set.state === 'generating' && stalled ? (set.summary ? 'ready' : 'empty') : set.state;
 
   // The poll. Keyed on the state alone, so a poll that returns another `generating` set does not
+  /**
+   * Whether the run currently in flight is one the user pressed the button for.
+   *
+   * **State rather than a ref, and a lint rule chose that.** A ref reads more naturally - nothing
+   * renders from this - but `regenerate` below is reachable from the `useMemo` that builds the
+   * context value, so `react-hooks/immutability` sees a ref write on a render-phase path and
+   * refuses it. This repo carries no eslint-disable comments. Setting state from that same closure
+   * is what `setStalled` and `setSet` already do two lines away, so the shape is the file's own.
+   *
+   * **It is mirrored into a ref and read from there inside the poll, which a review forced.** The
+   * flag used to be a dependency of the poll effect and was cleared only on the settle and the
+   * ceiling - so every *other* way `generating` can go false left it stuck true: the render-phase
+   * adoption of a `ready` set from any `router.refresh()`, and a period navigation making
+   * `isCurrentPeriod` false. A press followed by a period switch therefore announced nothing at the
+   * time and then put a spurious "Insights updated." on top of the next save's own toast, which is
+   * the double-toast-per-save this flag exists to prevent.
+   *
+   * Reading the ref keeps it out of the effect's dependencies, which is what lets the **cleanup**
+   * clear it: the cleanup runs on every teardown, so it covers the abandoned cases as well as the
+   * two the poll can see. As a dependency it could not, because clearing it would re-run the very
+   * effect that had just been armed.
+   */
+  const [manualRun, setManualRun] = useState(false);
+  const manualRunRef = useRef(manualRun);
+
+  useEffect(() => {
+    manualRunRef.current = manualRun;
+  }, [manualRun]);
+
   // restart the loop and lose its own backoff.
   useEffect(() => {
     if (!generating) {
@@ -184,6 +225,17 @@ export function InsightPollProvider({
           }
           setSet(next);
           if (next.state !== 'generating') {
+            // **Only a run the user asked for is announced (PET-77).** Every transaction and
+            // category write regenerates the set backend-side, so a poll settling is usually the
+            // tail of a save that already confirmed itself - a second toast there would double
+            // every save, which is exactly what the ticket decided against. The flag is set by
+            // `regenerate` and is the only thing that distinguishes the two.
+            if (manualRunRef.current) {
+              manualRunRef.current = false;
+              setManualRun(false);
+              post({ kind: 'success', message: TOAST_UPDATED });
+            }
+
             return;
           }
         }
@@ -200,6 +252,10 @@ export function InsightPollProvider({
       if (Date.now() - startedAt > POLL_CEILING_MS) {
         // Stop asking *and* say so, or the cards keep the skeletons forever: `generating` is this
         // effect's only dependency, and nothing left would move it. See the constant above.
+        // **A stalled run posts nothing, deliberately.** The button re-enables and the last-good
+        // content comes back on its own, and "insights updated" would be false while "insights
+        // failed" is more than the contract knows - A26 makes a failed run invisible. What the user
+        // asked for simply did not finish, and the screen says so by returning to itself.
         setStalled(true);
         return;
       }
@@ -215,8 +271,15 @@ export function InsightPollProvider({
     return () => {
       cancelled = true;
       clearTimeout(timer);
+
+      // **Every way out of a run clears the flag, not just the two the poll can see.** The settle
+      // above consumes it; the ceiling, a period navigation and a refreshed `ready` set all land
+      // here instead, and leaving it set is what let a later background regeneration announce
+      // itself as the user's.
+      manualRunRef.current = false;
+      setManualRun(false);
     };
-  }, [generating]);
+  }, [generating, post]);
 
   const value = useMemo<InsightPoll>(
     () => ({
@@ -233,6 +296,11 @@ export function InsightPollProvider({
         // committed the `generating` row before answering, so this is reporting what is already
         // true rather than optimistically guessing.
         if (result.ok) {
+          // **Marks this run as the user's**, so the poll announces it when it settles and stays
+          // silent for the runs that fire behind every write. Set before the state for the same
+          // reason `setStalled` is: the poll can begin as soon as the state moves.
+          setManualRun(true);
+
           // Before the state, so a click after the poll gave up really re-enters polling rather
           // than setting a state the `stalled` flag immediately renders through.
           setStalled(false);
@@ -253,10 +321,16 @@ export function InsightPollProvider({
         // redirect.
         if (result.reason === 'unauthenticated') {
           router.refresh();
+          return;
         }
+
+        // `failed`, which used to be silent: the click did nothing observable and the button
+        // re-enabled, so a user could press it repeatedly with no way of knowing. It is the one arm
+        // here with nowhere on the screen to report, which is `failureReporting.ts`'s whole rule.
+        post({ kind: 'failure', message: TOAST_FAILED });
       },
     }),
-    [set, displayState, generating, isCurrentPeriod, isEmpty, router],
+    [set, displayState, generating, isCurrentPeriod, isEmpty, router, post],
   );
 
   return <InsightPollContext.Provider value={value}>{children}</InsightPollContext.Provider>;

@@ -16,7 +16,7 @@ import { EditTransactionProvider } from '../EditTransactionProvider';
 import { TransactionFilterBar } from './TransactionFilterBar';
 import { TransactionsScreen } from './TransactionsScreen';
 import { TransactionsTable } from './TransactionsTable';
-import { PreferencesProvider } from '../PreferencesProvider';
+import { ShellStory } from '../shellStory';
 
 // 06 Transactions — List (node 26:90), the populated frame.
 //
@@ -112,7 +112,7 @@ function Frame({ filters }: { filters: TransactionFilters }) {
           `next/headers` in the page instead of an RPC. The story text below invites exactly that
           click. Resolving `ok` lets the whole flow be walked; nothing is deleted, and the list
           does not change because no server answered. */}
-      <PreferencesProvider currency="USD">
+      <ShellStory currency="USD">
         <DeleteTransactionProvider remove={async () => ({ ok: true })}>
           {/* PET-32's, inside the delete provider because it consumes that context, and with a stub
             action for the identical reason: the real `updateTransaction` is `'use server'`, and
@@ -142,7 +142,7 @@ function Frame({ filters }: { filters: TransactionFilters }) {
             </div>
           </EditTransactionProvider>
         </DeleteTransactionProvider>
-      </PreferencesProvider>
+      </ShellStory>
     </AddTransactionProvider>
   );
 }

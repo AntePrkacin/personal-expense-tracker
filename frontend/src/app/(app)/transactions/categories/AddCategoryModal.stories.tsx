@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 
 import type { Palette } from '@/lib/palette';
 
-import { PreferencesProvider } from '../../PreferencesProvider';
+import { ShellStory } from '../../shellStory';
 import { AddCategoryModal as Wrapped } from './AddCategoryModal';
 
 /**
@@ -16,9 +16,9 @@ import { AddCategoryModal as Wrapped } from './AddCategoryModal';
  */
 function AddCategoryModal(props: React.ComponentProps<typeof Wrapped>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <Wrapped {...props} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 

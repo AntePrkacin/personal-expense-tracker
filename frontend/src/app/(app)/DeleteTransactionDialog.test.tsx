@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 
 import { render } from './shellRender';
 import userEvent from '@testing-library/user-event';
@@ -11,6 +11,7 @@ import {
   deleteTransactionBody,
   type DeleteTarget,
 } from './DeleteTransactionDialog';
+import { toastMessages } from './toastQueries';
 
 /** The formatters the shell's provider would hand the dialog; see `PreferencesProvider`. */
 const USD = moneyFormatters('USD');
@@ -195,6 +196,28 @@ describe('Delete', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // **This dialog is the sharpest case for PET-77.** A delete takes the row, the dialog and often
+  // the control that opened it - a kebab dies with its row - so before this there was no surface
+  // left to say anything on, and a delete reported itself with nothing at all.
+  it('confirms the delete in the toast region, which survives the unwind', async () => {
+    renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(toastMessages()).toEqual(['Transaction deleted.']));
+  });
+
+  it('does not quote the merchant in that confirmation', async () => {
+    // Read after the dialog has gone, sometimes from another screen, so naming a row the user can
+    // no longer see would invite them to look for it. The body above is where the target is named.
+    renderDialog();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
+    expect(toastMessages()[0]).not.toContain(TARGET.merchant);
+  });
+
   it('refreshes before closing', async () => {
     // The order is AddTransactionModal's and matters for the same reason: closing first
     // unmounts this component mid-handler.
@@ -221,7 +244,12 @@ describe('Delete', () => {
 
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
 
-    settle({ ok: true });
+    // Awaited rather than fired and forgotten: the success path posts a toast as of PET-77, so
+    // resolving carries state updates on a provider above this dialog. Left unawaited they land
+    // after the test has finished, which React reports as an update outside `act`.
+    await act(async () => {
+      settle({ ok: true });
+    });
   });
 
   it('leaves Cancel live while the request is out', async () => {
@@ -240,23 +268,55 @@ describe('Delete', () => {
 
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
 
-    settle({ ok: true });
+    // Awaited rather than fired and forgotten: the success path posts a toast as of PET-77, so
+    // resolving carries state updates on a provider above this dialog. Left unawaited they land
+    // after the test has finished, which React reports as an update outside `act`.
+    await act(async () => {
+      settle({ ok: true });
+    });
   });
 });
 
+// **PET-77 split these three by where they are reported.** `missing` asks the user to close this
+// and see the current list, which is an instruction they carry out here; the other two name nothing
+// this dialog can do anything about, so they leave it. `(app)/failureReporting.ts` owns the rule.
 describe('the three failures', () => {
-  it.each([
-    ['missing', 'That transaction is already gone. Close this to see the current list.'],
-    ['unauthenticated', 'Your session has expired. Log in again to delete this.'],
-    ['failed', "We couldn't delete this transaction. Please try again."],
-  ])('shows its own line for %s', async (reason, message) => {
-    const remove = jest.fn().mockResolvedValue({ ok: false, reason });
+  it('shows its own line for missing, which asks the user to act here', async () => {
+    const remove = jest.fn().mockResolvedValue({ ok: false, reason: 'missing' });
     renderDialog({ remove });
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'That transaction is already gone. Close this to see the current list.',
+    );
+    expect(toastMessages()).toEqual([]);
   });
+
+  it('keeps the unauthenticated line inline, because the user must act on it', async () => {
+    const remove = jest.fn().mockResolvedValue({ ok: false, reason: 'unauthenticated' });
+    renderDialog({ remove });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Your session has expired. Log in again to delete this.',
+    );
+    expect(toastMessages()).toEqual([]);
+  });
+
+  it.each([['failed', "We couldn't delete this transaction. Please try again."]])(
+    'reports %s in the toast region instead',
+    async (reason, message) => {
+      const remove = jest.fn().mockResolvedValue({ ok: false, reason });
+      renderDialog({ remove });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+      await waitFor(() => expect(toastMessages()).toEqual([message]));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
 
   it('does not tell a user whose row is already gone to try again', async () => {
     // The reason `missing` exists as its own arm rather than folding into `failed`: retrying a
@@ -275,6 +335,7 @@ describe('the three failures', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
+    await waitFor(() => expect(toastMessages()).toHaveLength(1));
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
@@ -326,8 +387,9 @@ describe('when the request itself rejects', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      "We couldn't delete this transaction. Please try again.",
+    // Classified as `failed`, so it reports where `failed` reports (PET-77).
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't delete this transaction. Please try again."]),
     );
   });
 
@@ -353,9 +415,11 @@ describe('when the request itself rejects', () => {
   });
 
   it('clears a stale message when Delete is pressed again', async () => {
+    // `missing` rather than `failed`: after PET-77 only the arm the user can act on here renders an
+    // inline line at all, and the line is what this test is about.
     const remove = jest
       .fn()
-      .mockResolvedValueOnce({ ok: false, reason: 'failed' })
+      .mockResolvedValueOnce({ ok: false, reason: 'missing' })
       .mockResolvedValueOnce({ ok: true });
     renderDialog({ remove });
 

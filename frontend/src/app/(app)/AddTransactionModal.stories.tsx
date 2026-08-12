@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 
 import type { ScanReceiptResult } from '../../lib/scanReceipt';
 
-import { PreferencesProvider } from './PreferencesProvider';
+import { ShellStory } from './shellStory';
 import { AddTransactionModal as Wrapped } from './AddTransactionModal';
 
 /**
@@ -16,9 +16,9 @@ import { AddTransactionModal as Wrapped } from './AddTransactionModal';
  */
 function AddTransactionModal(props: React.ComponentProps<typeof Wrapped>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <Wrapped {...props} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 
