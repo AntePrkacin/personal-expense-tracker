@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-08-12T11:33:26.743Z",
+  "tables": {
+    "byScope": [
+      {
+        "scope": "central",
+        "tables": 6
+      },
+      {
+        "scope": "user",
+        "tables": 10
+      }
+    ],
+    "total": 16
+  },
+  "api": {
+    "operations": 29,
+    "paths": 22,
+    "byMethod": {
+      "GET": 14,
+      "POST": 9,
+      "PATCH": 4,
+      "DELETE": 2
+    }
+  },
+  "migrations": {
+    "byScope": [
+      {
+        "scope": "central",
+        "migrations": 1
+      },
+      {
+        "scope": "user",
+        "migrations": 2
+      }
+    ],
+    "total": 3
+  }
+}

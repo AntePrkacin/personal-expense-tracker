@@ -206,6 +206,35 @@ description = "Regenerate the committed showcase fixture.data.json"
 dir = "backend"
 run = "npx ts-node src/scripts/build-showcase-fixture.ts"
 
+# Refreshes every figure on docs/showcase/statistics.html and rebuilds the page's
+# data. One command, because the showcase is the same day the code is still being
+# written and the whole statistics vector is built around the refresh being cheap
+# enough to run minutes before the talk.
+#
+# The generators open no database and touch no network except `gh`, which
+# degrades to nulls rather than failing - so this works on a laptop with the wifi
+# off, which is the condition it was designed for.
+#
+# `showcase:stats:tests` is deliberately NOT part of it: it runs all three test
+# suites, which takes minutes. The page renders whatever that command last wrote.
+[tasks."showcase:stats"]
+description = "Refresh every showcase statistic and rebuild the charts page data"
+run = [
+  "node scripts/showcase/stats-repo.mjs",
+  "node scripts/showcase/stats-authors.mjs",
+  "node scripts/showcase/stats-delivery.mjs",
+  "node scripts/showcase/stats-deps.mjs",
+  "node scripts/showcase/stats-shape.mjs",
+  "node scripts/showcase/build-charts.mjs"
+]
+
+[tasks."showcase:stats:tests"]
+description = "Count the tests by running all three suites (slow, optional)"
+run = [
+  "node scripts/showcase/stats-tests.mjs",
+  "node scripts/showcase/build-charts.mjs"
+]
+
 # Mails every showcase participant their own 24-hour login link into the shared
 # demo account. Two tasks for the same reason `seed` has two, sharpened: a
 # mistaken local run writes rows into a gitignored SQLite file, a mistaken cloud
