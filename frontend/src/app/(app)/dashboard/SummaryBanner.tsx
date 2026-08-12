@@ -1,13 +1,51 @@
 import { Sparkle } from 'lucide-react';
 
-// The dark summary banner (INS-2, Figma node 38:495), in both of its shapes.
+// The summary banner (INS-2, Figma node 38:495), in both of its shapes. It was the *dark* banner
+// until PET-78, which is the next paragraph's subject.
 //
-// **`bg-neutral` with `text-neutral-content`**, daisyUI's always-dark slot - the same
-// mechanism `ui/Sidebar`'s panel uses. Not a `dark:` variant, which the repo forbids outright,
-// and not a raw palette class, which would compile and quietly bypass the theme.
+// **It was `bg-neutral` with `text-neutral-content` - daisyUI's always-dark slot - and in the dark
+// theme that made it invisible.** PET-78: `--color-neutral` is `#101720` in both Expensa themes and
+// the dark theme's `--color-base-200`, which paints the page canvas, is **also** `#101720`. So the
+// card's fill was byte-identical to the ground behind it, measured at exactly **1.000:1**: not a
+// weak highlight, the same colour. `ui/Sidebar.tsx` hit this in PET-74 and its comment names the
+// cause outright - "the ink version dissolved into the dark theme's canvas outright, because the
+// Expensa dark canvas *is* ink" - and answered it by ceasing to be ink.
+//
+// The sidebar's own answer (`bg-base-100` plus a hairline) is not this card's, because it would
+// make the banner identical to the five ordinary cards around it: visible, and no longer the
+// highlighted one. So this is **`bg-primary/20` with a `border-primary/30` hairline**, which is
+// distinct from the canvas *and* from a plain card in both themes, and which says "AI" with the
+// colour the assistant link and the sparkle already use. Still no `dark:` variant, which the repo
+// forbids outright, and still not a raw palette class - `primary` is a semantic token, so both
+// themes resolve it themselves.
+//
+// **Both halves carry an alpha, so both are composited and measured rather than reasoned about**,
+// which is the rule `frontend/CLAUDE.md` states for exactly this and which `getComputedStyle`
+// cannot satisfy on its own.
 //
 // **The glyph is `Sparkle`, not `Sparkles`.** `ui/Sidebar.tsx:53` records that the design's AI
-// mark is the single four-pointed star, and the library ships both.
+// mark is the single four-pointed star, and the library ships both. Only the skeleton draws one
+// now, for the reason below.
+//
+// **PET-78 deleted the uppercase eyebrow, and the reason is that the Dashboard said the period
+// three times.** It read "✦ AUGUST 2026 SUMMARY" over the headline, while the page header's own
+// overline said "August 2026" and the period select beside it said "August 2026" - so the card's
+// first line restated, in a third typographic style, the one fact the screen was least short of.
+// The `overline` prop is gone with it, which also took `UNLOCK_COPY`'s and `PENDING_COPY`'s
+// "AI Insights" - those two never named a period, and an eyebrow that exists only to label the
+// card as an AI card is what the headline and the assistant link already do.
+//
+// **What that gives up is worth knowing before restoring it.** The overline was the only place the
+// card said *which* period the set describes, and a set can outlive its own period: the read serves
+// the latest **ready** set whatever today is, so an account that writes nothing after a period rolls
+// over sees last period's analysis on this period's Dashboard. `isCurrentPeriod` does not cover that
+// - it asks which period the *screen* is showing, not when the set was generated. The honest fix if
+// that ever matters is a "generated {date}" line rather than the period label, because the defect is
+// staleness rather than a missing name; `docs/TODO.md` is where that belongs.
+//
+// The skeleton keeps its eyebrow, because that one is not a period label: "Analyzing your
+// spending..." is the only visible text while the bars are up, and it is what the `aria-busy`
+// state says in words.
 //
 // **The headline is a heading rather than a paragraph**, so the banner keeps a real accessible
 // structure instead of two runs of undifferentiated text. In the `ready` state everything in it
@@ -26,22 +64,6 @@ import { Sparkle } from 'lucide-react';
 // column now rather than sitting in the narrow one.
 
 type SummaryBannerProps = {
-  /**
-   * The uppercase eyebrow above the heading.
-   *
-   * In the ready state this is the period the set covers as the response renders it, plus
-   * "summary": `October 2025 summary`. INS-2 draws it as "✦ OCTOBER SUMMARY" with no year, and
-   * the year is kept because the set can outlive its own period - the read serves the latest
-   * *ready* set whatever today is, so an account that has not written anything since the period
-   * rolled over is looking at last month's analysis, and an overline reading "OCTOBER SUMMARY"
-   * in November is the card lying about which month it describes. Slicing the year off a field
-   * the contract documents as rendered prose would also be a second authority on how that
-   * string is built.
-   *
-   * A whole string rather than a `monthLabel` this component decorates, because the two copy
-   * states below have no period to name and would otherwise render " summary".
-   */
-  overline: string;
   headline: string;
   body: string;
   /**
@@ -68,7 +90,6 @@ type SummaryBannerProps = {
  * already keeps for its two copy objects.
  */
 export const UNLOCK_COPY = {
-  overline: 'AI Insights',
   headline: 'Insights unlock after your first expense.',
   body: "Log a few expenses and I'll surface patterns and ways to save.",
 };
@@ -81,25 +102,16 @@ export const UNLOCK_COPY = {
  * transaction and category write regenerates the set backend-side.
  */
 export const PENDING_COPY = {
-  overline: 'AI Insights',
   headline: 'No insights yet.',
   body: 'Your expenses are logged. Insights land here once an analysis has run.',
 };
 
-export function SummaryBanner({ overline, headline, body, action }: SummaryBannerProps) {
+export function SummaryBanner({ headline, body, action }: SummaryBannerProps) {
   return (
-    <section className="card bg-neutral text-neutral-content shadow-sm">
+    <section className="card border-primary/30 bg-primary/20 border shadow-sm">
       <div className="card-body gap-4">
-        {/* Decorative eyebrow, matching PageHeader's overline: the heading below carries the
-            card's accessible name, so an icon and a label both restating "insight" here would
-            be noise on top of it. */}
-        <div className="text-neutral-content/60 flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
-          <Sparkle className="size-3.5" aria-hidden="true" />
-          {overline}
-        </div>
-
         <h2 className="font-display text-xl font-bold">{headline}</h2>
-        <p className="text-neutral-content/70">{body}</p>
+        <p className="text-base-content/70">{body}</p>
 
         {action ? <div className="card-actions">{action}</div> : null}
       </div>
@@ -123,9 +135,9 @@ export function SummaryBanner({ overline, headline, body, action }: SummaryBanne
  */
 export function SummaryBannerSkeleton() {
   return (
-    <section aria-busy="true" className="card bg-neutral text-neutral-content shadow-sm">
+    <section aria-busy="true" className="card border-primary/30 bg-primary/20 border shadow-sm">
       <div className="card-body gap-4">
-        <div className="text-neutral-content/60 flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
+        <div className="text-base-content/60 flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
           <Sparkle className="size-3.5" aria-hidden="true" />
           Analyzing your spending...
         </div>
@@ -136,9 +148,9 @@ export function SummaryBannerSkeleton() {
             frame's own descending run rather than three equal blocks, so the shape reads as
             a headline over two lines of body. */}
         <div aria-hidden="true" className="flex flex-col gap-3">
-          <div className="skeleton bg-neutral-content/20 h-5 w-3/4" />
-          <div className="skeleton bg-neutral-content/20 h-4 w-full" />
-          <div className="skeleton bg-neutral-content/20 h-4 w-2/3" />
+          <div className="skeleton bg-base-content/20 h-5 w-3/4" />
+          <div className="skeleton bg-base-content/20 h-4 w-full" />
+          <div className="skeleton bg-base-content/20 h-4 w-2/3" />
         </div>
       </div>
     </section>

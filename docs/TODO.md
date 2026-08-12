@@ -78,6 +78,7 @@ knows. It is the one place the two-kind scheme is visibly short a kind.
 ## Post-Jira Cleanup Tasks
 - **Fix oversized CLAUDE.md files:** `backend/CLAUDE.md` (>700 lines) and `frontend/src/app/CLAUDE.md` (>1000 lines) need to be restructured and moved into feature subdirectories according to conventions.
 - **Fix JSDOM Version Mismatch:** `docs/CONTRIBUTING.md` and `jest.setup.ts` comments mention `jsdom 26.1.0`, while `frontend/package.json` depends on `jest-environment-jsdom: ^30.4.1`. Update the comments to reflect the actual installed version.
+- **`btn-primary`'s label fails WCAG AA in the dark theme, app-wide:** measured composited in headless Chromium at **3.90:1**, against the 4.5:1 floor for normal text (light is fine at 5.35:1). `--color-primary` is `#6963ee` and `--color-primary-content` `#edecfd` in `expensa-dark`. **It is every primary button in the app, not one screen**: PET-78 found it on the Dashboard's assistant link and proved it pre-existing by measuring the untouched "Add transaction" header button, which reads identically - the fill is opaque, so nothing behind it contributes. Not fixed there deliberately, because the fix moves a theme token and that triggers `frontend/CLAUDE.md`'s palette guard: both colour explainers have to be re-opened and every measured figure in them re-taken, since a theme change voids all of them. The cheap end is darkening `--color-primary-content` toward the near-black cast the other `-content` tokens use rather than touching `--color-primary`, which the whole category palette resolves against. Recorded rather than ticketed by the product owner's decision.
 
 ---
 
@@ -85,6 +86,52 @@ knows. It is the one place the two-kind scheme is visibly short a kind.
 
 These were decided against deliberately. Reasons are recorded so the decision is not
 relitigated by accident.
+
+### The Dashboard summary banner no longer says which period it describes
+
+PET-78 deleted the banner's uppercase eyebrow at the product owner's request, because the
+Dashboard stated the period three times: the page header's overline, the period select beside it,
+and "AUGUST 2026 SUMMARY" as the banner's own first line.
+
+What that gives up is precise and worth stating rather than discovering. The eyebrow was the only
+place the card named the period its analysis covers, and **a set can outlive its own period**:
+`GET /api/insights` serves the latest **ready** set whatever today is, so an account that writes
+nothing after a period rolls over sees last period's analysis on this period's Dashboard.
+`isCurrentPeriod` does not cover it - that flag asks which period the *screen* is showing, not when
+the set was generated - so the banner is silently one period stale rather than absent.
+
+Restoring the eyebrow is the wrong fix, because the defect is **staleness rather than a missing
+name**: a card labelled "July 2026 summary" on the August Dashboard is honest and still useless. The
+fix is a "generated {date}" line, or suppressing the banner when the set's own period is not the
+current one - which needs `GET /api/insights` to publish a period, which it does not. Filed here
+rather than as a bug because no account reaches it without a full period of inactivity, and the
+first write of the new period clears it.
+
+### A run that failed before the Dashboard loaded is invisible, and the poll can only see its own
+
+A review of PR #92 found PET-78's Regenerate condition missing a fourth dead end: a run that fails
+**after** a previously successful set. `insights.service.ts` skips a `failed` row and serves the
+newest `ready` one, so `GET /api/insights` answers `state: 'ready'` and the card looks perfectly
+healthy while the prose on it predates the write that triggered the run - with, before the fix, no
+control on screen able to start another.
+
+What shipped closes the half the frontend can see. `InsightPoll` compares `generatedAt` across a
+settle: the column is written at exactly one place backend-side, inside the transition to `ready`, so
+an unmoved value means the run produced nothing, and `runFailed` puts Regenerate back. That covers
+every run **this mount watched** - the button pressed, and the run that fires behind a save, since
+the modal's `router.refresh()` hands the provider a `generating` set and the poll follows it.
+
+The half it cannot cover is a run that failed while the user was on another screen, or before this
+mount existed. Loading the Dashboard fresh onto a stale set answers `ready` with no signal anywhere
+in the response, and no arithmetic over that response recovers one. Closing it is **one nullable
+field on `InsightSetResponseDto`** - the instant of the newest `failed` row when it is newer than the
+newest `ready` set, or a bare boolean - derived in `getSet` beside the two queries already there, and
+it is deliberately not in PET-78: that ticket is a UI/UX fixup round with no backend change in it, and
+this one wants a DTO change, an `api:sync` and an e2e case of its own.
+
+Note it is the **same shape** as the entry above, which wants `GET /api/insights` to publish a
+period. Both are "the card cannot tell the user how current this set is", and whichever ticket takes
+one should look at taking both, because they are one query away from each other.
 
 ### The verify page's inherited constraints, now that it exists
 

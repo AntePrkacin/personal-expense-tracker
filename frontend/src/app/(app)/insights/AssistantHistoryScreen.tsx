@@ -3,9 +3,9 @@ import Link from 'next/link';
 
 import { EmptyState } from '@/components/EmptyState';
 import type { AssistantSession } from '@/lib/assistant';
-import { calendarDateOfInstant, formatRelativeDate } from '@/lib/format';
 
 import { INSIGHTS_TAB_HREFS } from './InsightsTabs';
+import { LastActiveTime } from './LastActiveTime';
 
 // The History view's `<main>` (PET-73): every past conversation, newest activity first.
 //
@@ -42,7 +42,15 @@ export const HISTORY_EMPTY_COPY = {
 // The instant-to-calendar-date conversion this file used to hold privately now lives in
 // `lib/format.ts` as `calendarDateOfInstant`, because PET-76 gave the chat rows a timestamp of their
 // own and needed the identical fix. That function carries the full account of the zone bug a review
-// of PET-73 found here; nothing about this caption changed.
+// of PET-73 found here.
+//
+// **"Nothing about this caption changed" is what that note used to end on, and a review of PR #92
+// found the second half of the same bug still in it.** Sharing the conversion made both surfaces read
+// the *instant* the same way and said nothing about whose `today` they compared it against: PET-76
+// made the chat row client-only, so its `today` is the reader's, while this caption was rendered here
+// on the server, so its `today` was the frontend host's. Same message, "Today" on its row and
+// "Yesterday" in this list. `LastActiveTime.tsx` is the fix and carries the measurement; this screen
+// stays a Server Component and simply hands it the instant.
 
 /** Where a row links back to: the Chat view, carrying the session to resume. */
 export function conversationHref(sessionId: string): string {
@@ -56,9 +64,14 @@ export type AssistantHistoryScreenProps = {
    *
    * A parameter with a default rather than a bare clock read, the shape `formatRelativeDate` and
    * every helper in `lib/date.ts` already take, so a story and a suite can pin "Today" without
-   * faking a timer. It inherits the frontend-host-zone gap `RecentTransactionsCard` documents at
-   * length; `docs/TODO.md` carries it. What it no longer carries is a **second** zone on top of
-   * that one - see {@link calendarDateOfInstant}.
+   * faking a timer. Forwarded to `LastActiveTime`, which is where the default is now taken -
+   * **in the reader's browser rather than on this server**, which is the fix a review of PR #92
+   * made and the reason the caption is no longer rendered here.
+   *
+   * What remains is the one documented gap: the reader's own zone is still not the backend's
+   * `APP_TIMEZONE`, which `RecentTransactionsCard` records at length and `docs/TODO.md` tracks.
+   * The **second** zone this used to stack on top of that is gone twice over - once for the
+   * instant ({@link calendarDateOfInstant}) and once for `today`.
    */
   today?: string;
 };
@@ -94,10 +107,11 @@ export function AssistantHistoryScreen({ sessions, today }: AssistantHistoryScre
                 {session.title}
               </Link>
               {/* The caption is outside the link, so the link's accessible name stays the title
-                  alone. `formatRelativeDate` gives "Today", "Yesterday" or a short date. */}
+                  alone. `LastActiveTime` gives "Today", "Yesterday" or a short date, in the
+                  **reader's** zone - see that file, and note the words stay here because `<time>`
+                  should hold a time rather than a sentence about one. */}
               <div className="text-base-content/60 text-xs">
-                Last active{' '}
-                {formatRelativeDate(calendarDateOfInstant(session.lastMessageAt), today)}
+                Last active <LastActiveTime instant={session.lastMessageAt} today={today} />
               </div>
             </div>
           </li>

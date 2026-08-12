@@ -249,6 +249,43 @@ rules and they answer these questions in one grep.
   sets a property daisyUI never touches, so there is nothing to outrank. Keep the
   `justify-between`: it is what positions the boxes the moment either child stops growing.
 
+  **The same rule bites on the block axis, and there `text-right`'s trick has no counterpart -
+  PET-78 found it pushing the donut's centre readout out of the ring's hole.**
+  `dashboard/CategoryDonut.tsx` centres the period's total over the hole with an
+  `absolute inset-0 flex flex-col items-center justify-center` overlay holding two lines, and the
+  overlay is inside `.card-body`, so as `<p>`s each line grew to half the overlay's height and
+  rendered its text at the **top** of its own half. Measured on `/dashboard`: the amount's box 104px
+  tall against a 32px line, its centre **44px** above the hole's, the caption's **52px** below, and
+  neither line fitting inside the 67.2px hole radius - against 8px and 16px, both fitting, once
+  fixed. **The deceptive part is that the pair as a group stays perfectly centred**, the midpoint
+  measuring 0px off the hole's centre before and after, so nothing is off-centre and the two lines
+  are simply shoved apart - which is why it reads as a positioning mystery rather than as a flex
+  defect, and why the horizontal case above was found first despite being the subtler one. There is
+  no block-axis `text-right`, because the property that has to lose _is_ `flex-grow`: an override
+  needs (0,1,1) or better, and `[&_p]:grow-0` on the parent ties daisyUI's own specificity and is
+  decided by emission order, which is this list's first entry. **So the fix is structural - stop the
+  lines being `<p>`** (a `<span>` is blockified by the flex container and stacks identically, and the
+  selector does not match it), or wrap them in a `<div>`, where `flex-grow` is inert because the
+  children of a block container are not flex items. The general rule to carry: **inside a
+  `.card-body`, a `<p>` is a flex item that grows on whichever axis its parent runs**, so a
+  paragraph is the wrong element for anything being centred rather than filled.
+
+  **And `text-right` is the right fix for exactly one of the three shapes, which PET-78 found by
+  reaching for it and watching it make things worse.** It relocates the text inside the grown box, so
+  it works only where the intended position _is_ an edge - the "days left" caption above, which is
+  meant to reach the card's right edge. The dashboard's budget readout is the other row shape: a
+  `flex items-baseline gap-2` holding "€3,898" and "of €5,000", which are meant to read as **one
+  sentence**, and as `<p>`s each grew to half the row so `gap-2` sat between two boxes rather than
+  between two numbers - measured at **238.9px** between the two figures against the **8px** the class
+  asks for, restored to exactly 8px by making both `<span>`s. Pushing the second one right would have
+  moved it _further_ from the first. So: **where the intended position is an edge, align the text;
+  where two items are meant to be adjacent or centred, nothing about alignment can help and the
+  element has to stop being a `<p>`.** A browser sweep of all six signed-in screens for the rule
+  found 41 more flex-item paragraphs and **no further defect** - 27 of them are the first child of a
+  `justify-between` row, which grows and is still correct, so slack alone is not the test: the defect
+  needs a later, start-aligned child. `docs/plans/2026-08-12_PET-78_dashboard-ui-ux-fixups.md` carries
+  the sweep's method and the false start that produced it.
+
 - **The page canvas is `bg-base-200`, and `base-200` is also what daisyUI paints its two neutral
   surfaces - so a control on the canvas can be invisible with no class of its own being wrong.**
   `app/layout.tsx` paints the canvas; `textarea.css` fills **and borders** a disabled `textarea`
@@ -291,6 +328,28 @@ rules and they answer these questions in one grep.
   this class of defect is "is it distinct at all, and by the design's own step", never a WCAG floor -
   a disabled control is exempt from 1.4.11 anyway, and `cursor: not-allowed` plus the dimmed
   placeholder carry the state beside the fill.
+
+- **Two neutral surface tokens one step apart are not a contrast pair, and which of them is lighter
+  flips between the two themes.** The canvas entry above is this rule where one of the two surfaces
+  is the page; this is the same fact with both of them inside a component, and it is worse because
+  the failure is **theme-dependent rather than absent**. `table-zebra` paints every even row
+  `base-200` and `.chat-bubble` is `base-300`, so the markdown table in an assistant reply
+  (`insights/AssistantMarkdown.tsx`) drew a stripe measuring **1.072:1 in `expensa-light`** -
+  invisible, below the `1.115`/`1.152` this file already records as rejected - and **1.277:1 in
+  `expensa-dark`**, where `base-200` is the _darker_ of the two and the stripe genuinely paints. So a
+  walk in one theme reports a defect and a walk in the other reports a working stripe, and both are
+  right. **A class whose visibility depends on the reader's OS setting is the defect**, not a weak
+  one to be strengthened: the rows are distinguished or they are not. The fix was to delete the
+  modifier and let `.table`'s own bottom border carry it, measured at **1.114:1 light / 1.170:1
+  dark** - one mechanism behaving the same in both themes, where in dark the border and the deleted
+  stripe were within 0.1 of each other anyway. Two things generalise. **A stripe or tint inside a
+  coloured component wants a `base-content` alpha rather than a surface token**, which is the call
+  `AssistantMarkdown`'s `code` mapping already made beside it. And **the comment justifying that
+  call had the token wrong** - it said the bubble "_is_ `base-200`" where `chat.css` sets
+  `base-300` - which is what let the table repeat the mistake four lines below a paragraph warning
+  against it: a reader checking `table-zebra`'s `base-200` against that sentence finds `base-200` on
+  `base-200`, concludes it is impossible, and moves on. **Read the plugin's CSS for the token rather
+  than the neighbouring comment.**
 
 - **`loading-*` is not a CSS animation and cannot be tuned from CSS at all.** It reads exactly like
   a class whose speed an `animation-duration` beside it would change, and that utility reaches

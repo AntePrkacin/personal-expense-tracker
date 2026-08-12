@@ -54,6 +54,20 @@ type ButtonOwnProps = {
   variant?: ButtonVariant;
   /** A leading glyph, e.g. lucide's `<Trash2 />` on the delete text buttons. */
   icon?: React.ReactNode;
+  /**
+   * A trailing glyph, e.g. lucide's `<Sparkle />` on the Dashboard's assistant link.
+   *
+   * **A second slot rather than a position prop**, because the two are not alternatives: a
+   * control could want both, and `iconPosition` would make that unsayable while adding a
+   * value to get wrong. PET-78 added it for one caller, which this repo's conventions warn
+   * against for a shared primitive - taken because the alternative was worse in a specific
+   * way. The existing idiom for a trailing mark is a literal character in the label
+   * (`"Add transaction →"`), and a lucide glyph is a component, not a character, so the only
+   * other routes were a leading glyph (which is a different design) or a call site
+   * hand-rolling `btn btn-primary` on its own `next/link` and duplicating the one thing this
+   * component exists to keep in one place.
+   */
+  iconEnd?: React.ReactNode;
 };
 
 /**
@@ -100,7 +114,7 @@ type ButtonProps = ButtonOwnProps &
       }
   );
 
-export function Button({ label, variant = 'primary', icon, ...rest }: ButtonProps) {
+export function Button({ label, variant = 'primary', icon, iconEnd, ...rest }: ButtonProps) {
   // No 'use client'. This has no state, and a client component that imports it
   // pulls it into the client bundle on its own. Only a Server Component trying
   // to pass `onClick` would break, which is a caller error either way.
@@ -115,6 +129,7 @@ export function Button({ label, variant = 'primary', icon, ...rest }: ButtonProp
       <Link href={rest.href} className={className}>
         {icon}
         {label}
+        {iconEnd}
       </Link>
     );
   }
@@ -125,6 +140,7 @@ export function Button({ label, variant = 'primary', icon, ...rest }: ButtonProp
     <button type={type} disabled={disabled} onClick={onClick} className={className}>
       {icon}
       {label}
+      {iconEnd}
     </button>
   );
 }

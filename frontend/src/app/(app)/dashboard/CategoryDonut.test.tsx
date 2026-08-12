@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react';
 import { render } from '../shellRender';
 
 import { CategoryDonut } from './CategoryDonut';
+import { LegendRow } from './CategoryHover';
 
 // Node 21:4's own five categories (DSH-8), whose percentages are the ones that naively round
 // to 99 - so the apportionment is exercised by the default fixture rather than only by a
@@ -432,5 +433,50 @@ describe('the empty state (AC4, PET-26)', () => {
       screen.getByRole('img', { name: 'No spending recorded this period' }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/not attributed to any category/)).not.toBeInTheDocument();
+  });
+});
+
+describe('the hover association (PET-78)', () => {
+  // What the *paint* does is a browser check and deliberately not asserted here: jsdom runs no
+  // layout, and the highlight is a background colour rather than a daisyUI state class with an
+  // aria attribute to pin it against. `docs/plans/2026-08-12_PET-78_dashboard-ui-ux-fixups.md`
+  // carries what the walk measures. What is assertable is that the tooltip is gone and that the
+  // wiring is not silently absent.
+
+  it('renders no tooltip, since the legend states every fact one could', () => {
+    // The tooltip rendered at the cursor inside the ring's own box, so on most slices it printed
+    // the slice's name and amount over the centre readout. Recharts mounts its tooltip wrapper
+    // whether or not a slice is active, so its absence is exactly what says the element is gone -
+    // and this is the assertion that notices if anybody restores it.
+    const { container } = render(
+      <CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />,
+    );
+
+    expect(container.querySelector('.recharts-tooltip-wrapper')).toBeNull();
+  });
+
+  it('throws outside the provider rather than leaving the highlight silently dead', () => {
+    // The call `useFilterNavigation` and `useAddTransaction` both make. A highlight that quietly
+    // stops working reads as a slow render, so it would survive every gate and every review.
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => render(<LegendRow categoryId="c1">Groceries</LegendRow>)).toThrow(
+      /CategoryHoverProvider/,
+    );
+
+    errors.mockRestore();
+  });
+
+  it('leaves the legend rows out of the tab order', () => {
+    // `display only` above already sweeps the whole card for tab stops, and now sweeps these rows
+    // with it. This states the intent for the rows specifically: the highlight is a pointer-only
+    // convenience saying nothing a row does not already carry in text, so making one focusable
+    // would promise a keyboard contract nothing here implements.
+    render(<CategoryDonut currency="USD" categories={FIVE_CATEGORIES} spent={TOTAL} />);
+
+    for (const row of legendRows()) {
+      expect(row).not.toHaveAttribute('tabindex');
+      expect(row).not.toHaveAttribute('role');
+    }
   });
 });

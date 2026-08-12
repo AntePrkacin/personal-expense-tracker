@@ -11,6 +11,24 @@ import { MessageTime } from './MessageTime';
 // the end - a chat is the ARIA spec's own example of one. Polite rather than assertive: a reply
 // arriving must not interrupt whatever the reader is on.
 //
+// **`aria-relevant="additions"` narrows that, and a review of PR #88 is why.** The default is
+// `additions text`, so a *text change inside an existing descendant* is announced as well as a new
+// row - and PET-76's timestamps are exactly that: `MessageTime` renders empty on the server pass and
+// fills in one commit just after hydration (its own file carries why it must). A resumed twenty-turn
+// conversation therefore mutated twenty descendants of this region milliseconds after load, so a
+// screen reader could open the screen by reading out a burst of bare clock times before the reader
+// had reached a single message. Dropping `text` keeps the announcement this region exists for - an
+// appended message is an *addition*, and its timestamp is inside the added subtree, so a new reply
+// is still announced whole - and drops the one it never wanted.
+//
+// Two things about that choice, because `aria-relevant` is a rarely-correct attribute and this is
+// the app's only use of it. Support is uneven, so this narrows the announcement where it is honoured
+// and is inert where it is not: the failure mode is the current behaviour rather than a worse one.
+// And the alternative - `aria-hidden` on the time - was rejected outright: it would take the
+// timestamp out of the accessibility tree entirely, where the whole reason PET-76 added it is that
+// when a message was sent is content. It stays announced on the row; it is simply no longer
+// announced *at the reader*.
+//
 // **Each turn is labelled in text rather than by colour or side alone**, which is the rule the
 // trend chart's `sr-only` list settled: `chat-start` versus `chat-end` and the bubble's tint are
 // both invisible to a screen reader, and colour alone is a WCAG failure besides. The `chat-header`
@@ -78,7 +96,13 @@ const BUBBLE_CLASS: Record<AssistantMessage['role'], string> = {
 
 export function AssistantMessageList({ messages }: { messages: readonly AssistantMessage[] }) {
   return (
-    <div role="log" aria-live="polite" aria-label="Conversation" className="flex flex-col">
+    <div
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions"
+      aria-label="Conversation"
+      className="flex flex-col"
+    >
       {messages.map((message) => (
         <div key={message.id} className={ROW_CLASS[message.role]}>
           {/* `text-sm` rather than the `text-xs` this shipped at, with the glyph moved from

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
-import { Trash2 } from 'lucide-react';
+import { Sparkle, Trash2 } from 'lucide-react';
 
 import { Button, type ButtonVariant } from './Button';
 
@@ -92,6 +92,57 @@ describe('Button', () => {
     render(<Button label="Continue" />);
 
     expect(screen.getByRole('button').querySelector('svg')).toBeNull();
+  });
+
+  it('renders a trailing glyph after the label, not before it', () => {
+    // PET-78's Dashboard assistant link. The **order** is the whole reason this slot exists
+    // rather than reusing `icon`, so it is what the assertion pins: `lastElementChild` rather
+    // than merely "an svg is present", which the leading slot would satisfy too.
+    render(
+      <Button
+        label="Ask AI Assistant about your spending!"
+        iconEnd={<Sparkle className="size-4 shrink-0" aria-hidden="true" />}
+      />,
+    );
+
+    const button = screen.getByRole('button');
+    const glyph = button.lastElementChild;
+    expect(glyph?.tagName).toBe('svg');
+    expect(glyph).toHaveAttribute('aria-hidden', 'true');
+
+    // **Compared over `childNodes`, not `children`.** The label is a text node, so it is not an
+    // element child at all - which means with only a trailing glyph the one `<svg>` is both
+    // `firstElementChild` and `lastElementChild`, and an assertion on either passes whichever end
+    // the glyph is rendered at. The order is the entire subject of this case, so it has to be read
+    // against the nodes the label is actually one of.
+    const nodes = [...button.childNodes];
+    const glyphIndex = nodes.findIndex((node) => node.nodeName.toLowerCase() === 'svg');
+    const labelIndex = nodes.findIndex((node) => node.textContent?.includes('Ask AI Assistant'));
+    expect(labelIndex).toBeGreaterThanOrEqual(0);
+    expect(glyphIndex).toBeGreaterThan(labelIndex);
+
+    // The glyph is hidden, so the accessible name is the sentence alone - including the "!",
+    // which is part of the label rather than decoration.
+    expect(
+      screen.getByRole('button', { name: 'Ask AI Assistant about your spending!' }),
+    ).toBeInTheDocument();
+  });
+
+  it('renders both glyphs when given both, one at each end', () => {
+    // Not a state any caller wants today, and the reason `iconEnd` is a second slot rather than
+    // a position prop: a position would make this unsayable.
+    render(
+      <Button
+        label="Both"
+        icon={<Trash2 className="size-4" aria-hidden="true" />}
+        iconEnd={<Sparkle className="size-4" aria-hidden="true" />}
+      />,
+    );
+
+    const button = screen.getByRole('button');
+    expect(button.firstElementChild?.tagName).toBe('svg');
+    expect(button.lastElementChild?.tagName).toBe('svg');
+    expect(button.querySelectorAll('svg')).toHaveLength(2);
   });
 });
 

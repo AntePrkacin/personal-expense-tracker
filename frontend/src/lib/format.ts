@@ -277,6 +277,19 @@ const TIME_OF_DAY = new Intl.DateTimeFormat('en-US', {
  * History caption cannot disagree about which day an instant fell on: both go through
  * `calendarDateOfInstant` into `formatRelativeDate`, and this one appends the clock.
  *
+ * **That sentence was false for one ticket, and a review of PR #92 is what found it - worth keeping
+ * as a correction, because sharing the functions is exactly what made it read as safe.** Going
+ * through one pair of functions settles how the *instant* is read and says nothing about whose
+ * `today` it is compared against, and PET-76 moved the two apart on precisely that: it made the chat
+ * row client-only, so its default `today` is the **reader's** zone, while the History caption was
+ * still rendered on the server, so its default was the **frontend host's**. At `TZ=UTC` against a
+ * `Europe/Zagreb` reader, a message at `2026-08-12T23:00:00Z` read at `01:00Z` was "Today, 1:00 AM"
+ * on its row and "Last active Yesterday" in the list. Both surfaces render after hydration now -
+ * `insights/MessageTime.tsx` and `insights/LastActiveTime.tsx`, over the one seam in
+ * `insights/useHydrated.ts` - so the claim holds again, and it holds for a second reason rather than
+ * only the first. **The rule underneath it: two callers sharing a formatter agree about a
+ * viewer-dependent value only if they also share the viewer.**
+ *
  * **The year is dropped beyond yesterday**, which `formatIsoDayMonth` decides and this inherits. A
  * conversation from last December reads "Dec 14, 4:02 PM" with no year on it - acceptable because
  * the History list already orders and dates conversations, and because a chat row is read in the
@@ -285,8 +298,9 @@ const TIME_OF_DAY = new Intl.DateTimeFormat('en-US', {
  * callers share.
  *
  * `today` is a parameter with a default for `formatRelativeDate`'s own reason: a suite has to be
- * able to pin "Yesterday" without faking a timer. It inherits that function's host-zone gap, which
- * `docs/TODO.md` tracks.
+ * able to pin "Yesterday" without faking a timer. Its default is read wherever this runs, which for
+ * both of its callers is now the reader's browser - so what it inherits is the reader-versus-
+ * `APP_TIMEZONE` gap `docs/TODO.md` tracks, and no longer a host-versus-reader one on top of it.
  */
 export function formatMessageTimestamp(instant: string, today: string = todayIsoDate()): string {
   const day = formatRelativeDate(calendarDateOfInstant(instant), today);

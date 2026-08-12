@@ -109,9 +109,16 @@ describe('the ready state', () => {
   it('renders the banner and both cards from the set, owning none of the copy', () => {
     renderPoll(readySet());
 
-    expect(screen.getByText('October 2025 summary')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: "You're on track this month" })).toBeInTheDocument();
     expect(screen.getByText(/You've spent \$1,240/)).toBeInTheDocument();
+
+    // **The period is deliberately not on this card, as of PET-78.** It read
+    // "OCTOBER 2025 SUMMARY" above the headline while the page header's overline and the period
+    // select both already said the period - three statements of one fact on one screen. Asserted
+    // as an absence so it cannot come back unnoticed; `SummaryBanner.tsx` records what the
+    // deletion gives up, which is that a set can outlive the period it describes.
+    expect(screen.queryByText(/summary/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('October 2025')).not.toBeInTheDocument();
 
     for (const card of CARDS) {
       expect(screen.getByText(card.title)).toBeInTheDocument();
@@ -123,10 +130,9 @@ describe('the ready state', () => {
     // The destination is a conversation now: the cards it used to link to are on this screen.
     renderPoll(readySet());
 
-    expect(screen.getByRole('link', { name: /Ask about your spending/ })).toHaveAttribute(
-      'href',
-      '/insights',
-    );
+    expect(
+      screen.getByRole('link', { name: /Ask AI Assistant about your spending/ }),
+    ).toHaveAttribute('href', '/insights');
   });
 
   it('names each tone in text, so the colour is not the only carrier', () => {
@@ -201,7 +207,9 @@ describe('the empty state', () => {
 
     expect(screen.getByRole('heading', { name: PENDING_COPY.headline })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add transaction →' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Ask about your spending/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /Ask AI Assistant about your spending/ }),
+    ).toBeInTheDocument();
   });
 
   it('still offers Regenerate, because this state is reachable with a set to generate', () => {
@@ -209,9 +217,24 @@ describe('the empty state', () => {
     // logged a transaction" fails for an account whose transactions predate the write-path
     // trigger and for one whose first run failed - and hiding the button made both a dead end
     // with nothing on screen that could generate anything.
-    renderPoll(emptySet(), { isEmpty: true });
+    //
+    // **The fixture is `isEmpty: false`, and it used to be `true`, which contradicted the comment
+    // above it.** Both states this test names have transactions in them; `isEmpty: true` is the
+    // account with none, where a run can only produce the empty set it already has. PET-78 made
+    // the button conditional and that disagreement became a real one - the case below pins the
+    // unlock state having no Regenerate at all.
+    renderPoll(emptySet(), { isEmpty: false });
 
     expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+  });
+
+  it('offers no Regenerate in the unlock state, where a run has nothing to analyse', () => {
+    // PET-78. An account with nothing logged has one thing to do and it is not regenerating: the
+    // generator would answer with the same empty set. `AddTransactionButton` is the whole control.
+    renderPoll(emptySet(), { isEmpty: true });
+
+    expect(screen.getByRole('button', { name: 'Add transaction →' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
   });
 
   it('renders no insight cards', () => {
@@ -315,9 +338,17 @@ describe('the generating state and the poll', () => {
     expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
   });
 
+  // **These click from the pending state rather than from `ready`, and that is PET-78 rather than
+  // a preference.** Regenerate is no longer drawn in the `ready` state, because the set regenerates
+  // itself on every transaction and category write - so a click from a healthy account is not a
+  // path a user can take any more, and a test taking it would be testing an unreachable control.
+  // The pending state is where the button really lives, and the machinery behind the click is
+  // state-independent, so what these cases cover is unchanged.
+  const pending = () => renderPoll(emptySet(), { isEmpty: false });
+
   it('switches to skeletons when Regenerate is clicked', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    renderPoll(readySet());
+    pending();
 
     await user.click(screen.getByRole('button', { name: 'Regenerate' }));
 
@@ -332,7 +363,7 @@ describe('the generating state and the poll', () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     generate.mockResolvedValue({ ok: true });
     respondWith(readySet({ state: 'generating' }));
-    renderPoll(readySet());
+    pending();
 
     await user.click(screen.getByRole('button', { name: 'Regenerate' }));
     await waitFor(() => expect(screen.getByText('Analyzing your spending...')).toBeInTheDocument());
@@ -341,18 +372,23 @@ describe('the generating state and the poll', () => {
     expect(global.fetch).toHaveBeenCalledWith('/api/insights', { cache: 'no-store' });
   });
 
-  it('leaves the previous set on screen and re-enables the button when the run failed', async () => {
-    // A26 designs no error surface: a failed run is invisible by contract. `state` never moved,
-    // so the previous set is still what is rendered and the button is still enabled - both
-    // because they are derived from `state` rather than from a click flag.
+  it('leaves the card as it was and re-enables the button when the run failed', async () => {
+    // A26 designs no error surface: a failed run is invisible by contract. `state` never moved, so
+    // what was on screen is still what is rendered and the button is still enabled - both because
+    // they are derived from `state` rather than from a click flag.
+    //
+    // **It asserts the pending copy rather than the previous set's cards, because PET-78 made the
+    // ready-state click unreachable.** The subject is unchanged - a failed run changes nothing and
+    // leaves the control usable - and this is the state a user can really press it from, so the
+    // "previous content" it must not disturb is that state's own copy.
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     generate.mockResolvedValue({ ok: false, reason: 'failed' });
-    renderPoll(readySet());
+    pending();
 
     await user.click(screen.getByRole('button', { name: 'Regenerate' }));
 
     await waitFor(() => expect(generate).toHaveBeenCalled());
-    expect(screen.getByText(CARDS[0].title)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: PENDING_COPY.headline })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
     // **The one thing that did change (PET-77).** This arm used to be silent in every sense: the
     // click did nothing observable at all, so a user could press it repeatedly with no way of
@@ -366,10 +402,14 @@ describe('the generating state and the poll', () => {
   // **A run the user asked for is announced; the ones that fire behind every write are not.** That
   // split is the ticket's, and it is what keeps a saved transaction from producing two toasts.
   it('confirms a manual run when it settles', async () => {
+    // PET-77's toast, pressed from the state PET-78 leaves the button in. The confirmation is not
+    // reachable from `ready` any more, because that is where the control is now hidden - which
+    // narrows where "Insights updated." can appear without making it dead: a manual run is exactly
+    // a run started from pending or after a stall.
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     generate.mockResolvedValue({ ok: true });
     respondWith(readySet({ insights: [CARDS[0]], generatedAt: '2025-10-08T10:00:00.000Z' }));
-    renderPoll(readySet());
+    pending();
 
     await user.click(screen.getByRole('button', { name: 'Regenerate' }));
     await advance(500);
@@ -383,7 +423,9 @@ describe('the generating state and the poll', () => {
   it('forgets a manual run that was abandoned before it settled', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     generate.mockResolvedValue({ ok: true });
-    const { rerender } = renderPoll(readySet());
+    // Pending rather than ready, for the reason the case above gives: only the initial render needs
+    // the button, and PET-78 draws it there rather than on a healthy account.
+    const { rerender } = renderPoll(emptySet(), { isEmpty: false });
 
     await user.click(screen.getByRole('button', { name: 'Regenerate' }));
     await waitFor(() => expect(screen.getByText('Analyzing your spending...')).toBeInTheDocument());
@@ -420,7 +462,12 @@ describe('the generating state and the poll', () => {
 
     expect(screen.getByText(CARDS[0].title)).toBeInTheDocument();
     expect(screen.queryByText('Analyzing your spending...')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+    // **The settled state now has no Regenerate**, which is PET-78: a healthy `ready` account gets
+    // the assistant link alone, because every transaction and category write regenerates the set by
+    // itself. This assertion used to read `toBeEnabled()` and was standing in for "the run is over";
+    // the skeleton's absence above is the direct statement of that, so this pins the new rule
+    // instead of re-stating the old proxy.
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
 
     // Settled, so no further tick is scheduled.
     const callsAfterSettling = (global.fetch as jest.Mock).mock.calls.length;
@@ -431,9 +478,16 @@ describe('the generating state and the poll', () => {
   it('leaves the previous set on screen when the run finished without a new one', async () => {
     // A run that failed is invisible by contract (AC6): its row is marked `failed` and skipped,
     // so the read settles back to the previous `ready` set with `generatedAt` unmoved. The screen
-    // shows that content and re-enables the button, with no error state anywhere - which is what
-    // makes A26's undesigned failure survivable. `generatedAt` is written at exactly one place,
-    // inside the transition to `ready`, so it advances only when a run really completed.
+    // shows that content, with no error state anywhere - which is what makes A26's undesigned
+    // failure survivable. `generatedAt` is written at exactly one place, inside the transition to
+    // `ready`, so it advances only when a run really completed.
+    //
+    // **This case used to assert no Regenerate, and that was the defect rather than the rule.** A
+    // review of PR #92 found it: `displayState` is `ready` here, so PET-78's condition drew no
+    // control at all, and the account was left on prose that predates the write which triggered
+    // this very run with nothing on screen able to start another. It is `runFailed` now, which is
+    // exactly what an unmoved `generatedAt` across a settle means. Worth keeping as a correction,
+    // because a suite pinning the wrong behaviour is why no gate caught it.
     const previous = readySet();
     respondWith(previous);
     renderPoll(readySet({ state: 'generating' }));
@@ -442,7 +496,42 @@ describe('the generating state and the poll', () => {
 
     expect(screen.getByText(CARDS[0].title)).toBeInTheDocument();
     expect(screen.getByText(CARDS[1].title)).toBeInTheDocument();
+    expect(screen.queryByText('Analyzing your spending...')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+  });
+
+  it('offers no Regenerate when a run that produced nothing was on an empty account', async () => {
+    // The other half of the same review: the account has nothing to analyse, so a further run would
+    // produce the same nothing and the one control that helps is "Add transaction". `runFailed` is
+    // set here just as it is above - the gate that suppresses the button is `isEmpty`, which now
+    // leads the condition rather than qualifying one of its terms.
+    respondWith({ ...emptySet(), state: 'empty' });
+    renderPoll({ ...emptySet(), state: 'generating' }, { isEmpty: true });
+
+    await advance(500);
+
+    expect(screen.getByRole('heading', { name: UNLOCK_COPY.headline })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
+  });
+
+  it('reports a manual run that settled on the set it started from as a failure', async () => {
+    // **"Insights updated." was posted regardless until a review of PR #92 made the distinction
+    // computable.** A run that settles with `generatedAt` unmoved changed nothing, so the success
+    // toast confirmed an update that did not happen - on the one press where the user is watching
+    // for precisely that. Same string the never-landed request uses, for the same reason: what was
+    // asked for did not happen and pressing again is the thing to do about it.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    generate.mockResolvedValue({ ok: true });
+    const previous = readySet();
+    respondWith(previous);
+    renderPoll({ ...previous, state: 'empty', summary: null, insights: [] }, { isEmpty: false });
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await advance(500);
+
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't update your insights. Please try again."]),
+    );
   });
 
   it('keeps polling with a backoff while the state holds', async () => {
@@ -517,13 +606,34 @@ describe('the generating state and the poll', () => {
     // The other arm: the read carries content independently of `state`, and a first run has none
     // to fall back to. The empty copy plus Regenerate is the honest pair - skeletons would keep
     // asserting a run this mount has no way left to ask about.
+    //
+    // **It runs on `isEmpty: false`, and it was `true` until a review of PR #92.** The account with
+    // no content to fall back to and the account with nothing logged are two different accounts, and
+    // this case is about the first: an account whose transactions predate the write-path trigger, or
+    // whose first run failed. On `isEmpty: true` it was also asserting the pair the case below says
+    // must not exist, which is how the contradiction shipped - two cases in one file, each green.
+    (global.fetch as jest.Mock).mockRejectedValue(new Error('unreachable'));
+    renderPoll({ ...emptySet(), state: 'generating' }, { isEmpty: false });
+
+    await advancePastCeiling();
+
+    expect(screen.getByRole('heading', { name: PENDING_COPY.headline })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+  });
+
+  it('offers no Regenerate when the run it gave up on was on an empty account', async () => {
+    // **The contradiction the review found, pinned from the side that was wrong.** An account with
+    // nothing logged has nothing to analyse, so the unlock copy's "Add transaction →" is the one
+    // control that helps - and `InsightSummarySlot`'s condition excluded `isEmpty` on the `empty`
+    // term only, so a stall walked straight past it and drew both buttons. This fails with the gate
+    // written the old way, which is what it is here for.
     (global.fetch as jest.Mock).mockRejectedValue(new Error('unreachable'));
     renderPoll({ ...emptySet(), state: 'generating' }, { isEmpty: true });
 
     await advancePastCeiling();
 
     expect(screen.getByRole('heading', { name: UNLOCK_COPY.headline })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
   });
 
   it('re-enters polling when Regenerate is clicked after the poll gave up', async () => {
@@ -548,7 +658,7 @@ describe('the generating state and the poll', () => {
     // Component puts `requireInsights()` in front of the dead cookie.
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     generate.mockResolvedValue({ ok: false, reason: 'unauthenticated' });
-    renderPoll(readySet());
+    pending();
 
     await user.click(screen.getByRole('button', { name: 'Regenerate' }));
 
