@@ -32,6 +32,13 @@ const meta: Meta<typeof Sidebar> = {
     active: 'dashboard',
     fullName: 'Marko Kovač',
     email: 'marko@email.com',
+    // A stub, and this is the reason `logOut` is a prop rather than an import.
+    // Storybook's Vite build has no notion of `'use server'`: it would bundle the
+    // real action as an ordinary module, so pressing the footer control here
+    // would reach `cookies()` from `next/headers` in the browser. Defaulted on
+    // `meta` so a story added later cannot forget it - the call
+    // `CategoriesScreen.stories.tsx` makes for its own three actions.
+    logOut: () => Promise.resolve(),
   },
   argTypes: {
     active: { options: SIDEBAR_ITEMS, control: { type: 'radio' } },

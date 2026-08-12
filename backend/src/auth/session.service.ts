@@ -30,7 +30,8 @@ export interface SessionPrincipal {
 }
 
 /**
- * Issues and validates the opaque bearer tokens behind a logged-in session.
+ * Issues, validates and revokes the opaque bearer tokens behind a logged-in
+ * session.
  *
  * The same hash-as-lookup-key scheme as the login links, deliberately reusing
  * `hashToken` so there is one answer to "how does a token become a key" - see
@@ -105,6 +106,42 @@ export class SessionService {
       .limit(1);
 
     return row ?? null;
+  }
+
+  /**
+   * Ends one session, by tombstoning the row whose token this is.
+   *
+   * `issue()`'s counterpart, and deliberately narrower than a revoke-all: it
+   * keys on the token hash rather than on the user, so signing out on a laptop
+   * leaves the phone signed in. Concurrent sessions are legitimate (one per
+   * device), and `sessions_user_id_idx` is what a future "sign out everywhere"
+   * would key on instead - offered as its own control, never as a side effect of
+   * this one.
+   *
+   * `deletedAt` is the column `validate()` already filters on, so setting it is
+   * the whole of revocation: the next request carrying this token matches
+   * nothing and the guard answers 401. Nothing else about the auth path changes.
+   *
+   * Two things about the statement are deliberate. The `deletedAt` guard in the
+   * WHERE keeps the **first** tombstone rather than overwriting its timestamp,
+   * so "when was this session revoked" stays answerable from the row - the same
+   * reason `login_links` invalidation uses distinct columns. And matching
+   * **zero** rows is not an error: a token that is unknown, expired or already
+   * revoked leaves nothing to do, and no caller can act on the difference, since
+   * the guard has already refused anything it could report and the frontend
+   * clears its cookie either way. So this resolves rather than throwing, and
+   * reports no count nobody reads.
+   */
+  async revoke(rawToken: string): Promise<void> {
+    await this.centralDb
+      .update(sessions)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(sessions.tokenHash, hashToken(rawToken)),
+          isNull(sessions.deletedAt),
+        ),
+      );
   }
 
   /** Days. Fixed, never extended by use; see the class comment. */

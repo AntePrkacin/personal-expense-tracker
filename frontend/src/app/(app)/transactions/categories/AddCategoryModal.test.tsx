@@ -619,9 +619,12 @@ describe('when the save is rejected', () => {
     await u.type(name(), 'Subscriptions');
     await u.click(submit());
 
-    expect(
-      await screen.findByText("We couldn't add this category. Please try again."),
-    ).toBeInTheDocument();
+    // The stack rather than a text query, for the reason `EditCategoryProvider.test.tsx` records in
+    // full: `failed` is toasted, the announcer holds the same sentence for `ANNOUNCEMENT_CLEAR_MS`,
+    // and `findByText` therefore matches two elements or one depending on timing.
+    await waitFor(() => {
+      expect(toastMessages()).toEqual(["We couldn't add this category. Please try again."]);
+    });
     // The two halves that made it a freeze rather than a failure: the button comes back, and what
     // was typed is still there to submit again.
     expect(submit()).not.toBeDisabled();

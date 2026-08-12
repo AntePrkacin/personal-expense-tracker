@@ -64,6 +64,18 @@ their markup.
   `self-start` does nothing at all. `frontend/CLAUDE.md`'s Where daisyUI and Tailwind fight is
   the single home for the mechanism; `ui/FieldShell.tsx` carries the rest.
 
+- **`ui/Sidebar`'s footer carries the app's logout control as of PET-84**, and the file's own
+  comment is the authority for it. Two things about it belong here rather than there, because
+  both are about this folder's conventions. It takes the Server Action as a **required prop**,
+  never an import, which is this repo's standing rule for every action - Storybook's Vite build
+  has no notion of `'use server'`, so an imported one reaches `cookies()` in the browser on a
+  press - and required rather than optional so a control cannot ship wired to nothing. And it is
+  a `<form action>` around a `<button>` rather than an `onClick`, which is what keeps this a
+  Server Component while still performing a write: the platform submits it, so there is no state,
+  no handler and no pending flag to hold. `Sidebar.test.tsx`'s AC5 case, which used to pin the
+  **absence** of any sign-out affordance, is inverted rather than deleted, so a panel that loses
+  the control fails as loudly as one that gained it while the design said no.
+
 - **`ui/Sidebar` takes its active item as a prop**, not a `usePathname()` call, which keeps it a
   Server Component; the `(app)` shell's thin `'use client'` wrapper (`SidebarNav`) reads the
   pathname. `SIDEBAR_HREFS` is the single declaration of the four app routes and the contract

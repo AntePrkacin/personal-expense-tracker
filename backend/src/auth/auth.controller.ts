@@ -10,6 +10,7 @@ import {
 import { Public } from './public.decorator';
 import {
   ApiBearerAuth,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
@@ -24,7 +25,8 @@ import { RequestLoginLinkDto } from './dto/request-login-link.dto';
 import { SessionResponseDto } from './dto/session-response.dto';
 import { VerifyLoginLinkDto } from './dto/verify-login-link.dto';
 import { VerifyResponseDto } from './dto/verify-response.dto';
-import type { SessionPrincipal } from './session.service';
+import { BearerToken } from './bearer-token.decorator';
+import { SessionService, type SessionPrincipal } from './session.service';
 import { VerificationService } from './verification.service';
 
 /**
@@ -75,6 +77,13 @@ const ACCEPTED_RESPONSE = {
  *   navigation, and 30 per window would break a NAT'd classroom's ordinary
  *   browsing. The guard's 401 is the defense, and 256-bit tokens make probing
  *   pointless.
+ * - logout: neither, for session's reasons plus one of its own. It has no
+ *   address to key on, and per-IP would let one NAT's users exhaust the budget
+ *   for each other at the end of a lesson. What makes that safe rather than
+ *   merely convenient is that the route is **not repeatable**: the guard runs
+ *   first, and the call it just authenticated revokes the very token it needed,
+ *   so a second attempt with the same bearer is a 401 from the guard. There is
+ *   no action here to spend a budget on.
  *
  * Note that Nest's default key includes the handler, so each route gets its own
  * buckets rather than sharing them - accepted, since a legitimate journey can
@@ -95,6 +104,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly verification: VerificationService,
+    private readonly sessions: SessionService,
   ) {}
 
   /** Screen 22, "Finish setup" (REG-4). */
@@ -178,5 +188,30 @@ export class AuthController {
       email: user.email,
       expiresAt: user.expiresAt.toISOString(),
     };
+  }
+
+  /** The sidebar footer's logout control (PET-84). */
+  @Post('logout')
+  // No @Public(): ending a session means holding one, and the global
+  // SessionGuard has already validated the bearer by the time this runs.
+  @HttpCode(HttpStatus.NO_CONTENT)
+  // Named, like every skip on this controller: a bare @SkipThrottle() means
+  // `{ default: true }` and would silently skip nothing.
+  @SkipThrottle({ email: true, ip: true })
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'End this session.',
+    description:
+      'Revokes **only the bearer it is called with**, so other devices stay signed in. There is nothing to call twice: the token is dead afterwards, so a repeat answers **401** from the guard rather than a second 204. Clients should treat the local sign-out as their own responsibility - the frontend clears its session cookie whatever this answers, because a user who asked to leave must not be kept signed in by an unreachable API.',
+  })
+  @ApiNoContentResponse({ description: 'Signed out. No body.' })
+  @ApiErrorResponse(HttpStatus.UNAUTHORIZED)
+  // The token rather than `@CurrentUser()`, because revocation keys on the
+  // credential and the principal carries none - and `@BearerToken()` rather than
+  // `@Headers('authorization')`, because the plugin would publish that as a
+  // second, explicit declaration of a header the security scheme already
+  // describes. That decorator's own comment carries both halves.
+  async logout(@BearerToken() token: string): Promise<void> {
+    await this.sessions.revoke(token);
   }
 }

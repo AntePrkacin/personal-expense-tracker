@@ -80,6 +80,7 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/assistant/sessions/count`,
       `/${API_PREFIX}/assistant/sessions/{id}`,
       `/${API_PREFIX}/auth/login-link`,
+      `/${API_PREFIX}/auth/logout`,
       `/${API_PREFIX}/auth/register`,
       `/${API_PREFIX}/auth/session`,
       `/${API_PREFIX}/auth/verify`,

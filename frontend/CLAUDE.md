@@ -997,6 +997,16 @@ that was a decision rather than a queue, is in `docs/TODO.md`.
   a Settings save that moves either one sends this **first** and the ordinary patch second - the order
   is chosen for failure semantics, since the schedule write is the one the user was asked a question
   about.
+  **PET-84 added a tenth, `lib/logOut.ts`, and it is the one that publishes no taxonomy at all.**
+  Every write above names its reasons because a caller does something different per reason; this one
+  has nothing to do differently and nowhere to say it, since the screen it is pressed on is being
+  navigated away from. So it asks the API to revoke the session, **ignores the answer**, clears the
+  `spendifico.session` cookie and redirects - and clearing the cookie on every arm is the decision
+  rather than an oversight, because doing it only on a 2xx would leave a user unable to sign out of
+  their own browser whenever the backend is unreachable. It is also the only write here that **must**
+  be a Server Action rather than merely being one by the usual split: a Server Component's cookie jar
+  is read-only and `.delete()` throws at runtime. `frontend/src/app/CLAUDE.md` carries the rest,
+  including why the action is threaded to `ui/Sidebar` as a prop.
   **And PET-72 added a sixth read, `lib/periods.ts`**, whose `readPeriods()` backs the period select on
   two screens and the AI Insights overline. Its failure policy is the throwing one rather than a
   degrading one, deliberately against `lib/categoryTemplates.ts`'s: an empty list would render a header

@@ -65,6 +65,15 @@ const FALLBACK_ITEM: SidebarItem = 'dashboard';
 type SidebarNavProps = {
   fullName: string;
   email: string;
+  /**
+   * Passed straight through to `ui/Sidebar`'s footer control, unused here.
+   *
+   * This file is the shell's one client component, so it is also the boundary a Server Action has
+   * to cross to reach the panel - which it may: an action is serializable as a prop, unlike the
+   * `onNavigate` callback below it, which only a client parent can supply. See `Sidebar`'s own
+   * prop for why the action is injected rather than imported down there.
+   */
+  logOut: () => Promise<void>;
 };
 
 /**
@@ -79,7 +88,7 @@ function closeDrawer() {
   if (toggle instanceof HTMLInputElement) toggle.checked = false;
 }
 
-export function SidebarNav({ fullName, email }: SidebarNavProps) {
+export function SidebarNav({ fullName, email, logOut }: SidebarNavProps) {
   const pathname = usePathname();
   const active = matchItem(pathname) ?? FALLBACK_ITEM;
 
@@ -98,5 +107,13 @@ export function SidebarNav({ fullName, email }: SidebarNavProps) {
   // looking at that page. Both are kept rather than the click alone: a navigation can
   // arrive from somewhere other than these five links (the browser's Back button, a
   // redirect out of a page), and only the pathname read sees those.
-  return <Sidebar active={active} fullName={fullName} email={email} onNavigate={closeDrawer} />;
+  return (
+    <Sidebar
+      active={active}
+      fullName={fullName}
+      email={email}
+      onNavigate={closeDrawer}
+      logOut={logOut}
+    />
+  );
 }

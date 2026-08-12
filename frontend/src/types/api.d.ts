@@ -141,6 +141,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End this session.
+         * @description Revokes **only the bearer it is called with**, so other devices stay signed in. There is nothing to call twice: the token is dead afterwards, so a repeat answers **401** from the guard rather than a second 204. Clients should treat the local sign-out as their own responsibility - the frontend clears its session cookie whatever this answers, because a user who asked to leave must not be kept signed in by an unreachable API.
+         */
+        post: operations["AuthController_logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/profile": {
         parameters: {
             query?: never;
@@ -1449,6 +1469,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SessionResponseDto"];
                 };
+            };
+            /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    AuthController_logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not authenticated. The bearer credential is missing, invalid, expired or already spent. */
             401: {

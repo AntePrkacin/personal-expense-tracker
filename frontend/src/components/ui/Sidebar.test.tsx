@@ -54,7 +54,13 @@ const profile = {
 const renderSidebar = (
   active: SidebarItem,
   overrides: Partial<React.ComponentProps<typeof Sidebar>> = {},
-) => render(<Sidebar active={active} {...profile} {...overrides} />);
+) =>
+  // `logOut` is stubbed by default and overridable, which is the whole reason
+  // that prop is injected rather than imported: the real action reaches
+  // `cookies()` from `next/headers`, so a suite that could not replace it would
+  // have to mock the module by specifier - and `jest.mock('@/lib/logOut')` cannot
+  // resolve the alias at all, which `frontend/src/app/CLAUDE.md` records.
+  render(<Sidebar active={active} logOut={jest.fn()} {...profile} {...overrides} />);
 
 const itemLink = (item: SidebarItem) => screen.getByRole('link', { name: LABELS[item] });
 
@@ -158,8 +164,12 @@ describe('Sidebar', () => {
   it('hides every glyph from assistive technology', () => {
     const { container } = renderSidebar('settings');
 
+    // One per nav item, plus the footer's logout mark since PET-84. Counted
+    // rather than merely iterated, so a glyph that arrives without a decision
+    // fails here: the loop below would pass happily on any number of them, which
+    // is what makes the count the half worth keeping.
     const glyphs = container.querySelectorAll('svg');
-    expect(glyphs).toHaveLength(ITEMS.length);
+    expect(glyphs).toHaveLength(ITEMS.length + 1);
     for (const glyph of glyphs) {
       expect(glyph).toHaveAttribute('aria-hidden', 'true');
     }
@@ -194,18 +204,53 @@ describe('Sidebar', () => {
     }
   });
 
-  it('offers no sign-out affordance (AC5)', () => {
-    // Deliberate, not an omission. No frame in the file draws a logout control,
-    // including Settings, even though sessions exist; the designer still owes an
-    // answer (A39). This test is here so adding one by reflex fails rather than
-    // ships.
-    renderSidebar('settings');
+  describe('the footer logout control (PET-84, inverting AC5)', () => {
+    // **This block used to assert the opposite**, and the inversion is the point
+    // rather than an artifact: AC5 said the panel offers no sign-out affordance,
+    // because no frame in the file draws one (A39), and the case existed so that
+    // adding one by reflex would fail rather than ship. The product owner
+    // overruled A39 in PET-84, so the guard is kept and turned around - a panel
+    // that silently *lost* this control should fail here just as loudly as one
+    // that gained it while the design said otherwise.
 
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
-    expect(screen.queryByText(/log ?out|sign ?out/i)).not.toBeInTheDocument();
-    for (const link of screen.getAllByRole('link')) {
-      expect(link.textContent).not.toMatch(/log ?out|sign ?out/i);
-    }
+    it('names the control for a screen reader, not just with a glyph', () => {
+      renderSidebar('settings');
+
+      // The whole accessible name comes from `aria-label`: the button's subtree
+      // is one `aria-hidden` glyph, so without it this announces as "button".
+      const control = screen.getByRole('button', { name: 'Log out' });
+      expect(control).toHaveAttribute('type', 'submit');
+    });
+
+    it('submits a form rather than handling a click, so the panel needs no client boundary', () => {
+      const logOut = jest.fn();
+      renderSidebar('settings', { logOut });
+
+      const control = screen.getByRole('button', { name: 'Log out' });
+      // `closest('form')` rather than a class or a DOM walk: what matters is that
+      // the button is a submitter inside the form carrying the action, which is
+      // what makes a press reach a Server Action with no `onClick` anywhere.
+      expect(control.closest('form')).not.toBeNull();
+      // Not called on render. The action fires on submit, and jsdom does not run
+      // React's form action, so the press itself is a browser check.
+      expect(logOut).not.toHaveBeenCalled();
+    });
+
+    it('hides the glyph, because the label already carries the name', () => {
+      renderSidebar('settings');
+
+      const glyph = screen.getByRole('button', { name: 'Log out' }).querySelector('svg');
+      expect(glyph).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('is the only button in the panel, so nothing else became a control by accident', () => {
+      renderSidebar('settings');
+
+      // The other half of the old assertion, kept: every other affordance in this
+      // panel is a link, and a second button appearing here would mean something
+      // grew one without a decision.
+      expect(screen.getAllByRole('button')).toHaveLength(1);
+    });
   });
 
   it('truncates a long name and email rather than widening the panel', () => {

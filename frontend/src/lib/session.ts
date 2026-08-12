@@ -234,9 +234,25 @@ export type AuthorizedBodyResult<T> = { ok: true; data: T } | { ok: false; statu
  * `cache: 'no-store'` is explicit for `postAccepted`'s reason: a POST Next decided to
  * cache would silently swallow a second attempt.
  *
+ * **`timeoutMs` is opt-in and defaults to none, which is `authorizedGet`'s rule reached from
+ * the write side.** A write whose result the caller reports has nothing better to do than
+ * wait, and giving up early would turn a landed write into a reported failure - the one thing
+ * this function's own note above forbids. It exists for the opposite case, a caller whose next
+ * move does not depend on the answer, where a backend that **hangs rather than refusing** would
+ * otherwise leave the user pressing a control that does nothing: a refused connection fails in
+ * milliseconds, but a connection accepted and never answered runs to undici's 300s header
+ * timeout. An abort lands in the `catch` below and reports no status, which is already what
+ * "the request never completed" looks like. `lib/logOut.ts` is the one caller that passes it,
+ * and its docblock carries why leaving is not allowed to wait on the API.
+ *
  * @param path the backend path including its `/api` prefix
+ * @param options `timeoutMs` aborts the request after that many milliseconds
  */
-export async function authorizedPost(path: string, body: unknown): Promise<AuthorizedWriteResult> {
+export async function authorizedPost(
+  path: string,
+  body: unknown,
+  options: { timeoutMs?: number } = {},
+): Promise<AuthorizedWriteResult> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
 
@@ -253,6 +269,7 @@ export async function authorizedPost(path: string, body: unknown): Promise<Autho
       },
       body: JSON.stringify(body),
       cache: 'no-store',
+      signal: options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs),
     });
 
     // Any 2xx. See the type's note: the row exists by now, so nothing below this line may

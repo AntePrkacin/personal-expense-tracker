@@ -119,8 +119,9 @@ mails, which makes clicking the older of two links ordinary rather than exotic.
 the SHA-256 of a 256-bit random token (the `login_links` scheme, sharing its `hashToken`), and
 `validate()` is one indexed join back to `users` that performs no write - expiry is absolute,
 not sliding, so an authenticated read stays a read. `SESSION_TTL_D` is 30 days; there are no
-cookies here (the frontend owns that), no refresh, and no logout by design (A39), so
-revocation means tombstoning the row. Concurrent sessions per user are legitimate, one per
+cookies here (the frontend owns that) and no refresh, and revocation means tombstoning the
+row - which a user can now do for themselves, see the logout paragraph at the end of this
+section. Concurrent sessions per user are legitimate, one per
 device. `GET /api/auth/session` returns only `{ userId, email, expiresAt }`, because that is
 all central knows.
 
@@ -155,6 +156,43 @@ put every caller in one narrow bucket) and session skips both (a whoami the fron
 navigation, where one NAT would exhaust the per-IP budget for a whole classroom). **A bare
 `@SkipThrottle()` means `{ default: true }`, and no throttler here is named `default`, so it
 skips nothing at all - silently.** The named form is mandatory.
+
+**`POST /api/auth/logout` is the fifth auth route and the one that ends a session (PET-84), so
+"no logout by design (A39)" is history wherever this file or the schema still says it.** The
+product owner overruled A39; the designer never drew a control, so the sidebar footer's glyph,
+its label and the absence of a confirmation step are the frontend's invention and owe a sign-off
+with the rest of A29's list. Five things about the endpoint are decisions rather than shape.
+
+It **revokes only the bearer it is called with**, keyed on the token hash, so a second device
+stays signed in. `sessions_user_id_idx` is what a "sign out everywhere" would key on instead, and
+that belongs on Settings as its own explicit control rather than as a side effect of the footer -
+concurrent sessions per device are legitimate, so signing a phone out because a laptop was tidied
+up would be a surprise nothing on screen warned about.
+
+It is **guarded rather than `@Public()`**, so the count above stands: exactly five routes carry
+`@Public()` and this is not one of them. The consequence worth knowing is that **it is not
+repeatable**: the call revokes the very token it was authenticated with, so a second attempt is a
+401 from the guard rather than a second 204. PET-84 shipped with an idempotence criterion asking
+for the opposite and it was **amended on the ticket** rather than implemented, because satisfying
+it literally would mean making a mutating route public to buy a status nobody reads.
+
+`SessionService.revoke()` guards its UPDATE on `isNull(deletedAt)`, which **keeps the first
+tombstone rather than overwriting its timestamp** - the same reason `login_links` invalidation
+uses two distinct columns, so "when did this session end" stays answerable from the row. Matching
+zero rows is not an error.
+
+The handler takes **`@BearerToken()`**, a param decorator beside `CurrentUser`, because
+`SessionPrincipal` carries no token and no session id and the guard discards what it parsed. That
+shape is not cosmetic: `@Headers('authorization')` in the controller made the Swagger plugin
+publish a required `in: header` parameter, so the operation documented `Authorization` twice -
+once as the `bearer` security scheme and once as an explicit input - and it was the only operation
+in the spec that did. Caught by reading the `api:sync` diff, not by a gate, since both forms build
+and both answer 204.
+
+It **skips both limiters**, which is `session`'s treatment for `session`'s reason plus one of its
+own: there is no repeatable action here to spend a budget on. The `email` skip is the mandatory
+half (no address to key on), and the suite proves that one; the `ip` half is unprovable in e2e
+because `AUTH_RATE_IP_LIMIT` is 1000 there, exactly as `session`'s own skip is unprovable.
 
 ## Backend conventions
 

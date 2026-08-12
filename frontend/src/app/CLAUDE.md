@@ -195,6 +195,51 @@ on the central `users` row, and `GET /api/profile` is what stitches them. `ui/Si
 always stayed clean; its test pins that those three strings appear nowhere in the component, and
 `layout.test.tsx` now asserts a _different_ person's name so the placeholder cannot creep back.
 
+**PET-84 puts a logout control in that footer, and it is the shell's first write.** The footer had
+held the account's identity and no way to leave it since PET-18: `ui/Sidebar.tsx` reserved the slot
+with a comment saying so, `Sidebar.test.tsx` pinned the absence as AC5, and `AuthController`
+published no operation that ends a session. **A39 is overruled by the product owner rather than
+answered by the designer**, so the glyph, the label, the placement and the absence of a
+confirmation dialog are invented and join what A29 owes; `docs/TODO.md` carries that and the
+argument for why the control is not on Settings. Four things about it reach past `ui/Sidebar.tsx`'s
+own comment.
+
+**The action is threaded from `(app)/layout.tsx` through `SidebarNav` rather than imported by the
+panel**, which is this repo's rule for every Server Action and the one it has had to fix after the
+fact twice. `SidebarNav` is the shell's only client component and so is also the boundary the
+action crosses, which it may: an action is serializable as a prop, unlike the `onNavigate`
+callback beside it. The panel's prop is **required**, so a control cannot ship wired to nothing -
+the `pending` prop this file records as shipping unreachable is the failure that argues for it.
+
+**It must be a Server Action rather than anything a Server Component can do**, and that is a
+constraint rather than a preference: a Server Component's cookie jar is read-only and `.delete()`
+throws `ReadonlyRequestCookiesError` at runtime, which is the trap `lib/pendingEmail.ts` records
+for `.set` and the reason this file already says nothing clears a stale cookie on a 401. It is not
+a route handler either, unlike `/auth/verify` and the assistant's send: nothing navigates to it and
+nothing needs cancelling.
+
+**`lib/logOut.ts` is the app's one write with no failure taxonomy**, and the reasoning is worth
+reading before adding a message to it. It clears the cookie whichever way the API answers, because
+clearing it only on a 2xx leaves a user unable to sign out of their own browser during an outage;
+there is nothing a caller would do differently per reason and nowhere to say it, since the surface
+is being navigated away from and a toast cannot survive the redirect. That is PET-77's own rule -
+`failed` and `unauthenticated` leave the form because they name nothing actionable - reached from a
+direction where **every** reason is one of those. The cost is stated in that file and in
+`docs/TODO.md`: during an outage the token stays live while the browser says it left.
+
+**It redirects to `/login` rather than `/`**, and there is no loop, because the cookie is gone
+before that route's own `hasSession()` gate runs. Both destinations are legitimate for a
+signed-out visitor and `/login` is the one with a control on it.
+
+**Three suites cover three different things, which is worth knowing before adding a fourth.**
+`Sidebar.test.tsx` renders the panel with a stub and covers the control's name, role and form;
+`layout.test.tsx` covers the **threading**, because a prop dropped in the middle typechecks
+nowhere and is invisible to every other assertion in that file; and `lib/logOut.test.ts` covers
+the cookie on every arm through the real `authorizedPost`. What none of them can cover is the
+press: jsdom does not run React's form action, so that is a browser check, and the walk measured it
+along with the two things `ui/Sidebar.tsx` could otherwise only claim - that the control is
+`visibility: visible` at 1440px and hidden with the panel below `lg`.
+
 ## The access screens
 
 The six frames outside the shell (01 Welcome, 02 and 03 Setup, 22 Register, 23 Log in, 24

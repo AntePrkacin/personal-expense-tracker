@@ -1,4 +1,11 @@
-import { AlignLeft, LayoutGrid, Sparkle, SlidersHorizontal, type LucideIcon } from 'lucide-react';
+import {
+  AlignLeft,
+  LayoutGrid,
+  LogOut,
+  Sparkle,
+  SlidersHorizontal,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 
 import { initials, shortName } from '@/lib/format';
@@ -198,9 +205,24 @@ type SidebarProps = {
    * parent may supply it - which is exactly the one caller that does.
    */
   onNavigate?: () => void;
+  /**
+   * The Server Action behind the footer's logout control (PET-84).
+   *
+   * **Required, and injected rather than imported, which is this repo's standing rule for every
+   * Server Action.** Storybook's Vite build has no notion of `'use server'`, so it bundles the
+   * action as an ordinary module and a press would reach `cookies()` from `next/headers` in the
+   * browser - the defect PET-39 had to fix after the fact for `remove` and PET-48 for `create`.
+   * Threaded from `(app)/layout.tsx` through `SidebarNav`, so the story and both suites hand in a
+   * stub and neither can reach the real one.
+   *
+   * Required rather than optional on purpose: an optional action is how a control ships looking
+   * operable and doing nothing, which is the failure this app's inert-control doctrine exists
+   * against - and `frontend/CLAUDE.md` records the `pending` prop that shipped wired to nothing.
+   */
+  logOut: () => Promise<void>;
 };
 
-export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
+export function Sidebar({ active, fullName, email, onNavigate, logOut }: SidebarProps) {
   return (
     // min-h-full rather than a height of its own, because the drawer's side
     // column is what constrains it; justify-between pins the footer to the
@@ -297,10 +319,40 @@ export function Sidebar({ active, fullName, email, onNavigate }: SidebarProps) {
           <p className="text-base-content/60 truncate text-xs">{email}</p>
         </div>
 
-        {/* No sign-out control, deliberately. No frame in the file draws one,
-            including Settings, even though sessions exist (A39), and the
-            designer still owes an answer. Sidebar.test.tsx pins its absence so
-            it cannot be added here by reflex. */}
+        {/* The logout control, PET-84, in the slot the comment that used to sit
+            here was holding open. **A39 is overruled by the product owner rather
+            than answered by the designer**: no frame in the file draws a sign-out
+            anywhere, including Settings, so the glyph, the label, this placement
+            and the absence of a confirmation step are all invented and owe a
+            designer - and Sidebar.test.tsx's AC5 case, which pinned the absence,
+            is inverted rather than deleted.
+
+            **A form rather than an onClick, which is what keeps this component
+            free of 'use client'.** The action is a prop for the reason its type
+            gives, and a `<form action>` needs no state, no handler and no
+            pending flag: the platform submits it. There is deliberately no
+            confirmation dialog either - logging out destroys nothing and the way
+            back is one email - so a dialog would be ceremony on the one control
+            whose whole job is to be quick.
+
+            `btn btn-ghost btn-square btn-sm` is `(app)/PopoverMenu.tsx`'s
+            trigger string, this app's existing small icon button, so the footer
+            gains no new idiom. `shrink-0` sits on the form because the form is
+            the flex item: without it the name and address beside it lose width
+            to the button instead of truncating. */}
+        <form action={logOut} className="shrink-0">
+          <button
+            type="submit"
+            // The whole accessible name: a glyph-only button has nothing in its
+            // subtree to compute one from, so without this it announces as
+            // "button" - and HTML-AAM would ignore an external <label> here, the
+            // same trap `(app)/DateField.tsx` records for its own trigger.
+            aria-label="Log out"
+            className="btn btn-ghost btn-square btn-sm text-base-content/60 hover:text-base-content"
+          >
+            <LogOut aria-hidden="true" className="size-4" />
+          </button>
+        </form>
       </div>
     </aside>
   );
