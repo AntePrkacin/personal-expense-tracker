@@ -12,5 +12,7 @@
   },
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
-  }
+  },
+  "maxWorkers": "50%",
+  "workerIdleMemoryLimit": "512MB"
 }

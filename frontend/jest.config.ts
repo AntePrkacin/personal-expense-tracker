@@ -10,6 +10,24 @@ const createJestConfig = nextJest({ dir: './' });
 const config: Config = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+
+  /**
+   * Both of these are resource ceilings rather than test configuration, and they exist because
+   * this repo is routinely worked on from several checkouts at once.
+   *
+   * Jest's default `maxWorkers` is one less than the core count, and each worker is a full node
+   * process with its own jsdom. On a 20-core machine that is 19 of them per run, so two suites
+   * started seconds apart in two worktrees ask for 38 - which is how a 31GB machine was driven
+   * into swap-thrash hard enough to need a power cycle, with no OOM kill in the journal to
+   * explain it afterwards. A proportion rather than a fixed number, so a smaller CI runner
+   * scales down instead of over-subscribing.
+   *
+   * `workerIdleMemoryLimit` is the other half: a worker past the limit is restarted between test
+   * files, which bounds the heap each one accumulates over a long run. Without it the cap above
+   * limits how many workers there are and says nothing about how large any of them gets.
+   */
+  maxWorkers: '50%',
+  workerIdleMemoryLimit: '512MB',
 };
 
 /**
