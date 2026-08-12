@@ -150,6 +150,30 @@ every other filter. And the search field **disappears in the designed empty stat
 behaviour change to check rather than skim: it is safe because `empty` is decided by an account-wide
 probe rather than by the filter, so no keystroke can reach the state that removes the field.
 
+**PET-84 is the twentieth thing that works, and it is the one that lets a user leave.** Nineteen
+features shipped behind a session nobody could end: the sidebar footer drew the account's name and
+email with a comment reserving the space for a sign-out, `Sidebar.test.tsx` pinned that absence as
+AC5 so it could not be added by reflex, and `AuthController` published four routes and none that
+ends a session - `SessionService` had `issue()` and `validate()` and nothing else. With
+`SESSION_TTL_D` at 30 days and expiry absolute, the only exits were waiting a month or setting
+`sessions.deleted_at` by hand, which `docs/TODO.md` carried as an ops chore with the instruction to
+write tooling before an incident needed it. So the footer gains an icon button, `POST
+/api/auth/logout` revokes the bearer it is called with, and a Server Action clears the
+`spendifico.session` cookie and lands the user on `/login`. **A39 is overruled by the product owner
+rather than answered by the designer** - no frame draws a sign-out anywhere, including Settings - so
+the glyph, the label, the placement and the absence of a confirmation dialog are invented and owe a
+review with the rest of A29's list, and the AC5 test is **inverted rather than deleted**. Four
+things about it are decisions rather than shape. It revokes **only the presented session**, so a
+second device stays signed in; `sessions_user_id_idx` is what a "sign out everywhere" would use, and
+that belongs on Settings as its own control. It is **not repeatable** - the call revokes the token it
+was authenticated with, so a second attempt is a 401 from the guard, which is why the ticket's
+idempotence criterion was amended rather than implemented. The cookie is cleared **whichever way the
+API answers**, because a user must not be kept signed in by an unreachable backend, which makes this
+the app's one write with no failure taxonomy and its cost is recorded rather than hidden. And the
+handler takes a **`@BearerToken()` param decorator** beside `CurrentUser`, because the guard
+discards the token it validates and `@Headers('authorization')` made the published spec document
+`Authorization` twice.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and

@@ -1904,13 +1904,37 @@ the Turso MCP, the CLI, Studio, and any dashboard. Worth knowing before someone 
 phantom "migration did not run" for a minute, and worth remembering when a deploy is
 verified by querying the cloud database directly.
 
-### Revoking a session is a manual tombstone
+### Revoking somebody else's session is a manual tombstone
 
-A39 designs no logout, so there is no endpoint that ends a session. A stolen or unwanted
-bearer lives until its `expires_at`, and the only way to kill it sooner is to set
-`sessions.deleted_at` by hand - `validate()` filters on it, so the next request with that
-token answers 401. `sessions_user_id_idx` exists to make "revoke everything this person
-has" one statement. Write the tooling before an incident needs it, not during one.
+**Narrowed by PET-84, not closed.** A user can now end their **own** session: the sidebar
+footer's logout control posts to `POST /api/auth/logout`, which tombstones the row its bearer
+belongs to. So the half of this entry that said "there is no endpoint that ends a session" is
+history, and the sentence about A39 designing no logout is too - the product owner overruled it.
+
+What is left is the operator's half, unchanged. Revoking a session **somebody else** holds still
+means setting `sessions.deleted_at` by hand - `validate()` filters on it, so the next request
+with that token answers 401 - and so does revoking **every** session of one user, which
+`sessions_user_id_idx` exists to make one statement. Neither has tooling. Write it before an
+incident needs it, not during one.
+
+Two things worth knowing before that tooling is written. The endpoint deliberately revokes only
+the presented bearer, so it is not a building block for "sign out everywhere": that wants the
+index and a control of its own on Settings, and `frontend/src/lib/logOut.ts` records why it was
+kept out of the footer. And `revoke()` guards on the tombstone being null, so tooling that writes
+this column should do the same rather than overwriting a timestamp that already answers "when".
+
+### A logout during a backend outage is a local sign-out only
+
+**PET-84, and it is a decision with a stated cost rather than an omission.** The logout action
+clears the session cookie whatever the API answers, because clearing it only on a 2xx would leave
+a user unable to sign out of their own browser on the one screen whose purpose is leaving. So
+during an outage the browser is signed out while the token stays live in the database until
+`SESSION_TTL_D`, and the user is told it worked - which, from where they stand, it did.
+
+**Nothing reports that**, and the reason is that there is nowhere to report it to: the frontend
+has no logging seam at all, no `console.error` anywhere under `src/`, so the choice was to invent
+one for a line nothing reads or to record the asymmetry. If a logging or error-reporting seam ever
+lands, this is a caller for it. Until then the entry above is the operator's recourse.
 
 ### A verify that fails twice can orphan a cloud database
 
@@ -2072,8 +2096,10 @@ an address change, which is one `UPDATE` in `LoginTokenService` whenever it is w
 **Nothing tells the old address it lost the account.** The usual defence against a hijacked
 session quietly moving the login identifier is a notification to the previous address, and
 there is none: the change answers 200 and only the new address ever hears about it. A39
-designs no logout and no security-alert mail, so adding one is a product decision before it
-is a code one.
+designs no security-alert mail, so adding one is a product decision before it is a code one.
+(This clause used to say A39 designs no logout either. PET-84 overruled that half and built
+one, which changes nothing here: a logout ends the session its holder is using, and this
+entry is about the session's *other* holder never being told.)
 
 ### Autostop is available as a cost lever, and was measured before being rejected
 
@@ -2744,6 +2770,29 @@ there.
 `Screens/17 Settings` carries three stories that exist to collect the answer rather than to diff
 against the design: `WithMessages` puts all three inline messages up at once, `EmailTaken` shows the
 409 line, and `Saved` shows the confirmation. Two of them are states an untouched form cannot reach.
+
+### The logout control is invented end to end, and A39 was overruled rather than answered
+
+**PET-84.** A39 says no frame in the design file draws a sign-out anywhere, including Settings, and
+that both it and the email-change warning need a designer's answer before shipping. The product
+owner overruled the first half rather than waiting for it, so the control exists and **every visible
+decision about it is ours**: the sidebar footer as its home, `LogOut` from lucide as its glyph, "Log
+out" as its accessible name, an icon-only button rather than a labelled row, and **no confirmation
+dialog** - logging out destroys nothing and the way back is one email, so a dialog would be ceremony
+on the one control whose whole job is to be quick. The email-change half of A39 is untouched and
+still owed, and the entry about the old address never being notified is where that lives.
+
+There is no story to collect the answer on, unlike the three `Screens/17 Settings` ones above:
+`Components/Sidebar` already renders the panel and now renders this control in it, so the review
+surface is the existing story rather than a new state. What a designer would change is the glyph, the
+placement or the addition of a label, none of which needs a story that does not exist.
+
+Worth knowing for whoever answers it: the control is deliberately **not** on Settings, and the
+reason is mechanical rather than aesthetic. That page is one `<form>` with a page-level "Save
+changes", so a button inside it either submits the profile PATCH or needs a `type="button"` guard for
+a control that has nothing to do with the form, and it would be a fourth card on a screen whose suite
+pins exactly three `h2`s. If a designer wants it there as well, the footer control is what a second
+surface reuses.
 
 ### The Settings page has no unsaved-changes guard, by design
 
