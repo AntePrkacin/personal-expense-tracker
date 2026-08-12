@@ -1,30 +1,30 @@
 {
-  "generatedAt": "2026-08-12T11:36:01.396Z",
+  "generatedAt": "2026-08-12T12:48:41.117Z",
   "authors": [
     {
       "name": "izkreny",
-      "commits": 323,
-      "survivingLines": 83569,
-      "mergedPullRequests": 47,
+      "commits": 334,
+      "survivingLines": 85217,
+      "mergedPullRequests": 48,
       "areas": {
-        "backend": 37809,
-        "frontend": 22595,
-        "documentation": 27738,
+        "backend": 37815,
+        "frontend": 23691,
+        "documentation": 28600,
         "tooling": 12181
       }
     },
     {
       "name": "Ante Prkačin",
-      "commits": 212,
-      "survivingLines": 70176,
+      "commits": 215,
+      "survivingLines": 71116,
       "mergedPullRequests": 29,
       "areas": {
-        "backend": 3999,
-        "frontend": 67429,
-        "documentation": 13938,
+        "backend": 4171,
+        "frontend": 68315,
+        "documentation": 14037,
         "tooling": 454
       }
     }
   ],
-  "survivingLinesFromExcludedCommits": 6948
+  "survivingLinesFromExcludedCommits": 6947
 }

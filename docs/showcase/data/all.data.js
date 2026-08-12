@@ -4,44 +4,44 @@
 // file://, where fetch of a sibling file is blocked.
 window.__SHOWCASE__ = {
   "authors": {
-    "generatedAt": "2026-08-12T11:36:01.396Z",
+    "generatedAt": "2026-08-12T12:48:41.117Z",
     "authors": [
       {
         "name": "izkreny",
-        "commits": 323,
-        "survivingLines": 83569,
-        "mergedPullRequests": 47,
+        "commits": 334,
+        "survivingLines": 85217,
+        "mergedPullRequests": 48,
         "areas": {
-          "backend": 37809,
-          "frontend": 22595,
-          "documentation": 27738,
+          "backend": 37815,
+          "frontend": 23691,
+          "documentation": 28600,
           "tooling": 12181
         }
       },
       {
         "name": "Ante Prkačin",
-        "commits": 212,
-        "survivingLines": 70176,
+        "commits": 215,
+        "survivingLines": 71116,
         "mergedPullRequests": 29,
         "areas": {
-          "backend": 3999,
-          "frontend": 67429,
-          "documentation": 13938,
+          "backend": 4171,
+          "frontend": 68315,
+          "documentation": 14037,
           "tooling": 454
         }
       }
     ],
-    "survivingLinesFromExcludedCommits": 6948
+    "survivingLinesFromExcludedCommits": 6947
   },
   "delivery": {
-    "generatedAt": "2026-08-12T11:36:02.054Z",
-    "merged": 76,
-    "opened": 83,
+    "generatedAt": "2026-08-12T12:48:41.744Z",
+    "merged": 77,
+    "opened": 84,
     "closedUnmerged": 4,
     "open": 3
   },
   "deps": {
-    "generatedAt": "2026-08-12T11:36:02.135Z",
+    "generatedAt": "2026-08-12T12:48:41.841Z",
     "trees": [
       {
         "tree": "root",
@@ -63,9 +63,9 @@ window.__SHOWCASE__ = {
     "totalAtInitialCommit": 1660
   },
   "repo": {
-    "generatedAt": "2026-08-12T11:35:51.170Z",
+    "generatedAt": "2026-08-12T12:48:30.497Z",
     "activity": {
-      "commits": 535,
+      "commits": 549,
       "activeDays": 15,
       "calendarDays": 15,
       "firstCommit": "2026-07-29",
@@ -129,82 +129,82 @@ window.__SHOWCASE__ = {
         },
         {
           "date": "2026-08-12",
-          "commits": 11
+          "commits": 25
         }
       ]
     },
     "churn": {
-      "added": 235303,
-      "deleted": 63718,
-      "linesWrittenAndRewritten": 299021,
-      "addedExcludingGenerated": 186143,
-      "deletedExcludingGenerated": 33244,
-      "linesWrittenAndRewrittenExcludingGenerated": 219387
+      "added": 238472,
+      "deleted": 64304,
+      "linesWrittenAndRewritten": 302776,
+      "addedExcludingGenerated": 189264,
+      "deletedExcludingGenerated": 33784,
+      "linesWrittenAndRewrittenExcludingGenerated": 223048
     },
     "lines": {
       "code": {
-        "files": 641,
-        "code": 70169,
-        "comment": 36844,
-        "blank": 14468
+        "files": 647,
+        "code": 70716,
+        "comment": 37789,
+        "blank": 14626
       },
       "documentation": {
-        "files": 155,
-        "code": 32199,
+        "files": 156,
+        "code": 32866,
         "comment": 0,
-        "blank": 7179
+        "blank": 7283
       },
       "generated": {
         "files": 29,
-        "code": 41462,
+        "code": 41464,
         "comment": 800,
         "blank": 251
       }
     },
     "documentationSplit": {
       "plans": {
-        "files": 60,
-        "lines": 14963
+        "files": 61,
+        "lines": 15394
       },
       "agents": {
         "files": 10,
-        "lines": 6299
+        "lines": 6460
       },
       "other": {
         "files": 85,
-        "lines": 10937
+        "lines": 11012
       }
     },
     "largestDocuments": [
       {
         "path": "frontend/src/app/CLAUDE.md",
-        "lines": 2808
+        "lines": 2890
       },
       {
         "path": "docs/TODO.md",
-        "lines": 2622
+        "lines": 2683
       },
       {
         "path": "backend/CLAUDE.md",
         "lines": 1111
       },
       {
-        "path": "docs/plans/2026-08-10_PET-73_assistant-chat.md",
-        "lines": 879
+        "path": "frontend/CLAUDE.md",
+        "lines": 920
       },
       {
-        "path": "frontend/CLAUDE.md",
-        "lines": 864
+        "path": "docs/plans/2026-08-10_PET-73_assistant-chat.md",
+        "lines": 879
       }
     ],
     "commentDensity": {
-      "code": 70169,
-      "comment": 36844,
-      "per100": 52.5
+      "code": 70716,
+      "comment": 37789,
+      "per100": 53.4
     }
   },
   "shape": {
-    "generatedAt": "2026-08-12T11:36:02.183Z",
+    "generatedAt": "2026-08-12T12:48:41.882Z",
     "tables": {
       "byScope": [
         {
