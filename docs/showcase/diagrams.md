@@ -1,9 +1,22 @@
 # Showcase diagrams
 
-Draft diagrams for the showcase presentation. Mermaid sources, so GitHub renders them here and a
-reviewer can correct the source rather than an image.
+Diagrams for the showcase presentation. Mermaid sources, so GitHub renders them here and a reviewer can
+correct the source rather than an image.
 
-Three are drawn. Two more are candidates and are listed at the end.
+**This page is the combined view. Each diagram also exists as its own source file**, for rendering one
+at a time onto a slide:
+
+- `docs/showcase/diagrams/erd-central.mmd`
+- `docs/showcase/diagrams/erd-user.mmd`
+- `docs/showcase/diagrams/deployment.mmd`
+- `docs/showcase/diagrams/login-flow.mmd`
+
+The two ER diagrams are separate files rather than one, because two schemas on a single slide are not
+legible at projector size. Note that GitHub renders Mermaid inside a markdown fence but **not** a bare
+`.mmd` file, so this page stays the place to read them; the separate sources are what a renderer
+consumes. Editing one means editing both, until the PNG export below removes the duplication.
+
+Four are drawn. Two more are candidates and are listed at the end.
 
 ---
 

@@ -42,8 +42,11 @@ statistics generators need none of that.
 
 ### What gets counted
 
-Every figure excludes the repository's **initial commit** (`a237207`), which is the template Ante
-created the repo from and is nobody's work on this project. Every range is therefore `a237207..HEAD`.
+**Two commits are excluded, not one.** `a237207`, the initial commit, is the template the repo was
+created from. `ab73abd` is the academy's own project-management docs - the student handout, the brief and
+the tech spec, 644 lines by a third author who did nothing else here. Both are **inputs to the project
+rather than output of it**, which is the same reasoning for both, and excluding the second one also
+makes the per-author split genuinely two-way rather than two-way with an invisible third slice.
 
 **Activity**
 
@@ -70,6 +73,34 @@ created the repo from and is nobody's work on this project. Every range is there
 - API operations, and how many paths they sit on
 - Committed migrations
 - Tests, across the three suites
+
+**Who did what**
+
+- Commits, merged pull requests and surviving lines, each split between the two authors
+- The same work split by **area**, backend against frontend against documentation, per author
+
+### Attribution: by blame, and by area as well as by author
+
+**"Lines by author" means surviving lines, via `git blame`**, not lines added. It answers "whose code
+is in the repo now", which is consistent with the headline decision above to report the snapshot rather
+than the churn. One caveat to state rather than hide: refactoring somebody else's file transfers those
+lines to you, which is the honest answer to the question asked but not the same as "who typed more".
+
+**One pie per metric, two slices, the same two colours throughout.** That is the one thing a pie does
+well, and the split is balanced enough to be worth drawing: commits run about 59 to 41, merged pull
+requests 61 to 39, and lines added 52 to 47.
+
+**But the ratios are so close across metrics that three pies tell one story three times**, which is why
+the area split earns its own chart. Measured on additions with generated files excluded, it is
+genuinely complementary rather than competitive: one author's work is overwhelmingly frontend, the
+other's is backend first and documentation second, and both crossed over. It is also the only chart on
+the page a viewer cannot predict from the others, and it matches the running order PET-75 sets out,
+where the two of you present the two halves.
+
+**Two honesty notes, both belonging on the page rather than in this plan only.** Attribution is by
+**committer**, which on this project means who ran the session rather than who typed the lines. And
+author display names are already public in the git history so using them is fine, but **no email
+address goes into the committed JSON**.
 
 ### How lines get measured, which was an open question
 
@@ -151,8 +182,10 @@ The proposal, and it deliberately uses a pie for one thing only:
 
 | Surface | Chart | Why this one |
 | --- | --- | --- |
-| Code / documentation / generated | **Donut** | A genuine part-of-a-whole with three slices, which is the only case a pie reads well |
-| Documentation split, and packages per tree | **Bars** | Comparing magnitudes. Length is easy to compare, angle is not, and these have more slices than a pie can carry |
+| Commits, merged PRs and surviving lines, per author | **One pie each, two slices** | Part-of-a-whole with two slices is exactly what a pie can carry, and the same two colours across all three make the set readable at a glance |
+| Work by area, per author | **Stacked bar** | The one chart nobody can predict from the others, and the one that reads as a partnership rather than a scoreboard |
+| Code / documentation / generated | **Donut** | A genuine part-of-a-whole with three slices |
+| Documentation split, and packages per tree | **Bars** | Comparing magnitudes. Length is easy to compare, angle is not, and these carry more slices than a pie can |
 | Commits across the calendar | **Area** | The history is short and dense, and the shape over time is the point |
 | Commits, PRs, tickets, tables, endpoints, active days | **Stat tiles** | A single number is not a chart, and six of them in a row read faster than six charts |
 
@@ -181,8 +214,17 @@ counting Claude Code sessions or tokens, which cannot be measured from the repos
 
 ## Vector 2: diagrams
 
-**Three are drafted and committed in `docs/showcase/diagrams.md`**, as Mermaid sources so GitHub
-renders them and a reviewer corrects the source rather than an image:
+**Drafted, reviewed and approved.** They live twice over, deliberately: `docs/showcase/diagrams.md` is
+the combined page GitHub renders, and each diagram is also its own source file under
+`docs/showcase/diagrams/` for rendering one at a time onto a slide. The two ER diagrams are separate
+files rather than one, because two schemas on a single slide are not legible at projector size.
+
+GitHub renders Mermaid inside a markdown fence but **not** a bare `.mmd` file, so the combined page
+stays the place to read them while the separate sources are what a renderer consumes. That duplication
+is real and is the argument for the PNG export below, which would make the `.mmd` files the single
+source and the images the only thing a slide touches.
+
+What is drawn:
 
 1. **The data model, both scopes.** Two ER diagrams rather than one, because "every user gets their own
    database" is the architectural claim being made. It states in prose that **the relationship lines are
@@ -515,23 +557,28 @@ projector in a way that would actively mislead.
 **Vector 1: statistics**
 
 - [ ] `stats-repo.sh`: commits, active days, churn, and the snapshot line counts split into code,
-      documentation and generated, plus the three-way documentation split
+      documentation and generated, plus the three-way documentation split. Excludes both `a237207` and
+      `ab73abd`
+- [ ] `stats-authors.sh`: commits, merged PRs and **`git blame` surviving lines** per author, plus the
+      area split. Display names only, no email addresses in the JSON
 - [ ] `stats-delivery.sh`: merged and total pull requests
 - [ ] `stats-deps.sh`: package counts from the three lockfiles, now and at `a237207`
 - [ ] `stats-shape.sh`: tables, API operations, migrations
 - [ ] `stats-tests.sh`, optional and separate because it runs the suites
 - [ ] `data/tickets.json` from one JQL query, timestamped, tickets and epics
 - [ ] `build-charts.mjs`: the esbuild bundle and the `all.data.js` writer
-- [ ] Load the `dataviz` skill, then write `statistics.html`: one donut, several bars, one area, a row
-      of stat tiles
+- [ ] Load the `dataviz` skill, then write `statistics.html`: three two-slice pies per author, one
+      stacked bar by area, one donut, several bars, one area chart, a row of stat tiles
 - [ ] One `mise run showcase:stats` that refreshes everything and rewrites `all.data.js`
 - [ ] Verify in a browser, light and dark, at projector size
 
 **Vector 2: diagrams**
 
 - [x] `docs/showcase/diagrams.md` with the ERD for both scopes, the deployment map and the login flow
-- [ ] Review pass on all three, against the schemas and against `docs/guides/deployment.md`
-- [ ] Decide whether PNG export is wanted; if so, the Chromium render script
+- [x] Reviewed and approved by the product owner
+- [x] Each diagram also as its own source under `docs/showcase/diagrams/`, four files
+- [ ] Decide whether PNG export is wanted; if so, the Chromium render script, which also collapses the
+      combined page and the separate sources back to one source of truth
 - [ ] Optional: database-per-user, and the assistant cancellation path
 
 **Vector 3: login links and the send**
