@@ -206,6 +206,31 @@ description = "Regenerate the committed showcase fixture.data.json"
 dir = "backend"
 run = "npx ts-node src/scripts/build-showcase-fixture.ts"
 
+# Mails every showcase participant their own 24-hour login link into the shared
+# demo account. Two tasks for the same reason `seed` has two, sharpened: a
+# mistaken local run writes rows into a gitignored SQLite file, a mistaken cloud
+# run emails real people. So reaching production is typed out - and on top of
+# that the cloud task still does nothing until `-- --send` is added, because the
+# dry run is the default and is what replaces a draft-review step.
+#
+#   mise run showcase:invite                     read the plan and the rendered mail
+#   mise run showcase:invite:cloud               same, against the real database
+#   mise run showcase:invite:cloud -- --send     mint and mail
+#
+# `raw = true` because the send pauses for a typed confirmation, and mise's
+# captured output would swallow the prompt.
+[tasks."showcase:invite"]
+description = "Dry-run the showcase invite mails against the local database"
+dir = "backend"
+raw = true
+run = "npx ts-node src/scripts/invite-showcase.ts --local"
+
+[tasks."showcase:invite:cloud"]
+description = "Mint and mail showcase login links (needs -- --send to do anything)"
+dir = "backend"
+raw = true
+run = "npx ts-node src/scripts/invite-showcase.ts --cloud"
+
 # Reset is the inverse of seed, and split into two tasks for the same reason: a
 # mistaken local run deletes a gitignored SQLite file, a mistaken cloud run
 # destroys every account in Turso and the volume under the deployed app. So
