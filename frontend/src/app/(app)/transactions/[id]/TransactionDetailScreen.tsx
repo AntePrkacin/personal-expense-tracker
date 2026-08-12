@@ -106,7 +106,7 @@ export function TransactionDetailScreen({
                     `text-error`: every transaction in this app is a debit, so a danger colour
                     would mark the normal case as a fault - the same call TransactionRow makes
                     about its AMOUNT column. */}
-                <p className="font-display text-4xl font-bold tabular-nums">
+                <p className="font-display text-5xl font-bold tabular-nums">
                   {formatNegative(transaction.amount)}
                 </p>
               </div>
@@ -123,7 +123,7 @@ export function TransactionDetailScreen({
           <div className="flex flex-col gap-5">
             <section className="card bg-base-100 text-base-content shadow-sm">
               <div className="card-body gap-0">
-                <h2 className="font-display text-lg font-semibold">Details</h2>
+                <h2 className="font-display text-2xl font-semibold">Details</h2>
                 {/* A dl rather than a table: these are name/value pairs, not a grid, and a
                     two-column table would need a header row the frame does not draw. */}
                 <dl className="mt-3 text-sm">
@@ -137,7 +137,7 @@ export function TransactionDetailScreen({
             {note ? (
               <section className="card bg-base-100 text-base-content shadow-sm">
                 <div className="card-body gap-2">
-                  <h2 className="font-display text-lg font-semibold">Note</h2>
+                  <h2 className="font-display text-2xl font-semibold">Note</h2>
                   {/* whitespace-pre-line so a note typed with line breaks keeps them; the
                       textarea that writes it accepts them. */}
                   <p className="text-base-content/70 text-sm whitespace-pre-line">{note}</p>

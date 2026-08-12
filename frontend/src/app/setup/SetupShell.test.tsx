@@ -10,7 +10,12 @@ import { SETUP_STEPS, SetupShell, type SetupStep, STEP_DOT, STEP_WIDTH } from '.
 // are the only appearance signal, and nothing proves they generate real CSS
 // since PET-57 retired the compile guard.
 
-const CEDI = '₵';
+// The mark's visible glyphs, which PET-79 changed from one U+20B5 CEDI SIGN to a `$` doing double
+// duty as the S in "$PENDIFICO". Both halves are `aria-hidden`, so the accessible name is a
+// separate `sr-only` "Spendifico" - which is why the two assertions below differ: one reaches for
+// hidden text and one for the name a reader actually gets.
+const MARK_GLYPH = '$';
+const WORDMARK = 'PENDIFICO';
 
 /**
  * The indicator wrapper, found by walking **up** from the active pill.
@@ -151,8 +156,12 @@ describe('SetupShell', () => {
       </SetupShell>,
     );
 
+    // The announced name, which is `sr-only` and is what six other suites pin.
     expect(screen.getByText('Spendifico')).toBeInTheDocument();
-    expect(screen.getByText(CEDI)).toBeInTheDocument();
+    // The visible halves. `getByText` reads through `aria-hidden`, which is exactly why the line
+    // above is the one that proves a reader gets a whole word rather than "dollar P E N D I F...".
+    expect(screen.getByText(MARK_GLYPH)).toBeInTheDocument();
+    expect(screen.getByText(WORDMARK)).toBeInTheDocument();
     expect(screen.queryByText(/Expensa/)).not.toBeInTheDocument();
   });
 

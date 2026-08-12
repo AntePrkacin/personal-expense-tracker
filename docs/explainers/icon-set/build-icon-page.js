@@ -296,6 +296,134 @@ const mark = (n, label) => `
               <span class="text-[10px] font-semibold tracking-wide uppercase opacity-60">${esc(label)}</span>
             </figure>`;
 
+// --- the Expensa theme block, generated rather than hand-added ---------------
+//
+// **PET-74 added this block to this page BY HAND, and PET-79 found out the way you would expect:
+// the next run of this generator silently deleted it.** Root `CLAUDE.md` forbids hand-editing a
+// generated-but-committed artifact for exactly this reason, and a hand-added `<style>` in a file
+// whose whole header says "GENERATED, NOT HAND-WRITTEN" is that rule being broken quietly.
+//
+// So the generator owns it now, and reads it from
+// `docs/explainers/category-palette/theme-data.json` - the one artifact
+// `frontend/src/lib/themeGuard.ts` computes. That makes the block impossible to drift from
+// `globals.css` rather than merely checked for drift, which is the stronger of the two, and
+// `themeGuard.test.ts` diffs it anyway.
+//
+// The block exists because the pinned CDN `daisyui.css` carries only the stock themes: this page
+// deliberately loads no `themes.css`, so it paints the Expensa *values* into daisyUI's *stock*
+// selectors. The dark arm is `[data-theme='expensa-dark']` rather than `[data-theme='dark']`,
+// which stopped being unambiguous the moment PET-79 registered the real stock `dark`.
+function buildThemeBlock() {
+  const dataPath = path.join(
+    REPO,
+    'docs/explainers/category-palette/theme-data.json',
+  );
+  if (!fs.existsSync(dataPath)) {
+    throw new Error(
+      `missing docs/explainers/category-palette/theme-data.json - run ` +
+        `\`cd frontend && npm run theme:report\` first. This page's theme block is generated ` +
+        `from it rather than hand-written; see the note above buildThemeBlock().`,
+    );
+  }
+  const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+  // `authoredColours` rather than `themes[].effective`: the latter is the seventeen tokens the
+  // guard MEASURES, and a copy of a theme block needs all twenty-two - the three `base-*`
+  // surfaces, `base-content` and PET-74's `--color-orange` pair are none of them allowlist
+  // colours and every one of them is in this page's block.
+  const find = (name) => {
+    const colours = data.authoredColours?.[name];
+    if (!colours) {
+      throw new Error(
+        `theme-data.json carries no authoredColours for ${name} - regenerate it with ` +
+          `\`cd frontend && npm run theme:report\``,
+      );
+    }
+    return colours;
+  };
+  const light = find('expensa-light');
+  const dark = find('expensa-dark');
+
+  // The non-colour half, and it is here because leaving it out was a real regression rather than a
+  // theoretical one. This generator took the block over from PET-74's hand-written one and emitted
+  // `--color-*` only, so regenerating deleted --radius-selector/field/box, --size-*, --border,
+  // --depth and --noise. This page uses `rounded-field` 168 times and `rounded-box` 102 times, so
+  // every tile and card silently fell back to daisyUI's stock 4px/8px against the app's 12px/16px,
+  // and --depth went to 1 where the design is flat - a page that shows what the app draws, no
+  // longer drawing it. Read from theme-data.json for the same reason the colours are: nothing here
+  // restates a value that globals.css owns.
+  const geometry = (name) => {
+    const values = data.authoredGeometry?.[name];
+    if (!values) {
+      throw new Error(
+        `theme-data.json carries no authoredGeometry for ${name} - regenerate it with ` +
+          `\`cd frontend && npm run theme:report\``,
+      );
+    }
+    return values;
+  };
+  const lightGeometry = geometry('expensa-light');
+  const darkGeometry = geometry('expensa-dark');
+
+  const decl = (values, tokens) =>
+    tokens.map((t) => `        --color-${t}: ${values[t]};`).join('\n');
+
+  /** `color-scheme` is a real property; everything else in there is a custom property. */
+  const geometryDecl = (values, indent) =>
+    Object.entries(values)
+      .map(([token, value]) =>
+        token === 'color-scheme'
+          ? `${indent}color-scheme: ${value};`
+          : `${indent}--${token}: ${value};`,
+      )
+      .join('\n');
+
+  const lightTokens = Object.keys(light);
+  // Only what actually differs, which is the shape the block has always had: the light block
+  // carries every colour and the dark one carries the handful that change.
+  const darkTokens = lightTokens.filter((t) => dark[t] !== light[t]);
+
+  // Same differ-only rule for the geometry: `:root` carries all of it and a dark scope carries
+  // what changes. Today that is `color-scheme` alone - the radii, sizes, border and both flat-design
+  // flags are identical in the two blocks - and writing it as a filter rather than as a hard-coded
+  // `color-scheme: dark` means a future dark-only radius lands here on its own.
+  const darkGeometryDecl = geometryDecl(
+    Object.fromEntries(
+      Object.entries(darkGeometry).filter(([token, value]) => value !== lightGeometry[token]),
+    ),
+    '        ',
+  );
+
+  return `    <!--
+      GENERATED with the rest of this page - do not hand-edit, and do not re-add values here by
+      hand the way PET-74 did: this generator deletes anything it did not write. The source is
+      docs/explainers/category-palette/theme-data.json, via
+      \`cd frontend && npm run theme:report\`.
+
+      The pinned CDN daisyui.css carries only the stock themes, so the Expensa values are painted
+      into daisyUI's stock selectors instead. frontend/src/lib/themeGuard.test.ts diffs this block
+      against globals.css.
+    -->
+    <style>
+      :root {
+${geometryDecl(lightGeometry, '        ')}
+${decl(light, lightTokens)}
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) {
+${darkGeometryDecl}
+${decl(dark, darkTokens)}
+        }
+      }
+      :root:has(input.theme-controller[value='dark']:checked),
+      [data-theme='expensa-dark'] {
+${darkGeometryDecl}
+${decl(dark, darkTokens)}
+      }
+    </style>`;
+}
+
+const themeBlock = buildThemeBlock();
+
 const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -305,7 +433,7 @@ const html = `<!DOCTYPE html>
 
     <!--
       Pinned to exactly what frontend/package.json installs, the reasoning
-      docs/explainers/category-colors-icons-description-preview.html carries in full.
+      docs/explainers/category-palette-preview.html carries in full.
       lucide 1.29.0 matters twice over here: it is the version the app imports from, and
       because this page renders every name through it, a name that is not really in 1.29.0
       draws an empty tile instead of quietly passing review.
@@ -313,6 +441,7 @@ const html = `<!DOCTYPE html>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
     <script src="https://unpkg.com/lucide@1.29.0"></script>
+${themeBlock}
 </head>
 
 <!--

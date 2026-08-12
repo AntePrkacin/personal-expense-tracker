@@ -67,7 +67,7 @@ export function ErrorScreen({ digest, reset }: { digest?: string; reset: () => v
       {/* gap-2 is the designed 8px from heading to copy, and no overline above the heading,
           matching `VerifyFailedScreen` and frames 23 and 24 it takes that from. */}
       <div className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl font-bold">{COPY.heading}</h1>
+        <h1 className="font-display text-3xl font-bold">{COPY.heading}</h1>
         <p className="text-base-content/70">{COPY.body}</p>
         {digest !== undefined && (
           <p className="text-base-content/50 text-xs">Reference: {digest}</p>

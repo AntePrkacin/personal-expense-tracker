@@ -195,7 +195,7 @@ type CategorySeed = {
  * The twelve chips onboarding offers, with the colour, icon and description an
  * admin will later manage.
  *
- * **Twelve, not thirteen**: `docs/explainers/category-colors-icons-description-preview.html`
+ * **Twelve, not thirteen**: `docs/explainers/category-palette-preview.html`
  * is the sign-off artifact and draws thirteen rows, the last of which is
  * `Uncategorized` - the fallback, which is seeded for everybody, offered to
  * nobody and therefore not a template. A full pick provisions thirteen category

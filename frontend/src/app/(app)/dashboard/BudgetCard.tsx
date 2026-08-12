@@ -104,7 +104,7 @@ export function BudgetCard({
             stop them being flex items that grow at all. `frontend/CLAUDE.md` carries the rule
             and the specificity reason `grow-0` cannot do it. */}
         <div className="flex items-baseline gap-2">
-          <span className="font-display text-4xl font-bold">{formatWhole(spentWhole)}</span>
+          <span className="font-display text-5xl font-bold">{formatWhole(spentWhole)}</span>
           <span className="text-base-content/60 text-sm">of {formatWhole(budgetWhole)}</span>
         </div>
 

@@ -115,7 +115,7 @@ export function CategoryDonut({ categories, spent, currency }: CategoryDonutProp
                   claim there was none. Muted `base-content/50`, the same tone this file's own
                   fallback slice and legend dot already use for "nothing to spend meaningfully
                   about". */}
-              <span className="text-base-content/50 font-display text-2xl font-bold">
+              <span className="text-base-content/50 font-display text-3xl font-bold">
                 {formatWhole(spent)}
               </span>
               <span className="text-base-content/60 text-xs">Total spent</span>
@@ -185,7 +185,7 @@ export function CategoryDonut({ categories, spent, currency }: CategoryDonutProp
                 the trap `frontend/CLAUDE.md` records against the same rule on the inline axis. A
                 `<span>` is simply not matched by the selector. */}
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="font-display text-2xl font-bold">{formatWhole(spent)}</span>
+              <span className="font-display text-3xl font-bold">{formatWhole(spent)}</span>
               <span className="text-base-content/60 text-xs">Total spent</span>
             </div>
           </div>

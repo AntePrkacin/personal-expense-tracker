@@ -376,7 +376,7 @@ export function AllocateBudgetModal({
               {/* Never negative and never in a danger tone - `toAllocateTotals` clamps at zero, which
                 is the whole of the design's rule. The same figure as the "Unassigned" row below, from
                 the same place, so the headline and the column cannot disagree. */}
-              <span className="font-display text-3xl font-bold">
+              <span className="font-display text-4xl font-bold">
                 {formatWhole(totals.unassignedWhole)}
               </span>
             </div>

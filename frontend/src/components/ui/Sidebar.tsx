@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+import { LogoLockup } from '@/components/LogoLockup';
 import { initials, shortName } from '@/lib/format';
 
 // Sidebar (Figma "Components", node 18:252), on daisyUI `menu` (PET-57).
@@ -230,25 +231,13 @@ export function Sidebar({ active, fullName, email, onNavigate, logOut }: Sidebar
     // on Tailwind's scale.
     <aside className="bg-base-100 text-base-content border-base-300 flex min-h-full w-64 flex-col justify-between border-r px-4 pt-6 pb-5">
       <div className="flex flex-col gap-5">
-        {/* Not a link. Figma draws no affordance on the wordmark, and picking a
-            destination for it is a routing decision. */}
-        <div className="flex items-center gap-3 pt-1 pb-2 pl-2">
-          <div className="bg-primary text-primary-content rounded-field flex size-9 shrink-0 items-center justify-center">
-            {/* U+20B5 CEDI SIGN, as drawn. A text glyph rather than a traced
-                path, which is what Figma has, so it depends on Plus Jakarta Sans
-                carrying it - worth an eye in Storybook, because a fallback glyph
-                would look wrong here and no test can see it. */}
-            <span aria-hidden="true" className="font-display text-base font-semibold">
-              ₵
-            </span>
-          </div>
-          {/* "Spendifico", not Figma's "Expensa": the rename was decided on
-              2026-08-02 and this is its most visible string. The design file is
-              the only half that has not moved - swapping the logo asset is the
-              designer's call - and the divergence is recorded under "The Figma
-              file still says Expensa" in docs/TODO.md. Do not "correct" this
-              back to the design. */}
-          <p className="font-display text-lg font-bold">Spendifico</p>
+        {/* One lockup for the whole app as of PET-79. This drew its own tile and wordmark until
+            then - a hand-copied second version of `components/LogoLockup.tsx`, which that file's
+            own comment had named as needing "a size and a tone pair" before it could absorb this.
+            `md` is the size whose wordmark is reduced to fit this 216px column; the component
+            records why the artwork's own proportions cannot be used here. */}
+        <div className="pt-1 pb-2 pl-2">
+          <LogoLockup size="md" />
         </div>
 
         {/* One nav, three labelled lists. The overlines are the groups' names, so

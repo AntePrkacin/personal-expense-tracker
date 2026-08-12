@@ -14,7 +14,12 @@ import { AccessCard } from './AccessCard';
 // a rendered size - the card is located by daisyUI's own `card` class, which is
 // the one thing the width contract below needs to be attached to.
 
-const CEDI = '₵';
+// The mark's visible glyphs, which PET-79 changed from one U+20B5 CEDI SIGN to a `$` doing double
+// duty as the S in "$PENDIFICO". Both halves are `aria-hidden`, so the accessible name is a
+// separate `sr-only` "Spendifico" - which is why the two assertions below differ: one reaches for
+// hidden text and one for the name a reader actually gets.
+const MARK_GLYPH = '$';
+const WORDMARK = 'PENDIFICO';
 
 function card(container: HTMLElement): HTMLElement {
   const found = container.querySelector('.card');
@@ -71,8 +76,12 @@ describe('AccessCard', () => {
       </AccessCard>,
     );
 
+    // The announced name, which is `sr-only` and is what six other suites pin.
     expect(screen.getByText('Spendifico')).toBeInTheDocument();
-    expect(screen.getByText(CEDI)).toBeInTheDocument();
+    // The visible halves. `getByText` reads through `aria-hidden`, which is exactly why the line
+    // above is the one that proves a reader gets a whole word rather than "dollar P E N D I F...".
+    expect(screen.getByText(MARK_GLYPH)).toBeInTheDocument();
+    expect(screen.getByText(WORDMARK)).toBeInTheDocument();
     expect(screen.queryByText(/Expensa/)).not.toBeInTheDocument();
   });
 

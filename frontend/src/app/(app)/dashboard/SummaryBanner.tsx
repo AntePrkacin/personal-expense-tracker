@@ -110,7 +110,7 @@ export function SummaryBanner({ headline, body, action }: SummaryBannerProps) {
   return (
     <section className="card border-primary/30 bg-primary/20 border shadow-sm">
       <div className="card-body gap-4">
-        <h2 className="font-display text-xl font-bold">{headline}</h2>
+        <h2 className="font-display text-2xl font-bold">{headline}</h2>
         <p className="text-base-content/70">{body}</p>
 
         {action ? <div className="card-actions">{action}</div> : null}

@@ -39,7 +39,7 @@ export function SetupBudgetScreen() {
 
         {/* The screen's one h1. There is no PageHeader outside the (app) shell,
             so each access screen owns its own, exactly as WelcomeScreen does. */}
-        <h1 className="font-display text-2xl font-bold">Set your monthly budget</h1>
+        <h1 className="font-display text-3xl font-bold">Set your monthly budget</h1>
 
         <p className="text-base-content/70">{SUPPORTING_COPY}</p>
       </div>

@@ -7,7 +7,7 @@
 
     <!--
       Pinned to exactly what frontend/package.json installs, the reasoning
-      docs/explainers/category-colors-icons-description-preview.html carries in full.
+      docs/explainers/category-palette-preview.html carries in full.
       lucide 1.29.0 matters twice over here: it is the version the app imports from, and
       because this page renders every name through it, a name that is not really in 1.29.0
       draws an empty tile instead of quietly passing review.
@@ -15,16 +15,27 @@
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.16/daisyui.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
     <script src="https://unpkg.com/lucide@1.29.0"></script>
-
     <!--
-      PET-74's Expensa theme values, re-declared with the same selectors daisyui.css emits, because
-      globals.css registers the custom Expensa pair rather than the stock one. This block and the
-      two @plugin 'daisyui/theme' blocks in frontend/src/app/globals.css must carry the same
-      values, or this page stops painting what the app paints - edit them together.
+      GENERATED with the rest of this page - do not hand-edit, and do not re-add values here by
+      hand the way PET-74 did: this generator deletes anything it did not write. The source is
+      docs/explainers/category-palette/theme-data.json, via
+      `cd frontend && npm run theme:report`.
+
+      The pinned CDN daisyui.css carries only the stock themes, so the Expensa values are painted
+      into daisyUI's stock selectors instead. frontend/src/lib/themeGuard.test.ts diffs this block
+      against globals.css.
     -->
     <style>
       :root {
         color-scheme: light;
+        --radius-selector: 0.5rem;
+        --radius-field: 0.75rem;
+        --radius-box: 1rem;
+        --size-selector: 0.25rem;
+        --size-field: 0.25rem;
+        --border: 1px;
+        --depth: 0;
+        --noise: 0;
         --color-base-100: #ffffff;
         --color-base-200: #f5f7f8;
         --color-base-300: #edeff2;
@@ -47,29 +58,9 @@
         --color-error-content: #3f0b0b;
         --color-orange: #ea580c;
         --color-orange-content: #431407;
-        --radius-selector: 0.5rem;
-        --radius-field: 0.75rem;
-        --radius-box: 1rem;
-        --size-selector: 0.25rem;
-        --size-field: 0.25rem;
-        --border: 1px;
-        --depth: 0;
-        --noise: 0;
       }
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme]) {
-          color-scheme: dark;
-          --color-base-100: #18202b;
-          --color-base-200: #101720;
-          --color-base-300: #232c38;
-          --color-base-content: #ffffff;
-          --color-primary: #6963ee;
-          --color-primary-content: #edecfd;
-          --color-neutral: #101720;
-        }
-      }
-      :root:has(input.theme-controller[value='dark']:checked),
-      [data-theme='dark'] {
         color-scheme: dark;
         --color-base-100: #18202b;
         --color-base-200: #101720;
@@ -77,7 +68,17 @@
         --color-base-content: #ffffff;
         --color-primary: #6963ee;
         --color-primary-content: #edecfd;
-        --color-neutral: #101720;
+        }
+      }
+      :root:has(input.theme-controller[value='dark']:checked),
+      [data-theme='expensa-dark'] {
+        color-scheme: dark;
+        --color-base-100: #18202b;
+        --color-base-200: #101720;
+        --color-base-300: #232c38;
+        --color-base-content: #ffffff;
+        --color-primary: #6963ee;
+        --color-primary-content: #edecfd;
       }
     </style>
 </head>

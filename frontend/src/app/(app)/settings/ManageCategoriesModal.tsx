@@ -168,7 +168,7 @@ export function ManageCategoriesModal({
             <span className="text-base-content/60 text-xs font-semibold uppercase">
               Monthly budget
             </span>
-            <span className="font-display text-3xl font-bold">
+            <span className="font-display text-4xl font-bold">
               {formatWhole(totals.budgetWhole)}
             </span>
           </div>

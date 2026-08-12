@@ -25,7 +25,7 @@ export function LoginScreen() {
           block on the onboarding steps has an overline above the heading; this one
           starts at the heading. */}
       <div className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl font-bold">Log in</h1>
+        <h1 className="font-display text-3xl font-bold">Log in</h1>
         <p className="text-base-content/70">{SUPPORTING_COPY}</p>
       </div>
 

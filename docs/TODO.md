@@ -1829,6 +1829,16 @@ how components open and animate is daisyUI component CSS that no theme variable 
 Claude Design there means fighting the plugin's cascade per component - judged not worth doing at
 all, where the first gap is mechanical-but-wide and the second is a design pass.
 
+**The type half of that is closed by PET-79 and the other two are not**, so read this entry as
+naming two gaps rather than three. The typography audit it asked for happened, answered "not no
+change", and carried out the pass: Plus Jakarta Sans became **Crimson Pro** and 25 `font-display`
+sites moved up a step - or two, for `text-lg` - to keep their optical height, because Crimson Pro's
+caps are 76.9% of the old face's. `frontend/CLAUDE.md` carries the table and the reasoning, and
+`docs/explainers/font-pairing-review.html` is the evidence fourteen candidates were measured
+against. What is emphatically **not** closed is *spacing*, which that sentence bundles with type and
+which nothing in PET-79 touched. The `shadow-*` hairline pass and the component-animation gap are
+both untouched and both still candidate tickets.
+
 ### Three theme slots are invented values owing a designer sign-off
 
 The design sources define no `info`, `secondary` or `accent`, and all three are category-picker
@@ -1838,7 +1848,16 @@ The five dark `-content` casts (Pine, Navy, Forest, Umber, Maroon) are derivatio
 drew none of them. Every value is measured (`COLOUR_CONTRAST`, both explainers) but none is
 designed; they join what A29 already owes a designer.
 
-### The explainer theme blocks restate `globals.css` and nothing checks the copies
+**Still open after PET-79, and it reviewed them rather than resolving them.** That ticket put all
+three through the automated guard and they pass every check it makes - `info` reads 3.374:1 light and
+4.861:1 dark against the card, `secondary` 4.253 and 3.857, and `accent` 2.415 and 6.793, which is a
+category colour rather than a control and so not floored. Passing a measurement is not a sign-off,
+which is the whole point of this entry, so no value moved. Two things did change around it: "both
+explainers" is now the single generated `docs/explainers/category-palette-preview.html`, and
+`COLOUR_CONTRAST` covers five themes rather than two - so a designer looking at these three can now
+see them under every theme the app ships.
+
+### ~~The explainer theme blocks restate `globals.css` and nothing checks the copies~~ (closed by PET-79)
 
 Five files under `docs/explainers/` embed the Expensa theme values in a `<style>` block, because
 the pinned CDN `daisyui.css` carries only the stock themes and the pages exist to paint what the
@@ -1846,6 +1865,29 @@ app paints. That is six hand-held copies of the palette - `globals.css` plus fiv
 by a comment in each file and by nothing else; `npm run docs:check` verifies single-source prose,
 not CSS blocks. A small script diffing each block against the theme blocks in `globals.css` would
 close it, and belongs with the next theme edit if not sooner.
+
+**PET-79 was that edit and this is closed, by a Jest gate rather than the script this entry asked
+for.** `frontend/src/lib/themeGuard.test.ts` diffs every embedded block against the two
+`@plugin 'daisyui/theme'` blocks and fails naming the file, the block and the token. Three things
+about the shape are worth knowing before touching those pages.
+
+It is **three files rather than five**, because PET-79 merged `category-color-palette-preview.html`
+and `category-colors-icons-description-preview.html` into one generated, theme-aware page - which
+removes two hand-held copies rather than checking them, and is the better half of the fix.
+
+The diff reads **every `--color-*`, not the seventeen-token category allowlist**, because a diff that
+filtered would leave whatever it dropped free to drift - and `--color-orange` and its content pair
+live in exactly that gap, being in every theme block and in no allowlist.
+
+And it checks **every token a block declares** rather than every token the theme has: a dark block
+carries only the six values that differ between the pair plus a redundant-but-identical
+`--color-neutral`, where the light block carries all twenty-two, so a check demanding 22-for-22 in
+both would have reported false failures. It does compare the **two dark blocks against each other**,
+since they are hand-maintained copies of one another, and that arm was watched firing.
+
+The same ticket renamed each page's `[data-theme='dark']` to `[data-theme='expensa-dark']`, which had
+become genuinely ambiguous: stock `dark` is a registered theme now, so one attribute named the
+Expensa palette in these files and daisyUI's own in the app. The suite pins that absence too.
 
 ## Operational
 

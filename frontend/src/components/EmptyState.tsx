@@ -87,7 +87,7 @@ export function EmptyState({ icon, heading, body, action, headingLevel = 2 }: Em
         {icon}
       </div>
 
-      <Heading className="font-display text-2xl font-bold text-center">{heading}</Heading>
+      <Heading className="font-display text-3xl font-bold text-center">{heading}</Heading>
 
       {/* max-w-110 rather than the frame's fixed 440px w-110: at the designed 1440 width the
           two render identically, and a narrower window wraps instead of overflowing the

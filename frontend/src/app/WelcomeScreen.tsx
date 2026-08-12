@@ -74,8 +74,21 @@ export function WelcomeScreen() {
               max-w-115 is the designed 460px as a ceiling rather than a width, so
               the line breaks where Figma breaks it on a wide screen and wraps
               rather than overflowing on a narrow one. font-display is the heading
-              face; the size steps down twice below `lg`. */}
-          <h1 className="font-display max-w-115 text-4xl font-bold sm:text-5xl lg:text-6xl">
+              face; the size steps down twice below `lg`.
+
+              **This is the app's only three-breakpoint heading, so PET-79's x1.300
+              pass takes three edits here rather than one - and the top of the ramp
+              is the one place the scale runs out.** Crimson Pro's caps are 76.9%
+              of Plus Jakarta Sans's, so every size moves up to keep its optical
+              height: 36 -> 48 (target 46.8), 48 -> 60 (target 62.4), and 60 ->
+              **72** against a target of 78.0, which is 6px short where the other
+              two land within 2.4. `text-8xl` is 96px and overshoots by 18, so 72
+              is the nearer of the two and the hero reads a touch smaller than
+              exact parity at the widest breakpoint. Deliberate rather than
+              overlooked: an arbitrary `text-[4.875rem]` would match the arithmetic
+              and put a one-off off-scale value on the app's most prominent
+              heading. */}
+          <h1 className="font-display max-w-115 text-5xl font-bold sm:text-6xl lg:text-7xl">
             Take control of your money.
           </h1>
 

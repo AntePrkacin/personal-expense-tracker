@@ -64,7 +64,7 @@ export function CategoryContextCard({
       <div className="card-body gap-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           {/* h2 because PageHeader owns the page's h1, the same level EmptyState defaults to. */}
-          <h2 className="font-display text-lg font-semibold">{category.name} this month</h2>
+          <h2 className="font-display text-2xl font-semibold">{category.name} this month</h2>
           {chip === null ? null : <span className={chip.className}>{chip.label}</span>}
         </div>
 

@@ -107,6 +107,36 @@ preflight reads as the default body family; `font-display` (Plus Jakarta Sans) i
 and wordmark face. Type sizes are Tailwind's own scale (`text-sm`, `text-2xl`); the 19 named
 Figma type styles are gone.
 
+**PET-79's typography audit replaced the display face with Crimson Pro and kept Inter, so read
+"Plus Jakarta Sans" above as history.** Two constraints decided it and neither is visible in a
+side-by-side, which is the reason to read them before proposing a third face. A display face needs
+**real weights**, because 28 of the 29 `font-display` sites pair it with `font-bold` or
+`font-semibold` and a single-weight family gets synthesized bold at every one - which is what ruled
+out the logo artwork's own IM Fell English SC. A body face needs a **`tnum` feature**, because six
+sites depend on `tabular-nums` and the class is inert without one; Quicksand, Nunito, Source Sans 3
+and IBM Plex Sans all lack it. `docs/explainers/generators/font-metrics.json` holds every figure,
+measured from the font binaries, and `font-probe.js` beside it re-derives them and fails on drift.
+
+**The one mechanical cost is that every heading size had to move.** Crimson Pro's caps are 76.9% of
+Plus Jakarta Sans's at the same font-size (0.5732 against 0.7450), so matching them optically means
+x1.300 - and **not uniformly one step**, which is the trap: Tailwind's scale is not geometric, and
+steps 2px at a time up to `text-xl` (14 / 16 / 18 / 20) before widening after it (24 / 30 / 36 / 48).
+So **every size below `text-xl` moves two steps and `text-xl` and up move one**, which is four call
+sites in the first group: one `text-base` -> `text-xl`, three `text-lg` -> `text-2xl`.
+An earlier draft of this paragraph said `text-lg` alone moved two and "everything else moves one",
+and sent the reader to a table in this file that has never existed; both are corrected in place
+rather than left dated, on the same ground the `lib/pickerScroll.ts` path below is - a reader sent
+to something that is not there learns nothing. `app/fonts.ts` carries the arithmetic.
+The hero on `app/WelcomeScreen.tsx` is the one place the ramp runs out (60px wants 78, against
+`text-7xl`'s 72 and `text-8xl`'s 96) and takes the nearer rather than an off-scale literal. No gate
+can see any of this: every one of those classes compiles either way.
+
+**And the wordmark is no longer a `font-display` call site at all.** `components/LogoLockup.tsx` is
+one component for every place the brand appears, replacing three hand-copied lockups - two the plan
+named and a third, wordmark-only one in `(app)/layout.tsx`'s drawer bar that it missed. Its sizes are
+derived from the trimmed artwork rather than chosen, and the file records the container constraint
+that stops the largest ratio being usable everywhere.
+
 **Light and dark both ship, and the Settings Preferences card carries the app's one theme
 control as of PET-74's addendum**: a three-way System / Light / Dark segmented radio group,
 persisting in the `spendifico.theme` cookie the root layout stamps `<html data-theme>` from.
@@ -118,6 +148,30 @@ toggle and automatic prefers-dark cannot coexist - the `system` arm is the coexi
 `data-theme` value must be a **registered theme's name** - `app/DecorativePanel.tsx` records how
 an unregistered one fails silently.
 
+**PET-79 replaces that segmented row with a six-tile picker, and widens the union to five themes.**
+The paragraph above is right about the mechanism and dated about the control: `system` still means no
+attribute, the root layout still stamps it from the same cookie, and the choice still never travels
+in the PATCH. What changed is that a three-way row cannot offer a _choice of themes_, so the
+Preferences card now draws one tile per registered theme plus Automatic - **each tile wearing its own
+`data-theme`**, so its eight swatches paint that theme's real values through the same semantic
+classes the app uses. No hex is written and a theme edit updates every swatch for free.
+
+Two consequences worth knowing before touching either file. `themeAttribute` is a **lookup rather
+than two branches**, because every preference except `system` now _is_ a registered theme name - so
+there is no mapping table to keep in step with the CSS. And that lands one **deliberate behaviour
+change**: the cookie value `light` meant `expensa-light` under PET-74 and means daisyUI's own `light`
+now, so a browser holding the old cookie lands on a different theme once. Nothing is migrated, there
+being no real users and test accounts being purged, and `lib/theme.test.ts` pins the collision so a
+"fix" that mapped them back cannot quietly make the app's own pair unreachable.
+
+**`ThemeField` also writes the `theme-color` meta tag, which is not scope creep but the only place it
+can be done.** A manifest carries one static colour and `<meta name="theme-color">` varies only by
+media query, never by a cookie-driven attribute - so `layout.tsx` renders a `prefers-color-scheme`
+pair, right for Automatic and wrong for an explicit pick that disagrees with the OS, and the control
+overwrites both tags on a pick. `lib/theme.ts`'s `THEME_COLOUR` is the one place a theme value is
+restated outside `globals.css`, and `themeGuard.test.ts` pins all five against the themes' own
+`base-100`.
+
 ### Changing or adding a theme: the category palette is the guard
 
 **A theme is not a private decision of `globals.css`. It repaints seventeen category colours at
@@ -125,11 +179,18 @@ once, and two committed artifacts are what say whether the result is usable.** R
 registering a third daisyUI theme, before swapping either of the two that ship, and before any
 change that moves what a `--color-*` resolves to.
 
-- `docs/explainers/category-color-palette-preview.html` draws all **seventeen** allowlist tokens
-  as the four marks the app really paints them as, with the measured light and dark contrast
-  beside each.
-- `docs/explainers/category-colors-icons-description-preview.html` draws the **thirteen** seeded
-  categories, which is what a real account actually shows.
+- `docs/explainers/category-palette-preview.html` draws all **seventeen** allowlist tokens as the
+  marks the app really paints them as, with the measured contrast beside each, **and** the
+  **thirteen** categories a real account shows - under a switcher carrying every installed theme.
+
+  It was two pages until PET-79, `category-color-palette-preview.html` and
+  `category-colors-icons-description-preview.html`, each pinning one theme pair in a
+  hand-maintained `<style>` block. Neither exists; they are named here because the rest of this
+  section still describes them and git history is where they went. **Named without their
+  `docs/explainers/` prefix deliberately**, because `npm run docs:check` verifies that every
+  directory-qualified path a doc names actually resolves - and it caught this paragraph's first
+  draft doing exactly that. A bare filename is a reference to history; a path is a claim the file
+  is there.
 
 Both are stock HTML pinned to the installed daisyUI, Tailwind and lucide, so opening one in a
 browser is the whole procedure. As of PET-74 each explainer also embeds the Expensa theme values
@@ -163,6 +224,57 @@ painted over the card and the pixel is read, so a check that stops at `getComput
 checked `base-content/50`. And if a theme genuinely cannot carry seventeen distinguishable
 colours, the answer is to change the palette in `COLOUR_SEED` and re-run both files, not to ship
 the theme and let the categories collide.
+
+**PET-79 automated all of this, so read everything above as the procedure it replaced.** Five
+sentences in it are now false rather than dated, and it is worth saying which: the two named files
+no longer exist, "None of that is checked by anything" is the opposite of true, and "the answer is
+to change the palette in `COLOUR_SEED`" is a rule the product owner closed off. The rest - what the
+three conditions are, and why - is unchanged and is still the reason any of it exists.
+
+**The gate is `frontend/src/lib/themeGuard.test.ts` and the measurement is `lib/themeGuard.ts`.**
+`cd frontend && npm run theme:report` prints the human-facing tables and writes the one committed
+artifact, `docs/explainers/category-palette/theme-data.json`. The suite fails on a colliding pair
+that is not one of the two `GRANDFATHERED_PAIRS`, on a `-content` value that has stopped being
+legible on its own base, on `base-content/50` dropping under 3:1 against any theme's card, and on
+that artifact going stale. So **a theme edit now fails `npm run test` until the report is re-run and
+the JSON committed**, which is the behaviour the old procedure could only ask for politely.
+
+**Five themes ship, not two**: `expensa-light` (the `:root` default) and `expensa-dark` (`--prefersdark`)
+plus daisyUI's stock `light`, `dark` and `abyss`, each behind token overrides. **`globals.css` may
+now contain one more thing than the list above allows** - plain unlayered `[data-theme='<name>']`
+blocks overriding individual tokens in a registered stock theme. Seven declarations across three
+themes today. They are unlayered deliberately, which is what makes them win over daisyUI's layered
+theme rules, and each carries its measured before-and-after in a comment. That file's own header is
+the authority for why they exist and how the values were chosen; do not re-pick one by eye.
+
+**The card-contrast floor the old procedure implies is unsatisfiable, and the guard deliberately
+does not assert it.** Only **three** of the seventeen tokens clear 3:1 in every theme - `primary`,
+`secondary` and `base-content/50` - because daisyUI puts each `-content` at the opposite end of the
+lightness range from its base, which is exactly what makes it legible on its own tile and
+near-invisible on the page's own surface somewhere. That is a property of the pairing rather than of
+any assignment, so it cannot be fixed by re-picking a colour, and PET-64 accepted it on the record.
+The guard therefore **pins those figures against drift and floors only `base-content/50`**, the one
+token with a recorded reason to be visible as bare colour. A case in the suite pins the _absence_ of
+the wider floor, the way `layout.test.tsx` pins the absence of a `force-dynamic` export, so somebody
+reaching for it meets this argument first.
+
+**What the guard cannot see, and why the browser walk stays in every theme ticket.** It measures
+authored values, so it is blind to anything that never reaches the paint: a losing cascade rule, a
+theme name nobody registered (`app/DecorativePanel.tsx` shipped that once), an alpha applied at a
+call site. It was itself calibrated in a browser - all one hundred token-theme pairs painted on a
+1x1 canvas and read back, agreeing on 97 exactly and the rest within one byte. **The trap that
+found**: daisyUI's build emits an sRGB hex fallback beside each wide-gamut `lab()` value, the
+fallback is dead code in any browser that matters, and matching it instead of what Chromium paints
+would have reported a collision that does not exist. The sRGB fallback beside a wide-gamut colour is
+not what paints.
+
+**The two explainers became one generated page.** `docs/explainers/category-palette-preview.html`
+draws all seventeen tokens _and_ all thirteen categories with a **theme switcher that enumerates
+whatever is installed**, built by `docs/explainers/category-palette/build-palette-page.js` over the
+same artifact and checked by its sibling. Two pages each pinning one theme pair was a maintenance
+cost at two themes and a page that lies at five. Three explainers still embed the Expensa values by
+hand, and `themeGuard.test.ts` diffs those blocks against `globals.css` - which closes the
+`docs/TODO.md` entry that asked for it.
 
 ## Where daisyUI and Tailwind fight
 

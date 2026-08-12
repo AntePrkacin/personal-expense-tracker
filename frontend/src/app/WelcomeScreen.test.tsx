@@ -20,7 +20,12 @@ import { WelcomeScreen } from './WelcomeScreen';
 // in a terminal otherwise.
 const EM_DASH = '—';
 const MIDDLE_DOT = '·';
-const CEDI = '₵';
+// The mark's visible glyphs, which PET-79 changed from one U+20B5 CEDI SIGN to a `$` doing double
+// duty as the S in "$PENDIFICO". Both halves are `aria-hidden`, so the accessible name is a
+// separate `sr-only` "Spendifico" - which is why the two assertions below differ: one reaches for
+// hidden text and one for the name a reader actually gets.
+const MARK_GLYPH = '$';
+const WORDMARK = 'PENDIFICO';
 
 const INTRO =
   'Track every expense, set budgets by category, and get AI insights that keep you ' +
@@ -31,8 +36,12 @@ describe('the Welcome screen', () => {
     // AC1, WEL-1, all five elements the requirement lists.
     render(<WelcomeScreen />);
 
+    // The announced name, which is `sr-only` and is what six other suites pin.
     expect(screen.getByText('Spendifico')).toBeInTheDocument();
-    expect(screen.getByText(CEDI)).toBeInTheDocument();
+    // The visible halves. `getByText` reads through `aria-hidden`, which is exactly why the line
+    // above is the one that proves a reader gets a whole word rather than "dollar P E N D I F...".
+    expect(screen.getByText(MARK_GLYPH)).toBeInTheDocument();
+    expect(screen.getByText(WORDMARK)).toBeInTheDocument();
     expect(screen.getByText('PERSONAL FINANCE, SIMPLIFIED')).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { level: 1, name: 'Take control of your money.' }),

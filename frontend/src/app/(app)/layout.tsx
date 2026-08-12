@@ -1,5 +1,6 @@
 import { Menu } from 'lucide-react';
 
+import { LogoLockup } from '@/components/LogoLockup';
 import { logOut } from '@/lib/logOut';
 import { requireProfile } from '@/lib/profile';
 
@@ -79,7 +80,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           >
             <Menu className="size-5" aria-hidden="true" />
           </label>
-          <span className="font-display px-2 text-lg font-bold">Spendifico</span>
+          {/* The app's third hand-copied lockup until PET-79, and the one its plan missed: a
+              wordmark with no tile, so it could not use the `$`-for-S mark at all. `sm` is the
+              size that fits beside the hamburger. */}
+          <div className="px-2">
+            <LogoLockup size="sm" />
+          </div>
         </div>
         {/* The pages' shared horizontal gutter, stated exactly once. The header
             and every <main> below it read their left and right edges from this
