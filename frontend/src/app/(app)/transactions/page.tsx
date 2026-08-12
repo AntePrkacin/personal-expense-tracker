@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { readCategoryLabels } from '@/lib/categories';
+import { readPeriods } from '@/lib/periods';
 import { requireProfile } from '@/lib/profile';
 import { ACCESS_ROUTES } from '@/lib/routes';
 import { readTransactionsView } from '@/lib/transactions';
@@ -25,10 +26,18 @@ import { TransactionsTable } from './TransactionsTable';
 // the call this file was already making. `filters.ts` records why the URL won over client
 // state, and why an invalid value has to be dropped here rather than forwarded.
 //
-// **Two reads in parallel, and the second is a join rather than a second opinion.** A
+// **Three reads in parallel, and the second is a join rather than a second opinion.** A
 // transaction row carries only `categoryId`, so the name and the colour every row draws come
-// from `GET /api/categories`. `Promise.all` because neither depends on the other; serialising
+// from `GET /api/categories`. `Promise.all` because none depends on the others; serialising
 // them would add a round trip to the app's busiest screen for nothing.
+//
+// **The third is PET-67's `readPeriods()`, and it is unconditional.** The header's period select is
+// drawn in every state, so there is no branch to make it conditional on, which is the same call
+// `transactions/categories/page.tsx` records for its own copy of this read. Its failure policy is
+// the throwing one rather than a degrading one, and that is `lib/periods.ts`' decision rather than
+// this file's: a header naming no period over figures that are all scoped to one is a screen that
+// lies. It also happens to be the only policy consistent with the two reads beside it, both of
+// which take the page down on anything but a 401.
 //
 // **Both re-run on every filter change, including every debounced keystroke**, and the
 // categories cannot have changed between two of them. So a search costs two requests where one
@@ -57,9 +66,10 @@ export default async function TransactionsPage({
   // already called it to gate this route, so this resolves against that same promise.
   const { currency } = await requireProfile();
 
-  const [view, categories] = await Promise.all([
+  const [view, categories, { periods }] = await Promise.all([
     readTransactionsView(filters),
     readCategoryLabels(),
+    readPeriods(),
   ]);
 
   // The failure policy lives here rather than in `lib/categories.ts`, and that module's own
@@ -87,19 +97,14 @@ export default async function TransactionsPage({
     <TransactionsScreen
       view={view}
       filters={filters}
+      // The header's period select (PET-67). The whole of the account's history, so the control
+      // reaches every period rather than the three named values the pill it replaced offered.
+      periods={periods}
       // The Categories tab's badge, free here: this page already holds the category list for
       // the table's join, so the count costs no request. The mirror image on the other route
       // is not free, which is what `readTransactionCount()` exists for.
       categoryCount={categories.data.length}
-      filterBar={
-        <TransactionFilterBar
-          filters={filters}
-          categories={categories.data}
-          // The response's own name for a date-form period, so the pill can offer it as a real
-          // option. Undefined for `period=all`, whose response carries no period to name.
-          periodLabel={view.period?.label}
-        />
-      }
+      filterBar={<TransactionFilterBar filters={filters} categories={categories.data} />}
       // Built only for the state that renders it. The screen drops both slots in the empty
       // state anyway, so this is about types rather than output: narrowing here lets the
       // table take a `Transaction[]` instead of a union it would have to re-narrow.

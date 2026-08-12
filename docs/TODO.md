@@ -374,6 +374,36 @@ quickest thing to put in front of them, next to the `Empty` story it should be d
 The designed state keeps Figma's UK "categorised" untouched, which is A30's copy pass and not
 this.
 
+### The transactions filter bar's two amount sort labels are ours (PET-67)
+
+A16 records that Figma never draws the sort dropdown open, so "Newest first" is the only option in
+that list read off a frame. PET-29 added "Oldest first" as the amendment that made AC5 implementable
+at all, and PET-67 added two more when the contract grew an amount sort: **"Highest amount"** and
+**"Lowest amount"**, chosen by the product owner.
+
+They join the A29 group rather than needing an argument of their own - copy that ships, was not read
+off a frame, and needs a designer's sign-off. `Screens/06 Transactions — List`'s `Filtered` story is
+the quickest thing to put them in front of, since it opens with an amount sort active.
+
+**What is also worth a designer's answer there**, and is a layout question rather than copy: that same
+story is the only surface on which PET-67's swap can be reviewed. The period control moved into the
+header and the search field into the filter bar, at the product owner's direction and against TRN-1
+and node `26:137`, so the frame and the app now disagree about the arrangement of that screen on
+purpose. Nothing is undesigned about the individual controls; what has never been drawn is the two of
+them in these positions.
+
+### The designed empty state on /transactions now offers no search field (PET-67)
+
+A consequence of the swap above rather than a decision taken on its own. TRN-3 removes the filter bar
+in the `empty` state, and the search field is inside that bar now, so an account with nothing logged
+is offered nothing to search.
+
+It is defensible on its own terms - there is nothing to search - and it is safe in the way that
+matters: `lib/transactions.ts` decides `empty` from an account-wide `period=all` probe, so no
+keystroke can reach that state and no term can be stranded mid-typing. What is not settled is whether
+a designer wants the field drawn and disabled there instead, which is the sort of thing frame 07 would
+have answered if it drew the bar at all. `Screens/07 Transactions — Empty` is the story.
+
 ### Telling an empty account from an empty filter costs a second request
 
 `GET /api/transactions` returns `total` **after** filters and no account-wide count beside it -

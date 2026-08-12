@@ -330,22 +330,23 @@ describe('the header action, which differs on every screen', () => {
     ]);
   });
 
-  it('Transactions offers the search field and Add transaction, and no month select', async () => {
-    // The ticket's AC3 claims a month select here too. TRN-1 and Figma node
-    // 26:137 both draw a search field instead, and this pins which one shipped.
-    //
-    // By role rather than by text as of PET-29: the placeholder used to be a text node in an
-    // inert <div>, and `getByText` on it now silently finds nothing.
+  it('Transactions offers the period select and Add transaction in its header (PET-67)', async () => {
+    // **PET-19's AC3 turns out to have been right, two years of tickets after it was overruled.**
+    // It claimed a month select belongs in this header; TRN-1 and Figma node 26:137 both draw a
+    // search field instead, this suite pinned the frame, and the product owner has now decided for
+    // AC3. So the assertion is turned over rather than deleted, the way PET-36's inert-tabs case was.
     await renderScreen(TransactionsPage);
 
-    expect(screen.getByRole('textbox', { name: 'Search transactions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
-    // No period select either, which PET-72 makes worth stating by role rather than by text: this
-    // screen chooses its period through the filter bar's own pill under `<main>`, so the assertion
-    // is scoped to the header rather than sweeping a page that really does hold three comboboxes.
     const header = screen.getByRole('banner');
 
-    expect(within(header).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(within(header).getByRole('combobox', { name: 'Budgeting period' })).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Add transaction' })).toBeInTheDocument();
+    // And the field it replaced is under `<main>` now, inside the filter bar. Scoped both ways
+    // rather than swept, because the page legitimately holds both controls - just not in one place.
+    expect(within(header).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole('main')).getByRole('textbox', { name: 'Search transactions' }),
+    ).toBeInTheDocument();
   });
 
   it('the assistant offers New chat, and no longer Regenerate', async () => {
@@ -492,15 +493,20 @@ describe('the inert header controls', () => {
     );
   });
 
-  it('exposes exactly the three filter selects the design draws', async () => {
+  it('exposes exactly the three selects the screen draws', async () => {
     // The Dashboard assertion above pins that a `combobox` on *that* page would be a bug.
     // Here three of them are the feature, so the count is what is worth holding: a fourth
     // means a control nobody designed.
+    //
+    // **Still three after PET-67, and deliberately asserted in document order rather than as a
+    // set.** The period select left the bar for the header and the search field went the other way,
+    // so the count is unchanged while the *arrangement* is the whole of what the ticket did - which
+    // means the order is the only thing here that could catch a half-applied swap.
     await renderScreen(TransactionsPage);
 
     expect(
       screen.getAllByRole('combobox').map((select) => select.getAttribute('aria-label')),
-    ).toEqual(['Category', 'Period', 'Sort']);
+    ).toEqual(['Budgeting period', 'Category', 'Sort']);
   });
 
   it.each(SCREENS)('%s mounts no modal until a trigger is used', async (_name, Page) => {

@@ -40,7 +40,12 @@ describe('parseTransactionFilters', () => {
     it.each([
       ['a period that does not exist', { period: 'yearly' }],
       ['a near-miss period', { period: 'Current' }],
-      ['a sort that does not exist', { sort: 'amount_desc' }],
+      // This case read `{ sort: 'amount_desc' }` until PET-67, i.e. the suite's example of a
+      // sort the API would reject was the exact value this ticket added. It failed the moment
+      // `SORT_OPTIONS` grew, which is the parse allowlist and the option list being one thing
+      // rather than two - so the example moved to a field the API genuinely does not order by.
+      ['a sort that does not exist', { sort: 'merchant_asc' }],
+      ['a sort whose direction does not exist', { sort: 'amount_sideways' }],
       ['a category that is not a UUID', { categoryId: 'groceries' }],
       ['a category that is nearly a UUID', { categoryId: `${UUID}-extra` }],
       ['an empty value', { period: '' }],
@@ -89,15 +94,28 @@ describe('the option lists', () => {
   });
 
   it('offers every sort the contract accepts, and no sort it does not', () => {
-    // Two rather than four: the backend orders by date only, so an amount sort would be an
-    // option the API cannot serve.
-    expect(SORT_OPTIONS.map((option) => option.value)).toEqual(['date_desc', 'date_asc']);
+    // Four as of PET-67. `EverySortIsOffered` is what actually proves the first half of that
+    // sentence at build time; this pins the *order*, which the type cannot see and which decides
+    // both what the closed pill reads and what `DEFAULT_SORT` has to agree with below.
+    expect(SORT_OPTIONS.map((option) => option.value)).toEqual([
+      'date_desc',
+      'date_asc',
+      'amount_desc',
+      'amount_asc',
+    ]);
   });
 
   it('draws the labels the design draws for the closed controls', () => {
     // The only two strings in either list that were read off frame 06 rather than chosen.
     expect(PERIOD_OPTIONS[0].label).toBe('This month');
     expect(SORT_OPTIONS[0].label).toBe('Newest first');
+  });
+
+  it('labels the two amount sorts as a pair with the two date sorts', () => {
+    // Invented copy, so it is pinned here rather than restated in a story or a suite - the rule
+    // `TransactionsEmpty.tsx` sets for every shipped string on this screen.
+    expect(SORT_OPTIONS[2].label).toBe('Highest amount');
+    expect(SORT_OPTIONS[3].label).toBe('Lowest amount');
   });
 
   it('defaults to the option each select is drawn showing', () => {

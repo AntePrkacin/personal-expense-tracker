@@ -1620,8 +1620,8 @@ export interface operations {
                 categoryId?: string;
                 /** @description One of `current`, `previous`, `all`, or a period `start` in `YYYY-MM-DD` from `GET /api/periods`. Resolved server-side from your pay-schedule history, so the boundary is your budgeting period rather than the calendar month - and periods before a pay-day change keep the boundaries they had. `previous` is the period before the current one. `all` applies no date filter. A date that is not a real calendar date, or that starts none of your periods, is a **400**. */
                 period?: string;
-                /** @description Ties on `date` break on `createdAt` descending, then `id`, so the order is stable across requests rather than reshuffling for no visible reason. */
-                sort?: "date_desc" | "date_asc";
+                /** @description Every sort ends in the same tiebreaks: `date` descending (for the amount sorts only), then `createdAt` descending, then `id`. So the order is stable across requests rather than reshuffling for no visible reason, and two transactions of the same amount read newest-first between themselves. */
+                sort?: "date_desc" | "date_asc" | "amount_desc" | "amount_asc";
             };
             header?: never;
             path?: never;

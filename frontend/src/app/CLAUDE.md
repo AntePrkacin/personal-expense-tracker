@@ -126,6 +126,15 @@ takes it off the read whose figures it is labelling, which is what the other thr
 true is the rule the deletion of `periodOverline` established - **no period name is ever derived on
 this side** - reached here by not naming one.
 
+**PET-67 makes `/transactions` the third screen to _draw_ the select, which is a different count from
+the one those two paragraphs keep.** Three headers read their period off their own response and that
+is unchanged; what changed is that all three of them now put a `PeriodSelect` in the header rather
+than two, because that screen's period pill moved up out of the filter bar. Its overline is still the
+list read's own label and still prints "All time" for the one filter whose response carries no period,
+so the sentence above describing `/transactions` is intact - the screen simply has a control beside
+the label now. It reaches that select through `TransactionPeriodSelect` rather than rendering
+`PeriodSelect` directly, and the paragraph under The transactions screen carries why.
+
 **`export const dynamic = 'force-dynamic'` was on the layout and is deliberately gone.** It
 existed because the pages read `new Date()` for the overline, and without it Next prerendered
 them and every screen showed whatever month the build ran in - a bug that only appears a month
@@ -807,6 +816,41 @@ remounting it. Move it under `<main>` - into the branch that swaps between the t
 empty card - or key the screen on anything, and every keystroke loses focus once the debounce
 lands. `TransactionsScreen.test.tsx` pins that it is inside `<header>` and not inside `<main>`,
 because the failure is invisible in a diff.
+
+**PET-67 moved it under `<main>` anyway, and the paragraph above is worth keeping because every
+sentence in it is still true of the mechanism and the conclusion no longer follows.** The product
+owner asked for the search field and the period control to swap places, so the field now sits in
+`TransactionFilterBar` between the category and sort pills, and the header draws the account's real
+period history through `(app)/transactions/TransactionPeriodSelect.tsx`. What makes that safe is a
+fact about the states rather than about the tree: the bar is dropped in the `empty` state alone, and
+**no keystroke can reach that state.** `lib/transactions.ts` decides `empty` from an account-wide
+`period=all` probe, so it means "this account has never logged anything" where a filter that matched
+nothing is `noResults`, which keeps the bar. A user who can type is therefore never in the state that
+removes the field, and the field's position is identical across every state a keystroke can move
+between - which is the whole of what reconciliation needs. Read the old paragraph as the reason the
+field cannot live inside a conditional that a _filter change_ can flip, which is still the rule.
+
+Four consequences worth knowing before touching either screen. **The designed empty state now draws
+no search box at all**, which is defensible (nothing to search) and which neither TRN-3 nor A15 says
+anything about. **`PeriodSelect` grew an exclusive-union navigation arm** rather than a wider href
+builder, and the reason is a hard constraint rather than taste: a period change here has to preserve
+the other three filters, so `periodHref` (which rebuilds the query string from scratch) is wrong, and
+an `hrefFor` prop is impossible because `TransactionsScreen` is a **Server Component** and a function
+prop cannot cross into a Client Component. So the arm is `onSelect`, and
+`TransactionPeriodSelect` is the client component in between that supplies it - which then earns its
+keep twice by routing the change through `FilterNavigation`, so a period change dims the table like
+every other filter on that screen where the Dashboard's own `router.replace` cannot. **`?period=all`
+survives as one appended option**, because it is the single filter whose response carries
+`period: null` and so the one value `GET /api/periods` cannot supply; `previous` becomes URL-only,
+reachable from a link and from no control. And **`PERIOD_OPTIONS` in `filters.ts` changed job** from
+the pill's option list to `isPeriod`'s parse allowlist, which is why all three entries have to stay
+even though two are no longer picked by name.
+
+**It also reinstates PET-19's AC3, which this file records as having lost twice.** The paragraph
+under The app shell says AC3 "claimed the month select appears on Transactions too" and that TRN-1
+and node `26:137` won; that is what has been overridden, so the two paragraphs saying the design won
+are history on the period specifically. The rest of that note stands: Figma still draws a search
+field there, and the deviation is a product decision rather than a reading of the frame.
 
 **The filters live in `searchParams`, which is the choice PET-30 left open, and
 `app/(app)/transactions/filters.ts` is where the decision is written down.** Three things about
@@ -2146,6 +2190,7 @@ story has no render to swap, and must not use a `decorators` array, because the 
 each story from `render` or `meta.component` and never apply one. Ten story files had a private
 two-line `PreferencesProvider` wrapper and needed a second provider on the same day, which is what
 earned the shared frame.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

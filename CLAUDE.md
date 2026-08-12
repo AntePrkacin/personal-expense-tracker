@@ -126,6 +126,30 @@ everything actionable stays inline, and `components/FormError.tsx` survives for 
 there are **two kinds, not three** - a background insight regeneration announces nothing, because it
 fires behind every write and would double every save.
 
+**PET-67 is the nineteenth thing that works, and it is the first that overrules the design file on
+the arrangement of a screen rather than on a state the design never drew.** Two items off the
+umbrella UI/UX backlog, both on `/transactions`. The **sort** grows an amount pair: `TRANSACTION_SORTS`
+goes from two values to four, `orderFor` leads on `amount_cents` and keeps the existing three keys as
+tiebreaks behind it, and the filter bar offers "Highest amount" and "Lowest amount". No migration and
+no index - the column is already an INTEGER and the set is already narrowed to one period - and the
+one thing worth copying from it is that the frontend's `EverySortIsOffered` proof was **watched
+failing** between `api:sync` and the two new options, naming both missing values, which is what that
+proof is for. The **layout** swaps two controls: the period control moves up into the header and the
+search field moves down into the filter bar, so all three of the screens that scope by period now draw
+the same control in the same place. Four things about it reach past those two files. It is the
+**product owner overriding TRN-1 and node `26:137`**, which reinstates PET-19's AC3 after this repo
+twice recorded the design as having won that argument. The header's control is the shared
+`PeriodSelect` rather than the pill, so the screen reaches **every period the account has** where the
+pill offered three named values and could only *display* a date one a link handed it - `?period=all`
+survives as one appended option because it is the single filter whose response carries no period to
+name, and `previous` becomes URL-only. That select needed an **exclusive-union navigation arm** rather
+than an href builder, because `TransactionsScreen` is a Server Component and a function prop cannot
+cross into a Client Component at all; `transactions/TransactionPeriodSelect.tsx` is the client
+component in between, and it routes through `FilterNavigation` so a period change dims the table like
+every other filter. And the search field **disappears in the designed empty state**, which is the one
+behaviour change to check rather than skim: it is safe because `empty` is decided by an account-wide
+probe rather than by the filter, so no keystroke can reach the state that removes the field.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and

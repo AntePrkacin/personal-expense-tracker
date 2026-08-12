@@ -524,8 +524,37 @@ function escapeLikeTerm(term: string): string {
  * a same-day group oldest-first inside a list the user asked to see
  * oldest-first, which is defensible, but "newest first within the day" is what
  * makes the most recently added transaction findable under either sort.
+ *
+ * **PET-67's amount sorts carry `date` descending as a *third* key rather than
+ * dropping it**, and that is the one decision here worth not undoing. Amounts
+ * collide far harder than dates do - a €5 coffee bought weekly is one amount and
+ * a dozen rows - so without it a same-amount group would be ordered by
+ * `created_at` alone, which is the order rows were *logged* rather than the order
+ * they were spent, and a backfilled month would read shuffled. Sorting a
+ * same-amount group newest-spent-first is the same rule the date sorts already
+ * apply to a same-day group. It stays descending under `amount_asc` for that
+ * paragraph's reason exactly: the user asked to order the amounts, not the days
+ * inside one amount.
+ *
+ * Amount ordering is on `amount_cents`, an INTEGER column, so it is exact
+ * ordering over the stored value with no float comparison and no rounding
+ * anywhere near it.
  */
 function orderFor(sort: TransactionSort): SQL[] {
+  // Deliberately not `sort.startsWith('amount')`: the four literals are an enum
+  // the DTO publishes, and a string prefix would keep compiling if a fifth value
+  // named a field this function has no column for.
+  if (sort === 'amount_desc' || sort === 'amount_asc') {
+    return [
+      sort === 'amount_asc'
+        ? asc(transactions.amountCents)
+        : desc(transactions.amountCents),
+      desc(transactions.date),
+      desc(transactions.createdAt),
+      desc(transactions.id),
+    ];
+  }
+
   return [
     sort === 'date_asc' ? asc(transactions.date) : desc(transactions.date),
     desc(transactions.createdAt),
