@@ -115,7 +115,13 @@
           "base": "error",
           "ratio": 3.440014180664477
         }
-      ]
+      ],
+      "surfaces": {
+        "base-100": "#ffffff",
+        "base-200": "#f5f7f8",
+        "base-300": "#edeff2",
+        "base-content": "#131820"
+      }
     },
     {
       "name": "expensa-dark",
@@ -216,7 +222,13 @@
           "base": "error",
           "ratio": 3.440014180664477
         }
-      ]
+      ],
+      "surfaces": {
+        "base-100": "#18202b",
+        "base-200": "#101720",
+        "base-300": "#232c38",
+        "base-content": "#ffffff"
+      }
     },
     {
       "name": "light",
@@ -328,7 +340,13 @@
           "base": "error",
           "ratio": 5.454649808001543
         }
-      ]
+      ],
+      "surfaces": {
+        "base-100": "#ffffff",
+        "base-200": "#f8f8f8",
+        "base-300": "#eeeeee",
+        "base-content": "#18181b"
+      }
     },
     {
       "name": "dark",
@@ -440,7 +458,13 @@
           "base": "error",
           "ratio": 5.454649808001543
         }
-      ]
+      ],
+      "surfaces": {
+        "base-100": "#1d232a",
+        "base-200": "#191e24",
+        "base-300": "#15191e",
+        "base-content": "#ecf9ff"
+      }
     },
     {
       "name": "abyss",
@@ -544,7 +568,13 @@
           "base": "error",
           "ratio": 3.6908166913418086
         }
-      ]
+      ],
+      "surfaces": {
+        "base-100": "#001e29",
+        "base-200": "#00111d",
+        "base-300": "#000611",
+        "base-content": "#ffd6a7"
+      }
     }
   ],
   "authoredColours": {
@@ -595,6 +625,30 @@
       "error-content": "#3f0b0b",
       "orange": "#ea580c",
       "orange-content": "#431407"
+    }
+  },
+  "authoredGeometry": {
+    "expensa-light": {
+      "color-scheme": "light",
+      "radius-selector": "0.5rem",
+      "radius-field": "0.75rem",
+      "radius-box": "1rem",
+      "size-selector": "0.25rem",
+      "size-field": "0.25rem",
+      "border": "1px",
+      "depth": "0",
+      "noise": "0"
+    },
+    "expensa-dark": {
+      "color-scheme": "dark",
+      "radius-selector": "0.5rem",
+      "radius-field": "0.75rem",
+      "radius-box": "1rem",
+      "size-selector": "0.25rem",
+      "size-field": "0.25rem",
+      "border": "1px",
+      "depth": "0",
+      "noise": "0"
     }
   }
 }

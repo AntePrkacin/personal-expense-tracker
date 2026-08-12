@@ -19,24 +19,42 @@ export const metadata: Metadata = {
 // `color-scheme` declaration wins on the element, so this stays the pair
 // whichever way the choice goes.
 //
-// `themeColor` is the browser chrome, and it is a **pair keyed on
-// `prefers-color-scheme` rather than one value**, because that is the only
-// variation the tag supports: it cannot follow a cookie-driven `data-theme`, and
-// the manifest's own `theme_color` is a single static brand value. So this is
-// exactly right for the Automatic arm and wrong for an explicit pick that
-// disagrees with the OS - which is why `settings/ThemeField.tsx` overwrites both
-// tags when a theme is chosen, and restores this pair for Automatic by reading
-// each tag's own `media`. Without that the tag would be correct on load and
-// stale from the first theme change, the worse of the two failures because it
-// looks like it works. The two values are the Expensa casts' own `base-100`,
-// read from `lib/theme.ts` so nothing here restates a hex.
-export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: THEME_COLOUR['expensa-light'] },
-    { media: '(prefers-color-scheme: dark)', color: THEME_COLOUR['expensa-dark'] },
-  ],
-};
+// `themeColor` is the browser chrome, and it takes **two mechanisms rather than
+// one**, because a tag can vary by media query and a theme is chosen by cookie.
+// This is the load half: read the same cookie the layout reads, and emit one
+// colour for an explicit pick or the `prefers-color-scheme` pair for Automatic.
+// `settings/ThemeField.tsx` is the change half, overwriting both tags on a pick
+// and restoring the pair for Automatic by reading each tag's own `media` -
+// necessary because a client-side change re-renders no Server Component.
+//
+// **An earlier version of this file was a static pair and claimed the tag
+// "cannot follow a cookie-driven `data-theme`", which a code review of PET-79
+// disproved.** It can, on the server, which is what this function is. What the
+// static version shipped was the failure its own comment warned about, arrived
+// at from the other end: correct on a theme *change* and stale on every load
+// after it, plus wrong on every route where the control is not even mounted - a
+// cookie of `abyss` rendering `data-theme="abyss"` over a tag still saying
+// `#ffffff`. `generateViewport` replaces the `viewport` export rather than
+// joining it; Next permits only one of the two.
+//
+// The values are each theme's own `base-100`, read from `lib/theme.ts` so
+// nothing here restates a hex. `colorScheme` stays the pair in both arms: a
+// pinned theme's own `color-scheme` declaration wins on the element, so
+// narrowing it here would state the same fact twice and less reliably.
+export async function generateViewport(): Promise<Viewport> {
+  const pref = parseThemePref((await cookies()).get(THEME_COOKIE)?.value);
+  const pinned = themeAttribute(pref);
+
+  return {
+    colorScheme: 'light dark',
+    themeColor: pinned
+      ? THEME_COLOUR[pinned]
+      : [
+          { media: '(prefers-color-scheme: light)', color: THEME_COLOUR['expensa-light'] },
+          { media: '(prefers-color-scheme: dark)', color: THEME_COLOUR['expensa-dark'] },
+        ],
+  };
+}
 
 export default async function RootLayout({
   children,

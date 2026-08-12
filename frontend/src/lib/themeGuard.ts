@@ -198,6 +198,21 @@ export interface ThemeMeasurement {
   cardContrast: Record<ColourToken, number>;
   /** Each `-content` token's WCAG contrast against its own base colour. */
   contentLegibility: { content: SemanticToken; base: SemanticToken; ratio: number }[];
+  /**
+   * This theme's own surfaces and ink - the four tokens `effective` deliberately does not carry.
+   *
+   * **A review of PET-79 is why these are published, and the defect they close is worth knowing
+   * before deleting them.** `docs/explainers/category-palette/build-palette-page.js` emits one CSS
+   * scope per theme and had nothing but the seventeen measured tokens to put in it, so the page's
+   * own `bg-base-200` canvas and `card bg-base-100` always resolved from the CDN's stock-light
+   * `:root` whatever the switcher said. That silently defeats the second of the three conditions
+   * `frontend/CLAUDE.md` says that page exists for: `abyss`'s overridden `info-content` was drawn
+   * on white, looking perfectly visible, beside a contrast column reading 1.062.
+   *
+   * `base-100` is the same merged value `cardContrast` measures against, so a swatch and the figure
+   * beside it cannot disagree about what the card is.
+   */
+  surfaces: { 'base-100': string; 'base-200': string; 'base-300': string; 'base-content': string };
 }
 
 // ---------------------------------------------------------------------------
@@ -549,6 +564,57 @@ export function parseAuthoredThemeColours(
   return out;
 }
 
+/**
+ * The non-colour half of a theme block: the radii, the sizes, the border, and the two flat-design
+ * flags, plus `color-scheme`.
+ *
+ * **These are published because a review of PET-79 found the icon-set generator deleting them.**
+ * That page's block was hand-written until this ticket made the generator own it - correctly, since
+ * hand-editing a generated file is what had gone wrong - but the generator emitted `--color-*` and
+ * nothing else, so regenerating dropped all eight of these. Measured on the result: zero radius
+ * declarations on a page using `rounded-field` 168 times and `rounded-box` 102 times, which painted
+ * daisyUI's stock 4px/8px where the app draws 12px/16px, and `--depth: 1` where the design is flat.
+ * A page whose whole purpose is showing what the app draws stopped doing it.
+ *
+ * They are read from `globals.css` rather than restated in the generator for the reason
+ * `authoredColours` gives: one theme parser in this repo, and a value that cannot drift from the
+ * theme it describes.
+ */
+export const GEOMETRY_TOKENS = [
+  'radius-selector',
+  'radius-field',
+  'radius-box',
+  'size-selector',
+  'size-field',
+  'border',
+  'depth',
+  'noise',
+] as const;
+
+/** Every `GEOMETRY_TOKENS` entry each authored theme declares, plus its `color-scheme`. */
+export function parseAuthoredThemeGeometry(
+  globalsCss: string,
+): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  for (const block of stripComments(globalsCss).matchAll(
+    /@plugin\s+'daisyui\/theme'\s*\{([^{}]*)\}/g,
+  )) {
+    const body = block[1];
+    const name = /name:\s*'([^']+)'/.exec(body)?.[1];
+    if (!name) continue;
+
+    const declared: Record<string, string> = {};
+    const scheme = /(?:^|[\s;])color-scheme:\s*([^;]+);/.exec(body)?.[1]?.trim();
+    if (scheme) declared['color-scheme'] = scheme.replace(/^['"]|['"]$/g, '');
+    for (const token of GEOMETRY_TOKENS) {
+      const value = new RegExp(`--${token}:\\s*([^;]+);`).exec(body)?.[1]?.trim();
+      if (value) declared[token] = value;
+    }
+    out[name] = declared;
+  }
+  return out;
+}
+
 /** One disagreement between an explainer's embedded value and the theme's own. */
 export interface ExplainerDrift {
   file: string;
@@ -566,6 +632,14 @@ export interface ExplainerDrift {
  * that actually differ plus a redundant-but-identical `--color-neutral`, so this checks every token
  * a block *declares* rather than every token the theme has. What it will not tolerate is a declared
  * value that disagrees, or a dark block that disagrees with its sibling.
+ *
+ * **A review of PET-79 found that "every token a block declares" leaves the drift this check exists
+ * to catch, and the missing half is now checked too.** Omission was treated as the subset in every
+ * case - so a token that *starts* differing between the two Expensa blocks while being absent from
+ * a hand-maintained dark block passed silently, and the page then painted the light value in dark
+ * mode with the gate green. That is the same class of failure as an out-of-date value and strictly
+ * harder to notice. So a dark block must declare every token the pair actually disagrees about;
+ * anything it merely inherits unchanged stays optional.
  */
 export function explainerDrift(
   file: string,
@@ -575,12 +649,28 @@ export function explainerDrift(
   const blocks = parseExplainerThemeBlocks(html);
   const drift: ExplainerDrift[] = [];
 
-  const compare = (block: string, declared: Record<string, string>, themeName: string) => {
+  // Guarded rather than dereferenced: `authored` is parsed out of `globals.css`, so renaming
+  // either block turns every lookup below into a TypeError - a crash in place of the message this
+  // function exists to produce. Reported once per block instead.
+  const themeOf = (block: string, themeName: string): Record<string, string> | undefined => {
     const theme = authored[themeName];
+    if (theme) return theme;
+    drift.push({
+      file,
+      block,
+      token: `(globals.css declares no theme named '${themeName}')`,
+      explainer: undefined,
+      theme: '(missing)',
+    });
+    return undefined;
+  };
+
+  const compare = (block: string, declared: Record<string, string>, themeName: string) => {
+    const theme = themeOf(block, themeName);
+    if (!theme) return;
     for (const [token, value] of Object.entries(declared)) {
-      // A dark block declares a subset, so an absent token is the subset rather than a defect -
-      // but a token the theme does not declare at all is one, and `theme[token]` being undefined
-      // is what surfaces it.
+      // A token the theme does not declare at all is a defect, and `theme[token]` being
+      // undefined is what surfaces it.
       if (theme[token] !== value) {
         drift.push({ file, block, token, explainer: value, theme: theme[token] });
       }
@@ -589,6 +679,26 @@ export function explainerDrift(
 
   compare(':root', blocks.light, 'expensa-light');
   blocks.dark.forEach((declared, index) => compare(`dark[${index}]`, declared, 'expensa-dark'));
+
+  // The omission case: every token the two authored blocks disagree about has to appear in each
+  // dark block, or the page inherits the light value where the app would repaint.
+  const light = authored['expensa-light'];
+  const dark = authored['expensa-dark'];
+  if (light && dark) {
+    const differing = Object.keys(dark).filter((token) => dark[token] !== light[token]);
+    blocks.dark.forEach((declared, index) => {
+      for (const token of differing) {
+        if (token in declared) continue;
+        drift.push({
+          file,
+          block: `dark[${index}] omits a token the pair disagrees about`,
+          token,
+          explainer: undefined,
+          theme: dark[token],
+        });
+      }
+    });
+  }
 
   // The two dark blocks are hand-maintained copies of one another.
   if (blocks.dark.length === 2) {
@@ -686,11 +796,27 @@ export function measureTheme(source: ThemeSource): ThemeMeasurement {
   // `effectiveTokens` has already thrown if this is absent, so the assertion is a narrowing
   // rather than a claim - and it reads the merged value, so an override of the card itself is
   // measured against rather than the value daisyUI shipped.
-  const card = mergedValues(source)['base-100'] as string;
+  const merged = mergedValues(source);
+  const card = merged['base-100'] as string;
   const cardContrast = {} as Record<ColourToken, number>;
   for (const token of tokens) {
     cardContrast[token] = contrastRatio(effective[token], card);
   }
+
+  // The surfaces a consumer paints its own page with. `base-200` and `base-300` are read through
+  // the same merged view rather than being required: daisyUI defines all three in every stock
+  // theme and both Expensa blocks declare them, so an absent one means a theme this guard has
+  // never seen - reported as the card's own colour, which is visibly wrong rather than a crash.
+  const surfaces = {
+    'base-100': card,
+    'base-200': (merged['base-200'] as string | undefined) ?? card,
+    'base-300': (merged['base-300'] as string | undefined) ?? card,
+    // From `merged` rather than `effective`, which carries `base-content/50` and not the ink
+    // itself - `effective['base-content']` is `undefined`, and reading it here would have put a
+    // literal "undefined" into every emitted theme scope. `effectiveTokens` has already thrown if
+    // it is absent, so this is a narrowing.
+    'base-content': merged['base-content'] as string,
+  };
 
   const contentLegibility = CONTENT_PAIRS.map(([content, base]) => ({
     content,
@@ -718,6 +844,7 @@ export function measureTheme(source: ThemeSource): ThemeMeasurement {
     collisions,
     cardContrast,
     contentLegibility,
+    surfaces,
   };
 }
 
@@ -818,6 +945,11 @@ export interface ThemeData {
    * keeps one theme parser in this repo.
    */
   authoredColours: Record<string, Record<string, string>>;
+  /**
+   * The non-colour tokens each authored block declares - see `parseAuthoredThemeGeometry` for the
+   * regression that earned them a place in this artifact.
+   */
+  authoredGeometry: Record<string, Record<string, string>>;
 }
 
 /**
@@ -844,6 +976,7 @@ export function buildThemeData(sources: ThemeSources, daisyuiVersion: string): T
     grandfathered: GRANDFATHERED_PAIRS.map(([a, b]) => [a, b]),
     themes: measureThemes(sources),
     authoredColours: parseAuthoredThemeColours(sources.globalsCss),
+    authoredGeometry: parseAuthoredThemeGeometry(sources.globalsCss),
   };
 }
 

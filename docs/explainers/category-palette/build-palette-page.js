@@ -99,14 +99,51 @@ const FALLBACK = {
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** Every theme's values for one token, as CSS custom properties on the switcher's own scopes. */
+/**
+ * Every theme's values, as CSS custom properties on the switcher's own scopes.
+ *
+ * **Two families, and the second one is the fix for a defect a review of PET-79 found.** The
+ * `--swatch-*` properties feed the marks, and they were the whole of what this emitted - so the
+ * page's own canvas and cards, which are Tailwind `bg-base-200` / `card bg-base-100` /
+ * `border-base-300` / `text-base-content`, went on resolving from the CDN `daisyui.css`'s
+ * stock-light `:root` no matter what the switcher said. That quietly defeated the second of the
+ * three conditions `frontend/CLAUDE.md` says this page exists for - "every colour has to stay
+ * visible against `bg-base-100` as an 8px dot" - because every dot was drawn on white: `abyss`'s
+ * overridden `info-content` looked perfectly visible beside a contrast column reading 1.062.
+ *
+ * So the four surface tokens are emitted under **daisyUI's own `--color-*` names**, which is what
+ * makes the utilities follow; `--swatch-*` names would have been read by nothing. They come from
+ * `themes[].surfaces`, whose `base-100` is the same merged value the contrast figures are measured
+ * against, so a dot and the number beside it cannot disagree about what the card is.
+ *
+ * `--swatch-muted` used to be emitted here and is deliberately gone: it duplicated
+ * `--swatch-base-content-50` and was referenced by nothing on the page.
+ */
 function themeVars(theme) {
-  const lines = Object.entries(theme.effective).map(
+  const swatches = Object.entries(theme.effective).map(
     ([token, hex]) => `      --swatch-${token.replace('/', '-')}: ${hex};`,
   );
-  // The card and the ink, so the page can paint its own surfaces in the selected theme too.
-  const card = theme.effective['base-content/50'];
-  return lines.join('\n') + `\n      --swatch-muted: ${card};`;
+  const surfaces = Object.entries(theme.surfaces).map(
+    ([token, hex]) => `      --color-${token}: ${hex};`,
+  );
+  // `color-scheme` so the UA paints scrollbars and form controls to match, which is what stops a
+  // dark theme's own switcher reading as a light widget on a dark canvas.
+  const scheme = `      color-scheme: ${theme.prefersDark || isDarkSurface(theme) ? 'dark' : 'light'};`;
+  return [...surfaces, scheme, ...swatches].join('\n');
+}
+
+/**
+ * Whether a theme's card is dark, by luminance of its own `base-100`.
+ *
+ * `prefersDark` is a fact about *registration* - which theme daisyUI's `prefers-color-scheme` rule
+ * selects - and only `expensa-dark` carries it, so `dark` and `abyss` would otherwise be handed
+ * `color-scheme: light` over a near-black canvas. Derived rather than listed, so a sixth theme
+ * needs no edit here.
+ */
+function isDarkSurface(theme) {
+  const hex = theme.surfaces['base-100'].replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5;
 }
 
 const themeNames = data.themes.map((t) => t.name);

@@ -343,13 +343,55 @@ function buildThemeBlock() {
   const light = find('expensa-light');
   const dark = find('expensa-dark');
 
+  // The non-colour half, and it is here because leaving it out was a real regression rather than a
+  // theoretical one. This generator took the block over from PET-74's hand-written one and emitted
+  // `--color-*` only, so regenerating deleted --radius-selector/field/box, --size-*, --border,
+  // --depth and --noise. This page uses `rounded-field` 168 times and `rounded-box` 102 times, so
+  // every tile and card silently fell back to daisyUI's stock 4px/8px against the app's 12px/16px,
+  // and --depth went to 1 where the design is flat - a page that shows what the app draws, no
+  // longer drawing it. Read from theme-data.json for the same reason the colours are: nothing here
+  // restates a value that globals.css owns.
+  const geometry = (name) => {
+    const values = data.authoredGeometry?.[name];
+    if (!values) {
+      throw new Error(
+        `theme-data.json carries no authoredGeometry for ${name} - regenerate it with ` +
+          `\`cd frontend && npm run theme:report\``,
+      );
+    }
+    return values;
+  };
+  const lightGeometry = geometry('expensa-light');
+  const darkGeometry = geometry('expensa-dark');
+
   const decl = (values, tokens) =>
     tokens.map((t) => `        --color-${t}: ${values[t]};`).join('\n');
+
+  /** `color-scheme` is a real property; everything else in there is a custom property. */
+  const geometryDecl = (values, indent) =>
+    Object.entries(values)
+      .map(([token, value]) =>
+        token === 'color-scheme'
+          ? `${indent}color-scheme: ${value};`
+          : `${indent}--${token}: ${value};`,
+      )
+      .join('\n');
 
   const lightTokens = Object.keys(light);
   // Only what actually differs, which is the shape the block has always had: the light block
   // carries every colour and the dark one carries the handful that change.
   const darkTokens = lightTokens.filter((t) => dark[t] !== light[t]);
+
+  // Same differ-only rule for the geometry: `:root` carries all of it and a dark scope carries
+  // what changes. Today that is `color-scheme` alone - the radii, sizes, border and both flat-design
+  // flags are identical in the two blocks - and writing it as a filter rather than as a hard-coded
+  // `color-scheme: dark` means a future dark-only radius lands here on its own.
+  const darkGeometryDecl = geometryDecl(
+    Object.fromEntries(
+      Object.entries(darkGeometry).filter(([token, value]) => value !== lightGeometry[token]),
+    ),
+    '        ',
+  );
 
   return `    <!--
       GENERATED with the rest of this page - do not hand-edit, and do not re-add values here by
@@ -363,17 +405,18 @@ function buildThemeBlock() {
     -->
     <style>
       :root {
+${geometryDecl(lightGeometry, '        ')}
 ${decl(light, lightTokens)}
       }
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme]) {
-          color-scheme: dark;
+${darkGeometryDecl}
 ${decl(dark, darkTokens)}
         }
       }
       :root:has(input.theme-controller[value='dark']:checked),
       [data-theme='expensa-dark'] {
-        color-scheme: dark;
+${darkGeometryDecl}
 ${decl(dark, darkTokens)}
       }
     </style>`;

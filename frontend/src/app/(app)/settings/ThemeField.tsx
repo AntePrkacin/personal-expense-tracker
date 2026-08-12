@@ -100,11 +100,20 @@ export const THEME_OPTIONS = [
  * `globals.css` and missing from the picker is a theme nobody can reach, and an option naming a
  * theme that is not registered pins nothing and silently follows the page - the failure
  * `app/DecorativePanel.tsx` shipped once. `ThemeField.test.tsx` asserts both against
- * `THEME_NAMES`; these two aliases make the first a build error as well.
+ * `THEME_NAMES`; these two aliases make each a build error as well.
+ *
+ * **They are `AssertNever<Exclude<...>>` rather than `Exclude<...> extends never ? ... : ...`, and
+ * a code review of this ticket is why.** The conditional form reads as a proof and is not one: a
+ * registered theme missing from the picker makes `Exclude` yield `'abyss'`, `'abyss' extends never`
+ * is false, and the alias resolves to `never` with the build green. `AssertNever` fails to
+ * *instantiate* for anything but `never`, so the same case is a TS2344. The technique is
+ * `transactions/filters.ts`'s and `lib/money.ts` is its fourth user; this is the fifth.
  */
+type AssertNever<T extends never> = T;
+
 type OfferedPref = (typeof THEME_OPTIONS)[number]['pref'];
-export type EveryThemeIsOffered = Exclude<ThemePref, OfferedPref> extends never ? true : never;
-export type EveryOfferedIsAPref = Exclude<OfferedPref, ThemePref> extends never ? true : never;
+export type EveryThemeIsOffered = AssertNever<Exclude<ThemePref, OfferedPref>>;
+export type EveryOfferedIsAPref = AssertNever<Exclude<OfferedPref, ThemePref>>;
 
 /**
  * Writes one preference onto the document: the `<html>` attribute and the `theme-color` meta tags

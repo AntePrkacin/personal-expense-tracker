@@ -167,7 +167,17 @@ class CDP {
       const blankTiles = tiles.filter((el) => !opaque(getComputedStyle(el).backgroundColor)).length;
       // Every mark's painted colour, so two themes rendering identically is detectable.
       const fingerprint = marks.map((el) => getComputedStyle(el).backgroundColor).join('|');
-      perTheme[name] = { marks: marks.length, blank, tiles: tiles.length, blankTiles, fingerprint };
+      // The page's OWN surfaces, which is a different question from the marks' and was the
+      // defect a review of PET-79 found: the scopes emitted swatch properties only, so the canvas
+      // and the cards resolved from the CDN's stock-light :root in every theme and every dot was
+      // drawn on white. A mark being opaque says nothing about what it is opaque against.
+      // (No backticks anywhere in here - this whole block is inside a template literal.)
+      const card = document.querySelector('#category-cards > li');
+      perTheme[name] = {
+        marks: marks.length, blank, tiles: tiles.length, blankTiles, fingerprint,
+        canvas: getComputedStyle(document.body).backgroundColor,
+        card: card ? getComputedStyle(card).backgroundColor : null,
+      };
     }
 
     // CONTROL 1: a swatch pointed at a property nothing defines must paint nothing.
@@ -232,6 +242,27 @@ class CDP {
       'every lucide name on the page resolves',
       report.unresolvedIcons.length === 0,
       report.unresolvedIcons,
+    ],
+    // The page's own surfaces have to move with the switcher, or the second of the three
+    // conditions this page exists for cannot be judged by looking at it: a dot is checked for
+    // being visible against `bg-base-100`, and drawing every dot on white makes the worst case
+    // look like the best one. Asserted against a hex nowhere, so the check needs no second copy
+    // of the palette to compare with.
+    //
+    // **`> 1` rather than `=== themes.length`, and the first draft of this check got that wrong.**
+    // Two themes may legitimately share a surface - `expensa-light` and stock `light` are both
+    // `#ffffff` - so demanding every theme differ fails on correct output. What the defect looked
+    // like is *one* distinct value across all five, which is exactly what this rejects; it was
+    // watched failing that way, reporting `oklch(1 0 0)` five times.
+    [
+      'the page paints its own card in the selected theme',
+      new Set(themes.map((n) => report.perTheme[n].card)).size > 1,
+      Object.fromEntries(themes.map((n) => [n, report.perTheme[n].card])),
+    ],
+    [
+      'the page paints its own canvas in the selected theme',
+      new Set(themes.map((n) => report.perTheme[n].canvas)).size > 1,
+      Object.fromEntries(themes.map((n) => [n, report.perTheme[n].canvas])),
     ],
     ['CONTROL: an undefined property paints nothing', report.controlBlank === true, report.controlBlank],
     [

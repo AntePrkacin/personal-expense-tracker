@@ -115,7 +115,23 @@ for (let row = 0; row < shipped[0].contentLegibility.length; row += 1) {
   console.log(`${pad(label, 18)}${cells.join('')}`);
 }
 
-// --- 5. Every candidate daisyUI ships ----------------------------------------
+// --- 5. Write the committed artifact ----------------------------------------
+//
+// **Before the candidate table below, and a review of PET-79 is why.** That table measures all
+// thirty-five themes daisyUI ships, including the thirty this app does not register, and
+// `measureTheme` throws on a theme missing a semantic token while `cssColourToHex` throws on a
+// value it cannot parse. All thirty-five parse today - but a daisyUI bump adding one that does not
+// would make a purely informational section abort the only command that can un-stale
+// `theme-data.json`, i.e. break the gate for a reason with nothing to do with the gate. Writing
+// first makes the two independent; the `try` below is the other half.
+
+const target = path.join(REPO, THEME_DATA_PATH);
+mkdirSync(path.dirname(target), { recursive: true });
+writeFileSync(target, serialiseThemeData(buildThemeData(sources, daisyuiVersion)), 'utf8');
+console.log(`\n\nWrote ${THEME_DATA_PATH}`);
+console.log('Commit it: themeGuard.test.ts asserts the committed copy matches this output.');
+
+// --- 6. Every candidate daisyUI ships ----------------------------------------
 //
 // The question a human weighing a new theme actually has, which is "could this one join at
 // all". Measured over the unmodified stock values, so the count is what it would cost in
@@ -123,26 +139,28 @@ for (let row = 0; row < shipped[0].contentLegibility.length; row += 1) {
 
 console.log('\n\nEVERY STOCK THEME, BY COLLIDING PAIRS (the candidate list)');
 console.log(rule());
-const candidates = measureCandidateThemes(sources.themesCss)
-  .map((theme: ThemeMeasurement) => ({
-    name: theme.name,
-    total: theme.collisions.length,
-    fresh: theme.collisions.filter((c) => !c.grandfathered).length,
-  }))
-  .sort((a, b) => a.total - b.total || a.name.localeCompare(b.name));
-const registered = new Set(shipped.map((t) => t.name));
-for (const candidate of candidates) {
-  const mark = registered.has(candidate.name) ? ' <- registered' : '';
+try {
+  const candidates = measureCandidateThemes(sources.themesCss)
+    .map((theme: ThemeMeasurement) => ({
+      name: theme.name,
+      total: theme.collisions.length,
+      fresh: theme.collisions.filter((c) => !c.grandfathered).length,
+    }))
+    .sort((a, b) => a.total - b.total || a.name.localeCompare(b.name));
+  const registered = new Set(shipped.map((t) => t.name));
+  for (const candidate of candidates) {
+    const mark = registered.has(candidate.name) ? ' <- registered' : '';
+    console.log(
+      `${String(candidate.total).padStart(3)} pair(s)  ${pad(candidate.name, 16)}` +
+        `${String(candidate.fresh).padStart(3)} not grandfathered${mark}`,
+    );
+  }
+} catch (error) {
+  // Reported rather than rethrown: the artifact is already on disk, so the gate is fixable, and a
+  // theme this app does not register cannot affect what it paints.
+  console.log(`(skipped: ${error instanceof Error ? error.message : String(error)})`);
   console.log(
-    `${String(candidate.total).padStart(3)} pair(s)  ${pad(candidate.name, 16)}` +
-      `${String(candidate.fresh).padStart(3)} not grandfathered${mark}`,
+    'A theme this app does not register cannot affect it; the artifact above is written.',
   );
 }
-
-// --- 6. Write the committed artifact ----------------------------------------
-
-const target = path.join(REPO, THEME_DATA_PATH);
-mkdirSync(path.dirname(target), { recursive: true });
-writeFileSync(target, serialiseThemeData(buildThemeData(sources, daisyuiVersion)), 'utf8');
-console.log(`\n\nWrote ${THEME_DATA_PATH}`);
-console.log('Commit it: themeGuard.test.ts asserts the committed copy matches this output.\n');
+console.log('');
