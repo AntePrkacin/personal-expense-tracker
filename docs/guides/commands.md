@@ -37,6 +37,23 @@ installed separately, and ESLint in particular resolves its config and plugins f
 | `npm run storybook`       | Storybook on :6006, the design system reference           |
 | `npm run build-storybook` | Static Storybook build into `storybook-static/`           |
 
+## Long-running commands, and what they cost
+
+Several commands above never exit: both apps' `test:watch`, the backend's `start:dev`,
+`start:debug` and either `db:studio:*`, and the frontend's `dev`, `start` and `storybook`. Kill
+each one when the task that needed it is finished, rather than leaving it up for the length of a
+session. A Nest watch and a Next dev server together hold well over a gigabyte, they outlive the
+work that started them by default, and nothing afterwards reports them as the reason the machine
+ran out of memory.
+
+That matters most beside `npm test`, because Jest's own appetite is the other half of the same
+budget. Both apps cap the worker count and the per-worker heap in their own Jest config -
+`frontend/jest.config.ts`, the `jest` block in `backend/package.json`, and
+`backend/test/jest-e2e.json` - since the default is one worker per core, and two suites started at
+once in two checkouts ask for twice the machine. Those three files are the single home for the
+values: do not restate them here, and do not pass a competing `--maxWorkers` on the command line
+without a reason to.
+
 ## Root, from the repo root
 
 | Command              | Purpose                                                               |
