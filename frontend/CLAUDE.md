@@ -119,8 +119,14 @@ measured from the font binaries, and `font-probe.js` beside it re-derives them a
 
 **The one mechanical cost is that every heading size had to move.** Crimson Pro's caps are 76.9% of
 Plus Jakarta Sans's at the same font-size (0.5732 against 0.7450), so matching them optically means
-x1.300 - and **not uniformly one step**, which is the trap: Tailwind's scale steps 18 / 20 / 24, so
-`text-lg`'s 23.4px target lands between the last two and moves **two**. Everything else moves one.
+x1.300 - and **not uniformly one step**, which is the trap: Tailwind's scale is not geometric, and
+steps 2px at a time up to `text-xl` (14 / 16 / 18 / 20) before widening after it (24 / 30 / 36 / 48).
+So **every size below `text-xl` moves two steps and `text-xl` and up move one**, which is four call
+sites in the first group: one `text-base` -> `text-xl`, three `text-lg` -> `text-2xl`.
+An earlier draft of this paragraph said `text-lg` alone moved two and "everything else moves one",
+and sent the reader to a table in this file that has never existed; both are corrected in place
+rather than left dated, on the same ground the `lib/pickerScroll.ts` path below is - a reader sent
+to something that is not there learns nothing. `app/fonts.ts` carries the arithmetic.
 The hero on `app/WelcomeScreen.tsx` is the one place the ramp runs out (60px wants 78, against
 `text-7xl`'s 72 and `text-8xl`'s 96) and takes the nearer rather than an off-scale literal. No gate
 can see any of this: every one of those classes compiles either way.

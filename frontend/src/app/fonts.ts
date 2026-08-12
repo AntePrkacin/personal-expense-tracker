@@ -29,9 +29,18 @@ import { Crimson_Pro, Inter } from 'next/font/google';
 // the height of Plus Jakarta Sans's at the same font-size (0.5732 against 0.7450), so every
 // heading would read about a quarter smaller if the sizes were left alone. Matching them
 // optically means multiplying by 1.300, which PET-79 did across 25 call sites - and **not
-// uniformly one step**, because Tailwind's scale steps 18 / 20 / 24 and `text-lg`'s target lands
-// between the last two, so that one moves two steps where the rest move one. `frontend/CLAUDE.md`
-// carries the table.
+// uniformly one step**, because Tailwind's scale is not geometric: it steps 2px at a time up to
+// `text-xl` (14 / 16 / 18 / 20) and widens after it (24 / 30 / 36 / 48). So x1.3 clears a whole
+// step below `text-xl` and less than one above it: **every size under `text-xl` moves two steps,
+// and `text-xl` and up move one.** Four call sites are in the first group - one `text-base` ->
+// `text-xl` in `(app)/AddTransactionModal.tsx`, three `text-lg` -> `text-2xl`.
+//
+// **A code review of PET-79 corrected this paragraph, and the original error is the instructive
+// part.** It said `text-lg` alone moved two "where the rest move one", which is wrong twice: it
+// named one size where three qualify (`text-sm` too, though no `font-display` site uses it), and
+// it presented a property of the *scale* as a quirk of one value. It also sent the reader to a
+// table in `frontend/CLAUDE.md` that does not exist and never did. The rule above is the whole of
+// it, and `docs/explainers/generators/font-metrics.json` is the only file with figures in it.
 //
 // These expose CSS variables rather than classNames because `globals.css` maps them onto the
 // `--font-display` / `--font-sans` theme tokens. This lives in its own module rather than in
