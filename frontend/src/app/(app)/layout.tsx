@@ -1,5 +1,6 @@
 import { Menu } from 'lucide-react';
 
+import { logOut } from '@/lib/logOut';
 import { requireProfile } from '@/lib/profile';
 
 import { AddTransactionProvider } from './AddTransactionProvider';
@@ -163,7 +164,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             row, the email from the central `users` row - which is exactly what
             `GET /api/profile` stitches, and the reason the session read alone
             could never have fixed this. */}
-        <SidebarNav fullName={profile.fullName} email={profile.email} />
+        {/* `logOut` is threaded from here rather than imported by the panel, which is this repo's
+            rule for every Server Action - see `ui/Sidebar`'s own prop for what importing one costs
+            in Storybook. This is the only place the real action is named. */}
+        <SidebarNav fullName={profile.fullName} email={profile.email} logOut={logOut} />
       </div>
     </div>
   );

@@ -165,6 +165,19 @@ describe('the sidebar footer profile', () => {
     expect(screen.queryByText(/Marko/)).not.toBeInTheDocument();
     expect(screen.queryByText('marko@email.com')).not.toBeInTheDocument();
   });
+
+  it('wires the logout action all the way to the footer control (PET-84)', async () => {
+    render(await AppLayout({ children: null }));
+
+    // Three files have to agree for this to pass - this layout names the action,
+    // `SidebarNav` forwards it across the client boundary, and `ui/Sidebar` puts a
+    // submitter inside a form carrying it - and a prop dropped in the middle
+    // typechecks nowhere but is invisible to every other assertion in this file.
+    // Pinned here rather than in `Sidebar.test.tsx`, which renders the panel with
+    // a stub and so cannot see the threading at all.
+    const control = screen.getByRole('button', { name: 'Log out' });
+    expect(control.closest('form')).not.toBeNull();
+  });
 });
 
 describe('AppLayout', () => {

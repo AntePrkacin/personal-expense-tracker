@@ -16,7 +16,26 @@ const mockPathname = (pathname: string) => {
   (usePathname as jest.Mock).mockReturnValue(pathname);
 };
 
-const PROFILE = { fullName: 'Ada Lovelace', email: 'ada@example.com' };
+/**
+ * Every prop this component needs, spread by each render below.
+ *
+ * `logOut` is a stub here because this file asserts nothing about it: the panel's
+ * own control is `Sidebar.test.tsx`'s and the threading through to it is
+ * `layout.test.tsx`'s. What it does prove by being required is that this wrapper
+ * forwards it - the prop is unused by `SidebarNav` itself, so nothing else in this
+ * suite would notice it being dropped on the way past.
+ *
+ * Worth knowing how its absence surfaced, because it is the trap
+ * `frontend/CLAUDE.md` documents: adding the prop left this file eight type errors
+ * that `npm run build` and all 3222 Jest tests missed, because the build never
+ * reads a test file and Jest transpiles without checking types.
+ * `npx tsc --noEmit` is what found them.
+ */
+const PROFILE = {
+  fullName: 'Ada Lovelace',
+  email: 'ada@example.com',
+  logOut: () => Promise.resolve(),
+};
 
 // The labels are the only thing this file states for itself. The keys come from
 // SIDEBAR_ITEMS and the paths from SIDEBAR_HREFS, both Sidebar's own, so no
