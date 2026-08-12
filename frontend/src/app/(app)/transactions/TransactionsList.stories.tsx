@@ -57,6 +57,20 @@ const CATEGORIES: CategoryLabel[] = [
   { id: 'c7', name: 'Health', color: 'secondary' as const, icon: 'heart-pulse' as const },
 ];
 
+/**
+ * The account's period history, for the header's select (PET-67).
+ *
+ * `[0]` is the current period and doubles as the view's own `period`, so the overline and the
+ * control's chosen option cannot disagree. `[1]` is what the `Filtered` story navigates to, and
+ * `[2]` is a stretched period a pay-day change produced - the label case no arithmetic on this side
+ * could have derived, which is the whole reason the backend publishes one.
+ */
+const PERIODS = [
+  { start: '2025-10-01', end: '2025-11-01', label: 'October 2025', current: true },
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+  { start: '2025-07-15', end: '2025-09-01', label: 'July 2025 / August 2025', current: false },
+];
+
 /** Frame 06's ten rows, in its order, with the amounts and dates it draws. */
 const ROWS: [string, string, number, string][] = [
   ['Whole Foods', 'c1', 62.4, '2025-10-08'],
@@ -96,7 +110,7 @@ function Frame({ filters }: { filters: TransactionFilters }) {
     total: 128,
     // The header's overline, straight off the read as of PET-72 rather than composed from a start
     // day and a clock - which is what lets this story draw the frame's own month in any month.
-    period: { start: '2025-10-01', end: '2025-11-01', label: 'October 2025' },
+    period: PERIODS[0],
   };
 
   return (
@@ -128,6 +142,7 @@ function Frame({ filters }: { filters: TransactionFilters }) {
               <TransactionsScreen
                 view={view}
                 filters={filters}
+                periods={PERIODS}
                 categoryCount={CATEGORIES.length}
                 filterBar={<TransactionFilterBar filters={filters} categories={CATEGORIES} />}
                 table={
@@ -199,17 +214,29 @@ export const List: Story = {
 };
 
 /**
- * The same screen with three filters active, which no frame draws.
+ * The same screen with every filter active, which no frame draws.
  *
- * Here to check what the default story cannot: that each pill renders the value the URL is
- * filtered by rather than its first option, and that the two undesigned option sets read
- * sensibly closed - "Last month" and "Oldest first" are this ticket's amendment to A16 and
- * owe a designer's sign-off with the rest of what A29 tracks.
+ * Here to check what the default story cannot: that each control renders the value the URL is
+ * filtered by rather than its first option, and that the undesigned option sets read sensibly
+ * closed - "Oldest first" is PET-29's amendment to A16 and "Highest amount" / "Lowest amount" are
+ * PET-67's, all of which owe a designer's sign-off with the rest of what A29 tracks.
+ *
+ * **This is also the one place the swapped layout can be reviewed**, so it is worth opening beside
+ * frame 06: the period select sits in the header where the search field used to, and the search
+ * field sits in the bar where the period pill used to. The period shown is a **past** one, which the
+ * pill could only ever reach by name and this control reaches by date.
  *
  * The rows are the unfiltered ten regardless, since nothing here queries a backend.
  */
 export const Filtered: Story = {
   render: () => (
-    <Frame filters={{ search: 'Whole', categoryId: 'c1', period: 'previous', sort: 'date_asc' }} />
+    <Frame
+      filters={{
+        search: 'Whole',
+        categoryId: 'c1',
+        period: PERIODS[1].start,
+        sort: 'amount_desc',
+      }}
+    />
   ),
 };

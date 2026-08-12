@@ -7,7 +7,12 @@ import type { TransactionFilters } from '../../../lib/transactions';
 import { FilterNavigationProvider } from './FilterNavigation';
 import { TransactionFilterBar } from './TransactionFilterBar';
 
-// The three selects (TRN-3, AC4, AC5).
+// The bar's controls (TRN-3, AC4, AC5): a category select, the search field and a sort select.
+//
+// **The period pill left and the search field arrived, both at PET-67.** So this suite now renders a
+// real `TransactionSearch`, which owns a debounce - every assertion about typing is that file's, and
+// the two cases here only prove the field is present, named and prefilled from the URL. Nothing in
+// this file advances a timer.
 
 const replace = jest.fn();
 jest.mock('next/navigation', () => ({ useRouter: () => ({ replace, push: jest.fn() }) }));
@@ -38,40 +43,60 @@ function setup(filters: TransactionFilters = {}, categories = CATEGORIES) {
 
 const pill = (name: string) => screen.getByRole('combobox', { name });
 
+/** The search field, by its `aria-label`: the design draws no visible label for it either. */
+const searchField = () => screen.getByRole('textbox', { name: 'Search transactions' });
+
 beforeEach(() => {
   replace.mockClear();
 });
 
 describe('the three controls', () => {
-  it('renders a category, a period and a sort select', () => {
+  it('renders a category select, the search field and a sort select', () => {
     // By role rather than by class, so the assertion survives a restyling: PET-57 replaced a
     // hand-drawn box plus an overlaid SVG chevron with a stock daisyUI `select`, and nothing
     // in this suite had to change - which is the point of pinning behaviour.
     setup();
 
-    expect(screen.getAllByRole('combobox')).toHaveLength(3);
+    expect(screen.getAllByRole('combobox')).toHaveLength(2);
     expect(pill('Category')).toBeInTheDocument();
-    expect(pill('Period')).toBeInTheDocument();
     expect(pill('Sort')).toBeInTheDocument();
+    expect(searchField()).toBeInTheDocument();
+  });
+
+  it('no longer draws a period pill, which moved to the header (PET-67)', () => {
+    // Worth asserting the absence rather than just dropping the old case: the date-form option
+    // workaround went with it, and a pill reappearing here would mean two controls filtering one
+    // key - the state `filters.ts` calls two URLs for one view.
+    setup();
+
+    expect(screen.queryByRole('combobox', { name: 'Period' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Budgeting period' })).not.toBeInTheDocument();
   });
 
   it('names each one, since the design draws no visible labels', () => {
-    // The pills are label-less in the frame, which is why these are not `ui/Select` - that
+    // The controls are label-less in the frame, which is why these are not `ui/Select` - that
     // component always renders a `FieldShell` label above the control. An aria-label is what
-    // keeps three unnamed comboboxes from being three unnamed comboboxes.
+    // keeps three unnamed controls from being three unnamed controls.
     setup();
 
     expect(screen.queryByText('Category')).not.toBeInTheDocument();
     expect(pill('Category')).toHaveAccessibleName('Category');
+    expect(searchField()).toHaveAccessibleName('Search transactions');
   });
 
   it('opens on the values frame 06 draws closed', () => {
-    // "All categories", "This month" and "Newest first", on a bare /transactions.
+    // "All categories", an empty search box and "Newest first", on a bare /transactions.
     setup();
 
     expect(pill('Category')).toHaveDisplayValue('All categories');
-    expect(pill('Period')).toHaveDisplayValue('This month');
     expect(pill('Sort')).toHaveDisplayValue('Newest first');
+    expect(searchField()).toHaveValue('');
+  });
+
+  it('prefills the search field from the URL', () => {
+    setup({ search: 'Uber' });
+
+    expect(searchField()).toHaveValue('Uber');
   });
 });
 
@@ -84,15 +109,12 @@ describe('the options', () => {
     ).toEqual(['All categories', 'Groceries', 'Transport']);
   });
 
-  it('offers the three periods and four sorts the API can serve', () => {
-    // This is A16's amendment: Figma never draws either dropdown open, so shipping one
-    // option each would leave AC4's period half and AC5 unimplementable. The two amount
-    // entries are PET-67's, and they are the half of A16 the designer never drew at all.
+  it('offers the four sorts the API can serve', () => {
+    // This is A16's amendment: Figma never draws the dropdown open, so shipping one option would
+    // leave AC5 unimplementable. The two amount entries are PET-67's, and they are the half of A16
+    // the designer never drew at all.
     setup();
 
-    expect(
-      Array.from(pill('Period').querySelectorAll('option')).map((option) => option.textContent),
-    ).toEqual(['This month', 'Last month', 'All time']);
     expect(
       Array.from(pill('Sort').querySelectorAll('option')).map((option) => option.textContent),
     ).toEqual(['Newest first', 'Oldest first', 'Highest amount', 'Lowest amount']);
@@ -106,14 +128,6 @@ describe('changing a filter', () => {
     await user.selectOptions(pill('Category'), GROCERIES);
 
     expect(replace).toHaveBeenCalledWith(`/transactions?categoryId=${GROCERIES}`);
-  });
-
-  it('navigates with the chosen period', async () => {
-    const { user } = setup();
-
-    await user.selectOptions(pill('Period'), 'previous');
-
-    expect(replace).toHaveBeenCalledWith('/transactions?period=previous');
   });
 
   it('navigates with the chosen sort', async () => {
@@ -136,11 +150,11 @@ describe('changing a filter', () => {
   });
 
   it('replaces rather than pushes', async () => {
-    // Three views of one page, not three places - so Back should leave the screen rather
-    // than walk every category the user tried.
+    // Views of one page, not places - so Back should leave the screen rather than walk every
+    // category the user tried.
     const { user } = setup();
 
-    await user.selectOptions(pill('Period'), 'all');
+    await user.selectOptions(pill('Category'), GROCERIES);
 
     expect(replace).toHaveBeenCalled();
   });
@@ -168,24 +182,26 @@ describe('the other filters survive a change', () => {
   });
 
   it('renders the values the URL is actually filtered by', async () => {
-    setup({ categoryId: GROCERIES, period: 'all', sort: 'date_asc' });
+    setup({ categoryId: GROCERIES, period: 'all', sort: 'date_asc', search: 'Uber' });
 
     expect(pill('Category')).toHaveDisplayValue('Groceries');
-    expect(pill('Period')).toHaveDisplayValue('All time');
     expect(pill('Sort')).toHaveDisplayValue('Oldest first');
+    expect(searchField()).toHaveValue('Uber');
+  });
+
+  it('carries an unrendered period through a change it does not draw', async () => {
+    // The bar no longer has a period control and still has to preserve the filter: `apply` spreads
+    // the whole set, so `?period=all` survives a category change even though nothing here can show
+    // it. That is what makes losing the pill a move rather than a deletion.
+    const { user } = setup({ period: 'all' });
+
+    await user.selectOptions(pill('Sort'), 'amount_desc');
+
+    expect(replace).toHaveBeenCalledWith('/transactions?period=all&sort=amount_desc');
   });
 });
 
 describe('resetting to a default', () => {
-  it('removes the key rather than writing it out', async () => {
-    // One view, one URL: `?period=current` renders exactly what `/transactions` renders.
-    const { user } = setup({ period: 'all' });
-
-    await user.selectOptions(pill('Period'), 'current');
-
-    expect(replace).toHaveBeenCalledWith('/transactions');
-  });
-
   it('removes the sort key when "Newest first" is chosen back', async () => {
     const { user } = setup({ sort: 'date_asc' });
 

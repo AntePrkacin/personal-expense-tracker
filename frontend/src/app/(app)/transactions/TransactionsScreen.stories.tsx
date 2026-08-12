@@ -33,11 +33,11 @@ import { TransactionsScreen } from './TransactionsScreen';
 // all, and the no-results state's real bar needs a category list this module has no read for.
 //
 // **`nextjs: { appDirectory: true }` is mandatory as of PET-29, and no gate will tell you.**
-// The header's search field reaches `useRouter`, which throws `invariant expected app router
-// to be mounted` outside one - but `build-storybook` bundles stories without running them and
-// `screens.stories.test.tsx` renders this module with `next/navigation` already mocked, so
-// both gates stay green and only opening the story finds it. This parameter is what makes
-// @storybook/nextjs-vite mount its mock router.
+// The header's period select reaches `useRouter` (the search field did, until PET-67 moved it into
+// the bar), which throws `invariant expected app router to be mounted` outside one - but
+// `build-storybook` bundles stories without running them and `screens.stories.test.tsx` renders
+// this module with `next/navigation` already mocked, so both gates stay green and only opening the
+// story finds it. This parameter is what makes @storybook/nextjs-vite mount its mock router.
 
 const meta: Meta<typeof TransactionsScreen> = {
   title: 'Screens/07 Transactions — Empty',
@@ -58,6 +58,19 @@ const EMPTY: TransactionsView = { state: 'empty', total: 0, period: PERIOD };
 const NO_RESULTS: TransactionsView = { state: 'noResults', total: 0, period: PERIOD };
 
 /**
+ * The account's period history, for the header's select (PET-67).
+ *
+ * Three entries so the control is worth opening: the current period, the one before it, and a
+ * stretched one a pay-day change produced, whose label spans two month names and is exactly what no
+ * arithmetic on this side could have derived.
+ */
+const PERIODS = [
+  { ...PERIOD, current: true },
+  { start: '2025-09-01', end: '2025-10-01', label: 'September 2025', current: false },
+  { start: '2025-07-15', end: '2025-09-01', label: 'July 2025 / August 2025', current: false },
+];
+
+/**
  * The column every state shares, supplying the height the empty card centres inside.
  *
  * **The provider is inside this frame rather than in a decorator**, for the reason the header
@@ -75,7 +88,7 @@ function Frame({ view }: { view: TransactionsView }) {
       {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for the
           gutter the `(app)` shell owns, since neither wraps a story. */}
       <div className="bg-base-200 flex h-screen flex-col px-4 sm:px-6 lg:px-10">
-        <TransactionsScreen view={view} filters={{}} categoryCount={8} />
+        <TransactionsScreen view={view} filters={{}} periods={PERIODS} categoryCount={8} />
       </div>
     </AddTransactionProvider>
   );
@@ -106,8 +119,9 @@ export const Empty: Story = {
  * story above; everything else should be pixel-identical.
  *
  * In the running app this state also keeps the search field and the filter bar, which is A15's
- * other half. The field is here and real; the bar needs a category list this module does not
- * read, so `Screens/06 Transactions — List` is where it is diffed.
+ * other half. As of PET-67 the field is *inside* that bar, and the bar needs a category list this
+ * module does not read - so neither is here, and `Screens/06 Transactions — List` is where both are
+ * diffed. The header's period select is here and real.
  */
 export const NoResults: Story = {
   render: () => <Frame view={NO_RESULTS} />,
