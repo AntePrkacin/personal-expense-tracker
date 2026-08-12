@@ -1,4 +1,8 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import {
+  createParamDecorator,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { bearerToken, type AuthenticatedRequest } from './session.guard';
 
 /**
@@ -24,10 +28,26 @@ import { bearerToken, type AuthenticatedRequest } from './session.guard';
  * reason, restated for a credential: only a guarded route can use this
  * meaningfully, the guard has already refused anything without a usable bearer,
  * so an absent value is a bug to fail on rather than a branch to carry forever.
+ *
+ * **It throws rather than asserting non-null, which a code review asked for and
+ * is worth the one line.** `CurrentUser` spells the same idea `request.user!`,
+ * and there being wrong costs a property access on `undefined`; here the value
+ * flows into `hashToken`, so a `null` would surface as a **500** where the guard
+ * would have answered 401. That is reachable only by misusing this decorator -
+ * putting it on a `@Public()` route, or making logout public, which the removed
+ * idempotence criterion would have wanted - and the point is that misuse should
+ * fail legibly rather than as a server fault. The message mirrors the guard's own
+ * so the two cannot read as different problems.
  */
 export const BearerToken = createParamDecorator(
   (_data: unknown, context: ExecutionContext): string => {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    return bearerToken(request.headers.authorization)!;
+    const token = bearerToken(request.headers.authorization);
+
+    if (!token) {
+      throw new UnauthorizedException('Missing bearer credential.');
+    }
+
+    return token;
   },
 );
