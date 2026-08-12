@@ -1,13 +1,23 @@
 'use client';
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 
-import { useMoney } from '../PreferencesProvider';
+import { useCategoryHover } from './CategoryHover';
 
-// The donut's ring, and the card's only client boundary. `CategoryDonut` stays a Server
-// Component and everything on the card that is text - the heading, the centre total, the whole
-// legend - is rendered there, which is the rule `frontend/CLAUDE.md`'s The chart library sets and
-// the same split `TrendChart` uses.
+// The donut's ring. `CategoryDonut` stays a Server Component and everything on the card that is
+// text - the heading, the centre total, the whole legend - is rendered there, which is the rule
+// `frontend/CLAUDE.md`'s The chart library sets and the same split `TrendChart` uses.
+//
+// **It is no longer the card's only client boundary**: PET-78 added `CategoryHover`'s provider
+// above it and a client `<li>` wrapper below it, because the hover has to be visible at both ends.
+// The legend's *text* is still server-rendered, which is the part that matters - see that file.
+//
+// **The hover tooltip is gone, deliberately.** It rendered at the cursor inside this 192px box, so
+// on most slices it printed the slice's name and amount straight over the centre readout and left
+// both unreadable. Nothing was lost by deleting it: the comment below already argued that the
+// legend states every fact the tooltip did, in permanent text, which is the same argument that
+// lets this plot be `aria-hidden`. The association it *did* carry - which row owns this arc - is
+// now carried better, in both directions, by the shared active id.
 
 /** A slice, already sorted, already colour-resolved and already carrying its display percent. */
 export type RingSlice = {
@@ -19,12 +29,9 @@ export type RingSlice = {
   fill: string;
 };
 
-type TooltipContentProps = {
-  active?: boolean;
-  payload?: { payload: RingSlice }[];
-};
-
 export function CategoryRing({ slices }: { slices: RingSlice[] }) {
+  const { activeId, setActiveId } = useCategoryHover();
+
   return (
     <ResponsiveContainer width="100%" height={192}>
       <PieChart
@@ -35,14 +42,13 @@ export function CategoryRing({ slices }: { slices: RingSlice[] }) {
         // rule; the suite asserts the negative rather than trusting this comment.
         accessibilityLayer={false}
       >
-        {/* **The category name is the whole point of this tooltip.** The ring is pure colour, so
-            hovering a slice otherwise means tracing a hue back to the legend by eye - which is
-            the colour-alone problem the legend exists to solve, reintroduced for the one user who
-            is pointing directly at the thing. The amount and the percentage come along because a
-            tooltip carrying a bare name looks unfinished and both numbers are already computed. */}
-        <Tooltip content={<SliceTooltip />} isAnimationActive={false} />
-
         <Pie
+          // Reported by index rather than off the event's own datum: Recharts hands `onMouseEnter`
+          // a `PieSectorDataItem`, which is our slice merged with every geometric field the sector
+          // computed, so reading `id` off it would depend on the library not shadowing a key we
+          // chose. The index into the array we passed cannot drift.
+          onMouseEnter={(_, index) => setActiveId(slices[index]?.id ?? null)}
+          onMouseLeave={() => setActiveId(null)}
           data={slices}
           // **`spent`, not `percent`.** Recharts sizes each arc against the sum of the values it
           // is handed, so driving the ring from the amounts closes it by construction - whatever
@@ -78,32 +84,29 @@ export function CategoryRing({ slices }: { slices: RingSlice[] }) {
           isAnimationActive={false}
         >
           {slices.map((slice) => (
-            <Cell key={slice.id} fill={slice.fill} />
+            <Cell
+              key={slice.id}
+              fill={slice.fill}
+              // **The hovered arc is outlined, and the others are deliberately not dimmed.**
+              // Reducing the rest to a `fillOpacity` is the obvious emphasis and it buys a problem
+              // this repo has paid for twice: a translucent fill says nothing until it is
+              // composited over the card and the pixel is read, and the mark it makes disappear
+              // first is a small slice - `frontend/CLAUDE.md` carries both accounts. A stroke
+              // introduces no alpha, so there is no contrast argument to have. It replaces the
+              // `base-100` seam on this one arc, which is what the seam is for anyway: separating
+              // it from its neighbours.
+              //
+              // **Both arms are stated, and `undefined` on the resting arm is a real bug.** A
+              // `Cell`'s prop overrides the `Pie`'s rather than falling back to it, so
+              // `stroke={undefined}` deleted the seam from every slice - which is invisible until
+              // two same-coloured slices land next to each other, the exact defect the seam was
+              // added for. The suite caught it, which is what `SameColourNeighbours` is for.
+              stroke={activeId === slice.id ? 'var(--color-base-content)' : 'var(--color-base-100)'}
+              strokeWidth={activeId === slice.id ? 2 : 1}
+            />
           ))}
         </Pie>
       </PieChart>
     </ResponsiveContainer>
-  );
-}
-
-function SliceTooltip({ active, payload }: TooltipContentProps) {
-  // Recharts renders `content` as a real element rather than calling it, so this is an ordinary
-  // component inside the shell's provider and the hook resolves. It has to be read before the
-  // early return below, which is the ordinary rules-of-hooks constraint and the reason the
-  // destructure sits above a guard it does not need.
-  const { formatWhole } = useMoney();
-
-  const slice = payload?.[0]?.payload;
-  if (active !== true || slice === undefined) return null;
-
-  return (
-    <div className="rounded-box bg-neutral text-neutral-content px-3 py-2 text-xs shadow-md">
-      <p className="font-semibold">{slice.name}</p>
-      {/* The apportioned percent, handed in rather than recomputed, so the tooltip and the
-          legend row for the same slice can never disagree by a point. */}
-      <p>
-        {formatWhole(slice.spent)} · {slice.percent}%
-      </p>
-    </div>
   );
 }

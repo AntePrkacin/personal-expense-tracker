@@ -6,9 +6,12 @@ import { CategoryDonut as Donut } from './CategoryDonut';
 /**
  * The card inside the shell's preferences.
  *
- * The donut's ring is a Client Component and its hover tooltip calls `useMoney()`, so without this
- * the story renders and then throws the first time a slice is hovered - which Jest cannot see,
- * because it dispatches no hover. A wrapper rather than a `decorators` entry, for the reason
+ * **Nothing in this card calls `useMoney()` any more**, so this wrapper is no longer load-bearing.
+ * It was here because the ring's hover tooltip called it, and the story would render and then throw
+ * the first time a slice was hovered - which Jest could not see, because it dispatches no hover.
+ * PET-78 deleted that tooltip. The wrapper stays because the card is only ever rendered inside the
+ * shell, where the provider is always present, so a story without it would be the less faithful of
+ * the two. A wrapper rather than a `decorators` entry, for the reason
  * `frontend/src/app/CLAUDE.md` records: the story smoke tests never apply a meta's decorators.
  */
 function CategoryDonut(props: React.ComponentProps<typeof Donut>) {
@@ -89,9 +92,10 @@ export default meta;
 type Story = StoryObj<typeof CategoryDonut>;
 
 /**
- * The frame's own five categories. Worth hovering: the tooltip names the slice, which is the one
- * thing the ring cannot say on its own, and its percentage is the same integer as the legend
- * row's rather than a second rounding of the same number.
+ * The frame's own five categories. Worth hovering, in both directions: an arc outlines itself and
+ * highlights its legend row, and a legend row outlines its arc - which is the one thing the ring
+ * cannot say on its own, and the reason PET-78 could delete the tooltip that used to say it while
+ * landing on the centre readout.
  *
  * The legend reads 33 / 24 / 18 / 14 / 11 and sums to 100. Rounding each value on its own would
  * give 32 / 24 / 18 / 14 / 11, which sums to 99 under a ring that visibly closes.

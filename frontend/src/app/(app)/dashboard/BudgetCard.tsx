@@ -93,9 +93,19 @@ export function BudgetCard({
           </span>
         </div>
 
+        {/* **Both figures are `<span>`s, and `<p>`s here put "of $5,000" in the middle of the
+            card.** daisyUI ships `.card-body p { flex-grow: 1 }`, so as paragraphs these two
+            split the row's whole width between them and each rendered its text at the left edge
+            of its own over-wide box - which left the budget stranded near the 50% mark, eight
+            hundred pixels from the figure it qualifies, with `gap-2` between two boxes rather
+            than between two numbers. The "days left" caption below is the same rule caught
+            earlier and fixed the other way, with `text-right`, because that one is *meant* to
+            reach the card's edge; this pair is meant to read as one sentence, so the fix is to
+            stop them being flex items that grow at all. `frontend/CLAUDE.md` carries the rule
+            and the specificity reason `grow-0` cannot do it. */}
         <div className="flex items-baseline gap-2">
-          <p className="font-display text-4xl font-bold">{formatWhole(spentWhole)}</p>
-          <p className="text-base-content/60 text-sm">of {formatWhole(budgetWhole)}</p>
+          <span className="font-display text-4xl font-bold">{formatWhole(spentWhole)}</span>
+          <span className="text-base-content/60 text-sm">of {formatWhole(budgetWhole)}</span>
         </div>
 
         {/* Clamped to the max: an overspent month has `spent > monthlyBudget`, and a

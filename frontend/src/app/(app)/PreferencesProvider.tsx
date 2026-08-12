@@ -19,8 +19,10 @@ import { moneyFormatters, type MoneyFormatters } from '@/lib/money';
 // one.** Twelve of the sixteen components that format money are Server Components; those read the
 // currency by calling `requireProfile()` in their own `page.tsx` and threading it down as a prop,
 // which costs nothing now that the read is `cache()`-memoized per render. The other four are
-// Client Components (`dashboard/CategoryRing`, `dashboard/TrendChart`, `DeleteTransactionDialog`
-// and `transactions/categories/AllocateBudgetModal`), and prop-threading to those means passing a
+// Client Components (`dashboard/TrendChart`, `DeleteTransactionDialog`,
+// `transactions/categories/AllocateBudgetModal` - and `dashboard/CategoryRing` until PET-78
+// deleted the hover tooltip that was its only caller, so read that count as three), and
+// prop-threading to those means passing a
 // currency through every Server Component between the page and the leaf - including several that
 // format nothing themselves. So the client half gets a context and the server half gets props, and
 // neither is the "real" one.

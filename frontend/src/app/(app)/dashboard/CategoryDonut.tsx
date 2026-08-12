@@ -2,14 +2,20 @@ import { categoryDotClass, categoryFillVar } from '@/components/ui/categoryColou
 import { moneyFormatters } from '@/lib/money';
 import type { DashboardSummary } from '@/lib/dashboard';
 
+import { CategoryHoverProvider, LegendRow } from './CategoryHover';
 import { CategoryRing, type RingSlice } from './CategoryRing';
 import { apportionPercents, sortedCategories } from './donut';
 
 // Spending-by-category donut with its legend (Figma node 21:4, DSH-8).
 //
-// A Server Component. `CategoryRing` carries the `'use client'` and nothing else on the card
-// needs it: the centre total and every legend row are ordinary server-rendered HTML, which is
-// what lets the suite assert on them and what makes the legend the ring's accessible equivalent.
+// A Server Component. `CategoryRing` carried the `'use client'` and nothing else on the card
+// needed it, until PET-78 added two more: `CategoryHover`'s provider around this card's contents
+// and its `LegendRow` around each row. **What matters is unchanged and is the reason those two are
+// shaped the way they are** - the centre total and every legend row's *text* are still ordinary
+// server-rendered HTML, because `LegendRow` owns only the `<li>`'s class and its pointer handlers
+// and takes the row's content as children. That is what lets the suite assert on them and what
+// makes the legend the ring's accessible equivalent in the first HTML response rather than after
+// hydration.
 //
 // **This is the epic's most contract-served card and the one with the least arithmetic in it.**
 // The percentages arrive computed - nothing here divides a month, which
@@ -99,6 +105,9 @@ export function CategoryDonut({ categories, spent, currency }: CategoryDonutProp
               className="border-base-300 mx-auto flex size-46 items-center justify-center rounded-full border-[28px]"
             />
 
+            {/* Both lines are `<span>`s rather than `<p>`s, for the reason the populated branch
+                below records: `.card-body p { flex-grow: 1 }` would grow each to half this
+                overlay and pin its text to the top of its own half. */}
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
               {/* `spent` rather than a literal "$0": the true empty account has `spent: 0` and
                   reads exactly as frame 05 draws it, but the dangling-category race can leave
@@ -106,10 +115,10 @@ export function CategoryDonut({ categories, spent, currency }: CategoryDonutProp
                   claim there was none. Muted `base-content/50`, the same tone this file's own
                   fallback slice and legend dot already use for "nothing to spend meaningfully
                   about". */}
-              <p className="text-base-content/50 font-display text-2xl font-bold">
+              <span className="text-base-content/50 font-display text-2xl font-bold">
                 {formatWhole(spent)}
-              </p>
-              <p className="text-base-content/60 text-xs">Total spent</p>
+              </span>
+              <span className="text-base-content/60 text-xs">Total spent</span>
             </div>
           </div>
 
@@ -135,17 +144,25 @@ export function CategoryDonut({ categories, spent, currency }: CategoryDonutProp
       <div className="card-body gap-4">
         <h2 className="text-base font-semibold">Spending by category</h2>
 
-        <div className="relative">
-          {/* The ring is hidden from assistive technology and the legend below is its accessible
-              equivalent. That works here in a way it does not on the trend chart: the legend is a
-              strict **superset** of the tooltip, naming every slice with its amount and its
-              percentage in real text, so a pointer-only tooltip adds convenience rather than
-              information and there is nothing to mirror into an `sr-only` line. */}
-          <div aria-hidden="true">
-            <CategoryRing slices={slices} />
-          </div>
+        {/* One owner for the hover, wrapping both ends of it: the ring is a Client Component and
+            the legend's rows are client `<li>`s around server-rendered content, and neither can
+            hold state the other reads. `CategoryHover.tsx` carries the reasoning, including why a
+            provider costs no DOM node - the three children of `card-body` are unchanged, so its
+            `gap-4` still applies exactly as it did. */}
+        <CategoryHoverProvider>
+          <div className="relative">
+            {/* The ring is hidden from assistive technology and the legend below is its accessible
+                equivalent. That works here in a way it does not on the trend chart: the legend is a
+                strict **superset** of what a hover can say, naming every slice with its amount and
+                its percentage in real text, so there is nothing to mirror into an `sr-only` line.
+                PET-78 took that argument to its conclusion and deleted the tooltip, which was
+                landing on the centre readout; the hover now highlights this slice's legend row
+                instead, which is the one thing a tooltip said that the legend cannot. */}
+            <div aria-hidden="true">
+              <CategoryRing slices={slices} />
+            </div>
 
-          {/* The centre readout, positioned over the hole rather than drawn by Recharts.
+            {/* The centre readout, positioned over the hole rather than drawn by Recharts.
               `pointer-events-none` so it never eats a hover meant for the slice behind it.
 
               **It sits outside the `aria-hidden` above, and that is the point of the extra
@@ -154,33 +171,53 @@ export function CategoryDonut({ categories, spent, currency }: CategoryDonutProp
               total, so hiding this pair with the ring would put AC2's own figure on no accessible
               surface at all - the gap PET-22's chart paid for with an `sr-only` list. RTL reads
               through `aria-hidden`, so `getByText` passed either way and only the tree says
-              which; `CategoryDonut.test.tsx` asserts the containment rather than the text. */}
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <p className="font-display text-2xl font-bold">{formatWhole(spent)}</p>
-            <p className="text-base-content/60 text-xs">Total spent</p>
-          </div>
-        </div>
+                which; `CategoryDonut.test.tsx` asserts the containment rather than the text.
 
-        {/* AC2 holds by construction: this is the same `spent` field `BudgetCard` prints, off the
-            same response, from the one request PET-20 built the endpoint around. Through the same
-            `formatWhole`, so the equality is visible rather than merely true. */}
-        <ul className="flex flex-col gap-2">
-          {sorted.map((category, index) => (
-            <li key={category.id} className="flex items-center gap-2 text-sm">
-              {/* aria-hidden: the row's own text already names the category, the same call
-                  `CategoryChip` and `ui/Input`'s `$` prefix make about a decorative mark. */}
-              <span
-                className={`size-2.5 shrink-0 rounded-full ${categoryDotClass(category.color)}`}
-                aria-hidden="true"
-              />
-              <span className="grow truncate">{category.name}</span>
-              <span className="font-medium">{formatWhole(category.spent)}</span>
-              {/* The apportioned integer, read from the same array the ring's slices took theirs
-                  from, so a row and its slice cannot disagree by a point. */}
-              <span className="text-base-content/60 w-9 text-right">{percents[index] ?? 0}%</span>
-            </li>
-          ))}
-        </ul>
+                **Both lines are `<span>`s, and a `<p>` here is a real defect rather than a style
+                choice.** daisyUI ships `.card-body p { flex-grow: 1 }`, and this overlay is a
+                `flex-col` inside `.card-body` - so as paragraphs the two lines each grew to half
+                the overlay's height and rendered their text at the **top** of their own half,
+                putting the amount's centre 44px above the hole's and the caption's 52px below it -
+                96px apart, with neither line inside the hole at all. The pair's own midpoint stayed
+                on the centre, which is what made it read as a positioning mystery: nothing was
+                off-centre, the two lines were shoved apart. `grow-0` does not fix it - daisyUI's
+                selector is (0,1,1) against a utility's (0,1,0) and wins on specificity - which is
+                the trap `frontend/CLAUDE.md` records against the same rule on the inline axis. A
+                `<span>` is simply not matched by the selector. */}
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="font-display text-2xl font-bold">{formatWhole(spent)}</span>
+              <span className="text-base-content/60 text-xs">Total spent</span>
+            </div>
+          </div>
+
+          {/* AC2 holds by construction: this is the same `spent` field `BudgetCard` prints, off the
+              same response, from the one request PET-20 built the endpoint around. Through the same
+              `formatWhole`, so the equality is visible rather than merely true.
+
+              **Every row's content is still rendered here, on the server.** `LegendRow` owns only
+              the `<li>`'s class and its two pointer handlers, which is what keeps this legend real
+              text in the first HTML response - the thing that makes it the ring's accessible
+              equivalent. It adds no `tabindex` and no role, because the highlight says nothing a
+              row does not already carry in text. */}
+          <ul className="flex flex-col gap-2">
+            {sorted.map((category, index) => (
+              <LegendRow key={category.id} categoryId={category.id}>
+                {/* aria-hidden: the row's own text already names the category, the same call
+                    `CategoryChip` and `ui/Input`'s `$` prefix make about a decorative mark. */}
+                <span
+                  className={`size-2.5 shrink-0 rounded-full ${categoryDotClass(category.color)}`}
+                  aria-hidden="true"
+                />
+                <span className="grow truncate">{category.name}</span>
+                <span className="font-medium">{formatWhole(category.spent)}</span>
+                {/* The apportioned integer, read from the same array the ring's slices took theirs
+                    from, so a row and its slice cannot disagree by a point. Kept last, because
+                    `CategoryDonut.test.tsx` reads the percent off the row's `lastElementChild`. */}
+                <span className="text-base-content/60 w-9 text-right">{percents[index] ?? 0}%</span>
+              </LegendRow>
+            ))}
+          </ul>
+        </CategoryHoverProvider>
       </div>
     </section>
   );
