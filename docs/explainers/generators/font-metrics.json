@@ -1,0 +1,174 @@
+{
+ "Cinzel": {
+  "cap_em": 0.7,
+  "features": [
+   "kern"
+  ],
+  "tnum": false,
+  "weights": 6
+ },
+ "Cormorant Garamond": {
+  "cap_em": 0.625,
+  "features": [
+   "tnum",
+   "lnum",
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": true,
+  "weights": 5
+ },
+ "Crimson Pro": {
+  "cap_em": 0.5732,
+  "features": [
+   "tnum",
+   "pnum",
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": true,
+  "weights": 8
+ },
+ "EB Garamond": {
+  "cap_em": 0.65,
+  "features": [
+   "tnum",
+   "pnum",
+   "kern",
+   "liga"
+  ],
+  "tnum": true,
+  "weights": 5
+ },
+ "Figtree": {
+  "cap_em": 0.7,
+  "features": [
+   "tnum",
+   "pnum",
+   "kern",
+   "case"
+  ],
+  "tnum": true,
+  "weights": 7
+ },
+ "IBM Plex Sans": {
+  "cap_em": 0.698,
+  "features": [
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": false,
+  "weights": 7
+ },
+ "IM Fell English SC": {
+  "cap_em": 0.6919,
+  "features": [
+   "kern"
+  ],
+  "tnum": false,
+  "weights": 1
+ },
+ "Inter": {
+  "cap_em": 0.7275,
+  "features": [
+   "tnum",
+   "pnum",
+   "kern",
+   "case"
+  ],
+  "tnum": true,
+  "weights": 9
+ },
+ "Lora": {
+  "cap_em": 0.7,
+  "features": [
+   "tnum",
+   "pnum",
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": true,
+  "weights": 4
+ },
+ "Manrope": {
+  "cap_em": 0.72,
+  "features": [
+   "tnum",
+   "pnum",
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": true,
+  "weights": 7
+ },
+ "Nunito": {
+  "cap_em": 0.705,
+  "features": [
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": false,
+  "weights": 9
+ },
+ "Playfair Display": {
+  "cap_em": 0.708,
+  "features": [
+   "lnum",
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": false,
+  "weights": 6
+ },
+ "Quicksand": {
+  "cap_em": 0.7,
+  "features": [
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": false,
+  "weights": 5
+ },
+ "Rubik": {
+  "cap_em": 0.7,
+  "features": [
+   "tnum",
+   "pnum",
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": true,
+  "weights": 7
+ },
+ "Source Sans 3": {
+  "cap_em": 0.66,
+  "features": [
+   "pnum",
+   "kern",
+   "liga"
+  ],
+  "tnum": false,
+  "weights": 8
+ },
+ "Spectral": {
+  "cap_em": 0.66,
+  "features": [
+   "tnum",
+   "pnum",
+   "kern",
+   "liga",
+   "case"
+  ],
+  "tnum": true,
+  "weights": 7
+ }
+}

@@ -182,6 +182,50 @@ convention and is replaced from the same source, so the tab and the shell agree.
 pins the string so it cannot be half-reverted, and `docs/TODO.md` records the divergence. Nothing
 here reverts toward the design.
 
+### The supplied artwork, and what is superseded
+
+The product owner supplied `SPENDIFICO_LOGO` and `SPENDIFICO_ICON` as SVG and PNG, kept at
+`docs/explainers/assets/logo/`. The mark is a rounded tile carrying a dollar sign, followed by
+"PENDIFICO" - the `$` is doing double duty as the S. Both files were trimmed
+(`docs/explainers/generators/trim_svg.py`): 43% and 41% of each canvas was empty, and each carried
+exporter junk including **a stroke-only duplicate of the box outline in the box's own colour**,
+which had to go rather than stay, because once the fill becomes a theme token a leftover stroke is
+a hardcoded purple hairline around a themed box.
+
+**"The supplied SVG becomes the mark" above is superseded for the in-app lockup, and stands for
+the favicon.** The artwork is set in a typeface, IM Fell English SC, so the letterforms are not
+bespoke and the wordmark can be *text*. That retires the objection this plan was written on, which
+was that no font reproduces them. So:
+
+- **The in-app lockup is HTML and CSS**, a `primary` tile carrying a `warning` `$` with the
+  wordmark beside it, all in the display face. The exact size relation is measured rather than
+  guessed: `font-size = tile height x 0.6146 / (the family's cap/em)`.
+- **The favicon stays vector.** `app/icon.svg` is served as a static file and an SVG loaded as an
+  image cannot fetch a webfont, so `<text>` there would render in whatever the viewer's machine
+  happens to have. The trimmed icon path is what ships.
+
+Three findings from building the preview page belong here, because each is a trap rather than a
+detail. A **non-zero viewBox origin** is one: referencing a mark through `<use>` inside an `<svg>`
+carrying the same viewBox applies the offset twice, so the artwork slides out of its own box and
+clips. Both trimmed files are therefore normalised to `0 0 W H` with a translate on a group, which
+keeps every `d` byte-identical. The **corner radius is exactly 1/6 of the tile** (arc 16.5725 of
+99.4331), so it belongs in a percentage rather than as three hardcoded pixel values - and since the
+path draws its own corners, the tile needs no CSS radius at all, which makes today's `rounded-lg`
+redundant. And a **ring cannot be an inset shadow behind the tile**: an inset box-shadow paints
+under the element's content, and the content is an opaque square, so it would be invisible. If a
+ring is ever wanted it has to composite over the tile or be a stroke inside the SVG.
+
+**The colour mapping is the product owner's, taken against the measurement.** A `primary` tile with
+a `warning` `$` measures 1.37:1 in `abyss` and clears 3:1 only in stock `light`. Four alternatives
+that pass everywhere were drawn and priced in
+`docs/explainers/logo-tile-options-preview.html`; the mapping was chosen anyway, knowingly, and
+that page is the record of what it was chosen over.
+
+**One accessibility consequence.** The visible text becomes "PENDIFICO" with a `$` for the S, which
+a screen reader renders as "dollar P E N D I F I C O", and `Sidebar.test.tsx` pins the string
+"Spendifico". The lockup therefore needs an explicit accessible name with the visible glyphs hidden
+from the accessibility tree.
+
 ## The typography audit
 
 Two families load through `next/font/google` in `app/fonts.ts`: Inter as `--font-sans`, Plus
@@ -194,6 +238,46 @@ the four routed views, the six access frames and Storybook; decide whether the t
 the ad-hoc scale stand; record the decision either way. **"No change" is an acceptable outcome
 and is recorded as a decision with its reasoning**, which is the point: an unanswered item comes
 back, a decided one does not.
+
+### The outcome: Crimson Pro for display, Inter stays
+
+The audit is answered, and the answer is not "no change". **Plus Jakarta Sans is replaced by
+Crimson Pro** as `font-display`, which is also the wordmark's face - the product owner's
+requirement was that the mark and the page titles share a family. **Inter stays** as `--font-sans`.
+Eight candidate display faces and six body faces were measured from their own font binaries and
+drawn at matched cap height in `docs/explainers/font-pairing-review.html`.
+
+Two constraints drove it, and both are the silent kind that a visual comparison alone would miss.
+
+**A display face needs real weights, because 25 of the 26 `font-display` call sites pair it with
+`font-bold` or `font-semibold`.** A single-weight family gets synthesized bold at every one of
+them. That is what ruled out the artwork's own IM Fell English SC (one weight), along with its
+rendering lowercase as small caps, so "Dashboard" would read "Dᴀsʜʙᴏᴀʀᴅ". Crimson Pro has eight
+weights, 200 to 900.
+
+**A body face needs a `tnum` feature, because six call sites depend on `tabular-nums`** and the
+class is inert without one - `TransactionRow` ("so the column's digits line up down the page") and
+`BudgetField` ("so the digits stop shifting as they are typed") say why in their own comments.
+Quicksand, the product owner's presentation body face, has no `tnum`, and neither do Nunito, Source
+Sans 3 or IBM Plex Sans. Keeping Inter sidesteps this entirely. Crimson Pro carries `tnum` too,
+which matters because one heading in this app *is* a number: `font-display text-4xl font-bold
+tabular-nums` on the transaction detail amount.
+
+**Crimson Pro is the least dense of the eight**, which was the brief: `cap/em` 0.5732, the lowest
+measured, so it carries the most air around its capitals.
+
+**That lightness has a consequence, and it is the one mechanical cost of this choice.** Crimson
+Pro's caps are **76.9%** the height of Plus Jakarta Sans's at the same font-size (0.5732 against
+0.7450), so every heading would read about a quarter smaller if the sizes were left alone. Matching
+them optically means multiplying by 1.300, which lands close enough to Tailwind's own steps to be a
+one-step bump: `text-lg` to `text-2xl`, `text-2xl` to `text-3xl`, `text-3xl` to `text-4xl`,
+`text-4xl` to `text-5xl`. That pass over the 26 call sites **is** the "per-element type sizes and
+spacing" gap `docs/TODO.md` has listed since PET-74, so this ticket closes that entry rather than
+adding to it.
+
+**The wordmark gets tracking, and nothing else does.** `letter-spacing` on the wordmark alone opens
+the mark without touching a single heading or paragraph, which makes it free to tune; the ladder in
+the review page runs 0 to 0.12em and 0.04em is the starting point.
 
 ## Order of work
 
@@ -227,9 +311,21 @@ exactly once and then automating the measurement nobody needs again.
       wearing its own `data-theme` and drawing the eight swatches, native radios underneath
 - [ ] Update `ThemeField` stories and tests; assert the attribute-and-cookie writes rather than
       class strings
+- [x] Trim the supplied artwork, normalise both origins to `0 0 W H`, and commit the originals,
+      the trimmed pair, the generators and the two review pages under `docs/explainers/`
+- [x] Decide the logo colour mapping against measurement, and the display and body faces against
+      the font binaries; record both, including what each was chosen over
+- [ ] Swap `app/fonts.ts` to Crimson Pro plus Inter, remap the `--font-display` token, and apply
+      the same loaders in `.storybook/preview.ts`
+- [ ] Bump the 26 `font-display` call sites one Tailwind step to compensate for Crimson Pro's
+      lower cap height, closing the `docs/TODO.md` type-sizes entry
 - [ ] Unify the logo into one component with `size` and `tone`, replace both call sites, drop
-      the Sidebar copy, replace the glyph with the supplied asset, replace `app/icon.svg`
-- [ ] Run the typography audit and record its outcome, "no change" included
+      the Sidebar copy, build the lockup as text in the display face with `letter-spacing` on the
+      wordmark only, and give it an explicit accessible name with the glyphs hidden
+- [ ] Replace `app/icon.svg` from the trimmed icon path, which stays vector because an SVG loaded
+      as an image cannot reach a webfont
+- [ ] Confirm the tile needs no CSS radius now the path draws its own corners, and that no ring is
+      drawn behind an opaque tile
 - [ ] Amend `frontend/CLAUDE.md`: the theme list, the guard now being automated and what it does
       not cover, the `globals.css` contract growing the override blocks, and the picker replacing
       the segmented row
