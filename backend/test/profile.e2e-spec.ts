@@ -325,6 +325,16 @@ describe('Profile (e2e)', () => {
       // currencies only, because money.ts multiplies by 100 unconditionally.
       ['a zero-decimal currency', { currency: 'JPY' }, 'currency'],
       ['a three-decimal currency', { currency: 'KWD' }, 'currency'],
+      // Two-decimal, real, and offered by this very endpoint until PET-85 cut
+      // the allowlist to three by product decision. It is the only row here
+      // rejected for a reason the exponent rule cannot explain, so it is what
+      // fails if somebody restores the long list without meaning to - every
+      // other row would still pass against twenty-nine codes.
+      [
+        'a currency dropped from the allowlist',
+        { currency: 'CHF' },
+        'currency',
+      ],
     ])('400s %s, naming the field', async (_case, payload, field) => {
       await expectUntouched(async () => {
         const response = await patch(bearer, payload).expect(400);

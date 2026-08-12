@@ -266,6 +266,23 @@ rather than a number to restate here - with `DEFAULT_CURRENCY = 'EUR'`
   figure in the app into a silent factor of 100 or 1000. A wider list is a real feature and it
   needs a per-currency exponent first; `docs/TODO.md` carries it.
 
+**The exponent rule is necessary and not sufficient as of PET-85, and that is the sentence to carry
+out of this section.** Until then the list was mechanically derived - every ISO code with an exponent
+of 2, twenty-nine of them - which reads as a principled allowlist and is really the residue of a
+validation fix: nobody chose those codes. The frontend renders this exact list into a picker built
+for three, so twenty-nine of them overflowed the viewport with no way to scroll, and the product
+owner cut it to `EUR`, `USD`, `GBP`. So a code now has to clear the exponent rule **and** be chosen,
+and this file deliberately still does not say how many there are - the list is `src/common/currency.ts`'s to count, and that file's
+docblock is where the second half of the rule is argued.
+
+Two consequences reach past this section. The published enum is what the frontend's picker is typed
+off, so trimming the list is an `npm run api:sync` and a frontend list that must stay exhaustive over
+it, and skipping the sync degrades that union to `string` and silently retires both compile-time
+proofs. And nothing here rewrites stored data: a profile holding a code the list no longer carries
+keeps it and still renders, because `PATCH /api/profile` only ever receives fields a user touched.
+That is deliberate - the alternative is a migration that overwrites somebody's stated preference to
+satisfy a list they never saw.
+
 ## Transaction endpoints
 
 **Nothing this feature touches is derived, and nothing it returns is stored.** `GET

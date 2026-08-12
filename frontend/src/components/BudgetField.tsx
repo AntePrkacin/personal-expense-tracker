@@ -77,6 +77,23 @@ const BOX: Record<'valid' | 'invalid', string> = {
  * `w-56` rather than the trigger's width: a popover is out of flow and inherits nothing. No
  * `max-h`/`overflow` pair, unlike that file - three currencies fit, and a scroll container for
  * three rows would be furniture with nothing to do.
+ *
+ * **That sentence was true, then false for two tickets, and is true again - which is the reason to
+ * read it before growing `SUPPORTED_CURRENCIES` rather than after.** PET-72 took the list to
+ * twenty-nine codes for a good reason elsewhere (an exponent-2 allowlist, closing a defect that
+ * inflated every JPY amount a hundredfold) and nothing brought anyone back here. Measured at that
+ * point: the panel stood **1024px** in a **757px** viewport, overflowing by **294px**, with
+ * `max-height` computing to `none` and `scrollHeight === clientHeight`, so it did not scroll
+ * either. The last codes were painted and unreachable - a popover is in the **top layer** and
+ * positioned against the viewport, so scrolling the page does not bring its bottom back. PET-85
+ * cut the list to three, which restores the condition this constant was measured under instead of
+ * bounding a panel nobody had designed at that length.
+ *
+ * So the guard here is a **product** one rather than a CSS one, and it lives in
+ * `backend/src/common/currency.ts` where the list does. If that list ever grows past what fits, the
+ * `max-h`/`overflow` pair is the change - `transactions/categories/ColourSelect.tsx` is the working
+ * example one directory over - and this paragraph is the measurement to re-take, in a browser,
+ * because no gate in this repo can see it.
  */
 const PANEL = 'dropdown menu rounded-box bg-base-100 z-10 w-56 p-2 shadow-md';
 
@@ -171,10 +188,16 @@ export function BudgetField({
           <span className="sr-only">Currency</span>
           {/* **Rendered only when it is a real glyph.** `currencySymbol` falls back to the code
               itself for anything outside `SUPPORTED_CURRENCIES`, and this span used to sit
-              unconditionally beside `{currency}` - so a profile holding `CHF`, which the backend
-              accepts because it validates only `@IsISO4217CurrencyCode()`, drew "CHF CHF". The
+              unconditionally beside `{currency}` - so a profile holding `CHF` drew "CHF CHF". The
               symbol is decoration duplicating the code, so the honest fallback is to draw no
-              symbol at all rather than the code twice. */}
+              symbol at all rather than the code twice.
+
+              This stayed reachable through two changes to what "outside the list" means. It was
+              written when the backend validated `@IsISO4217CurrencyCode()` and any of 180 codes
+              could be stored; PET-72 narrowed that to an allowlist and PET-85 narrowed it again to
+              three, and each narrowing left *more* stored codes outside the list rather than
+              fewer. `CHF` is the live example: offered yesterday, not offered today, still
+              rendering. */}
           {symbol === currency ? null : (
             <span aria-hidden="true" className="font-semibold">
               {symbol}

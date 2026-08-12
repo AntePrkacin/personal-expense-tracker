@@ -64,23 +64,36 @@ describe('BudgetField', () => {
       expect(trigger()).toHaveAccessibleName('Currency GBP');
     });
 
-    it('never prints the code twice for a currency with no offered symbol', () => {
-      // **A review found "CHF CHF".** `currencySymbol` falls back to the code itself, and that span
-      // sat unconditionally beside the code - so a profile the backend accepts (it validates only
-      // `@IsISO4217CurrencyCode()`) rendered its code in both. Drawing no symbol is the honest
-      // fallback; the symbol is decoration duplicating the code.
-      render(<Harness currency="CHF" />);
+    it('draws the symbol beside the code for an offered currency', () => {
+      // The positive control for the case below, and it is the half that was missing. Without it,
+      // "never prints the code twice" passes just as well against a component that prints no symbol
+      // at all - which is this repo's standing rule about a check needing its negative beside it,
+      // applied to a subtree rather than to a class.
+      render(<Harness currency="EUR" />);
 
-      expect(trigger()).toHaveAccessibleName('Currency CHF');
-      expect(trigger().textContent).toBe('CurrencyCHF');
+      expect(trigger().textContent).toBe('Currency€EUR');
     });
 
-    it('shows the code for a currency the picker cannot offer', () => {
-      // The backend accepts every ISO 4217 code, so a profile can hold one this app never lists.
-      // The trigger says what is stored rather than guessing a glyph.
-      render(<Harness currency="JPY" />);
+    it('never prints the code twice for a currency the picker does not offer', () => {
+      // **A review found "CHF CHF".** `currencySymbol` falls back to the code itself, and that span
+      // sat unconditionally beside the code, so a profile holding an unoffered code rendered it in
+      // both. Drawing no symbol is the honest fallback; the symbol is decoration duplicating the
+      // code.
+      //
+      // **`CHF` and `JPY` reach this by two different routes, which is why one case covers both.**
+      // Until PET-85 these were two cases and the comments explained the difference wrongly: `CHF`
+      // was an *offered* code whose design symbol happened to be its own letters, and `JPY` was
+      // unoffered because the backend then validated `@IsISO4217CurrencyCode()`. Both those reasons
+      // are now history - `CHF` was dropped from the allowlist and `JPY` never cleared the
+      // exponent-2 rule - so they exercise one branch and are asserted as one.
+      for (const code of ['CHF', 'JPY']) {
+        const { unmount } = render(<Harness currency={code} />);
 
-      expect(trigger()).toHaveAccessibleName('Currency JPY');
+        expect(trigger()).toHaveAccessibleName(`Currency ${code}`);
+        expect(trigger().textContent).toBe(`Currency${code}`);
+
+        unmount();
+      }
     });
 
     it('reports its own collapsed state and does not claim to be a menu', () => {

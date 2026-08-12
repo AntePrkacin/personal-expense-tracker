@@ -736,6 +736,25 @@ union. The picker's list `satisfies readonly { code: CurrencyCode; ... }[]`, so 
 stops accepting fails `npm run build` instead of shipping an option that 400s. `docs/TODO.md` carries
 what a wider list needs, which is a per-currency exponent.
 
+**PET-85 cut that allowlist to three - `EUR`, `USD`, `GBP` - and the reason is a rendering defect
+rather than a validation one, which is why it is worth a paragraph here rather than a number
+change.** PET-72's list was every ISO code with an exponent of 2, twenty-nine of them, which is the
+right question for a validator and the wrong one for a picker: nobody chose those codes, and
+`components/BudgetField.tsx` renders them into a panel built and measured for three. Measured at
+twenty-nine, that panel stood 1024px in a 757px viewport, overflowed by 294px, computed `max-height:
+none` and did not scroll - and because a platform popover is in the **top layer**, positioned against
+the viewport, scrolling the page could not reach the codes below the fold. So the product owner
+specified the option list, which settles the tech spec's **A6** ("the option list is unknown; ship
+with USD until specified"), and the panel's own constant carries the measurement.
+
+Two things about it generalise past currencies. **The exponent rule is necessary and not sufficient
+now**: a code has to clear it to be eligible and then somebody has to decide the picker offers it, so
+adding one back is a product decision plus a browser check, in that order. And **nothing in this repo
+can catch the defect it fixes** - every gate was green at twenty-nine, because a list's length is not
+a class, a type or an assertion anybody had written. `lib/money.test.ts` pins the whole list by
+equality rather than its head for exactly that reason, which is the cheapest half of the guard; the
+other half is the walk.
+
 **`lib/amount.ts` is the fourth module in that family**, and it exists because `docs/TODO.md`
 predicted it and named the trigger: a third _form_ validating an amount without going through
 `(app)/transactionForm.ts`. The Settings Preferences card is that form. It holds `isPositiveAmount`
