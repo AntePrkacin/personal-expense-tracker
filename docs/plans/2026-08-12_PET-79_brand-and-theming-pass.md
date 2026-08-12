@@ -411,11 +411,20 @@ than two.
 
 **One implementation of the theme parse, not two, and that decides the data flow.** A parser in the
 frontend guard and a second in the page builder is the restatement this repo treats as a defect. So
-`lib/themeGuard.ts` stays the single implementation, the one with tests around it, and it **emits
-`docs/explainers/category-palette/theme-data.json`** - every theme's effective token values and
-measured contrast. `build-palette-page.js` is then a dumb renderer over that committed JSON, exactly
-as `build-icon-page.js` renders over its cached `lucide-categories.json`, and `check-palette-page.js`
+`lib/themeGuard.ts` stays the single implementation, the one with tests around it, and it computes
+every theme's effective token values and measured contrast. `build-palette-page.js` is then a dumb
+renderer over the committed `docs/explainers/category-palette/theme-data.json`, exactly as
+`build-icon-page.js` renders over its cached `lucide-categories.json`, and `check-palette-page.js`
 fails if the committed page does not match a fresh render.
+
+**Which command writes that JSON is a decision, and the wrong answer is the tempting one.** A Jest
+test must not write it: a suite that regenerates a committed artifact passes on a machine whose
+output has drifted, which is the opposite of a gate, and it makes `npm run test` mutate the working
+tree. So **`npm run theme:report` writes it** and the **test asserts the committed file matches what
+the module computes now** - the same division `check-icon-page.js` already draws against
+`build-icon-page.js`. A theme edit therefore fails the suite until the report is re-run and the JSON
+committed, which is the behaviour wanted: the artifact and the theme cannot drift silently, and
+nothing regenerates behind your back.
 
 **The other three theme-embedding explainers keep their hardcoded pair for now** and get only the
 selector rename, `[data-theme='dark']` to `[data-theme='expensa-dark']`, so nothing collides with
