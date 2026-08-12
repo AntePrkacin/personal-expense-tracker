@@ -35,7 +35,7 @@ import { SetupCategoriesScreen } from './SetupCategoriesScreen';
  * The three deliberately close colour pairs `categoryColour.ts` documents are
  * **not** all here, on purpose: this story is for diffing one chip's treatment
  * against the frame, and the pairs are a property of the seed rather than of the
- * component. `docs/explainers/category-colors-icons-description-preview.html` is
+ * component. `docs/explainers/category-palette-preview.html` is
  * where the whole palette is signed off.
  */
 const SAMPLE_TEMPLATES: CategoryTemplate[] = [

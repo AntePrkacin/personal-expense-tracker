@@ -804,6 +804,20 @@ export interface ThemeData {
   floors: { distinguishability: number; nonTextContrast: number };
   grandfathered: [SemanticToken, SemanticToken][];
   themes: ThemeMeasurement[];
+  /**
+   * Every `--color-*` the two Expensa blocks declare, allowlist or not, per theme name.
+   *
+   * **Wider than `themes[].effective` on purpose, and this is what a consumer copying a whole
+   * theme block needs.** `effective` is the seventeen tokens the guard *measures*, so it carries
+   * neither the three `base-100/200/300` surfaces, nor `base-content`, nor PET-74's
+   * `--color-orange` pair - twenty-two colours in total against seventeen.
+   *
+   * It exists because `docs/explainers/icon-set/build-icon-page.js` emits the Expensa block into
+   * its own page and had been doing it from a hand-added `<style>` that the generator deleted on
+   * its next run. Reading it from here rather than parsing `globals.css` a second time is what
+   * keeps one theme parser in this repo.
+   */
+  authoredColours: Record<string, Record<string, string>>;
 }
 
 /**
@@ -829,6 +843,7 @@ export function buildThemeData(sources: ThemeSources, daisyuiVersion: string): T
     },
     grandfathered: GRANDFATHERED_PAIRS.map(([a, b]) => [a, b]),
     themes: measureThemes(sources),
+    authoredColours: parseAuthoredThemeColours(sources.globalsCss),
   };
 }
 

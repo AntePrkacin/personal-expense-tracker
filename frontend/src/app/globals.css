@@ -49,7 +49,37 @@
    not a shadow system" - tokens/elevation.css); the `shadow-*` utilities in
    markup are a separate follow-up, see docs/TODO.md. The radius scale is
    Foundations' sm/md/lg (8/12/16px) on daisyUI's three radius slots; the 20px
-   xl step has no slot and is dropped. */
+   xl step has no slot and is dropped.
+
+   **PET-79 changed three things about this file, and two of the sentences above
+   are now dated rather than wrong.** Read them for the Expensa pair, which is
+   unchanged.
+
+   The plugin registration is no longer `themes: false`: stock `light`, `dark`
+   and `abyss` are registered beside the two authored blocks, so this app ships
+   **five** themes. Registering them by name emits only `[data-theme=...]`
+   selectors for them and no bare `:root` - verified in the built CSS - which is
+   what leaves `expensa-light`'s `default: true` and `expensa-dark`'s
+   `--prefersdark` intact. Both still work exactly as the second paragraph above
+   describes.
+
+   This file therefore contains **one more kind of thing than frontend/CLAUDE.md
+   used to allow**: plain unlayered `[data-theme='<name>']` blocks overriding
+   individual tokens inside a registered stock theme. Seven declarations across
+   three themes, each carrying its own measured before-and-after. Their own
+   header block below the theme blocks is the authority for why they exist and
+   how each value was arrived at - read it before editing one, because every one
+   is the output of a constrained search rather than a choice, and re-picking one
+   by eye re-opens a collision the search closed.
+
+   And "nothing checks that" is no longer true of any of it.
+   `frontend/src/lib/themeGuard.ts` measures every theme and
+   `themeGuard.test.ts` is the gate: a colliding pair that is not grandfathered,
+   a `-content` value that has stopped being legible on its own base, or a stale
+   `docs/explainers/category-palette/theme-data.json` all fail `npm run test`.
+   So a value moved here fails the suite until `npm run theme:report` is re-run
+   and its artifact committed. `--font-display` also moved, from Plus Jakarta
+   Sans to Crimson Pro; src/app/fonts.ts carries that decision. */
 @plugin 'daisyui' {
   themes: light, dark, abyss;
 }
