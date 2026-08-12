@@ -80,7 +80,12 @@ describe('the list', () => {
       />,
     );
 
-    expect(screen.getByText('Last active Yesterday')).toBeInTheDocument();
+    // **Asserted on the caption element rather than as one string**, because a review of PR #92 split
+    // the relative day into `LastActiveTime` - a client component, so that it resolves `today` in the
+    // reader's zone the way the chat row already did. "Last active" is still this screen's copy, so
+    // the two are separate nodes and `getByText` (which reads a node's own text children) matches the
+    // wrapper on the words alone.
+    expect(screen.getByText(/Last active/)).toHaveTextContent('Last active Yesterday');
   });
 
   it('reads the instant in the zone `today` is read in', () => {
@@ -101,7 +106,7 @@ describe('the list', () => {
         />,
       );
 
-      expect(screen.getByText('Last active Today')).toBeInTheDocument();
+      expect(screen.getByText(/Last active/)).toHaveTextContent('Last active Today');
       unmount();
     }
   });

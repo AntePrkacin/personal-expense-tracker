@@ -313,6 +313,81 @@ longer a path a user can take, and two more were asserting `Regenerate` as a **p
 settled"** - that proxy is precisely what changed, so they now assert the skeleton's absence directly
 and the button's absence as the new rule.
 
+## The review round on PR #92, and the one thing it changes about this ticket's scope
+
+A code review of this PR - taken together with PR #88, which had merged without one - reported five
+findings. Two are this ticket's own work and three are PET-76's, and they are all fixed here rather
+than filed, because three of the five sit in files this branch already touches and the other two are
+one-line changes on the screens PET-76 shipped a fortnight earlier. **What that does to the scope
+sentence above is worth stating plainly: "the Dashboard and nothing else" no longer holds.** Three of
+the five are on `/insights`. Taken anyway, at the cost of the boundary, because the alternative is a
+sixth ticket carrying two attribute changes and a docblock correction.
+
+**The pattern across the five is the one PR #88's own review already named**: four of them are the
+cost of a decision made one ticket earlier, surfacing in a place that decision never looked at. Not
+one could fail a gate - every one of them passed `build`, `lint`, `tsc --noEmit` and all 3,199 Jest
+tests on this branch before it was found.
+
+**Item 6 - the History caption and the chat row disagreed about which day it was (PET-76's).**
+`formatMessageTimestamp`'s docblock asserted that they "cannot disagree", on the ground that PET-76
+had lifted `calendarDateOfInstant` so both read the *instant* the same way. True, and it settles the
+instant rather than the *viewer*: PET-76 made the chat row client-only for the zone reason
+`MessageTime.tsx` records at length, and left the caption server-rendered inside a Server Component,
+so its `today` was the frontend host's. A message at `2026-08-12T23:00:00Z` read at `01:00Z` from
+`Europe/Zagreb` against a `TZ=UTC` frontend is "Today, 1:00 AM" on its row and "Last active
+Yesterday" in the list. `insights/LastActiveTime.tsx` is the caption's own client component,
+`insights/useHydrated.ts` is the seam both share, and both suites render through two renderers,
+because a disagreement between the server pass and the client pass is invisible to a suite that
+performs one. **The rule to carry: two callers sharing a formatter agree about a viewer-dependent
+value only if they also share the viewer.**
+
+**Item 7 - `canRegenerate` was missing a state and gating on the wrong term (item 5.4's).** Two
+findings, one condition. It read `stalled || (displayState === 'empty' && !isEmpty)`, and the
+docblock immediately above it said `isEmpty` is excluded "on purpose" because an account with nothing
+logged has nothing to analyse - which is a fact about the *account*, so binding it inside one arm left
+the other open: an account that created and then deleted its only transaction, whose triggered run
+then stalled, drew the unlock copy with **both** "Add transaction →" and "Regenerate". The suite
+contained a case asserting exactly that pair must not happen **and** a case asserting it does, each
+green, reached through different terms. And the enumerated three dead ends are four: a run that fails
+*after* a previously successful set leaves `displayState` on `ready`, the card looking healthy, and
+the prose on it predating the write that triggered the failed run - with no control able to start
+another. `InsightPoll` exposes `runFailed` for it, derived from `generatedAt` not moving across a
+settle, because the contract publishes no failure. The same signal fixed a lie beside it: a manual run
+that changed nothing was posting "Insights updated.". **What the flag cannot see is a run that failed
+before the mount existed**, which needs a nullable field on `InsightSetResponseDto` and is therefore
+out of scope for a UI/UX round - `docs/TODO.md` carries it, beside item 5.2's entry, which wants a
+field on the same DTO for the same reason.
+
+**Item 8 - the chat's live region announced twenty timestamps on load (PET-76's).** `role="log"` with
+`aria-live="polite"` and no `aria-relevant`, whose default is `additions text` - so the post-hydration
+fill `MessageTime` performs is a text mutation inside the region and a resumed twenty-turn
+conversation could be read out as a burst of bare clock times before the reader reached a message. It
+sets `aria-relevant="additions"` now, which keeps a new reply announced (its timestamp is inside the
+added subtree) and drops the announcement nobody wanted. `aria-hidden` on the time was rejected: it
+would remove the timestamp from the accessibility tree, where the whole reason PET-76 added it is
+that when a message was sent is content.
+
+**Item 9 - the markdown table's zebra, and the comment four lines above it that let it through
+(PET-76's).** `table-zebra` paints an even row `base-200` and `.chat-bubble` is `base-300`. The walk
+is where this stopped matching the report: the review priced the stripe at "about 1.03:1" and called
+it invisible, and composited against the real bubble it is **1.072:1 in light** - invisible, and below
+the `1.115`/`1.152` this repo has twice rejected - and **1.277:1 in dark**, where `base-200` is the
+*darker* of the two and the stripe genuinely paints. So the defect is not an invisible stripe, it is
+**a stripe that exists in one theme only**, and a walk in either theme alone would have reported the
+other one's answer. Deleted rather than re-tinted: `.table`'s own bottom border measures 1.114:1 light
+and 1.170:1 dark, so in dark it was within 0.1 of the stripe it sat under and in light it was doing
+all of the work. The `code` mapping's comment beside it said the bubble "*is* `base-200`", which is
+wrong (`chat.css` says `base-300`) and is what let the table repeat the mistake: a reader checking
+`table-zebra` against that sentence finds `base-200` on `base-200`, concludes it cannot happen, and
+moves on. Both are corrected, and `frontend/CLAUDE.md`'s trap list gains the entry.
+
+**One finding was raised and is not fixed, and one was raised and dismissed.** The dark-theme
+`btn-primary` label at 3.90:1 is real, pre-existing (the untouched header button measures identically)
+and already recorded with its deferral in the commit this branch made for it - counted as noise here
+rather than re-litigated. And the `secondary` Regenerate on the new `bg-primary/20` banner looks like
+the documented bare-`.btn`-on-`base-200` trap and is an improvement: on the old `bg-neutral` banner
+that button measured 1.000:1, which is item 5.1's whole finding.
+
 ## Out of scope
 
 - **Every screen that is not the Dashboard.** Same boundary PET-76 held.
@@ -354,6 +429,17 @@ and the button's absence as the new rule.
 - [ ] Further items, appended as they are reported
 - [ ] Rewrite PET-78's description with these as real acceptance criteria
 - [ ] Verify (below), then take the PR out of draft
+- [ ] Item 6: add `insights/useHydrated.ts` and `insights/LastActiveTime.tsx`; the History screen
+      renders the caption through it and stays a Server Component
+- [ ] Item 6: correct `formatMessageTimestamp`'s docblock, which asserted the two surfaces could not
+      disagree, and both `AssistantHistoryScreen` caption assertions the split changes
+- [ ] Item 7: `canRegenerate` leads on `!isEmpty`; `InsightPoll` exposes `runFailed`, and a manual run
+      that produced nothing posts the failure toast rather than the confirmation
+- [ ] Item 7: invert the suite case that pinned no Regenerate after a failed run, split the stalled
+      empty-account case in two, and record the residual DTO gap in `docs/TODO.md`
+- [ ] Item 8: `aria-relevant="additions"` on the chat log, pinned as an attribute
+- [ ] Item 9: drop `table-zebra`; correct the `code` mapping's token; add the two-neutral-surfaces
+      entry to `frontend/CLAUDE.md`'s trap list with both themes' measured figures
 
 ## Verification
 
@@ -394,3 +480,24 @@ defect that passes all of the above:
   currency symbol and no digits from the amount, while the bar's own label still paints it. Measured
   on the real `/dashboard`, since Recharts never activates a tooltip under jsdom - which is also why
   no Jest case covers this and the walk is the whole check.
+- **Items 6, 8 and 9**: on Storybook rather than the real screens, because all three subjects are on
+  `/insights`, which is behind the session gate, and none of them needs an account -
+  `Screens/Assistant chat`'s `Markdown` story draws the table and the log region, and
+  `Screens/Assistant history`'s `List` draws three captions. Twenty-four checks, both themes.
+  Item 9's zebra is probed the way `docs/agents/claude-tooling.md` prescribes and the way this ticket
+  has now done five times: the modifier is put back on a **clone** of the live table in the same run
+  and its even row composited against the real bubble, so the deleted class is seen painting
+  1.072:1 in light and 1.277:1 in dark rather than being asserted to. That probe is also what caught
+  the review's own figure being wrong and, more usefully, the defect being **theme-dependent** where
+  it was reported as invisible - the check written to the report's number would have failed in dark
+  and looked like a bad harness. `.table`'s surviving border is measured in the same pass so the
+  claim that nothing needs to replace the stripe rests on a number. Item 6 is read off the rendered
+  captions: each `<time>` has resolved a day after hydration, each wrapper reads "Last active
+  {day}" as one sentence, each carries its ISO instant in `datetime`, and no row link's text contains
+  "Last active" - which is the accessible-name decision the split must not break. Item 8 is the
+  attribute plus the fact that the timestamps mutating inside the region are real and filled.
+- **Item 7 is Jest's alone**, and deliberately: every state it touches needs an account whose run
+  fails or hangs, which is the same reason item 5.4's own presence checks are Jest's. All three new
+  cases were watched failing with their fix reverted - the two `isEmpty` cases against the old
+  condition and the toast case against the unconditional success post - because a check that has
+  never been seen to fail is not evidence.

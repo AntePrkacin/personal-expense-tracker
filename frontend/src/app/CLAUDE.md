@@ -2191,6 +2191,52 @@ each story from `render` or `meta.component` and never apply one. Ten story file
 two-line `PreferencesProvider` wrapper and needed a second provider on the same day, which is what
 earned the shared frame.
 
+**A code review of PR #92 found five things across the Dashboard and the assistant, and four of the
+five are the cost of a decision made one ticket earlier rather than a defect in the ticket under
+review.** None could fail a gate. Two reach past their own file.
+
+**The first is that two callers sharing a formatter agree about a viewer-dependent value only if they
+also share the viewer**, which is the rule to carry and which this file had already half-written.
+`formatMessageTimestamp`'s docblock said a chat row and the History caption "cannot disagree about
+which day an instant fell on", because PET-76 had lifted `calendarDateOfInstant` so both read the
+_instant_ the same way - and that settled the instant and said nothing about whose `today` it was
+measured against. PET-76 made the chat row client-only for exactly the zone reason `MessageTime.tsx`
+records; the History caption stayed server-rendered inside a Server Component, so its `today` was the
+frontend host's. Measured: with the frontend at `TZ=UTC` and the reader in `Europe/Zagreb`, a message
+at `2026-08-12T23:00:00Z` read at `01:00Z` is "Today, 1:00 AM" on its own row and "Last active
+Yesterday" in the list - one fact, two answers, two screens of one feature. `insights/LastActiveTime.tsx`
+is the caption's own client component and `insights/useHydrated.ts` is the seam both now share, lifted
+at its **second** consumer on `lib/pickerScroll.ts`'s exception rather than the rule of three. Two
+things about it worth knowing before writing another server-rendered date. **The wrong zone is the
+same defect whether or not anything hydrates**: `MessageTime`'s version was a hydration mismatch React
+could see, and this one had no client pass at all, so the server's zone was simply the answer with
+nothing to warn about it. And the screen **stays a Server Component** - the boundary is on the one
+element that needs it, `SidebarNav`'s and `TrendChart`'s rule, which is also why the words "Last
+active" stay in the screen and only the day moved.
+
+**The second is that an exclusion belonging to the account cannot be written as a term on one state.**
+`InsightSummarySlot`'s Regenerate condition was `stalled || (displayState === 'empty' && !isEmpty)`,
+and its own docblock said `isEmpty` is "excluded on purpose" because an account with nothing logged has
+nothing to analyse. That reasoning is about the account, so binding it inside one arm left the other
+arm open: an account that created and then deleted its only transaction, whose triggered run then
+stalled, drew the unlock copy with **both** "Add transaction →" and "Regenerate" on it - the exact pair
+another case in the same suite asserts must not happen, reached through the term that case does not
+touch. It reads `!isEmpty && (...)` now. The same review found the condition missing a **fourth** dead
+end where the docblock enumerates three: a run that fails _after_ a previously successful set, where
+the read skips the `failed` row, `displayState` is `ready`, the card looks healthy, and the prose on it
+predates the write that triggered the run. `InsightPoll` exposes `runFailed` for it, derived from
+`generatedAt` not moving across a settle because the contract publishes no failure at all - and the
+same signal fixed a lie beside it, since a manual run that changed nothing was posting "Insights
+updated.". **What that flag cannot see is a run that failed before the mount existed**, which needs a
+field on the DTO and is `docs/TODO.md`'s.
+
+The other three are local and documented where they happen: the chat's `role="log"` now sets
+`aria-relevant="additions"`, because the default `additions text` made twenty timestamps filling in
+just after hydration into twenty announcements before the reader had reached a message; and
+`AssistantMarkdown`'s table drops `table-zebra`, whose stripe a walk measured as invisible in light and
+visible in dark - `frontend/CLAUDE.md`'s trap list owns that one, including the comment whose wrong
+token let it through.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

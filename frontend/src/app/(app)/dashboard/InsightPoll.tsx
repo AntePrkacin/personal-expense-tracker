@@ -103,6 +103,36 @@ type InsightPoll = {
    */
   stalled: boolean;
   /**
+   * Whether a run this mount watched settled without producing a newer set.
+   *
+   * **The fourth dead end, and a review of PR #92 found it missing.** `InsightSummarySlot`'s own
+   * docblock enumerates three states that reach the card with no run coming, and this is the one it
+   * left out: a run that **fails after a previously successful set**. `insights.service.ts` skips a
+   * `failed` row and serves the newest `ready` one, so `state` comes back `ready`, the card looks
+   * perfectly healthy, and the account sits on insights that predate its own last write with no
+   * control on screen that could start another. Invisible precisely because nothing about it looks
+   * broken - which is what distinguishes it from the enumerated "first run failed", where there is no
+   * set at all and the empty copy shows.
+   *
+   * **It is derived rather than published, because the contract publishes nothing to read.**
+   * `InsightSetResponseDto` carries `state` and `generatedAt` and no notion of a failure -
+   * deliberately, since A26 makes a failed run invisible - so what this mount can see is that a run
+   * it was watching ended with the **same `generatedAt`** it started from. `generatedAt` is written
+   * at exactly one place backend-side, inside the transition to `ready`, so it advances if and only
+   * if a run really completed. Two runs reach this flag: one that failed, and one whose generator
+   * produced nothing to store. Both are the same fact for this card's purposes - the set on screen is
+   * the one that was already there, and nothing further is coming.
+   *
+   * **What it deliberately does not cover is a run that failed before this mount existed.** Loading
+   * the Dashboard fresh onto a stale set answers `ready` with no signal anywhere, and no arithmetic
+   * over this response can recover one. Closing that needs a field on the DTO;
+   * `docs/TODO.md` carries it rather than this file pretending to more than it can see.
+   *
+   * Client-only and cleared by a fresh server read, exactly like {@link stalled}: it is a fact about
+   * what this mount observed rather than about the account.
+   */
+  runFailed: boolean;
+  /**
    * Whether the period on screen is the one insights describe.
    *
    * **Resolved once in `page.tsx` and threaded, never re-derived here.** That is PET-26's rule
@@ -150,6 +180,15 @@ export function InsightPollProvider({
    */
   const [stalled, setStalled] = useState(false);
 
+  /**
+   * Whether a run this mount watched settled on the set it started from - see the field's docblock.
+   *
+   * Client-only and cleared by a fresh read for `stalled`'s reason, and cleared by a click for the
+   * reason that one is: a new run is a new question, and rendering the previous run's dead end
+   * through it would leave the button describing an answer nobody is waiting on any more.
+   */
+  const [runFailed, setRunFailed] = useState(false);
+
   // **The prop wins when it changes, and this is what starts the poll from a save.** The Add
   // transaction modal calls `router.refresh()`, which re-runs the Server Component and hands this
   // provider a set whose `state` has moved from `empty` to `generating` - with no click anywhere
@@ -175,6 +214,11 @@ export function InsightPollProvider({
     // is discarded with it - otherwise a `router.refresh()` landing after the ceiling would render
     // a set the server has just confirmed as generating through the stalled treatment.
     setStalled(false);
+    // Same argument for the same reason: this flag says a run ended on the set it started from, and
+    // a read that moved `state` or `generatedAt` is a newer answer than that. Note the guard above
+    // is what makes this safe to clear unconditionally - a refresh that changed neither field does
+    // not reach here, so a stale set being re-served cannot silently retract the dead end.
+    setRunFailed(false);
   }
 
   // **No poll on a period navigated back to.** Both consumers render nothing there, so a timer
@@ -215,6 +259,23 @@ export function InsightPollProvider({
     manualRunRef.current = manualRun;
   }, [manualRun]);
 
+  /**
+   * The `generatedAt` the poll compares a settle against, mirrored so it is not a dependency.
+   *
+   * **A ref for the reason the paragraph above gives, arrived at from the other direction.** The
+   * effect below is keyed on `generating` alone, deliberately, so that a poll returning another
+   * `generating` set does not restart the loop and lose its own backoff - which means it cannot
+   * name `set.generatedAt` in its dependencies without giving that up. Read **once, at arm time**
+   * into a local rather than at the settle, so the comparison cannot be confused by the mirror
+   * having moved underneath it; declared above the poll so React runs this mirror first on any
+   * commit they share.
+   */
+  const generatedAtRef = useRef(set.generatedAt);
+
+  useEffect(() => {
+    generatedAtRef.current = set.generatedAt;
+  }, [set.generatedAt]);
+
   // restart the loop and lose its own backoff.
   useEffect(() => {
     if (!generating) {
@@ -225,6 +286,10 @@ export function InsightPollProvider({
     let attempt = 0;
     let timer: ReturnType<typeof setTimeout>;
     const startedAt = Date.now();
+
+    // The set this run starts from. A settle carrying this same value is a run that produced
+    // nothing - see `runFailed` on the context type for why that is the only signal available.
+    const startedFrom = generatedAtRef.current;
 
     const tick = async () => {
       try {
@@ -237,6 +302,15 @@ export function InsightPollProvider({
           }
           setSet(next);
           if (next.state !== 'generating') {
+            // Whether this run produced anything at all. See `runFailed` on the context type: the
+            // contract publishes no failure, so an unmoved `generatedAt` across a settle is the
+            // whole of what a run that failed - or that had nothing to store - looks like here.
+            const produced = next.generatedAt !== startedFrom;
+
+            if (!produced) {
+              setRunFailed(true);
+            }
+
             // **Only a run the user asked for is announced (PET-77).** Every transaction and
             // category write regenerates the set backend-side, so a poll settling is usually the
             // tail of a save that already confirmed itself - a second toast there would double
@@ -245,7 +319,20 @@ export function InsightPollProvider({
             if (manualRunRef.current) {
               manualRunRef.current = false;
               setManualRun(false);
-              post({ kind: 'success', message: TOAST_UPDATED });
+              // **Which of the two messages is the same question `runFailed` answers**, and posting
+              // the success one regardless is what this said until a review of PR #92 made the
+              // distinction computable: a run that settled on the set it started from changed
+              // nothing, so "Insights updated." was a confirmation of an update that did not
+              // happen - on the one press where the user is watching for exactly that. The failure
+              // string is the one already used for a request that never landed, and it is right
+              // here for the same reason: what the user asked for did not happen, and pressing
+              // again is the thing to do about it. A stalled run still says nothing, because it
+              // did not finish - see the ceiling below.
+              post(
+                produced
+                  ? { kind: 'success', message: TOAST_UPDATED }
+                  : { kind: 'failure', message: TOAST_FAILED },
+              );
             }
 
             return;
@@ -299,6 +386,7 @@ export function InsightPollProvider({
       displayState,
       generating,
       stalled,
+      runFailed,
       isCurrentPeriod,
       isEmpty,
       regenerate: async () => {
@@ -317,6 +405,9 @@ export function InsightPollProvider({
           // Before the state, so a click after the poll gave up really re-enters polling rather
           // than setting a state the `stalled` flag immediately renders through.
           setStalled(false);
+          // And the same for the dead end a previous run left: this click is a new run, so the
+          // previous one's outcome stops being what the card reports.
+          setRunFailed(false);
           setSet((previous) => ({ ...previous, state: 'generating' }));
           return;
         }
@@ -343,7 +434,7 @@ export function InsightPollProvider({
         post({ kind: 'failure', message: TOAST_FAILED });
       },
     }),
-    [set, displayState, generating, stalled, isCurrentPeriod, isEmpty, router, post],
+    [set, displayState, generating, stalled, runFailed, isCurrentPeriod, isEmpty, router, post],
   );
 
   return <InsightPollContext.Provider value={value}>{children}</InsightPollContext.Provider>;

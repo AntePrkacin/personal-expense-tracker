@@ -107,6 +107,32 @@ current one - which needs `GET /api/insights` to publish a period, which it does
 rather than as a bug because no account reaches it without a full period of inactivity, and the
 first write of the new period clears it.
 
+### A run that failed before the Dashboard loaded is invisible, and the poll can only see its own
+
+A review of PR #92 found PET-78's Regenerate condition missing a fourth dead end: a run that fails
+**after** a previously successful set. `insights.service.ts` skips a `failed` row and serves the
+newest `ready` one, so `GET /api/insights` answers `state: 'ready'` and the card looks perfectly
+healthy while the prose on it predates the write that triggered the run - with, before the fix, no
+control on screen able to start another.
+
+What shipped closes the half the frontend can see. `InsightPoll` compares `generatedAt` across a
+settle: the column is written at exactly one place backend-side, inside the transition to `ready`, so
+an unmoved value means the run produced nothing, and `runFailed` puts Regenerate back. That covers
+every run **this mount watched** - the button pressed, and the run that fires behind a save, since
+the modal's `router.refresh()` hands the provider a `generating` set and the poll follows it.
+
+The half it cannot cover is a run that failed while the user was on another screen, or before this
+mount existed. Loading the Dashboard fresh onto a stale set answers `ready` with no signal anywhere
+in the response, and no arithmetic over that response recovers one. Closing it is **one nullable
+field on `InsightSetResponseDto`** - the instant of the newest `failed` row when it is newer than the
+newest `ready` set, or a bare boolean - derived in `getSet` beside the two queries already there, and
+it is deliberately not in PET-78: that ticket is a UI/UX fixup round with no backend change in it, and
+this one wants a DTO change, an `api:sync` and an e2e case of its own.
+
+Note it is the **same shape** as the entry above, which wants `GET /api/insights` to publish a
+period. Both are "the card cannot tell the user how current this set is", and whichever ticket takes
+one should look at taking both, because they are one query away from each other.
+
 ### The verify page's inherited constraints, now that it exists
 
 PET-52 built the frontend half: `app/auth/verify/route.ts` spends the emailed link,

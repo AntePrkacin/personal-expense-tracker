@@ -464,6 +464,25 @@ describe('the message list', () => {
     expect(log).toHaveAttribute('aria-live', 'polite');
   });
 
+  it('announces additions and not text changes, so the timestamps filling in are silent', () => {
+    // **A review of PR #88 found the cost of PET-76's timestamps here.** `aria-relevant` defaults to
+    // `additions text`, and `MessageTime` fills its text in one commit just after hydration - so
+    // resuming a twenty-turn conversation mutated twenty descendants of this region milliseconds
+    // after load and a screen reader could open the screen by reading out a burst of bare clock
+    // times. An addition still announces, which is what the region is for: a new reply's timestamp
+    // is inside the added subtree.
+    //
+    // Pinned as an attribute because that is the whole of the fix and nothing rendered says whether
+    // it is there - the same reason `layout.test.tsx` pins the *absence* of a `force-dynamic`
+    // export. jsdom announces nothing, so the behaviour itself is a screen-reader check.
+    renderScreen(jest.fn(), { conversation: conversation() });
+
+    expect(screen.getByRole('log', { name: 'Conversation' })).toHaveAttribute(
+      'aria-relevant',
+      'additions',
+    );
+  });
+
   it('labels each turn in text rather than by colour or side alone', () => {
     // **"AI Assistant" is queried inside the log rather than by bare text (PET-76)**, because that
     // string is now also the page's own `h1` - the sidebar item's label too. This tree holds

@@ -329,6 +329,28 @@ rules and they answer these questions in one grep.
   a disabled control is exempt from 1.4.11 anyway, and `cursor: not-allowed` plus the dimmed
   placeholder carry the state beside the fill.
 
+- **Two neutral surface tokens one step apart are not a contrast pair, and which of them is lighter
+  flips between the two themes.** The canvas entry above is this rule where one of the two surfaces
+  is the page; this is the same fact with both of them inside a component, and it is worse because
+  the failure is **theme-dependent rather than absent**. `table-zebra` paints every even row
+  `base-200` and `.chat-bubble` is `base-300`, so the markdown table in an assistant reply
+  (`insights/AssistantMarkdown.tsx`) drew a stripe measuring **1.072:1 in `expensa-light`** -
+  invisible, below the `1.115`/`1.152` this file already records as rejected - and **1.277:1 in
+  `expensa-dark`**, where `base-200` is the _darker_ of the two and the stripe genuinely paints. So a
+  walk in one theme reports a defect and a walk in the other reports a working stripe, and both are
+  right. **A class whose visibility depends on the reader's OS setting is the defect**, not a weak
+  one to be strengthened: the rows are distinguished or they are not. The fix was to delete the
+  modifier and let `.table`'s own bottom border carry it, measured at **1.114:1 light / 1.170:1
+  dark** - one mechanism behaving the same in both themes, where in dark the border and the deleted
+  stripe were within 0.1 of each other anyway. Two things generalise. **A stripe or tint inside a
+  coloured component wants a `base-content` alpha rather than a surface token**, which is the call
+  `AssistantMarkdown`'s `code` mapping already made beside it. And **the comment justifying that
+  call had the token wrong** - it said the bubble "_is_ `base-200`" where `chat.css` sets
+  `base-300` - which is what let the table repeat the mistake four lines below a paragraph warning
+  against it: a reader checking `table-zebra`'s `base-200` against that sentence finds `base-200` on
+  `base-200`, concludes it is impossible, and moves on. **Read the plugin's CSS for the token rather
+  than the neighbouring comment.**
+
 - **`loading-*` is not a CSS animation and cannot be tuned from CSS at all.** It reads exactly like
   a class whose speed an `animation-duration` beside it would change, and that utility reaches
   nothing: `loading.css` implements the mark as a `mask-image` **data-URI SVG** carrying SMIL

@@ -478,9 +478,16 @@ describe('the generating state and the poll', () => {
   it('leaves the previous set on screen when the run finished without a new one', async () => {
     // A run that failed is invisible by contract (AC6): its row is marked `failed` and skipped,
     // so the read settles back to the previous `ready` set with `generatedAt` unmoved. The screen
-    // shows that content and re-enables the button, with no error state anywhere - which is what
-    // makes A26's undesigned failure survivable. `generatedAt` is written at exactly one place,
-    // inside the transition to `ready`, so it advances only when a run really completed.
+    // shows that content, with no error state anywhere - which is what makes A26's undesigned
+    // failure survivable. `generatedAt` is written at exactly one place, inside the transition to
+    // `ready`, so it advances only when a run really completed.
+    //
+    // **This case used to assert no Regenerate, and that was the defect rather than the rule.** A
+    // review of PR #92 found it: `displayState` is `ready` here, so PET-78's condition drew no
+    // control at all, and the account was left on prose that predates the write which triggered
+    // this very run with nothing on screen able to start another. It is `runFailed` now, which is
+    // exactly what an unmoved `generatedAt` across a settle means. Worth keeping as a correction,
+    // because a suite pinning the wrong behaviour is why no gate caught it.
     const previous = readySet();
     respondWith(previous);
     renderPoll(readySet({ state: 'generating' }));
@@ -489,9 +496,42 @@ describe('the generating state and the poll', () => {
 
     expect(screen.getByText(CARDS[0].title)).toBeInTheDocument();
     expect(screen.getByText(CARDS[1].title)).toBeInTheDocument();
-    // Settled back to `ready`, so the control is the assistant link alone - see the case above.
     expect(screen.queryByText('Analyzing your spending...')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+  });
+
+  it('offers no Regenerate when a run that produced nothing was on an empty account', async () => {
+    // The other half of the same review: the account has nothing to analyse, so a further run would
+    // produce the same nothing and the one control that helps is "Add transaction". `runFailed` is
+    // set here just as it is above - the gate that suppresses the button is `isEmpty`, which now
+    // leads the condition rather than qualifying one of its terms.
+    respondWith({ ...emptySet(), state: 'empty' });
+    renderPoll({ ...emptySet(), state: 'generating' }, { isEmpty: true });
+
+    await advance(500);
+
+    expect(screen.getByRole('heading', { name: UNLOCK_COPY.headline })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
+  });
+
+  it('reports a manual run that settled on the set it started from as a failure', async () => {
+    // **"Insights updated." was posted regardless until a review of PR #92 made the distinction
+    // computable.** A run that settles with `generatedAt` unmoved changed nothing, so the success
+    // toast confirmed an update that did not happen - on the one press where the user is watching
+    // for precisely that. Same string the never-landed request uses, for the same reason: what was
+    // asked for did not happen and pressing again is the thing to do about it.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    generate.mockResolvedValue({ ok: true });
+    const previous = readySet();
+    respondWith(previous);
+    renderPoll({ ...previous, state: 'empty', summary: null, insights: [] }, { isEmpty: false });
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await advance(500);
+
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't update your insights. Please try again."]),
+    );
   });
 
   it('keeps polling with a backoff while the state holds', async () => {
@@ -566,13 +606,34 @@ describe('the generating state and the poll', () => {
     // The other arm: the read carries content independently of `state`, and a first run has none
     // to fall back to. The empty copy plus Regenerate is the honest pair - skeletons would keep
     // asserting a run this mount has no way left to ask about.
+    //
+    // **It runs on `isEmpty: false`, and it was `true` until a review of PR #92.** The account with
+    // no content to fall back to and the account with nothing logged are two different accounts, and
+    // this case is about the first: an account whose transactions predate the write-path trigger, or
+    // whose first run failed. On `isEmpty: true` it was also asserting the pair the case below says
+    // must not exist, which is how the contradiction shipped - two cases in one file, each green.
+    (global.fetch as jest.Mock).mockRejectedValue(new Error('unreachable'));
+    renderPoll({ ...emptySet(), state: 'generating' }, { isEmpty: false });
+
+    await advancePastCeiling();
+
+    expect(screen.getByRole('heading', { name: PENDING_COPY.headline })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+  });
+
+  it('offers no Regenerate when the run it gave up on was on an empty account', async () => {
+    // **The contradiction the review found, pinned from the side that was wrong.** An account with
+    // nothing logged has nothing to analyse, so the unlock copy's "Add transaction →" is the one
+    // control that helps - and `InsightSummarySlot`'s condition excluded `isEmpty` on the `empty`
+    // term only, so a stall walked straight past it and drew both buttons. This fails with the gate
+    // written the old way, which is what it is here for.
     (global.fetch as jest.Mock).mockRejectedValue(new Error('unreachable'));
     renderPoll({ ...emptySet(), state: 'generating' }, { isEmpty: true });
 
     await advancePastCeiling();
 
     expect(screen.getByRole('heading', { name: UNLOCK_COPY.headline })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
   });
 
   it('re-enters polling when Regenerate is clicked after the poll gave up', async () => {

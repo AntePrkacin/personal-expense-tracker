@@ -123,9 +123,18 @@ const COMPONENTS: Components = {
     </a>
   ),
 
-  // `bg-base-content/10` rather than `bg-base-200`: the assistant's bubble *is* `base-200`, so the
-  // stock code tint would be the bubble's own colour. This is the same class of mistake as the
-  // composer on the page canvas - see `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight.
+  // `bg-base-content/10` rather than `bg-base-200`: a tint of the bubble's own foreground is
+  // visible on it whatever the bubble is, where a neutral surface token is a coin flip against
+  // another neutral surface token. This is the same class of mistake as the composer on the page
+  // canvas - see `frontend/CLAUDE.md`, Where daisyUI and Tailwind fight.
+  //
+  // **The reason stated here was wrong until a review of PR #92, and the wrong reason is what let
+  // the table below repeat the mistake.** It said "the assistant's bubble *is* `base-200`";
+  // `chat.css` sets `.chat-bubble`'s background to **`base-300`**, verified rather than reasoned.
+  // The conclusion held by luck - a `base-200` tint on a `base-300` bubble is a different pair of
+  // near-identical neutrals, not the same one - and a reader checking the table's own
+  // `table-zebra` against this sentence would have found `base-200` on `base-200` impossible and
+  // moved on. See the `table` mapping for what that cost.
   code: ({ children }) => (
     <code className="bg-base-content/10 rounded px-1 py-0.5 font-mono text-[0.9em]">
       {children}
@@ -151,10 +160,33 @@ const COMPONENTS: Components = {
    * column sideways and takes the page's horizontal scrollbar with it. The wrapper scrolls the
    * table **inside** the bubble instead. `w-full` on the table itself is what makes a narrow table
    * still fill the bubble rather than huddling at its left edge.
+   *
+   * **`table-zebra` is deliberately not here, and it was until a review of PR #92.** That modifier
+   * paints every even row `var(--color-base-200)` while `.chat-bubble` is `var(--color-base-300)`
+   * (`chat.css`, read rather than assumed) - two neutral surface tokens one step apart, which is a
+   * coin flip rather than a stripe.
+   *
+   * **The walk is what settled it, and it settled it differently from the review that raised it.**
+   * That report priced the stripe at "about 1.03:1" and called it invisible; composited against the
+   * real bubble and read back off a pixel, it is **1.072:1 in `expensa-light`** - invisible, and
+   * below the `1.115`/`1.152` this repo has already measured and rejected twice - and **1.277:1 in
+   * `expensa-dark`**, where `base-200` is *darker* than `base-300` so the stripe genuinely paints.
+   * So the defect is not "a stripe nobody can see", it is **a stripe that exists in one theme
+   * only**, which is the worse version of the same problem: the rows are distinguished or they are
+   * not, and which it is depended on the reader's OS setting.
+   *
+   * Nothing replaces it, because `.table` already draws a `base-content` 5% bottom border on every
+   * row but the last - measured at **1.114:1 light and 1.170:1 dark** against this bubble, so in dark
+   * the border and the deleted stripe were within 0.1 of each other and in light the border was the
+   * only thing doing any work at all. One mechanism that behaves the same in both themes beats two
+   * that disagree. **If a real stripe is ever wanted it is a `base-content` alpha and not a surface
+   * token** - the `code` mapping above is the precedent and carries the same reasoning - and it owes
+   * its own composited measurement, because `getComputedStyle` reports a translucent fill
+   * uncomposited and a ratio taken from that is a ratio for a colour nobody sees.
    */
   table: ({ children }) => (
     <div className="overflow-x-auto">
-      <table className="table-zebra table table-sm w-full">{children}</table>
+      <table className="table table-sm w-full">{children}</table>
     </div>
   ),
   th: ({ children, style }) => <th className={TH_CLASS[cellAlign(style)]}>{children}</th>,
