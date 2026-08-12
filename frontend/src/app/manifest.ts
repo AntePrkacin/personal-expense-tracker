@@ -22,10 +22,19 @@ import { THEME_COLOUR } from '@/lib/theme';
 // so the session cookie lands in the browser's jar and the installed app stays signed out. That
 // needs a decision of its own, and it is not a theming one.
 //
-// **Installability is not claimed here.** Chrome has historically required a registered service
-// worker with a fetch handler before offering an install prompt, and that criterion has moved
-// between versions - so this ships `display: standalone` and a correct icon set, and the browser
-// walk *reports* whether a prompt appears rather than this file asserting it will.
+// **Installability was measured rather than claimed, and the answer is not what the plan
+// expected.** Chrome has historically required a registered service worker with a fetch handler
+// before offering an install prompt, so PET-79 planned to ship `display: standalone` plus a correct
+// icon set and have the walk *report* whether a prompt appears. It does: asked over CDP against the
+// running app, **Chromium 151 returns an empty `Page.getInstallabilityErrors` with zero service
+// workers registered** and parses the manifest with no errors. So this app is installable today on
+// the manifest and icons alone, and the service worker the deferred half would add is **not** what
+// stands between here and an install prompt.
+//
+// Two caveats on that, because it is a measurement of one browser at one version. The criterion has
+// moved before and can move again, and Firefox and Safari have their own. And installable is not the
+// same as *useful offline* - which is the half deliberately deferred below, and the reason nothing
+// here advertises the app as working without a network.
 //
 // **`theme_color` is one static value and cannot follow the picker**, which is a fact about the
 // platform rather than a gap: a manifest carries one colour and `<meta name="theme-color">` varies
