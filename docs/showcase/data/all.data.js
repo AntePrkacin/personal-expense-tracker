@@ -4,24 +4,24 @@
 // file://, where fetch of a sibling file is blocked.
 window.__SHOWCASE__ = {
   "authors": {
-    "generatedAt": "2026-08-12T12:48:41.117Z",
+    "generatedAt": "2026-08-12T15:23:44.330Z",
     "authors": [
       {
         "name": "izkreny",
-        "commits": 334,
-        "survivingLines": 85217,
-        "mergedPullRequests": 48,
+        "commits": 364,
+        "survivingLines": 93711,
+        "mergedPullRequests": 50,
         "areas": {
-          "backend": 37815,
-          "frontend": 23691,
-          "documentation": 28600,
-          "tooling": 12181
+          "backend": 38374,
+          "frontend": 27022,
+          "documentation": 30177,
+          "tooling": 16129
         }
       },
       {
         "name": "Ante Prkačin",
         "commits": 215,
-        "survivingLines": 71116,
+        "survivingLines": 70644,
         "mergedPullRequests": 29,
         "areas": {
           "backend": 4171,
@@ -31,17 +31,17 @@ window.__SHOWCASE__ = {
         }
       }
     ],
-    "survivingLinesFromExcludedCommits": 6947
+    "survivingLinesFromExcludedCommits": 6933
   },
   "delivery": {
-    "generatedAt": "2026-08-12T12:48:41.744Z",
-    "merged": 77,
-    "opened": 84,
+    "generatedAt": "2026-08-12T15:23:44.989Z",
+    "merged": 79,
+    "opened": 85,
     "closedUnmerged": 4,
-    "open": 3
+    "open": 2
   },
   "deps": {
-    "generatedAt": "2026-08-12T12:48:41.841Z",
+    "generatedAt": "2026-08-12T15:23:45.059Z",
     "trees": [
       {
         "tree": "root",
@@ -63,9 +63,9 @@ window.__SHOWCASE__ = {
     "totalAtInitialCommit": 1660
   },
   "repo": {
-    "generatedAt": "2026-08-12T12:48:30.497Z",
+    "generatedAt": "2026-08-12T15:23:31.898Z",
     "activity": {
-      "commits": 549,
+      "commits": 579,
       "activeDays": 15,
       "calendarDays": 15,
       "firstCommit": "2026-07-29",
@@ -129,68 +129,68 @@ window.__SHOWCASE__ = {
         },
         {
           "date": "2026-08-12",
-          "commits": 25
+          "commits": 55
         }
       ]
     },
     "churn": {
-      "added": 238472,
-      "deleted": 64304,
-      "linesWrittenAndRewritten": 302776,
-      "addedExcludingGenerated": 189264,
-      "deletedExcludingGenerated": 33784,
-      "linesWrittenAndRewrittenExcludingGenerated": 223048
+      "added": 248061,
+      "deleted": 65807,
+      "linesWrittenAndRewritten": 313868,
+      "addedExcludingGenerated": 198679,
+      "deletedExcludingGenerated": 35191,
+      "linesWrittenAndRewrittenExcludingGenerated": 233870
     },
     "lines": {
       "code": {
-        "files": 647,
-        "code": 70716,
-        "comment": 37789,
-        "blank": 14626
+        "files": 670,
+        "code": 75090,
+        "comment": 39441,
+        "blank": 15105
       },
       "documentation": {
-        "files": 156,
-        "code": 32866,
+        "files": 161,
+        "code": 34099,
         "comment": 0,
-        "blank": 7283
+        "blank": 7553
       },
       "generated": {
         "files": 29,
-        "code": 41464,
-        "comment": 800,
+        "code": 41536,
+        "comment": 806,
         "blank": 251
       }
     },
     "documentationSplit": {
       "plans": {
-        "files": 61,
-        "lines": 15394
+        "files": 63,
+        "lines": 16054
       },
       "agents": {
         "files": 10,
-        "lines": 6460
+        "lines": 6674
       },
       "other": {
-        "files": 85,
-        "lines": 11012
+        "files": 88,
+        "lines": 11371
       }
     },
     "largestDocuments": [
       {
         "path": "frontend/src/app/CLAUDE.md",
-        "lines": 2890
+        "lines": 2929
       },
       {
         "path": "docs/TODO.md",
-        "lines": 2683
+        "lines": 2772
       },
       {
         "path": "backend/CLAUDE.md",
-        "lines": 1111
+        "lines": 1143
       },
       {
         "path": "frontend/CLAUDE.md",
-        "lines": 920
+        "lines": 1029
       },
       {
         "path": "docs/plans/2026-08-10_PET-73_assistant-chat.md",
@@ -198,13 +198,13 @@ window.__SHOWCASE__ = {
       }
     ],
     "commentDensity": {
-      "code": 70716,
-      "comment": 37789,
-      "per100": 53.4
+      "code": 75090,
+      "comment": 39441,
+      "per100": 52.5
     }
   },
   "shape": {
-    "generatedAt": "2026-08-12T12:48:41.882Z",
+    "generatedAt": "2026-08-12T15:23:45.103Z",
     "tables": {
       "byScope": [
         {
@@ -219,11 +219,11 @@ window.__SHOWCASE__ = {
       "total": 16
     },
     "api": {
-      "operations": 29,
-      "paths": 22,
+      "operations": 30,
+      "paths": 23,
       "byMethod": {
         "GET": 14,
-        "POST": 9,
+        "POST": 10,
         "PATCH": 4,
         "DELETE": 2
       }

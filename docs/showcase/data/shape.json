@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-12T12:48:41.882Z",
+  "generatedAt": "2026-08-12T15:23:45.103Z",
   "tables": {
     "byScope": [
       {
@@ -14,11 +14,11 @@
     "total": 16
   },
   "api": {
-    "operations": 29,
-    "paths": 22,
+    "operations": 30,
+    "paths": 23,
     "byMethod": {
       "GET": 14,
-      "POST": 9,
+      "POST": 10,
       "PATCH": 4,
       "DELETE": 2
     }
