@@ -68,7 +68,7 @@ export function CheckEmailScreen({ email, resend }: CheckEmailScreenProps) {
       {/* gap-2 is the designed 8px from heading to copy (node 134:1149), and there is
           no overline above the heading on this frame either. */}
       <div className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl font-bold">Check your email</h1>
+        <h1 className="font-display text-3xl font-bold">Check your email</h1>
         <p className="text-base-content/70">
           {email === null ? (
             FALLBACK_COPY

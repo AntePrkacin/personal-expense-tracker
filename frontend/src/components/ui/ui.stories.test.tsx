@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { render } from '@testing-library/react';
 
 import * as BudgetField from '../BudgetField.stories';
+import * as LogoLockup from '../LogoLockup.stories';
 import * as Button from './Button.stories';
 import * as Input from './Input.stories';
 import * as Select from './Select.stories';
@@ -37,6 +38,10 @@ const MODULES: [name: string, module: StoryModule][] = [
   // Storybook. Its title *is* `Components/…`, which is the one thing this suite asserts, so it fits
   // here rather than wanting a fourth suite for a single file.
   ['BudgetField', BudgetField as StoryModule],
+  // `components/LogoLockup` joins for the identical reason, and PET-79 is when it needed to: it
+  // stopped being a propless component and became one with a `size` and a `tone`, drawn at five
+  // former call sites, so a throw in one arm is now a throw a story can reach.
+  ['LogoLockup', LogoLockup as StoryModule],
   ['Button', Button as StoryModule],
   ['Input', Input as StoryModule],
   ['Select', Select as StoryModule],

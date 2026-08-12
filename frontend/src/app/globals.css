@@ -293,7 +293,12 @@
    Tailwind's preflight reads --font-sans as the default body family, so Inter
    applies everywhere without a body rule; font-display is the heading face. */
 @theme static inline {
-  --font-display: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
+  /* PET-79 swapped the display face from Plus Jakarta Sans to Crimson Pro, and
+     the fallback stack changes with it: a serif face falling back to a sans is a
+     visible substitution rather than a near-miss, so `ui-serif, Georgia, serif`
+     is what stands in while the webfont loads or when it cannot. `--font-sans`
+     is unchanged - Inter stayed, for the `tnum` reason src/app/fonts.ts gives. */
+  --font-display: var(--font-crimson-pro), ui-serif, Georgia, serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 

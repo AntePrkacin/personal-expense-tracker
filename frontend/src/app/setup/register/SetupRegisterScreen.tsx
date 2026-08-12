@@ -25,7 +25,7 @@ export function SetupRegisterScreen() {
             above it stay aria-hidden. */}
         <p className="text-primary text-xs font-semibold tracking-widest uppercase">STEP 3 OF 3</p>
 
-        <h1 className="font-display text-2xl font-bold">Register</h1>
+        <h1 className="font-display text-3xl font-bold">Register</h1>
 
         <p className="text-base-content/70">{SUPPORTING_COPY}</p>
       </div>

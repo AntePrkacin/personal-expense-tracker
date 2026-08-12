@@ -148,7 +148,7 @@ export function SpendingSummaryCard({
           </div>
 
           <p className="flex flex-wrap items-baseline gap-2">
-            <span className="font-display text-2xl font-bold">{formatWhole(spentWhole)}</span>
+            <span className="font-display text-3xl font-bold">{formatWhole(spentWhole)}</span>
             <span className="text-base-content/60 text-sm">
               spent of {formatWhole(budgetWhole)} monthly budget
             </span>

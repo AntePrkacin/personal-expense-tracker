@@ -88,7 +88,7 @@ export function PageHeader({ overline, breadcrumb, caption, title, action }: Pag
             outline. This is the one element on a screen that earns level 1.
             ui/Sidebar deliberately renders no heading at all, so this is also
             the first heading a screen reader reaches. */}
-        <h1 className="font-display text-2xl font-bold">{title}</h1>
+        <h1 className="font-display text-3xl font-bold">{title}</h1>
         {caption ? <div className="flex flex-wrap items-center gap-2 pt-1">{caption}</div> : null}
       </div>
       {action ? <div className="flex shrink-0 items-center gap-3">{action}</div> : null}

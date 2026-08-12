@@ -86,7 +86,7 @@ function SampleBudgetCard() {
         </div>
 
         <div className="flex items-baseline gap-1.5">
-          <p className="font-display text-3xl font-bold">{SAMPLE_BUDGET.spentLabel}</p>
+          <p className="font-display text-4xl font-bold">{SAMPLE_BUDGET.spentLabel}</p>
           <p className="text-base-content/60 text-sm">{SAMPLE_BUDGET.budgetLabel}</p>
         </div>
 

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import './globals.css';
 import { parseThemePref, THEME_COLOUR, THEME_COOKIE, themeAttribute } from '@/lib/theme';
-import { inter, plusJakartaSans } from './fonts';
+import { crimsonPro, inter } from './fonts';
 
 // "Spendifico", the name decided on 2026-08-02 and now carried everywhere in
 // the repo. The Figma file is the one holdout and still says "Expensa"
@@ -57,7 +57,7 @@ export default async function RootLayout({
     <html
       lang="en"
       data-theme={theme}
-      className={`${plusJakartaSans.variable} ${inter.variable} h-full antialiased`}
+      className={`${crimsonPro.variable} ${inter.variable} h-full antialiased`}
     >
       {/* bg-base-200 is the page canvas, one elevation below the bg-base-100
           cards and panels that sit on it - the same canvas-vs-card distinction

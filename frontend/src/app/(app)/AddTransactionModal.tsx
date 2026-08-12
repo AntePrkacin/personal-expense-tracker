@@ -725,7 +725,7 @@ export function AddTransactionModal({
           <div className="bg-base-100/85 rounded-box absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center backdrop-blur-[2px]">
             <span className="loading loading-spinner loading-lg text-primary" aria-hidden="true" />
             <div className="flex flex-col gap-1">
-              <p className="font-display text-base font-bold" role="status">
+              <p className="font-display text-xl font-bold" role="status">
                 Reading your receipt…
               </p>
               <p className="text-sm opacity-60">This usually takes a few seconds.</p>

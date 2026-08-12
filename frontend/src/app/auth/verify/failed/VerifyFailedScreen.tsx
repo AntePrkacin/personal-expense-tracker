@@ -88,7 +88,7 @@ export function VerifyFailedScreen({ reason, hasAddress, resend }: VerifyFailedS
       {/* gap-2 is the designed 8px from heading to copy, and there is no overline above
           the heading here for the same reason frames 23 and 24 have none. */}
       <div className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl font-bold">{heading}</h1>
+        <h1 className="font-display text-3xl font-bold">{heading}</h1>
         <p className="text-base-content/70">{body}</p>
       </div>
 
