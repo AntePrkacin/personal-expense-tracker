@@ -31,15 +31,33 @@ export const TRANSACTION_PERIODS = ['current', 'previous', 'all'] as const;
 export type TransactionPeriod = (typeof TRANSACTION_PERIODS)[number];
 
 /**
- * The sort's two values.
+ * The sort's four values, and the two dimensions are deliberately not one enum
+ * of "field" plus one of "direction".
  *
- * Two, not a free-text field. A16 records that the open sort dropdown is never
- * drawn, so "Newest first" is the only option actually known; ascending is the
- * one a date sort certainly also has. Shipping anything wider would put a
- * contract in `openapi.json` that no screen asked for, and adding to this list
- * once the designer draws the menu is a one-line change.
+ * **PET-67 added the amount pair, which is the change the two-value version of
+ * this comment predicted.** It said the list was two "not a free-text field",
+ * because A16 records that the open sort dropdown is never drawn, so only
+ * "Newest first" was actually known and "adding to this list once the designer
+ * draws the menu is a one-line change". The product owner asked for amount
+ * sorting, so this is that change; read the old note as the reason the list was
+ * ever short rather than as an argument against widening it.
+ *
+ * One flat enum rather than `?sortBy=amount&sortDir=asc` for two reasons. The
+ * client is a single `<select>` whose options are whole sorts, so a split would
+ * make it assemble two parameters to express one choice a user made once. And a
+ * flat enum makes every combination the API accepts enumerable in
+ * `openapi.json`, which is what lets the frontend prove at compile time that it
+ * offers all of them - see `EverySortIsOffered` in
+ * `frontend/src/app/(app)/transactions/filters.ts`. A pair of orthogonal enums
+ * publishes a product of values rather than a list, and nothing could check the
+ * screen covered it.
  */
-export const TRANSACTION_SORTS = ['date_desc', 'date_asc'] as const;
+export const TRANSACTION_SORTS = [
+  'date_desc',
+  'date_asc',
+  'amount_desc',
+  'amount_asc',
+] as const;
 export type TransactionSort = (typeof TRANSACTION_SORTS)[number];
 
 /** The default period. See the note on the field. */
@@ -152,7 +170,7 @@ export class ListTransactionsQueryDto {
     enum: TRANSACTION_SORTS,
     default: DEFAULT_SORT,
     description:
-      'Ties on `date` break on `createdAt` descending, then `id`, so the order is stable across requests rather than reshuffling for no visible reason.',
+      'Every sort ends in the same tiebreaks: `date` descending (for the amount sorts only), then `createdAt` descending, then `id`. So the order is stable across requests rather than reshuffling for no visible reason, and two transactions of the same amount read newest-first between themselves.',
   })
   @IsOptional()
   @IsIn(TRANSACTION_SORTS)

@@ -81,14 +81,25 @@ export const PERIOD_OPTIONS = [
 ] as const satisfies readonly FilterOption<NamedPeriod>[];
 
 /**
- * The sort select's two options (TRN-3, A16).
+ * The sort select's four options (TRN-3, A16).
  *
- * Two rather than four: the contract sorts by date only, so "Highest amount" would be an
- * option the API cannot serve. Same amendment as the periods above.
+ * **PET-67 added the amount pair, and the sentence it replaces is worth keeping because it named
+ * its own condition.** It read "Two rather than four: the contract sorts by date only, so
+ * 'Highest amount' would be an option the API cannot serve" - which was true, and the thing that
+ * made it true was the backend's `TRANSACTION_SORTS`, not a decision here. The product owner asked
+ * for amount sorting, that list grew, and `EverySortIsOffered` below failed `npm run build` until
+ * these two lines existed. So this file never got to be wrong about what the API serves, which is
+ * the whole point of stating the proof rather than the count.
+ *
+ * The labels are the product owner's ("Highest amount", "Lowest amount") and read as a pair with
+ * the two above rather than restating the field name four times. They are invented copy like every
+ * other string on this bar and join what A29 owes a designer; `docs/TODO.md` carries them.
  */
 export const SORT_OPTIONS = [
   { value: 'date_desc', label: 'Newest first' },
   { value: 'date_asc', label: 'Oldest first' },
+  { value: 'amount_desc', label: 'Highest amount' },
+  { value: 'amount_asc', label: 'Lowest amount' },
 ] as const satisfies readonly FilterOption<Sort>[];
 
 /**

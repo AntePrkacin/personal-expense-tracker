@@ -320,8 +320,12 @@ describe('openapi.json', () => {
         default: 'current',
       });
       expect(byName.period).not.toHaveProperty('enum');
+      // Four values as of PET-67, and `sort` stays a single flat enum rather
+      // than splitting into a field plus a direction: a product of two enums
+      // publishes no list for the frontend's own exhaustiveness proof to be
+      // stated against. See `TRANSACTION_SORTS`.
       expect(byName.sort).toMatchObject({
-        enum: ['date_desc', 'date_asc'],
+        enum: ['date_desc', 'date_asc', 'amount_desc', 'amount_asc'],
         default: 'date_desc',
       });
       // Every one optional: an absent filter is absent, not a wildcard.

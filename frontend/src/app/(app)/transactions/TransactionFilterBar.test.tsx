@@ -84,9 +84,10 @@ describe('the options', () => {
     ).toEqual(['All categories', 'Groceries', 'Transport']);
   });
 
-  it('offers the three periods and two sorts the API can serve', () => {
+  it('offers the three periods and four sorts the API can serve', () => {
     // This is A16's amendment: Figma never draws either dropdown open, so shipping one
-    // option each would leave AC4's period half and AC5 unimplementable.
+    // option each would leave AC4's period half and AC5 unimplementable. The two amount
+    // entries are PET-67's, and they are the half of A16 the designer never drew at all.
     setup();
 
     expect(
@@ -94,7 +95,7 @@ describe('the options', () => {
     ).toEqual(['This month', 'Last month', 'All time']);
     expect(
       Array.from(pill('Sort').querySelectorAll('option')).map((option) => option.textContent),
-    ).toEqual(['Newest first', 'Oldest first']);
+    ).toEqual(['Newest first', 'Oldest first', 'Highest amount', 'Lowest amount']);
   });
 });
 
@@ -121,6 +122,17 @@ describe('changing a filter', () => {
     await user.selectOptions(pill('Sort'), 'date_asc');
 
     expect(replace).toHaveBeenCalledWith('/transactions?sort=date_asc');
+  });
+
+  it('navigates with an amount sort, which is PET-67', async () => {
+    // Worth its own case rather than leaning on the one above: the amount values are the two
+    // this screen could not serve until the contract grew, so a regression that dropped them
+    // from `SORT_OPTIONS` would leave the date case above passing.
+    const { user } = setup();
+
+    await user.selectOptions(pill('Sort'), 'amount_desc');
+
+    expect(replace).toHaveBeenCalledWith('/transactions?sort=amount_desc');
   });
 
   it('replaces rather than pushes', async () => {

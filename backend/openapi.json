@@ -529,13 +529,15 @@
             "name": "sort",
             "required": false,
             "in": "query",
-            "description": "Ties on `date` break on `createdAt` descending, then `id`, so the order is stable across requests rather than reshuffling for no visible reason.",
+            "description": "Every sort ends in the same tiebreaks: `date` descending (for the amount sorts only), then `createdAt` descending, then `id`. So the order is stable across requests rather than reshuffling for no visible reason, and two transactions of the same amount read newest-first between themselves.",
             "schema": {
               "default": "date_desc",
               "type": "string",
               "enum": [
                 "date_desc",
-                "date_asc"
+                "date_asc",
+                "amount_desc",
+                "amount_asc"
               ]
             }
           }
