@@ -446,74 +446,74 @@ exactly once and then automating the measurement nobody needs again.
 
 ## Checklist
 
-- [ ] Commit this plan alone, open the draft PR on it
-- [ ] Build `lib/themeGuard.ts`: parse both theme sources, hex and `oklch()` to OKLab,
+- [x] Commit this plan alone, open the draft PR on it
+- [x] Build `lib/themeGuard.ts`: parse both theme sources, hex and `oklch()` to OKLab,
       composite `base-content/50`, report collisions, token contrast against the card, and
       `-content` legibility on its own base
-- [ ] Build `lib/themeGuard.test.ts` as the gate, with the two grandfathered pairs in one named
+- [x] Build `lib/themeGuard.test.ts` as the gate, with the two grandfathered pairs in one named
       exported constant
-- [ ] Extend the guard to diff the five `docs/explainers/` `<style>` blocks against
+- [x] Extend the guard to diff the five `docs/explainers/` `<style>` blocks against
       `globals.css`, closing that `docs/TODO.md` entry
-- [ ] Add the `theme:report` script for the human-facing tables
-- [ ] Verify the gate fails on today's tree for the right reasons, then register `abyss`,
+- [x] Add the `theme:report` script for the human-facing tables
+- [x] Verify the gate fails on today's tree for the right reasons, then register `abyss`,
       `light` and `dark` and watch it fail for theirs
-- [ ] Author the seven overrides, steered onto `-content` tokens, until the gate is green
-- [ ] Review the Expensa pair against the guard's output, including the three invented slots
+- [x] Author the seven overrides, steered onto `-content` tokens, until the gate is green
+- [x] Review the Expensa pair against the guard's output, including the three invented slots
       (`info`, `secondary`, `accent`) that owe a designer sign-off
-- [ ] Regenerate `COLOUR_CONTRAST` in `backend/src/database/central/template-tokens.ts` for all
+- [x] Regenerate `COLOUR_CONTRAST` in `backend/src/database/central/template-tokens.ts` for all
       five themes from the tool's output
-- [ ] Have `themeGuard.ts` emit `docs/explainers/category-palette/theme-data.json`: every installed
+- [x] Have `themeGuard.ts` emit `docs/explainers/category-palette/theme-data.json`: every installed
       theme's effective token values, with the seven overrides applied, plus measured contrast
-- [ ] Build `docs/explainers/category-palette/` in `icon-set`'s shape - `build-palette-page.js`,
+- [x] Build `docs/explainers/category-palette/` in `icon-set`'s shape - `build-palette-page.js`,
       `check-palette-page.js`, `README.md`, plain Node, repo root as `argv[2]`, no npm script - and
       generate `category-palette-preview.html` with a switcher enumerating the installed themes and
       one contrast column that follows it
-- [ ] Delete `category-color-palette-preview.html` and
+- [x] Delete `category-color-palette-preview.html` and
       `category-colors-icons-description-preview.html`, and re-point the seven live references
       (both backend template files, `frontend/CLAUDE.md`, two sibling explainers,
       `icon-set/build-icon-page.js`, `SetupCategoriesScreen.stories.tsx`), leaving the two plan docs
       untouched as dated records
-- [ ] Port the four planning-time Python generators into the same Node shape
-- [ ] Rename `[data-theme='dark']` to `[data-theme='expensa-dark']` in the three remaining
+- [x] Port the four planning-time Python generators into the same Node shape
+- [x] Rename `[data-theme='dark']` to `[data-theme='expensa-dark']` in the three remaining
       theme-embedding explainers, and keep their hardcoded pair; the guard knows their dark block
       carries only the 6 tokens that change
-- [ ] Widen `lib/theme.ts`: `system` plus the five registered names, `themeAttribute` as a
+- [x] Widen `lib/theme.ts`: `system` plus the five registered names, `themeAttribute` as a
       lookup, unknown values still reading as `system`
-- [ ] Replace the segmented row with the six-tile picker on the Preferences card, each tile
+- [x] Replace the segmented row with the six-tile picker on the Preferences card, each tile
       wearing its own `data-theme` and drawing the eight swatches, native radios underneath
-- [ ] Update `ThemeField` stories and tests; assert the attribute-and-cookie writes rather than
+- [x] Update `ThemeField` stories and tests; assert the attribute-and-cookie writes rather than
       class strings
 - [x] Trim the supplied artwork, normalise both origins to `0 0 W H`, and commit the originals,
       the trimmed pair, the generators and the two review pages under `docs/explainers/`
 - [x] Decide the logo colour mapping against measurement, and the display and body faces against
       the font binaries; record both, including what each was chosen over
-- [ ] Swap `app/fonts.ts` to Crimson Pro plus Inter, remap the `--font-display` token, and apply
+- [x] Swap `app/fonts.ts` to Crimson Pro plus Inter, remap the `--font-display` token, and apply
       the same loaders in `.storybook/preview.ts`
-- [ ] Bump the 25 ordinary `font-display` sites per the table above - **not** uniformly one step,
+- [x] Bump the 25 ordinary `font-display` sites per the table above - **not** uniformly one step,
       since `text-lg` moves two - and decide the hero's three breakpoints separately, closing the
       `docs/TODO.md` type-sizes entry
-- [ ] Unify the logo into one component with `size` and `tone`, replace both call sites, drop
+- [x] Unify the logo into one component with `size` and `tone`, replace both call sites, drop
       the Sidebar copy, build the lockup as text in the display face with `letter-spacing` on the
       wordmark only, and give it an explicit accessible name with the glyphs hidden
-- [ ] Replace `app/icon.svg` from the trimmed icon path, which stays vector because an SVG loaded
+- [x] Replace `app/icon.svg` from the trimmed icon path, which stays vector because an SVG loaded
       as an image cannot reach a webfont
-- [ ] Add `app/manifest.ts` with `display: 'standalone'`, plus 192, 512, a **padded** maskable
+- [x] Add `app/manifest.ts` with `display: 'standalone'`, plus 192, 512, a **padded** maskable
       variant and an `apple-icon`, all from the trimmed square icon
-- [ ] Add `viewport.themeColor` as a `prefers-color-scheme` pair beside the existing `colorScheme`,
+- [x] Add `viewport.themeColor` as a `prefers-color-scheme` pair beside the existing `colorScheme`,
       and have `ThemeField` write the meta tag alongside `data-theme` so an explicit pick is not
       stale until reload
-- [ ] Report in the walk whether an install prompt actually appears, rather than assuming a manifest
+- [x] Report in the walk whether an install prompt actually appears, rather than assuming a manifest
       is sufficient without a service worker
-- [ ] Confirm the tile needs no CSS radius now the path draws its own corners, and that no ring is
+- [x] Confirm the tile needs no CSS radius now the path draws its own corners, and that no ring is
       drawn behind an opaque tile
-- [ ] Amend `frontend/CLAUDE.md`: the theme list, the guard now being automated and what it does
+- [x] Amend `frontend/CLAUDE.md`: the theme list, the guard now being automated and what it does
       not cover, the `globals.css` contract growing the override blocks, and the picker replacing
       the segmented row
-- [ ] Amend the `globals.css` header comment and close the `docs/TODO.md` entries this ticket
+- [x] Amend the `globals.css` header comment and close the `docs/TODO.md` entries this ticket
       finishes
-- [ ] Headless-browser walk: all five themes across the four routed views, the access frames and
+- [x] Headless-browser walk: all five themes across the four routed views, the access frames and
       the modals, plus the picker's six arms and Storybook
-- [ ] `npm run lint`, `npm run test`, `npm run build` in `frontend/`; `npm run build` in
+- [x] `npm run lint`, `npm run test`, `npm run build` in `frontend/`; `npm run build` in
       `backend/`; `npm run docs:check` at the root
 
 ## What this ticket does not do
@@ -523,3 +523,42 @@ The hairline-versus-shadow card treatment stays out, as it did in PET-74: roughl
 component interaction and animation stays out, judged in `docs/TODO.md` as not worth doing at
 all. No HTTP contract changes, so `npm run api:sync` is not involved. And `COLOUR_SEED` is not
 touched, which is the ruling this whole plan is built around.
+
+## What the implementation corrected in this plan
+
+Recorded here rather than edited into the prose above, because a plan is a dated record of what was
+believed when it was written and the corrections are the more useful half.
+
+**The gate cannot assert a 3:1 floor against the card, and this plan asked it to.** That assertion is
+unsatisfiable and the repo already said so: measured, the two Expensa themes alone fail it five and
+six times, and they are the pair this plan says needs zero overrides. Only **three** of the seventeen
+tokens clear 3:1 in every theme. So the card figures are pinned against drift instead, floored only
+for `base-content/50`, and a case pins the absence of the wider floor.
+
+**`abyss`'s collision count depends on how an out-of-gamut `oklch()` is reduced to sRGB**, which this
+plan did not know. Per-channel clipping gives four pairs, CSS Color 4 gamut mapping gives six, and
+daisyUI's own hex fallback gives five - and the browser settled it by clipping, which is what the
+planning probe happened to do. The count of seven overrides survives; a guard calibrated against
+daisyUI's fallback would have reported a collision that does not exist.
+
+**The size pass is 22 edits, not 25, because the logo absorbed five `font-display` sites rather than
+two.** This plan names `ui/Sidebar.tsx`'s wordmark and `LogoLockup.tsx`'s; it misses
+`(app)/layout.tsx`'s third, wordmark-only copy in the drawer bar, and both files' `₵` glyph spans.
+
+**The artwork's wordmark ratio does not fit the sidebar**, which no arithmetic in this plan checked.
+"PENDIFICO" is 4.98 times its own font-size wide, so `font-size = tile x 0.6146 / cap-per-em` needs
+238px where the `w-64` column leaves 216px. Only the largest size is artwork-faithful.
+
+**`CATEGORY_SEED` holds twelve rows, not thirteen.** The thirteenth is `Uncategorized`, seeded at
+provisioning and not a template, so the merged page draws it separately and marked.
+
+**PET-74 had hand-edited a generated file**, which regenerating the icon page exposed by deleting its
+theme block. That generator owns the block now, emitted from `theme-data.json`.
+
+**The generator port is narrowed to one of four**, with the reasoning in
+`docs/explainers/generators/README.md`: Node has no stdlib XML, `trim_svg.py`'s byte-for-byte
+guarantee is now load-bearing for the lockup's measured ratios, and the half of `gen_logo_preview.py`
+with ongoing value was already ported into `themeGuard.ts`.
+
+**The app is installable with no service worker.** This plan expected Chrome to require one and asked
+the walk to report; Chromium 151 returns no installability errors with none registered.
