@@ -1838,7 +1838,7 @@ The five dark `-content` casts (Pine, Navy, Forest, Umber, Maroon) are derivatio
 drew none of them. Every value is measured (`COLOUR_CONTRAST`, both explainers) but none is
 designed; they join what A29 already owes a designer.
 
-### The explainer theme blocks restate `globals.css` and nothing checks the copies
+### ~~The explainer theme blocks restate `globals.css` and nothing checks the copies~~ (closed by PET-79)
 
 Five files under `docs/explainers/` embed the Expensa theme values in a `<style>` block, because
 the pinned CDN `daisyui.css` carries only the stock themes and the pages exist to paint what the
@@ -1846,6 +1846,29 @@ app paints. That is six hand-held copies of the palette - `globals.css` plus fiv
 by a comment in each file and by nothing else; `npm run docs:check` verifies single-source prose,
 not CSS blocks. A small script diffing each block against the theme blocks in `globals.css` would
 close it, and belongs with the next theme edit if not sooner.
+
+**PET-79 was that edit and this is closed, by a Jest gate rather than the script this entry asked
+for.** `frontend/src/lib/themeGuard.test.ts` diffs every embedded block against the two
+`@plugin 'daisyui/theme'` blocks and fails naming the file, the block and the token. Three things
+about the shape are worth knowing before touching those pages.
+
+It is **three files rather than five**, because PET-79 merged `category-color-palette-preview.html`
+and `category-colors-icons-description-preview.html` into one generated, theme-aware page - which
+removes two hand-held copies rather than checking them, and is the better half of the fix.
+
+The diff reads **every `--color-*`, not the seventeen-token category allowlist**, because a diff that
+filtered would leave whatever it dropped free to drift - and `--color-orange` and its content pair
+live in exactly that gap, being in every theme block and in no allowlist.
+
+And it checks **every token a block declares** rather than every token the theme has: a dark block
+carries only the six values that differ between the pair plus a redundant-but-identical
+`--color-neutral`, where the light block carries all twenty-two, so a check demanding 22-for-22 in
+both would have reported false failures. It does compare the **two dark blocks against each other**,
+since they are hand-maintained copies of one another, and that arm was watched firing.
+
+The same ticket renamed each page's `[data-theme='dark']` to `[data-theme='expensa-dark']`, which had
+become genuinely ambiguous: stock `dark` is a registered theme now, so one attribute named the
+Expensa palette in these files and daisyUI's own in the app. The suite pins that absence too.
 
 ## Operational
 

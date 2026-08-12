@@ -451,6 +451,168 @@ export function parseThemeOverrides(globalsCss: string): Record<string, TokenVal
 }
 
 // ---------------------------------------------------------------------------
+// The explainer pages' embedded theme values
+// ---------------------------------------------------------------------------
+
+/**
+ * The explainer pages that paint the Expensa values into daisyUI's stock selectors.
+ *
+ * **None of them registers a theme by name**, and their shape is not what it looks like. Each
+ * loads daisyUI's `daisyui.css` for component CSS, deliberately skips `themes.css`, and writes the
+ * Expensa *values* into the *stock* selectors: bare `:root` for light, and both
+ * `@media (prefers-color-scheme: dark) { :root:not([data-theme]) }` and
+ * `[data-theme='expensa-dark']` for dark - the last so each page's own `theme-controller` checkbox
+ * keeps working.
+ *
+ * That third selector said `[data-theme='dark']` until PET-79, which is the rename this list exists
+ * to have made safe: the moment stock `dark` became a registered theme, that attribute meant one
+ * thing in the app and another in these files.
+ *
+ * `docs/TODO.md` recorded that nothing checked these copies against `globals.css` and asked for it
+ * "with the next theme edit if not sooner". This is that edit.
+ */
+export const THEME_EMBEDDING_EXPLAINERS = [
+  'docs/explainers/category-icon-set-preview.html',
+  'docs/explainers/how-category-templates-work.html',
+  'docs/explainers/receipt-scanning-modal-preview.html',
+] as const;
+
+/**
+ * Every `--color-*` declaration in a block, allowlist or not.
+ *
+ * **Deliberately wider than `readDeclarations`**, which filters to the seventeen category tokens
+ * because that is what it measures. This one is a *diff* rather than a measurement, so filtering
+ * would leave whatever it dropped free to drift - and there is a real token in that gap:
+ * `--color-orange` and its content pair are PET-74's app-authored fourth status hue, in every
+ * theme block and in every explainer, and in no allowlist.
+ */
+function readAnyColourDeclarations(body: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const match of body.matchAll(/--color-([a-z0-9-]+)\s*:\s*([^;}]+)/g)) {
+    values[match[1]] = cssColourToHex(match[2]);
+  }
+  return values;
+}
+
+/** One explainer's embedded values: the light block, and each block claiming to be the dark one. */
+export interface ExplainerThemeBlocks {
+  light: Record<string, string>;
+  dark: Record<string, string>[];
+}
+
+/**
+ * Reads one explainer's embedded theme values out of its `<style>` element.
+ *
+ * The light block is the bare `:root` rule; a dark block is any rule whose selector names
+ * `prefers-color-scheme: dark`'s `:root:not([data-theme])`, the `theme-controller` checkbox, or
+ * `[data-theme='expensa-dark']`. There are two of the latter per page and they must agree, which is
+ * a thing worth checking rather than assuming: they are hand-maintained copies of each other.
+ */
+export function parseExplainerThemeBlocks(html: string): ExplainerThemeBlocks {
+  const stripped = stripComments(html);
+  let light: Record<string, string> = {};
+  const dark: Record<string, string>[] = [];
+
+  for (const block of stripped.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    const selector = block[1].replace(/\s+/g, ' ').trim();
+    const declared = readAnyColourDeclarations(block[2]);
+    if (Object.keys(declared).length === 0) continue;
+
+    if (/\[data-theme=|theme-controller|:not\(\[data-theme\]\)/.test(selector)) {
+      dark.push(declared);
+    } else if (/(^|[\s,])(:root|html)\s*$/.test(selector) || selector.endsWith(':root')) {
+      // The bare `:root` rule. Matched on the selector's tail because the capture reaches back
+      // through the preceding markup, which is why this is not simply `selector === ':root'`.
+      light = { ...light, ...declared };
+    }
+  }
+  return { light, dark };
+}
+
+/**
+ * The Expensa blocks' own values, read wide enough to diff against an explainer.
+ *
+ * `parseAuthoredThemes` narrows to the allowlist because it feeds the measurement; this reads the
+ * same two blocks with nothing dropped, so the comparison covers every colour the theme declares.
+ */
+export function parseAuthoredThemeColours(
+  globalsCss: string,
+): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  for (const block of stripComments(globalsCss).matchAll(
+    /@plugin\s+'daisyui\/theme'\s*\{([^{}]*)\}/g,
+  )) {
+    const name = /name:\s*'([^']+)'/.exec(block[1])?.[1];
+    if (!name) continue;
+    out[name] = readAnyColourDeclarations(block[1]);
+  }
+  return out;
+}
+
+/** One disagreement between an explainer's embedded value and the theme's own. */
+export interface ExplainerDrift {
+  file: string;
+  block: string;
+  token: string;
+  explainer: string | undefined;
+  theme: string;
+}
+
+/**
+ * Diffs one explainer's embedded blocks against the Expensa pair.
+ *
+ * **A dark block declares only what changes between the pair, and demanding otherwise reports
+ * false failures.** The light block carries all twenty-two colours; the dark one carries the six
+ * that actually differ plus a redundant-but-identical `--color-neutral`, so this checks every token
+ * a block *declares* rather than every token the theme has. What it will not tolerate is a declared
+ * value that disagrees, or a dark block that disagrees with its sibling.
+ */
+export function explainerDrift(
+  file: string,
+  html: string,
+  authored: Record<string, Record<string, string>>,
+): ExplainerDrift[] {
+  const blocks = parseExplainerThemeBlocks(html);
+  const drift: ExplainerDrift[] = [];
+
+  const compare = (block: string, declared: Record<string, string>, themeName: string) => {
+    const theme = authored[themeName];
+    for (const [token, value] of Object.entries(declared)) {
+      // A dark block declares a subset, so an absent token is the subset rather than a defect -
+      // but a token the theme does not declare at all is one, and `theme[token]` being undefined
+      // is what surfaces it.
+      if (theme[token] !== value) {
+        drift.push({ file, block, token, explainer: value, theme: theme[token] });
+      }
+    }
+  };
+
+  compare(':root', blocks.light, 'expensa-light');
+  blocks.dark.forEach((declared, index) => compare(`dark[${index}]`, declared, 'expensa-dark'));
+
+  // The two dark blocks are hand-maintained copies of one another.
+  if (blocks.dark.length === 2) {
+    for (const token of new Set([...Object.keys(blocks.dark[0]), ...Object.keys(blocks.dark[1])])) {
+      if (blocks.dark[0][token] !== blocks.dark[1][token]) {
+        drift.push({
+          file,
+          block: 'the two dark blocks disagree',
+          token,
+          explainer: blocks.dark[0][token],
+          theme: blocks.dark[1][token],
+        });
+      }
+    }
+  }
+  return drift;
+}
+
+/** Reads one explainer off disk, relative to the repo root. */
+export function readExplainer(repoRoot: string, relativePath: string): string {
+  return readFileSync(`${repoRoot}/${relativePath}`, 'utf8');
+}
+
+// ---------------------------------------------------------------------------
 // Measurement
 // ---------------------------------------------------------------------------
 

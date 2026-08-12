@@ -7,7 +7,12 @@ import {
   NON_TEXT_CONTRAST_FLOOR,
   SEMANTIC_TOKENS,
   THEME_DATA_PATH,
+  THEME_EMBEDDING_EXPLAINERS,
   buildThemeData,
+  explainerDrift,
+  parseAuthoredThemeColours,
+  parseExplainerThemeBlocks,
+  readExplainer,
   compositeOver,
   contrastRatio,
   cssColourToHex,
@@ -372,6 +377,46 @@ describe('the shipped themes', () => {
 
   it('uses the same floor the category palette documents', () => {
     expect(DISTINGUISHABILITY_FLOOR).toBe(0.1);
+  });
+
+  it('keeps every explainer’s embedded theme values equal to globals.css', () => {
+    // The gap `docs/TODO.md` recorded and asked for "with the next theme edit if not sooner".
+    // Each of these pages paints the Expensa values into daisyUI's stock selectors by hand,
+    // because the CDN `daisyui.css` they load carries only the stock themes - so a theme edit was
+    // not done until every block matched, and nothing checked that it did.
+    const authored = parseAuthoredThemeColours(readThemeSources(REPO_ROOT).globalsCss);
+    const drift = THEME_EMBEDDING_EXPLAINERS.flatMap((file) =>
+      explainerDrift(file, readExplainer(REPO_ROOT, file), authored).map(
+        (row) =>
+          `${row.file} ${row.block}: --color-${row.token} is ${row.explainer}, theme says ${row.theme}`,
+      ),
+    );
+    expect(drift).toEqual([]);
+  });
+
+  it('reads a real light block and both dark blocks out of each explainer', () => {
+    // Guards the parse rather than the values: a selector regex that matched nothing would make
+    // the diff above pass by having nothing to compare, which is the failure mode of every check
+    // built on a parse. The counts are the shape the plan measured - 22 light colours, and the
+    // dark values twice (the prefers-dark arm and the theme-controller arm).
+    for (const file of THEME_EMBEDDING_EXPLAINERS) {
+      const blocks = parseExplainerThemeBlocks(readExplainer(REPO_ROOT, file));
+      expect(Object.keys(blocks.light)).toHaveLength(22);
+      expect(blocks.dark).toHaveLength(2);
+      for (const dark of blocks.dark) expect(Object.keys(dark).length).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('leaves no explainer selecting the stock dark theme’s name', () => {
+    // The rename PET-79 owed these files: `[data-theme='dark']` meant Expensa dark here and means
+    // daisyUI's own theme in the app the moment it is registered, so one attribute would have named
+    // two different palettes. Pinned as an absence, because the collision is silent - both themes
+    // exist and both paint.
+    for (const file of THEME_EMBEDDING_EXPLAINERS) {
+      const html = readExplainer(REPO_ROOT, file);
+      expect(html).not.toMatch(/\[data-theme=['"]dark['"]\]/);
+      expect(html).toMatch(/\[data-theme=['"]expensa-dark['"]\]/);
+    }
   });
 
   it('keeps THEME_COLOUR equal to each theme’s own base-100', () => {
