@@ -4,18 +4,18 @@
 // file://, where fetch of a sibling file is blocked.
 window.__SHOWCASE__ = {
   "authors": {
-    "generatedAt": "2026-08-12T11:33:25.913Z",
+    "generatedAt": "2026-08-12T11:36:01.396Z",
     "authors": [
       {
         "name": "izkreny",
-        "commits": 322,
-        "survivingLines": 81260,
+        "commits": 323,
+        "survivingLines": 83569,
         "mergedPullRequests": 47,
         "areas": {
           "backend": 37809,
           "frontend": 22595,
           "documentation": 27738,
-          "tooling": 9872
+          "tooling": 12181
         }
       },
       {
@@ -34,14 +34,14 @@ window.__SHOWCASE__ = {
     "survivingLinesFromExcludedCommits": 6948
   },
   "delivery": {
-    "generatedAt": "2026-08-12T11:33:26.562Z",
+    "generatedAt": "2026-08-12T11:36:02.054Z",
     "merged": 76,
     "opened": 83,
     "closedUnmerged": 4,
     "open": 3
   },
   "deps": {
-    "generatedAt": "2026-08-12T11:33:26.667Z",
+    "generatedAt": "2026-08-12T11:36:02.135Z",
     "trees": [
       {
         "tree": "root",
@@ -63,9 +63,9 @@ window.__SHOWCASE__ = {
     "totalAtInitialCommit": 1660
   },
   "repo": {
-    "generatedAt": "2026-08-12T11:33:13.850Z",
+    "generatedAt": "2026-08-12T11:35:51.170Z",
     "activity": {
-      "commits": 534,
+      "commits": 535,
       "activeDays": 15,
       "calendarDays": 15,
       "firstCommit": "2026-07-29",
@@ -129,17 +129,17 @@ window.__SHOWCASE__ = {
         },
         {
           "date": "2026-08-12",
-          "commits": 10
+          "commits": 11
         }
       ]
     },
     "churn": {
-      "added": 232266,
+      "added": 235303,
       "deleted": 63718,
-      "linesWrittenAndRewritten": 295984,
-      "addedExcludingGenerated": 183834,
+      "linesWrittenAndRewritten": 299021,
+      "addedExcludingGenerated": 186143,
       "deletedExcludingGenerated": 33244,
-      "linesWrittenAndRewrittenExcludingGenerated": 217078
+      "linesWrittenAndRewrittenExcludingGenerated": 219387
     },
     "lines": {
       "code": {
@@ -149,10 +149,10 @@ window.__SHOWCASE__ = {
         "blank": 14468
       },
       "documentation": {
-        "files": 154,
-        "code": 32073,
+        "files": 155,
+        "code": 32199,
         "comment": 0,
-        "blank": 7139
+        "blank": 7179
       },
       "generated": {
         "files": 29,
@@ -164,15 +164,15 @@ window.__SHOWCASE__ = {
     "documentationSplit": {
       "plans": {
         "files": 60,
-        "lines": 14932
+        "lines": 14963
       },
       "agents": {
         "files": 10,
-        "lines": 6292
+        "lines": 6299
       },
       "other": {
-        "files": 84,
-        "lines": 10849
+        "files": 85,
+        "lines": 10937
       }
     },
     "largestDocuments": [
@@ -204,7 +204,7 @@ window.__SHOWCASE__ = {
     }
   },
   "shape": {
-    "generatedAt": "2026-08-12T11:33:26.743Z",
+    "generatedAt": "2026-08-12T11:36:02.183Z",
     "tables": {
       "byScope": [
         {

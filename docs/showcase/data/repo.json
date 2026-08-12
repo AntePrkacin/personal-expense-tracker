@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-12T11:33:13.850Z",
+  "generatedAt": "2026-08-12T11:35:51.170Z",
   "activity": {
-    "commits": 534,
+    "commits": 535,
     "activeDays": 15,
     "calendarDays": 15,
     "firstCommit": "2026-07-29",
@@ -65,17 +65,17 @@
       },
       {
         "date": "2026-08-12",
-        "commits": 10
+        "commits": 11
       }
     ]
   },
   "churn": {
-    "added": 232266,
+    "added": 235303,
     "deleted": 63718,
-    "linesWrittenAndRewritten": 295984,
-    "addedExcludingGenerated": 183834,
+    "linesWrittenAndRewritten": 299021,
+    "addedExcludingGenerated": 186143,
     "deletedExcludingGenerated": 33244,
-    "linesWrittenAndRewrittenExcludingGenerated": 217078
+    "linesWrittenAndRewrittenExcludingGenerated": 219387
   },
   "lines": {
     "code": {
@@ -85,10 +85,10 @@
       "blank": 14468
     },
     "documentation": {
-      "files": 154,
-      "code": 32073,
+      "files": 155,
+      "code": 32199,
       "comment": 0,
-      "blank": 7139
+      "blank": 7179
     },
     "generated": {
       "files": 29,
@@ -100,15 +100,15 @@
   "documentationSplit": {
     "plans": {
       "files": 60,
-      "lines": 14932
+      "lines": 14963
     },
     "agents": {
       "files": 10,
-      "lines": 6292
+      "lines": 6299
     },
     "other": {
-      "files": 84,
-      "lines": 10849
+      "files": 85,
+      "lines": 10937
     }
   },
   "largestDocuments": [

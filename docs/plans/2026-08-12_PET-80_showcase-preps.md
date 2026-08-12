@@ -556,21 +556,41 @@ projector in a way that would actively mislead.
 
 **Vector 1: statistics**
 
-- [ ] `stats-repo.sh`: commits, active days, churn, and the snapshot line counts split into code,
+- [x] `stats-repo.mjs`: commits, active days, churn, and the snapshot line counts split into code,
       documentation and generated, plus the three-way documentation split. Excludes both `a237207` and
       `ab73abd`
-- [ ] `stats-authors.sh`: commits, merged PRs and **`git blame` surviving lines** per author, plus the
+- [x] `stats-authors.mjs`: commits, merged PRs and **`git blame` surviving lines** per author, plus the
       area split. Display names only, no email addresses in the JSON
-- [ ] `stats-delivery.sh`: merged and total pull requests
-- [ ] `stats-deps.sh`: package counts from the three lockfiles, now and at `a237207`
-- [ ] `stats-shape.sh`: tables, API operations, migrations
-- [ ] `stats-tests.sh`, optional and separate because it runs the suites
-- [ ] `data/tickets.json` from one JQL query, timestamped, tickets and epics
-- [ ] `build-charts.mjs`: the esbuild bundle and the `all.data.js` writer
-- [ ] Load the `dataviz` skill, then write `statistics.html`: three two-slice pies per author, one
+- [x] `stats-delivery.mjs`: merged and total pull requests
+- [x] `stats-deps.mjs`: package counts from the three lockfiles, now and at `a237207`
+- [x] `stats-shape.mjs`: tables, API operations, migrations
+- [x] `stats-tests.mjs`, optional and separate because it runs the suites
+- [x] `data/tickets.json` from one JQL query, timestamped, tickets and epics
+- [x] `build-charts.mjs`: the esbuild bundle and the `all.data.js` writer
+- [x] Load the `dataviz` skill, then write `statistics.html`: three two-slice pies per author, one
       stacked bar by area, one donut, several bars, one area chart, a row of stat tiles
-- [ ] One `mise run showcase:stats` that refreshes everything and rewrites `all.data.js`
-- [ ] Verify in a browser, light and dark, at projector size
+- [x] One `mise run showcase:stats` that refreshes everything and rewrites `all.data.js`
+- [x] Verify in a browser, light and dark, at projector size
+
+**Three things the generators settled that this plan had guessed at, recorded here because each
+changes a figure rather than an implementation detail.**
+
+**The generators are `.mjs`, not `.sh`.** Counting comment lines honestly needs a scanner that knows
+a `//` inside a string literal is not a comment and that a block comment spans lines; `git blame`
+attribution and lockfile walking are tree-shaped rather than line-shaped. Node is already pinned by
+mise and `build-charts.mjs` had to be Node regardless, so the real choice was one language for the
+set against a comment counter in awk that nobody would trust on a projector.
+
+**Attribution is by git *author*, not committer.** The plan chose committer on the grounds that it
+means "who ran the session"; 57 commits carry a committer of `GitHub`, because they were merged
+through the web UI. Committer attribution therefore invents a third contributor who is a website and
+silently takes those merges from the people who made them. The author field carries the same meaning
+with no such hole, and it yields the clean two-way split the plan predicted.
+
+**"16 active days, from 2026-07-27" is 15, from 2026-07-29.** Those two statements in this plan
+contradict each other: `a237207` is the *only* commit on 2026-07-27, so excluding it - which this
+plan also decides - removes that day entirely. 15 active days is the figure consistent with the
+exclusion rule, and it is what the page reports.
 
 **Vector 2: diagrams**
 
@@ -585,19 +605,37 @@ projector in a way that would actively mislead.
 
 - [x] `docs/.gitignore`, confirmed with `git check-ignore -v`
 - [ ] `docs/showcase/.participants` supplied
-- [ ] Establish that `MAILPACE_API_TOKEN` is readable locally
-- [ ] `SHOWCASE_EMAIL` becomes an argument defaulting to `slavko@spendifico.eu`; `fullName` becomes
+- [x] Establish that `MAILPACE_API_TOKEN` is readable locally - it and `MAIL_FROM` are both in
+      `backend/.env.local`
+- [x] `SHOWCASE_EMAIL` becomes an argument defaulting to `slavko@spendifico.eu`; `fullName` becomes
       `Slavko`
-- [ ] `mise run seed:fixture` in its own commit, then `mise run seed:check`
-- [ ] `docs/guides/seeding-dummy-data.md` updated, the two PET-60 incident records left alone
-- [ ] `invite-showcase.ts`, five phases, dry-run by default, header comment carrying the walkthrough
-- [ ] The email template
-- [ ] `showcase:invite` and `showcase:invite:cloud`
-- [ ] Dry-run and read every rendered mail
-- [ ] End-to-end test on a plus-address before any real participant address
+- [x] `mise run seed:fixture` in its own commit, then `mise run seed:check` - the diff was the one
+      `fullName` line, as predicted, and all invariants hold
+- [x] `docs/guides/seeding-dummy-data.md` updated, the two PET-60 incident records left alone
+- [x] `invite-showcase.ts`, five phases, dry-run by default, header comment carrying the walkthrough
+- [x] The email template
+- [x] `showcase:invite` and `showcase:invite:cloud`
+- [x] Dry-run and read every rendered mail
+- [ ] End-to-end test on a plus-address before any real participant address - **blocked on the reset
+      and reseed**, since links minted before it would be destroyed with the database
 - [ ] Send the batch
-- [ ] `watch-showcase-invites.ts`, including the completion line
-- [ ] The supersede rule written into `docs/showcase/README.md` as a rule
+- [x] `watch-showcase-invites.ts`, including the completion line
+- [x] The supersede rule written into `docs/showcase/README.md` as a rule
+
+**Verified against a running backend rather than argued.** The three properties the whole vector
+rests on were tested by minting real rows locally and consuming them: a directly-inserted link
+authenticates (200), its sibling still authenticates afterwards (200), and a replay of the first is
+rejected (401). The supersede hazard was reproduced deliberately too - two minted links, one login-form
+submission, both flagged broken by the watcher.
+
+**Two flags the plan did not call for, both about testability.** `--mint-only` reaches phases 2 and 3
+without sending, because `--send` is what triggers them and local mode refuses `--send` by design - so
+without it the transaction, the hash and the ledger would have executed for the first time against
+production with a room waiting. `--participants=` overrides the invite list, so a rehearsal cannot
+overwrite the real file, which is hand-written shortly before the run and has no second copy.
+
+**The email template lives in `backend/src/scripts/showcase/`, not `scripts/showcase/`.** A module
+imported by backend code has to sit inside the app's `rootDir` or `nest build` cannot resolve it.
 
 **Vector 4: assistant against SQL**
 
@@ -609,8 +647,8 @@ projector in a way that would actively mislead.
 
 **Closing**
 
-- [ ] `docs/showcase/README.md`
-- [ ] `npm run docs:check` green
+- [x] `docs/showcase/README.md`
+- [x] `npm run docs:check` green
 - [ ] Refresh every statistic against final `main` on the day
 
 ## What this deliberately does not do
