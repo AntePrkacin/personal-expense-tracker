@@ -102,8 +102,9 @@ function toNumber(value: string | number | undefined): number {
 
 export function TrendChart({ rows, max }: { rows: TrendRow[]; max: number }) {
   // `renderValue` below is passed to `LabelList` as a plain render function rather than mounted as
-  // a component, so it cannot hold a hook of its own and reads this one out of the closure.
-  // `TrendTooltip` is a real element and calls `useMoney()` itself.
+  // a component, so it cannot hold a hook of its own and reads this one out of the closure. It is
+  // now the only consumer on this card: `TrendTooltip` is a real element and did call `useMoney()`
+  // itself, until PET-78 left it holding a date range and no money at all.
   const { formatWhole } = useMoney();
 
   // Recharts positions this from the bar's own box, so it needs the row back to know whether the
@@ -175,7 +176,16 @@ export function TrendChart({ rows, max }: { rows: TrendRow[]; max: number }) {
             never showed and the only thing on screen that can explain a short final bucket
             drawn beside full weeks. `cursor={false}` suppresses the grey hover rectangle
             Recharts draws by default, which no frame designs. The range is also in the
-            card's screen-reader list, because a tooltip is pointer-only. */}
+            card's screen-reader list, because a tooltip is pointer-only.
+
+            **It carries the range and nothing else, as of PET-78 item 3.** It printed the
+            amount underneath, which `LabelList` above already paints permanently over every
+            bar - so hovering a bar restated the one figure that was never in question and
+            covered the neighbouring bars to do it. That leaves this tooltip holding exactly
+            what is not otherwise on screen, which is the same test that deleted the donut's
+            tooltip outright in item 2: there the legend already stated everything, here the
+            date range is stated nowhere else. The screen-reader list keeps **both**, because
+            it is the equivalent of the whole chart rather than of this bubble. */}
         <Tooltip content={<TrendTooltip />} cursor={false} isAnimationActive={false} />
 
         <Bar dataKey="value" isAnimationActive={false} radius={[4, 4, 0, 0]}>
@@ -190,17 +200,19 @@ export function TrendChart({ rows, max }: { rows: TrendRow[]; max: number }) {
 }
 
 function TrendTooltip({ active, payload }: TooltipContentProps) {
-  const { formatWhole } = useMoney();
-
   const row = payload?.[0]?.payload;
   if (active !== true || row === undefined) return null;
 
+  // **An empty range now suppresses the whole tooltip, and that is a consequence of dropping the
+  // amount rather than a separate decision.** `bucketRangeLabel` answers `''` for a date it could
+  // not parse; while the amount was here that only had to avoid a blank line above it, and the
+  // bubble still had something to say. The range is the only thing left, so an empty one would
+  // paint an empty box floating beside the bar.
+  if (row.range === '') return null;
+
   return (
-    <div className="rounded-box bg-neutral text-neutral-content px-3 py-2 text-xs shadow-md">
-      {/* An empty range is what `bucketRangeLabel` answers for a date it could not parse, and
-          rendering the element anyway would leave a blank line above the amount. */}
-      {row.range === '' ? null : <p className="font-semibold">{row.range}</p>}
-      <p>{formatWhole(row.actual)}</p>
+    <div className="rounded-box bg-neutral text-neutral-content px-3 py-2 text-xs font-semibold shadow-md">
+      {row.range}
     </div>
   );
 }
