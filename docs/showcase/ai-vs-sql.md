@@ -136,11 +136,60 @@ quantity, and one that looks identical in the transcript afterwards. Nine turns 
 
 The model is not deterministic even when the data is, so one right answer proves nothing.
 
-> **Not yet recorded.** The nine turns have to be taken against the account as seeded above. Fill
-> the table in as they are asked; a blank row is an honest state and a guessed one is not.
+Asked through `POST /api/assistant/messages` against production on **2026-08-12**, one call per
+ask with `sessionId` omitted - which is what makes the backend open a new conversation.
 
 | Question | Ask 1 | Ask 2 | Ask 3 | Verdict |
 | --- | --- | --- | --- | --- |
-| 1. Top merchant in 2025 | | | | |
-| 2. Most expensive gift | | | | |
-| 3. Groceries merchant by visits | | | | |
+| 1. Top merchant in 2025 | **Correct** | **Correct** | *upstream failure* | Right every time it answered |
+| 2. Most expensive gift | **Correct** | **Correct** | **Correct** | 3/3, all three facts each time |
+| 3. Groceries merchant by visits | **91** - merchant right, count **wrong** by one | *upstream failure* | *upstream failure* | The one genuine miss |
+
+### What it got right, and it went further than it was asked
+
+On question 1 the model volunteered the composition without being asked: twelve monthly payments
+of EUR 1,450.00 filed under *Loans & debt* on the 1st of each month. Every one of those details
+checks out against the SQL above.
+
+On question 2 it returned all three checkable facts - EUR 319.33, Gift Gallery, 2026-07-04 - on
+every ask, phrased differently each time. That is a needle in a haystack: 34 gift rows inside
+2,220 transactions.
+
+### The one genuine miss, and why it is the useful one
+
+Asked how many times the account has shopped at Konzum for groceries, the model answered **91**.
+The answer is **90**.
+
+It is worth being precise about what kind of error that is, because the obvious explanation is
+wrong. It is **not** a definitional disagreement about which rows count: `Konzum` appears exactly
+90 times in the whole account, every one of them in `Groceries`, and the model quoted the date
+range `2023-09-07` to `2026-08-06` - which is *precisely* the correct span. So it found the right
+rows and then miscounted them by one.
+
+That is the honest headline of this whole comparison. **The model reads the data correctly and
+does arithmetic on it unreliably.** It is also the cheapest possible thing to check: one line of
+SQL, one integer, no interpretation.
+
+Note the asymmetry with the other two questions. A *maximum* and a *sum over twelve rows* it gets
+right; a *count over ninety* it does not. Nothing here should be read as "the assistant is
+accurate" - it is accurate on two shapes of question and was caught being wrong on the third, on
+the first ask, with one query.
+
+### Three of nine turns never got an answer at all
+
+Five turns answered, one answered wrongly, and **three failed upstream** - so the table above has
+gaps that are not omissions. Google returned `503 UNAVAILABLE`, "This model is currently
+experiencing high demand", and on the retries two calls simply timed out. Nothing about the
+account, the prompt or the questions changed between the asks that worked and the ones that did
+not.
+
+That is worth stating rather than hiding, because it is a real property of the thing being
+demonstrated: **this feature depends on a free-tier third-party model, and a third of the attempts
+in one sitting did not complete.**
+
+**One defect surfaced by it.** An upstream `503` reaches the client as a **generic 500**, because
+`AssistantController` documents 503 for "not configured" and 504 for a timeout, and an overloaded
+model matches neither - so it falls through `AllExceptionsFilter` as an unhandled exception. A
+transient "try again in a moment" is therefore indistinguishable from a real bug, and the UI
+offers no retry affordance for it. Recorded in `docs/TODO.md`; mapping it to a true 503 is small
+but it touches the error taxonomy and wants its own ticket.

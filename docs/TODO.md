@@ -3311,3 +3311,21 @@ afterwards. The real fix is the admin panel the templates were moved into centra
 failing that a narrower "sync templates" path that adds rows absent from the table without
 resurrecting deliberately deleted ones - which needs a tombstone on the template rows to tell
 those two cases apart.
+
+### An overloaded Gemini reaches the client as a generic 500
+
+`POST /api/assistant/messages` documents **503** for "the assistant is not configured on this
+deployment" and **504** for "the model call did not finish in time". An upstream
+`503 UNAVAILABLE` - Google's own "This model is currently experiencing high demand" - matches
+neither, so it falls through `AllExceptionsFilter` as an unhandled exception and the caller sees
+the generic 500.
+
+The consequence is a user-facing one rather than a tidiness one: a transient "try again in a
+moment" is indistinguishable from a real bug, and the composer offers no retry affordance for a
+500 the way it could for a named transient failure.
+
+Observed on 2026-08-12 while recording `docs/showcase/ai-vs-sql.md`: **three of nine turns failed
+this way in one sitting**, first as 503s and then, on retry, as two 504 timeouts - so this is not
+a rare edge. `AssistantCompletionService` is where the SDK's `ApiError` would be inspected;
+mapping a 503 upstream to a 503 outward is small, but it widens the endpoint's documented error
+set and the frontend's failure taxonomy, so it wants its own ticket rather than a drive-by.
