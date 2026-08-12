@@ -294,11 +294,18 @@ drawn at matched cap height in `docs/explainers/font-pairing-review.html`.
 
 Two constraints drove it, and both are the silent kind that a visual comparison alone would miss.
 
-**A display face needs real weights, because 25 of the 26 `font-display` call sites pair it with
+**A display face needs real weights, because 28 of the 29 `font-display` call sites pair it with
 `font-bold` or `font-semibold`.** A single-weight family gets synthesized bold at every one of
 them. That is what ruled out the artwork's own IM Fell English SC (one weight), along with its
 rendering lowercase as small caps, so "Dashboard" would read "Dᴀsʜʙᴏᴀʀᴅ". Crimson Pro has eight
 weights, 200 to 900.
+
+**The count is 29 and an earlier draft of this plan said 26.** Worth correcting rather than editing
+quietly, because the wrong figure reached the Jira ticket and the review page too, and because of
+_how_ it was wrong: `rg 'font-display text-lg'` undercounts every site where another class sits
+between the two, and this app has one (`font-display px-2 text-lg`). Counting the distinct class
+strings instead gives `text-base` 2, `text-lg` 5, `text-xl` 3, `text-2xl` 12, `text-3xl` 3,
+`text-4xl` 3, and one carrying no size at all.
 
 **A body face needs a `tnum` feature, because six call sites depend on `tabular-nums`** and the
 class is inert without one - `TransactionRow` ("so the column's digits line up down the page") and
@@ -314,11 +321,35 @@ measured, so it carries the most air around its capitals.
 **That lightness has a consequence, and it is the one mechanical cost of this choice.** Crimson
 Pro's caps are **76.9%** the height of Plus Jakarta Sans's at the same font-size (0.5732 against
 0.7450), so every heading would read about a quarter smaller if the sizes were left alone. Matching
-them optically means multiplying by 1.300, which lands close enough to Tailwind's own steps to be a
-one-step bump: `text-lg` to `text-2xl`, `text-2xl` to `text-3xl`, `text-3xl` to `text-4xl`,
-`text-4xl` to `text-5xl`. That pass over the 26 call sites **is** the "per-element type sizes and
-spacing" gap `docs/TODO.md` has listed since PET-74, so this ticket closes that entry rather than
-adding to it.
+them optically means multiplying by 1.300, and the results land close to Tailwind's own steps:
+
+| Today | Sites | x1.300 | Nearest step | Distance |
+| --- | --- | --- | --- | --- |
+| `text-base` 16px | 2 | 20.8px | `text-xl` 20px | one step |
+| `text-lg` 18px | 5 | 23.4px | `text-2xl` 24px | **two** steps |
+| `text-xl` 20px | 3 | 26.0px | `text-2xl` 24px | one step |
+| `text-2xl` 24px | 12 | 31.2px | `text-3xl` 30px | one step |
+| `text-3xl` 30px | 3 | 39.0px | `text-4xl` 36px | one step |
+| `text-4xl` 36px | 3 | 46.8px | `text-5xl` 48px | one step |
+
+**It is not a uniform one-step bump, and an earlier draft of this section said it was.** `text-lg`
+is the exception: `lg` to `2xl` crosses `xl`, because Tailwind's scale steps 18 / 20 / 24 and the
+target lands between the last two. Worth stating because "bump everything one step" is the obvious
+way to carry the pass out, and it undersizes exactly those five while getting the rest right - a
+defect no gate can see, since every one of those classes compiles either way.
+
+**Three of the 29 are not ordinary bumps, and each needs deciding rather than stepping.**
+`app/WelcomeScreen.tsx:78` is the app's hero and carries **three** breakpoints
+(`text-4xl sm:text-5xl lg:text-6xl`), so it takes three edits and the top of the ramp runs out of
+scale - `6xl` at 60px wants 78px, which is nearer `7xl` (72) than `8xl` (96).
+`dashboard/InsightCard.tsx:25` is `font-display font-bold` with **no size at all** and inherits, so
+the bump does not apply to it. And **two of the sites are the wordmark itself** -
+`ui/Sidebar.tsx:229` at `text-lg` and `LogoLockup.tsx` at `text-xl` - which the logo unification
+replaces, so they leave this list rather than being bumped in it. That is 25 ordinary size edits,
+not 29, and the two that vanish are the reason to do the logo before the type pass.
+
+That pass **is** the "per-element type sizes and spacing" gap `docs/TODO.md` has listed since
+PET-74, so this ticket closes that entry rather than adding to it.
 
 **The wordmark gets no tracking, and the lever stays documented anyway.** `letter-spacing` on the
 wordmark alone would open the mark without touching a single heading or paragraph, so it was drawn
@@ -449,8 +480,9 @@ exactly once and then automating the measurement nobody needs again.
       the font binaries; record both, including what each was chosen over
 - [ ] Swap `app/fonts.ts` to Crimson Pro plus Inter, remap the `--font-display` token, and apply
       the same loaders in `.storybook/preview.ts`
-- [ ] Bump the 26 `font-display` call sites one Tailwind step to compensate for Crimson Pro's
-      lower cap height, closing the `docs/TODO.md` type-sizes entry
+- [ ] Bump the 25 ordinary `font-display` sites per the table above - **not** uniformly one step,
+      since `text-lg` moves two - and decide the hero's three breakpoints separately, closing the
+      `docs/TODO.md` type-sizes entry
 - [ ] Unify the logo into one component with `size` and `tone`, replace both call sites, drop
       the Sidebar copy, build the lockup as text in the display face with `letter-spacing` on the
       wordmark only, and give it an explicit accessible name with the glyphs hidden

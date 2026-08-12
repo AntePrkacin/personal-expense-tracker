@@ -184,7 +184,7 @@ def main():
             '</div></div>')
     sec_titles = ('<section><h2>3. The same face doing the app\'s real headings</h2>'
                   '<p class="lede">These are the sizes and weights actually in the code: '
-                  '<code>font-display text-2xl font-bold</code> appears eleven times, '
+                  '<code>font-display text-2xl font-bold</code> appears twelve times, '
                   '<code>text-3xl font-bold</code> three times, and one '
                   '<code>text-4xl font-bold tabular-nums</code> on the transaction amount. '
                   'A face with one weight has to fake every one of them.</p>'
@@ -236,7 +236,7 @@ def main():
             'than IM Fell English SC, plus a body face. The lockup is drawn in the mapping you '
             'chose, a <code>primary</code> tile with a <code>warning</code> dollar sign.</p>'
             '<p>Two hard constraints came out of measuring the fonts themselves. A display face '
-            'wants <b>more than one weight</b>, because 25 of the 26 <code>font-display</code> '
+            'wants <b>more than one weight</b>, because 28 of the 29 <code>font-display</code> '
             'call sites pair it with <code>font-bold</code> or <code>font-semibold</code>. And a '
             'body face wants a <b><code>tnum</code> feature</b>, because six call sites rely on '
             '<code>tabular-nums</code> and it is inert without one.</p></header>\n\n'
