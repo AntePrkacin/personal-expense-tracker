@@ -24,6 +24,8 @@ import {
   serialiseThemeData,
   type ThemeData,
 } from './themeGuard';
+// The one restatement of a theme value outside `globals.css`, checked against it below.
+import { THEME_COLOUR } from './theme';
 
 // The gate `frontend/CLAUDE.md`'s theme procedure never had (PET-79). Two halves, and the split
 // matters: the cases above the `describe('the shipped themes')` block are unit tests over pure
@@ -370,5 +372,22 @@ describe('the shipped themes', () => {
 
   it('uses the same floor the category palette documents', () => {
     expect(DISTINGUISHABILITY_FLOOR).toBe(0.1);
+  });
+
+  it('keeps THEME_COLOUR equal to each theme’s own base-100', () => {
+    // `lib/theme.ts` writes those five hexes by hand, because `<meta name="theme-color">` takes a
+    // colour rather than a `var()` and the element sits outside the themed subtree. So they are
+    // the one place a theme value is restated, and this is what stops the restatement drifting:
+    // editing a theme's card colour in `globals.css` fails here until the chrome follows it.
+    const { globalsCss, themesCss } = readThemeSources(REPO_ROOT);
+    const declared = {
+      ...Object.fromEntries(parseAuthoredThemes(globalsCss).map((t) => [t.name, t.declared])),
+      ...parseStockThemes(themesCss),
+    };
+    const overrides = parseThemeOverrides(globalsCss);
+    for (const [name, colour] of Object.entries(THEME_COLOUR)) {
+      const card = overrides[name]?.['base-100'] ?? declared[name]['base-100'];
+      expect(colour).toBe(card);
+    }
   });
 });

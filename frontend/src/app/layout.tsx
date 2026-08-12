@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import './globals.css';
-import { parseThemePref, THEME_COOKIE, themeAttribute } from '@/lib/theme';
+import { parseThemePref, THEME_COLOUR, THEME_COOKIE, themeAttribute } from '@/lib/theme';
 import { inter, plusJakartaSans } from './fonts';
 
 // "Spendifico", the name decided on 2026-08-02 and now carried everywhere in
@@ -13,12 +13,29 @@ export const metadata: Metadata = {
 };
 
 // Light and dark both ship: the Expensa pair as of PET-74, selected
-// automatically from the OS unless the Settings Theme control has pinned one.
-// Declaring both here keeps UA widgets (form controls, scrollbars) in step in
-// the automatic case; a pinned theme's own `color-scheme` declaration wins on
-// the element, so this stays the pair whichever way the choice goes.
+// automatically from the OS unless the Settings Theme control has pinned one -
+// and four more themes as of PET-79. Declaring both here keeps UA widgets (form
+// controls, scrollbars) in step in the automatic case; a pinned theme's own
+// `color-scheme` declaration wins on the element, so this stays the pair
+// whichever way the choice goes.
+//
+// `themeColor` is the browser chrome, and it is a **pair keyed on
+// `prefers-color-scheme` rather than one value**, because that is the only
+// variation the tag supports: it cannot follow a cookie-driven `data-theme`, and
+// the manifest's own `theme_color` is a single static brand value. So this is
+// exactly right for the Automatic arm and wrong for an explicit pick that
+// disagrees with the OS - which is why `settings/ThemeField.tsx` overwrites both
+// tags when a theme is chosen, and restores this pair for Automatic by reading
+// each tag's own `media`. Without that the tag would be correct on load and
+// stale from the first theme change, the worse of the two failures because it
+// looks like it works. The two values are the Expensa casts' own `base-100`,
+// read from `lib/theme.ts` so nothing here restates a hex.
 export const viewport: Viewport = {
   colorScheme: 'light dark',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: THEME_COLOUR['expensa-light'] },
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLOUR['expensa-dark'] },
+  ],
 };
 
 export default async function RootLayout({
