@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 
 // `render` comes from the shell wrapper: the modal below prefixes the profile's currency symbol as
 // of PET-47, so it reaches `useMoney()`/`useCurrency()`. See `shellRender.tsx`.
@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import type { Category } from '../../../../lib/categories';
 import type { Palette } from '../../../../lib/palette';
 
+import { toastMessages } from '../../toastQueries';
 import { DELETE_CATEGORY_TITLE } from './DeleteCategoryDialog';
 import { DeleteCategoryProvider } from './DeleteCategoryProvider';
 import { EditCategoryProvider, useEditCategory } from './EditCategoryProvider';
@@ -252,9 +253,18 @@ describe('AC7: the modal’s Delete category', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete category' }));
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    expect(
-      await screen.findByText("We couldn't delete this category. Please try again."),
-    ).toBeInTheDocument();
+    // **`toastMessages()` rather than `findByText`, and this was a flake that reddened CI on an
+    // unrelated PR.** `failed` is a toasted reason (PET-77), so the sentence lands in the visible
+    // stack *and* in the assertive announcer, which `ToastProvider` clears after
+    // `ANNOUNCEMENT_CLEAR_MS`. A whole-text query therefore matched **two** elements while the
+    // announcement was still up and one after it cleared - so this passed or failed on how fast the
+    // run was, failing roughly one time in five locally and once on CI. `toastQueries.ts`'s own
+    // docblock had already written the rule down ("prefer `toastMessages()` for 'did this post'");
+    // this case simply predated following it. Reading the stack answers what the test means to ask
+    // and cannot be ambiguous, because the dismiss control exists only there.
+    await waitFor(() => {
+      expect(toastMessages()).toEqual(["We couldn't delete this category. Please try again."]);
+    });
     expect(screen.getByRole('heading', { level: 2, name: 'Edit category' })).toBeInTheDocument();
   });
 });

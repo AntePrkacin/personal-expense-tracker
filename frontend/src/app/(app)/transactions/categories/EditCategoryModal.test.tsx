@@ -476,9 +476,13 @@ describe('the five failures', () => {
     await user().type(name(), 'Streaming');
     await user().click(save());
 
-    expect(
-      await screen.findByText("We couldn't save this category. Please try again."),
-    ).toBeInTheDocument();
+    // The stack rather than a text query, because `failed` is toasted and the announcer holds the
+    // same sentence for `ANNOUNCEMENT_CLEAR_MS` - so `findByText` matches two elements or one
+    // depending on how fast the run is. `EditCategoryProvider.test.tsx` carries the full account;
+    // this is the same latent flake in a sibling suite, fixed before it reddened anything.
+    await waitFor(() => {
+      expect(toastMessages()).toEqual(["We couldn't save this category. Please try again."]);
+    });
     expect(save()).toBeEnabled();
   });
 
