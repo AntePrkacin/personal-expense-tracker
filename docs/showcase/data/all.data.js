@@ -4,24 +4,24 @@
 // file://, where fetch of a sibling file is blocked.
 window.__SHOWCASE__ = {
   "authors": {
-    "generatedAt": "2026-08-12T15:23:44.330Z",
+    "generatedAt": "2026-08-12T15:40:35.954Z",
     "authors": [
       {
         "name": "izkreny",
-        "commits": 364,
-        "survivingLines": 93711,
-        "mergedPullRequests": 50,
+        "commits": 368,
+        "survivingLines": 94011,
+        "mergedPullRequests": 51,
         "areas": {
-          "backend": 38374,
-          "frontend": 27022,
-          "documentation": 30177,
+          "backend": 38404,
+          "frontend": 27106,
+          "documentation": 30426,
           "tooling": 16129
         }
       },
       {
         "name": "Ante Prkačin",
         "commits": 215,
-        "survivingLines": 70644,
+        "survivingLines": 70623,
         "mergedPullRequests": 29,
         "areas": {
           "backend": 4171,
@@ -34,14 +34,14 @@ window.__SHOWCASE__ = {
     "survivingLinesFromExcludedCommits": 6933
   },
   "delivery": {
-    "generatedAt": "2026-08-12T15:23:44.989Z",
-    "merged": 79,
+    "generatedAt": "2026-08-12T15:40:36.621Z",
+    "merged": 80,
     "opened": 85,
     "closedUnmerged": 4,
-    "open": 2
+    "open": 1
   },
   "deps": {
-    "generatedAt": "2026-08-12T15:23:45.059Z",
+    "generatedAt": "2026-08-12T15:40:36.700Z",
     "trees": [
       {
         "tree": "root",
@@ -63,9 +63,9 @@ window.__SHOWCASE__ = {
     "totalAtInitialCommit": 1660
   },
   "repo": {
-    "generatedAt": "2026-08-12T15:23:31.898Z",
+    "generatedAt": "2026-08-12T15:40:24.494Z",
     "activity": {
-      "commits": 579,
+      "commits": 583,
       "activeDays": 15,
       "calendarDays": 15,
       "firstCommit": "2026-07-29",
@@ -129,50 +129,50 @@ window.__SHOWCASE__ = {
         },
         {
           "date": "2026-08-12",
-          "commits": 55
+          "commits": 59
         }
       ]
     },
     "churn": {
-      "added": 248061,
-      "deleted": 65807,
-      "linesWrittenAndRewritten": 313868,
-      "addedExcludingGenerated": 198679,
-      "deletedExcludingGenerated": 35191,
-      "linesWrittenAndRewrittenExcludingGenerated": 233870
+      "added": 248528,
+      "deleted": 66073,
+      "linesWrittenAndRewritten": 314601,
+      "addedExcludingGenerated": 199042,
+      "deletedExcludingGenerated": 35275,
+      "linesWrittenAndRewrittenExcludingGenerated": 234317
     },
     "lines": {
       "code": {
         "files": 670,
-        "code": 75090,
-        "comment": 39441,
-        "blank": 15105
+        "code": 75042,
+        "comment": 39518,
+        "blank": 15106
       },
       "documentation": {
-        "files": 161,
-        "code": 34099,
+        "files": 162,
+        "code": 34315,
         "comment": 0,
-        "blank": 7553
+        "blank": 7586
       },
       "generated": {
         "files": 29,
-        "code": 41536,
+        "code": 41458,
         "comment": 806,
         "blank": 251
       }
     },
     "documentationSplit": {
       "plans": {
-        "files": 63,
-        "lines": 16054
+        "files": 64,
+        "lines": 16203
       },
       "agents": {
         "files": 10,
-        "lines": 6674
+        "lines": 6733
       },
       "other": {
         "files": 88,
-        "lines": 11371
+        "lines": 11379
       }
     },
     "largestDocuments": [
@@ -182,15 +182,15 @@ window.__SHOWCASE__ = {
       },
       {
         "path": "docs/TODO.md",
-        "lines": 2772
+        "lines": 2780
       },
       {
         "path": "backend/CLAUDE.md",
-        "lines": 1143
+        "lines": 1158
       },
       {
         "path": "frontend/CLAUDE.md",
-        "lines": 1029
+        "lines": 1046
       },
       {
         "path": "docs/plans/2026-08-10_PET-73_assistant-chat.md",
@@ -198,13 +198,13 @@ window.__SHOWCASE__ = {
       }
     ],
     "commentDensity": {
-      "code": 75090,
-      "comment": 39441,
-      "per100": 52.5
+      "code": 75042,
+      "comment": 39518,
+      "per100": 52.7
     }
   },
   "shape": {
-    "generatedAt": "2026-08-12T15:23:45.103Z",
+    "generatedAt": "2026-08-12T15:40:36.742Z",
     "tables": {
       "byScope": [
         {
@@ -243,28 +243,28 @@ window.__SHOWCASE__ = {
     }
   },
   "tests": {
-    "generatedAt": "2026-08-12T11:24:16.362Z",
+    "generatedAt": "2026-08-12T15:41:58.199Z",
     "suites": [
       {
         "suite": "backend unit",
-        "total": 580,
-        "passed": 580,
+        "total": 592,
+        "passed": 592,
         "failed": 0
       },
       {
         "suite": "backend e2e",
-        "total": 401,
-        "passed": 401,
+        "total": 411,
+        "passed": 411,
         "failed": 0
       },
       {
         "suite": "frontend",
-        "total": 3173,
-        "passed": 3173,
+        "total": 3288,
+        "passed": 3288,
         "failed": 0
       }
     ],
-    "total": 4154
+    "total": 4291
   },
   "tickets": {
     "generatedAt": "2026-08-12T11:26:00.000Z",
