@@ -69,9 +69,14 @@ export const Euro: Story = {
 /**
  * A code the picker does not offer.
  *
- * Reachable because the backend validates `@IsISO4217CurrencyCode()` rather than an allowlist, so
- * a profile can hold one set through the API. The trigger shows the code rather than guessing a
- * glyph, and the panel still offers the three.
+ * The trigger shows the code rather than guessing a glyph, and the panel still offers the three.
+ *
+ * **Why this is reachable has changed twice, and the story outlived both reasons.** It was written
+ * when the backend validated `@IsISO4217CurrencyCode()`, so any of 180 codes could be stored;
+ * PET-72 replaced that with an exponent-2 allowlist, and PET-85 cut the allowlist to three. What
+ * keeps the state live is that neither narrowing rewrote stored data - an account set to a code
+ * that is no longer offered keeps it, and `PATCH /api/profile` never re-sends a field the user did
+ * not touch. `CHF` is the closer case to check than `JPY`, being one this app offered until PET-85.
  */
 export const UnofferedCurrency: Story = {
   render: () => <Controlled currency="JPY" value="240,000" />,

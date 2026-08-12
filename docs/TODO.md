@@ -1779,6 +1779,15 @@ and `KWD` (exponent 3) and would turn every figure in the app into a silent fact
 Supporting them is a real feature and it is not a longer list: it is an exponent per code, threaded
 through both conversion functions, every `Intl` call and the amount field's hand-built grouping.
 
+**PET-85 cut that allowlist from twenty-nine codes to three (`EUR`, `USD`, `GBP`), which changes the
+count this entry is stated against and none of its conclusion.** Read the narrowing as a product
+decision rather than a technical retreat: the twenty-nine were every exponent-2 ISO code, which is
+the right question for a validator and the wrong one for a picker, and the picker they were rendered
+into had been built and measured for three - so it overflowed the viewport by 294px with no scroll
+container, and a platform popover cannot be scrolled to. The entry above still describes what a
+genuinely wider list needs, and it is now the *second* thing such a list needs: the first is somebody
+choosing which codes to offer, which is what settles the tech spec's **A6**.
+
 **Correcting a history row has no endpoint.** The three histories are append-only and nothing edits or
 removes a row, so a schedule change made from the wrong paycheck can only be answered with another one
 - which leaves both rows and resolves to the newer. Right for a record of decisions, wrong for a typo,

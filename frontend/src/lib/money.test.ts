@@ -110,11 +110,18 @@ describe('moneyFormatters', () => {
 });
 
 describe('SUPPORTED_CURRENCIES', () => {
-  it('leads with the three the design draws, in EUR-first order', () => {
+  it('offers exactly the three the design draws, in EUR-first order', () => {
     // Read off `ui_kits/expensa-app/OnboardingScreen.jsx`'s `ONBOARDING_CURRENCIES`, with EUR
     // promoted to the front because it is the default since PET-72. The names are design copy
     // rather than `Intl.DisplayNames` output, so they are pinned here.
-    expect(SUPPORTED_CURRENCIES.slice(0, 3)).toEqual([
+    //
+    // **Asserted against the whole list rather than its first three, which is PET-85's half of this
+    // case.** It was a `slice(0, 3)` while the list ran to twenty-nine, so it pinned the head and
+    // said nothing about the length - and the length is exactly what went wrong: the panel in
+    // `components/BudgetField.tsx` is built for three rows and overflowed the viewport at
+    // twenty-nine. A whole-list equality is what makes a fourth entry fail here, in a file a person
+    // reads, rather than only in a browser walk somebody has to remember to run.
+    expect(SUPPORTED_CURRENCIES).toEqual([
       { code: 'EUR', symbol: '€', name: 'Euro' },
       { code: 'USD', symbol: '$', name: 'US Dollar' },
       { code: 'GBP', symbol: '£', name: 'British Pound' },

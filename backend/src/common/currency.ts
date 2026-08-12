@@ -27,41 +27,27 @@
  * this array publishes a real OpenAPI enum, so the frontend's currency picker is
  * typed off the contract and cannot offer a code the backend would reject.
  *
- * Ordering is the picker's order, not alphabetical: EUR, USD and GBP first
- * because they are what PET-47 offered and what almost every user will want,
- * then the rest alphabetically.
+ * Ordering is the picker's order, not alphabetical: EUR first because it is the
+ * default, then USD and GBP.
+ *
+ * **It is three codes rather than twenty-nine, by product decision (PET-85), and
+ * the count is the point rather than an accident of which codes qualify.** PET-72
+ * wrote this list by asking "which ISO codes have an exponent of 2", which is the
+ * right question for a *validator* and the wrong one for a *picker*: it produced
+ * twenty-nine entries nobody had chosen, and the panel that renders them
+ * (`components/BudgetField.tsx`) had been built and measured for three - so it
+ * carried no scroll container, overflowed the viewport by 294px, and left the last
+ * codes painted and unreachable, since a platform popover sits in the top layer and
+ * does not scroll with the page. That closes the tech spec's **A6**, which said the
+ * option list was unknown and to ship with USD until specified. This is the
+ * specification.
+ *
+ * So the exponent rule above is **necessary and not sufficient**. A code has to
+ * clear it to be eligible, and then somebody has to decide the picker should offer
+ * it. Adding one back is a product decision plus a look at that panel, in that
+ * order; the codes PET-72 listed are in this file's history if the list ever grows.
  */
-export const SUPPORTED_CURRENCIES = [
-  'EUR',
-  'USD',
-  'GBP',
-  'AED',
-  'AUD',
-  'BAM',
-  'BGN',
-  'BRL',
-  'CAD',
-  'CHF',
-  'CNY',
-  'CZK',
-  'DKK',
-  'HKD',
-  'HUF',
-  'ILS',
-  'INR',
-  'MKD',
-  'MXN',
-  'NOK',
-  'NZD',
-  'PLN',
-  'RON',
-  'RSD',
-  'SEK',
-  'SGD',
-  'TRY',
-  'UAH',
-  'ZAR',
-] as const;
+export const SUPPORTED_CURRENCIES = ['EUR', 'USD', 'GBP'] as const;
 
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 

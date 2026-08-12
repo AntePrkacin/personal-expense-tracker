@@ -573,7 +573,7 @@ export interface components {
              * @example EUR
              * @enum {string}
              */
-            currency: "EUR" | "USD" | "GBP" | "AED" | "AUD" | "BAM" | "BGN" | "BRL" | "CAD" | "CHF" | "CNY" | "CZK" | "DKK" | "HKD" | "HUF" | "ILS" | "INR" | "MKD" | "MXN" | "NOK" | "NZD" | "PLN" | "RON" | "RSD" | "SEK" | "SGD" | "TRY" | "UAH" | "ZAR";
+            currency: "EUR" | "USD" | "GBP";
             /**
              * @description Major units (e.g. 2000.50). Stored as integer cents. The cap is not a
              *     product judgment: it keeps the cents conversion far inside JS safe-integer
@@ -640,7 +640,7 @@ export interface components {
              * @description ISO 4217 code, uppercase. Display only - amounts are stored in minor units. The list is restricted to two-decimal currencies, because the whole API assumes an exponent of 2.
              * @enum {string}
              */
-            currency: "EUR" | "USD" | "GBP" | "AED" | "AUD" | "BAM" | "BGN" | "BRL" | "CAD" | "CHF" | "CNY" | "CZK" | "DKK" | "HKD" | "HUF" | "ILS" | "INR" | "MKD" | "MXN" | "NOK" | "NZD" | "PLN" | "RON" | "RSD" | "SEK" | "SGD" | "TRY" | "UAH" | "ZAR";
+            currency: "EUR" | "USD" | "GBP";
             /**
              * @description Day of the month the budgeting period starts on, 1-28 - your pay day.
              *
@@ -690,7 +690,7 @@ export interface components {
              * @example EUR
              * @enum {string}
              */
-            currency?: "EUR" | "USD" | "GBP" | "AED" | "AUD" | "BAM" | "BGN" | "BRL" | "CAD" | "CHF" | "CNY" | "CZK" | "DKK" | "HKD" | "HUF" | "ILS" | "INR" | "MKD" | "MXN" | "NOK" | "NZD" | "PLN" | "RON" | "RSD" | "SEK" | "SGD" | "TRY" | "UAH" | "ZAR";
+            currency?: "EUR" | "USD" | "GBP";
             /**
              * @description What the sidebar and greeting show. One field, not a first and last name.
              *

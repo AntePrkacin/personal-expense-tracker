@@ -69,11 +69,19 @@ export type CurrencyCode = NonNullable<
 /**
  * The currencies the UI offers, in the order the budget field lists them.
  *
- * The first three are the ones PET-47 shipped, read off the team's Claude Design system
+ * These are the three PET-47 shipped, read off the team's Claude Design system
  * (`ui_kits/expensa-app/OnboardingScreen.jsx`'s `ONBOARDING_CURRENCIES`) with EUR promoted to the
  * front, because it is the default now. The symbol and the name are written out rather than derived
  * from `Intl.DisplayNames`, because these two strings are **design copy**: the panel draws "Euro"
  * beside a "€", and a formatter's idea of a currency's display name is not the designer's.
+ *
+ * **It was twenty-nine between PET-72 and PET-85, and the trim back is a bug fix rather than a
+ * retreat.** `components/BudgetField.tsx` renders this list into a panel built and measured for
+ * three; at twenty-nine it stood 1024px tall in a 757px viewport with no scroll container, and
+ * because a platform popover sits in the top layer the page could not be scrolled to reach the
+ * codes hanging below the fold. `backend/src/common/currency.ts` is where the count is argued -
+ * read it before adding an entry here, because the exponent rule that governs that list is
+ * necessary and not sufficient, and this list has to stay exhaustive over it either way.
  *
  * **This list is exhaustive over `CurrencyCode` and is checked to be**, which reverses what the
  * paragraph here used to say. It read "the backend accepts far more than these three", and pointed
@@ -89,32 +97,6 @@ export const SUPPORTED_CURRENCIES = [
   { code: 'EUR', symbol: '€', name: 'Euro' },
   { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'GBP', symbol: '£', name: 'British Pound' },
-  { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham' },
-  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
-  { code: 'BAM', symbol: 'KM', name: 'Bosnia-Herzegovina Mark' },
-  { code: 'BGN', symbol: 'лв', name: 'Bulgarian Lev' },
-  { code: 'BRL', symbol: 'R$', name: 'Brazilian Real' },
-  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
-  { code: 'CHF', symbol: 'CHF', name: 'Swiss Franc' },
-  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
-  { code: 'CZK', symbol: 'Kč', name: 'Czech Koruna' },
-  { code: 'DKK', symbol: 'kr', name: 'Danish Krone' },
-  { code: 'HKD', symbol: 'HK$', name: 'Hong Kong Dollar' },
-  { code: 'HUF', symbol: 'Ft', name: 'Hungarian Forint' },
-  { code: 'ILS', symbol: '₪', name: 'Israeli Shekel' },
-  { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
-  { code: 'MKD', symbol: 'ден', name: 'Macedonian Denar' },
-  { code: 'MXN', symbol: 'MX$', name: 'Mexican Peso' },
-  { code: 'NOK', symbol: 'kr', name: 'Norwegian Krone' },
-  { code: 'NZD', symbol: 'NZ$', name: 'New Zealand Dollar' },
-  { code: 'PLN', symbol: 'zł', name: 'Polish Złoty' },
-  { code: 'RON', symbol: 'lei', name: 'Romanian Leu' },
-  { code: 'RSD', symbol: 'дин', name: 'Serbian Dinar' },
-  { code: 'SEK', symbol: 'kr', name: 'Swedish Krona' },
-  { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
-  { code: 'TRY', symbol: '₺', name: 'Turkish Lira' },
-  { code: 'UAH', symbol: '₴', name: 'Ukrainian Hryvnia' },
-  { code: 'ZAR', symbol: 'R', name: 'South African Rand' },
 ] as const satisfies readonly { code: CurrencyCode; symbol: string; name: string }[];
 
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
@@ -122,9 +104,13 @@ export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 /**
  * Compile-time proof that every code the contract accepts is offered.
  *
- * `AssertNever` fails to instantiate for anything but `never`, so a thirtieth code added to the
+ * `AssertNever` fails to instantiate for anything but `never`, so a fourth code added to the
  * backend's allowlist breaks `npm run build` rather than shipping a currency the picker cannot
  * offer. The technique and its reasoning are `transactions/filters.ts`'s; this is its fourth user.
+ *
+ * The number in that sentence has been wrong once already - it said "a thirtieth" until PET-85 cut
+ * the allowlist to three - which is the argument for writing the proof rather than the count: this
+ * type is right whatever the length, and only the prose needs maintaining.
  */
 type AssertNever<T extends never> = T;
 

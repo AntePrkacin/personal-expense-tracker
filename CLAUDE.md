@@ -174,6 +174,35 @@ handler takes a **`@BearerToken()` param decorator** beside `CurrentUser`, becau
 discards the token it validates and `@Headers('authorization')` made the published spec document
 `Authorization` twice.
 
+**PET-85 is the twenty-first thing that works, and it is the smallest of them and the one whose
+lesson is about comments rather than code.** The currency switcher was unusable: PET-72 grew
+`SUPPORTED_CURRENCIES` from three codes to twenty-nine, closing a real defect - the whole ISO list let
+a JPY user have every amount inflated a hundredfold, because money conversion multiplies by 100
+unconditionally - and never came back to the panel that renders it. That panel carries a constant
+whose comment reads "three currencies fit, and a scroll container for three rows would be furniture
+with nothing to do", true when it was written at PET-47 and false for two tickets afterwards.
+Measured: **1024px of panel in a 757px viewport, overflowing by 294px**, `max-height` computing to
+`none`, and not scrolling either - and because a platform popover sits in the **top layer**,
+positioned against the viewport, scrolling the page could not bring the bottom back, so the last
+codes were painted and unreachable by any means the user had. The fix is one list trimmed to
+**`EUR`, `USD`, `GBP`** and a regenerated contract; the component needed no change, because three
+rows is the condition it was measured under.
+
+Four things about it reach past those two files. It **settles A6** rather than amending it - the tech
+spec says the Figma select shows only "USD - $", the option list is unknown, and to ship with USD
+until specified, so the product owner naming three codes is the specification arriving, the same
+route A39 took one ticket earlier. The **exponent rule became necessary and not sufficient**: PET-72
+derived its list mechanically, which reads as principled and is really the residue of a validation
+fix, so a code must now clear the rule *and* be chosen, and `backend/src/common/currency.ts` is where
+that second half is argued. The **rule-satisfying alternative was priced and declined** - bounding
+the panel with a `max-h`/`overflow` pair keeps every code and fixes the overflow, and it would ship
+an undesigned control over a list nobody reviewed; if the list ever grows back, that is the ticket
+where the scroll container is right. And **no gate in this repo could see any of it**: a list's
+length is not a class, a type or an assertion, every check was green at twenty-nine, and what caught
+it was a person opening the panel. `lib/money.test.ts` now pins the whole list by equality rather
+than its head, which is the cheapest half of the guard and still not the half that would have found
+this.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and
