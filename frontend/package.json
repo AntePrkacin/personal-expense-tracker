@@ -13,6 +13,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "api:types": "openapi-typescript ../backend/openapi.json -o src/types/api.d.ts",
+    "theme:report": "node --no-warnings=MODULE_TYPELESS_PACKAGE_JSON scripts/theme-report.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },

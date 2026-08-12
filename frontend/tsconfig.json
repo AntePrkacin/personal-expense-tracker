@@ -11,6 +11,12 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // `scripts/theme-report.ts` is run by `node` directly, which resolves ESM specifiers
+    // literally and therefore needs the `.ts` extension written out; without this flag tsc
+    // rejects that specifier (TS5097). Legal only because `noEmit` is true above, and it only
+    // *permits* the extension - nothing else in the app writes one. Chosen over adding a `tsx`
+    // devDependency for a script that Node 26 can already run on its own.
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
