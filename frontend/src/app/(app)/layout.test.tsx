@@ -21,6 +21,8 @@ import { useDeleteTransaction } from './DeleteTransactionProvider';
 import { DELETE_TRANSACTION_TITLE } from './DeleteTransactionDialog';
 import { useEditTransaction } from './EditTransactionProvider';
 import { useMoney } from './PreferencesProvider';
+import { assertiveAnnouncement, politeAnnouncement, toastMessages } from './toastQueries';
+import { useToast } from './ToastProvider';
 import AppLayout from './layout';
 
 // The shell layout's two jobs: gate the segment and lay the two columns out. The gate is
@@ -98,6 +100,17 @@ function OpenEditModal() {
   return (
     <button type="button" onClick={() => open(TRANSACTION)}>
       Edit it
+    </button>
+  );
+}
+
+/** A child that posts a notification, standing in for any of the twelve call sites (PET-77). */
+function PostAToast() {
+  const { post } = useToast();
+
+  return (
+    <button type="button" onClick={() => post({ kind: 'success', message: 'Transaction added.' })}>
+      Post it
     </button>
   );
 }
@@ -205,6 +218,32 @@ describe('AppLayout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit it' }));
 
     expect(screen.getByRole('dialog', { name: 'Edit transaction' })).toBeInTheDocument();
+  });
+
+  it('mounts ToastProvider, with both announcers empty before anything is posted', async () => {
+    // **The region has to be in the tree from the first render**, which is the opposite of the rule
+    // every modal here follows. A closed `<dialog>` must not be mounted because `queryAllByText`
+    // reads straight through `display: none`; these two are live regions, and one created in the
+    // same commit as its content is not announced at all. So the assertion is about their **text**,
+    // not their presence - `getByRole('status')` cannot tell a working region from a broken one.
+    render(await AppLayout({ children: null }));
+
+    expect(politeAnnouncement()).toBe('');
+    expect(assertiveAnnouncement()).toBe('');
+  });
+
+  it('lets a child post into that region', async () => {
+    // What this proves is that the provider is mounted and the seam resolves. It deliberately does
+    // **not** claim the provider is outermost: a probe in `children` resolves however deep the
+    // provider sits, which is the trap the `PreferencesProvider` test below records paying for. The
+    // property that matters - that a *dialog* can post - is pinned where the dialogs are, in each
+    // call site's own suite.
+    render(await AppLayout({ children: <PostAToast /> }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Post it' }));
+
+    expect(politeAnnouncement()).toBe('Transaction added.');
+    expect(toastMessages()).toEqual(['Transaction added.']);
   });
 
   it('mounts PreferencesProvider outside the three modal providers', async () => {

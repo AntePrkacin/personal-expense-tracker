@@ -126,6 +126,15 @@ takes it off the read whose figures it is labelling, which is what the other thr
 true is the rule the deletion of `periodOverline` established - **no period name is ever derived on
 this side** - reached here by not naming one.
 
+**PET-67 makes `/transactions` the third screen to _draw_ the select, which is a different count from
+the one those two paragraphs keep.** Three headers read their period off their own response and that
+is unchanged; what changed is that all three of them now put a `PeriodSelect` in the header rather
+than two, because that screen's period pill moved up out of the filter bar. Its overline is still the
+list read's own label and still prints "All time" for the one filter whose response carries no period,
+so the sentence above describing `/transactions` is intact - the screen simply has a control beside
+the label now. It reaches that select through `TransactionPeriodSelect` rather than rendering
+`PeriodSelect` directly, and the paragraph under The transactions screen carries why.
+
 **`export const dynamic = 'force-dynamic'` was on the layout and is deliberately gone.** It
 existed because the pages read `new Date()` for the overline, and without it Next prerendered
 them and every screen showed whatever month the build ran in - a bug that only appears a month
@@ -807,6 +816,41 @@ remounting it. Move it under `<main>` - into the branch that swaps between the t
 empty card - or key the screen on anything, and every keystroke loses focus once the debounce
 lands. `TransactionsScreen.test.tsx` pins that it is inside `<header>` and not inside `<main>`,
 because the failure is invisible in a diff.
+
+**PET-67 moved it under `<main>` anyway, and the paragraph above is worth keeping because every
+sentence in it is still true of the mechanism and the conclusion no longer follows.** The product
+owner asked for the search field and the period control to swap places, so the field now sits in
+`TransactionFilterBar` between the category and sort pills, and the header draws the account's real
+period history through `(app)/transactions/TransactionPeriodSelect.tsx`. What makes that safe is a
+fact about the states rather than about the tree: the bar is dropped in the `empty` state alone, and
+**no keystroke can reach that state.** `lib/transactions.ts` decides `empty` from an account-wide
+`period=all` probe, so it means "this account has never logged anything" where a filter that matched
+nothing is `noResults`, which keeps the bar. A user who can type is therefore never in the state that
+removes the field, and the field's position is identical across every state a keystroke can move
+between - which is the whole of what reconciliation needs. Read the old paragraph as the reason the
+field cannot live inside a conditional that a _filter change_ can flip, which is still the rule.
+
+Four consequences worth knowing before touching either screen. **The designed empty state now draws
+no search box at all**, which is defensible (nothing to search) and which neither TRN-3 nor A15 says
+anything about. **`PeriodSelect` grew an exclusive-union navigation arm** rather than a wider href
+builder, and the reason is a hard constraint rather than taste: a period change here has to preserve
+the other three filters, so `periodHref` (which rebuilds the query string from scratch) is wrong, and
+an `hrefFor` prop is impossible because `TransactionsScreen` is a **Server Component** and a function
+prop cannot cross into a Client Component. So the arm is `onSelect`, and
+`TransactionPeriodSelect` is the client component in between that supplies it - which then earns its
+keep twice by routing the change through `FilterNavigation`, so a period change dims the table like
+every other filter on that screen where the Dashboard's own `router.replace` cannot. **`?period=all`
+survives as one appended option**, because it is the single filter whose response carries
+`period: null` and so the one value `GET /api/periods` cannot supply; `previous` becomes URL-only,
+reachable from a link and from no control. And **`PERIOD_OPTIONS` in `filters.ts` changed job** from
+the pill's option list to `isPeriod`'s parse allowlist, which is why all three entries have to stay
+even though two are no longer picked by name.
+
+**It also reinstates PET-19's AC3, which this file records as having lost twice.** The paragraph
+under The app shell says AC3 "claimed the month select appears on Transactions too" and that TRN-1
+and node `26:137` won; that is what has been overridden, so the two paragraphs saying the design won
+are history on the period specifically. The rest of that note stands: Figma still draws a search
+field there, and the deviation is a product decision rather than a reading of the frame.
 
 **The filters live in `searchParams`, which is the choice PET-30 left open, and
 `app/(app)/transactions/filters.ts` is where the decision is written down.** Three things about
@@ -2088,6 +2132,64 @@ which is the instant-to-calendar-date conversion `insights/AssistantHistoryScree
 after a review of PET-73 found its zone bug, lifted here at its **second** consumer rather than its
 third. That is `lib/pickerScroll.ts`'s exception restated: two copies of markup are cheap, and two
 copies of a _fix_ are a divergence waiting for the next reviewer who corrects only one of them.
+**PET-77 gives the shell a notification region, and it is the first thing in this app that renders
+outside every route's tree.** `(app)/ToastProvider.tsx` holds the queue and `(app)/ToastRegion.tsx`
+the DOM, mounted once on `(app)/layout.tsx` **outermost of the five providers** - it consumes nothing,
+and everything that can post is inside it, including the three dialogs the transaction providers
+mount. Twelve call sites post; none owns a region. It replaces the four unrelated ways a write used to
+report itself, which `docs/TODO.md` carried as its one HIGH IMPORTANCE entry until this ticket: a
+modal that just closed, Settings' `role="status"` badge, the Allocate modal's snap line, and nothing
+at all. Six things about it reach past those two files.
+
+**The top layer is why it is a `popover`, and four Chrome measurements shaped the code.** `Modal`
+opens with `showModal()`, so every dialog in this app is in the top layer, and daisyUI's `.toast` is
+`position: fixed` and nothing more - a fixed element cannot paint over a top-layer one at any
+z-index, and most toasts here are raised from inside a modal. Measured before the component was
+written: a popover shown **after** a dialog paints above it, one shown **before** is painted under it
+and visibly dimmed by the dialog's own `::backdrop`, its dismiss button is **inert** while the dialog
+is open (`elementFromPoint` resolves to the dialog and a real click never reaches the handler), and a
+popover that is a **DOM descendant** of the dialog is hit-testable. So `showPopover()` fires on
+**every post** rather than once at mount - the re-show is load-bearing, not defensive - and the
+dismiss control is decorative while a modal is up, with the auto-dismiss clearing it. Portalling the
+region into the topmost dialog is the only fix for that and was rejected: fragility across four
+providers, bought against a timer that already works.
+
+**The announcement is two `sr-only` regions, and the visible stack carries no `aria-live` at all.**
+A hidden popover is `display: none`, so React appends the toast into a hidden subtree and
+`showPopover()` reveals it a tick later - and a live region whose content changed while it was hidden
+is not reliably announced. That is the same silence `AllocateBudgetModal.tsx` and `SettingsForm.tsx`
+each recorded for a region created with its content, reached from a new direction. The announcers are
+ordinary in-flow elements that never move, mount empty, and hold the message for one second.
+
+**They publish `aria-live` and deliberately no role**, which is a decision about the rest of the app
+rather than about the region. `role="status"` and `role="alert"` are what every form-level message in
+this repo already publishes - `components/FormError.tsx` is one and five screens render it - so an
+always-mounted pair carrying those roles would make `getByRole('alert')` match two elements the
+moment any form showed a message. Thirty-three such queries in `SettingsForm.test.tsx` alone.
+
+**Where a failure is reported is a property of its reason, not of its surface**, and
+`(app)/failureReporting.ts` owns the rule for all twelve sites. Every write here already publishes a
+named taxonomy, and exactly two names are shared by all of them: `failed` and `unauthenticated` name
+nothing the user can act on where they are, so they leave the form; `invalid`, `missing`, `fallback`,
+`taken` and `categoryMissing` are instructions to act on the surface in front of them and keep the
+inline line. That is why `FormError` survives this ticket rather than being replaced by it. **Settings
+keeps one more than anyone else**: its `unauthenticated` treatment carries a "Log in again" link, the
+only recovery control in the app attached to that reason, so a toast would replace something
+actionable with a sentence that expires.
+
+**Two call sites carry an arm nobody else has.** Settings' one "Save changes" is **two** writes to two
+endpoints with no transaction across them, so the second can fail after the first has landed - it says
+which landed rather than a bare "we couldn't save", because that would invite a retry of an applied
+change. And `dashboard/InsightPoll.tsx` announces a run **only when the user pressed the button**: a
+regeneration fires behind every transaction and category write, and announcing those would put a
+second toast after every save. A stalled run says nothing either, because it did not finish.
+
+**`(app)/shellRender.tsx` and `(app)/shellStory.tsx` are the two harnesses that keep this testable**,
+and they are the same job for two callers that cannot share code. A suite swaps its `render` import; a
+story has no render to swap, and must not use a `decorators` array, because the story smoke tests build
+each story from `render` or `meta.component` and never apply one. Ten story files had a private
+two-line `PreferencesProvider` wrapper and needed a second provider on the same day, which is what
+earned the shared frame.
 
 ## Not built here
 

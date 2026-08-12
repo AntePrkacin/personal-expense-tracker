@@ -116,6 +116,11 @@ type DeleteCategoryDialogProps = {
   onDeleted?: () => void;
 };
 
+/** The toast's sentence, interpolated exactly as the body is - see the call site. */
+function deletedToast(fallbackName: string): string {
+  return `Category deleted. Its transactions moved to ${fallbackName}.`;
+}
+
 export const DELETE_CATEGORY_TITLE = 'Delete this category?';
 
 /**
@@ -184,6 +189,12 @@ export function DeleteCategoryDialog({
     <ConfirmDeleteDialog
       title={DELETE_CATEGORY_TITLE}
       body={deleteCategoryBody(target, fallbackName)}
+      // **It names where the transactions went, where the transaction confirmation names nothing
+      // (PET-77).** A category delete is two effects and the second one is the surprising half -
+      // the rows are not deleted, they are reassigned - so a bare "Category deleted." would be
+      // true and misleading. `fallbackName` is the account's own, resolved off the list response
+      // rather than assumed, which is the rule this file already follows for the body above.
+      confirmation={deletedToast(fallbackName)}
       messages={MESSAGES}
       // Bound here, so the shared component never learns what a category is.
       remove={() => remove(target.id)}

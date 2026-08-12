@@ -14,7 +14,7 @@ import { DeleteTransactionProvider } from '../../DeleteTransactionProvider';
 import { EditTransactionProvider } from '../../EditTransactionProvider';
 import { TransactionDetailActions } from './TransactionDetailActions';
 import { TransactionDetailScreen } from './TransactionDetailScreen';
-import { PreferencesProvider } from '../../PreferencesProvider';
+import { ShellStory } from '../../shellStory';
 
 // 08 Transaction detail (node 34:349).
 //
@@ -121,7 +121,7 @@ type Story = StoryObj<typeof TransactionDetailScreen>;
 function Frame({ detail }: { detail: TransactionDetail }) {
   return (
     <AddTransactionProvider>
-      <PreferencesProvider currency="USD">
+      <ShellStory currency="USD">
         <DeleteTransactionProvider remove={async () => ({ ok: true })}>
           <EditTransactionProvider update={async () => ({ ok: true })}>
             {/* `bg-base-200` is what the root layout paints `<body>`, and `px-*` stands in for
@@ -142,7 +142,7 @@ function Frame({ detail }: { detail: TransactionDetail }) {
             </div>
           </EditTransactionProvider>
         </DeleteTransactionProvider>
-      </PreferencesProvider>
+      </ShellStory>
     </AddTransactionProvider>
   );
 }

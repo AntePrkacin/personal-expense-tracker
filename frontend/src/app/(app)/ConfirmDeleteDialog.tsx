@@ -6,7 +6,9 @@ import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 
+import { isToastedFailure } from './failureReporting';
 import { Modal, type ModalHandle } from './Modal';
+import { useToast } from './ToastProvider';
 
 // The confirmation behind both deletes: frame 12 (transaction) and frame 20 (category).
 //
@@ -36,6 +38,10 @@ import { Modal, type ModalHandle } from './Modal';
 //    Delete answers 404, which would replace a succeeding delete with "that is already gone"; but
 //    no fetch in this app carries a timeout, so a hung request is exactly when a visible way out
 //    matters most, and the centred shape has no X beside it.
+// 5. **The confirmation is posted here, and PET-77 added it as a fifth for the same reason as the
+//    other four.** Both callers unwind on success - the dialog closes, the row goes, sometimes the
+//    route changes - so neither has a surface left to say "that worked" on. Putting it in one place
+//    is what stops the next delete inventing a sixth way to report itself.
 //
 // **What stays with each caller is the copy and the target.** This component never learns what a
 // transaction or a category is: it takes a rendered `body` string, a `title`, and a `remove` that
@@ -72,6 +78,16 @@ type ConfirmDeleteDialogProps<R extends string> = {
   title: string;
   /** The rendered body sentence. Built by the caller, so no interpolation happens here. */
   body: string;
+  /**
+   * What the toast region says once the row is really gone (PET-77).
+   *
+   * **Required rather than defaulted**, which is `messages`' own argument applied to the fifth
+   * behaviour this component now carries: a shared default would have both confirmations say the
+   * same sentence, and they must not - deleting a category also moves every transaction it held,
+   * which is the half a user has to be told about. Required means a third caller cannot quietly
+   * inherit the wrong one.
+   */
+  confirmation: string;
   /**
    * One line per reason the caller's action can answer with (A29).
    *
@@ -113,6 +129,7 @@ type ConfirmDeleteDialogProps<R extends string> = {
 export function ConfirmDeleteDialog<R extends string>({
   title,
   body,
+  confirmation,
   messages,
   remove,
   staleReasons = [],
@@ -122,6 +139,7 @@ export function ConfirmDeleteDialog<R extends string>({
   icon = <Trash2 className="size-6" aria-hidden="true" />,
 }: ConfirmDeleteDialogProps<R>) {
   const router = useRouter();
+  const { post } = useToast();
   const modalRef = useRef<ModalHandle>(null);
 
   /** The post-network failure line, already resolved to its copy. `null` means none showing. */
@@ -145,13 +163,28 @@ export function ConfirmDeleteDialog<R extends string>({
 
     if (!result.ok) {
       setPending(false);
-      setFailure(messages[result.reason]);
+
+      // **Behaviour 5 (PET-77): where the failure is reported is a property of the reason.** Both
+      // callers' `missing` and `fallback` arms ask the user to close this and look at the current
+      // list, which is an instruction and belongs where they are about to act; `failed` names
+      // nothing they can do here. `(app)/failureReporting.ts` owns the rule for all twelve sites.
+      if (isToastedFailure(result.reason)) {
+        post({ kind: 'failure', message: messages[result.reason] });
+      } else {
+        setFailure(messages[result.reason]);
+      }
 
       // Behaviour 2 above.
       if (staleReasons.includes(result.reason)) router.refresh();
 
       return;
     }
+
+    // **Posted before the unwind, and this dialog is the sharpest case for it.** A delete removes
+    // the row *and* whatever opened this - a kebab that died with its row, an edit modal coming
+    // down behind it, sometimes the whole route (`navigates`). There is no surface left to report
+    // on, which is precisely why this was the write that reported itself with nothing at all.
+    post({ kind: 'success', message: confirmation });
 
     // Behaviour 3 above.
     if (!navigates) router.refresh();

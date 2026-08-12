@@ -5,7 +5,7 @@ import type { Palette } from '@/lib/palette';
 
 import { category } from './categoryFixture';
 import { CategoriesScreen } from './CategoriesScreen';
-import { PreferencesProvider } from '../../PreferencesProvider';
+import { ShellStory } from '../../shellStory';
 
 // The import above is type-only on purpose. Importing any *value* from Storybook breaks the
 // story smoke tests with an opaque ESM error, because @storybook/nextjs-vite will not load under
@@ -263,7 +263,7 @@ function Frame({
     // the `(app)` shell owns, since neither wraps a story.
     // The Allocate banner's modal calls `useMoney()`; a review found this provider missing, so
     // pressing "Allocate" in this story threw rather than opening the dialog.
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <div className="bg-base-200 flex min-h-screen flex-col px-4 sm:px-6 lg:px-10">
         <CategoriesScreen
           {...props}
@@ -277,7 +277,7 @@ function Frame({
           save={save}
         />
       </div>
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 

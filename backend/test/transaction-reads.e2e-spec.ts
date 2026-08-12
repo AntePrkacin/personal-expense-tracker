@@ -323,6 +323,31 @@ describe('Transaction reads (e2e)', () => {
       ]);
     });
 
+    it('sorts largest amount first for amount_desc, which is PET-67', async () => {
+      const response = await list('?sort=amount_desc').expect(200);
+
+      // Spar 44.10, Konzum 12.50, Uber 8.40, Boundary 5.00 - deliberately a
+      // different order from every date sort above, so a request that silently
+      // fell back to `date_desc` could not pass this.
+      expect(merchantsOf(response)).toEqual([
+        'Spar',
+        'Konzum',
+        'Uber',
+        'Boundary',
+      ]);
+    });
+
+    it('sorts smallest amount first for amount_asc', async () => {
+      const response = await list('?sort=amount_asc').expect(200);
+
+      expect(merchantsOf(response)).toEqual([
+        'Boundary',
+        'Uber',
+        'Konzum',
+        'Spar',
+      ]);
+    });
+
     it('orders same-date rows identically across two identical requests', async () => {
       const first = await list().expect(200);
       const second = await list().expect(200);
@@ -400,6 +425,60 @@ describe('Transaction reads (e2e)', () => {
         `?period=all&categoryId=${probeId}&search=${encodeURIComponent('A_B')}`,
       ).expect(200);
       expect(merchantsOf(underscore)).toEqual(['A_B Cafe']);
+    });
+
+    it('breaks a same-amount tie on the date, newest spent first', async () => {
+      // A fresh category, so these rows are invisible to every count above, and
+      // the reads below filter to it.
+      const created = await request(app.getHttpServer())
+        .post('/api/categories')
+        .set('Authorization', `Bearer ${bearer}`)
+        .send({ name: 'Amount tie probe', color: 'primary', icon: 'gift' })
+        .expect(201);
+      const probeId = (created.body as CategoryResponseDto).id;
+
+      // One amount, three days, seeded oldest-first so `created_at` ascending and
+      // `date` descending disagree. Without the date key an amount sort would
+      // order these by when they were logged rather than when they were spent,
+      // and this seed order is what makes that visible.
+      await seed({
+        merchant: 'TieOldest',
+        categoryId: probeId,
+        amount: 9.99,
+        date: dayIn(current, 1),
+      });
+      await seed({
+        merchant: 'TieMiddle',
+        categoryId: probeId,
+        amount: 9.99,
+        date: dayIn(current, 2),
+      });
+      await seed({
+        merchant: 'TieNewest',
+        categoryId: probeId,
+        amount: 9.99,
+        date: dayIn(current, 3),
+      });
+
+      const descending = await list(
+        `?period=current&categoryId=${probeId}&sort=amount_desc`,
+      ).expect(200);
+      expect(merchantsOf(descending)).toEqual([
+        'TieNewest',
+        'TieMiddle',
+        'TieOldest',
+      ]);
+
+      // The tiebreaks stay descending under `amount_asc` too: the user asked to
+      // order the amounts, not the days inside one amount.
+      const ascending = await list(
+        `?period=current&categoryId=${probeId}&sort=amount_asc`,
+      ).expect(200);
+      expect(merchantsOf(ascending)).toEqual([
+        'TieNewest',
+        'TieMiddle',
+        'TieOldest',
+      ]);
     });
 
     it('filters by category', async () => {

@@ -1,20 +1,22 @@
 'use client';
 
-import { createElement, useEffect, useRef, useState } from 'react';
+import { createElement, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/Button';
 import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
 import { FormError } from '@/components/FormError';
 import { reformatAmountInput } from '@/lib/amountField';
-import { currencySymbol, type MoneyFormatters } from '@/lib/money';
+import { currencySymbol } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
 import type { Period } from '@/lib/periods';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
 
+import { isToastedFailure } from '../../failureReporting';
 import { Modal, type ModalHandle } from '../../Modal';
 import { CapPeriodDialog } from './CapPeriodDialog';
 import { useCurrency, useMoney } from '../../PreferencesProvider';
+import { useToast } from '../../ToastProvider';
 import {
   applyCap,
   invalidRows,
@@ -46,8 +48,6 @@ import { AllocationBar } from './AllocationBar';
 /** Two islands over the modal's own canvas, matching the source's card-on-canvas relationship. */
 const ISLAND = 'card bg-base-200 card-body gap-4 p-5';
 
-const SNAP_MESSAGE_MS = 3_400;
-
 /**
  * Every line this modal can show, keyed by field name and by result reason so
  * `MESSAGES[result.reason]` resolves directly - the shape both category modals use.
@@ -68,6 +68,9 @@ const SNAP_MESSAGE_MS = 3_400;
  *
  * **`tooMany` is a 400 the modal refuses to send rather than one it reports.** See `MAX_CAP_ROWS`.
  */
+/** What the toast region says when the bulk cap write lands (PET-77). */
+const TOAST_SAVED = 'Category limits saved.';
+
 const MESSAGES = {
   cap: 'Enter an amount greater than 0, or clear it for no limit.',
   invalid: 'We couldn’t save these limits. Please check the amounts and try again.',
@@ -92,28 +95,6 @@ export const ALLOCATE_HINT = 'Clear a field to leave a category without a limit.
  */
 export const ALLOCATE_EMPTY =
   'There are no categories to give a limit to yet. Add one from the Categories tab, then set its limit here.';
-
-/**
- * The transient message a snap shows. Exported for the same reason.
- *
- * **Two sentences, because a ceiling of zero is a different fact.** "Capped at $0.00" would be
- * technically true and useless: the field was cleared rather than capped, and what the user needs to
- * know is that there is nothing left to give this category. Reached whenever the budget is fully
- * assigned, which is an ordinary state rather than an edge - it is where the modal's own snap leaves
- * you.
- *
- * **The formatters are a parameter for `deleteTransactionBody`'s reason**: PET-47 made money follow
- * the profile's currency through a context, which only a hook can reach, and this is a plain
- * function so its suite needs no provider around it.
- */
-export const cappedMessage = (
-  capCents: number,
-  budgetCents: number,
-  { formatCurrency, formatWhole }: MoneyFormatters,
-): string =>
-  capCents === 0
-    ? `Nothing left to assign. Free up budget from another category first.`
-    : `Capped at ${formatCurrency(capCents / 100)} - the rest of your ${formatWhole(budgetCents / 100)} is assigned elsewhere.`;
 
 type AllocateBudgetModalProps = {
   categories: Category[];
@@ -147,6 +128,7 @@ export function AllocateBudgetModal({
   const router = useRouter();
   const modalRef = useRef<ModalHandle>(null);
   const money = useMoney();
+  const { post } = useToast();
   // The cap inputs' prefix glyph, which was a literal `$` until PET-47's review - so a GBP account
   // read "£1,350 spent of £3,000" above a column of fields prefixed with dollars.
   const currency = useCurrency();
@@ -190,29 +172,13 @@ export function AllocateBudgetModal({
    */
   const [stale, setStale] = useState(false);
 
-  /**
-   * The snap message, as a fresh object per snap rather than a bare amount.
-   *
-   * **The identity is what makes the timer restart.** Two snaps to the same ceiling would carry an
-   * equal number, so the effect below would not re-run and the second message would inherit the
-   * first's remaining time. An object changes identity every snap.
-   */
-  const [snap, setSnap] = useState<{ cents: number } | null>(null);
-
-  // **An effect keyed on `snap`, not a ref plus a manual clearTimeout.** The cleanup is
-  // unconditional and co-located, so an unmount leak is structurally impossible rather than
-  // remembered - and the restart-on-retrigger above is obtained rather than coded, because React
-  // runs the previous cleanup before the next effect.
-  //
-  // The leak is deliberately not given a test: React 19 does not warn on setState after unmount, so
-  // a test asserting no console error would pass with this cleanup deleted. The design is the
-  // guarantee.
-  useEffect(() => {
-    if (snap === null) return;
-
-    const timer = setTimeout(() => setSnap(null), SNAP_MESSAGE_MS);
-    return () => clearTimeout(timer);
-  }, [snap]);
+  // **The snap's state machine is deleted with its announcement (PET-77, AC13).** It held a
+  // `{ cents }` object purely so a 3.4s timer could revert the `role="status"` line; with the line
+  // gone the state was permanently null, the effect returned on its first line forever, and both it
+  // and `SNAP_MESSAGE_MS` survived every lint and type gate because the dead code still referenced
+  // them. `cappedMessage` moved to `allocateForm.ts`, which is where this file and `docs/TODO.md`
+  // both already said it lived - the clamp arithmetic and its copy stay covered by that module's
+  // suite, so restoring the line is a `<p role="status">` and nothing re-derived.
 
   const totals = toAllocateTotals(draft, ledger);
 
@@ -236,10 +202,12 @@ export function AllocateBudgetModal({
     const next = applyCap(draft, index, typed, ledger);
     const row = next.draft[index];
 
+    // **The clamp still happens; only its announcement is gone (PET-77, AC13).** On the snapping
+    // keystroke the string the user was editing no longer exists, so the caret is collapsed to the
+    // end explicitly - the one place in this app that overrides `lib/amountField.ts`'s caret restore.
     if (next.snappedToCents !== null) {
       element.value = row.cap;
       element.setSelectionRange(row.cap.length, row.cap.length);
-      setSnap({ cents: next.snappedToCents });
     }
 
     setDraft(next.draft);
@@ -321,7 +289,8 @@ export function AllocateBudgetModal({
     } catch {
       setPending(false);
       setCapAnchor(null);
-      setFailure(MESSAGES.failed);
+      // A rejection is `failed`, which reports in the toast region (PET-77).
+      post({ kind: 'failure', message: MESSAGES.failed });
       return;
     }
 
@@ -330,7 +299,15 @@ export function AllocateBudgetModal({
       // The anchor question comes down with any failure, so the message reports once, in the modal
       // holding the edits - see `CapPeriodDialog`'s note on why it carries no failure line.
       setCapAnchor(null);
-      setFailure(MESSAGES[result.reason]);
+
+      // Two of the four arms leave this form (PET-77); `failureReporting.ts` owns the rule. The two
+      // that stay are the ones with something to do here: a body to correct, and a category the
+      // grid behind this is still drawing.
+      if (isToastedFailure(result.reason)) {
+        post({ kind: 'failure', message: MESSAGES[result.reason] });
+      } else {
+        setFailure(MESSAGES[result.reason]);
+      }
 
       // The one arm that marks the list stale, `EditCategoryModal`'s precedent one step further on:
       // `missing` means the grid behind this dialog is drawing a category the server no longer has,
@@ -346,6 +323,10 @@ export function AllocateBudgetModal({
     // Refresh before closing, and close through the dialog so the browser hands focus back to the
     // Allocate banner. The `close` event then calls `onClose`. The anchor question, if open,
     // unmounts with the modal.
+    // Posted before the close, which unmounts this component - see `(app)/AddTransactionModal.tsx`.
+    // "limits" rather than "caps", which is the word the card's own control uses ("Set limit").
+    post({ kind: 'success', message: TOAST_SAVED });
+
     setCapAnchor(null);
     router.refresh();
     modalRef.current?.close();
@@ -540,33 +521,22 @@ export function AllocateBudgetModal({
           )}
         </section>
 
-        {/* The footer hint, and the snap message that replaces it. **Two nodes rather than one that
-          switches**, which is `FormError`'s own argument: the message is worth announcing because the
-          value the user typed was overridden, while the 3.4s revert must be silent - and a removal
-          from a live region announces nothing, where a node that emptied itself would announce
-          twice. `role="status"` is polite; `role="alert"` is for a failure after a round trip.
-          The ledger figures are in no live region at all, because they change on every keystroke and
-          are not new information.
+        {/* **The snap's `role="status"` line is gone (PET-77, AC13).** It announced that a typed cap
+          had been clamped to what the budget had left, and it was one of the four unrelated ways a
+          write used to report itself - so the ticket that replaces all four deletes it.
 
-          **The region is mounted from the start and only its text changes, which is a correctness
-          requirement rather than a shape.** A live region created in the same commit as its content
-          is generally not announced at all: assistive technology registers regions and then watches
-          them for mutations, so a node that arrives already holding its message arrives too late to
-          be one - the announcement the whole treatment exists for was silent, and
-          `getByRole('status')` cannot tell the two apart. An empty block element has no line box, so
-          the resting state costs no layout either. Emptying it stays silent for the reason above:
-          `aria-relevant` defaults to additions and text, so removal announces nothing.
+          Read the trade honestly, because it is not the same trade the Settings badge made. That one
+          confirmed a *write* and the toast now does it better. This described a *field*: the clamp
+          still happens and the clamped figure is still written into the input, so a sighted user sees
+          it, and a screen-reader user is no longer told. It cannot become a toast either - the snap
+          fires on a keystroke, and a notification per keystroke is a stream rather than a message.
+          `docs/plans/2026-08-11_PET-77_toast-notifications.md` carries the recommendation to keep it
+          and the note that the product owner chose otherwise; `docs/TODO.md` records what it costs.
 
-          The hint is still its own node, and still unmounted while a message is up, so the two never
-          stack and the hint is never announced. */}
+          `cappedMessage` survives in `allocateForm.ts` with its suite: it is the arithmetic and the
+          copy, and re-deriving either is what a future ticket restoring this would have to do. */}
         {/* Suppressed with no rows, where it would be advice about fields that are not there. */}
-        {snap === null && draft.length > 0 ? (
-          <p className="text-base-content/60 text-xs">{ALLOCATE_HINT}</p>
-        ) : null}
-
-        <p role="status" className="text-warning text-xs">
-          {snap === null ? '' : cappedMessage(snap.cents, ledger.budgetCents, money)}
-        </p>
+        {draft.length > 0 ? <p className="text-base-content/60 text-xs">{ALLOCATE_HINT}</p> : null}
 
         <FormError message={failure ?? ''} />
       </Modal>

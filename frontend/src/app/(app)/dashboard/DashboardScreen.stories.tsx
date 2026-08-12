@@ -6,7 +6,7 @@ import { addDays } from '@/lib/calendar';
 import { todayIsoDate } from '@/lib/date';
 
 import { AddTransactionProvider } from '../AddTransactionProvider';
-import { PreferencesProvider } from '../PreferencesProvider';
+import { ShellStory } from '../shellStory';
 import { BudgetCard } from './BudgetCard';
 import { CategoryDonut } from './CategoryDonut';
 import { DashboardScreen } from './DashboardScreen';
@@ -178,7 +178,7 @@ export const Default: Story = {
     // format money through it. Mounted here rather than in `decorators` for the reason
     // `frontend/src/app/CLAUDE.md` records: the story smoke test never applies a meta's
     // decorators, so a decorator works in the browser and throws under Jest.
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <AddTransactionProvider>
         {/* `bg-base-200` is what the root layout paints `<body>`; `px-*` stands in for the
           `(app)` shell's own gutter, since neither wraps a story. */}
@@ -247,6 +247,6 @@ export const Default: Story = {
           />
         </div>
       </AddTransactionProvider>
-    </PreferencesProvider>
+    </ShellStory>
   ),
 };

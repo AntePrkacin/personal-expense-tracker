@@ -9,6 +9,7 @@ import { render } from '../shellRender';
 import { generateInsights } from '../../../lib/generateInsights';
 import type { InsightSet } from '../../../lib/insights';
 
+import { toastMessages } from '../toastQueries';
 import { AddTransactionProvider } from '../AddTransactionProvider';
 import { InsightCardsSlot } from './InsightCardsSlot';
 import { InsightPollProvider } from './InsightPoll';
@@ -389,6 +390,68 @@ describe('the generating state and the poll', () => {
     await waitFor(() => expect(generate).toHaveBeenCalled());
     expect(screen.getByRole('heading', { name: PENDING_COPY.headline })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Regenerate' })).toBeEnabled();
+    // **The one thing that did change (PET-77).** This arm used to be silent in every sense: the
+    // click did nothing observable at all, so a user could press it repeatedly with no way of
+    // knowing. The screen is still unchanged - A26 makes a failed *run* invisible - and the toast
+    // is what says the request itself did not land.
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't update your insights. Please try again."]),
+    );
+  });
+
+  // **A run the user asked for is announced; the ones that fire behind every write are not.** That
+  // split is the ticket's, and it is what keeps a saved transaction from producing two toasts.
+  it('confirms a manual run when it settles', async () => {
+    // PET-77's toast, pressed from the state PET-78 leaves the button in. The confirmation is not
+    // reachable from `ready` any more, because that is where the control is now hidden - which
+    // narrows where "Insights updated." can appear without making it dead: a manual run is exactly
+    // a run started from pending or after a stall.
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    generate.mockResolvedValue({ ok: true });
+    respondWith(readySet({ insights: [CARDS[0]], generatedAt: '2025-10-08T10:00:00.000Z' }));
+    pending();
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await advance(500);
+
+    await waitFor(() => expect(toastMessages()).toEqual(['Insights updated.']));
+  });
+
+  // **The stuck-flag case a review found.** `generating` can go false without the poll settling -
+  // a `router.refresh()` delivering an already-`ready` set, or a period navigation - and the flag
+  // used to survive that, so the *next* background regeneration announced itself as the user's.
+  it('forgets a manual run that was abandoned before it settled', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    generate.mockResolvedValue({ ok: true });
+    // Pending rather than ready, for the reason the case above gives: only the initial render needs
+    // the button, and PET-78 draws it there rather than on a healthy account.
+    const { rerender } = renderPoll(emptySet(), { isEmpty: false });
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await waitFor(() => expect(screen.getByText('Analyzing your spending...')).toBeInTheDocument());
+
+    // The server hands back a settled set on its own, which takes the poll down without it ever
+    // observing a settle of its own.
+    rerenderPoll(rerender, readySet({ generatedAt: '2025-10-08T10:00:00.000Z' }));
+
+    // A later run nobody pressed for must stay silent.
+    respondWith(readySet({ insights: [CARDS[0]], generatedAt: '2025-10-08T11:00:00.000Z' }));
+    rerenderPoll(rerender, readySet({ state: 'generating' }));
+    await advance(500);
+
+    expect(toastMessages()).toEqual([]);
+  });
+
+  it('says nothing when a run nobody pressed for settles', async () => {
+    // The write path regenerates the set backend-side, so this is what the tail of an ordinary save
+    // looks like from here: the screen arrives already generating and settles on its own.
+    respondWith(readySet({ insights: [CARDS[0]], generatedAt: '2025-10-08T10:00:00.000Z' }));
+    renderPoll(readySet({ state: 'generating' }));
+
+    await advance(500);
+
+    expect(screen.getByText(CARDS[0].title)).toBeInTheDocument();
+    expect(toastMessages()).toEqual([]);
   });
 
   it('swaps in the new set and stops polling once the state settles', async () => {

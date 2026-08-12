@@ -147,3 +147,57 @@ describe('what it navigates to', () => {
     expect(replace).not.toHaveBeenCalled();
   });
 });
+
+describe('the delegating arm (PET-67)', () => {
+  /**
+   * `/transactions`' shape: the caller owns both the href and the transition, so this component
+   * touches the router not at all. `TransactionPeriodSelect` is the real one; this proves the seam
+   * rather than that screen's behaviour.
+   */
+  function renderDelegating(onSelect: (value: string) => void) {
+    return render(
+      <PeriodSelect
+        periods={PERIODS}
+        selected={CURRENT.start}
+        onSelect={onSelect}
+        extraOptions={[{ value: 'all', label: 'All time' }]}
+      />,
+    );
+  }
+
+  it('hands the chosen period back and never touches the router', async () => {
+    // The router half matters as much as the callback: navigating here *as well* would fire two
+    // navigations for one change, and the caller's is the one inside the screen's transition.
+    const onSelect = jest.fn();
+    const user = userEvent.setup();
+    renderDelegating(onSelect);
+
+    await user.selectOptions(select(), PREVIOUS.start);
+
+    expect(onSelect).toHaveBeenCalledWith(PREVIOUS.start);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('appends extra options after the account’s own periods', () => {
+    renderDelegating(jest.fn());
+
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'March 2026',
+      'February 2026',
+      'December 2025 / January 2026',
+      'All time',
+    ]);
+  });
+
+  it('hands back an extra option’s value too, since only the caller knows what it means', async () => {
+    // The `periods.find` guard would drop this: it is not a period start, and the whole reason the
+    // navigation is a union rather than a wider href builder is that the caller offered it.
+    const onSelect = jest.fn();
+    const user = userEvent.setup();
+    renderDelegating(onSelect);
+
+    await user.selectOptions(select(), 'all');
+
+    expect(onSelect).toHaveBeenCalledWith('all');
+  });
+});

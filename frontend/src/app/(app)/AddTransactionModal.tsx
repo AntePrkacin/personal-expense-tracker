@@ -23,8 +23,10 @@ import type { ScanReceiptResult } from '@/lib/scanReceipt';
 import type { components } from '@/types/api';
 
 import { DateField } from './DateField';
+import { isToastedFailure } from './failureReporting';
 import { Modal, type ModalHandle } from './Modal';
 import { useCurrency } from './PreferencesProvider';
+import { useToast } from './ToastProvider';
 import {
   invalidFields,
   mergeScannedFields,
@@ -94,6 +96,19 @@ const MESSAGES = {
     "This phone saves photos in a format the browser can't read (HEIC). Use Scan receipt, or convert the file first.",
   compressionFailedDesktop:
     "This file is in a format the browser can't read (HEIC). Convert it to a JPEG or PNG first.",
+} as const;
+
+/**
+ * What the toast region says for this modal's two outcomes (PET-77).
+ *
+ * Kept apart from `MESSAGES` above rather than folded into it, because the two answer different
+ * questions to the same reader: those lines say "why did this not just work" beside a field, and
+ * these say "that worked" from the corner of a screen the user may already have moved on from.
+ */
+const TOASTS = {
+  created: 'Transaction added.',
+  scanned: 'Receipt scanned.',
+  scanReadNothing: 'We could not read that receipt. Fill the form in yourself.',
 } as const;
 
 /** What each scan failure reason (`lib/scanReceipt.ts`) reads as. */
@@ -184,6 +199,11 @@ export function AddTransactionModal({
   // The prefix glyph for `ui/Input`'s currency variant, which drew a literal `$` until PET-47's
   // review. See `useCurrency` for why the symbol is a prop rather than read inside the primitive.
   const currency = useCurrency();
+  // The notification region on the layout. A hook rather than a prop, unlike `create` and `scan`
+  // beside it: those two are injected so the suite can pass a `jest.fn()` and the stories can avoid
+  // reaching `cookies()` in the browser, and neither reason applies to a client-side context - a
+  // story renders this inside `ToastProvider` and a suite renders it through `shellRender`.
+  const { post } = useToast();
   const modalRef = useRef<ModalHandle>(null);
 
   /**
@@ -369,7 +389,15 @@ export function AddTransactionModal({
     setScanning(false);
 
     if (!result.ok) {
-      setScanFailure(SCAN_FAILURE_MESSAGES[result.reason]);
+      // The same split the submit path makes, over a longer taxonomy. Every other arm here names
+      // something the user can do differently - use photos rather than a mixed PDF, wait a minute,
+      // add it by hand - so those stay inline beside the two file controls they are about.
+      if (isToastedFailure(result.reason)) {
+        post({ kind: 'failure', message: SCAN_FAILURE_MESSAGES[result.reason] });
+      } else {
+        setScanFailure(SCAN_FAILURE_MESSAGES[result.reason]);
+      }
+
       return;
     }
 
@@ -409,6 +437,20 @@ export function AddTransactionModal({
     } else {
       setScanNote(missingFieldsNote(missing));
     }
+
+    // **The toast reports the outcome and the note keeps naming the fields (PET-77, AC8).** Those
+    // are two different facts and neither substitutes for the other: "which fields are still empty"
+    // belongs beside the fields, where the user is about to type, while "the scan finished" is the
+    // round trip's own result and is what the overlay coming down would otherwise be the only sign
+    // of. The nothing-extracted row is a failure toast because nothing was filled - a green
+    // "Receipt scanned." over an untouched form would be the one lie this control could tell.
+    const readNothing = missing.length === Object.keys(MISSING_FIELD_LABELS).length;
+
+    post(
+      readNothing
+        ? { kind: 'failure', message: TOASTS.scanReadNothing }
+        : { kind: 'success', message: TOASTS.scanned },
+    );
   }
 
   /** The camera control: one photo at a time, so a second capture merges rather than replaces. */
@@ -458,9 +500,27 @@ export function AddTransactionModal({
 
     if (!result.ok) {
       setPending(false);
-      setFailure(MESSAGES[result.reason]);
+
+      // **Two of the four arms leave this form (PET-77), and `failureReporting.ts` owns the rule.**
+      // `invalid` and `categoryMissing` are things the user can fix in the fields in front of them,
+      // so they stay on the inline line they have always had; `failed` and `unauthenticated` are
+      // not, and a modal that stays open around an unactionable red line is the shape this ticket
+      // replaces.
+      if (isToastedFailure(result.reason)) {
+        post({ kind: 'failure', message: MESSAGES[result.reason] });
+      } else {
+        setFailure(MESSAGES[result.reason]);
+      }
+
       return;
     }
+
+    // **The confirmation is posted before the modal goes**, and it has to be: this component is
+    // unmounted by the close below, so a post afterwards would be a setState on a dead component.
+    // The region is mounted on the layout and outlives every dialog, which is the whole reason it
+    // is there rather than here - and it is what makes "a save whose row lands outside the current
+    // filter is confirmed by nothing at all" stop being true.
+    post({ kind: 'success', message: TOASTS.created });
 
     // **Refresh before closing, and close through the dialog rather than by unmounting.**
     // `router.refresh()` re-runs the Server Components of whichever of the three routes the

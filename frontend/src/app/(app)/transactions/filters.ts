@@ -61,14 +61,26 @@ type Sort = NonNullable<TransactionFilters['sort']>;
 export type FilterOption<T extends string> = { value: T; label: string };
 
 /**
- * The period select's three options (TRN-3).
+ * The three **named** periods, and as of PET-67 this list's job is parsing rather than drawing.
  *
- * **This amends A16**, which records that Figma never draws the dropdown open, so only the
- * closed "This month" is known. Shipping one option would leave AC4's period half
- * unimplementable and the control as inert as it was before, so the list is the contract's
- * own `current | previous | all` and nothing invented on top - every option is one the API
- * can honour. The labels are ours and owe a designer's sign-off with the rest of what A29
- * tracks.
+ * It was the period pill's option list, and that pill is gone: `TransactionPeriodSelect` draws the
+ * account's real period history in the header instead, so `current` and `previous` are no longer
+ * options anybody picks by name. What the list still is, and has to stay, is the **allowlist
+ * `isPeriod` validates against** - all three remain values the contract accepts and a URL can
+ * legitimately carry, so dropping either of the first two would start silently discarding a filter
+ * the API would have honoured. `previous` in particular is now URL-only, reachable from a link or a
+ * hand-edited address bar and from no control.
+ *
+ * The two surviving labels each have exactly one reader. `ALL_PERIODS_OPTION` below reuses "All
+ * time" for the one entry the new select appends, and `PERIOD_OPTIONS[0].label` is still the string
+ * frame 06 draws on the closed control, kept because it is one of only two strings on this bar read
+ * off the design rather than invented.
+ *
+ * **This amends A16**, which records that Figma never draws the dropdown open, so only the closed
+ * "This month" is known. Shipping one option would have left AC4's period half unimplementable and
+ * the control as inert as it was before, so the list was the contract's own `current | previous |
+ * all` and nothing invented on top. PET-67 supersedes the amendment rather than reverting it: the
+ * dropdown the designer never drew is now the same one the Dashboard draws.
  *
  * `as const satisfies` rather than an annotation, for the reason `STARTER_CATEGORIES`
  * records: an annotation widens `value` to the union and the exhaustiveness proof below
@@ -81,14 +93,36 @@ export const PERIOD_OPTIONS = [
 ] as const satisfies readonly FilterOption<NamedPeriod>[];
 
 /**
- * The sort select's two options (TRN-3, A16).
+ * The one entry the header's period select appends after the account's own periods (PET-67).
  *
- * Two rather than four: the contract sorts by date only, so "Highest amount" would be an
- * option the API cannot serve. Same amendment as the periods above.
+ * `period=all` is the only filter whose response carries `period: null`, because a list spanning
+ * every period can be labelled by none of them - so it is the one value the select cannot get from
+ * `GET /api/periods` and the one it would otherwise have no option to show. Read out of
+ * `PERIOD_OPTIONS` rather than written again, so the pill's old label and this one cannot drift into
+ * two names for one view.
+ */
+export const ALL_PERIODS_OPTION = PERIOD_OPTIONS[2];
+
+/**
+ * The sort select's four options (TRN-3, A16).
+ *
+ * **PET-67 added the amount pair, and the sentence it replaces is worth keeping because it named
+ * its own condition.** It read "Two rather than four: the contract sorts by date only, so
+ * 'Highest amount' would be an option the API cannot serve" - which was true, and the thing that
+ * made it true was the backend's `TRANSACTION_SORTS`, not a decision here. The product owner asked
+ * for amount sorting, that list grew, and `EverySortIsOffered` below failed `npm run build` until
+ * these two lines existed. So this file never got to be wrong about what the API serves, which is
+ * the whole point of stating the proof rather than the count.
+ *
+ * The labels are the product owner's ("Highest amount", "Lowest amount") and read as a pair with
+ * the two above rather than restating the field name four times. They are invented copy like every
+ * other string on this bar and join what A29 owes a designer; `docs/TODO.md` carries them.
  */
 export const SORT_OPTIONS = [
   { value: 'date_desc', label: 'Newest first' },
   { value: 'date_asc', label: 'Oldest first' },
+  { value: 'amount_desc', label: 'Highest amount' },
+  { value: 'amount_asc', label: 'Lowest amount' },
 ] as const satisfies readonly FilterOption<Sort>[];
 
 /**

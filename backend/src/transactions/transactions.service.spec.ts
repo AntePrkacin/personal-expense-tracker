@@ -171,6 +171,39 @@ describe('TransactionsService', () => {
       expect(order[2]).toContain('desc');
     });
 
+    it('leads on amount_cents for amount_desc, which is PET-67', async () => {
+      await service.list(USER_ID, { sort: 'amount_desc' });
+
+      const order = orderOf();
+      expect(order[0]).toContain('amount_cents');
+      expect(order[0]).toContain('desc');
+    });
+
+    it('carries date as a third key under the amount sorts', async () => {
+      await service.list(USER_ID, { sort: 'amount_desc' });
+
+      // Four keys rather than three, and the extra one is the point: amounts
+      // collide far harder than dates do, so a same-amount group ordered by
+      // created_at alone reads in the order rows were logged rather than the
+      // order they were spent.
+      const order = orderOf();
+      expect(order).toHaveLength(4);
+      expect(order[1]).toContain('date');
+      expect(order[2]).toContain('created_at');
+      expect(order[3]).toContain('id');
+    });
+
+    it('flips only the amount column for amount_asc, keeping all three tiebreaks descending', async () => {
+      await service.list(USER_ID, { sort: 'amount_asc' });
+
+      const order = orderOf();
+      expect(order[0]).toContain('amount_cents');
+      expect(order[0]).not.toContain('desc');
+      expect(order[1]).toContain('desc');
+      expect(order[2]).toContain('desc');
+      expect(order[3]).toContain('desc');
+    });
+
     it('defaults to the current period rather than all history', async () => {
       await service.list(USER_ID, {});
 

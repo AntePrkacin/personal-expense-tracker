@@ -21,11 +21,13 @@ import type { Period } from '@/lib/periods';
 import type { UpdateCategoryResult } from '@/lib/updateCategory';
 import type { components } from '@/types/api';
 
+import { isToastedFailure } from '../../failureReporting';
 import { Modal, type ModalHandle } from '../../Modal';
 import { CapPeriodDialog } from './CapPeriodDialog';
 import { ColourSelect } from './ColourSelect';
 import { IconSelect } from './IconSelect';
 import { useCurrency } from '../../PreferencesProvider';
+import { useToast } from '../../ToastProvider';
 import {
   invalidFields,
   toCategoryFormValues,
@@ -84,6 +86,12 @@ import {
  *   until the read lands; here it blocks nothing, so the line says which two fields are affected
  *   rather than implying the modal is broken.
  */
+/**
+ * What the toast region says when the edit lands (PET-77). "saved", not "added" - see
+ * `(app)/EditTransactionModal.tsx` for why one word matters here.
+ */
+const TOAST_SAVED = 'Category saved.';
+
 const MESSAGES = {
   name: 'Enter a name.',
   monthlyCap: 'Enter a budget greater than 0, or leave it blank for no limit.',
@@ -231,6 +239,7 @@ export function EditCategoryModal({
   // The prefix glyph for `ui/Input`'s currency variant, which drew a literal `$` until PET-47's
   // review. See `useCurrency` for why the symbol is a prop rather than read inside the primitive.
   const currency = useCurrency();
+  const { post } = useToast();
   const modalRef = useRef<ModalHandle>(null);
 
   /**
@@ -394,7 +403,8 @@ export function EditCategoryModal({
     } catch {
       setPending(false);
       setCapAnchor(null);
-      setFailure(MESSAGES.failed);
+      // A rejection is `failed`, which reports in the toast region (PET-77).
+      post({ kind: 'failure', message: MESSAGES.failed });
       return;
     }
 
@@ -404,7 +414,15 @@ export function EditCategoryModal({
       // holding the edits, and a retry re-asks - see `CapPeriodDialog`'s note on why it carries no
       // failure line of its own.
       setCapAnchor(null);
-      setFailure(MESSAGES[result.reason]);
+
+      // Two of the five arms leave this form (PET-77); `failureReporting.ts` owns the rule. The
+      // three that stay are the ones with something to do here - a body to fix, a category that is
+      // gone, and the fallback's refused rename.
+      if (isToastedFailure(result.reason)) {
+        post({ kind: 'failure', message: MESSAGES[result.reason] });
+      } else {
+        setFailure(MESSAGES[result.reason]);
+      }
 
       // **One failure arm still refreshes, and leaving it out made this modal's copy a lie.**
       // `missing` means the server no longer has the category, so the grid behind this dialog is
@@ -436,6 +454,9 @@ export function EditCategoryModal({
     // `modalRef.current.close()` rather than `onClose()` so the browser restores focus to whatever
     // opened this. The close event then calls `onClose` for us. The anchor question, if it was
     // open, unmounts with the modal.
+    // Posted before the close, which unmounts this component - see `(app)/AddTransactionModal.tsx`.
+    post({ kind: 'success', message: TOAST_SAVED });
+
     setCapAnchor(null);
     router.refresh();
     modalRef.current?.close();

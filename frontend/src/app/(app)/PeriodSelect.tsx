@@ -30,8 +30,36 @@ import { periodHref } from '@/lib/periodParams';
 // **`replace`, not `push`**, which is `TransactionFilterBar`'s recorded decision for the identical
 // reason: changing which period you are looking at is not a place you navigated to, so twelve periods
 // browsed should not be twelve entries to back out of.
+//
+// **PET-67 gave it a third consumer and two optional props, and the interesting half is why the
+// navigation had to become a union rather than a wider href builder.** `/transactions` draws this in
+// its header now, where a period change has to preserve the search term, the category and the sort -
+// so `periodHref`, which rebuilds the query string from scratch, is exactly wrong there. The obvious
+// fix is an `hrefFor` prop, and it cannot be passed: `TransactionsScreen` is a **Server Component**,
+// and a function prop cannot cross into a Client Component at all. So the arm is `onSelect`, supplied
+// by `transactions/TransactionPeriodSelect.tsx`, a client wrapper that exists for that reason and
+// then earns its keep twice over by routing the change through `FilterNavigation` - which is what
+// makes a period change dim the table like every other filter change on that screen, where the
+// `router.replace` below cannot.
 
-type PeriodSelectProps = {
+type PeriodSelectNavigation =
+  /**
+   * Build the href here and navigate. The Dashboard's and the Categories tab's arm: a period is the
+   * whole of their URL state, so `periodHref` rebuilding the query string is correct rather than
+   * lossy.
+   */
+  | { pathname: string; onSelect?: never }
+  /**
+   * Hand the chosen value back and navigate nowhere. `/transactions`' arm, where the period is one
+   * of four filters and the caller owns both the href and the transition.
+   *
+   * An exclusive union rather than two optional props, the technique `ui/Button` uses for `href`
+   * versus `onClick` and `PageHeader` for its two shapes: a `pathname` that is silently ignored
+   * because an `onSelect` was also passed is a state worth making unrepresentable.
+   */
+  | { pathname?: never; onSelect: (value: string) => void };
+
+type PeriodSelectProps = PeriodSelectNavigation & {
   /**
    * Every period the account has, newest first, straight from `GET /api/periods`.
    *
@@ -40,7 +68,7 @@ type PeriodSelectProps = {
    */
   periods: readonly Period[];
   /**
-   * The period the screen is showing, as its `start`.
+   * The period the screen is showing, as its `start` - or an `extraOptions` value.
    *
    * Taken from the **response** rather than from the URL, so the selected option is what the server
    * actually answered with. On a bare `/dashboard` the URL carries no period and this is the current
@@ -48,11 +76,29 @@ type PeriodSelectProps = {
    * trap `transactions/filters.ts` records for its own pills.
    */
   selected: string;
-  /** The route to navigate within, e.g. `/dashboard`. Its own `?period=` is rebuilt from scratch. */
-  pathname: string;
+  /**
+   * Entries appended after the account's own periods, for a value that is not a period.
+   *
+   * One caller and one entry: `/transactions`' "All time", whose response carries `period: null`
+   * because a list spanning every period can be labelled by none of them. Without it that filter is
+   * a `selected` matching no option, which browsers draw as blank or as the wrong first entry - the
+   * same trap `filters.ts` records, and the reason this is a prop rather than something the
+   * transactions caller could paper over on its side.
+   *
+   * It is deliberately not a place to put "Last month": that period is already in `periods` under
+   * its own name, and two options for one view is the two-URLs-for-one-view problem `filters.ts`
+   * argues against.
+   */
+  extraOptions?: readonly { value: string; label: string }[];
 };
 
-export function PeriodSelect({ periods, selected, pathname }: PeriodSelectProps) {
+export function PeriodSelect({
+  periods,
+  selected,
+  pathname,
+  onSelect,
+  extraOptions = [],
+}: PeriodSelectProps) {
   const router = useRouter();
 
   return (
@@ -62,10 +108,20 @@ export function PeriodSelect({ periods, selected, pathname }: PeriodSelectProps)
       aria-label="Budgeting period"
       value={selected}
       onChange={(event) => {
-        const period = periods.find((entry) => entry.start === event.target.value);
+        const value = event.target.value;
+
+        // The delegating arm hands back whatever was chosen, `extraOptions` values included - the
+        // caller offered them, so it is the only thing that can say what they mean.
+        if (onSelect) {
+          onSelect(value);
+          return;
+        }
+
+        const period = periods.find((entry) => entry.start === value);
 
         // A value not in the list cannot come from this control; guarding rather than asserting
-        // because the alternative is navigating to `undefined`.
+        // because the alternative is navigating to `undefined`. Note this arm cannot be reached by
+        // an `extraOptions` entry, because a caller passing those passes `onSelect` above.
         if (period) router.replace(periodHref(pathname, period));
       }}
       // `w-auto` for `FilterPill`'s reason: `select` ships `width: clamp(3rem, 20rem, 100%)`, sized
@@ -80,6 +136,14 @@ export function PeriodSelect({ periods, selected, pathname }: PeriodSelectProps)
               a pay-day change stretches one across the gap - so month arithmetic on this side would
               print the wrong thing exactly when it matters. `lib/periods.ts` carries the argument. */}
           {period.label}
+        </option>
+      ))}
+
+      {/* After the real periods, never interleaved: the list is newest-first history, and an entry
+          that is not a period has no place in that ordering. */}
+      {extraOptions.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
         </option>
       ))}
     </select>

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 
 import type { DeleteTransactionResult } from '@/lib/deleteTransaction';
 
-import { PreferencesProvider } from './PreferencesProvider';
+import { ShellStory } from './shellStory';
 import { DeleteTransactionDialog as Dialog, type DeleteTarget } from './DeleteTransactionDialog';
 
 /**
@@ -15,9 +15,9 @@ import { DeleteTransactionDialog as Dialog, type DeleteTarget } from './DeleteTr
  */
 function DeleteTransactionDialog(props: React.ComponentProps<typeof Dialog>) {
   return (
-    <PreferencesProvider currency="USD">
+    <ShellStory currency="USD">
       <Dialog {...props} />
-    </PreferencesProvider>
+    </ShellStory>
   );
 }
 
