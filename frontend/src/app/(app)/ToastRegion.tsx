@@ -1,7 +1,7 @@
 'use client';
 
 import { CircleAlert, CircleCheck, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // The notification region: one stack, bottom right, above whatever is on screen.
 //
@@ -47,6 +47,17 @@ import { useEffect, useRef } from 'react';
 // `components/`' criterion is spanning route segments in *different* trees, and every consumer here
 // is inside the `(app)` group. So this is `Modal.tsx`'s and `PageHeader.tsx`'s situation: the
 // signed-in shell's own component, beside the layout, with its stories filed under **Shell**.
+
+/**
+ * Whether the page currently has a modal dialog open.
+ *
+ * `dialog[open]` covers `showModal()` and the non-modal `show()` alike; this app only ever opens
+ * modals, and a non-modal dialog would not make the region inert - so the over-match is harmless
+ * and the narrower `:modal` selector is avoided because jsdom does not implement it.
+ */
+function hasOpenModal(): boolean {
+  return typeof document !== 'undefined' && document.querySelector('dialog[open]') !== null;
+}
 
 /** What a toast is for. Two kinds, and `docs/TODO.md`'s entry is the argument for no third. */
 export type ToastKind = 'success' | 'failure';
@@ -120,6 +131,39 @@ export function ToastRegion({
 }: ToastRegionProps) {
   const regionRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Whether a modal dialog is open, because that is exactly when this region's dismiss control is
+   * dead.
+   *
+   * **A review called the previous shape what it was: a control that looks operable and is not.**
+   * The header above records the measurement - a popover shown after a modal `<dialog>` paints over
+   * it and is inert, so a real click never reaches `onDismiss` - and the button was still drawn
+   * fully styled, focusable and hover-responsive for the toast's whole life. Root `CLAUDE.md`
+   * re-asserted one commit earlier that this app ships no such control. So the control announces
+   * itself instead: `aria-disabled` plus the muted treatment, which is the call every inert control
+   * on the Categories tab made before PET-70 cleared them.
+   *
+   * A `MutationObserver` rather than a check at post time, because the dialog can open or close
+   * while a toast is up and the answer has to follow it.
+   */
+  const [modalOpen, setModalOpen] = useState(() => hasOpenModal());
+
+  useEffect(() => {
+    const sync = () => setModalOpen(hasOpenModal());
+
+    sync();
+
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['open'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   /** The newest toast's id, which is what "a post happened" looks like from in here. */
   const newestId = toasts.length === 0 ? null : toasts[toasts.length - 1].id;
 
@@ -162,10 +206,10 @@ export function ToastRegion({
           33 such queries in `SettingsForm.test.tsx` alone, and the ambiguity would be a defect in
           the region rather than in the suites that found it. `aria-live` announces identically and
           publishes no role, so the role landscape of every screen is exactly what it was. */}
-      <div className="sr-only" aria-live="polite">
+      <div className="sr-only" data-toast-announcer="polite" aria-live="polite">
         {politeAnnouncement}
       </div>
-      <div className="sr-only" aria-live="assertive">
+      <div className="sr-only" data-toast-announcer="assertive" aria-live="assertive">
         {assertiveAnnouncement}
       </div>
 
@@ -192,8 +236,18 @@ export function ToastRegion({
               // container's utility loses to it on specificity. A utility on the button itself wins,
               // because Tailwind's utilities layer outranks daisyUI's component layer - the same
               // mechanism `Modal`'s `translate-none scale-none` relies on.
-              className="btn btn-ghost btn-xs btn-circle text-white"
-              onClick={() => onDismiss(toast.id)}
+              //
+              // **`aria-disabled` while a modal is open**, because the control is genuinely dead
+              // then - see `modalOpen` above. Never `disabled`: that takes it out of the tab order,
+              // so a keyboard user meets a gap where this states its condition. The handler is
+              // dropped with it, so the attribute and the behaviour cannot disagree.
+              aria-disabled={modalOpen || undefined}
+              className={
+                modalOpen
+                  ? 'btn btn-ghost btn-xs btn-circle text-white/50'
+                  : 'btn btn-ghost btn-xs btn-circle text-white'
+              }
+              onClick={modalOpen ? undefined : () => onDismiss(toast.id)}
             >
               <X className="size-4" aria-hidden="true" />
               <span className="sr-only">Dismiss: {toast.message}</span>

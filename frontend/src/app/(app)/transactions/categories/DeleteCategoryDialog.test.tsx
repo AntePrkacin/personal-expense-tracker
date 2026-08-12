@@ -256,20 +256,20 @@ describe('the four failures', () => {
     expect(toastMessages()).toEqual([]);
   });
 
-  it.each([
-    ['unauthenticated', 'Your session has expired. Log in again to delete this.'],
-    ['failed', "We couldn't delete this category. Please try again."],
-  ])('reports %s in the toast region and keeps the dialog open', async (reason, message) => {
-    const { onClose } = renderDialog({
-      remove: jest.fn().mockResolvedValue({ ok: false, reason }),
-    });
+  it.each([['failed', "We couldn't delete this category. Please try again."]])(
+    'reports %s in the toast region and keeps the dialog open',
+    async (reason, message) => {
+      const { onClose } = renderDialog({
+        remove: jest.fn().mockResolvedValue({ ok: false, reason }),
+      });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    await waitFor(() => expect(toastMessages()).toEqual([message]));
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(onClose).not.toHaveBeenCalled();
-  });
+      await waitFor(() => expect(toastMessages()).toEqual([message]));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
 
   it('re-enables Delete after a failure, so the user can retry', async () => {
     renderDialog({ remove: jest.fn().mockResolvedValue({ ok: false, reason: 'failed' }) });

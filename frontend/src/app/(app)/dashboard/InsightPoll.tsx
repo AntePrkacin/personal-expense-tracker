@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { generateInsights } from '@/lib/generateInsights';
 import type { InsightSet } from '@/lib/insights';
@@ -183,12 +183,25 @@ export function InsightPollProvider({
    * refuses it. This repo carries no eslint-disable comments. Setting state from that same closure
    * is what `setStalled` and `setSet` already do two lines away, so the shape is the file's own.
    *
-   * **It joins the poll effect's dependencies and cannot restart it mid-run**, which is the thing to
-   * check before touching either. It is set true in the same handler that sets `generating` true, and
-   * both go false together when the run settles - so the effect sees one arrival and one departure,
-   * never a change while a poll is in flight, and the backoff is never restarted underneath itself.
+   * **It is mirrored into a ref and read from there inside the poll, which a review forced.** The
+   * flag used to be a dependency of the poll effect and was cleared only on the settle and the
+   * ceiling - so every *other* way `generating` can go false left it stuck true: the render-phase
+   * adoption of a `ready` set from any `router.refresh()`, and a period navigation making
+   * `isCurrentPeriod` false. A press followed by a period switch therefore announced nothing at the
+   * time and then put a spurious "Insights updated." on top of the next save's own toast, which is
+   * the double-toast-per-save this flag exists to prevent.
+   *
+   * Reading the ref keeps it out of the effect's dependencies, which is what lets the **cleanup**
+   * clear it: the cleanup runs on every teardown, so it covers the abandoned cases as well as the
+   * two the poll can see. As a dependency it could not, because clearing it would re-run the very
+   * effect that had just been armed.
    */
   const [manualRun, setManualRun] = useState(false);
+  const manualRunRef = useRef(manualRun);
+
+  useEffect(() => {
+    manualRunRef.current = manualRun;
+  }, [manualRun]);
 
   // restart the loop and lose its own backoff.
   useEffect(() => {
@@ -217,7 +230,8 @@ export function InsightPollProvider({
             // tail of a save that already confirmed itself - a second toast there would double
             // every save, which is exactly what the ticket decided against. The flag is set by
             // `regenerate` and is the only thing that distinguishes the two.
-            if (manualRun) {
+            if (manualRunRef.current) {
+              manualRunRef.current = false;
               setManualRun(false);
               post({ kind: 'success', message: TOAST_UPDATED });
             }
@@ -242,7 +256,6 @@ export function InsightPollProvider({
         // content comes back on its own, and "insights updated" would be false while "insights
         // failed" is more than the contract knows - A26 makes a failed run invisible. What the user
         // asked for simply did not finish, and the screen says so by returning to itself.
-        setManualRun(false);
         setStalled(true);
         return;
       }
@@ -258,8 +271,15 @@ export function InsightPollProvider({
     return () => {
       cancelled = true;
       clearTimeout(timer);
+
+      // **Every way out of a run clears the flag, not just the two the poll can see.** The settle
+      // above consumes it; the ceiling, a period navigation and a refreshed `ready` set all land
+      // here instead, and leaving it set is what let a later background regeneration announce
+      // itself as the user's.
+      manualRunRef.current = false;
+      setManualRun(false);
     };
-  }, [generating, manualRun, post]);
+  }, [generating, post]);
 
   const value = useMemo<InsightPoll>(
     () => ({

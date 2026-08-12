@@ -559,20 +559,34 @@ describe('when the save is rejected', () => {
     expect(toastMessages()).toEqual([]);
   });
 
-  it.each([
-    ['unauthenticated', 'Your session has expired. Log in again to save this.'],
-    ['failed', "We couldn't add this category. Please try again."],
-  ] as const)('reports %s in the toast region instead', async (reason, message) => {
+  it('keeps the unauthenticated line inline, because the user must act on it', async () => {
     const u = user();
-    create.mockResolvedValue({ ok: false, reason });
+    create.mockResolvedValue({ ok: false, reason: 'unauthenticated' });
     open();
 
     await u.type(name(), 'Subscriptions');
     await u.click(submit());
 
-    await waitFor(() => expect(toastMessages()).toEqual([message]));
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(
+      await screen.findByText('Your session has expired. Log in again to save this.'),
+    ).toBeInTheDocument();
+    expect(toastMessages()).toEqual([]);
   });
+
+  it.each([['failed', "We couldn't add this category. Please try again."]] as const)(
+    'reports %s in the toast region instead',
+    async (reason, message) => {
+      const u = user();
+      create.mockResolvedValue({ ok: false, reason });
+      open();
+
+      await u.type(name(), 'Subscriptions');
+      await u.click(submit());
+
+      await waitFor(() => expect(toastMessages()).toEqual([message]));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
 
   it('neither closes nor refreshes, so nothing typed is lost', async () => {
     const u = user();

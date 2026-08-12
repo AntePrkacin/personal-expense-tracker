@@ -10,14 +10,25 @@
 // announcement when it meant to ask about the stack. The dismiss control exists only in the visible
 // stack, which is what makes it the honest handle.
 
-/** What the polite region is currently announcing. Empty string when it is at rest. */
+/**
+ * What the polite region is currently announcing. Empty string when it is at rest.
+ *
+ * **Queried by `data-toast-announcer`, not by `[aria-live]`**, and a review found why: publishing
+ * no role leaves the attribute as the only other handle, and two shipped components render an
+ * `aria-live="polite"` of their own - `DateField`'s month label while its calendar is open, and
+ * `AssistantMessageList`'s `role="log"` whenever the chat holds messages. `ToastProvider` renders
+ * `{children}` before the region, so both come first in DOM order and a bare selector returns
+ * "October 2025" or a conversation transcript. `AddTransactionModal.test.tsx` already calls this on
+ * a screen holding a `DateField` and passes only because those cases leave the picker closed - so a
+ * suite that opened it would report a toast as announced that was never announced.
+ */
 export function politeAnnouncement(): string {
-  return document.querySelector('[aria-live="polite"]')?.textContent ?? '';
+  return document.querySelector('[data-toast-announcer="polite"]')?.textContent ?? '';
 }
 
 /** What the assertive region is currently announcing. Empty string when it is at rest. */
 export function assertiveAnnouncement(): string {
-  return document.querySelector('[aria-live="assertive"]')?.textContent ?? '';
+  return document.querySelector('[data-toast-announcer="assertive"]')?.textContent ?? '';
 }
 
 /**

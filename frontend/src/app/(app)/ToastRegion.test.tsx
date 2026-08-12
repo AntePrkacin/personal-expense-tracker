@@ -53,6 +53,26 @@ describe('ToastRegion', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
+  // **The regression a review found in `toastQueries.ts`.** The announcers publish no role, so the
+  // suites query them by attribute - and a bare `[aria-live="polite"]` matched whichever component
+  // under test rendered one first. `DateField` and `AssistantMessageList` both do. This pins that a
+  // competing live region earlier in the document cannot be mistaken for the toast's.
+  it('is found past another component’s live region', () => {
+    render(
+      <>
+        <div aria-live="polite">October 2025</div>
+        <ToastRegion
+          toasts={[SUCCESS]}
+          politeAnnouncement={SUCCESS.message}
+          assertiveAnnouncement=""
+          onDismiss={jest.fn()}
+        />
+      </>,
+    );
+
+    expect(politeAnnouncement()).toBe('Transaction added.');
+  });
+
   it('contributes no text to the page while it holds nothing', () => {
     renderRegion();
 
@@ -119,6 +139,45 @@ describe('ToastRegion', () => {
     expect(success).toHaveClass('alert-success');
     expect(failure).toHaveClass('alert-error');
     expect(success).not.toHaveClass('alert-error');
+  });
+
+  // **The control announces its own condition while a modal is open (PET-77 review).** The header
+  // records the measurement: a popover shown after a modal `<dialog>` paints above it and is inert,
+  // so the click never lands. Drawing a live-looking X for the toast's whole life is precisely the
+  // "looks operable and is not" control this app says it does not ship.
+  it('marks the dismiss control unavailable while a modal dialog is open', () => {
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+
+    try {
+      const onDismiss = jest.fn();
+      render(
+        <ToastRegion
+          toasts={[SUCCESS]}
+          politeAnnouncement=""
+          assertiveAnnouncement=""
+          onDismiss={onDismiss}
+        />,
+      );
+
+      const control = screen.getByRole('button', { name: 'Dismiss: Transaction added.' });
+
+      expect(control).toHaveAttribute('aria-disabled', 'true');
+      // `aria-disabled`, never `disabled`: the control stays reachable so a keyboard user is told
+      // why rather than finding a gap.
+      expect(control).toBeEnabled();
+    } finally {
+      dialog.remove();
+    }
+  });
+
+  it('leaves the dismiss control live when nothing is open over it', () => {
+    renderRegion({ toasts: [SUCCESS] });
+
+    expect(screen.getByRole('button', { name: 'Dismiss: Transaction added.' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
   });
 
   // jsdom has no `showPopover`, so what is pinned is that the attribute is on the element and that

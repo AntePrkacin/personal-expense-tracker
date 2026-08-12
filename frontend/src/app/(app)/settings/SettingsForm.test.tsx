@@ -860,13 +860,64 @@ describe('the four failures', () => {
     await user.click(screen.getByRole('button', { name: '15th of the month' }));
     await saveThroughDialog(user);
 
+    // The partial sentence leads and the specific cause follows it, so neither is lost.
     await waitFor(() =>
       expect(toastMessages()).toEqual([
-        'Your pay schedule was saved, but your profile changes were not.',
+        "Your pay schedule was saved, but your profile changes were not. We couldn't save your changes. Please try again.",
       ]),
     );
     expect(saveSchedule).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  // **The inline arms carry the partial note too, which a review found missing.** `taken` reported
+  // only the address problem, silent about a schedule change that had already been applied.
+  it('says what landed on an inline failure as well', async () => {
+    const user = userEvent.setup();
+    saveSchedule.mockResolvedValue({ ok: true });
+    renderForm(jest.fn().mockResolvedValue({ ok: false, reason: 'taken' }));
+
+    await user.clear(screen.getByLabelText('Email'));
+    await user.type(screen.getByLabelText('Email'), 'taken@email.com');
+    await user.click(screen.getByRole('button', { name: '15th of the month' }));
+    await saveThroughDialog(user);
+
+    // By text rather than by role: `taken` also drives the Email field's own inline message, so the
+    // page legitimately holds two elements carrying that sentence.
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('alert')
+          .some((el) => el.textContent?.startsWith('Your pay schedule was saved,')),
+      ).toBe(true),
+    );
+  });
+
+  // **The retry must not append a second row to an append-only history.** The schedule landed on
+  // the first press, so the second sends only the half that failed - and never re-asks the paycheck
+  // question, because there is nothing left to anchor.
+  it('does not re-send a schedule that already landed when the user retries', async () => {
+    const user = userEvent.setup();
+    saveSchedule.mockResolvedValue({ ok: true });
+    const save = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, reason: 'taken' })
+      .mockResolvedValueOnce({ ok: true });
+    renderForm(save);
+
+    await user.clear(screen.getByLabelText('Email'));
+    await user.type(screen.getByLabelText('Email'), 'taken@email.com');
+    await user.click(screen.getByRole('button', { name: '15th of the month' }));
+    await saveThroughDialog(user);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+
+    // The dialog deliberately stays open over a failed save, with the picked month intact, so the
+    // retry goes through its own affirmative - which is the path that used to re-POST the schedule.
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(saveSchedule).toHaveBeenCalledTimes(1);
   });
 
   it('says the plain thing when the schedule write is the one that failed', async () => {

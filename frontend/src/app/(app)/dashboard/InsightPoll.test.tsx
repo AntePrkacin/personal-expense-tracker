@@ -377,6 +377,29 @@ describe('the generating state and the poll', () => {
     await waitFor(() => expect(toastMessages()).toEqual(['Insights updated.']));
   });
 
+  // **The stuck-flag case a review found.** `generating` can go false without the poll settling -
+  // a `router.refresh()` delivering an already-`ready` set, or a period navigation - and the flag
+  // used to survive that, so the *next* background regeneration announced itself as the user's.
+  it('forgets a manual run that was abandoned before it settled', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    generate.mockResolvedValue({ ok: true });
+    const { rerender } = renderPoll(readySet());
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await waitFor(() => expect(screen.getByText('Analyzing your spending...')).toBeInTheDocument());
+
+    // The server hands back a settled set on its own, which takes the poll down without it ever
+    // observing a settle of its own.
+    rerenderPoll(rerender, readySet({ generatedAt: '2025-10-08T10:00:00.000Z' }));
+
+    // A later run nobody pressed for must stay silent.
+    respondWith(readySet({ insights: [CARDS[0]], generatedAt: '2025-10-08T11:00:00.000Z' }));
+    rerenderPoll(rerender, readySet({ state: 'generating' }));
+    await advance(500);
+
+    expect(toastMessages()).toEqual([]);
+  });
+
   it('says nothing when a run nobody pressed for settles', async () => {
     // The write path regenerates the set backend-side, so this is what the tail of an ordinary save
     // looks like from here: the screen arrives already generating and settles on its own.

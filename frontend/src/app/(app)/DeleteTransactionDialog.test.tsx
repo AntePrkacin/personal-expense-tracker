@@ -293,18 +293,30 @@ describe('the three failures', () => {
     expect(toastMessages()).toEqual([]);
   });
 
-  it.each([
-    ['unauthenticated', 'Your session has expired. Log in again to delete this.'],
-    ['failed', "We couldn't delete this transaction. Please try again."],
-  ])('reports %s in the toast region instead', async (reason, message) => {
-    const remove = jest.fn().mockResolvedValue({ ok: false, reason });
+  it('keeps the unauthenticated line inline, because the user must act on it', async () => {
+    const remove = jest.fn().mockResolvedValue({ ok: false, reason: 'unauthenticated' });
     renderDialog({ remove });
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
-    await waitFor(() => expect(toastMessages()).toEqual([message]));
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Your session has expired. Log in again to delete this.',
+    );
+    expect(toastMessages()).toEqual([]);
   });
+
+  it.each([['failed', "We couldn't delete this transaction. Please try again."]])(
+    'reports %s in the toast region instead',
+    async (reason, message) => {
+      const remove = jest.fn().mockResolvedValue({ ok: false, reason });
+      renderDialog({ remove });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+      await waitFor(() => expect(toastMessages()).toEqual([message]));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
 
   it('does not tell a user whose row is already gone to try again', async () => {
     // The reason `missing` exists as its own arm rather than folding into `failed`: retrying a

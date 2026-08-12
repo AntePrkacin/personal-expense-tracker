@@ -141,7 +141,11 @@ const MESSAGES = {
  * is what the region makes possible.
  */
 function partialOrPlain(message: string, scheduleLanded: boolean): string {
-  return scheduleLanded ? MESSAGES.partial : message;
+  // **Composed rather than substituted, which is the review's other half.** Replacing the message
+  // wholesale is right for the generic `failed` and wrong for `taken` and `invalid`, whose whole
+  // value is naming the field to fix - so the partial sentence leads and the specific cause follows
+  // it. Nothing is lost in either direction.
+  return scheduleLanded ? `${MESSAGES.partial} ${message}` : message;
 }
 
 /** The inline message for one problem, which is why `emailProblem` reports a reason rather than a boolean. */
@@ -260,6 +264,23 @@ export function SettingsForm({
    * meant.) A successful save closes it; a cancelled one abandons the save whole.
    */
   const [anchorMonth, setAnchorMonth] = useState<string | null>(null);
+
+  /**
+   * The schedule body this form has already written, and the month it was anchored to.
+   *
+   * **A review found the hole this closes.** The two writes have no transaction across them, so the
+   * profile patch can fail *after* the schedule has landed - and that path returns before any
+   * `router.refresh()`, so `syncedProfile` still holds the old schedule and `scheduleChanged` is
+   * still true. Fixing the address and pressing Save again therefore re-asked the paycheck question
+   * and **re-POSTed the same schedule**, appending a duplicate row to PET-72's append-only,
+   * effective-dated history. Comparing the body we are about to send against the one that landed is
+   * what makes the retry send only the half that failed.
+   *
+   * A ref rather than state: nothing renders from it, and it is read inside an awaited handler
+   * where a state value captured at press time would be the value from before the first attempt.
+   * Cleared on a fully successful save, because the refresh that follows moves the baseline.
+   */
+  const appliedSchedule = useRef<{ body: string; month: string } | null>(null);
 
   // **The server's values `values` was last seeded from, and the flag that says a save is waiting
   // for its refresh.** Together these are the resync below; both exist because `router.refresh()`
@@ -499,6 +520,18 @@ export function SettingsForm({
     // Below this line is the request, which `commit` owns so the dialog's confirm reaches it by
     // exactly the same path.
     if (scheduleChanged(syncedProfile, values)) {
+      // Already written by a previous press whose *profile* half failed - so there is nothing left
+      // to ask about, and asking would invite a second identical row. Straight to the patch.
+      const applied = appliedSchedule.current;
+
+      if (
+        applied !== null &&
+        applied.body === JSON.stringify(toChangeScheduleBody(values, applied.month))
+      ) {
+        void commit(applied.month);
+        return;
+      }
+
       setFailure(null);
       setExpired(false);
       // **The stored day and the form's day, both, and neither is redundant.** The month depends on
@@ -554,7 +587,15 @@ export function SettingsForm({
     // A local rather than state: nothing renders from it and it is read once, three lines later.
     let scheduleLanded = false;
 
-    if (month !== null) {
+    const scheduleBody =
+      month === null ? null : JSON.stringify(toChangeScheduleBody(values, month));
+    const alreadyApplied = scheduleBody !== null && appliedSchedule.current?.body === scheduleBody;
+
+    if (month !== null && alreadyApplied) {
+      // The first press wrote this and the patch beside it failed. Re-sending is what appends a
+      // duplicate row to an append-only history, so the retry carries only the profile half.
+      scheduleLanded = true;
+    } else if (month !== null) {
       let schedule: ChangeScheduleResult;
 
       try {
@@ -580,6 +621,8 @@ export function SettingsForm({
         }
 
         // The reason split (PET-77): `invalid` is a body the fields can fix, so it stays inline.
+        // No partial note on either arm, and that is not an oversight: this is the *first* of the
+        // two writes, so nothing has landed when it fails.
         if (isToastedFailure(schedule.reason)) {
           post({ kind: 'failure', message: MESSAGES[schedule.reason] });
         } else {
@@ -590,6 +633,7 @@ export function SettingsForm({
       }
 
       scheduleLanded = true;
+      appliedSchedule.current = { body: scheduleBody as string, month };
     }
 
     // **Skipped when nothing else moved**, which is the ordinary case for a budget-only save: the
@@ -611,7 +655,8 @@ export function SettingsForm({
         // The 401 renders its own alert with a way out of it; the other three are bare strings.
         if (result.reason === 'unauthenticated') {
           // Same reason as the schedule arm: the alert with its link lives
-          // under the dialog's top layer.
+          // under the dialog's top layer. It says nothing about the schedule half deliberately -
+          // the recovery is to log in again, after which the retry skips the applied write.
           setAnchorMonth(null);
           setExpired(true);
           return;
@@ -619,13 +664,17 @@ export function SettingsForm({
 
         // The reason split (PET-77). `invalid` and `taken` both name something the fields in front
         // of the user can fix - `taken` names the address that is in use - so they stay inline.
+        //
+        // **Both halves carry the partial note, which a review found missing from the inline one.**
+        // A `taken` address after a landed schedule change reported only the address problem: true,
+        // and silent about a write that had already been applied.
         if (isToastedFailure(result.reason)) {
           post({
             kind: 'failure',
             message: partialOrPlain(MESSAGES[result.reason], scheduleLanded),
           });
         } else {
-          setFailure(MESSAGES[result.reason]);
+          setFailure(partialOrPlain(MESSAGES[result.reason], scheduleLanded));
         }
 
         return;
@@ -647,6 +696,7 @@ export function SettingsForm({
     // re-enabled - a second click re-POSTed the schedule, and the only way out ran `onClose`, whose
     // comment claims it "abandons the whole save". Unmounting here still restores focus, because
     // `Modal` refocuses on unmount rather than only through `close()`.
+    appliedSchedule.current = null;
     setAnchorMonth(null);
     router.refresh();
     setAwaitingSaved(true);

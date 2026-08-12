@@ -523,10 +523,7 @@ describe('the four failures', () => {
     },
   );
 
-  it.each([
-    ['unauthenticated', /session has expired/i],
-    ['failed', /try again/i],
-  ] as const)(
+  it.each([['failed', /try again/i]] as const)(
     'reports %s in the toast region without refreshing behind itself',
     async (reason, copy) => {
       renderModal();

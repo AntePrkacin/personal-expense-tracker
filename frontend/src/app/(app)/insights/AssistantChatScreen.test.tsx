@@ -273,7 +273,7 @@ describe('a failure', () => {
     },
   );
 
-  it.each([['unauthenticated'], ['failed']] as const)(
+  it.each([['failed']] as const)(
     'reports %s in the toast region and restores the question',
     async (reason) => {
       const user = userEvent.setup();
@@ -375,6 +375,22 @@ describe('cancellation', () => {
     await waitFor(() => expect(toastMessages()).toEqual(['Response stopped.']));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Ask about your spending')).toHaveValue('Hello');
+  });
+
+  // **The other half of AC9, and a review found it.** The unmount cleanup aborts an in-flight turn
+  // on every teardown, and that abort resolves the same branch the composer's Stop does - after the
+  // component is gone. The toast region lives on the layout and outlives it, so without a guard
+  // leaving mid-turn threw "Response stopped." over whatever the user navigated to.
+  it('says nothing when the abort came from unmounting rather than from Stop', async () => {
+    const user = userEvent.setup();
+    const { promise, settle } = deferred();
+    const { unmount } = renderScreen(jest.fn().mockReturnValue(promise));
+
+    await ask(user, 'Hello');
+    unmount();
+    settle({ ok: false, aborted: true });
+
+    await waitFor(() => expect(toastMessages()).toEqual([]));
   });
 
   it('aborts a turn in flight when the screen goes away', async () => {

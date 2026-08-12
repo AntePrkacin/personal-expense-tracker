@@ -507,6 +507,7 @@ describe('the four failure lines', () => {
   it.each([
     ['invalid', "We couldn't add this transaction. Please check the values and try again."],
     ['categoryMissing', 'That category no longer exists. Pick another one.'],
+    ['unauthenticated', 'Your session has expired. Log in again to save this.'],
   ] as const)('keeps %s beside the form, where the user can act on it', async (reason, message) => {
     create.mockResolvedValue({ ok: false, reason });
 
@@ -520,22 +521,22 @@ describe('the four failure lines', () => {
     expect(toastMessages()).toEqual([]);
   });
 
-  it.each([
-    ['unauthenticated', 'Your session has expired. Log in again to save this.'],
-    ['failed', "We couldn't add this transaction. Please try again."],
-  ] as const)('reports %s in the toast region instead', async (reason, message) => {
-    create.mockResolvedValue({ ok: false, reason });
+  it.each([['failed', "We couldn't add this transaction. Please try again."]] as const)(
+    'reports %s in the toast region instead',
+    async (reason, message) => {
+      create.mockResolvedValue({ ok: false, reason });
 
-    const u = user();
-    open();
-    await fill(u);
-    await u.click(submit());
+      const u = user();
+      open();
+      await fill(u);
+      await u.click(submit());
 
-    await waitFor(() => expect(toastMessages()).toEqual([message]));
-    // The counterpart assertion, and the one that would catch reporting it twice: no inline line is
-    // left behind under the fields for a failure the fields cannot fix.
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
+      await waitFor(() => expect(toastMessages()).toEqual([message]));
+      // The counterpart assertion, and the one that would catch reporting it twice: no inline line
+      // is left behind under the fields for a failure the fields cannot fix.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
 
   it('announces the failure assertively, where a field message deliberately does not', async () => {
     // Assertive because this appears after a network round trip with nothing else on screen
@@ -1008,6 +1009,7 @@ describe('the scan controls', () => {
       ],
       ['rateLimited', "You've scanned a lot in a short time. Wait a minute and try again."],
       ['timedOut', 'That scan took too long. Try again, or add the transaction by hand.'],
+      ['unauthenticated', 'Your session has expired. Log in again to save this.'],
     ] as [ScanReceiptFailureReason, string][])(
       'shows its own message for %s',
       async (reason, message) => {
@@ -1027,25 +1029,22 @@ describe('the scan controls', () => {
       },
     );
 
-    it.each([
-      ['unauthenticated', 'Your session has expired. Log in again to save this.'],
-      ['failed', "We couldn't read that receipt. Please try again."],
-    ] as [ScanReceiptFailureReason, string][])(
-      'reports %s in the toast region instead',
-      async (reason, message) => {
-        // The other two arms of the same taxonomy, and the split is `failureReporting.ts`'s rather
-        // than this screen's: neither names anything the two file controls could do differently.
-        scan.mockResolvedValue({ ok: false, reason });
+    it.each([['failed', "We couldn't read that receipt. Please try again."]] as [
+      ScanReceiptFailureReason,
+      string,
+    ][])('reports %s in the toast region instead', async (reason, message) => {
+      // The other two arms of the same taxonomy, and the split is `failureReporting.ts`'s rather
+      // than this screen's: neither names anything the two file controls could do differently.
+      scan.mockResolvedValue({ ok: false, reason });
 
-        const u = user();
-        open();
-        await u.upload(upload(), photo());
+      const u = user();
+      open();
+      await u.upload(upload(), photo());
 
-        await waitFor(() => expect(toastMessages()).toEqual([message]));
-        expect(overlay()).not.toBeInTheDocument();
-        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      },
-    );
+      await waitFor(() => expect(toastMessages()).toEqual([message]));
+      expect(overlay()).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
 
     it('takes the overlay down when the Server Action rejects rather than resolving', async () => {
       // A body over `bodySizeLimit`, or a connection dropped mid-action. Uncaught, this

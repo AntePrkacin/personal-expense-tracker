@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import type { Palette } from '../../../../lib/palette';
 import type { UpdateCategoryResult } from '../../../../lib/updateCategory';
 
+import { toastMessages } from '../../toastQueries';
 import { EditCategoryModal } from './EditCategoryModal';
 import { category, CATEGORY_PERIODS } from './categoryFixture';
 
@@ -365,13 +366,31 @@ describe('validation', () => {
   });
 });
 
+// **PET-77 split these five by where they report, and a review found this suite unpinned.** It was
+// the only one of the twelve call sites whose tests were not touched: every arm still asserted
+// `findByText`, which after the split matched the *toast* for `failed` rather than the inline line
+// it was written for - so the title stayed green while the invariant it named stopped holding.
+// Each case now says which surface it expects and asserts the other is empty.
+// `Category saved.` was the one toast string in the ticket with no coverage at all - grep hit only
+// the source - so reusing "Category added." here, or deleting the post, was a silent regression.
+describe('the confirmation', () => {
+  it('confirms the save in the toast region, with the word that distinguishes it from a create', async () => {
+    open();
+
+    await user().clear(name());
+    await user().type(name(), 'Streaming');
+    await user().click(save());
+
+    await waitFor(() => expect(toastMessages()).toEqual(['Category saved.']));
+  });
+});
+
 describe('the five failures', () => {
   it.each([
     ['invalid', "We couldn't save this category. Please check the values and try again."],
     ['missing', 'This category no longer exists. Close this to see the current list.'],
     ['fallback', "This category's name is fixed and can't be changed."],
     ['unauthenticated', 'Your session has expired. Log in again to save this.'],
-    ['failed', "We couldn't save this category. Please try again."],
   ] as const)('shows the %s line and keeps the form open', async (reason, message) => {
     update.mockResolvedValue({ ok: false, reason });
     open();
@@ -380,9 +399,26 @@ describe('the five failures', () => {
     await user().type(name(), 'Streaming');
     await user().click(save());
 
-    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(toastMessages()).toEqual([]);
     expect(onClose).not.toHaveBeenCalled();
     // Re-enabled, or a failed save would leave the modal frozen with Cancel as its only exit.
+    expect(save()).toBeEnabled();
+  });
+
+  it('reports failed in the toast region and keeps the form open', async () => {
+    update.mockResolvedValue({ ok: false, reason: 'failed' });
+    open();
+
+    await user().clear(name());
+    await user().type(name(), 'Streaming');
+    await user().click(save());
+
+    await waitFor(() =>
+      expect(toastMessages()).toEqual(["We couldn't save this category. Please try again."]),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
     expect(save()).toBeEnabled();
   });
 

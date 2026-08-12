@@ -11,11 +11,20 @@
 //   that says "use photos, or a single PDF" is an instruction rather than a report. These keep the
 //   `components/FormError.tsx` line they have always had - which is why that component survives
 //   this ticket rather than being replaced by it.
-// - **A toast** is a reason they cannot act on where they are. There are exactly two, and they are
-//   the two every taxonomy shares: `failed` (something broke, try again) and `unauthenticated` (the
-//   session is gone, and nothing on this screen will work again). Both are equally true whether the
-//   surface that produced them is still on screen, and both are the arms most likely to fire on a
-//   surface that closes.
+// - **A toast** is a reason they cannot act on where they are. There is exactly one: `failed`.
+//   Something broke, trying again is the whole of the advice, and it is equally true whether the
+//   surface that produced it is still on screen.
+//
+// **`unauthenticated` was on that list for one commit, and a review took it off.** It looks like the
+// same shape - the user cannot fix a dead session from a modal either - and it is not, because of
+// what a toast *is*: an 8-second message whose dismiss control this app documents as inert while a
+// modal is open. So a session that expired mid-edit announced itself once, over a dialog that stayed
+// open with the edits intact and Save re-enabled, and then vanished; the next press produced another
+// disappearing toast and the user never learned to log in. That was six surfaces - both transaction
+// dialogs, both category modals, the Allocate modal and the chat. `SettingsForm` is the proof it was
+// wrong: it kept `unauthenticated` inline all along, deliberately, because that arm is the one
+// carrying a "Log in again" link, and it was the only screen where an expired session still said so
+// afterwards. A notice a user must act on has to outlive a timer.
 //
 // **A `string` parameter rather than a union, and that is honest rather than lazy.** There is no
 // single reason type to accept: twelve modules publish twelve unions, and what they share is two
@@ -30,12 +39,12 @@
 // argument in full.
 
 /**
- * The two arms that leave the form and become a notification.
+ * The arms that leave the form and become a notification.
  *
  * Exported so a suite can state the rule rather than restate the strings, and so the list is
  * greppable from the twelve call sites that obey it.
  */
-export const TOASTED_FAILURE_REASONS: readonly string[] = ['failed', 'unauthenticated'];
+export const TOASTED_FAILURE_REASONS: readonly string[] = ['failed'];
 
 /**
  * Whether this failure belongs in the toast region rather than beside the form.

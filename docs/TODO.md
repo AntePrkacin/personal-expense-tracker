@@ -38,7 +38,8 @@ four treatments, and the plan recommended keeping it: unlike the Settings badge 
 visible to everyone else. It cannot become a toast, because the snap fires on a keystroke. Restoring
 it is a `role="status"` line and the `cappedMessage` call that still exists in `allocateForm.ts`.
 
-**The success toast's text does not reach AA, and the fill is the theme's rather than this ticket's.**
+**The success toast's text does not reach AA, and the review of PET-77 established that it cannot be
+fixed by moving the token.**
 The toast draws `text-white` on the semantic fill, after a product decision that the sentence, the
 icon and the dismiss X must all be one colour - they were three colours before, because the label
 took `--color-success-content` (a near-black green) while the `btn-ghost` X painted from
@@ -49,12 +50,23 @@ component in both themes, where the fills are identical: **failure is 4.829:1 an
 Worth stating exactly what moved, because white made one arm better and one arm worse. The previous
 pairing measured 3.44:1 for failure and 3.742:1 for success, so both failed; white fixes failure
 outright and costs success about half a point. **What is left is a fill that is too light for white
-text at that size**, which is `--color-success` itself - so the fix moves every success surface in
-the app and belongs with whoever owns the Expensa themes, not here. Two ways out: darken that token,
-or draw the toast as a `base-100` surface with a toned icon and border, which is what most
-notification systems do and what would let the text be `base-content` again. Note the treatment this
-replaced had the same defect and hid it: `badge badge-success` was measured against the *card* behind
-it rather than as text on its own fill.
+text at that size**, which is `--color-success` itself - and darkening it is **not** available,
+which the review measured rather than assumed. The same token is used two ways that pull in
+opposite directions: as a *fill* under white text (this toast), and as *text* on `base-100` (the
+soft status badges `lib/budgetStatus.ts` draws). Moving it to `#15803d` takes white-on-fill from
+3.296:1 to 5.016:1 and the light theme's soft badge from 3.296:1 to 5.016:1 - and takes the **dark**
+theme's soft badge from 4.977:1 down to 3.27:1, because both themes share one value. Trading a fixed
+toast for a broken badge is not a fix.
+
+So this needs a decision rather than an edit, and there are two shapes for it. **Per-theme success
+values**, which the Expensa pair does not currently have (`globals.css` repeats the same six lines
+in both blocks) - light gets the darker green, dark keeps the brighter one, and the toast still
+fails in dark. Or **the toast stops being a filled surface**: `base-100` with a toned icon, a
+border and `base-content` text, which is the shape most notification systems use and the only one
+where both kinds pass in both themes. The second contradicts the product owner's instruction that
+the toast text be white, so it is theirs to take. Note the treatment this replaced had the same
+defect and hid it: `badge badge-success` was measured against the *card* behind it rather than as
+text on its own fill.
 
 **"Response stopped." is a failure toast, and a stop is not a failure.** With the `info` kind
 dropped there are two, and a deliberate cancel fits neither: green claims something worked, red says

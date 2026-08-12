@@ -570,11 +570,13 @@ describe('the five failure lines', () => {
     );
   });
 
+  // Inline again after the PET-77 review: a dead session is the one failure the user must act on,
+  // and a toast expires. `failureReporting.ts` carries the argument.
   it('says the session expired on a 401, without navigating anywhere', async () => {
-    const message = await submitAndReadToast({ ok: false, reason: 'unauthenticated' });
+    const line = await submitAndRead({ ok: false, reason: 'unauthenticated' });
 
-    expect(message).toBe('Your session has expired. Log in again to save this.');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(line).toHaveTextContent('Your session has expired. Log in again to save this.');
+    expect(toastMessages()).toEqual([]);
   });
 
   it('says to try again on anything else', async () => {

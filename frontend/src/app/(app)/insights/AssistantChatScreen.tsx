@@ -122,6 +122,15 @@ export function AssistantChatScreen({
    */
   const controllerRef = useRef<AbortController | null>(null);
 
+  /**
+   * Whether the abort about to arrive is the composer's "Stop" rather than the unmount cleanup's.
+   *
+   * A ref rather than state because nothing renders from it and it is read inside an awaited
+   * continuation, where a state value captured at send time would be the value from before the
+   * press. Cleared as it is read, so one press reports once.
+   */
+  const stopRequested = useRef(false);
+
   // Keyed on what actually changes the height: a bubble arriving or leaving, and the typing
   // indicator appearing. Deliberately not on every render.
   useEffect(() => {
@@ -160,6 +169,7 @@ export function AssistantChatScreen({
     setDraft('');
     setFailure(null);
     setTruncation(null);
+    stopRequested.current = false;
     setPending(true);
 
     const restore = () => {
@@ -190,6 +200,18 @@ export function AssistantChatScreen({
       // message for something the user chose.
       if (result.aborted) {
         restore();
+
+        // **Only a stop the user pressed is reported, and a review found why that matters.** The
+        // unmount cleanup below aborts an in-flight turn on *every* teardown - "New chat", a click
+        // into History, any sidebar navigation - and that abort resolves this same branch after the
+        // component is gone. `restore()` is a no-op on a dead component, which is why this used to
+        // be silent; `post()` is not, because the region lives on the layout and outlives the
+        // screen. Without this guard, leaving mid-turn threw a red "Response stopped." over
+        // whatever the user navigated to, reporting a cancellation they never performed.
+        const requested = stopRequested.current;
+        stopRequested.current = false;
+
+        if (!requested) return;
         // **AC9's second half: a stop is reported rather than silent (PET-77).** It used to leave no
         // trace at all - the composer swapped back and the question reappeared in the box, which is
         // the same thing a failure does, so the two were indistinguishable from across the room.
@@ -265,7 +287,10 @@ export function AssistantChatScreen({
         value={draft}
         onChange={setDraft}
         onSubmit={() => void submit()}
-        onStop={() => controllerRef.current?.abort()}
+        onStop={() => {
+          stopRequested.current = true;
+          controllerRef.current?.abort();
+        }}
         pending={pending}
       />
     </main>

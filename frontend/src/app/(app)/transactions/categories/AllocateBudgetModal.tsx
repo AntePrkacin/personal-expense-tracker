@@ -1,13 +1,13 @@
 'use client';
 
-import { createElement, useEffect, useRef, useState } from 'react';
+import { createElement, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/Button';
 import { categoryIcon, categoryTileClass } from '@/components/ui/categoryColour';
 import { FormError } from '@/components/FormError';
 import { reformatAmountInput } from '@/lib/amountField';
-import { currencySymbol, type MoneyFormatters } from '@/lib/money';
+import { currencySymbol } from '@/lib/money';
 import type { Allocation, Category } from '@/lib/categories';
 import type { Period } from '@/lib/periods';
 import type { UpdateCategoryCapsResult } from '@/lib/updateCategoryCaps';
@@ -47,8 +47,6 @@ import { AllocationBar } from './AllocationBar';
 
 /** Two islands over the modal's own canvas, matching the source's card-on-canvas relationship. */
 const ISLAND = 'card bg-base-200 card-body gap-4 p-5';
-
-const SNAP_MESSAGE_MS = 3_400;
 
 /**
  * Every line this modal can show, keyed by field name and by result reason so
@@ -97,28 +95,6 @@ export const ALLOCATE_HINT = 'Clear a field to leave a category without a limit.
  */
 export const ALLOCATE_EMPTY =
   'There are no categories to give a limit to yet. Add one from the Categories tab, then set its limit here.';
-
-/**
- * The transient message a snap shows. Exported for the same reason.
- *
- * **Two sentences, because a ceiling of zero is a different fact.** "Capped at $0.00" would be
- * technically true and useless: the field was cleared rather than capped, and what the user needs to
- * know is that there is nothing left to give this category. Reached whenever the budget is fully
- * assigned, which is an ordinary state rather than an edge - it is where the modal's own snap leaves
- * you.
- *
- * **The formatters are a parameter for `deleteTransactionBody`'s reason**: PET-47 made money follow
- * the profile's currency through a context, which only a hook can reach, and this is a plain
- * function so its suite needs no provider around it.
- */
-export const cappedMessage = (
-  capCents: number,
-  budgetCents: number,
-  { formatCurrency, formatWhole }: MoneyFormatters,
-): string =>
-  capCents === 0
-    ? `Nothing left to assign. Free up budget from another category first.`
-    : `Capped at ${formatCurrency(capCents / 100)} - the rest of your ${formatWhole(budgetCents / 100)} is assigned elsewhere.`;
 
 type AllocateBudgetModalProps = {
   categories: Category[];
@@ -196,29 +172,13 @@ export function AllocateBudgetModal({
    */
   const [stale, setStale] = useState(false);
 
-  /**
-   * The snap message, as a fresh object per snap rather than a bare amount.
-   *
-   * **The identity is what makes the timer restart.** Two snaps to the same ceiling would carry an
-   * equal number, so the effect below would not re-run and the second message would inherit the
-   * first's remaining time. An object changes identity every snap.
-   */
-  const [snap, setSnap] = useState<{ cents: number } | null>(null);
-
-  // **An effect keyed on `snap`, not a ref plus a manual clearTimeout.** The cleanup is
-  // unconditional and co-located, so an unmount leak is structurally impossible rather than
-  // remembered - and the restart-on-retrigger above is obtained rather than coded, because React
-  // runs the previous cleanup before the next effect.
-  //
-  // The leak is deliberately not given a test: React 19 does not warn on setState after unmount, so
-  // a test asserting no console error would pass with this cleanup deleted. The design is the
-  // guarantee.
-  useEffect(() => {
-    if (snap === null) return;
-
-    const timer = setTimeout(() => setSnap(null), SNAP_MESSAGE_MS);
-    return () => clearTimeout(timer);
-  }, [snap]);
+  // **The snap's state machine is deleted with its announcement (PET-77, AC13).** It held a
+  // `{ cents }` object purely so a 3.4s timer could revert the `role="status"` line; with the line
+  // gone the state was permanently null, the effect returned on its first line forever, and both it
+  // and `SNAP_MESSAGE_MS` survived every lint and type gate because the dead code still referenced
+  // them. `cappedMessage` moved to `allocateForm.ts`, which is where this file and `docs/TODO.md`
+  // both already said it lived - the clamp arithmetic and its copy stay covered by that module's
+  // suite, so restoring the line is a `<p role="status">` and nothing re-derived.
 
   const totals = toAllocateTotals(draft, ledger);
 
