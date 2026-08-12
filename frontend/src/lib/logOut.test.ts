@@ -86,6 +86,23 @@ describe('signing out', () => {
 
     expect(redirect).toHaveBeenCalledWith('/login');
   });
+
+  it('bounds the revoke, so a hanging backend cannot keep the user signed in', async () => {
+    const fetchMock = respondWith(204);
+
+    await logOut();
+
+    // The signal is the whole of the fix a code review asked for. Without it, a
+    // backend that accepts the connection and never answers holds the `await` for
+    // undici's 300s header timeout - so the cookie is never cleared, the redirect
+    // never runs, and the user has pressed a control that does nothing. Clearing
+    // the cookie on every arm is worth nothing if the arm never arrives.
+    //
+    // Asserting that a signal is passed rather than how long it runs: a real timer
+    // would make this suite wait for it, and the duration is a tuning decision
+    // where the presence of a bound is the correctness one.
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
 });
 
 describe('when the API will not answer', () => {

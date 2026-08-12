@@ -166,15 +166,25 @@ describe('the sidebar footer profile', () => {
     expect(screen.queryByText('marko@email.com')).not.toBeInTheDocument();
   });
 
-  it('wires the logout action all the way to the footer control (PET-84)', async () => {
+  it('renders the footer logout control as a form submitter (PET-84)', async () => {
     render(await AppLayout({ children: null }));
 
-    // Three files have to agree for this to pass - this layout names the action,
-    // `SidebarNav` forwards it across the client boundary, and `ui/Sidebar` puts a
-    // submitter inside a form carrying it - and a prop dropped in the middle
-    // typechecks nowhere but is invisible to every other assertion in this file.
-    // Pinned here rather than in `Sidebar.test.tsx`, which renders the panel with
-    // a stub and so cannot see the threading at all.
+    // **What this does and does not prove, because an earlier version of it
+    // overclaimed and a code review caught that.** It proves the control reaches
+    // the DOM through the real layout with a submitter inside a form - which is
+    // shape, not wiring. It does *not* prove the action prop arrived: this passes
+    // with `logOut` replaced by a no-op anywhere along
+    // layout -> SidebarNav -> Sidebar, and it would pass if the form were
+    // refactored to an `onClick`.
+    //
+    // The comment here used to claim a prop dropped in the middle "typechecks
+    // nowhere", and that is wrong: `SidebarNav.tsx` is app code inside
+    // `next build`'s module graph, so a missing required prop there is a build
+    // error. What genuinely typechecks nowhere is the *test* files, which is
+    // `npx tsc --noEmit`'s job rather than this suite's.
+    //
+    // The press itself is a browser check: jsdom does not run a Server Action, so
+    // no suite in this repo can see it. The walk in the PR measured it.
     const control = screen.getByRole('button', { name: 'Log out' });
     expect(control.closest('form')).not.toBeNull();
   });

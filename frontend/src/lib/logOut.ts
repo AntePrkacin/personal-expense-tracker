@@ -25,6 +25,15 @@ import { SESSION_COOKIE, authorizedPost } from '@/lib/session';
 // cookie inside `authorizedPost`, so a caller can only ever end their own session.
 
 /**
+ * How long to wait for the revoke before leaving anyway.
+ *
+ * Generous for what it covers - one indexed UPDATE against central - and deliberately short
+ * against what it protects, which is a user standing in front of a control that has visibly done
+ * nothing. See the call site for the failure this bounds.
+ */
+const REVOKE_TIMEOUT_MS = 2_000;
+
+/**
  * Signs the user out, and does not come back.
  *
  * Three steps, and the **order and the missing error handling are the whole design**: ask the API
@@ -55,7 +64,19 @@ export async function logOut(): Promise<void> {
   // Fire and forget in effect: the result is deliberately unread, which is what every paragraph
   // above is about. `authorizedPost` never throws - it returns `{ ok: false }` for a request that
   // never completed - so there is nothing here to catch either.
-  await authorizedPost('/api/auth/logout', {});
+  //
+  // **The timeout is what makes the guarantee above true, and a code review is why it is here.**
+  // Clearing the cookie on every arm is worth nothing if the arm never arrives: a backend that
+  // refuses fails in milliseconds, but one that accepts the connection and never answers - a
+  // wedged machine, a proxy holding the request - would keep this `await` open for undici's 300s
+  // header timeout. The user has pressed "Log out" by then and **nothing happens at all**: the
+  // cookie is still set, the redirect has not run, and this control carries no pending state to
+  // say so. Two seconds is far more than a single indexed UPDATE against central needs, and an
+  // abort is reported as an ordinary failed write, which the two lines below already ignore.
+  //
+  // The cookie cannot simply be cleared first instead: `authorizedPost` reads it to get the
+  // bearer, so clearing it would revoke nothing.
+  await authorizedPost('/api/auth/logout', {}, { timeoutMs: REVOKE_TIMEOUT_MS });
 
   // `{ name, path }` rather than the bare name, matching how `/auth/verify` deletes the
   // pending-address cookie: a delete has to agree with the `path: '/'` it was written under, or
