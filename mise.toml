@@ -231,6 +231,25 @@ dir = "backend"
 raw = true
 run = "npx ts-node src/scripts/invite-showcase.ts --cloud"
 
+# The other half of the invite run: who has actually logged in, and automatic
+# repair of any link the login form supersedes. It defaults to the newest ledger,
+# so the bare command is usually right; the invite run prints the explicit form.
+# `raw = true` because it redraws a status line every 30 seconds and mise's
+# captured output would hold all of it until the process ended - which, for a
+# task whose whole purpose is to be watched live, is the same as producing
+# nothing.
+[tasks."showcase:watch"]
+description = "Watch showcase login links against the local database"
+dir = "backend"
+raw = true
+run = "npx ts-node src/scripts/watch-showcase-invites.ts --local"
+
+[tasks."showcase:watch:cloud"]
+description = "Watch showcase logins and re-send any link that breaks"
+dir = "backend"
+raw = true
+run = "npx ts-node src/scripts/watch-showcase-invites.ts --cloud"
+
 # Reset is the inverse of seed, and split into two tasks for the same reason: a
 # mistaken local run deletes a gitignored SQLite file, a mistaken cloud run
 # destroys every account in Turso and the volume under the deployed app. So
