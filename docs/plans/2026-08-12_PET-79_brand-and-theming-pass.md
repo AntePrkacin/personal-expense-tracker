@@ -228,6 +228,49 @@ a screen reader renders as "dollar P E N D I F I C O", and `Sidebar.test.tsx` pi
 "Spendifico". The lockup therefore needs an explicit accessible name with the visible glyphs hidden
 from the accessibility tree.
 
+## The installable shell, and the half of PWA this ticket refuses
+
+**The manifest, the icon set and the browser chrome colour come in; the service worker, offline
+support and the install prompt do not.** The product owner's split, and the line is drawn where the
+work overlaps: the icons come from the artwork this ticket already trimmed, `app/icon.svg` is already
+being replaced here, and `layout.tsx` already exports a `viewport` carrying
+`colorScheme: 'light dark'` - so doing this later means touching the same three files twice.
+
+- `app/manifest.ts`, Next 16.2.12's own `MetadataRoute.Manifest` convention, with `display:
+  'standalone'`, `start_url`, `name` and `short_name`.
+- **192, 512 and a maskable icon**, plus an `apple-icon`, generated from
+  `docs/explainers/assets/logo/SPENDIFICO_ICON.trimmed.svg`. The trim pays for itself here: the
+  trimmed icon is an exact 99.4331 square, where the original canvas was 127.54 x 136.13 and would
+  have produced a letterboxed or off-centre icon at every size.
+- **The maskable variant needs padding that the others must not have.** A maskable icon has to keep
+  its content inside a circle of 80% of the icon's width, and the trimmed artwork is a tile drawn
+  edge to edge - so that one variant is the tile inset on a filled ground, not the same file at a
+  different size. Getting this wrong crops the corners of the tile on Android.
+
+**The chrome colour cannot follow the picker, and that is a fact about the platform rather than a
+gap to close.** The manifest's `theme_color` is one static value, and `<meta name="theme-color">`
+varies only by media query - never by a cookie-driven `data-theme`. So the meta tag carries a
+light/dark pair keyed on `prefers-color-scheme`, which is exactly right for the `system` arm and
+wrong for an explicit pick that disagrees with the OS. **`ThemeField` therefore writes the meta tag
+alongside `data-theme`**, which closes the explicit case, and the manifest's single value stays a
+brand constant. Without that two-line addition the tag would be correct on load and stale from the
+first theme change, which is the worse of the two failures because it looks like it works.
+
+**Installability itself is not claimed until it is measured.** Chrome has historically required a
+registered service worker with a fetch handler before offering an install prompt, and that criterion
+has moved between versions - so this ticket ships `display: standalone` and a correct icon set, and
+the browser walk **reports** whether an install prompt appears rather than the plan asserting it
+will. If it does not, that is the deferred ticket's to close and not a defect here.
+
+**Why the rest is deferred rather than squeezed in**, recorded so the next person does not read it as
+an oversight. **Every route in this app is dynamic** and not one carries `export const dynamic`,
+because the cookie read opts each one out - so there is no prerendered shell to serve offline, and an
+offline experience would have to be authored from nothing. Caching per-user financial data in the
+Cache API is a security decision (a shared machine, a cache outliving a logout) rather than a build
+step. And **the passwordless flow collides with an installed app**: the emailed login link opens the
+default browser rather than the installed PWA, so the session cookie lands in the browser's jar and
+the installed app stays signed out. That needs a decision of its own, and it is not a theming one.
+
 ## The typography audit
 
 Two families load through `next/font/google` in `app/fonts.ts`: Inter as `--font-sans`, Plus
@@ -413,6 +456,13 @@ exactly once and then automating the measurement nobody needs again.
       wordmark only, and give it an explicit accessible name with the glyphs hidden
 - [ ] Replace `app/icon.svg` from the trimmed icon path, which stays vector because an SVG loaded
       as an image cannot reach a webfont
+- [ ] Add `app/manifest.ts` with `display: 'standalone'`, plus 192, 512, a **padded** maskable
+      variant and an `apple-icon`, all from the trimmed square icon
+- [ ] Add `viewport.themeColor` as a `prefers-color-scheme` pair beside the existing `colorScheme`,
+      and have `ThemeField` write the meta tag alongside `data-theme` so an explicit pick is not
+      stale until reload
+- [ ] Report in the walk whether an install prompt actually appears, rather than assuming a manifest
+      is sufficient without a service worker
 - [ ] Confirm the tile needs no CSS radius now the path draws its own corners, and that no ring is
       drawn behind an opaque tile
 - [ ] Amend `frontend/CLAUDE.md`: the theme list, the guard now being automated and what it does
