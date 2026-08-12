@@ -116,9 +116,11 @@ checking the copies. At five themes the manual version is ten browser walks per 
   and on any `-content` token that has stopped being legible on its base. The grandfathered pairs
   are named in one exported constant, so widening the exception is a visible diff and never an
   accident.
-- The same module checks the five `docs/explainers/` `<style>` blocks against `globals.css`,
+- The same module checks the remaining `docs/explainers/` `<style>` blocks against `globals.css`,
   which closes the gap `docs/TODO.md` records as belonging "with the next theme edit if not
-  sooner". This is that edit.
+  sooner". This is that edit. It is **three** blocks rather than the five that exist today, because
+  two of the five are merged into one generated page - see the merge section below, which also
+  explains why the parse lives here once and reaches the page as committed JSON.
 - A `npm run theme:report` script prints the tables for a human deciding whether a candidate
   theme can join at all, which is the reporting half.
 
@@ -275,9 +277,83 @@ one-step bump: `text-lg` to `text-2xl`, `text-2xl` to `text-3xl`, `text-3xl` to 
 spacing" gap `docs/TODO.md` has listed since PET-74, so this ticket closes that entry rather than
 adding to it.
 
-**The wordmark gets tracking, and nothing else does.** `letter-spacing` on the wordmark alone opens
-the mark without touching a single heading or paragraph, which makes it free to tune; the ladder in
-the review page runs 0 to 0.12em and 0.04em is the starting point.
+**The wordmark gets no tracking, and the lever stays documented anyway.** `letter-spacing` on the
+wordmark alone would open the mark without touching a single heading or paragraph, so it was drawn
+as a ladder from 0 to 0.12em in the review page. The product owner picked **0**: Crimson Pro is open
+enough on its own that the mark needs no help, which is the same property that made it the pick.
+The ladder stays in the page as the record of what 0 was chosen over.
+
+### The explainers hijack the stock selectors, and one of them is about to become ambiguous
+
+Worth knowing before touching the five explainer `<style>` blocks, because their shape is not what
+it looks like. None of them registers `expensa-light` or `expensa-dark` as a name. Each loads
+daisyUI's `daisyui.css` for component CSS, deliberately skips `themes.css`, and paints the Expensa
+*values* into daisyUI's *stock* selectors: bare `:root` for light, and both
+`@media (prefers-color-scheme: dark) { :root:not([data-theme]) }` and `[data-theme='dark']` for
+dark, the latter so the page's own `theme-controller` checkbox keeps working.
+
+Three things follow. **`[data-theme='dark']` stops being unambiguous the moment this ticket
+registers the real stock `dark` theme** - in the app that attribute will select stock dark, while in
+these five files it selects Expensa dark. They should move to `[data-theme='expensa-dark']` so the
+app and its own evidence agree. **The pages cannot show the three new themes**, since each hardcodes
+one pair, so "open both explainers under each theme" is not a procedure that survives this ticket;
+that is another argument for the guard tool owning the measurement. And **the block-diff has to know
+the real shape**: the light block carries all 22 colours while the dark block carries only the 6 that
+actually change between the pair, plus a redundant but identical `--color-neutral`. A check demanding
+22-for-22 in both would report five false failures.
+
+All five were verified in sync by hand while planning: 22 of 22 light tokens match `globals.css`, and
+all 6 dark overrides match. That is the first time anything has confirmed it, which is exactly the
+gap `docs/TODO.md` records.
+
+### The two palette pages merge into one generated, theme-aware page
+
+**`category-color-palette-preview.html` and `category-colors-icons-description-preview.html` are
+replaced by a single generated page**, `docs/explainers/category-palette-preview.html`, carrying a
+**theme switcher that enumerates whatever themes are actually installed** rather than a hardcoded
+pair. Both originals are deleted. The product owner's call, and it is the right one: two files each
+pinning one theme pair was already a maintenance cost, and at five themes it becomes a page that
+lies.
+
+**The switcher's list is derived, so "five" is nobody's constant.** The generator reads
+`globals.css` for both `@plugin 'daisyui/theme'` blocks and for the stock names the
+`@plugin 'daisyui'` registration enables, then applies this ticket's seven overrides, so the page
+paints each theme's *effective* values. Add a sixth theme and the page grows a sixth option with no
+edit.
+
+**Contrast is one column that follows the switcher.** Seventeen tokens across five themes is 85
+figures, and a five-column table gets wider with every theme. The generator emits every theme's
+measured figures as data and the switcher swaps the visible column. Cross-theme comparison is the
+guard tool's job, and the guard is better at it than a table.
+
+**It follows `icon-set`'s convention rather than inventing one.**
+`docs/explainers/icon-set/build-icon-page.js` already generates a sibling explainer from
+`template-tokens.ts` and `template-seed.ts`, with a paired `check-icon-page.js`, a `README.md` and
+cached JSON beside it, run as plain Node with the repo root as `argv[2]` and deliberately not wired
+to an npm script. So this page gets `docs/explainers/category-palette/` with `build-palette-page.js`,
+`check-palette-page.js` and a `README.md`, in that same shape. **The four generator scripts committed
+earlier during planning are ported to it too**, so the repo carries one pattern for this job rather
+than two.
+
+**One implementation of the theme parse, not two, and that decides the data flow.** A parser in the
+frontend guard and a second in the page builder is the restatement this repo treats as a defect. So
+`lib/themeGuard.ts` stays the single implementation, the one with tests around it, and it **emits
+`docs/explainers/category-palette/theme-data.json`** - every theme's effective token values and
+measured contrast. `build-palette-page.js` is then a dumb renderer over that committed JSON, exactly
+as `build-icon-page.js` renders over its cached `lucide-categories.json`, and `check-palette-page.js`
+fails if the committed page does not match a fresh render.
+
+**The other three theme-embedding explainers keep their hardcoded pair for now** and get only the
+selector rename, `[data-theme='dark']` to `[data-theme='expensa-dark']`, so nothing collides with
+the real stock `dark`. Making them theme-aware is a follow-up, not this ticket.
+
+**Deleting the two files means re-pointing seven live references**, and deliberately not two others.
+The live ones: `template-seed.ts` and `template-tokens.ts` comments, `frontend/CLAUDE.md`'s guard
+procedure which names both files, `category-icon-set-preview.html`,
+`how-category-templates-work.html`, `icon-set/build-icon-page.js`, and
+`setup/categories/SetupCategoriesScreen.stories.tsx`. The two that stay untouched are
+`docs/plans/2026-08-07_PET-64...` and `docs/plans/2026-08-10_PET-74...`, because a plan is a dated
+record of what was true when it was written and rewriting one is falsifying it.
 
 ## Order of work
 
@@ -303,8 +379,21 @@ exactly once and then automating the measurement nobody needs again.
       (`info`, `secondary`, `accent`) that owe a designer sign-off
 - [ ] Regenerate `COLOUR_CONTRAST` in `backend/src/database/central/template-tokens.ts` for all
       five themes from the tool's output
-- [ ] Update the five explainer `<style>` blocks for all five themes; the guard now proves they
-      match
+- [ ] Have `themeGuard.ts` emit `docs/explainers/category-palette/theme-data.json`: every installed
+      theme's effective token values, with the seven overrides applied, plus measured contrast
+- [ ] Build `docs/explainers/category-palette/` in `icon-set`'s shape - `build-palette-page.js`,
+      `check-palette-page.js`, `README.md`, plain Node, repo root as `argv[2]`, no npm script - and
+      generate `category-palette-preview.html` with a switcher enumerating the installed themes and
+      one contrast column that follows it
+- [ ] Delete `category-color-palette-preview.html` and
+      `category-colors-icons-description-preview.html`, and re-point the seven live references
+      (both backend template files, `frontend/CLAUDE.md`, two sibling explainers,
+      `icon-set/build-icon-page.js`, `SetupCategoriesScreen.stories.tsx`), leaving the two plan docs
+      untouched as dated records
+- [ ] Port the four planning-time Python generators into the same Node shape
+- [ ] Rename `[data-theme='dark']` to `[data-theme='expensa-dark']` in the three remaining
+      theme-embedding explainers, and keep their hardcoded pair; the guard knows their dark block
+      carries only the 6 tokens that change
 - [ ] Widen `lib/theme.ts`: `system` plus the five registered names, `themeAttribute` as a
       lookup, unknown values still reading as `system`
 - [ ] Replace the segmented row with the six-tile picker on the Preferences card, each tile
