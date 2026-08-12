@@ -444,8 +444,11 @@ describe('Profile (e2e)', () => {
 
     it('leaves the existing session working, now answering to the new address', async () => {
       // Sessions key on a token hash and join `users` live, so nothing about
-      // them is invalidated by the address moving - and there is no logout in
-      // this design to fall back on (A39).
+      // them is invalidated by the address moving. PET-84 added
+      // `POST /api/auth/logout`, so the clause that used to end this comment -
+      // that there is no logout to fall back on (A39) - is history; what has not
+      // changed is the assertion, because moving an address must still not end
+      // the session doing the moving. Ending one is now the user's own act.
       const session = await request(app.getHttpServer())
         .get('/api/auth/session')
         .set('Authorization', `Bearer ${moverBearer}`)

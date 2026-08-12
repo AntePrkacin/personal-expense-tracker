@@ -223,8 +223,15 @@ export const sessions = sqliteTable(
       .$onUpdateFn(() => new Date()),
 
     // Soft delete as everywhere else, but here the tombstone carries a second
-    // job: setting it *is* revocation. A39 designs no logout, so killing a
-    // session is currently an ops action against this column.
+    // job: setting it *is* revocation. PET-84 gave that a caller -
+    // `POST /api/auth/logout` through `SessionService.revoke()` - so this is no
+    // longer an ops-only column, and the sentence that used to end this comment
+    // ("A39 designs no logout") is history. Revoking *every* session of one user
+    // is still manual, which is what the index below serves.
+    //
+    // The write guards on this column being null, so a second revoke keeps the
+    // first timestamp rather than overwriting it: when a session ended is a fact
+    // worth being able to read back.
     deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
   },
   (table) => [

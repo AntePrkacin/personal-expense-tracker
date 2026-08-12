@@ -455,4 +455,100 @@ describe('Verification and sessions (e2e)', () => {
       await getSession('Bearer long-dead-session').expect(401);
     });
   });
+
+  describe('POST /api/auth/logout', () => {
+    const logout = (bearer?: string) => {
+      const call = request(app.getHttpServer()).post('/api/auth/logout');
+      return bearer ? call.set('Authorization', bearer) : call;
+    };
+
+    it('answers 204 with no body and kills the token it was called with', async () => {
+      const email = nextEmail();
+      const { session } = await registerAndVerify(email);
+
+      // Live before.
+      await getSession(`Bearer ${session.token}`).expect(200);
+
+      const response = await logout(`Bearer ${session.token}`).expect(204);
+      expect(response.body).toEqual({});
+
+      // This is the assertion the whole ticket exists for, and the only one that
+      // proves it: the same bearer through the real guard, which no unit test can
+      // answer because it mocks the database the tombstone was written to.
+      await getSession(`Bearer ${session.token}`).expect(401);
+    });
+
+    it('tombstones the row rather than deleting it', async () => {
+      const email = nextEmail();
+      const { user, session } = await registerAndVerify(email);
+
+      await logout(`Bearer ${session.token}`).expect(204);
+
+      // Soft delete everywhere else in this schema, and here the tombstone *is*
+      // the revocation - so the row has to still be there, carrying a timestamp.
+      const [row] = await sessionRows(user.id);
+      expect(row.tokenHash).toBe(sha256(session.token));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    it('leaves this account signed in on its other devices', async () => {
+      const email = nextEmail();
+      const { user, session: laptop } = await registerAndVerify(email);
+
+      // A second session for the same user, which is what a second device is:
+      // concurrent sessions are legitimate by design.
+      const phoneToken = await loginTokens.issue(user.id);
+      const phone = (await post('verify', { token: phoneToken }).expect(200))
+        .body as { token: string };
+      expect(await sessionRows(user.id)).toHaveLength(2);
+
+      await logout(`Bearer ${laptop.token}`).expect(204);
+
+      // The point of keying revocation on the token hash rather than the user:
+      // a revoke-all would sign the phone out because the laptop was tidied up,
+      // and every other assertion in this file would still pass.
+      await getSession(`Bearer ${laptop.token}`).expect(401);
+      await getSession(`Bearer ${phone.token}`).expect(200);
+    });
+
+    it('is not repeatable: the second call is refused by the guard', async () => {
+      const email = nextEmail();
+      const { session } = await registerAndVerify(email);
+
+      await logout(`Bearer ${session.token}`).expect(204);
+      // Not a second 204, and deliberately so - PET-84's removed idempotence
+      // criterion. The token it would need is the one it just revoked.
+      await logout(`Bearer ${session.token}`).expect(401);
+    });
+
+    it('requires a session of its own', async () => {
+      await logout().expect(401);
+      await logout('Bearer not-a-real-session').expect(401);
+      await logout('Basic dXNlcjpwYXNz').expect(401);
+    });
+
+    it('is exempt from the per-address limiter', async () => {
+      const email = nextEmail();
+      const { user } = await registerAndVerify(email);
+
+      // Same shape as the verify case above, and the same claim: logout carries
+      // no address, so without the named skip the email tracker would put every
+      // call into one `no-email:<ip>` bucket three requests wide, and the fourth
+      // would be a 429 instead of a 204. Each iteration spends a fresh session,
+      // because the previous one is dead by design.
+      //
+      // The `ip: true` half of the skip is deliberately **not** claimed here:
+      // this suite sets AUTH_RATE_IP_LIMIT to 1000, so these four calls would
+      // pass with or without it. `GET /api/auth/session`'s identical skip is
+      // unproven for the same reason - asserting it would need a limit this
+      // suite does not set.
+      for (let attempt = 0; attempt <= RATE_LIMIT; attempt++) {
+        const raw = await loginTokens.issue(user.id);
+        const { token } = (await post('verify', { token: raw }).expect(200))
+          .body as { token: string };
+
+        await logout(`Bearer ${token}`).expect(204);
+      }
+    });
+  });
 });

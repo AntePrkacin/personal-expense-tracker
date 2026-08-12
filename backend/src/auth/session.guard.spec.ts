@@ -1,7 +1,11 @@
 import { UnauthorizedException, type ExecutionContext } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from './public.decorator';
-import { SessionGuard, type AuthenticatedRequest } from './session.guard';
+import {
+  SessionGuard,
+  bearerToken,
+  type AuthenticatedRequest,
+} from './session.guard';
 import type { SessionPrincipal, SessionService } from './session.service';
 
 describe('SessionGuard', () => {
@@ -131,5 +135,37 @@ describe('SessionGuard', () => {
       handler,
       SomeController,
     ]);
+  });
+});
+
+/**
+ * The parser is exercised through `canActivate` by the cases above, so these
+ * exist for a different reason: `AuthController.logout` now calls it directly,
+ * because the guard discards the token it validates. What they pin is the
+ * contract that second caller depends on - a token out, or null for anything it
+ * will not guess at - so a change made for the guard's benefit cannot silently
+ * hand the logout route something else.
+ */
+describe('bearerToken', () => {
+  it('returns the token from a well-formed header', () => {
+    expect(bearerToken('Bearer live-token')).toBe('live-token');
+  });
+
+  it('matches the scheme case-insensitively, as RFC 7235 specifies', () => {
+    expect(bearerToken('bearer live-token')).toBe('live-token');
+    expect(bearerToken('BEARER live-token')).toBe('live-token');
+  });
+
+  it('returns null rather than guessing', () => {
+    for (const header of [
+      undefined,
+      '',
+      'Bearer',
+      'Bearer a b',
+      'token-only',
+      'Basic dXNlcjpwYXNz',
+    ]) {
+      expect(bearerToken(header)).toBeNull();
+    }
   });
 });

@@ -161,4 +161,84 @@ describe('SessionService', () => {
       expect(insert).not.toHaveBeenCalled();
     });
   });
+
+  describe('revoke', () => {
+    it('tombstones the row, in one conditional UPDATE', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.revoke('raw-token');
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(select).not.toHaveBeenCalled();
+      const set = argsOf(chain, 'set')[0] as { deletedAt: Date };
+      expect(set.deletedAt).toBeInstanceOf(Date);
+    });
+
+    it('keys on the hash, never on the raw value', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.revoke('raw-token');
+
+      const params = paramsOf(argsOf(chain, 'where')[0]);
+      expect(params).toContain(sha256('raw-token'));
+      expect(params).not.toContain('raw-token');
+    });
+
+    it('keys on the token rather than the user, so other devices survive', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.revoke('raw-token');
+
+      const where = toSql(argsOf(chain, 'where')[0]);
+      expect(where).toContain('"token_hash" = ?');
+      // The assertion that matters: a revoke-all would key on this column, and
+      // it would sign a phone out because a laptop was tidied up.
+      expect(where).not.toContain('"user_id"');
+    });
+
+    it('leaves an existing tombstone alone rather than overwriting it', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.revoke('raw-token');
+
+      // Without this guard a second revoke rewrites the timestamp, and "when
+      // was this session revoked" stops being answerable from the row.
+      expect(toSql(argsOf(chain, 'where')[0])).toContain(
+        '"deleted_at" is null',
+      );
+    });
+
+    it('resolves when nothing matched', async () => {
+      // An unknown, expired or already-revoked token leaves nothing to do, and
+      // no caller can act on the difference - so this must not throw.
+      update.mockReturnValue(queryChain([]));
+
+      await expect(service.revoke('raw-token')).resolves.toBeUndefined();
+    });
+
+    it('writes the one column validate filters on', async () => {
+      const revoked = queryChain([]);
+      update.mockReturnValue(revoked);
+      await service.revoke('raw-token');
+
+      const validated = queryChain([]);
+      select.mockReturnValue(validated);
+      await service.validate('raw-token');
+
+      // The two halves of revocation have to name the same column, and nothing
+      // else in this suite would notice if they drifted apart. Deliberately not
+      // an assertion that the token is now dead: a mocked database cannot answer
+      // that, so the honest proof is the e2e replay in auth.e2e-spec.ts.
+      expect(Object.keys(argsOf(revoked, 'set')[0] as object)).toEqual([
+        'deletedAt',
+      ]);
+      expect(toSql(argsOf(validated, 'where')[0])).toContain(
+        '"deleted_at" is null',
+      );
+    });
+  });
 });
