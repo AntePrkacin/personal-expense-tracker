@@ -40,7 +40,16 @@ def save(s):
 
 def main():
     run = "--run" in sys.argv[1:]
-    created = json.load(open(os.path.join(HERE, "apply-state.json")))["created"]
+    # apply.py guards this and assign.py did not, which mattered: the other
+    # scenario's state file holds numbers 1-170, and 85 of those are live pull
+    # requests in this repository. Copying that file here - the two working
+    # directories have been swapping scripts all day - would have assigned people
+    # onto someone else's real PRs.
+    _st = json.load(open(os.path.join(HERE, "apply-state.json")))
+    if _st.get("repo") not in (None, A.REPO):
+        raise SystemExit(
+            f"state file is for {_st['repo']}, not {A.REPO} - refusing to run")
+    created = _st["created"]
     items = [i for i in B.build(None) if i["assignees"]]
     missing = [i["src"] for i in items if i["src"] not in created]
     if missing:
@@ -53,7 +62,7 @@ def main():
 
     if not run:
         print("PLAN (nothing will be written)\n")
-        print(f"  issues to assign : {len(items)} of 170")
+        print(f"  issues to assign : {len(items)} of {len(B.build(None))}")
         for k, v in sorted(per.items(), key=lambda t: -t[1]):
             print(f"    {v:>4}  {k}")
         print(f"\n  {len(items)} calls at {A.PACE_S}s "

@@ -4,18 +4,22 @@
 Phases:
   0  preflight    - target tracker EMPTY on a first run; reconcile on a resume;
                     issues enabled; ADF fully converted; assignees valid
-  1  labels       - create the 33 labels with colours
-  2  create       - 170 issues, bodies carrying NO target-repo numbers; record the
+  1  labels       - create the labels with colours
+  2  create       - the issues, bodies carrying NO target-repo numbers; record the
                     real number and node_id GitHub returns
-  3  comments     - 153 comments, resumed by reading back what already exists
-  4  patch+close  - re-render the 78 number-bearing bodies from the real map and
+  3  comments     - the comments, resumed by reading back what already exists
+  4  patch+close  - re-render the number-bearing bodies from the real map and
                     set final state in the same PATCH
   5  subissues    - 68 native parent/child links (verified to work on closed
                     issues, so the phase order is deliberate)
   6  verify       - assert the finished state matches the plan
 
 Assignees are set at CREATE time when --assign is passed; there is no separate
-assignment phase, because doing both double-posted 162 assignments.
+assignment phase, because doing both double-posted every assignment. assign.py
+exists for the case where the issues already exist.
+
+Which scenario this runs - which repo, whether pull requests are archived, whether
+`#NN` is rewritten - is entirely in config.py. Read that first.
 
   python3 apply.py                 # print the plan, write nothing
   python3 apply.py --run           # phases 0-6
@@ -41,7 +45,7 @@ REPO = C.REPO
 API = "https://api.github.com"
 
 # Keep the state file out of the scratchpad if asked: losing it mid-run means
-# resume is impossible and up to 170 issues must be deleted by hand.
+# resume is impossible and every issue created so far must be deleted by hand.
 STATE_PATH = os.environ.get("MIGRATION_STATE", os.path.join(HERE, "apply-state.json"))
 LOCK_PATH = STATE_PATH + ".lock"
 
@@ -106,7 +110,10 @@ def req(method, path, body=None, graphql=False, tolerate=(), _tries=0):
             raise SystemExit(
                 f"403 that is NOT a rate limit on {method} {path} - check token "
                 f"scopes and repo permissions.\n{raw[:600]}")
-        safe = is_limit or method in ("GET", "PATCH", "PUT")
+        # 4xx is a permanent answer - a wrong repo name or a bad payload - so
+        # retrying it just delays the error. Without the 5xx condition a typo in
+        # config.REPO backed off for 36 minutes before reporting a 404.
+        safe = is_limit or (e.code >= 500 and method in ("GET", "PATCH", "PUT"))
         if safe and _tries < 8:
             ra = (e.headers.get("Retry-After") or "").strip()
             reset = e.headers.get("x-ratelimit-reset")
@@ -345,8 +352,13 @@ def phase6_verify(items, state):
     final = B.build(num_map)
     live = {i["number"]: i for i in paged(f"/repos/{REPO}/issues?state=all")}
     problems = []
-    if len(state["created"]) != len(items):
-        problems.append(f"created {len(state['created'])} of {len(items)}")
+    want = {i["src"] for i in items}
+    missing = want - set(state["created"])
+    extra = set(state["created"]) - want
+    if missing:
+        problems.append(f"{len(missing)} never created, e.g. {sorted(missing)[:5]}")
+    if extra:
+        problems.append(f"{len(extra)} in state but not in the plan: {sorted(extra)[:5]}")
     for it in final:
         num = num_map.get(it["src"])
         got = live.get(num)
@@ -382,7 +394,8 @@ def main():
         labels = B.all_labels(items)
         subs = sum(len(i["children"]) for i in items)
         comments = sum(len(i["comments"]) for i in items)
-        muts = len(labels) + len(items) + comments + len(items) + subs
+        patches = sum(1 for i in items if i["needs_patch"] or i["state"] == "closed")
+        muts = len(labels) + len(items) + comments + patches + subs
         print("PLAN (nothing will be written)\n")
         print(f"  target repo      : {REPO}")
         print(f"  state file       : {STATE_PATH}")

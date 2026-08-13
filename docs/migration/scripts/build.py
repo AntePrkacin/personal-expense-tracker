@@ -3,7 +3,7 @@
 The one rule that shapes this file: **no target-repo issue number is ever
 predicted**. `build(num_map=None)` produces the bodies used at *create* time,
 which reference nothing in the target repo. After creation, the real numbers
-come back from the API and `build(num_map=real)` re-renders the 76 bodies that
+come back from the API and `build(num_map=real)` re-renders the bodies that
 need them, which the apply step PATCHes.
 
 The dry run calls it with a predicted map purely so a human can read what the
@@ -66,7 +66,10 @@ def load_sources():
     for f in glob.glob("jira/issues/PET-*.json"):
         d = json.load(open(f))
         jira[d["key"]] = d
-    prs = {p["number"]: p for p in json.load(open("gh/prs.json"))}
+    # Only loaded when it is actually used, so a checkout that carries just the
+    # Jira export still works.
+    prs = ({p["number"]: p for p in json.load(open("gh/prs.json"))}
+           if C.INCLUDE_PR_ARCHIVE else {})
     return jira, prs
 
 

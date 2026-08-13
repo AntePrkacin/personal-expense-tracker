@@ -21,6 +21,18 @@ REPO = "AntePrkacin/personal-expense-tracker"
 # migrated, so nothing carries the `pr-archive`, `merged` or `not-merged` labels.
 INCLUDE_PR_ARCHIVE = False
 
+# Where the dry run's *illustrative* numbering starts.
+#
+# It must not overlap the numbers already in use here, or a reviewer cannot tell
+# a generated reference from an inherited one. Numbering from 1 put `#41` in an
+# epic's checklist while `#41` is also a real pull request in this repository -
+# two different meanings, same glyph, in the same file. This repo's highest
+# number is 96, so the real run will hand out 97 upward and the dry run says so.
+#
+# Illustrative only. Nothing in apply.py reads it; the real numbers come back
+# from the API.
+ILLUSTRATIVE_BASE = 97
+
 # False: leave an inherited `#NN` exactly as its author wrote it.
 #
 # In `izkreny/spendifico` these had to be rewritten into explicit links to this

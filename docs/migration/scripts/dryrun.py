@@ -21,9 +21,11 @@ DRAFTS = os.path.expanduser(
     "~/.claude/drafts/migration-" + C.REPO.replace("/", "-"))
 
 create = B.build(None)
-# Illustrative only: what GitHub would hand out on an empty tracker, in creation
-# order. apply.py never does this.
-illustrative = {it["src"]: n + 1 for n, it in enumerate(create)}
+# Illustrative only, starting at config.ILLUSTRATIVE_BASE so these cannot be
+# confused with the numbers already in use in the target repo. apply.py never
+# does this - it reads every number back from the API.
+illustrative = {it["src"]: C.ILLUSTRATIVE_BASE + n
+                for n, it in enumerate(create)}
 final = B.build(illustrative)
 
 os.makedirs("dryrun", exist_ok=True)
@@ -53,12 +55,14 @@ for it in final:
 
 D = DRAFTS
 os.makedirs(D, exist_ok=True)
-rows = ["# Spendifico migration - dry run", "",
+rows = [f"# Migration dry run - {C.REPO}", "",
         f"{len(final)} issues, {sum(len(i['comments']) for i in final)} comments. "
         "Nothing written to GitHub yet.", "",
-        "Issue numbers below are **illustrative**. The real run reads each number "
-        "back from the GitHub API and patches the 76 number-bearing bodies "
-        "afterwards, so nothing depends on this arithmetic.", "",
+        f"Issue numbers below are **illustrative**, starting at "
+        f"#{C.ILLUSTRATIVE_BASE} so they cannot be mistaken for numbers already "
+        f"in use. The real run reads each number back from the GitHub API and "
+        f"patches the number-bearing bodies afterwards, so nothing depends on "
+        f"this arithmetic.", "",
         "| # | Source | State | Cmts | Sub | Assignee | Patched | Title |",
         "|---|---|---|---|---|---|---|---|"]
 for it in final:
@@ -74,7 +78,8 @@ open(os.path.join(D, "INDEX.md"), "w").write("\n".join(rows) + "\n")
 import shutil  # noqa: E402
 shutil.rmtree(os.path.join(D, "dryrun"), ignore_errors=True)
 shutil.copytree("dryrun", os.path.join(D, "dryrun"))
-for f in ("adf2md.py", "render.py", "build.py", "apply.py", "dryrun.py"):
+for f in ("config.py", "adf2md.py", "render.py", "build.py", "apply.py",
+          "assign.py", "dryrun.py"):
     shutil.copy(f, os.path.join(D, f))
 
 print(f"issues      : {len(final)}")
@@ -84,4 +89,4 @@ print(f"open/closed : {sum(1 for i in final if i['state'] == 'open')}"
 print(f"patched     : {sum(1 for i in final if i['needs_patch'])}")
 print(f"sub-issues  : {sum(len(i['children']) for i in final)}")
 print(f"labels      : {len(B.all_labels(final))}")
-print(f"\nwritten to {D} (dry run, index, and all five scripts)")
+print(f"\nwritten to {D} (dry run, index, and every script)")
