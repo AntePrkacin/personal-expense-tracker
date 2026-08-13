@@ -1,0 +1,141 @@
+{
+  "generatedAt": "2026-08-12T15:40:24.494Z",
+  "activity": {
+    "commits": 583,
+    "activeDays": 15,
+    "calendarDays": 15,
+    "firstCommit": "2026-07-29",
+    "lastCommit": "2026-08-12",
+    "commitsPerDay": [
+      {
+        "date": "2026-07-29",
+        "commits": 1
+      },
+      {
+        "date": "2026-07-30",
+        "commits": 1
+      },
+      {
+        "date": "2026-07-31",
+        "commits": 5
+      },
+      {
+        "date": "2026-08-01",
+        "commits": 22
+      },
+      {
+        "date": "2026-08-02",
+        "commits": 38
+      },
+      {
+        "date": "2026-08-03",
+        "commits": 39
+      },
+      {
+        "date": "2026-08-04",
+        "commits": 78
+      },
+      {
+        "date": "2026-08-05",
+        "commits": 87
+      },
+      {
+        "date": "2026-08-06",
+        "commits": 50
+      },
+      {
+        "date": "2026-08-07",
+        "commits": 53
+      },
+      {
+        "date": "2026-08-08",
+        "commits": 36
+      },
+      {
+        "date": "2026-08-09",
+        "commits": 54
+      },
+      {
+        "date": "2026-08-10",
+        "commits": 30
+      },
+      {
+        "date": "2026-08-11",
+        "commits": 30
+      },
+      {
+        "date": "2026-08-12",
+        "commits": 59
+      }
+    ]
+  },
+  "churn": {
+    "added": 248528,
+    "deleted": 66073,
+    "linesWrittenAndRewritten": 314601,
+    "addedExcludingGenerated": 199042,
+    "deletedExcludingGenerated": 35275,
+    "linesWrittenAndRewrittenExcludingGenerated": 234317
+  },
+  "lines": {
+    "code": {
+      "files": 670,
+      "code": 75042,
+      "comment": 39518,
+      "blank": 15106
+    },
+    "documentation": {
+      "files": 162,
+      "code": 34315,
+      "comment": 0,
+      "blank": 7586
+    },
+    "generated": {
+      "files": 29,
+      "code": 41458,
+      "comment": 806,
+      "blank": 251
+    }
+  },
+  "documentationSplit": {
+    "plans": {
+      "files": 64,
+      "lines": 16203
+    },
+    "agents": {
+      "files": 10,
+      "lines": 6733
+    },
+    "other": {
+      "files": 88,
+      "lines": 11379
+    }
+  },
+  "largestDocuments": [
+    {
+      "path": "frontend/src/app/CLAUDE.md",
+      "lines": 2929
+    },
+    {
+      "path": "docs/TODO.md",
+      "lines": 2780
+    },
+    {
+      "path": "backend/CLAUDE.md",
+      "lines": 1158
+    },
+    {
+      "path": "frontend/CLAUDE.md",
+      "lines": 1046
+    },
+    {
+      "path": "docs/plans/2026-08-10_PET-73_assistant-chat.md",
+      "lines": 879
+    }
+  ],
+  "commentDensity": {
+    "code": 75042,
+    "comment": 39518,
+    "per100": 52.7
+  }
+}

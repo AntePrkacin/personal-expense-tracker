@@ -1,0 +1,13 @@
+# Every hidden file and directory under docs/, at any depth, is local-only.
+#
+# A standing rule rather than a list of exceptions, so a local input file or a
+# scratch export needs no edit here to stay out of the repository. The live use
+# is `showcase/.participants`, the invite list, which is real personal data and
+# which root CLAUDE.md keeps out of this repo absolutely. A `.figma/` dump of
+# full-resolution frame exports was the second, and is the kind of thing this
+# rule exists to catch without anybody having to remember it.
+#
+# The negation is load-bearing: `.*` matches this file too, and without the
+# exception it could never be added in the first place.
+.*
+!.gitignore

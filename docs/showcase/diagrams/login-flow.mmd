@@ -1,0 +1,50 @@
+%% Passwordless login. There is no password field anywhere in the app.
+%% Four details are the ones people ask about:
+%%   - the raw token is never stored, only its SHA-256, which IS the lookup key
+%%   - a link is single use, by one conditional UPDATE rather than read-then-write
+%%   - only the newest link works: issuing one supersedes every unused link
+%%   - "superseded" is told apart from "invalid" because it is the one rejection
+%%     the user can act on, and it enumerates nobody
+sequenceDiagram
+    actor U as User
+    participant FE as Frontend (Vercel)
+    participant API as API (Fly.io)
+    participant DB as Central database
+    participant MP as MailPace
+    participant IN as Inbox
+
+    U->>FE: enters an email address
+    FE->>API: POST /api/auth/login-link
+    API->>DB: find the user by email
+
+    rect rgb(240, 240, 245)
+    note over API,DB: issue() - one transaction
+    API->>DB: supersede EVERY unused link for this user
+    API->>DB: insert one row: SHA-256 hash, expires in 15 minutes
+    end
+
+    API->>MP: send the mail carrying the RAW token
+    API-->>FE: 202, always empty
+    note over API,FE: identical whether or not the account exists,<br/>so the response enumerates nobody
+    MP->>IN: delivers
+
+    U->>IN: opens the mail
+    U->>FE: clicks /auth/verify?token=RAW
+    FE->>API: POST /api/auth/verify
+
+    rect rgb(240, 240, 245)
+    note over API,DB: consume() - one conditional UPDATE
+    API->>DB: set used_at WHERE hash matches<br/>AND unused AND unsuperseded AND unexpired
+    end
+
+    alt the row matched
+        API->>DB: create a session: SHA-256 hash, 30 days, absolute expiry
+        API-->>FE: sets the session cookie
+        FE-->>U: lands on the dashboard
+    else a newer link was issued
+        API-->>FE: superseded
+        FE-->>U: "open the most recent email"
+    else unknown, spent or expired
+        API-->>FE: invalid
+        FE-->>U: "request a new link"
+    end

@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-08-12T15:41:58.199Z",
+  "suites": [
+    {
+      "suite": "backend unit",
+      "total": 592,
+      "passed": 592,
+      "failed": 0
+    },
+    {
+      "suite": "backend e2e",
+      "total": 411,
+      "passed": 411,
+      "failed": 0
+    },
+    {
+      "suite": "frontend",
+      "total": 3288,
+      "passed": 3288,
+      "failed": 0
+    }
+  ],
+  "total": 4291
+}

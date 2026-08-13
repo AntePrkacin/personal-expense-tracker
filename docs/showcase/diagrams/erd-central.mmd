@@ -1,0 +1,58 @@
+%% Central database: the user directory. One database, shared by everybody.
+%% Relationship lines are LOGICAL, not enforced: neither schema declares a
+%% foreign key, because the Turso engine has PRAGMA foreign_keys off per
+%% connection. Verified against backend/src/database/central/schema.ts.
+erDiagram
+    users {
+        text id PK
+        text email UK
+        text db_name "pointer to this user's own database"
+        text db_url
+        text db_auth_token
+        text onboarding_payload "held until the account is verified"
+        int  deleted_at
+    }
+    login_links {
+        text id PK
+        text user_id FK
+        text token_hash "SHA-256 of the emailed token"
+        int  expires_at
+        int  used_at "set on click, single use"
+        int  superseded_at "set when a newer link is issued"
+        int  deleted_at
+    }
+    sessions {
+        text id PK
+        text user_id FK
+        text token_hash "SHA-256 of the cookie value"
+        int  expires_at "absolute, not sliding"
+        int  deleted_at
+    }
+    colour_templates {
+        text id PK
+        text token "a daisyUI semantic colour"
+        text label
+        int  sort_order
+        bool enabled
+    }
+    icon_templates {
+        text id PK
+        text name "a lucide icon name"
+        text label
+        int  sort_order
+        bool enabled
+    }
+    category_templates {
+        text id PK
+        text name
+        text colour_id FK
+        text icon_id FK
+        text description
+        int  sort_order
+        bool enabled
+    }
+
+    users ||--o{ login_links : "requests"
+    users ||--o{ sessions : "holds"
+    colour_templates ||--o{ category_templates : "colours"
+    icon_templates ||--o{ category_templates : "marks"

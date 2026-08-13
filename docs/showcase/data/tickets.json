@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-08-12T11:26:00.000Z",
+  "note": "Written by an agent running JQL count queries against the Atlassian MCP, not by a script: there is no Jira CLI here and the MCP is not reachable from a shell. `generatedAt` is therefore the one timestamp on this page that a refresh cannot update on its own - check it before quoting these figures.",
+  "project": "PET",
+  "total": 84,
+  "epics": 8,
+  "tasks": 76,
+  "byStatusCategory": {
+    "done": 73,
+    "inProgress": 3,
+    "toDo": 8
+  }
+}

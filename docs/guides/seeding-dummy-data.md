@@ -1,6 +1,6 @@
 # Seeding Dummy Data for Showcases
 
-This guide explains how to fill one account (`dummy@spendifico.eu`) with 36 months of realistic
+This guide explains how to fill one account (`slavko@spendifico.eu`) with 36 months of realistic
 transaction data, for demos, UI work and showcases.
 
 The data comes from three commands rather than one. A committed fixture
@@ -40,6 +40,17 @@ mise run seed:cloud   # Turso Cloud, using backend/.env
 Local is the default and cloud has to be typed out, because the two are not equally forgiving. A
 mistaken local run writes a gitignored SQLite file. A mistaken cloud run creates a real database
 in the shared Turso organization and pushes thousands of rows into it.
+
+**The account is `slavko@spendifico.eu`, and `--email=` seeds a different one:**
+
+```bash
+mise run seed:cloud -- --email=rehearsal@spendifico.eu
+```
+
+The address is the only thing separating two seeded accounts, so this is how a rehearsal or a
+second demo gets an account of its own without colliding with the showcase one. It is normalized
+the way the app stores addresses, so case does not create a duplicate. Everything else about the
+run is unchanged, including the profile name the fixture carries.
 
 `seed` ignores `backend/.env` entirely, the same way the e2e suite and the OpenAPI
 emitter do. That is deliberate: having cloud credentials in `.env` must not turn a local seed into
@@ -102,13 +113,13 @@ Nothing is written when that happens, so the repair is only to stop the server a
    ```bash
    mise run seed
    ```
-   It takes a few seconds and finishes with `Seeded dummy@spendifico.eu with N transactions...`.
+   It takes a few seconds and finishes with `Seeded slavko@spendifico.eu with N transactions...`.
 3. **Start your dev servers**:
    ```bash
    mise run dev
    ```
 4. **Log in**:
-   Go to `http://localhost:4200` and enter `dummy@spendifico.eu`. Without MailPace credentials the
+   Go to `http://localhost:4200` and enter `slavko@spendifico.eu`. Without MailPace credentials the
    backend prints the login link to its terminal. Click it.
 
 If your `.env` **does** carry the four `TURSO_*` values, `mise run dev` starts the backend in
@@ -141,7 +152,7 @@ rather than a plain file, which changes what is locked and nothing about the out
    mise run dev
    ```
 5. **Log in**:
-   Go to `http://localhost:4200` and enter `dummy@spendifico.eu`. That is a **deliverable
+   Go to `http://localhost:4200` and enter `slavko@spendifico.eu`. That is a **deliverable
    address**, not a placeholder: it is an alias on the project's own domain forwarding to
    `spendifico@gmail.com`, the same inbox `login@spendifico.eu` lands in. So with
    `MAILPACE_API_TOKEN` set the login link really arrives and can be clicked, including from a

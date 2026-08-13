@@ -70,8 +70,42 @@ import type { Fixture } from './showcase/fixture';
  * login link for this account really does arrive and really can be clicked -
  * which is what makes the showcase demonstrable from a phone rather than only
  * from the terminal that has the logs.
+ *
+ * Named `slavko@` since PET-80, because the account is a person on a projector
+ * rather than a row in a fixture: the sidebar, the greeting and every screenshot
+ * carry the profile's name, and "Showcase User" reads as scaffolding in a way a
+ * name does not. The rename changes nothing that already exists - the new
+ * account simply appears at the next reset and reseed.
+ *
+ * `--email=` overrides it. That exists so a rehearsal, a smoke test or a second
+ * demo can have an account of its own without editing this file: the address is
+ * the *only* thing that separates two seeded accounts, so a constant would mean
+ * every such run either collides with the showcase account or needs a commit.
  */
-const SHOWCASE_EMAIL = 'dummy@spendifico.eu';
+const DEFAULT_SHOWCASE_EMAIL = 'slavko@spendifico.eu';
+
+const EMAIL_FLAG = '--email=';
+
+/**
+ * Normalized the way `UsersService` stores addresses, because this script both
+ * looks one up and creates one: an unnormalized `--email=Slavko@...` would miss
+ * the existing row and then create a second account differing only in case.
+ */
+function parseEmail(argv: readonly string[]): string {
+  const flag = argv.find((arg) => arg.startsWith(EMAIL_FLAG));
+  if (!flag) {
+    return DEFAULT_SHOWCASE_EMAIL;
+  }
+
+  const email = flag.slice(EMAIL_FLAG.length).trim().toLowerCase();
+  if (email === '') {
+    throw new Error(`${EMAIL_FLAG} was given with no address.`);
+  }
+
+  return email;
+}
+
+const SHOWCASE_EMAIL = parseEmail(process.argv.slice(2));
 
 /**
  * How long the seed waits for the insight run it starts, as attempts times an

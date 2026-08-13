@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-08-12T15:40:35.954Z",
+  "authors": [
+    {
+      "name": "izkreny",
+      "commits": 368,
+      "survivingLines": 94011,
+      "mergedPullRequests": 51,
+      "areas": {
+        "backend": 38404,
+        "frontend": 27106,
+        "documentation": 30426,
+        "tooling": 16129
+      }
+    },
+    {
+      "name": "Ante Prkačin",
+      "commits": 215,
+      "survivingLines": 70623,
+      "mergedPullRequests": 29,
+      "areas": {
+        "backend": 4171,
+        "frontend": 68315,
+        "documentation": 14037,
+        "tooling": 454
+      }
+    }
+  ],
+  "survivingLinesFromExcludedCommits": 6933
+}

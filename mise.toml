@@ -206,6 +206,79 @@ description = "Regenerate the committed showcase fixture.data.json"
 dir = "backend"
 run = "npx ts-node src/scripts/build-showcase-fixture.ts"
 
+# Refreshes every figure on docs/showcase/statistics.html and rebuilds the page's
+# data. One command, because the showcase is the same day the code is still being
+# written and the whole statistics vector is built around the refresh being cheap
+# enough to run minutes before the talk.
+#
+# The generators open no database and touch no network except `gh`, which
+# degrades to nulls rather than failing - so this works on a laptop with the wifi
+# off, which is the condition it was designed for.
+#
+# `showcase:stats:tests` is deliberately NOT part of it: it runs all three test
+# suites, which takes minutes. The page renders whatever that command last wrote.
+[tasks."showcase:stats"]
+description = "Refresh every showcase statistic and rebuild the charts page data"
+run = [
+  "node scripts/showcase/stats-repo.mjs",
+  "node scripts/showcase/stats-authors.mjs",
+  "node scripts/showcase/stats-delivery.mjs",
+  "node scripts/showcase/stats-deps.mjs",
+  "node scripts/showcase/stats-shape.mjs",
+  "node scripts/showcase/build-charts.mjs"
+]
+
+[tasks."showcase:stats:tests"]
+description = "Count the tests by running all three suites (slow, optional)"
+run = [
+  "node scripts/showcase/stats-tests.mjs",
+  "node scripts/showcase/build-charts.mjs"
+]
+
+# Mails every showcase participant their own 24-hour login link into the shared
+# demo account. Two tasks for the same reason `seed` has two, sharpened: a
+# mistaken local run writes rows into a gitignored SQLite file, a mistaken cloud
+# run emails real people. So reaching production is typed out - and on top of
+# that the cloud task still does nothing until `-- --send` is added, because the
+# dry run is the default and is what replaces a draft-review step.
+#
+#   mise run showcase:invite                     read the plan and the rendered mail
+#   mise run showcase:invite:cloud               same, against the real database
+#   mise run showcase:invite:cloud -- --send     mint and mail
+#
+# `raw = true` because the send pauses for a typed confirmation, and mise's
+# captured output would swallow the prompt.
+[tasks."showcase:invite"]
+description = "Dry-run the showcase invite mails against the local database"
+dir = "backend"
+raw = true
+run = "npx ts-node src/scripts/invite-showcase.ts --local"
+
+[tasks."showcase:invite:cloud"]
+description = "Mint and mail showcase login links (needs -- --send to do anything)"
+dir = "backend"
+raw = true
+run = "npx ts-node src/scripts/invite-showcase.ts --cloud"
+
+# The other half of the invite run: who has actually logged in, and automatic
+# repair of any link the login form supersedes. It defaults to the newest ledger,
+# so the bare command is usually right; the invite run prints the explicit form.
+# `raw = true` because it redraws a status line every 30 seconds and mise's
+# captured output would hold all of it until the process ended - which, for a
+# task whose whole purpose is to be watched live, is the same as producing
+# nothing.
+[tasks."showcase:watch"]
+description = "Watch showcase login links against the local database"
+dir = "backend"
+raw = true
+run = "npx ts-node src/scripts/watch-showcase-invites.ts --local"
+
+[tasks."showcase:watch:cloud"]
+description = "Watch showcase logins and re-send any link that breaks"
+dir = "backend"
+raw = true
+run = "npx ts-node src/scripts/watch-showcase-invites.ts --cloud"
+
 # Reset is the inverse of seed, and split into two tasks for the same reason: a
 # mistaken local run deletes a gitignored SQLite file, a mistaken cloud run
 # destroys every account in Turso and the volume under the deployed app. So

@@ -1,0 +1,87 @@
+%% Per-user database: one of these exists per account.
+%% Relationship lines are LOGICAL, not enforced - see erd-central.mmd.
+%% The three *_history tables are append-only and effective-dated, resolved on
+%% read, so a change applies from a date and never backwards.
+%% Verified against backend/src/database/user/schema.ts.
+erDiagram
+    profile {
+        text id PK
+        text full_name
+        text currency
+        int  deleted_at
+    }
+    period_rules {
+        text id PK
+        text effective_from "append-only history"
+        int  month_start_day "the pay day"
+        text transition_start "set on a stretched transition period"
+        int  deleted_at
+    }
+    budget_history {
+        text id PK
+        text effective_from "append-only history"
+        int  budget_cents
+        int  deleted_at
+    }
+    categories {
+        text id PK
+        text name
+        text color "a daisyUI semantic token"
+        text icon "a lucide icon name"
+        text description
+        bool is_fallback "exactly one row, Uncategorized"
+        int  deleted_at
+    }
+    category_cap_history {
+        text id PK
+        text category_id FK
+        text effective_from "append-only history"
+        int  cap_cents "null means uncapped"
+        int  deleted_at
+    }
+    transactions {
+        text id PK
+        text merchant
+        text category_id FK
+        int  amount_cents
+        text date "YYYY-MM-DD, text to dodge timezones"
+        text note
+        int  deleted_at
+    }
+    insight_sets {
+        text id PK
+        text status
+        text month_label
+        text summary_headline
+        text summary_body
+        int  generated_at
+        int  deleted_at
+    }
+    insights {
+        text id PK
+        text set_id FK
+        text tone
+        text title
+        text body
+        int  sort_order
+        int  deleted_at
+    }
+    assistant_sessions {
+        text id PK
+        text title "derived from the first message"
+        int  last_message_at
+        int  deleted_at
+    }
+    assistant_messages {
+        text id PK
+        text session_id FK
+        text role
+        text content
+        int  sort_order
+        int  deleted_at
+    }
+
+    categories ||--o{ transactions : "classifies"
+    categories ||--o{ category_cap_history : "is capped by"
+    insight_sets ||--o{ insights : "contains"
+    assistant_sessions ||--o{ assistant_messages : "contains"

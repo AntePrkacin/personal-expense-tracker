@@ -1,0 +1,48 @@
+%% Deployment and infrastructure: five hosted services and one API key.
+%% Three things on it are decisions rather than topology:
+%%   - the frontend is the only caller of the API, which is what lets the HTTP
+%%     contract be generated from the backend and committed
+%%   - main does NOT auto-deploy the backend; the deploy is dispatch-only, so an
+%%     endpoint can be merged and absent from production
+%%   - the Fly volume holds sync replicas, not the source of truth
+flowchart TB
+    subgraph client["Browser"]
+        B["www.spendifico.eu"]
+    end
+
+    subgraph vercel["Vercel"]
+        FE["Next.js frontend<br/>App Router, port 4200 in dev"]
+    end
+
+    subgraph fly["Fly.io"]
+        API["NestJS API<br/>api.spendifico.eu"]
+        VOL[("Volume<br/>local sync replicas")]
+    end
+
+    subgraph turso["Turso Cloud"]
+        CDB[("spendifico-app<br/>central directory")]
+        UDB[("spendifico-user-UUID<br/>one per account")]
+    end
+
+    MP["MailPace<br/>login@spendifico.eu"]
+    INBOX["spendifico@gmail.com<br/>replies and forwards"]
+    GEM["Google Gemini<br/>receipt scanning + assistant"]
+    PB["Porkbun<br/>DNS for spendifico.eu"]
+
+    subgraph ci["GitHub Actions"]
+        CI["ci.yml<br/>on every PR"]
+        DEP["deploy<br/>manual dispatch only"]
+    end
+
+    B --> FE
+    FE -->|"the only caller"| API
+    API --> CDB
+    API --> UDB
+    API --- VOL
+    API -->|"login links"| MP
+    MP --> INBOX
+    API -->|"scan + chat"| GEM
+    PB -.->|"resolves"| B
+    PB -.->|"resolves"| API
+    DEP -->|"flyctl deploy"| API
+    CI -.->|"gates the merge"| DEP

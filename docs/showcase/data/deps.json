@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-08-12T15:40:36.700Z",
+  "trees": [
+    {
+      "tree": "root",
+      "now": 100,
+      "atInitialCommit": 182
+    },
+    {
+      "tree": "backend",
+      "now": 833,
+      "atInitialCommit": 725
+    },
+    {
+      "tree": "frontend",
+      "now": 1093,
+      "atInitialCommit": 753
+    }
+  ],
+  "totalNow": 2026,
+  "totalAtInitialCommit": 1660
+}
