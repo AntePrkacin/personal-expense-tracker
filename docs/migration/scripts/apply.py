@@ -67,6 +67,14 @@ LABEL_COLOURS = {
 DEFAULT_COLOUR = "ededed"
 TITLE_RE = re.compile(r"^\[(PET-\d+|PR-\d+)\]")
 
+# POSTs that are safe to retry after a 5xx, because repeating them cannot create a
+# second anything: a label that already exists answers 422 (tolerated below, and
+# phase 1 skips existing names anyway), and adding an assignee who is already
+# assigned is a no-op. Creating an issue or a comment is NOT in this set - that is
+# what the blanket rule exists for. GitHub returned a 500 on a label POST on the
+# first attempt at this run, which the blanket rule turned into a dead stop.
+POST_RETRY_SAFE = ("/labels", "/assignees")
+
 TOKEN = None
 
 
@@ -113,7 +121,13 @@ def req(method, path, body=None, graphql=False, tolerate=(), _tries=0):
         # 4xx is a permanent answer - a wrong repo name or a bad payload - so
         # retrying it just delays the error. Without the 5xx condition a typo in
         # config.REPO backed off for 36 minutes before reporting a 404.
-        safe = is_limit or (e.code >= 500 and method in ("GET", "PATCH", "PUT"))
+        # 422 on a label we were creating means it is already there - success.
+        if e.code == 422 and path.endswith("/labels") and "already_exists" in low:
+            return {"tolerated": True}
+        idempotent_post = method == "POST" and path.endswith(POST_RETRY_SAFE)
+        safe = is_limit or (e.code >= 500
+                            and (idempotent_post
+                                 or method in ("GET", "PATCH", "PUT")))
         if safe and _tries < 8:
             ra = (e.headers.get("Retry-After") or "").strip()
             reset = e.headers.get("x-ratelimit-reset")
