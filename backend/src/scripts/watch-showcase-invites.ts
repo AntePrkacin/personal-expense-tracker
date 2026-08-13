@@ -71,7 +71,13 @@ const POLL_INTERVAL_MS = 30_000;
 /** Per address, not per run. See the header. */
 const MAX_RESENDS = 2;
 
-const LINK_TTL_HOURS = 24;
+/**
+ * Only a fallback. The lifetime a replacement gets is the one **the invite run
+ * chose**, read from the ledger, so repairing a 4-day link does not quietly hand
+ * somebody a 24-hour one and lock them out three days early. This value covers a
+ * ledger written before `ttlHours` was recorded.
+ */
+const FALLBACK_TTL_HOURS = 24;
 const TOKEN_BYTES = 32;
 const LEDGER_DIR = join(homedir(), '.spendifico');
 const MAILPACE_SEND_URL = 'https://app.mailpace.com/api/v1/send';
@@ -93,7 +99,14 @@ interface Ledger {
   userId: string;
   frontendUrl: string;
   expiresAt: string;
+  /** Optional: ledgers written before this was recorded fall back. */
+  ttlHours?: number;
   participants: LedgerEntry[];
+}
+
+/** The lifetime a replacement link gets: whatever the invite run chose. */
+function ttlHoursOf(ledger: Ledger): number {
+  return ledger.ttlHours ?? FALLBACK_TTL_HOURS;
 }
 
 /** What a row says about its participant right now. */
@@ -226,7 +239,7 @@ async function remint(
     id,
     userId: ledger.userId,
     tokenHash: hashToken(rawToken),
-    expiresAt: new Date(Date.now() + LINK_TTL_HOURS * 60 * 60 * 1000),
+    expiresAt: new Date(Date.now() + ttlHoursOf(ledger) * 60 * 60 * 1000),
   });
 
   entry.loginLinkId = id;
@@ -246,7 +259,7 @@ async function send(
   const email = renderShowcaseInviteEmail(
     ledger.frontendUrl,
     rawToken,
-    LINK_TTL_HOURS,
+    ttlHoursOf(ledger),
   );
 
   const response = await fetch(MAILPACE_SEND_URL, {

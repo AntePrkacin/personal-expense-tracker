@@ -98,12 +98,22 @@ import { renderShowcaseInviteEmail } from './showcase/invite.template';
  */
 
 /**
- * The link lifetime, as a value written into `expires_at` rather than as
+ * The default link lifetime, as a value written into `expires_at` rather than as
  * configuration. Long enough that links minted on the morning of the event
  * comfortably outlast it, short enough that a leaked mail is not a permanent
  * door.
+ *
+ * `--hours=` overrides it, because the event was never the only reason to hand
+ * somebody a link: a reviewer, an examiner or a teammate needs one that outlasts
+ * a working day, and the alternative is minting a fresh 24-hour link every
+ * morning. The ceiling is what keeps that from drifting into "a permanent door
+ * nobody remembers issuing" - a link is a bearer credential in an inbox, and the
+ * only thing bounding its blast radius is how soon it stops working.
  */
-const LINK_TTL_HOURS = 24;
+const DEFAULT_LINK_TTL_HOURS = 24;
+
+/** Two weeks. Past this, issue a second link rather than a longer one. */
+const MAX_LINK_TTL_HOURS = 336;
 
 /** 256 bits, the same width and encoding `LoginTokenService.issue()` uses. */
 const TOKEN_BYTES = 32;
@@ -156,6 +166,8 @@ interface Flags {
    * overwrites it destroys the only copy.
    */
   participantsFile: string;
+  /** How long the minted links last, in hours. See `DEFAULT_LINK_TTL_HOURS`. */
+  ttlHours: number;
 }
 
 /** One participant's row and link, as written to the ledger. */
@@ -176,6 +188,13 @@ interface Ledger {
   userId: string;
   frontendUrl: string;
   expiresAt: string;
+  /**
+   * Recorded so the watcher re-mints a replacement with the **same** lifetime
+   * this run chose. Without it a broken 4-day link would be repaired with a
+   * 24-hour one, quietly, and the person holding it would be locked out three
+   * days early with nothing to explain why.
+   */
+  ttlHours: number;
   participants: LedgerEntry[];
 }
 
@@ -199,7 +218,37 @@ function parseFlags(argv: readonly string[]): Flags {
     mintOnly: argv.includes('--mint-only'),
     email,
     participantsFile,
+    ttlHours: parseTtlHours(argv),
   };
+}
+
+/**
+ * `--hours=`, defaulting to a day and refused outside 1 to `MAX_LINK_TTL_HOURS`.
+ *
+ * Validated rather than trusted, because every failure here is silent at the
+ * call site and loud a week later. A typo'd `--hours=9600` reads as a plausible
+ * number and mints a credential lasting thirteen months; `--hours=0` mints rows
+ * that `consume()` rejects on sight, which looks exactly like a delivery
+ * problem. Both are cheaper to refuse than to explain.
+ */
+function parseTtlHours(argv: readonly string[]): number {
+  const flag = argv.find((arg) => arg.startsWith('--hours='));
+  if (!flag) {
+    return DEFAULT_LINK_TTL_HOURS;
+  }
+
+  const hours = Number(flag.slice('--hours='.length).trim());
+  if (!Number.isFinite(hours) || !Number.isInteger(hours)) {
+    throw new Error(`--hours= must be a whole number of hours, got "${flag}".`);
+  }
+  if (hours < 1 || hours > MAX_LINK_TTL_HOURS) {
+    throw new Error(
+      `--hours=${hours} is outside 1 to ${MAX_LINK_TTL_HOURS}. Past two weeks, ` +
+        'issue a second link rather than a longer one.',
+    );
+  }
+
+  return hours;
 }
 
 /**
@@ -276,7 +325,7 @@ async function confirmPlan(
   console.log(
     '  Links expire   ',
     expiresAt.toISOString(),
-    `(in ${LINK_TTL_HOURS}h)`,
+    `(in ${flags.ttlHours}h)`,
   );
   console.log('  Mail from      ', flags.send ? from : '(nothing sent)');
   console.log('');
@@ -389,7 +438,7 @@ async function sendAll(
     const email = renderShowcaseInviteEmail(
       ledger.frontendUrl,
       rawToken,
-      LINK_TTL_HOURS,
+      ledger.ttlHours,
     );
 
     try {
@@ -481,7 +530,7 @@ async function invite(app: INestApplicationContext): Promise<void> {
     'FRONTEND_URL',
     'http://localhost:4200',
   );
-  const expiresAt = new Date(Date.now() + LINK_TTL_HOURS * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + flags.ttlHours * 60 * 60 * 1000);
 
   await confirmPlan(flags, addresses, user.id, frontendUrl, expiresAt, from);
 
@@ -489,7 +538,7 @@ async function invite(app: INestApplicationContext): Promise<void> {
     const sample = renderShowcaseInviteEmail(
       frontendUrl,
       'THIS-IS-NOT-A-REAL-TOKEN',
-      LINK_TTL_HOURS,
+      flags.ttlHours,
     );
     console.log('Dry run. This is the mail each of them would receive:');
     console.log('');
@@ -522,6 +571,7 @@ async function invite(app: INestApplicationContext): Promise<void> {
     userId: user.id,
     frontendUrl,
     expiresAt: expiresAt.toISOString(),
+    ttlHours: flags.ttlHours,
     participants: entries,
   };
   const ledgerPath = writeLedger(ledger);
