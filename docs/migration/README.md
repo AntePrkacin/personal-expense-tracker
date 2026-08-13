@@ -54,8 +54,8 @@ issues occupy `#97` upward, so the two ranges cannot collide.
 This is worth stating because the same migration into a *different* repository had to do the
 opposite. There the numbers had to be rewritten into explicit cross-repository links, because a bare
 `#93` would have resolved against a tracker where #93 was an unrelated ticket. Which behaviour
-applies is a one-line switch, `LINK_CROSS_REFS` in `scripts/config.py`, and that file explains the
-reasoning in full.
+applies is a one-line switch, `LINK_CROSS_REFS` in
+`docs/migration/scripts/config.py`, and that file explains the reasoning in full.
 
 **Timestamps are normalised to UTC and labelled.** Jira served `+0200` and GitHub serves `Z`; left
 alone that put a silent two-hour skew between a ticket's own dates and everything around it.
@@ -96,9 +96,16 @@ filed.
 content-generating requests per minute but only about 500 per hour, and reports exist of blocks well
 below that with no `Retry-After` header. 7.2s per mutation is slow on purpose.
 
-**A `POST` is never retried on a 5xx.** GitHub can return 502 after a write has already committed, so
-a blind retry creates a duplicate that the state file knows nothing about. On a restart the runner
-adopts anything already present by matching issue titles instead.
+**A `POST` that creates an issue or a comment is never retried on a 5xx.** GitHub can return 502
+after a write has already committed, so a blind retry creates a duplicate that the state file knows
+nothing about. On a restart the runner adopts anything already present by matching issue titles
+instead.
+
+Label and assignee POSTs are the exception and *do* retry, because repeating them cannot create a
+second anything: phase 1 skips names that already exist, a duplicate label answers 422
+`already_exists`, and adding an assignee who is already assigned is a no-op. That distinction was
+learned the hard way here - GitHub returned a 500 on a label during this very migration, and the
+blanket rule turned a transient blip into a dead stop with zero issues created.
 
 The runner is resumable: every step is recorded before the next begins, and re-running after success
 is a no-op. Its preflight refuses to start if it finds issues that look already-migrated without a
