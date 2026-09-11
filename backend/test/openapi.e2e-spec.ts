@@ -87,6 +87,9 @@ describe('openapi.json', () => {
       `/${API_PREFIX}/categories`,
       `/${API_PREFIX}/categories/{id}`,
       `/${API_PREFIX}/dashboard`,
+      // The app's second session issuer and its sixth public route, on a
+      // controller of its own so the auth routes stay four. PET-86.
+      `/${API_PREFIX}/demo/session`,
       `/${API_PREFIX}/health`,
       `/${API_PREFIX}/insights`,
       `/${API_PREFIX}/insights/generate`,
