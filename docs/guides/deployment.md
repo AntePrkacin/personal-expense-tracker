@@ -161,7 +161,7 @@ sketch to think through rather than a script to follow:
 1. Cut external traffic so nothing wakes an instance: `--ingress=internal`. CPU is throttled
    between requests, so an idle instance runs no sync timer.
 2. Wait for the service to scale to zero.
-3. Delete every `spendifico-user-*` database and the central one, then recreate central **with
+3. Delete every `expenso-user-*` database and the central one, then recreate central **with
    `--tursodb`** - the engine is fixed at creation and getting it wrong is silent.
 4. Mint a new data-plane token and update the `TURSO_CENTRAL_DB_URL` and `TURSO_CENTRAL_DB_TOKEN`
    secrets.

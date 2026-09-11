@@ -85,7 +85,7 @@ describe('VerificationService', () => {
     persistProvisionedDb = jest.fn().mockResolvedValue(undefined);
     clearOnboardingPayload = jest.fn().mockResolvedValue(undefined);
     provisionUserDb = jest.fn().mockResolvedValue({
-      dbName: 'spendifico-user-user-id',
+      dbName: 'expenso-user-userid',
       dbUrl: null,
       dbAuthToken: null,
     });
@@ -194,7 +194,7 @@ describe('VerificationService', () => {
 
       expect(provisionUserDb).toHaveBeenCalledWith('user-id');
       expect(persistProvisionedDb).toHaveBeenCalledWith('user-id', {
-        dbName: 'spendifico-user-user-id',
+        dbName: 'expenso-user-userid',
         dbUrl: null,
         dbAuthToken: null,
       });
@@ -387,7 +387,7 @@ describe('VerificationService', () => {
       findById.mockResolvedValue({
         id: 'user-id',
         email: 'marko@email.com',
-        dbUrl: 'spendifico-user-user-id-acme.turso.io',
+        dbUrl: 'expenso-user-user-id-acme.turso.io',
         onboardingPayload: null,
       });
     });
@@ -411,7 +411,7 @@ describe('VerificationService', () => {
       findById.mockResolvedValue({
         id: 'user-id',
         email: 'marko@email.com',
-        dbUrl: 'spendifico-user-user-id-acme.turso.io',
+        dbUrl: 'expenso-user-user-id-acme.turso.io',
         onboardingPayload: payload,
       });
     });
@@ -485,7 +485,7 @@ describe('VerificationService', () => {
       const [logged] = logError.mock.calls[0] as [string];
       // The actual database name, not the bare user id: this log exists for an
       // operator to find the orphan in `turso db list` and delete it by hand.
-      expect(logged).toContain('spendifico-user-user-id');
+      expect(logged).toContain('expenso-user-userid');
       // Names the manual fix, because nothing automatic can reclaim the orphan.
       expect(logged).toMatch(/hand|manual/i);
     });

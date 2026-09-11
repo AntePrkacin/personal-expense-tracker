@@ -57,7 +57,7 @@ per-user ones itself, at **verification** rather than registration - see
 
 **The Turso CLI cannot address a per-user database, and fails silently at it.** `turso db
 shell` and `turso db destroy` resolve names against a local name cache in
-`~/.config/turso/settings.json`, not the API, so every `spendifico-user-<uuid>` database -
+`~/.config/turso/settings.json`, not the API, so every `expenso-user-<uuid>` database -
 created by the backend through the Platform API - is invisible to them: `db shell` says
 "database not found" and `db destroy` exits 0 having deleted nothing. `db show` and `db
 list` hit the API and work on the same name. Use the Turso MCP server (`plugin:turso`)
@@ -136,6 +136,26 @@ so an account provisioned per visitor spends that cap from an unauthenticated pu
 failure when it runs out is not a slow demo, it is registration failing for real users. Ten is
 bounded, needs no Platform API call inside a request, and holds `UserDatabaseService`'s deliberately
 unbounded connection cache at ten entries rather than one per visitor who ever clicked.
+
+**A per-user database name carries the uuid with its hyphens removed, and the four characters that
+saves are the whole reason.** The prefix this shipped with, `spendifico-user-`, is 16 characters and
+a UUIDv7 is 36, so that form is 52 against Turso's limit of 51 - and a name one character too long does not degrade, it
+makes provisioning answer 400 and **no account can be created at all**. That is how it shipped:
+the name is built in `database.constants.ts`, stored at registration, and only sent to Turso when an
+account is first verified, so no build, lint, type or test touches it - both suites run in local
+mode, where the name is a filename and no limit applies. It was found by the first real
+provisioning attempt against a Turso organization that enforced the limit, with every gate green.
+PET-86 also renamed the prefix to `expenso-user-`, matching the Cloud Run service, which makes the
+name 45 characters - the hyphens stay stripped for the headroom rather than because the shorter
+prefix still needs them. `database.constants.spec.ts` pins the length against
+`TURSO_MAX_DB_NAME_LENGTH`, which is the cheap half of the guard; the expensive half is provisioning against real Turso, which nothing
+automated here does by design.
+
+**Changing that function is a data migration whenever any account exists.** `users.db_name` stores
+what it returned, and `deleteUserDb` recomputes rather than reading it, so the two must agree - a
+rename with live rows strands every database silently, exactly as the `USER_DB_NAME_PREFIX`
+docblock warns. It was free to change at PET-86 only because the new Turso organization had no
+per-user database at all, which was verified against `turso db list` before the edit.
 
 ## Migrations and schema conventions
 

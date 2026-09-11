@@ -133,7 +133,9 @@ describe('AuthController (e2e)', () => {
 
       // The cloud pointer waits for verification, and in local mode no file is
       // created either. This is the whole pre-auth cost exposure, asserted.
-      expect(row.dbName).toBe(`spendifico-user-${row.id}`);
+      // Hyphens stripped from the id, to stay inside Turso's 51-character name
+      // limit. See database.constants.ts.
+      expect(row.dbName).toBe(`expenso-user-${row.id.replaceAll('-', '')}`);
       expect(row.dbUrl).toBeNull();
       expect(row.dbAuthToken).toBeNull();
       await expect(

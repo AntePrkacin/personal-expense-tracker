@@ -1995,7 +1995,7 @@ delete _also_ fails, a cloud database exists that no row points at, the central 
 `db_url` stays NULL, and every later verification of that account 500s on the name
 collision. The failure is logged in full by `VerificationService`, naming the database.
 
-The fix is manual and one step: delete `spendifico-user-<id>` through the Turso MCP server or
+The fix is manual and one step: delete `expenso-user-<id>` through the Turso MCP server or
 the Platform API - never the CLI, for the name-cache reason below. The next resent link then
 provisions cleanly.
 
@@ -2068,8 +2068,8 @@ needed urgently rather than during an incident.
 
 ### The Turso CLI has a stale name cache, and it bites this project constantly
 
-With CLI v1.0.31, `turso db shell spendifico-user-<uuid>` reports "database not found" and
-`turso db destroy spendifico-user-<uuid> --yes` exits 0 having done nothing, while `turso db
+With CLI v1.0.31, `turso db shell expenso-user-<uuid>` reports "database not found" and
+`turso db destroy expenso-user-<uuid> --yes` exits 0 having done nothing, while `turso db
 show` and `turso db list` handle the identical name perfectly.
 
 **Cause, confirmed on 2026-08-01.** The CLI caches the organization's database names in
@@ -2078,7 +2078,7 @@ and `db destroy` resolve the name against that cache instead of the API. Any dat
 created by something other than this CLI is therefore invisible to them until the cache
 expires. That is _every_ per-user database, since the backend creates them through the
 Platform API, which is why `spendifico-app` and `jura` work (both created via the CLI) and
-`spendifico-user-*` never does. Nothing to do with the name being long, which was the first
+`expenso-user-*` never does. Nothing to do with the name being long, which was the first
 guess.
 
 Note that `turso db list` does **not** refresh the cache, so the error message's advice to
@@ -2088,7 +2088,7 @@ Three ways around it, best first:
 
 1. **Use the Turso MCP server.** It goes straight to the API and has no cache.
    `read_database`, `evolve_schema` and `delete_database` all worked on a
-   freshly-created `spendifico-user-<uuid>` in the same session where the CLI refused.
+   freshly-created `expenso-user-<uuid>` in the same session where the CLI refused.
 2. **Expire the cache**, after which the CLI falls back to the API and works:
    ```bash
    python3 -c "import json;p='$HOME/.config/turso/settings.json';d=json.load(open(p));d['cache']['database_names']['expiration']=0;json.dump(d,open(p,'w'))"

@@ -215,7 +215,7 @@ flowchart TB
 
     subgraph turso["Turso Cloud"]
         CDB[("spendifico-app<br/>central directory")]
-        UDB[("spendifico-user-UUID<br/>one per account")]
+        UDB[("expenso-user-UUID<br/>one per account")]
     end
 
     MP["MailPace<br/>login@spendifico.eu"]
