@@ -9,6 +9,7 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { AppModule } from '../app.module';
 import { LoginTokenService } from '../auth/login-token.service';
 import { VerificationService } from '../auth/verification.service';
+import { DemoLeaseService } from '../demo/demo-lease.service';
 import { DemoSeedService } from '../demo/demo-seed.service';
 import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
@@ -247,10 +248,23 @@ async function ensureShowcaseUser(
 async function seed(app: INestApplicationContext): Promise<void> {
   const fixture = load();
   const demoSeed = app.get(DemoSeedService);
+  const demoLeases = app.get(DemoLeaseService);
+  const pooled = new Set(
+    Array.from({ length: DEMO_POOL_SIZE }, (_, i) => demoPoolEmail(i + 1)),
+  );
 
   for (const email of SEED_TARGETS) {
     const userId = await ensureShowcaseUser(app, fixture, email);
     const written = await demoSeed.reseed(userId);
+
+    // **Enrolled only if it is one of the pool's own addresses.** `--email=` is
+    // how a rehearsal account gets seeded, and putting one of those into the
+    // pool would hand it to the next stranger who opened `/demo`. Membership is
+    // therefore decided by the address rather than by the fact that this script
+    // just wrote to it.
+    if (pooled.has(email)) {
+      await demoLeases.enrol(userId);
+    }
 
     console.log(
       `Seeded ${email} with ${written} transactions across ${fixture.months} months (${SEED_MODE} mode).`,
@@ -259,6 +273,11 @@ async function seed(app: INestApplicationContext): Promise<void> {
 
   if (SEED_TARGETS.length > 1) {
     console.log(`Seeded ${SEED_TARGETS.length} accounts.`);
+  }
+
+  const { total, free } = await demoLeases.size();
+  if (total > 0) {
+    console.log(`Demo pool: ${total} account(s), ${free} free.`);
   }
 }
 

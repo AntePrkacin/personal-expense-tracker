@@ -33,6 +33,8 @@ const DEFAULT_SCAN_RATE_TTL_S = 3600;
 // made possible. See the `chat` throttler below.
 const DEFAULT_CHAT_RATE_LIMIT = 20;
 const DEFAULT_CHAT_RATE_TTL_S = 3600;
+const DEFAULT_DEMO_RATE_LIMIT = 5;
+const DEFAULT_DEMO_RATE_TTL_S = 3600;
 
 @Module({
   imports: [
@@ -120,6 +122,9 @@ const DEFAULT_CHAT_RATE_TTL_S = 3600;
         const chatTtl = seconds(
           config.get<number>('CHAT_RATE_TTL_S', DEFAULT_CHAT_RATE_TTL_S),
         );
+        const demoTtl = seconds(
+          config.get<number>('DEMO_RATE_TTL_S', DEFAULT_DEMO_RATE_TTL_S),
+        );
 
         return {
           throttlers: [
@@ -158,6 +163,17 @@ const DEFAULT_CHAT_RATE_TTL_S = 3600;
               ),
               ttl: chatTtl,
               getTracker: trackByUser,
+            },
+            // Keyed by IP rather than by user, because the whole point of the
+            // route it guards is that the caller has no user yet. PET-86.
+            {
+              name: 'demo',
+              limit: config.get<number>(
+                'DEMO_RATE_LIMIT',
+                DEFAULT_DEMO_RATE_LIMIT,
+              ),
+              ttl: demoTtl,
+              getTracker: trackByIp,
             },
           ],
         };

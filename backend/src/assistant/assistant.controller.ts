@@ -69,7 +69,7 @@ export class AssistantController {
    */
   @Post('messages')
   @UseGuards(ThrottlerGuard)
-  @SkipThrottle({ email: true, ip: true, scan: true })
+  @SkipThrottle({ email: true, ip: true, scan: true, demo: true })
   @ApiOperation({
     summary: 'Ask the assistant a question about your spending.',
     description:

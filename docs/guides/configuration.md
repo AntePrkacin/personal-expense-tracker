@@ -41,6 +41,10 @@ Backend variables:
 | `SCAN_RATE_TTL_S`        | `3600`                  | Window length in seconds for the scan limiter         |
 | `CHAT_RATE_LIMIT`        | `20`                    | Assistant chat turns per window, per session user id  |
 | `CHAT_RATE_TTL_S`        | `3600`                  | Window length in seconds for the chat limiter         |
+| `DEMO_ENABLED`           | `false`                 | Whether `POST /api/demo/session` exists; 404 when off  |
+| `DEMO_LEASE_TTL_M`       | `60`                    | How long a visitor keeps a leased demo account         |
+| `DEMO_RATE_LIMIT`        | `5`                     | Demo hand-outs per window, per caller IP               |
+| `DEMO_RATE_TTL_S`        | `3600`                  | Window length in seconds for the demo limiter          |
 | `TRUST_PROXY_HOPS`       | `0`                     | Reverse proxies in front; 0 means `req.ip` is the socket |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.

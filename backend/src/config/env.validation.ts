@@ -128,6 +128,24 @@ export const envValidationSchema = Joi.object({
   CHAT_RATE_LIMIT: Joi.number().integer().positive().default(20),
   CHAT_RATE_TTL_S: Joi.number().integer().positive().default(3600),
 
+  // The demo pool (PET-86). Off unless a deployment says otherwise, because the
+  // route behind it hands an anonymous caller a real session: a fresh clone, CI
+  // and the e2e suite must not expose a session minter by accident, so the safe
+  // value is the default and enabling it is the deliberate act.
+  DEMO_ENABLED: Joi.boolean().default(false),
+
+  // How long a visitor keeps a leased demo account. Long enough to read every
+  // screen without being interrupted, short enough that a pool of ten is not
+  // exhausted for an hour by ten people who glanced and left.
+  DEMO_LEASE_TTL_M: Joi.number().integer().positive().default(60),
+
+  // The fifth named throttler, keyed on IP because the caller has no session
+  // yet. What it bounds is not cost but churn: every hand-out to a new visitor
+  // rewrites roughly 2,300 rows, so an unthrottled public route is a way to keep
+  // the pool permanently busy re-seeding itself for nobody.
+  DEMO_RATE_LIMIT: Joi.number().integer().positive().default(5),
+  DEMO_RATE_TTL_S: Joi.number().integer().positive().default(3600),
+
   // How many reverse proxies sit in front of this process, which is what Express
   // needs to know before req.ip can mean the caller rather than the proxy. The
   // per-IP limiter above keys on req.ip, so this is not cosmetic in either
