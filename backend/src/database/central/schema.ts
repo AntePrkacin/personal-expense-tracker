@@ -411,3 +411,102 @@ export const categoryTemplates = sqliteTable(
 
 export type CategoryTemplateRow = typeof categoryTemplates.$inferSelect;
 export type NewCategoryTemplateRow = typeof categoryTemplates.$inferInsert;
+
+/**
+ * One account in the demo pool, and whose hands it is in right now.
+ *
+ * ## Why this is in central at all
+ *
+ * The file header above says central holds the bare minimum, and
+ * `src/database/CLAUDE.md` names the sanctioned exceptions to it. This is one
+ * more, and it earns the place the same way `sessions` and `login_links` do
+ * rather than the way the template tables do: a lease decides **which session
+ * may be issued next**, and that decision has to be made before any per-user
+ * database is opened - there is no "the user's own database" to consult when
+ * the whole question is which user the caller is about to become.
+ *
+ * It is emphatically not profile data. Nothing here describes a person; every
+ * column is about the pool's own bookkeeping, and the account it points at is
+ * an ordinary user whose real data lives in its own database like everybody
+ * else's.
+ *
+ * ## Why a pool rather than an account per visitor
+ *
+ * Turso's starter plan caps an organization at 100 databases with overages
+ * disabled, and this app is database-per-user, so an account per visitor spends
+ * that cap from an unauthenticated public route - and when it runs out,
+ * provisioning fails for real registrations too, not just demos. Ten is bounded,
+ * needs no Platform API call inside a request, and keeps `UserDatabaseService`'s
+ * deliberately unbounded connection cache at ten entries rather than one per
+ * visitor who ever clicked.
+ */
+export const demoAccounts = sqliteTable(
+  'demo_accounts',
+  {
+    // Same primary-key caveat as `users.id`: notNull() records intent that
+    // drizzle-kit does not emit for a text primary key. See docs/TODO.md.
+    id: text('id').primaryKey().notNull(),
+
+    // Plain text, no references(), like every other id in this schema; see the
+    // note on `login_links.user_id` for why the absence is a decision.
+    userId: text('user_id').notNull(),
+
+    // Non-null means leased, and names the instant the lease dies. One column
+    // carries both facts deliberately: a separate boolean could disagree with
+    // the timestamp, and the disagreement would strand an account nobody can
+    // hand out and nothing can reclaim.
+    //
+    // Reclaiming is lazy - the next hand-out expires whatever has run out
+    // before it claims anything - because Cloud Run throttles CPU between
+    // requests and scales to zero, so a setInterval sweep would run on no
+    // schedule anyone could describe. Doing it on the request path means the
+    // feature needs no scheduler at all.
+    leaseExpiresAt: integer('lease_expires_at', { mode: 'timestamp_ms' }),
+
+    // When the current or most recent lease started. Kept after the lease ends
+    // because it is the ordering key for the next claim: handing out the
+    // least-recently-leased account spreads wear over the pool and makes a
+    // just-released account the last one to be reused, which is what gives a
+    // visitor who wandered off a few minutes of grace before their session's
+    // data is rewritten underneath them.
+    leasedAt: integer('leased_at', { mode: 'timestamp_ms' }),
+
+    // When the fixture was last written to this account.
+    //
+    // Load-bearing for a reason that has nothing to do with tidiness: the
+    // showcase fixture positions transactions by (month, occurrence) and the
+    // seed resolves them against *today*, so an account seeded in September
+    // shows September as its current period and, opened in November, renders an
+    // empty current period and an app that looks broken. Re-seeding is upkeep,
+    // not only repair, and this column is what the hand-out consults to decide
+    // whether it can skip one.
+    seededAt: integer('seeded_at', { mode: 'timestamp_ms' }),
+
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+
+    // Soft delete as everywhere else. Here it means "retired from the pool":
+    // the underlying user and its database survive, so retiring an account is
+    // reversible and never destroys data the way removing it would.
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    // One pool entry per account. Partial, so a retired entry does not block
+    // re-enrolling the same account later - the same shape `users_email_live_unique`
+    // uses, and for the same reason.
+    uniqueIndex('demo_accounts_user_id_live_unique')
+      .on(table.userId)
+      .where(isNull(table.deletedAt)),
+    // Every hand-out opens by expiring whatever has run out, which is a range
+    // scan on this column.
+    index('demo_accounts_lease_expires_at_idx').on(table.leaseExpiresAt),
+  ],
+);
+
+export type DemoAccountRow = typeof demoAccounts.$inferSelect;
+export type NewDemoAccountRow = typeof demoAccounts.$inferInsert;

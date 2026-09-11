@@ -107,6 +107,36 @@ its own minted data-plane token, stored in the central row and never serialized 
 response. By MVP decision every Turso token is created with **Expires: NEVER**: no refresh
 logic anywhere, rotation is a manual ops action.
 
+**A fifth exception arrived with PET-86, and it is a return to the first kind rather than the
+fourth.** `demo_accounts` records which account of the ten-strong demo pool is leased to a visitor
+right now, when that lease dies, and when the fixture was last written to it. It belongs in central
+for exactly the reason `login_links` and `sessions` do, one step earlier than either: the lease
+decides **which session may be issued next**, and there is no per-user database to consult when the
+whole question is which user the caller is about to become. Nothing in the table describes a person -
+every column is the pool's own bookkeeping, and the account it points at is an ordinary user whose
+real data lives in its own database like everybody else's. Read this as sanctioning **pool
+bookkeeping**, on the same terms as the credential tables, and not as a second door for profile data
+any more than PET-64 was.
+
+Three things about it are load-bearing. Leases are reclaimed **lazily, on the request path** - the
+next hand-out expires whatever has run out before it claims anything - because Cloud Run throttles
+CPU between requests and scales to zero, so a `setInterval` sweep would run on no schedule anybody
+could describe; the feature therefore needs no scheduler at all. `lease_expires_at` carries both
+"is it leased" and "until when" in **one column**, because a separate boolean could disagree with
+the timestamp and the disagreement would strand an account nobody can hand out and nothing can
+reclaim. And `seeded_at` exists for a reason that is not tidiness: the showcase fixture positions
+transactions by `(month, occurrence)` and the seed resolves them against **today**, so an account
+seeded in September renders an empty current period in November and an app that looks broken.
+Re-seeding is upkeep rather than repair, and that column is what a hand-out consults to decide
+whether it may skip one.
+
+**The pool is ten because the plan caps databases, not because ten felt right.** Turso's starter plan
+allows 100 databases in the organization with overages disabled, and this is a database-per-user app,
+so an account provisioned per visitor spends that cap from an unauthenticated public route - and the
+failure when it runs out is not a slow demo, it is registration failing for real users. Ten is
+bounded, needs no Platform API call inside a request, and holds `UserDatabaseService`'s deliberately
+unbounded connection cache at ten entries rather than one per visitor who ever clicked.
+
 ## Migrations and schema conventions
 
 **Migrations are committed and applied programmatically**, in
