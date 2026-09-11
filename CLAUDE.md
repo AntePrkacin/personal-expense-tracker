@@ -203,6 +203,48 @@ it was a person opening the panel. `lib/money.test.ts` now pins the whole list b
 than its head, which is the cheapest half of the guard and still not the half that would have found
 this.
 
+**PET-86 is the twenty-second thing that works, and it is the one that lets somebody in who has no
+account.** Twenty-one features shipped behind a door only an email could open, and the email stopped
+coming: the domain and the mail service are gone and are not coming back, so every login link is
+written to a log and delivered to nobody. That is not a defect to fix, it is the condition this repo
+now ships under - which makes the normal login flow dead for every visitor including its owner, and
+makes this ticket's route the only working door rather than a convenience beside one. So `/demo`
+hands a visitor **their own pre-seeded account** out of a pool of ten, restored to the showcase
+fixture on the way, and lands them on a populated Dashboard with no email, no password and no form.
+
+**The pool is the design, and the alternative that reads more elegant is the one the plan can't
+afford.** An account per visitor is perfectly isolated and spends a hard cap: Turso's starter plan
+allows 100 databases with overages disabled, this app gives **every user their own database**, and
+the failure when the cap runs out is registration breaking for real users rather than a slow demo.
+So ten accounts are seeded by hand, `POST /api/demo/session` leases the least recently used free one,
+and a lease elapses after an hour. Two visitors get two accounts and cannot see each other at all,
+which is the thing a single shared demo could never offer - one visitor's deletions are the next
+one's first impression.
+
+Five things about it reach past those two files. The restore is **the seed script's own write phase,
+extracted into a service** and called by both, so an account restored at hand-out and one seeded from
+the terminal are the same account rather than two implementations drifting. Reclaiming is **lazy, on
+the request path**, because Cloud Run throttles CPU between requests and scales to zero, so a timer
+would run on no schedule anybody could describe - and the feature therefore needs no scheduler at
+all. `seeded_at` is a **dirty marker that doubles as a staleness check**, because the fixture places
+transactions relative to the day it was written: an untouched pool seeded in September hands out an
+empty current period in November, looking perfectly intact, and that is the one failure no gate in
+this repo can see. A **fifth named throttler** joins the four that existed, the first keyed by IP
+since `ip` itself, because the caller has no session to key on. And the entry point is a **GET with
+side effects**, which is the cost of a link being shareable at all - so Welcome's "Try the demo" is a
+plain `<a>` rather than a `next/link`, because a prefetch would lease an account for somebody who
+never clicked, and nothing in jsdom can see the difference.
+
+**It also found something older than itself, and that is the part to act on.** `docs/TODO.md` records
+"a single instance is a deployment invariant", and three behaviours rest on it - the in-memory
+throttler, the absent cross-process migration lock, and the insight runner's in-process state. Fly
+held it by construction; this backend has been on **Google Cloud Run** since before this ticket, at
+`maxScale: 20`, and **no file in this repository mentions GCP at all** - the deploy workflow, the
+deploy script, the `repo-fly` skill and `docs/guides/deployment.md` all still drive Fly, so the
+commands they publish do not reach production. The invariant needs `--max-instances=1` on the
+service and in whatever replaces that workflow; the documentation is corrected in place rather than
+left dated, and the tooling is recorded as owed.
+
 ## Repository map
 
 - `backend/` - the NestJS API. Its own `package.json`, its own `node_modules`, and
@@ -305,6 +347,8 @@ read the file before you write the change, not after.
 | add or change a category endpoint, or touch the fallback category   | `backend/CLAUDE.md`, Category endpoints |
 | add or change the dashboard endpoint                                | `backend/CLAUDE.md`, Dashboard   |
 | add or change the insights endpoint                                 | `backend/CLAUDE.md`, Insights    |
+| touch the demo pool, a lease, or the demo endpoint                  | `backend/CLAUDE.md`, The demo pool |
+| touch `/demo`, or link to it from anywhere                          | `frontend/src/app/CLAUDE.md`, The demo entry point |
 | touch a category template, a colour token or an icon name           | `backend/CLAUDE.md`, Templates   |
 | compute anything per month, or read `monthStartDay`                 | `backend/CLAUDE.md`, Backend conventions |
 | resolve a period, or touch a budget, cap or pay-schedule history    | `backend/CLAUDE.md`, Backend conventions |

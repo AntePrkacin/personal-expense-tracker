@@ -3329,3 +3329,48 @@ this way in one sitting**, first as 503s and then, on retry, as two 504 timeouts
 a rare edge. `AssistantCompletionService` is where the SDK's `ApiError` would be inspected;
 mapping a 503 upstream to a 503 outward is small, but it widens the endpoint's documented error
 set and the frontend's failure taxonomy, so it wants its own ticket rather than a drive-by.
+
+## The single-instance invariant has nothing enforcing it (PET-86)
+
+`backend/CLAUDE.md` states "exactly one instance, and it is not a preference", and three behaviours
+rest on it: `@nestjs/throttler`'s in-memory store, the absent cross-process migration lock, and
+`InsightsService`'s `inFlight`/`dirty` process state. PET-86 adds a fourth, since two instances hold
+two replicas of one leased demo account and reconcile them on the five-second sync.
+
+**Fly held it by construction** - a volume attaches to one machine - so the rule was true without
+anybody maintaining it. This backend has been on **Cloud Run** since before PET-86, configured
+`maxScale: 20`, `minScale: 0`, `containerConcurrency: 80`. So the invariant is currently a claim the
+documentation makes and the platform does not honour, and every one of the four failures is quiet:
+no error, no log line, just a rate limit worth twice its number or a write that never pushed.
+
+The fix is `--max-instances=1` on the service, **and** in whatever deploys it, so a later deploy
+cannot drop it again. The second half is the one that matters: setting it by hand fixes today and
+nothing else.
+
+## Nothing in this repository mentions GCP (PET-86)
+
+`.github/workflows/deploy.yml`, `.github/workflows/deploy-verify.yml`, `scripts/deploy-backend.sh`,
+the `repo-fly` skill, `backend/fly.toml`, the Fly-volume steps in `scripts/reset-databases.sh` and
+`docs/guides/deployment.md` all still drive Fly.io. The backend runs on Cloud Run. So every command
+this repo publishes for deploying, verifying or resetting production does not reach production, and
+a reader following any of them is working on a platform this project left.
+
+PET-86 corrected the reasoning in `backend/CLAUDE.md` in place and deliberately did **not** port the
+tooling, which is a ticket of its own rather than a paragraph: a Cloud Run deploy needs either
+Workload Identity Federation or a service-account key in GitHub secrets, and that is IAM work with
+an approval step in front of it rather than a file to write. What the port must carry, so it is not
+rediscovered: `--max-instances=1` passed explicitly (see above), the secrets already in Secret
+Manager rather than re-declared, and the reset script's volume steps rewritten for an ephemeral
+`/tmp` that needs no replacement.
+
+## The demo pool has no scheduled refresh (PET-86)
+
+A pooled demo account is restored at hand-out when `seeded_at` is null or not today, so the pool
+repairs itself as it is used. What nothing does is refresh an account **nobody asks for**: the tenth
+account can sit untouched for a month, and the first visitor to reach it pays for a restore they did
+not cause - a few seconds on the one page-load the whole feature exists to make fast.
+
+Not worth a scheduler at this scale, and a scheduler is exactly what the lazy design avoids needing.
+If it ever matters, the cheap version is `mise run seed:demo-pool:cloud` on a cron; the honest
+version is a warm-up that restores the least recently leased account in the background, which needs
+somewhere for background work to run that Cloud Run does not currently give this app.

@@ -183,6 +183,30 @@ description = "Seed the showcase user into Turso Cloud (needs backend/.env)"
 dir = "backend"
 run = "npx ts-node src/scripts/seed-showcase.ts --cloud"
 
+# The demo pool (PET-86): ten accounts `/demo` leases to visitors, seeded and
+# enrolled in one application context rather than ten process launches.
+#
+# Split local/cloud for the same reason `seed` is, sharpened by what a pooled
+# account is for: a mistaken local run fills gitignored SQLite files, a mistaken
+# cloud run rewrites the accounts recruiters are looking at right now. It is
+# idempotent and safe to re-run - an enrolled account keeps its lease and only has
+# `seeded_at` moved forward - but a visitor mid-demo will see their data reset.
+#
+# Re-run it whenever the fixture changes, and note the calendar: the fixture
+# places transactions relative to the day it was written, so a pool left alone
+# for weeks hands out an empty current period. The hand-out restores a stale
+# account by itself, so this is a way to make that restore cheap rather than a
+# thing that has to be remembered.
+[tasks."seed:demo-pool"]
+description = "Seed and enrol the ten demo pool accounts into the local SQLite files"
+dir = "backend"
+run = "npx ts-node src/scripts/seed-showcase.ts --local --pool"
+
+[tasks."seed:demo-pool:cloud"]
+description = "Seed and enrol the ten demo pool accounts into Turso Cloud"
+dir = "backend"
+run = "npx ts-node src/scripts/seed-showcase.ts --cloud --pool"
+
 # Reports rather than asserts, and touches no database at all - the generator is
 # pure, so this is just arithmetic over its output. Run it with --trials=200
 # after changing the model: one account cannot tell you whether a category goes

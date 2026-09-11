@@ -138,6 +138,14 @@ guard's public check is a pure metadata read - no header, no body, no query - so
 ahead of the controller-level `ThrottlerGuard` without changing what the rate-limit
 trackers see. Guards are invisible to OpenAPI, so the flip was a zero-diff `api:sync`.
 
+**PET-86 makes it six, and the sixth is the only one that hands out a credential rather than
+checking one.** `POST /api/demo/session` leases a pooled demo account and issues a session for it,
+to a caller presenting nothing at all - so read "exactly five" above, and the sentence under logout
+restating it, as dated. It is public for the reason `verify` is: it is how somebody with no
+credential gets one. What makes it a different kind of public from the other five is that nothing
+about the request is checked, which is why it is off by default, bounded by a pool somebody had to
+enrol by hand, and carries a limiter of its own. See `## The demo pool`.
+
 **The auth routes carry two independent rate limiters, per submitted email and per IP.**
 Deliberately two throttlers rather than one composite `ip:email` key: a composite key hands
 every new (IP, address) pair a fresh bucket, so it throttles only one host hammering one
@@ -1148,6 +1156,77 @@ true. And **`chat` is a fourth named throttler** beside `email`, `ip` and `scan`
 one `ThrottlerModule.forRootAsync` in `app.module.ts` - so every guarded route now skips three
 throttlers it is not named by rather than two.
 
+**PET-86 adds a fifth, `demo`, so that last clause is four rather than three.** It is the first
+keyed by **IP** since `ip` itself, because the route it guards has no session to key on - and what
+it bounds is not cost but churn, since every hand-out to a new visitor rewrites a couple of
+thousand rows. The mechanical consequence is the one this paragraph already warns about: three more
+`demo: true` entries had to be added to skip lists that were already correct, on
+`AuthController`'s class decorator, `POST /api/transactions/scan` and `POST
+/api/assistant/messages`.
+
+## The demo pool
+
+**`src/demo/` leases one of ten pre-seeded accounts to a visitor who has no credential, so a
+recruiter can open a link and click around real data.** One route, `POST /api/demo/session`, and two
+services: `DemoLeaseService` takes and returns accounts, `DemoSeedService` writes the showcase
+fixture into one. `backend/src/database/CLAUDE.md` owns the `demo_accounts` table and the argument
+for why it is in central at all.
+
+**It exists because this deployment cannot send mail.** Access is passwordless only, so with no
+domain and no mail service every login link is written to a log and delivered to nobody - which
+makes `/demo` not a convenience but the only working door, for a recruiter and for the owner alike.
+That is a fact about the deployment rather than a design goal, and it is the thing to re-read if
+mail ever comes back.
+
+**Ten accounts, and the number is the plan's rather than a preference.** Turso's starter plan caps
+the organization at 100 databases with overages disabled, and this is a database-per-user app, so an
+account provisioned per visitor spends a hard cap from an unauthenticated public route - and the
+failure when it runs out is registration breaking for real users, not a slow demo.
+
+Five things about it are easy to get wrong:
+
+- **The hand-out is expire, claim, restore, issue, and the order is the whole design.** Expiring
+  first means a pool that looks full is reclaimed before anybody is turned away. Claiming second
+  means the account is exclusively ours before a single row of it is rewritten. Issuing the session
+  **last** means a session never names an account whose restore failed half way - and a failed
+  restore releases the lease rather than keeping it, because the write phase wraps only the
+  transactions table and a half-written account must not become the next visitor's first impression.
+
+- **Leases are reclaimed lazily, on the request path, and that is what makes the feature need no
+  scheduler.** Cloud Run throttles CPU between requests and scales to zero, so a `setInterval` sweep
+  would run on no schedule anybody could describe. The only moment a free account is needed is the
+  moment somebody asks for one, so that is when the sweep happens.
+
+- **`seeded_at` is the dirty marker, and freeing a lease is what clears it.** A `null` means somebody
+  has had the account since it was last written; a date that is not today means the fixture has gone
+  stale on its own, because it places transactions by `(month, occurrence)` against the day it was
+  written. So an account seeded in September hands out an **empty current period** in November while
+  looking perfectly intact - the failure that column exists to prevent, and the one
+  `test/demo.e2e-spec.ts` pins by aging a row rather than by waiting.
+
+- **There is no queue here, and adding a transaction would break it.** `LoginTokenService` chains its
+  writes because the embedded driver refuses overlapping transactions and `issue()` needs one.
+  Nothing in the lease does: expiring, claiming and releasing are each a single statement, and the
+  driver's one connection per database serializes them. Wrapping the pair in `db.transaction()` is
+  the defensive move that would actually introduce the bug.
+
+- **The session outlives the lease, deliberately.** A session runs for `SESSION_TTL_D` days and a
+  lease for `DEMO_LEASE_TTL_M` minutes, so a visitor with a tab open keeps a working session onto an
+  account that has since been handed to somebody else and rewritten under them. Shortening the
+  session to the lease would sign a visitor out mid-demo, and what they would see afterwards is the
+  same fixture they started with.
+
+**`DEMO_ENABLED` defaults to false and a disabled deployment answers 404**, not 403 and not 503: a
+deployment with no demo has no such route, where 403 would confirm the feature exists and 503 would
+promise it is coming back. That default is also what keeps a fresh clone and the e2e suite from
+publishing an anonymous session minter by accident.
+
+**The write phase is shared with the CLI rather than duplicated.** `src/scripts/seed-showcase.ts`
+calls the same `DemoSeedService`, which is why a demo account restored at hand-out and one seeded
+from the terminal are the same account. What stayed in the CLI is the half a live app must never do:
+provisioning an account, and the `process.env` scrubbing in `seed-showcase.env.ts` that keeps a
+`--local` run off Turso Cloud. `mise run seed:demo-pool` and its `:cloud` sibling build the pool.
+
 ## Persistence
 
 The persistence layer has its own file, `backend/src/database/CLAUDE.md`, which loads
@@ -1199,6 +1278,29 @@ The commands, the first-time setup and how to verify a deploy are in
 `docs/guides/deployment.md`. What follows is why the deployment has the shape it has, because
 almost every constraint here is one the persistence design imposed rather than a hosting
 preference.
+
+**This backend runs on Google Cloud Run, not Fly.io, and every sentence below naming Fly is dated
+rather than wrong about its reasoning.** The service is `expenso` in project `expensa-app-26`,
+region `europe-west1`, with the four `TURSO_*` values and `GEMINI_API_KEY` in Secret Manager,
+`DATABASE_DIR=/tmp/databases` and `TURSO_SYNC_INTERVAL_S=5`. Read the arguments below as the
+constraints they still are - they are properties of a local replica synced to a cloud, not of a
+host - and read the mechanisms as history: `--ha=false`, `fly.toml`, the volume and the autostop
+measurements all describe a platform this no longer runs on. **Nothing in this repository mentions
+GCP**: the deploy workflow, `scripts/deploy-backend.sh`, the `repo-fly` skill and
+`docs/guides/deployment.md` all still drive Fly, so the commands they give do not reach production.
+PET-86 records that gap rather than closing it; `docs/TODO.md` carries what porting them needs.
+
+**The single-instance invariant currently has nothing enforcing it, and that is the part to act on
+rather than note.** Fly held it by construction - a volume attaches to one machine - so the rule
+below was true without anybody maintaining it. Cloud Run is configured `maxScale: 20`, `minScale: 0`,
+`containerConcurrency: 80`, which means the invariant is a claim this file makes and the platform
+does not honour. Three things depend on it and all three degrade quietly rather than failing: the
+throttler's in-memory store hands each instance its own budget, nothing holds a cross-process lock
+while a user database runs its first migration, and `InsightsService`'s `inFlight` and `dirty` are
+process state about floated runs. PET-86 adds a fourth, since two instances would hold two replicas
+of one leased demo account and reconcile them on the five-second sync. The fix is
+`--max-instances=1` on the service **and** in whatever replaces the deploy workflow, so a later
+deploy cannot drop it again.
 
 **Exactly one instance, and it is not a preference.** The architecture is a local replica synced
 to the cloud, so a second process is a second replica set with its own unpushed writes.

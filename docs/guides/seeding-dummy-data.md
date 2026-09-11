@@ -152,11 +152,18 @@ rather than a plain file, which changes what is locked and nothing about the out
    mise run dev
    ```
 5. **Log in**:
-   Go to `http://localhost:4200` and enter `slavko@spendifico.eu`. That is a **deliverable
-   address**, not a placeholder: it is an alias on the project's own domain forwarding to
-   `spendifico@gmail.com`, the same inbox `login@spendifico.eu` lands in. So with
-   `MAILPACE_API_TOKEN` set the login link really arrives and can be clicked, including from a
-   phone. Without MailPace credentials the backend logs the link instead, as always.
+   Go to `http://localhost:4200` and enter `slavko@spendifico.eu`, then open the login link the
+   backend prints to its own terminal.
+
+   **That address is no longer deliverable, and this step used to say the opposite.** It was an
+   alias on the project's own domain forwarding to `spendifico@gmail.com`, which is what once made
+   a login link arrive on a phone. As of PET-86 the domain and the mail service are gone and are
+   not coming back, so no address reaches anybody and the backend logs every link instead of
+   sending it - locally and in production alike. The address is now only what tells two seeded
+   accounts apart.
+
+   On the deployed app there is no terminal to read, which is what `/demo` exists for: see
+   [Demo accounts](demo-accounts.md).
 
 ## What gets generated
 

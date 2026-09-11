@@ -94,6 +94,8 @@ Fly deploy (see [Deployment](deployment.md)).
 | `mise run seed`               | Fill the showcase user with 36 months of data, in local SQLite files |
 | `mise run seed:cloud`         | The same, against Turso Cloud - needs `backend/.env`                 |
 | `mise run seed:fixture`       | Regenerate the committed showcase fixture from the spending model    |
+| `mise run seed:demo-pool`     | Seed and enrol the ten demo pool accounts into the local files       |
+| `mise run seed:demo-pool:cloud` | The same, against Turso Cloud - see [Demo accounts](demo-accounts.md) |
 | `mise run seed:check`         | Measure the showcase spending model without seeding anything         |
 | `mise run reset`              | Delete the local database files under `backend/databases/`           |
 | `mise run reset:cloud`        | Destroy every Turso database and the Fly volume, then redeploy       |
