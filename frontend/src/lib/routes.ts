@@ -108,4 +108,27 @@ export const ACCESS_ROUTES = {
    * `/check-email` and into a cookie does not apply to it.
    */
   verifyFailed: '/auth/verify/failed',
+  /**
+   * The shareable demo link (PET-86). **A route handler, not a page** - the second
+   * key here that is, and the second thing in the app to set a session cookie.
+   *
+   * Unlike `verify`, this path *is* ours to choose, and unlike `verify` the whole
+   * point is that things link to it: the Welcome screen's "Try the demo", and a URL
+   * pasted into a README or a message. That is what makes it a handler rather than
+   * an action - a shared link is a navigation, and an action cannot answer one.
+   *
+   * **Following it has side effects**, which no other key here does: it leases a
+   * pooled account and may rewrite a few thousand rows. Anything linking to it must
+   * therefore opt out of prefetching, and `robots.txt` disallows it.
+   */
+  demo: '/demo',
+  /**
+   * Where a demo that could not hand out an account lands (PET-86).
+   *
+   * No Figma frame draws it, or anything else in this flow, so it borrows screen
+   * 24's card exactly as `verifyFailed` does. Nested under `demo` rather than made a
+   * sibling, because that handler is the only thing that ever navigates here and the
+   * nesting says so. It takes a `?reason=`, which carries no personal data.
+   */
+  demoUnavailable: '/demo/unavailable',
 } as const;

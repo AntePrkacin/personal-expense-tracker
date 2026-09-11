@@ -28,6 +28,7 @@ const BUILT = [
   'login',
   'checkEmail',
   'verifyFailed',
+  'demoUnavailable',
 ] as const satisfies readonly RouteKey[];
 
 /**
@@ -44,7 +45,7 @@ const BUILT = [
  * `backend/src/mail/login-link.template.ts`, so a rename here points every login email
  * in production at a 404 with no other gate failing.
  */
-const HANDLERS = ['verify'] as const satisfies readonly RouteKey[];
+const HANDLERS = ['verify', 'demo'] as const satisfies readonly RouteKey[];
 
 /**
  * Routes declared for a screen nobody has built yet.
