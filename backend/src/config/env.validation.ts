@@ -59,7 +59,7 @@ export const envValidationSchema = Joi.object({
   TURSO_GROUP_TOKEN: Joi.string(),
 
   // Turso group holding the central database and every per-user one.
-  TURSO_GROUP: Joi.string().default('decode-pet'),
+  TURSO_GROUP: Joi.string().default('default'),
 
   // How often a cloud-mode connection pushes and pulls, in seconds.
   TURSO_SYNC_INTERVAL_S: Joi.number().positive().default(60),

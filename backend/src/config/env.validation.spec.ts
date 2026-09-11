@@ -93,7 +93,7 @@ describe('envValidationSchema', () => {
         PORT: 3000,
         FRONTEND_URL: 'http://localhost:4200',
         DATABASE_DIR: './databases',
-        TURSO_GROUP: 'decode-pet',
+        TURSO_GROUP: 'default',
         TURSO_SYNC_INTERVAL_S: 60,
         LOGIN_LINK_TTL_M: 15,
         SESSION_TTL_D: 30,
