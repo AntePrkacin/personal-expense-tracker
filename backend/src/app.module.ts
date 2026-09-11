@@ -14,6 +14,7 @@ import { SessionGuard } from './auth/session.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
+import { DemoModule } from './demo/demo.module';
 import { InsightsModule } from './insights/insights.module';
 import { PeriodsModule } from './periods/periods.module';
 import { ProfileModule } from './profile/profile.module';
@@ -176,6 +177,10 @@ const DEFAULT_CHAT_RATE_TTL_S = 3600;
     // generated on a schedule and a conversation held with a user share a
     // vocabulary and nothing else. See src/assistant/CLAUDE.md.
     AssistantModule,
+    // Last, and it depends on nothing the others do not already provide: the
+    // demo pool composes InsightsModule and the global DatabaseModule and adds
+    // one public route of its own. PET-86.
+    DemoModule,
   ],
   controllers: [AppController],
   providers: [
