@@ -1,0 +1,24 @@
+# Kept deliberately short: the only rule here is the one that has to exist.
+#
+# `/demo` is a route handler, not a page, and following it has side effects - it
+# leases one of a small pool of demo accounts and restores that account to the
+# showcase fixture. A crawler that follows it is not reading a page, it is taking
+# an account out of circulation for an hour and rewriting a few thousand rows on
+# the way. Nothing about the response tells a crawler that, so this is where it
+# is said.
+#
+# It is one of three bounds rather than the whole defence, because a crawler that
+# ignores this file is ordinary: the Welcome screen's link is a plain `<a>` so
+# Next never prefetches it, and the backend's `demo` throttler caps hand-outs per
+# IP. What makes the residue tolerable is that a burned lease heals on its own -
+# it elapses, and the next real visitor's hand-out restores the account before
+# handing it over.
+#
+# **A prefix rule, not `/demo$`.** The `$` end-of-match wildcard is a Google and
+# Bing extension rather than part of the original standard, so a stricter crawler
+# reads it as a literal character and the rule matches nothing at all - which is
+# the worst outcome for the one line this file exists for. The prefix also covers
+# `/demo/unavailable`, which is harmless: that page is an error state nobody
+# should be indexing anyway.
+User-agent: *
+Disallow: /demo

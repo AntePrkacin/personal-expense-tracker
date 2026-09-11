@@ -89,17 +89,18 @@ const ACCEPTED_RESPONSE = {
  * buckets rather than sharing them - accepted, since a legitimate journey can
  * touch several.
  *
- * **Class-level `@SkipThrottle({ scan: true, chat: true })`** because
- * `ThrottlerModule` registers two further named throttlers for the two Gemini
- * routes - `scan` for `POST /api/transactions/scan` and `chat` for `POST
- * /api/assistant/messages` (see `AppModule`). `ThrottlerGuard` runs every
- * configured throttler on a route it guards, so without these skips every route
- * here would also count against both budgets for no reason.
+ * **Class-level `@SkipThrottle({ scan: true, chat: true, demo: true })`** because
+ * `ThrottlerModule` registers three further named throttlers - `scan` for `POST
+ * /api/transactions/scan` and `chat` for `POST /api/assistant/messages`, the two
+ * Gemini routes, and `demo` for `POST /api/demo/session` (see `AppModule`).
+ * `ThrottlerGuard` runs every configured throttler on a route it guards, so
+ * without these skips every route here would also count against all three
+ * budgets for no reason.
  */
 @ApiTags('auth')
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
-@SkipThrottle({ scan: true, chat: true })
+@SkipThrottle({ scan: true, chat: true, demo: true })
 export class AuthController {
   constructor(
     private readonly authService: AuthService,

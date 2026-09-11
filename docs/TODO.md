@@ -1995,7 +1995,7 @@ delete _also_ fails, a cloud database exists that no row points at, the central 
 `db_url` stays NULL, and every later verification of that account 500s on the name
 collision. The failure is logged in full by `VerificationService`, naming the database.
 
-The fix is manual and one step: delete `spendifico-user-<id>` through the Turso MCP server or
+The fix is manual and one step: delete `expenso-user-<id>` through the Turso MCP server or
 the Platform API - never the CLI, for the name-cache reason below. The next resent link then
 provisions cleanly.
 
@@ -2028,7 +2028,7 @@ throwaway diagnostic route and replaying it offline against the same Express sta
 now `2`, and it is exact rather than a safe margin: replaying a client-forged prefix through the
 same stack showed 2 correctly ignores it while 3 or higher trusts it, so raising this number
 "to be safe" does the opposite. See `backend/CLAUDE.md` for why it is a hop count rather than a
-boolean and the full replay methodology, `backend/fly.toml`'s comment for the value, and
+boolean and the full replay methodology, `fly.toml`'s comment for the value, and
 `docs/guides/deployment.md`'s per-IP check for how to catch a regression here.
 
 **PET-11 made that second half real, and it is no longer a deployment-time worry.** The
@@ -2068,8 +2068,8 @@ needed urgently rather than during an incident.
 
 ### The Turso CLI has a stale name cache, and it bites this project constantly
 
-With CLI v1.0.31, `turso db shell spendifico-user-<uuid>` reports "database not found" and
-`turso db destroy spendifico-user-<uuid> --yes` exits 0 having done nothing, while `turso db
+With CLI v1.0.31, `turso db shell expenso-user-<uuid>` reports "database not found" and
+`turso db destroy expenso-user-<uuid> --yes` exits 0 having done nothing, while `turso db
 show` and `turso db list` handle the identical name perfectly.
 
 **Cause, confirmed on 2026-08-01.** The CLI caches the organization's database names in
@@ -2078,7 +2078,7 @@ and `db destroy` resolve the name against that cache instead of the API. Any dat
 created by something other than this CLI is therefore invisible to them until the cache
 expires. That is _every_ per-user database, since the backend creates them through the
 Platform API, which is why `spendifico-app` and `jura` work (both created via the CLI) and
-`spendifico-user-*` never does. Nothing to do with the name being long, which was the first
+`expenso-user-*` never does. Nothing to do with the name being long, which was the first
 guess.
 
 Note that `turso db list` does **not** refresh the cache, so the error message's advice to
@@ -2088,7 +2088,7 @@ Three ways around it, best first:
 
 1. **Use the Turso MCP server.** It goes straight to the API and has no cache.
    `read_database`, `evolve_schema` and `delete_database` all worked on a
-   freshly-created `spendifico-user-<uuid>` in the same session where the CLI refused.
+   freshly-created `expenso-user-<uuid>` in the same session where the CLI refused.
 2. **Expire the cache**, after which the CLI falls back to the API and works:
    ```bash
    python3 -c "import json;p='$HOME/.config/turso/settings.json';d=json.load(open(p));d['cache']['database_names']['expiration']=0;json.dump(d,open(p,'w'))"
@@ -2186,8 +2186,8 @@ cover, or not serving it in production at all.
 ### `/api/health` still proves liveness only, not readiness
 
 PET-66 replaced `/api/hello`, which had become the deploy health check by coincidence rather
-than design, with a purpose-built `GET /api/health`. `.github/workflows/deploy.yml`'s post-deploy
-assertion and `backend/fly.toml`'s own check now curl something honestly named. It still proves
+than design, with a purpose-built `GET /api/health`. `deploy.yml`'s post-deploy
+assertion and `fly.toml`'s own check now curl something honestly named. It still proves
 only that the process answers HTTP, deliberately: no DB ping, no migration state, no deployed
 commit SHA or version - `fly.toml`'s own comment on the check already rules out touching the
 database, because that would flap the machine on a transient Turso blip. A separate readiness or
@@ -3329,3 +3329,55 @@ this way in one sitting**, first as 503s and then, on retry, as two 504 timeouts
 a rare edge. `AssistantCompletionService` is where the SDK's `ApiError` would be inspected;
 mapping a 503 upstream to a 503 outward is small, but it widens the endpoint's documented error
 set and the frontend's failure taxonomy, so it wants its own ticket rather than a drive-by.
+
+## The single-instance invariant has nothing enforcing it (PET-86)
+
+`backend/CLAUDE.md` states "exactly one instance, and it is not a preference", and three behaviours
+rest on it: `@nestjs/throttler`'s in-memory store, the absent cross-process migration lock, and
+`InsightsService`'s `inFlight`/`dirty` process state. PET-86 adds a fourth, since two instances hold
+two replicas of one leased demo account and reconcile them on the five-second sync.
+
+**Fly held it by construction** - a volume attaches to one machine - so the rule was true without
+anybody maintaining it. This backend has been on **Cloud Run** since before PET-86, configured
+`maxScale: 20`, `minScale: 0`, `containerConcurrency: 80`. So the invariant is currently a claim the
+documentation makes and the platform does not honour, and every one of the four failures is quiet:
+no error, no log line, just a rate limit worth twice its number or a write that never pushed.
+
+The fix is `--max-instances=1` on the service, **and** in whatever deploys it, so a later deploy
+cannot drop it again. The second half is the one that matters: setting it by hand fixes today and
+nothing else.
+
+## Nothing in this repository mentions GCP (PET-86)
+
+`deploy.yml`, `deploy-verify.yml`, `deploy-backend.sh`, the `repo-fly` skill, `fly.toml`, the
+Fly-volume steps in `scripts/reset-databases.sh` and `docs/guides/deployment.md` all still drive
+Fly.io. (Those five are named without their directories deliberately: `npm run docs:check` verifies
+that every directory-qualified path a document names resolves, and PET-86 deleted them - so a bare
+filename is a reference to history where a path would be a claim the file is still there.) The backend runs on Cloud Run. So every command
+this repo publishes for deploying, verifying or resetting production does not reach production, and
+a reader following any of them is working on a platform this project left.
+
+**PET-86 closed this, and what it found is worth more than what it wrote.** The port was scoped as
+a GitHub Actions workflow needing Workload Identity Federation or a service-account key - and none
+of that was necessary, because a **Cloud Build trigger already existed**, created on 2026-09-10 and
+linked to the repository through Developer Connect: it builds `backend/Dockerfile` and deploys on
+every push to `main`, entirely on Google's side. So the right move was deleting the Fly tooling
+rather than porting it, and writing a second deploy path in Actions would have raced the trigger.
+
+What remains open is narrower and is recorded here rather than solved: `TRUST_PROXY_HOPS` is `1`
+because Fly's topology wanted that, and Google's front end builds `X-Forwarded-For` differently, so
+the value is unverified. It is silent when wrong and it puts every caller in one rate-limit bucket -
+which since PET-86 includes the IP-keyed `demo` limiter, turning five hand-outs per visitor per hour
+into five for the whole internet.
+
+## The demo pool has no scheduled refresh (PET-86)
+
+A pooled demo account is restored at hand-out when `seeded_at` is null or not today, so the pool
+repairs itself as it is used. What nothing does is refresh an account **nobody asks for**: the tenth
+account can sit untouched for a month, and the first visitor to reach it pays for a restore they did
+not cause - a few seconds on the one page-load the whole feature exists to make fast.
+
+Not worth a scheduler at this scale, and a scheduler is exactly what the lazy design avoids needing.
+If it ever matters, the cheap version is `mise run seed:demo-pool:cloud` on a cron; the honest
+version is a warm-up that restores the least recently leased account in the background, which needs
+somewhere for background work to run that Cloud Run does not currently give this app.

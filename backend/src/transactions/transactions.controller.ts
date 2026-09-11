@@ -112,7 +112,7 @@ export class TransactionsController {
    */
   @Post('scan')
   @UseGuards(ThrottlerGuard)
-  @SkipThrottle({ email: true, ip: true, chat: true })
+  @SkipThrottle({ email: true, ip: true, chat: true, demo: true })
   @UseInterceptors(
     FilesInterceptor('files', MAX_RECEIPT_FILES, receiptUploadOptions),
   )

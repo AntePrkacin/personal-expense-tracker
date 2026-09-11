@@ -24,7 +24,7 @@ async function bootstrap() {
   // the opposite mistake is worse: trusting X-Forwarded-For with nothing in
   // front lets a client choose its own bucket per request, defeating the limiter
   // completely. Numeric, never `true`, which trusts every hop and reopens that
-  // same hole. The deployment sets it (backend/fly.toml).
+  // same hole. The deployment sets it on the Cloud Run service.
   const trustedProxyHops = config.get<number>('TRUST_PROXY_HOPS', 0);
   if (trustedProxyHops > 0) {
     app.set('trust proxy', trustedProxyHops);

@@ -87,7 +87,7 @@ curl http://localhost:3000/api/health
 | [Database](docs/guides/database.md) | Local files, trying the access flow, schema changes, Turso Cloud |
 | [Sending real email](docs/guides/email.md) | MailPace setup and the smoke test |
 | [Seeding dummy data](docs/guides/seeding-dummy-data.md) | Filling a showcase account, locally or in Turso Cloud |
-| [Deployment](docs/guides/deployment.md) | Deploying the backend to Fly.io, and the Vercel settings |
+| [Deployment](docs/guides/deployment.md) | How a push to `main` deploys the backend to Cloud Run, and the Vercel side |
 | [Troubleshooting](docs/guides/troubleshooting.md) | Symptom to cause, for the whole repo |
 | [Contributing](docs/CONTRIBUTING.md) | Branches, commits, the hooks, what CI checks |
 

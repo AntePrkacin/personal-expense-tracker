@@ -109,6 +109,29 @@ export function WelcomeScreen() {
                 would fail both outright while hiding it. */}
             <Button label="Get started" href={ACCESS_ROUTES.setup} />
 
+            {/* **A plain `<a>`, and it has to be** - this is the one link in the app
+                that must not be a `next/link`. `/demo` is a route handler that leases
+                a demo account and may rewrite a few thousand rows, and `<Link>`
+                prefetches: on a production build this href would be fetched as soon as
+                it entered the viewport, so simply loading Welcome would burn a lease
+                for a visitor who never clicked. `prefetch={false}` would also do it,
+                but `ui/Button` takes no such prop and widening a shared component for
+                one caller is the wrong trade - see the rule of three in
+                frontend/CLAUDE.md. A full page load is the right navigation anyway:
+                the handler's whole job is to set a cookie and redirect.
+
+                The classes are `BUTTON_VARIANTS.secondary` written out, which is the
+                one duplication here worth taking. A bare `.btn` is invisible on the
+                `base-200` canvas, and this screen's <main> is `base-100`, so it is
+                safe exactly where it stands - do not copy this markup onto a canvas.
+
+                No Figma frame draws a demo entry point at all, so the label, the
+                placement and the variant are invented and owe a designer, alongside
+                everything else A29 has yet to sign off. */}
+            <a href={ACCESS_ROUTES.demo} className="btn">
+              Try the demo
+            </a>
+
             {/* `link-hover` rather than `link`: no underline is drawn anywhere in
                 the file, so the resting state stays the colour-only one Figma draws
                 and daisyUI adds the underline on hover for free. A colour-only link

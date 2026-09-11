@@ -489,6 +489,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/demo/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lease a demo account and start a session on it.
+         * @description Hands the caller their own pre-seeded account out of a small pool, restoring it to the showcase fixture first unless it is untouched and was seeded today. No credential is required and none is accepted. **503** is the one ordinary rejection: every pooled account is leased to somebody else, and a later attempt will succeed as leases elapse. **404** means this deployment has the demo disabled.
+         */
+        post: operations["DemoController_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1238,6 +1258,28 @@ export interface components {
             createdAt: string;
             /** @description In render order, oldest first. */
             messages: components["schemas"]["AssistantMessageDto"][];
+        };
+        DemoSessionResponseDto: {
+            /**
+             * @description The raw session token, to be sent back as `Authorization: Bearer <token>`.
+             *
+             *     The only place it ever appears in a response - the server keeps its hash.
+             *     The frontend puts it in an httpOnly, first-party cookie and forwards it
+             *     server-side; it must never reach client-side JavaScript.
+             */
+            token: string;
+            /**
+             * @description ISO 8601. Fixed at issue: using the session does not extend it.
+             *
+             *     **This is the session's life, not the lease's.** A session runs for
+             *     `SESSION_TTL_D` days while the lease runs for `DEMO_LEASE_TTL_M` minutes,
+             *     so a visitor who leaves a tab open keeps a working session onto an account
+             *     that has since been handed to somebody else and rewritten under them. That
+             *     is accepted rather than overlooked: shortening the session to the lease
+             *     would sign a visitor out mid-demo, and the data they would see afterwards is
+             *     the same fixture they started with.
+             */
+            expiresAt: string;
         };
     };
     responses: never;
@@ -2494,6 +2536,52 @@ export interface operations {
             };
             /** @description No such resource. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+        };
+    };
+    DemoController_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoSessionResponseDto"];
+                };
+            };
+            /** @description No such resource. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description Rate limited. Refused by the throttler guard, which runs before the request body is ever validated. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponseDto"];
+                };
+            };
+            /** @description The feature is not configured on this deployment. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

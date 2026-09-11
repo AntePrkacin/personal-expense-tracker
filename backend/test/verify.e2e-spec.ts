@@ -267,7 +267,9 @@ describe('Verification and sessions (e2e)', () => {
       expect(user.onboardingPayload).toBeNull();
       expect(user.dbUrl).toBeNull();
       expect(user.dbAuthToken).toBeNull();
-      expect(user.dbName).toBe(`spendifico-user-${user.id}`);
+      // Hyphens stripped from the id, to stay inside Turso's 51-character name
+      // limit. See database.constants.ts.
+      expect(user.dbName).toBe(`expenso-user-${user.id.replaceAll('-', '')}`);
     });
 
     it('refuses the same link a second time, creating no second session', async () => {

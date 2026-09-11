@@ -16,7 +16,17 @@ jest.mock('drizzle-orm/tursodatabase-sync/migrator');
 jest.mock('node:fs/promises');
 
 const USER_ID = '019fbd57-ca52-7509-bc0d-fee63ffc5294';
-const USER_DB_PATH = `/tmp/spendifico-test/users/spendifico-user-${USER_ID}.db`;
+/**
+ * The name `userDbName` derives, written out rather than re-derived.
+ *
+ * A literal so this file states the format independently: importing the helper
+ * would make every assertion below compare the function against itself. The
+ * hyphens are stripped to keep the name well inside Turso's 51-character limit
+ * - see database.constants.ts, which carries the arithmetic and the defect that
+ * produced it.
+ */
+const USER_DB_NAME = 'expenso-user-019fbd57ca527509bc0dfee63ffc5294';
+const USER_DB_PATH = `/tmp/spendifico-test/users/${USER_DB_NAME}.db`;
 
 const openLocalMock = jest.mocked(openLocalDatabase);
 const openCloudMock = jest.mocked(openCloudDatabase);
@@ -124,7 +134,7 @@ describe('UserDatabaseService', () => {
 
     it('provisions without touching the Platform API', async () => {
       await expect(build().provisionUserDb(USER_ID)).resolves.toEqual({
-        dbName: `spendifico-user-${USER_ID}`,
+        dbName: USER_DB_NAME,
         dbUrl: null,
         dbAuthToken: null,
       });
@@ -145,7 +155,7 @@ describe('UserDatabaseService', () => {
     it("connects with that one user's stored url and token, not a shared one", async () => {
       centralRows = [
         {
-          dbUrl: 'spendifico-user-x.aws.turso.io',
+          dbUrl: 'expenso-user-x.aws.turso.io',
           dbAuthToken: 'per-user-token',
         },
       ];
@@ -154,7 +164,7 @@ describe('UserDatabaseService', () => {
 
       expect(openCloudMock).toHaveBeenCalledWith({
         path: USER_DB_PATH,
-        url: 'spendifico-user-x.aws.turso.io',
+        url: 'expenso-user-x.aws.turso.io',
         authToken: 'per-user-token',
         syncIntervalS: 60,
       });
@@ -171,14 +181,14 @@ describe('UserDatabaseService', () => {
 
     it('creates the database and mints its token when provisioning', async () => {
       createUserDatabase.mockResolvedValue({
-        dbName: `spendifico-user-${USER_ID}`,
-        hostname: 'spendifico-user-x.aws.turso.io',
+        dbName: USER_DB_NAME,
+        hostname: 'expenso-user-x.aws.turso.io',
       });
       mintDbToken.mockResolvedValue('per-user-token');
 
       await expect(build().provisionUserDb(USER_ID)).resolves.toEqual({
-        dbName: `spendifico-user-${USER_ID}`,
-        dbUrl: 'spendifico-user-x.aws.turso.io',
+        dbName: USER_DB_NAME,
+        dbUrl: 'expenso-user-x.aws.turso.io',
         dbAuthToken: 'per-user-token',
       });
     });
@@ -190,9 +200,7 @@ describe('UserDatabaseService', () => {
 
       await build().deleteUserDb(USER_ID);
 
-      expect(deleteUserDatabase).toHaveBeenCalledWith(
-        `spendifico-user-${USER_ID}`,
-      );
+      expect(deleteUserDatabase).toHaveBeenCalledWith(USER_DB_NAME);
     });
 
     it('removes every sibling either engine can have left behind, including the sync-only ones', async () => {

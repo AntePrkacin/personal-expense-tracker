@@ -2282,6 +2282,54 @@ just after hydration into twenty announcements before the reader had reached a m
 visible in dark - `frontend/CLAUDE.md`'s trap list owns that one, including the comment whose wrong
 token let it through.
 
+## The demo entry point
+
+**`app/demo/route.ts` is the shareable link a recruiter opens, and the second handler in this app
+to set a session cookie.** It POSTs `/api/demo/session`, which leases one of ten pre-seeded demo
+accounts, writes `spendifico.session` on its own response and answers a relative 307 to
+`/dashboard`. `backend/CLAUDE.md`'s `## The demo pool` owns everything on the other side of that
+call.
+
+**The navigation is what forces a handler, exactly as it does for `/auth/verify`** - but here it is
+a link we chose to be shareable rather than one another application builds. A Server Action cannot
+answer a GET navigation, so a link that can be pasted into a README, a message or a CV has to be a
+handler. That is also what buys one implementation for two entry points: Welcome's "Try the demo" is
+a plain anchor to the same URL rather than a second code path.
+
+**This is a GET with side effects, which is the one thing to hold in mind before touching either
+file.** Following it leases an account and may rewrite a couple of thousand rows, so anything that
+fetches a URL without a person deciding to will burn a lease. Three things bound it and no one of
+them is sufficient:
+
+- **Welcome's link is a plain `<a>`, not `ui/Button` and not `next/link`.** `<Link>` prefetches, so
+  on a production build the href would be fetched as soon as it entered the viewport and a visitor
+  who never clicked would take an account out of circulation. **No test can see this** - a `<Link>`
+  and an `<a>` both render an `<a>` in jsdom - so the reasoning lives in a comment beside the
+  element and in `WelcomeScreen.test.tsx`'s own note about what its count assertion cannot catch.
+- **`public/robots.txt` disallows `/demo`**, as a prefix rule rather than `/demo$`: the `$`
+  end-of-match wildcard is a Google and Bing extension, so a stricter crawler reads it literally and
+  the rule matches nothing at all.
+- **The backend's `demo` throttler caps hand-outs per IP**, which is what covers a crawler that
+  ignores the file.
+
+What makes the residue tolerable rather than merely bounded is that a burned lease **heals on its
+own**: it elapses, and the next real visitor's hand-out restores the account before handing it over.
+
+**`busy` and `failed` must stay distinct**, which is the lesson `docs/agents/api-contract.md` draws
+from the assistant's 502. A 503 is the backend saying every pooled account is leased, and a fetch
+that threw never reached the backend at all - so folding the two together would tell a visitor that
+ten people are ahead of them on the strength of no information. `404` is a third case,
+`disabled`, which is a deployment that never had a demo and where "try again" would be a lie.
+
+**The unavailable screen offers no "try again" control**, deliberately, even for `busy` where
+retrying is the advice. A button there would point back at a GET with side effects, so a visitor
+tapping it would lease and rewrite accounts as fast as the throttler allowed. The copy says to try
+again and the browser's own reload is how; the one control forward is "Create an account".
+
+**No Figma frame draws any of this** - not the entry point, not the unavailable state - so every
+string, the placement and the variant are invented and join what A29 owes a designer, alongside the
+verify-failure screen and the assistant's.
+
 ## Not built here
 
 `frontend/CLAUDE.md` carries the list, under its own `## Not built here`, and it loads

@@ -94,13 +94,28 @@ describe('the two entry routes', () => {
     );
   });
 
-  it('renders both exits as links and no buttons at all', () => {
-    // Both change the page location, so both have to be <a>. This is the assertion
-    // that catches "Get started" being regressed to a <button> with a router.push,
-    // which would force 'use client' onto the whole screen.
+  it('sends "Try the demo" to the demo handler', () => {
+    // PET-86. No frame draws this exit, so the label and the destination are both
+    // ours; the href is hard-coded here for the same reason the two above are.
     render(<WelcomeScreen />);
 
-    expect(screen.getAllByRole('link')).toHaveLength(2);
+    expect(screen.getByRole('link', { name: 'Try the demo' })).toHaveAttribute('href', '/demo');
+  });
+
+  it('renders all three exits as links and no buttons at all', () => {
+    // All three change the page location, so all three have to be <a>. This is the
+    // assertion that catches "Get started" being regressed to a <button> with a
+    // router.push, which would force 'use client' onto the whole screen.
+    //
+    // **What it cannot catch is the one that matters most for the demo exit.** A
+    // `next/link` and a plain `<a>` both render an <a> here, so nothing in jsdom can
+    // see that "Try the demo" must not be prefetched - and a `<Link>` would fetch
+    // `/demo` as soon as it entered the viewport, leasing an account for a visitor who
+    // never clicked. The reasoning is in WelcomeScreen.tsx beside the element, because
+    // a comment is the only place it can live.
+    render(<WelcomeScreen />);
+
+    expect(screen.getAllByRole('link')).toHaveLength(3);
     expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 });

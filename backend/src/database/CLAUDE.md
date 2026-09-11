@@ -57,7 +57,7 @@ per-user ones itself, at **verification** rather than registration - see
 
 **The Turso CLI cannot address a per-user database, and fails silently at it.** `turso db
 shell` and `turso db destroy` resolve names against a local name cache in
-`~/.config/turso/settings.json`, not the API, so every `spendifico-user-<uuid>` database -
+`~/.config/turso/settings.json`, not the API, so every `expenso-user-<uuid>` database -
 created by the backend through the Platform API - is invisible to them: `db shell` says
 "database not found" and `db destroy` exits 0 having deleted nothing. `db show` and `db
 list` hit the API and work on the same name. Use the Turso MCP server (`plugin:turso`)
@@ -106,6 +106,56 @@ token: minting it scoped to the group with just `db:create`, `db:delete` and
 its own minted data-plane token, stored in the central row and never serialized into an API
 response. By MVP decision every Turso token is created with **Expires: NEVER**: no refresh
 logic anywhere, rotation is a manual ops action.
+
+**A fifth exception arrived with PET-86, and it is a return to the first kind rather than the
+fourth.** `demo_accounts` records which account of the ten-strong demo pool is leased to a visitor
+right now, when that lease dies, and when the fixture was last written to it. It belongs in central
+for exactly the reason `login_links` and `sessions` do, one step earlier than either: the lease
+decides **which session may be issued next**, and there is no per-user database to consult when the
+whole question is which user the caller is about to become. Nothing in the table describes a person -
+every column is the pool's own bookkeeping, and the account it points at is an ordinary user whose
+real data lives in its own database like everybody else's. Read this as sanctioning **pool
+bookkeeping**, on the same terms as the credential tables, and not as a second door for profile data
+any more than PET-64 was.
+
+Three things about it are load-bearing. Leases are reclaimed **lazily, on the request path** - the
+next hand-out expires whatever has run out before it claims anything - because Cloud Run throttles
+CPU between requests and scales to zero, so a `setInterval` sweep would run on no schedule anybody
+could describe; the feature therefore needs no scheduler at all. `lease_expires_at` carries both
+"is it leased" and "until when" in **one column**, because a separate boolean could disagree with
+the timestamp and the disagreement would strand an account nobody can hand out and nothing can
+reclaim. And `seeded_at` exists for a reason that is not tidiness: the showcase fixture positions
+transactions by `(month, occurrence)` and the seed resolves them against **today**, so an account
+seeded in September renders an empty current period in November and an app that looks broken.
+Re-seeding is upkeep rather than repair, and that column is what a hand-out consults to decide
+whether it may skip one.
+
+**The pool is ten because the plan caps databases, not because ten felt right.** Turso's starter plan
+allows 100 databases in the organization with overages disabled, and this is a database-per-user app,
+so an account provisioned per visitor spends that cap from an unauthenticated public route - and the
+failure when it runs out is not a slow demo, it is registration failing for real users. Ten is
+bounded, needs no Platform API call inside a request, and holds `UserDatabaseService`'s deliberately
+unbounded connection cache at ten entries rather than one per visitor who ever clicked.
+
+**A per-user database name carries the uuid with its hyphens removed, and the four characters that
+saves are the whole reason.** The prefix this shipped with, `spendifico-user-`, is 16 characters and
+a UUIDv7 is 36, so that form is 52 against Turso's limit of 51 - and a name one character too long does not degrade, it
+makes provisioning answer 400 and **no account can be created at all**. That is how it shipped:
+the name is built in `database.constants.ts`, stored at registration, and only sent to Turso when an
+account is first verified, so no build, lint, type or test touches it - both suites run in local
+mode, where the name is a filename and no limit applies. It was found by the first real
+provisioning attempt against a Turso organization that enforced the limit, with every gate green.
+PET-86 also renamed the prefix to `expenso-user-`, matching the Cloud Run service, which makes the
+name 45 characters - the hyphens stay stripped for the headroom rather than because the shorter
+prefix still needs them. `database.constants.spec.ts` pins the length against
+`TURSO_MAX_DB_NAME_LENGTH`, which is the cheap half of the guard; the expensive half is provisioning against real Turso, which nothing
+automated here does by design.
+
+**Changing that function is a data migration whenever any account exists.** `users.db_name` stores
+what it returned, and `deleteUserDb` recomputes rather than reading it, so the two must agree - a
+rename with live rows strands every database silently, exactly as the `USER_DB_NAME_PREFIX`
+docblock warns. It was free to change at PET-86 only because the new Turso organization had no
+per-user database at all, which was verified against `turso db list` before the edit.
 
 ## Migrations and schema conventions
 

@@ -41,15 +41,20 @@ Backend variables:
 | `SCAN_RATE_TTL_S`        | `3600`                  | Window length in seconds for the scan limiter         |
 | `CHAT_RATE_LIMIT`        | `20`                    | Assistant chat turns per window, per session user id  |
 | `CHAT_RATE_TTL_S`        | `3600`                  | Window length in seconds for the chat limiter         |
+| `DEMO_ENABLED`           | `false`                 | Whether `POST /api/demo/session` exists; 404 when off  |
+| `DEMO_LEASE_TTL_M`       | `60`                    | How long a visitor keeps a leased demo account         |
+| `DEMO_RATE_LIMIT`        | `5`                     | Demo hand-outs per window, per caller IP               |
+| `DEMO_RATE_TTL_S`        | `3600`                  | Window length in seconds for the demo limiter          |
 | `TRUST_PROXY_HOPS`       | `0`                     | Reverse proxies in front; 0 means `req.ip` is the socket |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.
 
 The defaults above are the **local development** values. What the deployed backend sets instead
-lives in `backend/fly.toml`, and [Deployment](deployment.md) explains the two that carry
-consequences: `FRONTEND_URL`, which is both the single allowed CORS origin and the base of every
-emailed login link, and `TRUST_PROXY_HOPS`, which is what makes `req.ip` the real caller rather
-than Fly's proxy.
+lives on the Cloud Run service itself rather than in any file in this repository - read it with
+`gcloud run services describe expenso` - and [Deployment](deployment.md) explains the three that
+carry consequences: `FRONTEND_URL`, which is the single allowed CORS origin; `TRUST_PROXY_HOPS`,
+which is what makes `req.ip` the real caller rather than Google's front end, and whose value is
+**unverified** since the move off Fly; and `DEMO_ENABLED`, without which `/demo` does not exist.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`.
 A typo or a bad value fails at **boot**, not at first use: the backend validates its environment
@@ -93,8 +98,8 @@ deliberately does not - is inventoried in `backend/CLAUDE.md` under Receipt scan
 says so beside the buttons, and `docs/TODO.md` carries why no per-scan opt-in exists. Use a key
 from an account you are willing to send test receipts through.
 
-For the deployed backend the same key is a Fly secret rather than a `.env` line; see
-[Deployment](deployment.md).
+For the deployed backend the same key is in Secret Manager and bound to the service by reference
+rather than being a `.env` line; see [Deployment](deployment.md).
 
 Note that drizzle-kit never passes through that schema: it reads raw `process.env`, which is why
 the two `drizzle.*.config.ts` files repeat the `DATABASE_DIR` default themselves.
