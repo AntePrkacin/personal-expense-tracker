@@ -39,31 +39,29 @@ test/                 Supertest e2e specs
 
 A new feature is a new folder under `src/` with its own module.
 
-`Dockerfile`, `.dockerignore` and `fly.toml` also live here, because this directory is the
-build context and the Fly app root.
+`Dockerfile` and `.dockerignore` also live here, because this directory is the build context.
 
-## Deploy on Fly.io
+## Deploy on Google Cloud Run
 
-Deployed as the Fly app `spendifico-api` in region `fra`, served at `https://api.spendifico.eu`,
-on **one** machine with a volume
-mounted at `/data`. From this directory:
+Deployed as the Cloud Run service `expenso` in project `expensa-app-26`, region `europe-west1`,
+served at `https://expenso-pjmskjsr7q-ew.a.run.app`, capped at **one** instance.
 
-```sh
-fly deploy --remote-only --ha=false
-```
+**There is no deploy command.** A Cloud Build trigger builds this directory's `Dockerfile` and
+deploys it on every push to `main`, so deploying is merging - which also means new configuration
+has to be set on the service _before_ the code that reads it lands. The single-instance cap is not
+a preference: three things in this app assume it and degrade silently without it.
 
-`--ha=false` is not optional: `fly deploy --ha` defaults to true, and a second machine would be
-a second replica set holding its own unpushed writes. The full runbook, including first-time
-setup and how to verify a deploy, is in [Deployment](../docs/guides/deployment.md); why one
-instance and why the long kill timeout is in [`CLAUDE.md`](CLAUDE.md).
+The runbook, the rollback and the reset sketch are in [Deployment](../docs/guides/deployment.md);
+why one instance is in [`CLAUDE.md`](CLAUDE.md).
 
 ## Guides
 
 - [Commands](../docs/guides/commands.md) - every script here, and what it is for
 - [Configuration](../docs/guides/configuration.md) - every environment variable
 - [Database](../docs/guides/database.md) - local files, schema changes, Turso Cloud
-- [Sending real email](../docs/guides/email.md) - MailPace setup and the smoke test
-- [Deployment](../docs/guides/deployment.md) - Fly.io, and the two Vercel settings
+- [Sending real email](../docs/guides/email.md) - MailPace setup and the smoke test, **unused**: no mail service is configured and login links are logged rather than sent
+- [Demo accounts](../docs/guides/demo-accounts.md) - the pool behind `/demo`, which is how anybody signs in now
+- [Deployment](../docs/guides/deployment.md) - Cloud Run, and the Vercel side
 - [Troubleshooting](../docs/guides/troubleshooting.md)
 
 Why it is built the way it is - why registration provisions no database, why login tokens are

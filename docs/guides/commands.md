@@ -77,8 +77,8 @@ frontend on 4200. The frontend calls the backend, never the reverse.
 ## Repo-wide tasks with mise
 
 Unlike the npm commands above, these run **from the repo root**, and most cover all
-three packages in order. The exception is `deploy-backend`, which dispatches the backend's
-Fly deploy (see [Deployment](deployment.md)).
+three packages in order. **There is no deploy task**: a Cloud Build trigger deploys the backend on
+every push to `main`, so deploying is merging (see [Deployment](deployment.md)).
 
 | Task                         | What it does                                                         |
 | ---------------------------- | -------------------------------------------------------------------- |
@@ -90,7 +90,6 @@ Fly deploy (see [Deployment](deployment.md)).
 | `mise run db:generate`       | Generate Drizzle migrations for both database scopes                 |
 | `mise run api:sync`          | Regenerate the OpenAPI spec, then the frontend types from it         |
 | `mise run skills`            | Refresh Drizzle's committed agent skills after a drizzle-kit bump    |
-| `mise run deploy-backend`    | Dispatch the Fly deploy workflow on `main`, stream it, open the run  |
 | `mise run seed`               | Fill the showcase user with 36 months of data, in local SQLite files |
 | `mise run seed:cloud`         | The same, against Turso Cloud - needs `backend/.env`                 |
 | `mise run seed:fixture`       | Regenerate the committed showcase fixture from the spending model    |
@@ -98,7 +97,7 @@ Fly deploy (see [Deployment](deployment.md)).
 | `mise run seed:demo-pool:cloud` | The same, against Turso Cloud - see [Demo accounts](demo-accounts.md) |
 | `mise run seed:check`         | Measure the showcase spending model without seeding anything         |
 | `mise run reset`              | Delete the local database files under `backend/databases/`           |
-| `mise run reset:cloud`        | Destroy every Turso database and the Fly volume, then redeploy       |
+| `mise run reset:cloud`        | **Disabled** - it reset Fly. See [Deployment](deployment.md) for the manual steps |
 
 `reset:cloud` is destructive and has no undo: it deletes every account in Turso, replaces
 the deployed app's volume and redeploys. It asks for the project name before doing anything,

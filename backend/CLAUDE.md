@@ -1286,9 +1286,14 @@ region `europe-west1`, with the four `TURSO_*` values and `GEMINI_API_KEY` in Se
 constraints they still are - they are properties of a local replica synced to a cloud, not of a
 host - and read the mechanisms as history: `--ha=false`, `fly.toml`, the volume and the autostop
 measurements all describe a platform this no longer runs on. **Nothing in this repository mentions
-GCP**: the deploy workflow, `scripts/deploy-backend.sh`, the `repo-fly` skill and
+GCP**: the deploy workflow, `deploy-backend.sh`, the `repo-fly` skill and
 `docs/guides/deployment.md` all still drive Fly, so the commands they give do not reach production.
-PET-86 records that gap rather than closing it; `docs/TODO.md` carries what porting them needs.
+**PET-86 closed that gap rather than only recording it**, so read the sentence above as the state
+it found: `fly.toml`, the deploy workflow, `deploy-backend.sh`, the
+`mise run deploy-backend` task and the `repo-fly` skill are **deleted**, `deploy-verify.yml` builds
+the image with plain `docker build` and no credentials, `docs/guides/deployment.md` is rewritten,
+`.claude/skills/repo-gcp` replaces the old skill, and `scripts/reset-databases.sh --cloud` refuses
+with an explanation rather than running eleven Fly steps against a platform that has none of them.
 
 **The single-instance invariant currently has nothing enforcing it, and that is the part to act on
 rather than note.** Fly held it by construction - a volume attaches to one machine - so the rule
@@ -1374,11 +1379,32 @@ merely convenient: replaying a client-forged `X-Forwarded-For` prefix through th
 correctly ignores it - a client can only push its own junk further left, never move the boundary -
 while 3 or higher trusts the forged entry as if it were real, reopening the exact hole this
 variable exists to close. So the number tracks Fly's real topology, not a margin of safety; see
-`backend/fly.toml`'s comment on `TRUST_PROXY_HOPS` and `docs/guides/deployment.md`'s per-IP
-verification step for the check that catches a regression here.
+`docs/guides/deployment.md`'s per-IP verification step for the check that catches a regression here.
+(`fly.toml` carried that comment and is deleted; the value now lives on the Cloud Run
+service.)
+
+**And the number is therefore unverified, which is the one thing in this section to act on.** It is
+`1` on Cloud Run because that is what the Fly deployment ended up setting, and Google's front end
+builds `X-Forwarded-For` its own way - so the measurement that produced `2` for Fly says nothing
+about it. A wrong value is silent and puts every caller in one shared bucket. PET-86 makes that
+worse rather than merely untidy: the `demo` throttler is keyed by IP, so an over-trusting or
+under-trusting value turns five hand-outs per visitor per hour into five for the entire internet.
+Re-measure it the way it was measured the first time - reach the deployed API from two networks and
+confirm exhausting one budget leaves the other alone.
+
+**Merging a backend change deploys it, automatically, and this paragraph used to say the exact
+opposite.** A Cloud Build trigger created on 2026-09-10 builds `backend/Dockerfile` and deploys to
+Cloud Run on every push to `main`, so the manual gate below is gone along with the workflow that
+provided it. The reasoning that gate rested on is still sound and now has nothing enforcing it:
+**set any new configuration on the service before merging the code that reads it**, because a
+deploy will boot into whatever is there minutes later with nobody watching. PET-86's own four
+variables are safe by construction - all have defaults and `DEMO_ENABLED` defaults to off, so the
+route 404s until somebody turns it on - which is the shape to copy rather than an accident. The
+pre-commit hook says so on any commit touching `backend/`, and `docs/guides/deployment.md` is the
+procedure. Everything from here to the end of this paragraph is history:
 
 **Merging a backend change does not deploy it - dispatch the workflow, or it stays undeployed.**
-PET-55 added `.github/workflows/deploy.yml`, but its trigger is `workflow_dispatch` only, never a
+PET-55 added `deploy.yml`, but its trigger is `workflow_dispatch` only, never a
 push to `main`: every deploy stops the single machine (see above), and a merge can add a new env
 var with no safe default for a blind auto-deploy to boot into. This already bit the project once,
 before PET-55 existed - merging PET-53 did not redeploy anything, and `main` drifted ahead of

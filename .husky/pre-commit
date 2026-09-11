@@ -12,10 +12,13 @@ npx lint-staged
 # slow). The `backend` job in .github/workflows/ci.yml runs lint, build, unit
 # tests and e2e on every PR. Run them locally if you like.
 #
-# The deploy reminder is a nudge, not a gate: merging a backend change does NOT
-# deploy it (the workflow is manual dispatch only, see backend/CLAUDE.md), so
-# once the change reaches main someone must dispatch the deploy by hand.
+# The deploy reminder is a nudge, not a gate, and PET-86 inverted what it says.
+# It used to read "main does not auto-deploy" and name a manual dispatch, which
+# was true on Fly. A Cloud Build trigger now builds and deploys this backend on
+# every push to main, so the risk ran the other way round the moment the platform
+# changed: the danger is no longer forgetting to deploy, it is merging something
+# that deploys itself before its configuration exists. See backend/CLAUDE.md.
 if echo "$CHANGED" | grep -q '^backend/'; then
   echo "ℹ️  backend/ files changed - consider running: cd backend && npm test"
-  echo "⚠️  backend/ changed - main does not auto-deploy. Once this lands on main, deploy: mise run deploy-backend"
+  echo "⚠️  backend/ changed - merging to main DEPLOYS it automatically. Set any new config on Cloud Run first."
 fi

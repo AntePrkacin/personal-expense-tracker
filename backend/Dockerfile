@@ -1,9 +1,15 @@
-# Container image for the Spendifico API, deployed to Fly.io.
+# Container image for the Spendifico API, deployed to Google Cloud Run.
+#
+# Built by a Cloud Build trigger on every push to main, with `backend` as the
+# build context and this file as -f. The PR job in .github/workflows/deploy-verify.yml
+# runs the identical `docker build -f backend/Dockerfile backend`, which is the
+# pairing to keep in step: building from the repo root would resolve every COPY
+# below differently and pass there while failing here.
 #
 # The build context is THIS directory, not the repo root. backend/ is a
 # self-contained npm project with its own package-lock.json, and nothing in the
 # image needs frontend/ or the root tooling - so every path below is relative to
-# backend/ and `fly deploy` runs from here, like every other command in this app.
+# backend/, which is the build context the trigger and the PR job both pass.
 #
 # Debian slim, never Alpine: the @tursodatabase/* prebuilds target
 # linux-x64-gnu and Alpine is musl, so the mismatch would surface as a
@@ -41,8 +47,9 @@ COPY --from=builder /app/dist ./dist
 # instead - at central open, or on a new user's first authenticated request.
 COPY --from=builder /app/drizzle ./drizzle
 
-# Documentation only; Fly routes to fly.toml's internal_port, and the app's own
-# port comes from the Joi default (3000), not an [env] entry - see fly.toml.
+# Documentation only. Cloud Run injects PORT into the container and routes to it,
+# and main.ts reads PORT through ConfigService - so the platform's value wins and
+# the Joi default (3000) applies only when nothing sets it, as in local runs.
 # Keep this and internal_port in step if either ever moves.
 EXPOSE 3000
 

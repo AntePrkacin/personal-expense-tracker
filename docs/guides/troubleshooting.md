@@ -29,23 +29,26 @@ Symptom first. If something here sends you to another guide, the fix lives there
 | git still asks for a password on push | You answered "No" to the credential-helper prompt. Re-run `gh auth login` and answer Yes   |
 | Two accounts, wrong one is used       | `gh auth switch`                                                                           |
 
-## Deploying to Fly.io
+## Deploying to Cloud Run
 
 Fixes are in [Deployment](deployment.md); this table only maps the symptom.
 
+**The Fly rows that used to fill this table are deleted rather than amended.** Every one of them
+named a machine, a volume or a `fly` command, and none of those exists here - a reader matching a
+symptom against them would be diagnosing a platform this project left.
+
 | Symptom                                                       | Cause                                                                                                                                              |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `fly machine list` shows two machines                         | A deploy ran without `--ha=false`, which defaults to true. Two replica sets is a correctness failure, not a cost surprise. Destroy the spare        |
-| The shutdown log opens but never closes                       | The flush was cut off and writes are being lost on every restart. `kill_timeout` is too low, or you passed `--timeout` to `fly machine stop`        |
-| A migration error naming `drizzle/`, but the app booted fine  | `drizzle/` is missing from the image. It is resolved from `process.cwd()`, so it must sit beside `dist/`. Check `fly ssh console --command "ls /app/drizzle"` |
-| `EACCES` on `mkdir /data/databases` at boot                   | A non-root `USER` was added to the Dockerfile without a `chown`. Fly mounts volumes root-owned                                                      |
-| Every auth request 429s, from every caller                    | `TRUST_PROXY_HOPS` is too low for Fly's real hop count (2), so `req.ip` resolves to a constant and all callers share one bucket                     |
-| A tethered/second-network request still gets 429 against an exhausted bucket | Same root cause. `TRUST_PROXY_HOPS` is not resolving the real caller in production - see the per-IP check in [Deployment](deployment.md) |
-| The app crash-loops right after a `fly secrets unset`         | You unset half a validated pair. `MAILPACE_API_TOKEN` needs `MAIL_FROM`, and the four `TURSO_*` are all-or-none                                     |
-| The machine stays stopped after `fly machine stop`            | Expected: `auto_start_machines` is false on purpose, so traffic will not wake it. Run `fly machine start`                                           |
-| Every request 503s and the machine reads `stopped`             | Same cause, and a deploy does **not** start a stopped machine - it only updates its config. `fly machine start <id>`                                |
-| `fly config show` errors with "no machines configured"        | It reads from a running machine, so it cannot work on an app that has never deployed                                                                |
+| A merge to `main` changed nothing in production               | The Cloud Build trigger failed, or built something else. `gcloud builds list --project=expensa-app-26 --region=europe-west1 --limit=5`              |
+| The new revision serves but boots into the wrong behaviour     | Configuration was not set before the code that reads it merged. Deploying is merging now, so the order is the operator's to keep                    |
+| `maxScale` reads anything but `1`                             | The service was recreated rather than updated. A deploy inherits settings; a recreate loses them. Three things in the app assume one instance        |
+| A migration error naming `drizzle/`, but the app booted fine  | `drizzle/` is missing from the image. It is resolved from `process.cwd()`, so it must sit beside `dist/` - see the `COPY` in `backend/Dockerfile`   |
+| Every auth request 429s, from every caller                    | `TRUST_PROXY_HOPS` is wrong for Google's hop count, so `req.ip` resolves to a constant and all callers share one bucket. The value is **unverified** since the platform move |
+| A tethered/second-network request still gets 429 against an exhausted bucket | Same root cause, and the check that proves it: see the per-IP step in [Deployment](deployment.md)                                     |
+| `/demo` answers 404 on the deployed app                       | `DEMO_ENABLED` is not `true` on the service. See [Demo accounts](demo-accounts.md)                                                                  |
+| `/demo` always answers "the demo is busy"                     | The pool is empty rather than busy - an un-seeded pool has no free accounts. Run `mise run seed:demo-pool:cloud`                                    |
+| The app crash-loops right after a secret change                | You unset half a validated pair. `MAILPACE_API_TOKEN` needs `MAIL_FROM`, and the four `TURSO_*` are all-or-none                                     |
+| Data you deleted in Turso comes back                          | An instance still holding a replica pushed it. Nothing may be deleted while a process that holds a replica of it can run                            |
 | The deployed API rejects the frontend's browser request        | `FRONTEND_URL` allows exactly one CORS origin, and no Vercel preview URL will ever match it                                                        |
-| A login link connects but `/auth/verify` 404s                  | Expected until PET-52 builds that route. Post the token to `POST /api/auth/verify` in the meantime                                                   |
-| CORS fails only for visitors without `www`                    | Exactly one origin is allowed and it is the `www` form. The apex must redirect to `www`, not serve the app                                          |
+| A login link never arrives                                     | Expected, permanently: no mail service is configured, so links are written to the backend's log. `/demo` is how anybody signs in                     |
 

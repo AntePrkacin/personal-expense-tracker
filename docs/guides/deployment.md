@@ -1,462 +1,187 @@
 # Deployment
 
-How to deploy the NestJS backend to Fly.io and point the Vercel frontend at it. Why the
-deployment is shaped this way - one instance, the long kill timeout, the container running as
-root - is in `backend/CLAUDE.md` under Deployment. Variable defaults are in
-[`configuration.md`](configuration.md), which is their single home; this file names variables but
-never restates a default.
+How this app reaches production, what deploys it, and what to do when something is wrong.
 
-The frontend's own Vercel setup is in [`../../frontend/README.md`](../../frontend/README.md).
+**This guide was rewritten for Google Cloud Run by PET-86.** It previously described Fly.io in
+detail, and every command in it has been replaced rather than amended: the app name, the volume,
+the machine, `flyctl` and `fly.toml` all belonged to a platform this project left. Git history has
+the old version if the reasoning is ever wanted. What survived the move unchanged is in
+`backend/CLAUDE.md`, because the constraints there are properties of a local replica synced to a
+cloud rather than of any host.
 
 ## What is deployed
 
-| Thing | Value |
-| --- | --- |
-| Fly app | `spendifico-api`, in the `spendifico` organization |
-| URL | `https://api.spendifico.eu` (also reachable as `https://spendifico-api.fly.dev`) |
-| Region | `fra`, nearest our users. Sync mode keeps Turso off the request path |
-| Machine | One, `shared-cpu-1x` with 512MB and 512MB of swap. Runs continuously |
-| Volume | `spendifico_data`, 1GB, encrypted, mounted at `/data` |
-| Config | `backend/fly.toml`, `backend/Dockerfile`, `backend/.dockerignore` |
+| Half         | Where                                              | How it gets there            |
+| ------------ | -------------------------------------------------- | ---------------------------- |
+| **Backend**  | Cloud Run service `expenso`, project `expensa-app-26`, region `europe-west1` | Cloud Build trigger, on push to `main` |
+| **Frontend** | Vercel, `https://spendifico.vercel.app`            | Vercel's own Git integration |
 
-Everything runs from `backend/`, because that is the build context and where `fly.toml` lives.
+The backend's URL is `https://expenso-pjmskjsr7q-ew.a.run.app`. There is **no custom domain**:
+`spendifico.eu` and `api.spendifico.eu` are gone, and every reference to them in this repo's older
+documents is history rather than configuration.
 
-## The one command
+**There is also no mail service.** Login links are written to the backend's log and delivered to
+nobody, which is why `/demo` exists and is the only working way into the deployed app. See
+[Demo accounts](demo-accounts.md).
 
-```sh
-cd backend
-fly deploy --remote-only --ha=false
-```
+## Deploying is merging
 
-**`--ha=false` is not optional.** `fly deploy --ha` defaults to **true**, so a bare `fly deploy`
-creates a spare machine. There is no `fly.toml` key that prevents this and neither
-`auto_stop_machines` nor `min_machines_running` affects it. A second machine is a second replica
-set holding its own unpushed writes, which is a correctness failure rather than a cost surprise -
-see `backend/CLAUDE.md`. After any deploy, confirm the count:
+**A push to `main` builds and deploys the backend automatically, within minutes.** A Cloud Build
+trigger (`cloudrun-expenso-europe-west1-…`, created 2026-09-10, linked through Developer Connect)
+builds `backend/Dockerfile` with `backend` as its context, pushes the image to Artifact Registry,
+and runs `gcloud run services update expenso --image=…`. Nothing in this repository fires it and
+nothing needs to: there is no deploy workflow, no `mise run deploy-backend`, and no secret in
+GitHub.
 
-```sh
-fly machine list          # must show exactly one machine
-```
+**That inverts the rule this project used to have.** On Fly the deploy was a manual
+`workflow_dispatch`, deliberately, so that a merge adding a new environment variable could not boot
+production into a configuration nobody had set. The reasoning still holds and nothing enforces it
+any more, so it is now a habit rather than a gate:
 
-`--remote-only` is already the default in flyctl 0.4.77; it is passed explicitly so the command
-documents itself and matches what a CI job will run.
+> **Set new configuration on Cloud Run _before_ merging the code that reads it.**
 
-## First-time setup
+The pre-commit hook says so on any commit touching `backend/`.
 
-Ordered so each step can fail for one reason only. Only step 4 needs real secret values.
+Watching a deploy:
 
 ```sh
-# 1. The app. --org is mandatory: fly defaults to `personal`, and a volume cannot
-#    move between organizations afterwards.
-fly apps create spendifico-api --org spendifico
-
-# 2. The config, before anything boots from it. --strict also rejects unrecognized
-#    keys, which is the mistake this file is most likely to introduce.
-cd backend && fly config validate --strict
-
-# 3. The volume. The region must match primary_region or the machine cannot
-#    attach it. Scheduled snapshots are on by default, 5-day retention.
-#    1GB is Fly's minimum and still far more than this app needs. Size up rather
-#    than down if unsure: volumes can be EXTENDED but never shrunk.
-fly volumes create spendifico_data --region fra --size 1
-
-# 4. The secrets, in ONE command. See the warning below.
-fly secrets import        # then paste NAME=VALUE lines, or pipe them in
-
-# 5. Packaging alone, nothing booted. A failure here is the Dockerfile.
-fly deploy --remote-only --build-only
-
-# 6. The real thing.
-fly deploy --remote-only --ha=false
+gcloud builds list --project=expensa-app-26 --region=europe-west1 --limit=5
+gcloud builds log <BUILD_ID> --project=expensa-app-26 --region=europe-west1
 ```
 
-**Set the secrets in one command, never one at a time.** `fly secrets set` restarts every machine,
-and the four `TURSO_*` variables are validated as a group, so setting them individually boots the
-app against an incomplete set and Joi fails it each time. On a brand-new app the values are staged
-until the first deploy, which is why step 4 comes before step 6. To change a secret later without
-an immediate restart, use `fly secrets set --stage` and then `fly secrets deploy`.
+A PR that touches `backend/Dockerfile`, `.dockerignore` or the lockfile runs
+`.github/workflows/deploy-verify.yml`, which builds the image and deploys nothing. That job needs
+no credentials, so it works on a fork, and it is the only thing between a Dockerfile that does not
+build and an unattended failed deploy on `main`.
 
-Six secrets are set: `TURSO_ORG`, `TURSO_ORG_TOKEN`, `TURSO_CENTRAL_DB_URL`,
-`TURSO_CENTRAL_DB_TOKEN`, `MAILPACE_API_TOKEN` and `GEMINI_API_KEY`. Everything else the app reads
-is non-secret and lives in `fly.toml`'s `[env]`. `TURSO_GROUP_TOKEN` is deliberately **not** set,
-because the application never reads it.
+## Exactly one instance, and why it is set by hand
 
-`GEMINI_API_KEY` is the one secret the app boots without: unset, `POST /api/transactions/scan`
-answers 503 and the Add transaction modal's scan buttons report scanning as switched off, while
-every other endpoint works. So omitting it is a deploy that runs with one feature dark rather than
-a deploy that fails, which is exactly the failure a secret list is easy to leave it out of. Where
-to get a key is in [Configuration](configuration.md).
+The architecture is a local replica synced to Turso Cloud, so a second process is a second replica
+set with its own unpushed writes. Three things in the app assume one instance and degrade **quietly**
+without saying so: the rate limiter's in-memory store, the absent cross-process migration lock, and
+the insight runner's in-process state. PET-86 adds a fourth, since two instances would hold two
+replicas of one leased demo account.
 
-Piping from a local `.env` keeps the values out of your shell history and out of any terminal
-transcript, since `fly secrets import` echoes only names:
+Fly held this by construction, because a volume attaches to one machine. **Cloud Run does not**, and
+the service shipped at `maxScale: 20` for a while before anybody noticed. It is now:
 
 ```sh
-rg -N '^(TURSO_ORG|TURSO_ORG_TOKEN|TURSO_CENTRAL_DB_URL|TURSO_CENTRAL_DB_TOKEN|MAILPACE_API_TOKEN|GEMINI_API_KEY)=' \
-  backend/.env | fly secrets import
+gcloud run services update expenso \
+  --project=expensa-app-26 --region=europe-west1 --max-instances=1
 ```
 
-Check the file first for values carrying a trailing `#` comment or wrapping quotes; either would
-be imported as part of the token.
-
-## Day to day
+Check it:
 
 ```sh
-fly status                     # machine state and current release
-fly logs                       # live tail. Nothing is retained, so copy anything you need
-fly logs --no-tail             # the recent buffer, without holding the terminal
-fly ssh console                # a shell in the running machine
-fly machine list               # ids, and the count that must stay at one
-fly secrets list               # names and digests only, never values
-fly volumes list               # size, region, and which machine holds it
-fly config show                # the config as the RUNNING machine resolved it
+gcloud run services describe expenso --project=expensa-app-26 --region=europe-west1 \
+  --format='value(spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"])'
 ```
 
-`fly config show` reads from a running machine, so it fails on an app that has never deployed. It
-is the only way to confirm what the platform made of the file rather than what you meant: it is
-what shows `kill_timeout = "60s"` arriving as `"1m0s"`.
+**A deploy does not reset it.** The trigger uses `services update --image`, which changes the image
+and inherits every other setting, so the cap survives. Recreating the service from scratch would
+lose it.
 
-## Verifying a deploy
+## Configuration
 
-The first four are the ones that fail silently.
-
-**1. Exactly one machine.** `fly machine list`. Two means `--ha=false` was missed.
-
-**2. The boot sequence.** In `fly logs`, in order: the volume mounting at `/data`, Nest starting,
-`UsersModule dependencies initialized` (that pause is the central replica opening and migrating),
-then `Nest application successfully started`. Observed at about **9 seconds** from machine start
-to listening, of which ~2s is the central replica on a cold volume and ~1s on a warm one. The
-health check's `grace_period` is set to roughly three times that.
-
-**3. The graceful stop. This is the most important check.** Tail the logs in one terminal, then:
+Non-secret values are environment variables on the service; the five secrets come from Secret
+Manager. Both are listed by:
 
 ```sh
-fly machine stop <id>          # BARE. Never pass --timeout
+gcloud run services describe expenso --project=expensa-app-26 --region=europe-west1 \
+  --format='yaml(spec.template.spec.containers[0].env)'
 ```
 
-`fly machine stop --timeout` overrides `kill_timeout` for that stop, which would make this test
-prove nothing. `auto_start_machines` is false, so the machine stays stopped and the test is not
-raced by the next request. Look for both bracket lines:
-
-```text
-INFO Sending signal SIGINT to main child process w/ PID 657
-[DatabaseModule] Flushing and closing 0 user database(s) and the central replica...
-[DatabaseModule] Databases flushed and closed
-INFO Main child exited with signal (with signal 'SIGINT', core dumped? false)
-```
-
-**An opening line with no closing line means the flush was cut off**, writes are being lost on
-every restart, and `kill_timeout` is too low. That is the failure the whole deployment is built
-around, and the two log lines exist so it is visible rather than silent.
-
-**4. Restart without data loss.** `fly machine start <id>`, then read a record back through the
-API - and read the same record from a second client (the Turso MCP server) to prove the push
-happened rather than a stale local file being served. Allow up to one `TURSO_SYNC_INTERVAL_S`
-beat: the cloud copy legitimately lags by up to one interval.
-
-**5. Migrations resolved in the image.** A brand-new user's first authenticated request has to
-create their tables. If `drizzle/` were missing from the image, the migrator throws at that
-moment rather than at boot. Confirm the folder is where the code expects it:
+Setting one:
 
 ```sh
-fly ssh console --command "ls /app/drizzle"     # must list central and user
+gcloud run services update expenso --project=expensa-app-26 --region=europe-west1 \
+  --update-env-vars=DEMO_ENABLED=true
 ```
 
-**6. The engine of a newly provisioned user database.** `turso db list`, and the `TYPE` column
-must read `Turso`, not `SQLite`. Getting this wrong is silent and the only remedy is deleting the
-database. Note the CLI cannot address a per-user database beyond `list`; use the Turso MCP server.
+[Configuration](configuration.md) is the home for the full variable table. Three that carry
+consequences here:
 
-**7. The per-IP throttle is per caller, not per deployment.** This one shipped wrong once, so it
-earns its own check rather than trust. From one network, exhaust the bucket with distinct unknown
-addresses (`login-link` sends nothing for an address that does not exist, so this is safe to run
-against production):
-
-```sh
-for i in $(seq 1 31); do
-  curl -s -o /dev/null -w '%{http_code} ' -X POST https://api.spendifico.eu/api/auth/login-link \
-    -H 'Content-Type: application/json' -d "{\"email\":\"throttle-check-$i@example.com\"}"
-done
-```
-
-Expect 30 × `202` then `429`. Then, from a **second network** (a phone tether is enough - not a
-second browser tab, which shares the same source address), send one more request the same way.
-**202** means the per-caller key works. **429** means `TRUST_PROXY_HOPS` is not resolving the real
-caller, and every request everywhere is landing in one shared bucket - exactly what shipped
-initially with the value set to `1`. See `backend/fly.toml`'s comment on that variable for how the
-correct value was determined and why it must be exact rather than a safe-feeling guess.
-
-## Showcase / demo day
-
-**Raise the per-IP auth limit before any event where a group signs up together, and put it back
-after.** This is an operational toggle, not a code change: the value lives in `fly.toml`'s `[env]`.
-
-`fly.toml` carries two commented profiles, **DEFAULT** and **DEVELOPMENT**, with one of them
-active. That file is the single home for the numbers; this guide deliberately names none of them,
-so read it there rather than trusting a figure quoted anywhere else. **Check which profile is
-active before an event** - a DEVELOPMENT profile left in place is already loose, and a DEFAULT one
-is not enough for a room.
-
-The trap is the per-IP limiter. A room full of people on **one venue WiFi** all share a single
-caller IP, so they share a single per-IP bucket. And a full signup spends **two** of that IP's
-knocks - `register`, then `verify` when the emailed link is opened (`verify` is exempt from the
-per-email limiter but **not** the per-IP one; `session` is exempt from both). So the DEFAULT per-IP
-value lets one shared network complete only about **seven signups per 15 minutes** before everyone
-else gets a `429`. The per-email limiter is not the constraint here, because each person uses their
-own address and knocks it once.
-
-For an event, estimate two-to-four knocks per attendee (signup plus retries), and set the limit
-with headroom - roughly `10 x attendees`:
-
-```sh
-cd backend
-# edit AUTH_RATE_IP_LIMIT in fly.toml's [env], e.g. "500" for a 50-person room
-fly deploy --remote-only --ha=false
-```
-
-Afterwards, restore the DEFAULT profile and redeploy. `AUTH_RATE_TTL_S` (the 15-minute window)
-rarely needs touching. The alternative - asking attendees to use mobile data instead of the shared
-WiFi, giving each their own IP - works but is fragile to rely on.
-
-**A raised limit is a weakened abuse control, and nothing expires it.** The per-email limiter is
-what stops a script sending unlimited login mail to an address somebody else owns, so a temporary
-profile that nobody restores is a standing hole rather than a tidiness problem. Whoever raises it
-owns putting it back, and the deploy that restores it is as necessary as the one that raised it -
-merging alone changes nothing on the machine.
-
-## The machine runs continuously, and autostop was rejected
-
-`auto_stop_machines = "off"`, so responses are always warm (~200ms) and there is never a cold
-start. That costs roughly $3.32/month of machine time, which is accepted.
-
-Autostop was configured, deployed and measured before being reverted, so it does not need
-retesting. It works: the shutdown flush ran on an autostop, and the health check did not keep the
-machine alive. What ruled it out was **~15 seconds** to serve the first request after idling -
-about 9s app, the rest Fly starting the machine - and the fact that Fly gives **no way to tune the
-idle delay**. The proxy's stop loop runs on its own schedule and decides on excess capacity;
-`idle_timeout` is an HTTP connection setting, not this. `backend/CLAUDE.md` has the full reasoning.
-
-`auto_start_machines` is also false, which matters mainly for one thing: a `fly machine stop`
-**stays** stopped, so the graceful-shutdown check below is deterministic. Crashes are covered
-separately by Fly's own restart policy.
-
-The trade-off is sharper than it sounds, and it bit during this ticket: a machine that is stopped
-for any reason **stays down and every request 503s**, because nothing is permitted to wake it. Note
-in particular that **`fly deploy` does not start a stopped machine** - it updates the config and
-leaves it stopped. So after switching autostop off, or any time `fly status` shows `stopped`:
-
-```sh
-fly machine start <id>
-```
+- **`FRONTEND_URL`** is `https://spendifico.vercel.app`, and it has two consumers. `main.ts` uses it
+  as the **only** allowed CORS origin, and `auth.service.ts` uses it as the base of every emailed
+  login link. A wrong value does not fail at boot - Joi only checks that it parses - it fails as a
+  browser that cannot call the API. No Vercel preview deployment will ever pass CORS, since each
+  preview gets its own hostname.
+- **`DATABASE_DIR`** is `/tmp/databases`, and on Cloud Run `/tmp` is memory that vanishes with the
+  instance. That is survivable because Turso Cloud is the source of truth and a cold instance
+  re-bootstraps its replica, but it means every cold start pays a bootstrap and nothing local is
+  durable.
+- **`TRUST_PROXY_HOPS`** is `1`, **and that number was derived for Fly's topology, not Google's.**
+  It has not been re-measured since the move. It decides what `req.ip` means, so if it is wrong
+  every caller lands in one shared rate-limit bucket - and since PET-86 that includes the `demo`
+  limiter, which would make it five hand-outs per hour for the whole world rather than per visitor.
+  Worth an hour's work: reach the deployed API from two networks and confirm one exhausting its
+  budget does not throttle the other.
 
 ## Rolling back
 
-There is no second machine to fail over to, so rollback is the recovery path:
+Revisions are immutable, so a rollback is a traffic change rather than a rebuild:
 
 ```sh
-fly releases                          # version history
-fly deploy --image <previous-image-ref>
+gcloud run revisions list --service=expenso --project=expensa-app-26 --region=europe-west1
+gcloud run services update-traffic expenso --project=expensa-app-26 --region=europe-west1 \
+  --to-revisions=<REVISION>=100
 ```
 
-Worth doing once deliberately, while nothing is at stake, so the procedure is known before it is
-needed. It requires at least two releases to exist.
+Put traffic back on the newest with `--to-latest`. Note a rollback does **not** revert a database
+migration: a user-scope migration runs unattended on first open and there is no down-migration
+anywhere in this project.
 
-## `FRONTEND_URL` is load-bearing
-
-The production frontend is **`https://www.spendifico.eu`**, and that is what `fly.toml` sets.
-Local development does not use this value: the default there is `http://localhost:4200`, per
-[Configuration](configuration.md).
-
-It has **two** consumers, and the second is the one that gets missed:
-
-- `main.ts` uses it as the only allowed CORS origin.
-- `auth.service.ts` uses it as the **base of every emailed login link**.
-
-So a wrong value does not fail at boot - Joi checks only that it parses as a URI - it fails as
-login emails pointing at a dead host, with a 202 and nothing usable in the inbox. Getting it
-exactly right matters more than it looks.
-
-Three consequences of "exactly one origin", all live:
-
-- **`www` is not interchangeable with the apex.** A browser on `https://spendifico.eu` sends that
-  as its `Origin`, and it will not match `https://www.spendifico.eu`. The apex has to **redirect**
-  to `www` rather than serve the app, or those visitors get CORS failures and login links they
-  cannot use.
-- **No Vercel preview deployment will ever pass CORS**, since each preview gets its own hostname.
-- Changing it is an edit plus a deploy:
+## Verifying a deploy
 
 ```sh
-cd backend
-# edit FRONTEND_URL in fly.toml, then
-fly deploy --remote-only --ha=false
+curl -s -o /dev/null -w '%{http_code}\n' https://expenso-pjmskjsr7q-ew.a.run.app/api/health
 ```
 
-**One thing is still missing, so nobody reads this as finished.** Links point at
-`https://www.spendifico.eu/auth/verify?token=...`, and the domain is live as of 2026-08-05 - the
-Vercel project exists, both `www` and the apex resolve and serve, confirmed at the end of the
-Vercel section below. What is not there yet is `/auth/verify` itself: it 404s, correctly, because
-the frontend half of verification is PET-52.
-
-Until it lands, the access flow can only be completed by posting the token to
-`POST /api/auth/verify` directly.
-
-## The backend's own domain
-
-The API answers on **`https://api.spendifico.eu`** as well as `spendifico-api.fly.dev`. Set up
-once, and reproducible:
+200 means the process serves. For anything more, check that the central database really opened -
+the templates read is public and touches it:
 
 ```sh
-cd backend
-fly certs add api.spendifico.eu     # prints the DNS records to add
-fly certs check api.spendifico.eu   # Status = Issued once DNS propagates
+curl -s https://expenso-pjmskjsr7q-ew.a.run.app/api/templates/categories | head -c 200
 ```
 
-Two records at the registrar, which is Porkbun:
+An empty category list from a fresh central database means the boot seed did not run, which is a
+real failure wearing a 200.
 
-| Type   | Host  | Value                                        |
-| ------ | ----- | -------------------------------------------- |
-| `A`    | `api` | Fly's shared IPv4, from `fly ips list`       |
-| `AAAA` | `api` | the app's **dedicated** IPv6, same command   |
+## Resetting the cloud databases
 
-The `AAAA` record is what proves domain ownership, which is why no `_fly-ownership` TXT record is
-needed. Renewal is automatic while those records stand, and `force_https = true` means there is no
-unencrypted path.
+`scripts/reset-databases.sh --cloud` is **disabled**, deliberately. Its eleven steps stop a Fly
+machine, replace a Fly volume and redeploy a pinned Fly image, and none of those exists here. A
+half-ported version would still delete every Turso database - that part is platform-neutral - and
+then fail to stop the live instance pushing its stale replicas back, silently restoring data the
+operator believed they had destroyed. `--local` is unaffected.
 
-One trade-off to know: `fly certs setup` also offers a `CNAME` to a per-app `*.fly.dev` name. The
-`A` record above points at a **shared** IPv4, so if Fly ever changes it the record needs updating
-by hand, where a CNAME would follow. The A/AAAA pair was chosen because the dedicated IPv6 doubles
-as the ownership proof.
+The shape of the procedure by hand, **not rehearsed since the platform move**, so treat it as a
+sketch to think through rather than a script to follow:
+
+1. Cut external traffic so nothing wakes an instance: `--ingress=internal`. CPU is throttled
+   between requests, so an idle instance runs no sync timer.
+2. Wait for the service to scale to zero.
+3. Delete every `spendifico-user-*` database and the central one, then recreate central **with
+   `--tursodb`** - the engine is fixed at creation and getting it wrong is silent.
+4. Mint a new data-plane token and update the `TURSO_CENTRAL_DB_URL` and `TURSO_CENTRAL_DB_TOKEN`
+   secrets.
+5. Deploy a new revision, so the instance starts with an empty `/tmp` and the new secrets.
+6. Restore `--ingress=all`, verify health and templates, then re-seed the demo pool.
+
+The ordering constraint is the whole point and is the same one Fly's version had: **nothing may be
+deleted while a process that holds a replica of it can still run.**
 
 ## The Vercel side
 
-Live as of 2026-08-05, verified against the deployed site rather than assumed:
+`https://spendifico.vercel.app` serves the frontend and answers 200. Its only configuration is
+`BACKEND_URL`, which must point at the Cloud Run URL above and is server-side only - it has no
+`NEXT_PUBLIC_` prefix and must never be given one, because such a variable is inlined into the
+browser bundle and is public forever.
 
-- `https://www.spendifico.eu` answers 200, real markup (`<title>Spendifico</title>`), valid TLS.
-- `https://spendifico.eu` answers a **308** to `https://www.spendifico.eu/` - the apex redirects
-  rather than serving, as required (see below).
-- `x-vercel-id` on every response reads `fra1::...`, confirming the function region actually took
-  rather than only being configured.
-- Root `/` is 200 (Welcome), `/dashboard` and `/setup` are 200 (the shell exists, ungated per
-  PET-52's deferral), `/login` is 404 (PET-12 not shipped) - all exactly what
-  `frontend/CLAUDE.md`'s Not built here list predicts.
+## What is gone
 
-**`BACKEND_URL` cannot be confirmed from outside.** Nothing in `frontend/src` reads `process.env`
-yet (see below), so there is no HTTP behaviour that would prove the variable is set to the right
-value - only the dashboard shows it. Re-verify it once PET-52 adds the first real fetch.
-
-For reference, the steps that got it here:
-
-1. **Create the project.** Import this Git repository, and set **Root Directory** to `frontend`.
-   This is a multi-app repo, so Vercel must build only that folder; it auto-detects the Next.js
-   preset and needs no build-command override.
-2. **Set `BACKEND_URL`** under Settings, Environment Variables, for **Production and Preview**:
-
-   ```text
-   BACKEND_URL=https://api.spendifico.eu
-   ```
-
-   No trailing slash and no `/api` suffix, matching the shape in `frontend/.env.example`, because
-   callers append the path themselves. It is read server-side only and must never gain a
-   `NEXT_PUBLIC_` prefix.
-
-3. **Add the domains.** `www.spendifico.eu` as the production domain, and `spendifico.eu`
-   configured to **redirect** to it rather than serve the app. Then replace the registrar's
-   parking records with whatever Vercel specifies for each - a project-specific `CNAME` for `www`
-   and an `A` record for the apex, both shown only after the domains are added.
-4. **Confirm the function region reads `fra1`** under Settings, Functions, Function Regions. It
-   comes from `frontend/vercel.json`, so it should already be right; confirming it is how you
-   catch the `iad1` default silently winning.
-
-**On the region, match Fly and not Turso.** This is easy to get backwards, because Vercel's own
-guidance is "run functions close to your database". The frontend's data source is not Turso, it is
-this API: the path is browser to Vercel function to Fly, and only Fly talks to Turso. The default
-is `iad1` (Washington), which would put a transatlantic round trip on every server-side fetch.
-Hobby gets one region, freely chosen, and exceeding the plan's count fails the deployment before
-the build rather than silently dropping extras. There is no function failover on Hobby, so a
-`fra1` outage is downtime.
-
-**Why the apex must redirect rather than serve.** The backend allows exactly one CORS origin and
-it is the `www` form, so an apex serving the app directly would break both CORS and every login
-link for those visitors.
-
-**Preview deployments share the production backend, deliberately.** There is no staging API. Since
-`BACKEND_URL` is read server-side, CORS never applies to those fetches, so previews can call the
-production backend perfectly well - but once PET-52 lands, testing on a preview writes real rows
-into the real user directory and sends real mail. Accepted for this project rather than overlooked.
-
-**None of this can be exercised end to end yet.** Nothing in `frontend/src` reads `process.env` at
-all; `BACKEND_URL` is a seam documented in `frontend/src/lib/session.ts` and filled in by PET-52.
-
-## Costs
-
-Pay As You Go, with no fixed plan and **no hard spend cap by default**.
-
-Roughly **$3.47/month**: about $3.32 for the machine running continuously plus **$0.15** for the
-1GB volume, which bills on provisioned capacity even while the machine is stopped. Egress is extra.
-
-Nothing structurally prevents a mistake - a larger VM, a second machine from a missing
-`--ha=false`, an egress spike - from costing more, so a budget alert on the organization is worth
-setting.
-
-Two levers if it ever needs to be cheaper. Dropping the machine to 256MB would save roughly
-$1.34/month of running time, but measured idle RSS is **119MB with no user databases open**, and
-`UserDatabaseService.connections` never evicts - so 256MB (about 210MB usable) leaves little room,
-and the failure mode is an OOM kill, which skips the shutdown flush and loses writes silently.
-The volume cannot go below 1GB. Autostop would cut the machine charge to near zero but was
-rejected for the cold start, as above.
-
-## Automated deploys
-
-Two GitHub Actions workflows (PET-55):
-
-- **`.github/workflows/deploy.yml`** deploys, on **manual dispatch only** (Actions tab, Run
-  workflow). Not on push to `main`, deliberately: every deploy stops the machine, so every trigger
-  is a full replica-flush plus a cold start plus brief downtime, and a merge can add a new env var
-  with no safe default. Press the button after setting any new config. It runs
-  `fly deploy --remote-only --ha=false`, then asserts exactly one started machine and a 200 from
-  `/api/health` before going green - because `fly deploy` does not start a stopped machine and can
-  otherwise report success while the API 503s.
-- **`.github/workflows/deploy-verify.yml`** runs on any PR that touches `backend/Dockerfile`,
-  `backend/.dockerignore` or `backend/fly.toml`: `fly config validate --strict` plus a
-  `--build-only` image build, so a broken config or Dockerfile fails the PR rather than the next
-  deploy. It releases nothing.
-
-Both authenticate with the `FLY_API_TOKEN` repository secret (app-scoped, from
-`fly tokens create deploy`). The manual `fly deploy` above still works and is the fallback; the
-workflow runs the same command.
-
-Rollback stays manual (`fly deploy --image <ref>`), and there is no auto-deploy on merge, so after
-merging backend changes someone still dispatches the deploy - which is also the moment to set any
-new config the merge introduced.
-
-### Dispatching a deploy, step by step
-
-1. **Confirm anything new is configured first.** If the merge added a secret or a `fly.toml`
-   `[env]` value with no safe default, set it now (see First-time setup and Configuration above) -
-   the workflow does not do this for you.
-2. **Open the repo's Actions tab**, then **Deploy backend to Fly.io** in the left sidebar.
-3. **Click "Run workflow"**, confirm the branch dropdown reads **`main`** - the job refuses to run
-   from anything else, see `deploy.yml` - and click the green **Run workflow** button.
-4. **Watch the run.** `Deploy` runs `flyctl deploy --remote-only --ha=false`, then two assertion
-   steps check exactly one `started` machine and a 200 from `/api/health`. A red run means one of
-   those failed, not necessarily the deploy itself - check `fly machine list` and `fly logs`
-   directly if the cause is not obvious from the step output.
-
-Equivalently, from a terminal with `gh` authenticated, the one command does the whole thing -
-dispatch on `main`, wait for the run to register, stream it to completion, and open the run
-page in a browser:
-
-```sh
-mise run deploy-backend
-```
-
-It wraps `scripts/deploy-backend.sh`, which is just the two `gh` calls with the run id resolved
-in between (`gh workflow run` prints none):
-
-```sh
-gh workflow run deploy.yml --ref main
-gh run watch          # follow the run that was just queued
-```
-
-**Dispatching needs write access to the repository, not admin.** GitHub gates `workflow_dispatch`
-(UI and API/CLI alike) on write access to the repo; write, maintain and admin can all trigger it,
-read-only collaborators cannot. It does not require repo-admin, an organization role, or being the
-`FLY_API_TOKEN`'s creator.
+Named so that a reader who finds a reference elsewhere knows it is history rather than something
+they have failed to find: Fly.io and `flyctl`, `fly.toml`, the `Deploy backend to Fly.io`
+workflow, `deploy-backend.sh`, `mise run deploy-backend`, the `spendifico.eu` and
+`api.spendifico.eu` domains, and MailPace. `docs/plans/` still describes all of them, correctly, as
+the record of what shipped at the time.

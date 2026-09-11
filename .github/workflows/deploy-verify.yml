@@ -1,16 +1,27 @@
-name: Verify Fly config and image
+name: Verify the deploy image
 
-# The rest of the repo is strict about drift - two CI jobs exist only to fail on a
-# stale generated artifact - yet nothing checked the Fly config or the image, so a
-# broken fly.toml or Dockerfile could rot until the next manual deploy discovered
-# it. This closes that gap: on any PR that touches the deploy files, validate the
-# config and build the image WITHOUT deploying. Nothing is released here.
+# Builds the backend image on a PR, without deploying anything.
+#
+# **This matters more since PET-86 than it did before it.** It used to be a
+# drift check of the same shape as the two CI jobs that fail on a stale
+# generated artifact: nothing read the Dockerfile between manual deploys, so a
+# broken one could rot until somebody dispatched a release. A Cloud Build
+# trigger now builds this exact file and deploys it to Cloud Run on every push
+# to `main`, which means a Dockerfile that does not build no longer waits to be
+# discovered - it breaks production's next deploy, unattended, minutes after a
+# merge. This job is the only thing standing between that and a green PR.
+#
+# What it checks is narrow and worth stating: **the image builds**, nothing
+# more. It does not run the image, reach Cloud Run, or verify that Cloud Build's
+# own environment agrees - so a build that passes here and fails there is
+# possible, just far less likely than the failure this catches.
 on:
   pull_request:
     paths:
       - backend/Dockerfile
       - backend/.dockerignore
-      - backend/fly.toml
+      - backend/package.json
+      - backend/package-lock.json
       - .github/workflows/deploy-verify.yml
 
 concurrency:
@@ -19,32 +30,24 @@ concurrency:
 
 jobs:
   verify:
-    name: validate config and build image
+    name: build the image
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: backend
-    env:
-      # Both steps reach Fly's API (validation checks against the platform, the
-      # build uses Fly's remote builder), so both need the token. On a fork PR the
-      # secret is absent and this job fails, which is the safe direction.
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
-      # Pinned to a major version tag, matching deploy.yml and the rest of this
-      # repo's actions - @master would let the install step change under us.
-      - uses: superfly/flyctl-actions/setup-flyctl@v1
-        with:
-          version: 0.4.77
-
-      # --strict also rejects unrecognized sections and keys, which is the mistake
-      # a hand-edited fly.toml is most likely to introduce.
-      - name: Validate fly.toml
-        run: flyctl config validate --strict
-
-      # Build the image on Fly's remote builder without releasing it. A failure
-      # here is the Dockerfile, caught on the PR instead of at the next deploy.
+      # **No credentials at all**, which is the improvement PET-86 took while
+      # replacing this job rather than a nicety. The Fly version needed
+      # FLY_API_TOKEN for both of its steps, because it validated against Fly's
+      # platform and built on Fly's remote builder - so the job failed on a fork
+      # PR, where secrets are absent. A plain `docker build` on the runner needs
+      # nothing, runs identically for a fork, and is the same build Cloud Build
+      # performs.
+      #
+      # The context is `backend` and the file is `backend/Dockerfile`, matching
+      # the Cloud Build trigger's own arguments exactly. That pairing is the
+      # thing to keep in step: the image expects a build context rooted at
+      # backend/, so building from the repo root would resolve every COPY
+      # differently and pass here while failing there.
       - name: Build the image (no deploy)
-        run: flyctl deploy --remote-only --build-only
+        run: docker build -f backend/Dockerfile backend

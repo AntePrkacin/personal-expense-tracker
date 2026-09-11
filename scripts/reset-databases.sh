@@ -295,6 +295,47 @@ reset_local() {
 # Cloud reset
 # --------------------------------------------------------------------------
 
+# **PET-86 disabled this arm rather than porting it, and the refusal is the
+# honest answer rather than a stopgap.** Every one of the eleven steps below is
+# built on Fly: it stops a Fly machine to release the lock on the embedded
+# replicas, replaces a Fly volume to discard them, and redeploys a pinned Fly
+# image. This backend runs on Cloud Run now, where none of those three things
+# exists - there is no machine to stop, the replicas live in an ephemeral /tmp
+# that no command replaces, and a deploy is a Cloud Build trigger on push to
+# main rather than a command anybody runs.
+#
+# Two ways to be wrong here, and refusing avoids the worse one. A half-ported
+# script would still delete every Turso database - that part is platform-neutral
+# and works perfectly - and would then fail to make the running instance forget
+# its replicas, so a single request could push thousands of rows of stale state
+# back into a database that was just recreated. That is a silent, unrecoverable
+# restore of data the operator believed they had destroyed. Refusing loses
+# nothing but convenience, because the procedure is documented and the steps are
+# the same steps by hand.
+#
+# So: read docs/guides/deployment.md, and port this only against a platform
+# somebody can actually rehearse the ordering on.
+refuse_cloud() {
+  cat >&2 <<'MSG'
+reset-databases.sh --cloud is disabled.
+
+This script resets Fly.io. The backend runs on Google Cloud Run, where the three
+mechanisms it depends on do not exist: there is no machine to stop, no volume to
+replace, and no command that deploys. Running a half-ported version would delete
+every Turso database and then fail to stop the live instance pushing its stale
+replicas back - restoring data you meant to destroy, silently.
+
+The procedure by hand is in docs/guides/deployment.md, under "Resetting the
+cloud databases". `--local` is unaffected and still works.
+MSG
+  exit 2
+}
+
+# UNREACHABLE since PET-86. `--cloud` dispatches to refuse_cloud() above; nothing
+# calls this. It is kept rather than deleted because it is the only written record
+# of the *ordering* a cloud reset has to obey - stop anything holding a replica
+# before deleting what it replicates - and whoever ports this to Cloud Run will
+# want to read it rather than reinvent it. Every flyctl call below is dead code.
 reset_cloud() {
   # ---- 1. Preflight, before anything is touched --------------------------
   step "1/11 Preflight"
@@ -647,6 +688,6 @@ DONE
 
 case "${1:-}" in
   --local) reset_local ;;
-  --cloud) reset_cloud ;;
+  --cloud) refuse_cloud ;;
   *) usage ;;
 esac

@@ -160,14 +160,18 @@ run = "npm run dev"
 description = "Start both backend and frontend servers together"
 depends = ["dev:backend", "dev:frontend"]
 
-# Fire the workflow_dispatch-only deploy, stream it live (instead of clicking
-# through the Actions tab), and open the run page at the end. `raw = true` hands
-# the terminal to `gh run watch` so its live-redrawing status renders. Always
-# deploys main; the workflow refuses any other ref.
-[tasks."deploy-backend"]
-description = "Dispatch the Fly deploy workflow and stream it to completion"
-raw = true
-run = "scripts/deploy-backend.sh"
+# There is deliberately no deploy task any more (PET-86). `mise run deploy-backend`
+# dispatched a workflow_dispatch-only GitHub Action that ran `flyctl deploy`, and
+# this backend no longer runs on Fly: a Cloud Build trigger in project
+# expensa-app-26 builds backend/Dockerfile and deploys to Cloud Run on every push
+# to main, entirely on Google's side. So deploying is merging, and a task that
+# claimed to deploy would either do nothing or race the trigger.
+#
+# What replaces it is watching rather than firing:
+#
+#   gcloud builds list --project=expensa-app-26 --region=europe-west1 --limit=5
+#
+# docs/guides/deployment.md is the procedure, including how to roll back.
 
 # Two tasks rather than one with a flag, because the two targets are not
 # equally forgiving: a mistaken local run writes a gitignored SQLite file, a

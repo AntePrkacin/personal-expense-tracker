@@ -2028,7 +2028,7 @@ throwaway diagnostic route and replaying it offline against the same Express sta
 now `2`, and it is exact rather than a safe margin: replaying a client-forged prefix through the
 same stack showed 2 correctly ignores it while 3 or higher trusts it, so raising this number
 "to be safe" does the opposite. See `backend/CLAUDE.md` for why it is a hop count rather than a
-boolean and the full replay methodology, `backend/fly.toml`'s comment for the value, and
+boolean and the full replay methodology, `fly.toml`'s comment for the value, and
 `docs/guides/deployment.md`'s per-IP check for how to catch a regression here.
 
 **PET-11 made that second half real, and it is no longer a deployment-time worry.** The
@@ -2186,8 +2186,8 @@ cover, or not serving it in production at all.
 ### `/api/health` still proves liveness only, not readiness
 
 PET-66 replaced `/api/hello`, which had become the deploy health check by coincidence rather
-than design, with a purpose-built `GET /api/health`. `.github/workflows/deploy.yml`'s post-deploy
-assertion and `backend/fly.toml`'s own check now curl something honestly named. It still proves
+than design, with a purpose-built `GET /api/health`. `deploy.yml`'s post-deploy
+assertion and `fly.toml`'s own check now curl something honestly named. It still proves
 only that the process answers HTTP, deliberately: no DB ping, no migration state, no deployed
 commit SHA or version - `fly.toml`'s own comment on the check already rules out touching the
 database, because that would flap the machine on a transient Turso blip. A separate readiness or
@@ -3349,19 +3349,26 @@ nothing else.
 
 ## Nothing in this repository mentions GCP (PET-86)
 
-`.github/workflows/deploy.yml`, `.github/workflows/deploy-verify.yml`, `scripts/deploy-backend.sh`,
-the `repo-fly` skill, `backend/fly.toml`, the Fly-volume steps in `scripts/reset-databases.sh` and
-`docs/guides/deployment.md` all still drive Fly.io. The backend runs on Cloud Run. So every command
+`deploy.yml`, `deploy-verify.yml`, `deploy-backend.sh`, the `repo-fly` skill, `fly.toml`, the
+Fly-volume steps in `scripts/reset-databases.sh` and `docs/guides/deployment.md` all still drive
+Fly.io. (Those five are named without their directories deliberately: `npm run docs:check` verifies
+that every directory-qualified path a document names resolves, and PET-86 deleted them - so a bare
+filename is a reference to history where a path would be a claim the file is still there.) The backend runs on Cloud Run. So every command
 this repo publishes for deploying, verifying or resetting production does not reach production, and
 a reader following any of them is working on a platform this project left.
 
-PET-86 corrected the reasoning in `backend/CLAUDE.md` in place and deliberately did **not** port the
-tooling, which is a ticket of its own rather than a paragraph: a Cloud Run deploy needs either
-Workload Identity Federation or a service-account key in GitHub secrets, and that is IAM work with
-an approval step in front of it rather than a file to write. What the port must carry, so it is not
-rediscovered: `--max-instances=1` passed explicitly (see above), the secrets already in Secret
-Manager rather than re-declared, and the reset script's volume steps rewritten for an ephemeral
-`/tmp` that needs no replacement.
+**PET-86 closed this, and what it found is worth more than what it wrote.** The port was scoped as
+a GitHub Actions workflow needing Workload Identity Federation or a service-account key - and none
+of that was necessary, because a **Cloud Build trigger already existed**, created on 2026-09-10 and
+linked to the repository through Developer Connect: it builds `backend/Dockerfile` and deploys on
+every push to `main`, entirely on Google's side. So the right move was deleting the Fly tooling
+rather than porting it, and writing a second deploy path in Actions would have raced the trigger.
+
+What remains open is narrower and is recorded here rather than solved: `TRUST_PROXY_HOPS` is `1`
+because Fly's topology wanted that, and Google's front end builds `X-Forwarded-For` differently, so
+the value is unverified. It is silent when wrong and it puts every caller in one rate-limit bucket -
+which since PET-86 includes the IP-keyed `demo` limiter, turning five hand-outs per visitor per hour
+into five for the whole internet.
 
 ## The demo pool has no scheduled refresh (PET-86)
 
