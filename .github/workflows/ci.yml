@@ -42,6 +42,23 @@ jobs:
       - name: Build (also the typecheck gate - there is no separate tsc script)
         run: npm run build
 
+      - name: The build output carries every asset the app reads at runtime
+        # **The one class of defect no suite here can see.** Both test suites run
+        # from the source tree, where every asset sits beside the code that reads
+        # it - so a file that `nest build` does not copy into dist/ is present for
+        # every test and absent in production. PET-87 is the worked example:
+        # `DemoSeedService` reads `fixture.data.json` through
+        # `join(__dirname, ...)`, tsc emits only JavaScript, and `/demo` answered
+        # 500 for every visitor while 596 unit and 419 e2e tests stayed green.
+        #
+        # It is checked here rather than in a spec because dist/ only exists
+        # after a build, and a spec asserting it would fail for anybody who had
+        # not run one. Add a line whenever something in the request path starts
+        # reading a file; `nest-cli.json`'s `assets` is what puts it there.
+        run: |
+          test -f dist/scripts/showcase/fixture.data.json \
+            || { echo "::error::dist is missing fixture.data.json - declare it in nest-cli.json assets"; exit 1; }
+
       - name: Committed OpenAPI spec is up to date
         # api:emit, not api:spec: Build has just run `nest build` with the
         # swagger plugin active, and there is no reason to compile twice.

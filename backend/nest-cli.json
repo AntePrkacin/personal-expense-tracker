@@ -4,6 +4,12 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
+    "assets": [
+      {
+        "include": "scripts/showcase/fixture.data.json",
+        "outDir": "dist"
+      }
+    ],
     "plugins": [
       {
         "name": "@nestjs/swagger",

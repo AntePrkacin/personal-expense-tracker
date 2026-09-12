@@ -90,6 +90,18 @@ export type Fixture = {
 };
 
 /** Where the committed fixture lives, relative to this file rather than to `cwd`. */
+/**
+ * **`__dirname`, which means this file has to be shipped beside the compiled
+ * JavaScript, and `nest build` does not do that on its own.**
+ *
+ * Harmless while only CLI scripts read it: `ts-node` resolves `__dirname` to
+ * `src/scripts/showcase/`, where the JSON is. PET-86 moved the read into the
+ * running app, where `__dirname` is `dist/scripts/showcase/` - and tsc emits no
+ * assets, so every demo hand-out answered 500 with `ENOENT` until PET-87
+ * declared it in `nest-cli.json`'s `assets`. Neither test suite can see this,
+ * because both run from the source tree; `.github/workflows/ci.yml` checks the
+ * build output instead.
+ */
 const FIXTURE_PATH = join(__dirname, 'fixture.data.json');
 
 /**

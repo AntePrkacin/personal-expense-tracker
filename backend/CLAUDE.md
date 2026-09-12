@@ -1351,6 +1351,22 @@ the SQL has to be copied beside `dist/`. Forgetting it does not break the build 
 migrator throws on the first migration instead, which for a user database means one person's
 first authenticated request rather than a failed deploy.
 
+**PET-87 is the second instance of that rule, so read it as general rather than as a fact about
+`drizzle/`: `nest build` emits JavaScript and nothing else, so any file the running app reads is
+absent in production unless something puts it there.** The demo pool's restore reads
+`fixture.data.json` through `join(__dirname, ...)`, and `dist/scripts/showcase/` had no JSON in it -
+so `/demo` answered 500 to every visitor. Three things about how it hid are worth more than the fix.
+It was invisible to **both suites**, which run from the source tree where the file sits beside the
+code that reads it, so 596 unit and 419 e2e tests were green on a build that could not work. It was
+invisible for a **day**, because a hand-out only restores an account whose fixture has gone stale -
+so the pool's first day exercised the one path that never opens the file, and the failure arrived on
+a clock rather than on a deploy. And the fix is **`nest-cli.json`'s `assets`** rather than another
+`COPY`, because this path is `__dirname`-relative inside `src/` where `drizzle/` is cwd-relative
+outside it - the same rule, two mechanisms, and reaching for the wrong one leaves `node dist/main`
+broken locally while the image works. `.github/workflows/ci.yml` asserts the build output carries it,
+which is the only place that check can live: `dist/` exists there and does not exist for somebody who
+has not built.
+
 **The container runs as root, deliberately for now.** Note the trap before "fixing" it: Fly
 mounts volumes root-owned, so adding `USER node` without a `chown` or an init step turns the
 `mkdir(DATABASE_DIR)` at boot into a permission error. Either change both together or leave it
