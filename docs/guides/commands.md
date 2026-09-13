@@ -99,10 +99,12 @@ every push to `main`, so deploying is merging (see [Deployment](deployment.md)).
 | `mise run reset`              | Delete the local database files under `backend/databases/`           |
 | `mise run reset:cloud`        | **Disabled** - it reset Fly. See [Deployment](deployment.md) for the manual steps |
 
-`reset:cloud` is destructive and has no undo: it deletes every account in Turso, replaces
-the deployed app's volume and redeploys. It asks for the project name before doing anything,
-and needs a `TURSO_API_TOKEN` the app itself does not have. Read
-[Database](database.md#resetting-everything-to-a-clean-state) before running it.
+`reset:cloud` refuses to run since the move to Cloud Run: its steps stopped a Fly machine and
+replaced its volume, and neither exists any more. The Fly-era version was destructive with no
+undo, and any replacement will be too - it deletes every account in Turso and needs a
+`TURSO_API_TOKEN` the app itself does not have. Read
+[Database](database.md#resetting-everything-to-a-clean-state) and the manual sketch in
+[Deployment](deployment.md) before attempting it by hand.
 
 Every task also has per-package variants when you want just one: `install:repo`,
 `install:backend`, `install:frontend`, `dev:backend`, `dev:frontend`, `update:repo`,

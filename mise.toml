@@ -326,6 +326,6 @@ raw = true
 run = "scripts/reset-databases.sh --local"
 
 [tasks."reset:cloud"]
-description = "Destroy and recreate every Turso database and the Fly volume"
+description = "Disabled since the move to Cloud Run - see docs/guides/deployment.md for the manual steps"
 raw = true
 run = "scripts/reset-databases.sh --cloud"

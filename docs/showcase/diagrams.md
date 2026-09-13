@@ -201,55 +201,53 @@ Five hosted services and one API key, each doing exactly one job.
 ```mermaid
 flowchart TB
     subgraph client["Browser"]
-        B["www.spendifico.eu"]
+        B["spendifico.vercel.app"]
     end
 
     subgraph vercel["Vercel"]
         FE["Next.js frontend<br/>App Router, port 4200 in dev"]
     end
 
-    subgraph fly["Fly.io"]
-        API["NestJS API<br/>api.spendifico.eu"]
-        VOL[("Volume<br/>local sync replicas")]
+    subgraph gcp["Google Cloud, europe-west1"]
+        API["NestJS API on Cloud Run"]
+        TMP[("/tmp<br/>ephemeral sync replicas")]
+        CB["Cloud Build trigger<br/>on every push to main"]
     end
 
     subgraph turso["Turso Cloud"]
-        CDB[("spendifico-app<br/>central directory")]
+        CDB[("expanso<br/>central directory")]
         UDB[("expenso-user-UUID<br/>one per account")]
     end
 
-    MP["MailPace<br/>login@spendifico.eu"]
-    INBOX["spendifico@gmail.com<br/>replies and forwards"]
     GEM["Google Gemini<br/>receipt scanning + assistant"]
-    PB["Porkbun<br/>DNS for spendifico.eu"]
 
     subgraph ci["GitHub Actions"]
         CI["ci.yml<br/>on every PR"]
-        DEP["deploy<br/>manual dispatch only"]
     end
 
     B --> FE
     FE -->|"the only caller"| API
     API --> CDB
     API --> UDB
-    API --- VOL
-    API -->|"login links"| MP
-    MP --> INBOX
+    API --- TMP
     API -->|"scan + chat"| GEM
-    PB -.->|"resolves"| B
-    PB -.->|"resolves"| API
-    DEP -->|"flyctl deploy"| API
-    CI -.->|"gates the merge"| DEP
+    CB -->|"builds backend/Dockerfile, deploys"| API
+    CI -.->|"gates the merge"| CB
 ```
 
 Three things on it are decisions rather than topology:
 
 - **The frontend is the only thing that calls the API.** No other client exists, which is what lets the
   HTTP contract be generated from the backend and committed.
-- **`main` does not auto-deploy the backend.** The deploy is workflow-dispatch only, so an endpoint can
-  be merged and absent from production, which has happened.
-- **The Fly volume holds sync replicas, not the source of truth.** Turso Cloud is authoritative, and a
-  replica that disagrees is repaired by deleting it and letting it re-bootstrap.
+- **`main` auto-deploys the backend.** A Cloud Build trigger builds `backend/Dockerfile` and deploys
+  to Cloud Run on every push, so deploying is merging - and new configuration has to be set on the
+  service *before* the code that reads it is merged.
+- **The instance's `/tmp` holds sync replicas, not the source of truth.** Turso Cloud is authoritative,
+  a cold instance re-bootstraps its replica, and the service is capped at **one instance** because
+  the rate limiter, the migration lock and the demo pool all assume it.
+
+There is no mail service and no custom domain any more: login links are written to the API's log, which
+is why the `/demo` route exists and is the working way into the deployed app.
 
 ---
 
@@ -261,9 +259,9 @@ There is no password field anywhere in the app. Access is an emailed single-use 
 sequenceDiagram
     actor U as User
     participant FE as Frontend (Vercel)
-    participant API as API (Fly.io)
+    participant API as API (Cloud Run)
     participant DB as Central database
-    participant MP as MailPace
+    participant MP as Mailer
     participant IN as Inbox
 
     U->>FE: enters an email address
@@ -314,6 +312,10 @@ Four details on it are the ones people ask about:
 - **"Superseded" is told apart from "invalid"** because it is the one rejection a user can act on, and
   disclosing it enumerates nobody: it is only ever returned to somebody holding a token that was
   genuinely emailed to the account owner.
+
+"Mailer" is a seam rather than a provider. With mail credentials configured it is MailPace over HTTPS;
+in the current deployment nothing is configured, so the link is written to the API's log and delivered
+to nobody, and visitors get in through `/demo` instead. [Email](../guides/email.md) has both halves.
 
 ---
 

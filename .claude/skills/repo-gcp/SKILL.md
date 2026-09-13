@@ -22,7 +22,7 @@ need spelled out but an agent driving `gcloud` must know.
 | Project  | `expensa-app-26`                                   |
 | Service  | `expenso`                                          |
 | Region   | `europe-west1`                                     |
-| URL      | `https://expenso-pjmskjsr7q-ew.a.run.app`          |
+| URL      | `https://expenso-692959542833.europe-west1.run.app` |
 | Frontend | `https://spendifico.vercel.app` (Vercel)           |
 
 Pass `--project` and `--region` explicitly on every command. The account's default project

@@ -51,7 +51,7 @@ database is known. Everything else about a person lives in **their own Turso dat
 holding `profile` (single row), `categories`, `transactions`, the insight tables, PET-72's three
 effective-dated histories (`period_rules`, `budget_history` and `category_cap_history`) and PET-73's
 two assistant tables (`assistant_sessions` and its child `assistant_messages`). In cloud mode the central database and every per-user one
-live in a single group, `TURSO_GROUP` (default `decode-pet`); the backend creates the
+live in a single group, `TURSO_GROUP` (default `default`); the backend creates the
 per-user ones itself, at **verification** rather than registration - see
 `backend/CLAUDE.md`, Access and sessions.
 
