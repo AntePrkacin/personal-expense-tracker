@@ -94,7 +94,9 @@ broken (at most twice per address), and when the last person is in it prints
 ## What you need in place
 
 - **`backend/.env`** with the four `TURSO_*` values, `MAILPACE_API_TOKEN`, `MAIL_FROM` and a
-  `FRONTEND_URL` pointing at production. The operator secrets live in `backend/.env.local`, which
+  `FRONTEND_URL` pointing at production. **The current deployment has no mail provider**, so the
+  invite and watch steps above cannot run as written until one is re-enabled per
+  [Email](../guides/email.md); a session today hands out `/demo` instead. The operator secrets live in `backend/.env.local`, which
   is gitignored; `docs/guides/configuration.md` is the variable table.
 - **The account seeded in cloud mode.** The invite script refuses to mint against an account with
   no database rather than letting ten people race its provisioning.

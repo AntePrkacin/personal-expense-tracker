@@ -59,7 +59,7 @@ why one instance is in [`CLAUDE.md`](CLAUDE.md).
 - [Commands](../docs/guides/commands.md) - every script here, and what it is for
 - [Configuration](../docs/guides/configuration.md) - every environment variable
 - [Database](../docs/guides/database.md) - local files, schema changes, Turso Cloud
-- [Sending real email](../docs/guides/email.md) - MailPace setup and the smoke test, **unused**: no mail service is configured and login links are logged rather than sent
+- [Email](../docs/guides/email.md) - why no mail is sent in the current deployment, and how to re-enable a provider
 - [Demo accounts](../docs/guides/demo-accounts.md) - the pool behind `/demo`, which is how anybody signs in now
 - [Deployment](../docs/guides/deployment.md) - Cloud Run, and the Vercel side
 - [Troubleshooting](../docs/guides/troubleshooting.md)

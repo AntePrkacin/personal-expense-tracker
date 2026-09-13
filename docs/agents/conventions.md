@@ -179,7 +179,8 @@ Fixture data uses the tech spec's own persona, Marko Kovač / `marko@email.com`,
 already the convention everywhere; anything needing a genuinely deliverable address uses
 `spendifico@gmail.com` (see Environment variables). Note that git commit author metadata
 carries a real name and address on every commit by default - a separate, pre-existing
-exposure worth raising rather than quietly rewriting history over.
+exposure worth raising rather than quietly rewriting history over. Author attribution in
+`README.md` and the copyright line in `LICENSE` are the one deliberate exception.
 
 **A ticket's acceptance criteria are amendable.** When an AC conflicts with a repo
 convention or a sounder design, weigh the engineering trade-off and recommend the better

@@ -13,7 +13,7 @@ databases
 
 # Local secrets. ignoreEnvFile is true only for NODE_ENV=test and OPENAPI_EMIT,
 # so a .env inside the image WOULD be read at boot and would silently win over
-# `fly secrets`. .env.example goes too - it is no use in an image, and one fewer
+# the service's own env vars and Secret Manager bindings. .env.example goes too - it is no use in an image, and one fewer
 # pattern to keep correct.
 .env
 .env.*
@@ -22,5 +22,4 @@ databases
 # builder on every deploy, so this is per-deploy time rather than a one-off.
 coverage
 test
-fly.toml
 *.md

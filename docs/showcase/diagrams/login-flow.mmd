@@ -5,12 +5,14 @@
 %%   - only the newest link works: issuing one supersedes every unused link
 %%   - "superseded" is told apart from "invalid" because it is the one rejection
 %%     the user can act on, and it enumerates nobody
+%% "Mailer" is a seam: MailPace over HTTPS when configured, otherwise the link
+%% is logged. The current deployment configures nothing, so /demo is the door.
 sequenceDiagram
     actor U as User
     participant FE as Frontend (Vercel)
-    participant API as API (Fly.io)
+    participant API as API (Cloud Run)
     participant DB as Central database
-    participant MP as MailPace
+    participant MP as Mailer
     participant IN as Inbox
 
     U->>FE: enters an email address

@@ -2,6 +2,7 @@
   "name": "spendifico",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "description": "Repo-level dev tooling (Husky hooks, commitlint, lint-staged, Prettier). The backend/ and frontend/ apps keep their own package.json - this root does not manage them.",
   "engines": {
     "node": ">=22.12.0"

@@ -243,7 +243,9 @@ held it by construction; this backend has been on **Google Cloud Run** since bef
 deploy script, the `repo-fly` skill and `docs/guides/deployment.md` all still drive Fly, so the
 commands they publish do not reach production. The invariant needs `--max-instances=1` on the
 service and in whatever replaces that workflow; the documentation is corrected in place rather than
-left dated, and the tooling is recorded as owed.
+left dated, and the tooling is recorded as owed. Read "no file mentions GCP" as the state PET-86 found:
+the same ticket deleted the Fly workflow, script, task and skill, rewrote `docs/guides/deployment.md`
+for Cloud Run and added `.claude/skills/repo-gcp`, and `--max-instances=1` is set on the service by hand.
 
 ## Repository map
 
@@ -319,7 +321,7 @@ behind a pointer.
   tests, fixtures, docs, commit messages or example payloads: this is a public-facing teaching
   repo, so anything committed is effectively published. Fixtures use the spec's own persona,
   Marko Kovač / `marko@email.com`; anything needing a deliverable address uses
-  `spendifico@gmail.com`.
+  `spendifico@gmail.com`. Author attribution in `README.md` and `LICENSE` is the one exception.
 - **Never give a server-only secret a `NEXT_PUBLIC_` prefix.** Such a variable is inlined into
   the browser bundle and is public forever.
 - **A search that is evidence of an absence has to reach dotfiles.** Use whatever tool you like,

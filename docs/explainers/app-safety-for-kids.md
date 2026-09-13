@@ -76,7 +76,7 @@ the same). Two buckets, both tricks covered.
 
 ### The bug we fixed on 2026-08-05
 
-The bouncer stands **behind a big front gate** (the Fly.io servers), and everyone walks through
+The bouncer stands **behind a big front gate** (the cloud servers), and everyone walks through
 that gate first. Our bouncer was accidentally watching the **gate** instead of the **people**, so
 he thought the whole crowd was **one giant person** sharing **one doorstep bucket**. That meant a
 single busy visitor could empty everyone's coins and lock the whole world out.

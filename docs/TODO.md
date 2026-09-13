@@ -211,7 +211,7 @@ this copy.
 **The wait behind the verify click was measured on 2026-08-05, and the blank page stands.**
 This was the open question A33/A19 left: verify is one blocking POST with no loading state
 designed, so the number decided whether a waiting state had to go to the designer. Measured
-in cloud mode against Turso (group `decode-pet`, `aws-eu-west-1`), with a throwaway central
+in cloud mode against Turso (group `default`, `aws-eu-west-1`), with a throwaway central
 database so nothing touched the real directory:
 
 - **First verification, which provisions:** 2.10s and 1.83s across two accounts. That covers
@@ -1535,6 +1535,9 @@ normalized column rather than separately.
 
 ### The Fly MCP server is declined; the flyctl workflow becomes a repo skill instead
 
+**Fly-era history.** The backend left Fly in PET-86; `.claude/skills/repo-gcp` is the skill this
+entry queued, written for the platform it actually runs on. Kept for the MCP-versus-CLI reasoning.
+
 `flyctl` ships an experimental MCP server behind `fly mcp server --claude`, evaluated on
 2026-08-04 while PET-53 was being set up. Probed over stdio it identifies as `FlyMCP 🚀 0.4.77`
 and exposes 60 tools: `fly-apps-*`, `fly-machine-*` (19 of them), `fly-volumes-*`,
@@ -2030,6 +2033,8 @@ same stack showed 2 correctly ignores it while 3 or higher trusts it, so raising
 "to be safe" does the opposite. See `backend/CLAUDE.md` for why it is a hop count rather than a
 boolean and the full replay methodology, `fly.toml`'s comment for the value, and
 `docs/guides/deployment.md`'s per-IP check for how to catch a regression here.
+**That `2` was Fly's number.** On Cloud Run the service sets `1`, derived for a topology it no
+longer runs on and unverified since the move; the PET-86 entry below is the current statement.
 
 **PET-11 made that second half real, and it is no longer a deployment-time worry.** The
 register call goes through a Next Server Action, so the backend sees the *frontend server's*
@@ -2154,6 +2159,10 @@ entry is about the session's *other* holder never being told.)
 
 ### Autostop is available as a cost lever, and was measured before being rejected
 
+**Fly-era history.** Cloud Run scales to zero by default, so the cold-start cost this entry
+measured is now the normal case rather than an option; the point about a stop landing between a
+202 and a floated mail send still applies to any platform that stops the process.
+
 `auto_stop_machines = "stop"` would take the machine charge from roughly $3.32/month to near
 zero, leaving only the $0.15 volume. It was configured, deployed and measured on 2026-08-05,
 then reverted, and the numbers are recorded so nobody has to repeat the experiment.
@@ -2178,7 +2187,7 @@ warm-up ping during the hours that matter.
 `SwaggerModule.setup` registers its routes on the HTTP adapter rather than as Nest controllers,
 so the global `SessionGuard` never sees them and `/api/docs` needs no bearer. That was harmless
 while the only reader was a developer on localhost; it is a deliberate exposure now that
-`https://spendifico-api.fly.dev/api/docs` answers 200 to anyone. It leaks no data, only the shape
+`https://expenso-pjmskjsr7q-ew.a.run.app/api/docs` answers 200 to anyone. It leaks no data, only the shape
 of the API, and it is genuinely useful to the frontend - but it should be a decision rather than
 something discovered. Gating it would mean serving the document behind a route that the guard does
 cover, or not serving it in production at all.
@@ -3256,6 +3265,9 @@ than discovered.
 
 ### The cloud reset has no dry-run, and no backup behind it
 
+**Fly-era history.** `reset:cloud` refuses to run since the move to Cloud Run; the manual sketch is
+in `docs/guides/deployment.md`. The dry-run and backup arguments carry over to any replacement.
+
 PET-71 turned the manual "wipe everything" sequence into `mise run reset:cloud`
 (`scripts/reset-databases.sh`). What it does not have is a rehearsal: there is no `--dry-run`
 that prints the plan without executing it, so the only preview is the confirmation block
@@ -3279,6 +3291,8 @@ derived central database name would delete nothing and still report success on t
 step later.
 
 ### The cloud reset's failure branches are reviewed, not run
+
+**Fly-era history.** The `flyctl` branches this entry describes are dead code behind a refusal.
 
 `reset:cloud` was run end to end on 2026-08-11 and its happy path is now exercised twice, but
 the `die` branches that run fixed that day are not covered by either run. They fire only when
@@ -3347,11 +3361,16 @@ The fix is `--max-instances=1` on the service, **and** in whatever deploys it, s
 cannot drop it again. The second half is the one that matters: setting it by hand fixes today and
 nothing else.
 
+**The first half is done**: the service carries `--max-instances=1`, set by hand, and
+`docs/guides/deployment.md` shows how to check it. The trigger's `services update --image` inherits
+it, so a deploy does not drop it; recreating the service would. Nothing in this repository or in the
+trigger declares it, which is the half that stays open.
+
 ## Nothing in this repository mentions GCP (PET-86)
 
-`deploy.yml`, `deploy-verify.yml`, `deploy-backend.sh`, the `repo-fly` skill, `fly.toml`, the
+`deploy.yml`, `deploy-backend.sh`, the `repo-fly` skill, `fly.toml`, the
 Fly-volume steps in `scripts/reset-databases.sh` and `docs/guides/deployment.md` all still drive
-Fly.io. (Those five are named without their directories deliberately: `npm run docs:check` verifies
+Fly.io. (Those four deleted files are named without their directories deliberately: `npm run docs:check` verifies
 that every directory-qualified path a document names resolves, and PET-86 deleted them - so a bare
 filename is a reference to history where a path would be a claim the file is still there.) The backend runs on Cloud Run. So every command
 this repo publishes for deploying, verifying or resetting production does not reach production, and

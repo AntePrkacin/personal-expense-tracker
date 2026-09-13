@@ -78,10 +78,12 @@ Only needed if you want real cloud databases. One-time setup with the
 
 ```bash
 turso auth login
-turso group create decode-pet                       # holds every database
+# Every Turso account has a group named `default`; this project uses it and
+# creates no other. `spendifico-app` below is an example name - the live central
+# database happens to be called `expanso`, and the name is yours to choose.
 
 # --tursodb is required, not optional. See the note below.
-turso db create spendifico-app --group decode-pet --tursodb
+turso db create spendifico-app --group default --tursodb
 
 turso db show spendifico-app --url                     # -> TURSO_CENTRAL_DB_URL
 turso db tokens create spendifico-app                  # -> TURSO_CENTRAL_DB_TOKEN
@@ -91,7 +93,7 @@ turso db tokens create spendifico-app                  # -> TURSO_CENTRAL_DB_TOK
 # --org is mandatory whenever --group is given; without it the CLI (v1.0.31)
 # refuses with "Error: --group requires --org" rather than assuming the current
 # org. Your slug is the one `turso org list` marks as current.
-turso auth api-tokens mint spendifico-backend --org <your-org-slug> --group decode-pet \
+turso auth api-tokens mint spendifico-backend --org <your-org-slug> --group default \
   --scope db:create --scope db:delete --scope db:mint-token
 ```
 
@@ -143,14 +145,17 @@ the project name before touching anything. It also refuses to run at all without
 terminal to read that confirmation from, so it cannot be driven from CI, from an agent, or
 through a shell that pipes stdin - run it from a terminal window.
 
-**Why the order inside it matters, and why you should not improvise your own.** The Fly
-volume holds embedded *replicas*, not caches, and they sync in both directions - the client
+**`reset:cloud` is disabled since the move to Cloud Run**; the paragraph below describes the
+Fly-era script, and [Deployment](deployment.md) sketches the manual procedure that replaces it.
+
+**Why the order inside it matters, and why you should not improvise your own.** The deployed
+instance holds embedded *replicas*, not caches, and they sync in both directions - the client
 pushes then pulls on a timer, and the shutdown hook does a final push on every open replica.
-Deleting rows in Turso while the machine is running therefore lets the replica push them
-straight back, so the cleanup silently undoes itself. The script stops the machine before
-the first Turso call and replaces the volume rather than reusing it. It also captures the
-image digest that is already deployed and redeploys exactly that, so a reset can never ship
-whatever happens to be checked out.
+Deleting rows in Turso while an instance is running therefore lets the replica push them
+straight back, so the cleanup silently undoes itself. The Fly-era script stopped the machine
+before the first Turso call and replaced its volume rather than reusing it. It also captured the
+image digest that was already deployed and redeployed exactly that, so a reset could never ship
+whatever happened to be checked out.
 
 **It needs `TURSO_API_TOKEN`, which is not a backend environment variable.** The app's
 `TURSO_ORG_TOKEN` is scoped to `db:create`, `db:delete` and `db:mint-token`, so it cannot
@@ -162,9 +167,8 @@ Tokens, then either export it or add it to `backend/.env.local`, which is gitign
 export TURSO_API_TOKEN=...
 ```
 
-This project's own token is named **`decode-pet-admin`** in the Turso UI, and is scoped to
-the `decode-pet` group rather than to the whole account. That is deliberate and it is
-sufficient: every database the reset touches lives in that group, and the `read` scope is
+Scope the token to the `default` group rather than to the whole account. That is deliberate
+and it is sufficient: every database the reset touches lives in that group, and the `read` scope is
 what satisfies the list call the app's token cannot make. **Rotate it whenever its value has
 been anywhere it should not have been** - a chat transcript, a screenshot, a paste into an
 issue. Replace the value rather than deleting the line, since the next reset needs it.
@@ -179,8 +183,8 @@ database back and asserts `database_type: "tursodb"` before continuing, because 
 is fixed at creation and getting it wrong is silent. Note the readback: the create response
 reports the engine under no key at all, so asserting on the create body cannot work. And the
 freshly minted data-plane token is verified with a real query - retried, because the data
-plane 404s a brand-new namespace for the first few seconds - then written to both the Fly
-secret and every backend env file that already carries the key.
+plane 404s a brand-new namespace for the first few seconds - then written to both the
+platform's secret store and every backend env file that already carries the key.
 
 **The last step waits, and the wait is not slack.** The app migrates and seeds its local
 embedded replica, and pushes to Turso Cloud only on the `TURSO_SYNC_INTERVAL_S` timer. So for

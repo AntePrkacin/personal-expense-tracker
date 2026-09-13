@@ -26,7 +26,7 @@ Backend variables:
 | `TURSO_CENTRAL_DB_URL`   | -                       | Central database URL                                  |
 | `TURSO_CENTRAL_DB_TOKEN` | -                       | Central database data-plane token                     |
 | `TURSO_GROUP_TOKEN`      | -                       | Break-glass CLI/Studio access; the app never reads it |
-| `TURSO_GROUP`            | `decode-pet`            | Group holding the central and all per-user databases  |
+| `TURSO_GROUP`            | `default`               | Group holding the central and all per-user databases  |
 | `TURSO_SYNC_INTERVAL_S`  | `60`                    | Cloud-mode push/pull interval                         |
 | `MAILPACE_API_TOKEN`     | -                       | MailPace server token. Paired with `MAIL_FROM`        |
 | `MAIL_FROM`              | -                       | Sender address, on the DKIM-authorized domain         |

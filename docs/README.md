@@ -15,7 +15,9 @@ in [`agents/conventions.md`](agents/conventions.md).
 | [`guides/commands.md`](guides/commands.md) | Every backend, frontend, root and mise script, and what each is for |
 | [`guides/configuration.md`](guides/configuration.md) | Every environment variable, its default, and what a missing or half-filled value does |
 | [`guides/database.md`](guides/database.md) | Local database files, trying the access flow with curl, changing the schema, Turso Cloud |
-| [`guides/email.md`](guides/email.md) | Turning on real MailPace sends, and the smoke-test procedure |
+| [`guides/email.md`](guides/email.md) | Why the deployment sends no email, and how to re-enable a provider (MailPace) with its smoke test |
+| [`guides/demo-accounts.md`](guides/demo-accounts.md) | The pool of pre-seeded accounts behind `/demo`: seeding, enabling, troubleshooting |
+| [`guides/seeding-dummy-data.md`](guides/seeding-dummy-data.md) | Filling a showcase account with the committed fixture, locally or in Turso Cloud |
 | [`guides/deployment.md`](guides/deployment.md) | How a push to `main` deploys the backend to Cloud Run, verifying it, and the Vercel side |
 | [`guides/troubleshooting.md`](guides/troubleshooting.md) | One symptom-to-cause table for the whole repo |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Branch naming, Conventional Commits, the two hooks, stacked branches, what CI checks |
@@ -34,6 +36,10 @@ into `guides/`, or the pull-request page quietly loses its link to it.
 | [`reviews/`](reviews) | Code reviews kept for the record |
 | [`agents/`](agents) | Cross-cutting notes written for Claude Code: the HTTP contract, the working conventions, the Claude tooling inventory |
 | [`2026-07-30-audit.md`](2026-07-30-audit.md) | A dated `npm audit` triage snapshot |
+| [`showcase/`](showcase) | The final presentation's artifacts: the statistics page, the Mermaid diagrams, the assistant-versus-SQL comparison |
+| [`explainers/`](explainers) | Plain-language explainers and generated preview pages for design decisions |
+| [`screenshots/`](screenshots) | The five screenshots the root README shows |
+| [`migration/`](migration) | How the Jira tickets were moved into GitHub Issues, with the scripts that did it |
 
 Note that `agents/` here is prose for agents to **read**. The subagent definitions the harness
 loads are a different thing and live in `.claude/agents/`.

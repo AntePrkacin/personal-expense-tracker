@@ -16,7 +16,9 @@ cloud rather than of any host.
 | **Backend**  | Cloud Run service `expenso`, project `expensa-app-26`, region `europe-west1` | Cloud Build trigger, on push to `main` |
 | **Frontend** | Vercel, `https://spendifico.vercel.app`            | Vercel's own Git integration |
 
-The backend's URL is `https://expenso-pjmskjsr7q-ew.a.run.app`. There is **no custom domain**:
+The backend's URL is `https://expenso-pjmskjsr7q-ew.a.run.app`. Cloud Run also serves a second,
+deterministic hostname for the same service; this repo names only this one, because the other
+embeds the project number. There is **no custom domain**:
 `spendifico.eu` and `api.spendifico.eu` are gone, and every reference to them in this repo's older
 documents is history rather than configuration.
 
