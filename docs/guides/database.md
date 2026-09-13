@@ -79,7 +79,8 @@ Only needed if you want real cloud databases. One-time setup with the
 ```bash
 turso auth login
 # Every Turso account has a group named `default`; this project uses it and
-# creates no other. This project's live central database is named `expanso`.
+# creates no other. `spendifico-app` below is an example name - the live central
+# database happens to be called `expanso`, and the name is yours to choose.
 
 # --tursodb is required, not optional. See the note below.
 turso db create spendifico-app --group default --tursodb

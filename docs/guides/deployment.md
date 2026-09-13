@@ -16,9 +16,9 @@ cloud rather than of any host.
 | **Backend**  | Cloud Run service `expenso`, project `expensa-app-26`, region `europe-west1` | Cloud Build trigger, on push to `main` |
 | **Frontend** | Vercel, `https://spendifico.vercel.app`            | Vercel's own Git integration |
 
-The backend's URL is `https://expenso-692959542833.europe-west1.run.app`. Cloud Run also serves the
-older-style alias `https://expenso-pjmskjsr7q-ew.a.run.app` for the same service; both are permanent,
-and the first is the one this repo names. There is **no custom domain**:
+The backend's URL is `https://expenso-pjmskjsr7q-ew.a.run.app`. Cloud Run also serves a second,
+deterministic hostname for the same service; this repo names only this one, because the other
+embeds the project number. There is **no custom domain**:
 `spendifico.eu` and `api.spendifico.eu` are gone, and every reference to them in this repo's older
 documents is history rather than configuration.
 
@@ -136,14 +136,14 @@ anywhere in this project.
 ## Verifying a deploy
 
 ```sh
-curl -s -o /dev/null -w '%{http_code}\n' https://expenso-692959542833.europe-west1.run.app/api/health
+curl -s -o /dev/null -w '%{http_code}\n' https://expenso-pjmskjsr7q-ew.a.run.app/api/health
 ```
 
 200 means the process serves. For anything more, check that the central database really opened -
 the templates read is public and touches it:
 
 ```sh
-curl -s https://expenso-692959542833.europe-west1.run.app/api/templates/categories | head -c 200
+curl -s https://expenso-pjmskjsr7q-ew.a.run.app/api/templates/categories | head -c 200
 ```
 
 An empty category list from a fresh central database means the boot seed did not run, which is a

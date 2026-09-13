@@ -1257,8 +1257,9 @@ and all: that file is copied verbatim by `cp .env.example .env`, so uncommenting
 `MAIL_FROM` would leave a fresh clone unable to start.
 
 **Smoke-test mail goes to `spendifico@gmail.com`, never a personal address.** That is the
-project's official inbox, and it is also where `login@spendifico.eu` - this project's
-`MAIL_FROM` - forwards, so one inbox holds both what the app sends and any reply. The
+project's official inbox, and it is also where `login@spendifico.eu` - this project's former
+`MAIL_FROM`, on a domain no longer held - used to forward, so one inbox held both what the app
+sent and any reply. The
 procedure, including running the backend against a throwaway database so a test
 registration never reaches the real user directory, is in `docs/guides/email.md`. Run it whenever the mail path changes: it catches what a mocked spec cannot, the
 standing example being the `Accept: application/json` header that MailPace requires and

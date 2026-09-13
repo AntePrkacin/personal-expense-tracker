@@ -2187,7 +2187,7 @@ warm-up ping during the hours that matter.
 `SwaggerModule.setup` registers its routes on the HTTP adapter rather than as Nest controllers,
 so the global `SessionGuard` never sees them and `/api/docs` needs no bearer. That was harmless
 while the only reader was a developer on localhost; it is a deliberate exposure now that
-`https://expenso-692959542833.europe-west1.run.app/api/docs` answers 200 to anyone. It leaks no data, only the shape
+`https://expenso-pjmskjsr7q-ew.a.run.app/api/docs` answers 200 to anyone. It leaks no data, only the shape
 of the API, and it is genuinely useful to the frontend - but it should be a decision rather than
 something discovered. Gating it would mean serving the document behind a route that the guard does
 cover, or not serving it in production at all.

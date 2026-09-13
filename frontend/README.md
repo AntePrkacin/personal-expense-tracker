@@ -62,11 +62,14 @@ This is a multi-app repo, so Vercel must build only this folder:
 1. Import the Git repo into Vercel.
 2. Set **Root Directory** to `frontend` in Project Settings.
 3. Vercel auto-detects the Next.js preset (build `next build`, no extra config).
-4. Add `BACKEND_URL=https://expenso-692959542833.europe-west1.run.app` under **Environment
-   Variables**, for Production. Other variables, and their defaults, are in
-   [Configuration](../docs/guides/configuration.md). There is no custom domain: the production
-   URL is `https://spendifico.vercel.app`, and the backend allows exactly that one CORS origin, so
-   no preview deployment can call the API.
+4. Add `BACKEND_URL=https://expenso-pjmskjsr7q-ew.a.run.app` under **Environment
+   Variables**, scoped to **Production only**. Other variables, and their defaults, are in
+   [Configuration](../docs/guides/configuration.md). `BACKEND_URL` is read server-side, so CORS
+   does not gate it: a preview deployment given the production value would lease production demo
+   accounts and write production user databases from an unreviewed branch. Leave it unset for
+   Preview, or point Preview at a backend of its own. There is no custom domain; the production
+   URL is `https://spendifico.vercel.app`, and that is the one origin the backend's CORS allows for
+   browser-side requests.
 
 Every push to a connected branch then gets a preview deployment, and merges to the production
 branch promote automatically. The NestJS backend is **not** deployed to Vercel; it ships

@@ -14,14 +14,15 @@ contract generated from the backend keeps them honest with each other.
 
 **[Open the demo](https://spendifico.vercel.app/demo)**. One click, no sign-up, no email. You get
 your own pre-seeded account with three years of spending on it, leased to you for an hour. Add,
-edit and delete whatever you like; nobody else can see it, and the account is restored for the
-next visitor when your lease ends. There are ten such accounts, so a busy moment can answer "the
-demo is busy" for a while.
+edit and delete whatever you like: two visitors at the same time get two different accounts, and
+yours is restored to its starting data for the next visitor when your lease ends. Treat it as a
+demo rather than a private notebook. There are ten such accounts, so a busy moment can answer
+"the demo is busy" for a while.
 
 The app itself is at <https://spendifico.vercel.app>. The API behind it runs on Google Cloud Run at
-<https://expenso-692959542833.europe-west1.run.app>; everything lives under `/api`, so
+<https://expenso-pjmskjsr7q-ew.a.run.app>; everything lives under `/api`, so
 `/api/health` answers and `/` is a 404 by design. Its OpenAPI document is browsable at
-[`/api/docs`](https://expenso-692959542833.europe-west1.run.app/api/docs).
+[`/api/docs`](https://expenso-pjmskjsr7q-ew.a.run.app/api/docs).
 
 **The public deployment sends no email.** The domain and mail service behind the login link are
 gone, so the email form on the live site leads nowhere and `/demo` is the only working way in.

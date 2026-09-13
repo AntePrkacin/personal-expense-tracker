@@ -33,6 +33,15 @@ MailPace implementation, so re-enabling real email is configuration plus a domai
 The implementation talks to [MailPace](https://mailpace.com). Any other HTTP mail API would be a
 new class behind the same `MAILER` token; this section is for the one that exists.
 
+**Before turning sends on, move every seeded account off `spendifico.eu`.** The demo pool
+(`demo1@spendifico.eu` to `demo10@spendifico.eu`) and the showcase account are registered under a
+domain nobody on this project holds any more, and `POST /api/auth/login-link` accepts any registered
+address. Today that is harmless, because the link goes to a log; the moment a provider is
+configured, whoever owns that domain receives working login links for eleven live accounts.
+Re-seed them onto a domain you control first, or make the login-link route refuse pooled accounts.
+Note also that the logging fallback writes the full tokenised link to the backend's log, so anyone
+with log access on the Cloud Run project can sign in to any account that requests a link.
+
 1. **Own a domain and authorize it.** Add the domain in MailPace and complete the DKIM
    authorization it walks you through. Until that is done every send is rejected. The spam
    incident recorded in `docs/TODO.md` (2026-08-05) showed that DKIM alone is not the whole story:
