@@ -3,7 +3,7 @@ import { eq, isNull, ne } from 'drizzle-orm';
 import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import { demoAccounts } from './../src/database/central/schema';
+import { demoAccounts, loginLinks } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
 import { UserDatabaseService } from './../src/database/user-database.service';
@@ -331,4 +331,36 @@ describe('Demo endpoint (e2e)', () => {
 
     await ask().expect(429);
   }, 120_000);
+  /**
+   * The other door into a pooled account, closed.
+   *
+   * These addresses are published in the seed script and in the pool guide, and
+   * this deployment writes every login link to a log rather than sending it -
+   * so a link for a demo account is a session on somebody else's demo data,
+   * outside the lease, outside the hand-out's revoke and outside the lowered
+   * Gemini budget. The **202** is the point as much as the absent row: it is
+   * byte-identical to the answer an unknown address gets, so nothing here tells
+   * an enumerator which addresses are pooled.
+   */
+  it('issues no login link for a pooled account, and says nothing about it', async () => {
+    const userId = await enrolAccount(app, 'demo-seven@example.com');
+    // Enrolling issues one, because provisioning goes through a real
+    // verification - so the assertion below is that this request adds none.
+    const linksFor = async () =>
+      (await centralDb.select().from(loginLinks)).filter(
+        (row) => row.userId === userId,
+      ).length;
+    const before = await linksFor();
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login-link')
+      .send({ email: 'demo-seven@example.com' })
+      .expect(202);
+
+    // `floatLoginLink` is deliberately not awaited by the handler, so a row
+    // written by this request would land after the response rather than before.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    await expect(linksFor()).resolves.toBe(before);
+  }, 60_000);
 });

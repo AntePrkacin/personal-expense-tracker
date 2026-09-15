@@ -1257,6 +1257,30 @@ inherits what the first spent - it bounds the **account**, which is the safer di
 is a quota override in the Gemini key's own Google project, which `docs/guides/deployment.md` owns
 along with the fact that the key is on a **different project from the app** and has billing off.
 
+**A pooled account is refused a login link, and the refusal lives in `AuthService` rather than in a
+controller.** `requestLoginLink` returns before issuing anything when the address belongs to
+`demo_accounts`, which is the same shape the unknown-address arm already has - one empty 202, so
+nothing tells an enumerator which addresses are pooled. Why it matters: these are real accounts with
+real addresses published in the seed script and the pool guide, and this deployment writes links to
+a log rather than sending them, so a link for a demo account is a session **outside** the lease, the
+hand-out's revoke and the lowered Gemini budget, all three of which are properties of `/demo` rather
+than of the account. Nothing legitimate is lost, because `/demo` asks for no address.
+
+**The seed identities are on `example.com`, and that is a safety property.** `demo1@example.com`
+through `demo10@example.com` plus `slavko@example.com`; they were on `spendifico.eu`, which nobody
+here holds any more, so anybody could register it and receive mail for eleven live accounts. RFC
+2606 reserves `example.com` and nobody can register it. `.invalid` and `.example` are reserved too
+and were rejected for a duller reason - they are not in the IANA TLD list the validators check
+against. A pool seeded before the change keeps its old addresses, so re-seeding adds ten accounts
+rather than renaming ten; `docs/guides/demo-accounts.md` says what to do about that.
+
+**`LogMailer` withholds the link when `NODE_ENV=production`**, logging the recipient and the first
+eight characters of the token. On this deployment that class is not a development fallback, it is
+the **only** mail path - so a full tokenised link in Cloud Logging is a working credential for the
+named account, readable by anybody with log-read on the project and subject to that store's own
+retention and exports. Local development keeps the whole link, which is the entire point of the
+fallback.
+
 **`DEMO_ENABLED` defaults to false and a disabled deployment answers 404**, not 403 and not 503: a
 deployment with no demo has no such route, where 403 would confirm the feature exists and 503 would
 promise it is coming back. That default is also what keeps a fresh clone and the e2e suite from

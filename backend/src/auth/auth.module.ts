@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { normalizeEmail } from '../common/normalize-email';
+import { DemoMembershipModule } from '../demo/demo-membership.module';
 import { MailModule } from '../mail/mail.module';
 import { TemplatesModule } from '../templates/templates.module';
 import { UsersModule } from '../users/users.module';
@@ -104,6 +105,10 @@ export function trackByUser(req: Record<string, unknown>): string {
   imports: [
     MailModule,
     UsersModule,
+    // For `DemoMembershipService`: a pooled demo account is refused a login
+    // link, and this module imports nothing itself, so depending on it here
+    // cannot close a cycle back through `DemoModule` - which imports this one.
+    DemoMembershipModule,
     // Both halves of the access flow read it: register resolves the picked
     // template ids against central before stashing them, and verification reads
     // the same rows back to seed the account's categories.

@@ -32,9 +32,21 @@ mise run seed:demo-pool          # local SQLite files under backend/databases/
 mise run seed:demo-pool:cloud    # Turso Cloud, using backend/.env
 ```
 
-This provisions `demo1@spendifico.eu` through `demo10@spendifico.eu` if they do not exist, fills
+This provisions `demo1@example.com` through `demo10@example.com` if they do not exist, fills
 each with the committed fixture, and enrols each into the pool. One application context serves all
 ten, so it costs one boot rather than ten.
+
+**The addresses are on `example.com` deliberately, and they changed.** They were on
+`spendifico.eu`, a domain nobody on this project holds any more, so anybody could have registered it
+and started receiving mail for eleven live accounts; RFC 2606 reserves `example.com` and nobody can
+register it, which makes these permanently undeliverable by construction. A pool seeded before that
+change keeps its old addresses - the seed matches on the address, so re-running it creates ten new
+accounts beside the old ten rather than renaming them. **Tombstone the old entries and their users
+before re-seeding**, or the pool is twenty accounts against a hundred-database cap.
+
+**A pooled account cannot be sent a login link at all**, whatever its address: `POST
+/api/auth/login-link` answers the same empty 202 it gives an unknown address and issues nothing.
+`/demo` is how a pooled account is reached, and it asks for no address.
 
 **Stop your dev server first.** The database engine takes an exclusive file lock, so the seed cannot
 run while a backend is up in either mode. Nothing is written when that happens - the repair is to

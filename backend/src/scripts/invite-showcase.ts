@@ -141,7 +141,15 @@ const SEND_TIMEOUT_MS = 10_000;
 /** Shape only. Deliverability is MailPace's answer, not a regex's. */
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const DEFAULT_SHOWCASE_EMAIL = 'slavko@spendifico.eu';
+/**
+ * Matches `seed-showcase.ts`'s default, and is on `example.com` for its reason:
+ * `spendifico.eu` is unheld, so anybody can register it and receive mail meant
+ * for a real seeded account, where RFC 2606 makes this one permanently
+ * undeliverable. Note what that means for this script - the default address can
+ * never receive an invitation, which is correct: inviting anybody is `--email=`
+ * and `--send` together, both deliberate.
+ */
+const DEFAULT_SHOWCASE_EMAIL = 'slavko@example.com';
 
 interface Flags {
   /** Off by default: minting and mailing real people has to be asked for. */
