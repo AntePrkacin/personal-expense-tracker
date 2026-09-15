@@ -6,10 +6,13 @@ import { newId } from '../common/ids';
 import { mostRecentAnchor } from '../common/period-rules';
 import { UserDatabaseService } from '../database/user-database.service';
 import {
+  assistantMessages,
+  assistantSessions,
   budgetHistory,
   categories,
   categoryCapHistory,
   periodRules,
+  profile,
   transactions,
 } from '../database/user/schema';
 import { InsightsService } from '../insights/insights.service';
@@ -205,6 +208,30 @@ export class DemoSeedService {
         capCents: category.capCents,
       })),
     );
+
+    // **What the visitor typed goes with the rows they typed it about.** The two
+    // assistant tables are the only place in this database that holds a
+    // visitor's own words, and nothing else in the app deletes them: left here,
+    // every question one visitor asked is listed under the History tab for
+    // every visitor of this account afterwards, indefinitely. People type real
+    // finances into demo chat boxes.
+    //
+    // Messages before sessions, because the child rows are the ones with a
+    // parent to be orphaned by. There is no foreign key to enforce it - this
+    // schema declares none - so the order is a courtesy to anybody reading the
+    // tables mid-restore rather than a constraint.
+    await userDb.delete(assistantMessages);
+    await userDb.delete(assistantSessions);
+
+    // **The display name and the currency are the visitor's to change too**, and
+    // Settings lets them. Rewritten rather than left, so the next visitor is not
+    // greeted by the last one's idea of a funny name - and so the fixture's
+    // amounts are read back in the currency they were written for. Everything
+    // else in this row is provisioning's and stays as it is.
+    await userDb.update(profile).set({
+      fullName: fixture.profile.fullName,
+      currency: fixture.profile.currency,
+    });
 
     // One transaction, so a failure part-way through leaves the account with the
     // history it had rather than with whichever chunk landed before the error.

@@ -1210,16 +1210,28 @@ Five things about it are easy to get wrong:
   driver's one connection per database serializes them. Wrapping the pair in `db.transaction()` is
   the defensive move that would actually introduce the bug.
 
-- **The session outlives the lease, deliberately.** A session runs for `SESSION_TTL_D` days and a
-  lease for `DEMO_LEASE_TTL_M` minutes, so a visitor with a tab open keeps a working session onto an
-  account that has since been handed to somebody else and rewritten under them. Shortening the
-  session to the lease would sign a visitor out mid-demo, and what they would see afterwards is the
-  same fixture they started with.
+- **The session dies with the lease, and that reverses an earlier decision here.** This file used
+  to argue that a session outliving its lease was harmless, on the grounds that an abandoned tab
+  would see the fixture it started from. It is not harmless: a visitor who **keeps** the bearer
+  reads and writes every later visitor's transactions, scans and chats on that account for
+  `SESSION_TTL_D` days, which is the one thing the pool exists to make impossible. So a demo
+  session is issued with the lease's own expiry through `issue()`'s optional `expiresAt`, and
+  `revokeAllForUser()` runs both when a lease is reclaimed and again on the claim, before the
+  restore - before, so no kept token can write into the account while the fixture lands on top of
+  it. The cost is the one the old argument named: an abandoned tab is signed out at the hour.
 
 **`DEMO_ENABLED` defaults to false and a disabled deployment answers 404**, not 403 and not 503: a
 deployment with no demo has no such route, where 403 would confirm the feature exists and 503 would
 promise it is coming back. That default is also what keeps a fresh clone and the e2e suite from
 publishing an anonymous session minter by accident.
+
+**The restore clears what the visitor typed, not only what they spent.** The two assistant tables
+are the only place in a user database holding a visitor's own words and nothing else in the app
+deletes them, so `writeFixture()` empties both - messages first - alongside the transactions and the
+three histories. It also rewrites `profile.full_name` and `profile.currency` from the fixture, which
+Settings lets a visitor change. Insight sets need nothing: `generate()` supersedes them. Anything
+new in `src/database/user/schema.ts` that a visitor can write has to be added to that list, and no
+gate will say so.
 
 **The write phase is shared with the CLI rather than duplicated.** `src/scripts/seed-showcase.ts`
 calls the same `DemoSeedService`, which is why a demo account restored at hand-out and one seeded

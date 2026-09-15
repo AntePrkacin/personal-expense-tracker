@@ -1967,9 +1967,16 @@ history, and the sentence about A39 designing no logout is too - the product own
 
 What is left is the operator's half, unchanged. Revoking a session **somebody else** holds still
 means setting `sessions.deleted_at` by hand - `validate()` filters on it, so the next request
-with that token answers 401 - and so does revoking **every** session of one user, which
-`sessions_user_id_idx` exists to make one statement. Neither has tooling. Write it before an
-incident needs it, not during one.
+with that token answers 401. There is no tooling for it. Write it before an incident needs it,
+not during one.
+
+**Revoking every session of one user is no longer hand-written SQL**, though it is still not
+operator tooling. The demo pool's session hardening added `SessionService.revokeAllForUser()`,
+one indexed `UPDATE` over `sessions_user_id_idx`, and the lease calls it whenever an account
+changes hands. Anything written for the operator's case should call that rather than a second
+statement doing the same thing - and should stay a script or an admin route, because on Settings
+it would be a "sign out everywhere" control, which is the feature the paragraph below explains was
+deliberately left out of the footer.
 
 Two things worth knowing before that tooling is written. The endpoint deliberately revokes only
 the presented bearer, so it is not a building block for "sign out everywhere": that wants the

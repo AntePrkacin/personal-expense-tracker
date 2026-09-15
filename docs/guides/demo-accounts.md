@@ -121,10 +121,16 @@ deletion is repaired by re-seeding the pool; a template change needs the fixture
 
 **A visitor is still signed in to an account somebody else now has.**
 
-Expected, and harmless. A session lasts `SESSION_TTL_D` days while a lease lasts minutes, so an
-abandoned tab keeps a working session onto an account that has since been restored under it. What
-that visitor sees is the same fixture they started from. Shortening the session to the lease would
-sign people out mid-demo, which is worse.
+That cannot happen any more, and if you see it, it is a bug rather than the design. A demo session
+now expires with the lease that minted it rather than after `SESSION_TTL_D` days, and every session
+on a pooled account is revoked twice over: when the lease is reclaimed, and again when the account
+is claimed for the next visitor, before a single row of it is rewritten.
+
+What it costs is real and was accepted: an abandoned tab is signed out at the end of the hour rather
+than showing the fixture it started from. What it buys is the claim the README makes - two visitors
+cannot see each other's data - being true of a visitor who keeps their bearer, not only of one who
+closes the tab. Ending a session on a **non-pooled** account is still an operator's manual tombstone;
+`docs/TODO.md` carries that.
 
 ## What a demo visitor can do
 
@@ -132,6 +138,11 @@ Everything a real user can, on their own account: add, edit and delete transacti
 change the budget and the pay day, scan a receipt, and chat to the assistant. Two of those cost real
 money on a shared Gemini key, and both carry their own per-user rate limits; there is no separate
 cap for demo accounts, which is recorded in `docs/TODO.md` rather than solved.
+
+What they leave behind goes with them. The restore rewrites the transactions, all three histories,
+the display name and the currency, and **deletes every assistant conversation** - so one visitor's
+questions are not listed under the next visitor's History tab. Insight sets regenerate on the same
+pass.
 
 They cannot reach anybody else's data. A demo account is an ordinary account with its own database,
 so isolation is the same structural isolation every user has, not a filter somebody remembered to

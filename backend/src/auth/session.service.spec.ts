@@ -81,6 +81,23 @@ describe('SessionService', () => {
       expect(expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 7 * DAY_MS);
     });
 
+    it('takes an explicit expiry over SESSION_TTL_D when one is given', async () => {
+      const chain = queryChain([]);
+      insert.mockReturnValue(chain);
+      const leaseExpiresAt = new Date(Date.now() + 60 * 60_000);
+
+      const { expiresAt } = await service.issue('user-id', {
+        expiresAt: leaseExpiresAt,
+      });
+
+      // The demo pool's only use of it: a session on a pooled account must not
+      // outlive the lease that named it.
+      expect(expiresAt).toBe(leaseExpiresAt);
+      expect(
+        (argsOf(chain, 'values')[0] as { expiresAt: Date }).expiresAt,
+      ).toBe(leaseExpiresAt);
+    });
+
     it('supersedes nothing: concurrent sessions are one per device', async () => {
       insert.mockReturnValue(queryChain([]));
 
@@ -88,6 +105,58 @@ describe('SessionService', () => {
 
       expect(insert).toHaveBeenCalledTimes(1);
       expect(update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('revokeAllForUser', () => {
+    it('tombstones every live session of one user, in one indexed UPDATE', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.revokeAllForUser('user-id');
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(select).not.toHaveBeenCalled();
+      const where = toSql(argsOf(chain, 'where')[0]);
+      // `sessions_user_id_idx` is what makes this one statement rather than a
+      // read and a loop.
+      expect(where).toContain('"user_id" = ?');
+      expect(where).toContain('"deleted_at" is null');
+      expect(paramsOf(argsOf(chain, 'where')[0])).toContain('user-id');
+    });
+
+    it("names no other user, so one account changing hands ends nobody else's session", async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.revokeAllForUser('user-id');
+
+      const params = paramsOf(argsOf(chain, 'where')[0]);
+      // A missing user predicate would revoke every session in the deployment,
+      // and a mocked database would report it as a perfectly successful call.
+      expect(params.filter((value) => typeof value === 'string')).toEqual([
+        'user-id',
+      ]);
+    });
+
+    it('writes the one column validate filters on', async () => {
+      const chain = queryChain([]);
+      update.mockReturnValue(chain);
+
+      await service.revokeAllForUser('user-id');
+
+      expect(Object.keys(argsOf(chain, 'set')[0] as object)).toEqual([
+        'deletedAt',
+      ]);
+    });
+
+    it('resolves when the user had nothing live', async () => {
+      // The ordinary case: most reclaimed leases have no session behind them.
+      update.mockReturnValue(queryChain([]));
+
+      await expect(
+        service.revokeAllForUser('user-id'),
+      ).resolves.toBeUndefined();
     });
   });
 

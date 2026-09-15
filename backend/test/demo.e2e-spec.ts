@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, ne } from 'drizzle-orm';
 import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -7,7 +7,12 @@ import { demoAccounts } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
 import { UserDatabaseService } from './../src/database/user-database.service';
-import { transactions } from './../src/database/user/schema';
+import {
+  assistantMessages,
+  assistantSessions,
+  profile,
+  transactions,
+} from './../src/database/user/schema';
 import { bootDemoApp, enrolAccount, whoami } from './demo-pool';
 
 /**
@@ -152,5 +157,65 @@ describe('Demo endpoint (e2e)', () => {
 
     // Re-stamped, which only happens on a restore that actually ran.
     expect(after.seededAt!.getTime()).toBeGreaterThan(twoDaysAgo.getTime());
+  }, 120_000);
+
+  /**
+   * What the previous visitor leaves behind, and what their bearer can still
+   * reach afterwards.
+   *
+   * Both halves of the isolation the pool promises, in one walk because both
+   * need the same expensive setup: an account leased, used, reclaimed and
+   * handed to somebody else. Every other account is pinned as leased first, so
+   * the second hand-out can only pick this one.
+   */
+  it("ends the last visitor's session and clears what they typed", async () => {
+    const userId = await enrolAccount(app, 'demo-four@example.com');
+
+    // Nothing else is claimable, so the hand-out below is this account's.
+    await centralDb
+      .update(demoAccounts)
+      .set({ leaseExpiresAt: new Date(Date.now() + 60 * 60_000) })
+      .where(ne(demoAccounts.userId, userId));
+
+    const first = await request(app.getHttpServer())
+      .post('/api/demo/session')
+      .expect(200);
+    const staleToken = (first.body as { token: string }).token;
+    expect(await whoami(app, staleToken)).toBe('demo-four@example.com');
+
+    // What a visitor actually leaves: a conversation, and a display name.
+    const userDb = await app.get(UserDatabaseService).getUserDb(userId);
+    await userDb.insert(assistantSessions).values({
+      id: 'chat-session-id',
+      title: 'How much did I spend on rent?',
+    });
+    await userDb.insert(assistantMessages).values({
+      id: 'chat-message-id',
+      sessionId: 'chat-session-id',
+      role: 'user',
+      content: 'How much did I spend on rent?',
+      sortOrder: 0,
+    });
+    await userDb.update(profile).set({ fullName: 'Somebody Else' });
+
+    await centralDb
+      .update(demoAccounts)
+      .set({ leaseExpiresAt: new Date(Date.now() - 1_000) })
+      .where(eq(demoAccounts.userId, userId));
+
+    await request(app.getHttpServer()).post('/api/demo/session').expect(200);
+
+    // The bearer the first visitor kept. Dead from the moment the lease was
+    // reclaimed, which is the whole point: a 30-day session on an account that
+    // changes hands hourly is a 30-day read of everybody who has it next.
+    await request(app.getHttpServer())
+      .get('/api/auth/session')
+      .set('Authorization', `Bearer ${staleToken}`)
+      .expect(401);
+
+    expect(await userDb.select().from(assistantMessages)).toEqual([]);
+    expect(await userDb.select().from(assistantSessions)).toEqual([]);
+    const [restored] = await userDb.select().from(profile);
+    expect(restored.fullName).not.toBe('Somebody Else');
   }, 120_000);
 });
