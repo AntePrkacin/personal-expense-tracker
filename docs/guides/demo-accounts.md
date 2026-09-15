@@ -114,9 +114,10 @@ has its lease released and is handed to nobody until the cause is fixed.
 
 **The logs show the restore failing with "the fixture and the category templates disagree".**
 
-A category template was added, renamed or removed since the fixture was generated, or a visitor
-deleted a category through the UI. The message names which category and which cause. A visitor's
-deletion is repaired by re-seeding the pool; a template change needs the fixture rebuilt
+A category template was added, renamed or removed since the fixture was generated. That is now the
+only cause: a visitor renaming or deleting a category used to produce the same message and no longer
+can, because the restore deletes the account's categories - tombstones included - and rewrites them
+from the templates rather than checking the ones it finds. Fixing it means rebuilding the fixture
 (`docs/guides/seeding-dummy-data.md` covers that, and regenerating alone does not fix it).
 
 **A visitor is still signed in to an account somebody else now has.**

@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { eq, ne } from 'drizzle-orm';
+import { eq, isNull, ne } from 'drizzle-orm';
 import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -10,6 +10,7 @@ import { UserDatabaseService } from './../src/database/user-database.service';
 import {
   assistantMessages,
   assistantSessions,
+  categories,
   profile,
   transactions,
 } from './../src/database/user/schema';
@@ -217,5 +218,78 @@ describe('Demo endpoint (e2e)', () => {
     expect(await userDb.select().from(assistantSessions)).toEqual([]);
     const [restored] = await userDb.select().from(profile);
     expect(restored.fullName).not.toBe('Somebody Else');
+  }, 120_000);
+  /**
+   * The poisoning that used to kill the only door into the deployed app.
+   *
+   * Renaming a category is something every visitor can do from the Manage
+   * categories modal, and the restore used to assert the account's categories
+   * against the fixture *before* rewriting anything - so the rename made every
+   * later hand-out of that account throw, release the lease and answer 500.
+   * Ten renames killed the advertised demo until somebody intervened by hand.
+   */
+  it('restores a renamed category instead of refusing the account', async () => {
+    const userId = await enrolAccount(app, 'demo-five@example.com');
+
+    await centralDb
+      .update(demoAccounts)
+      .set({ leaseExpiresAt: new Date(Date.now() + 60 * 60_000) })
+      .where(ne(demoAccounts.userId, userId));
+
+    // Dirty, as a lease that has been held and reclaimed leaves it. Without
+    // this the account is untouched and seeded today, so the hand-out below
+    // hands it over as it is and proves nothing.
+    await centralDb
+      .update(demoAccounts)
+      .set({ seededAt: null })
+      .where(eq(demoAccounts.userId, userId));
+
+    const userDb = await app.get(UserDatabaseService).getUserDb(userId);
+    const [renamed, tombstoned] = await userDb
+      .select()
+      .from(categories)
+      .where(eq(categories.isFallback, false))
+      .limit(2);
+    await userDb
+      .update(categories)
+      .set({ name: 'Not a fixture category' })
+      .where(eq(categories.id, renamed.id));
+
+    // Deleted the way a visitor's delete does it: a tombstone, not a removal,
+    // so the row is still there to collide with whatever the restore writes.
+    await userDb
+      .update(categories)
+      .set({ deletedAt: new Date() })
+      .where(eq(categories.id, tombstoned.id));
+
+    // A hand-out, and the assertion is simply that it is a 200.
+    const response = await request(app.getHttpServer())
+      .post('/api/demo/session')
+      .expect(200);
+
+    const live = await userDb
+      .select()
+      .from(categories)
+      .where(isNull(categories.deletedAt));
+    // The tombstoned row is gone rather than merely filtered: the reconcile
+    // deletes it, because a soft-deleted row keeps the name it was written
+    // with and would sit beside the one being recreated forever.
+    expect(await userDb.select().from(categories)).toHaveLength(13);
+    expect(live.map((row) => row.name)).not.toContain('Not a fixture category');
+    // Thirteen: the fixture's twelve plus the fallback, and exactly one of the
+    // latter, which `categories_fallback_idx` would refuse to have twice.
+    expect(live).toHaveLength(13);
+    expect(live.filter((row) => row.isFallback)).toHaveLength(1);
+
+    // Every transaction the restore wrote points at a category that exists,
+    // which is what binding the fixture's names to freshly minted ids is for.
+    const listed = await request(app.getHttpServer())
+      .get('/api/transactions?period=all')
+      .set(
+        'Authorization',
+        `Bearer ${(response.body as { token: string }).token}`,
+      )
+      .expect(200);
+    expect((listed.body as { total: number }).total).toBeGreaterThan(1_000);
   }, 120_000);
 });

@@ -131,6 +131,37 @@ export class TemplatesService {
   }
 
   /**
+   * The templates behind a set of category **names**, for the demo restore.
+   *
+   * The one read here that is keyed on a name rather than an id, because its
+   * caller has no ids to key on: the showcase fixture names its categories, for
+   * the reason it names their categories in transactions too - ids belong to an
+   * account that does not exist when the fixture is generated.
+   *
+   * `enabled` is not filtered, for `resolve()`'s reason applied to a longer-
+   * lived pick: a pooled demo account was provisioned with every template that
+   * existed then, and an admin disabling one afterwards must not make that
+   * account unrestorable. The tombstone **is** filtered, so a template that is
+   * genuinely gone comes back missing and the caller can say which.
+   *
+   * Names are not unique in `category_templates` and nothing here pretends
+   * otherwise; on a duplicate the caller keeps whichever `sort_order` puts
+   * first, which is the same order provisioning would have seeded.
+   */
+  async byNames(names: readonly string[]): Promise<ResolvedCategoryTemplate[]> {
+    if (names.length === 0) {
+      return [];
+    }
+
+    return this.resolvedTemplates(
+      and(
+        isNull(categoryTemplates.deletedAt),
+        inArray(categoryTemplates.name, [...names]),
+      ),
+    );
+  }
+
+  /**
    * Which of `ids` are live category templates, for a membership check.
    *
    * **Deliberately not `resolve()`, and the difference is the joins.** That one

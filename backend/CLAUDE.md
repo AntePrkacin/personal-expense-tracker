@@ -1225,6 +1225,19 @@ deployment with no demo has no such route, where 403 would confirm the feature e
 promise it is coming back. That default is also what keeps a fresh clone and the e2e suite from
 publishing an anonymous session minter by accident.
 
+**The restore rebuilds the categories rather than checking them, and that reverses the second of
+this section's decisions.** `assertCategoriesMatch` used to run first, against whatever the last
+visitor left, and throw when it disagreed with the fixture - so a rename, which every visitor can
+perform from the Manage categories modal, made every later hand-out of that account release its
+lease and answer 500. One rename in each of ten accounts killed the only door into the deployed app.
+`reconcileCategories` now deletes every category row and every cap row - **tombstones included**,
+since a soft-deleted row keeps its name and would collide with the one being recreated - and writes
+the fixture's set from `category_templates`, binding the fixture's named transactions and caps to
+the new ids. The assert survives as a **post-condition** on rows the restore itself wrote, which is
+the one place it is safe to throw, and the fallback comes from `FALLBACK_CATEGORY` rather than from
+a template because it is not one. `TemplatesService.byNames()` is the read, and it filters the
+tombstone but not `enabled`, for the reason `resolve()` gives.
+
 **The restore clears what the visitor typed, not only what they spent.** The two assistant tables
 are the only place in a user database holding a visitor's own words and nothing else in the app
 deletes them, so `writeFixture()` empties both - messages first - alongside the transactions and the
