@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CategoriesModule } from '../categories/categories.module';
+import { DemoMembershipModule } from '../demo/demo-membership.module';
 import { PeriodsModule } from '../periods/periods.module';
 import { AssistantCompletionService } from './assistant-completion.service';
 import { AssistantController } from './assistant.controller';
@@ -18,9 +19,12 @@ import { AssistantService } from './assistant.service';
  * reports its own documentation. `rg -n "from '.*insights" src/assistant/` and
  * its mirror are both empty; see `src/assistant/CLAUDE.md`.
  *
- * Two imports, for the composition surface: `PeriodsModule` for the current
- * period, its budget and today's date, and `CategoriesModule` for the caps and
- * the account's own fallback category name. `DatabaseModule` is `@Global` so
+ * Three imports. Two are the composition surface: `PeriodsModule` for the
+ * current period, its budget and today's date, and `CategoriesModule` for the
+ * caps and the account's own fallback category name. The third is
+ * `DemoMembershipModule`, for `DemoTierThrottlerGuard` - a pooled demo account
+ * gets a much lower chat budget, and that module imports nothing precisely so
+ * this one can depend on it without closing a cycle through `DemoModule`. `DatabaseModule` is `@Global` so
  * `UserDatabaseService` injects with no import, and `SessionGuard` is an
  * `APP_GUARD` so every route is guarded without saying so.
  *
@@ -34,7 +38,7 @@ import { AssistantService } from './assistant.service';
  * Nothing is exported: no other feature composes a conversation.
  */
 @Module({
-  imports: [CategoriesModule, PeriodsModule],
+  imports: [CategoriesModule, PeriodsModule, DemoMembershipModule],
   controllers: [AssistantController],
   providers: [AssistantService, AssistantCompletionService],
 })

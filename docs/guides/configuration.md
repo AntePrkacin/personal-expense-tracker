@@ -46,6 +46,8 @@ Backend variables:
 | `DEMO_LEASE_TTL_M`       | `60`                    | How long a visitor keeps a leased demo account         |
 | `DEMO_RATE_LIMIT`        | `5`                     | Demo hand-outs per window, per caller IP               |
 | `DEMO_RATE_TTL_S`        | `3600`                  | Window length in seconds for the demo limiter          |
+| `DEMO_CHAT_RATE_LIMIT`   | `5`                     | Chat turns per window for a **pooled demo** account    |
+| `DEMO_SCAN_RATE_LIMIT`   | `3`                     | Receipt scans per window for a **pooled demo** account |
 | `TRUST_PROXY_HOPS`       | `0`                     | Reverse proxies in front; 0 means `req.ip` is the socket |
 
 Both apps run on their defaults with no `.env` at all, so a missing file is not an error.

@@ -142,6 +142,33 @@ consequences here:
   visitor is told this deployment has no demo; the backend logs a warning naming the header, which
   is the only way to tell that apart from the demo genuinely being off.
 
+## The Gemini quota, and the project it belongs to
+
+**The Gemini key is not in `expensa-app-26`.** It is an AI Studio key belonging to a second
+project, `gen-lang-client-0566337014` ("Expanso"), which is the one AI Studio created; that project
+has `generativelanguage.googleapis.com` enabled and **billing disabled**, so the key is on the free
+tier. Nothing about the demo can produce a charge today. What it can produce is an exhausted quota,
+which breaks receipt scanning and the assistant for the owner and every visitor at once and
+announces itself nowhere.
+
+Two layers bound that, and only the second is a real ceiling:
+
+- **In the app**, a pooled demo account gets `DEMO_CHAT_RATE_LIMIT` and `DEMO_SCAN_RATE_LIMIT`
+  instead of the ordinary budgets. Per user, in memory, so it bounds one visitor rather than the
+  sum of them.
+- **In the console**, a quota override on the Generative Language API in that project caps the
+  total. This is the layer that survives a bug in every other one, and it is not set today: on the
+  free tier the tier's own limits already are the ceiling, and lowering them further only makes the
+  outage arrive sooner.
+
+**Set both of these on the day billing is enabled on that project**, because that is the day a
+quota stops being an outage and starts being an invoice: a Cloud Billing budget with alerts on the
+billing account, and a per-day request quota override under IAM & Admin, Quotas, filtered to
+`generativelanguage.googleapis.com`. Alerts only tell you; the quota is what stops it.
+
+There is no per-key rate limit in AI Studio, and looking for one is the wrong place: a key is a
+credential, and the limits belong to the project and its tier.
+
 ## Rolling back
 
 Revisions are immutable, so a rollback is a traffic change rather than a rebuild:

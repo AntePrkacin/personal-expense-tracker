@@ -297,4 +297,38 @@ describe('Demo endpoint (e2e)', () => {
       .expect(200);
     expect((listed.body as { total: number }).total).toBeGreaterThan(1_000);
   }, 120_000);
+  /**
+   * The demo tier's own Gemini budget, proven on the route rather than in the
+   * guard's unit spec.
+   *
+   * The suite boots with `CHAT_RATE_LIMIT` at its default of 20, so a sixth
+   * refusal can only come from the lowered ceiling a pooled account gets.
+   * Every answer before it is a **503** - no `GEMINI_API_KEY` here - which is
+   * exactly the point: the limiter is a guard, so it counts a turn that the
+   * handler then refuses, and an abuser spending the project's quota is
+   * stopped at the same number whatever the model does.
+   */
+  it('gives a pooled account a lower chat budget than a real one', async () => {
+    const userId = await enrolAccount(app, 'demo-six@example.com');
+
+    await centralDb
+      .update(demoAccounts)
+      .set({ leaseExpiresAt: new Date(Date.now() + 60 * 60_000) })
+      .where(ne(demoAccounts.userId, userId));
+
+    const leased = await handOut(app).expect(200);
+    const token = (leased.body as { token: string }).token;
+
+    const ask = () =>
+      request(app.getHttpServer())
+        .post('/api/assistant/messages')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ message: 'How much did I spend on rent?' });
+
+    for (let turn = 0; turn < 5; turn += 1) {
+      await ask().expect(503);
+    }
+
+    await ask().expect(429);
+  }, 120_000);
 });

@@ -25,7 +25,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
+import { DemoTierThrottlerGuard } from '../demo/demo-tier-throttler.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { SessionPrincipal } from '../auth/session.service';
 import { ApiErrorResponse } from '../common/decorators/api-error-response.decorator';
@@ -109,9 +110,17 @@ export class TransactionsController {
    * at PET-73: it protects the same Gemini quota with a budget an order of
    * magnitude different, so a burst of chat turns must not be able to disable
    * receipt scanning mid-form.
+   *
+   * **The guard is `DemoTierThrottlerGuard`, not `ThrottlerGuard`.** It is that
+   * class with one behaviour added: a caller who is in `demo_accounts` gets a
+   * much lower ceiling on this same bucket. Ten pooled accounts at the ordinary
+   * budget can exhaust the project's free Gemini quota around the clock, which
+   * breaks this route for the owner and every real visitor at once. The named
+   * throttlers and the skips below are unchanged, deliberately - see that file
+   * for why a second pair of names would have been worse.
    */
   @Post('scan')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(DemoTierThrottlerGuard)
   @SkipThrottle({ email: true, ip: true, chat: true, demo: true })
   @UseInterceptors(
     FilesInterceptor('files', MAX_RECEIPT_FILES, receiptUploadOptions),

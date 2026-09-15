@@ -1643,6 +1643,20 @@ free-tier quota between them, and more than one Fly machine gives each user a fr
 machine on top of that. A genuine cap needs a shared store and a global counter, which is a
 real piece of infrastructure this project has not needed before.
 
+**Three things have changed under that paragraph and none of them closes it.** The demo pool
+made "N users" mean something an attacker chooses rather than something the user base happens to
+be, so `DemoTierThrottlerGuard` gives a pooled account a much lower budget on the same buckets -
+five chats and three scans an hour rather than twenty and ten. That bounds the arm that grew,
+and it is still per user. **The bill this entry implies does not exist**: the key is an AI Studio
+key on project `gen-lang-client-0566337014`, where **billing is disabled**, so what runs out is
+the free tier's quota and the cost is that scanning and the assistant break for everyone at once,
+with nothing announcing it. And **the honest ceiling is not in this codebase at all** - it is a
+quota override on the Generative Language API in that project's console, which is the only layer
+that survives a bug in every other one; `docs/guides/deployment.md` carries what to set and when.
+A process-wide counter was considered and declined for now: in memory it resets whenever Cloud Run
+scales to zero, which on this app's traffic is most nights, and a persistent one is a central
+migration and a write per call bought against a quota rather than a bill.
+
 **A page-count guard on a scanned PDF.** Gemini reads PDFs natively, which is what makes
 accepting one cheap enough to ship - but the backend has no PDF parser, so it cannot look at a
 PDF's page count before sending it. A 40-page bank statement is accepted up to the 4MB size cap

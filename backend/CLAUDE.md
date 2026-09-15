@@ -1236,6 +1236,27 @@ header is trusted **only** there, which is the whole difference between it and r
 limiter runs. And the secret is compared over **sha256 digests** with `timingSafeEqual`, which
 throws on a length mismatch, so hashing first is what keeps the length out of the timing.
 
+**A pooled account gets a much lower Gemini budget, and `DemoTierThrottlerGuard` is the whole of
+it.** `POST /api/assistant/messages` and `POST /api/transactions/scan` are guarded by that class
+rather than by `ThrottlerGuard`: it is the same guard with one behaviour added, substituting
+`DEMO_CHAT_RATE_LIMIT` or `DEMO_SCAN_RATE_LIMIT` for the ordinary ceiling when the caller is in
+`demo_accounts`. Ten pooled accounts at the ordinary budget are 20 chats and 10 scans an hour each,
+around the clock, from anybody who keeps a session.
+
+Four things about it are decisions. It **substitutes a limit rather than adding `demoChat` and
+`demoScan`**, so there is one bucket per user per route with the ceiling chosen per caller - two
+named pairs would mean two more `@SkipThrottle` entries on every route not named by them, which is
+the silent mistake this file already warns about, and two buckets one caller could spend both of.
+Membership comes from `DemoMembershipService`, cached per instance, and it lives in
+`DemoMembershipModule` - which imports **nothing**, because its consumers are `AssistantModule` and
+`TransactionsModule` and `DemoModule` reaches `TransactionsModule` through `InsightsModule`, so
+importing the demo feature from a Gemini route would close a cycle. The window is the ordinary
+`CHAT_RATE_TTL_S` / `SCAN_RATE_TTL_S` rather than the lease, so a second visitor inside the hour
+inherits what the first spent - it bounds the **account**, which is the safer direction. And it is
+**not an aggregate cap**: the store is in memory and the key is per user, so what caps total spend
+is a quota override in the Gemini key's own Google project, which `docs/guides/deployment.md` owns
+along with the fact that the key is on a **different project from the app** and has billing off.
+
 **`DEMO_ENABLED` defaults to false and a disabled deployment answers 404**, not 403 and not 503: a
 deployment with no demo has no such route, where 403 would confirm the feature exists and 503 would
 promise it is coming back. That default is also what keeps a fresh clone and the e2e suite from

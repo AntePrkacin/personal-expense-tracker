@@ -17,7 +17,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
+import { DemoTierThrottlerGuard } from '../demo/demo-tier-throttler.guard';
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { SessionPrincipal } from '../auth/session.service';
@@ -63,12 +64,20 @@ export class AssistantController {
    * silently disable receipt scanning mid-form, with no message that could
    * explain it.
    *
+   * **The guard is `DemoTierThrottlerGuard`, not `ThrottlerGuard`.** It is that
+   * class with one behaviour added: a caller who is in `demo_accounts` gets a
+   * much lower ceiling on this same bucket. Ten pooled accounts at the ordinary
+   * budget can exhaust the project's free Gemini quota around the clock, which
+   * breaks this route for the owner and every real visitor at once. The named
+   * throttlers and the skips below are unchanged, deliberately - see that file
+   * for why a second pair of names would have been worse.
+   *
    * **`@Res({ passthrough: true })`**, so Nest still serialises the return value:
    * the response object is needed only to hear the connection drop, not to write
    * to. See `abortOnClientDisconnect` for the Express trap in that.
    */
   @Post('messages')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(DemoTierThrottlerGuard)
   @SkipThrottle({ email: true, ip: true, scan: true, demo: true })
   @ApiOperation({
     summary: 'Ask the assistant a question about your spending.',
