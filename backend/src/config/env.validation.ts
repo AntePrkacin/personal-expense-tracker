@@ -134,10 +134,30 @@ export const envValidationSchema = Joi.object({
   // value is the default and enabling it is the deliberate act.
   DEMO_ENABLED: Joi.boolean().default(false),
 
+  // Required whenever the demo is on, and paired with it the way the four
+  // TURSO_* variables are paired with each other: `POST /api/demo/session`
+  // mints a session for anybody who asks, so a deployment must not be able to
+  // open that route and forget the credential that keeps it to the frontend.
+  // The failure is a boot error naming this variable, which is deliberately
+  // louder than a bypass nobody notices. Set the same value on the frontend.
+  DEMO_SHARED_SECRET: Joi.string()
+    .min(16)
+    .when('DEMO_ENABLED', {
+      is: Joi.boolean().valid(true),
+      then: Joi.required(),
+    }),
+
   // How long a visitor keeps a leased demo account. Long enough to read every
   // screen without being interrupted, short enough that a pool of ten is not
   // exhausted for an hour by ten people who glanced and left.
   DEMO_LEASE_TTL_M: Joi.number().integer().positive().default(60),
+
+  // The two Gemini budgets a pooled demo account gets instead of the ordinary
+  // ones, in the same windows (`CHAT_RATE_TTL_S`, `SCAN_RATE_TTL_S`). Not paired
+  // with `DEMO_ENABLED`: they are read per request by pool membership, so they
+  // matter wherever a pool exists rather than wherever the route is published.
+  DEMO_CHAT_RATE_LIMIT: Joi.number().integer().positive().default(5),
+  DEMO_SCAN_RATE_LIMIT: Joi.number().integer().positive().default(3),
 
   // The fifth named throttler, keyed on IP because the caller has no session
   // yet. What it bounds is not cost but churn: every hand-out to a new visitor

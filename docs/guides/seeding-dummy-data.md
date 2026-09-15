@@ -1,6 +1,6 @@
 # Seeding Dummy Data for Showcases
 
-This guide explains how to fill one account (`slavko@spendifico.eu`) with 36 months of realistic
+This guide explains how to fill one account (`slavko@example.com`) with 36 months of realistic
 transaction data, for demos, UI work and showcases.
 
 The data comes from three commands rather than one. A committed fixture
@@ -41,10 +41,10 @@ Local is the default and cloud has to be typed out, because the two are not equa
 mistaken local run writes a gitignored SQLite file. A mistaken cloud run creates a real database
 in the shared Turso organization and pushes thousands of rows into it.
 
-**The account is `slavko@spendifico.eu`, and `--email=` seeds a different one:**
+**The account is `slavko@example.com`, and `--email=` seeds a different one:**
 
 ```bash
-mise run seed:cloud -- --email=rehearsal@spendifico.eu
+mise run seed:cloud -- --email=rehearsal@example.com
 ```
 
 The address is the only thing separating two seeded accounts, so this is how a rehearsal or a
@@ -113,13 +113,13 @@ Nothing is written when that happens, so the repair is only to stop the server a
    ```bash
    mise run seed
    ```
-   It takes a few seconds and finishes with `Seeded slavko@spendifico.eu with N transactions...`.
+   It takes a few seconds and finishes with `Seeded slavko@example.com with N transactions...`.
 3. **Start your dev servers**:
    ```bash
    mise run dev
    ```
 4. **Log in**:
-   Go to `http://localhost:4200` and enter `slavko@spendifico.eu`. Without MailPace credentials the
+   Go to `http://localhost:4200` and enter `slavko@example.com`. Without MailPace credentials the
    backend prints the login link to its terminal. Click it.
 
 If your `.env` **does** carry the four `TURSO_*` values, `mise run dev` starts the backend in
@@ -152,7 +152,7 @@ rather than a plain file, which changes what is locked and nothing about the out
    mise run dev
    ```
 5. **Log in**:
-   Go to `http://localhost:4200` and enter `slavko@spendifico.eu`, then open the login link the
+   Go to `http://localhost:4200` and enter `slavko@example.com`, then open the login link the
    backend prints to its own terminal.
 
    **That address is no longer deliverable, and this step used to say the opposite.** It was an

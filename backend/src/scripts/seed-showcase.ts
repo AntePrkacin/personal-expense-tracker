@@ -60,10 +60,21 @@ import type { Fixture } from './showcase/fixture';
  * it is why `/demo` exists. What the address still is, and all it has to be, is
  * the one thing that tells two seeded accounts apart.
  *
+ * **On `example.com` rather than on the project's own domain, and that is a
+ * safety property rather than tidiness.** `spendifico.eu` is a domain nobody
+ * holds any more, so anybody can register it and start receiving mail addressed
+ * to these accounts - and a login link is a bearer credential for an account
+ * that is real, seeded and reachable. `example.com` is reserved by RFC 2606 and
+ * cannot be registered by anybody, which makes the address permanently
+ * undeliverable **by construction** rather than by the current state of a
+ * registrar. The `.invalid` and `.example` TLDs are reserved too and were
+ * rejected for a duller reason: they are not in the IANA TLD list that the
+ * validators in this project check against.
+ *
  * `--email=` overrides it and may be repeated, so a rehearsal or a second demo
  * can have an account of its own without editing this file.
  */
-const DEFAULT_SHOWCASE_EMAIL = 'slavko@spendifico.eu';
+const DEFAULT_SHOWCASE_EMAIL = 'slavko@example.com';
 
 /**
  * How many accounts `--pool` seeds, and what they are called.
@@ -74,11 +85,16 @@ const DEFAULT_SHOWCASE_EMAIL = 'slavko@spendifico.eu';
  * because nothing reads them: a pooled account is identified by its row in
  * `demo_accounts`, and the address exists only because `users.email` is how this
  * script finds an account it has already provisioned.
+ *
+ * On `example.com` for the reason above, and it matters more here than for the
+ * showcase account: there are ten of these, they are published in
+ * `docs/guides/demo-accounts.md`, and each one is an account a stranger might
+ * be holding when the link arrives.
  */
 const DEMO_POOL_SIZE = 10;
 
 function demoPoolEmail(index: number): string {
-  return `demo${index}@spendifico.eu`;
+  return `demo${index}@example.com`;
 }
 
 const EMAIL_FLAG = '--email=';
@@ -176,7 +192,7 @@ async function onboardingPayload(
  * payload either, because provisioning clears it strictly last. In cloud mode
  * that account looks finished and has no database at all, so the seed would
  * declare it ready and then die opening it. That is not hypothetical: it is
- * what the first cloud run did, against a `dummy@spendifico.eu` a local run had
+ * what the first cloud run did, against a `dummy@example.com` a local run had
  * left in `backend/databases/`.
  *
  * Re-stashing the payload puts such an account back into the state verification

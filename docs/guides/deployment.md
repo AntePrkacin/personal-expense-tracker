@@ -83,10 +83,52 @@ gcloud run services describe expenso --project=expensa-app-26 --region=europe-we
 and inherits every other setting, so the cap survives. Recreating the service from scratch would
 lose it.
 
+**`backend/cloudbuild.yaml` is where the cap is declared**, and it exists because the sentence above
+was the only thing standing between this invariant and a silent loss: the cap was set by hand on the
+service, no file in this repository mentioned it, and a service recreated from scratch or a deploy
+path written by somebody reading only the repository drops it with nothing failing. That file is the
+trigger's own inline build copied verbatim with `--max-instances=1` added to the deploy step.
+
+**It is not in force until the trigger is pointed at it**, which is a one-time change on Google's
+side and is a production action. **Do it after the file is on `main`, never before**: a trigger
+naming a build config that is not in the commit it is building fails the whole build, so repointing
+early breaks every deploy until the merge lands.
+
+There is **no `gcloud builds triggers export`**; the read half is `describe` with a YAML format.
+Take a copy, remove the inline `build:` block, add `filename:`, and import it back - `import`
+updates an existing trigger rather than creating a second one, matching on the `name` in the file:
+
+```sh
+TRIGGER=cloudrun-expenso-europe-west1-AntePrkacin-personal-expense-txwv
+
+gcloud builds triggers describe "$TRIGGER" \
+  --project=expensa-app-26 --region=europe-west1 --format=yaml > trigger-backup.yaml
+cp trigger-backup.yaml trigger.yaml
+```
+
+Then edit `trigger.yaml`: delete the whole `build:` block, delete the output-only `createTime` and
+`resourceName`, and add one line at the top level.
+
+```yaml
+filename: backend/cloudbuild.yaml
+```
+
+Keep `substitutions:`, `name:` and `id:`. The `_`-prefixed values live on the trigger rather than in
+the file, which is what keeps `backend/cloudbuild.yaml` free of any project, region or service name.
+
+```sh
+gcloud builds triggers import --project=expensa-app-26 --region=europe-west1 --source=trigger.yaml
+```
+
+**Verify by what the next build does, not by the import's own output.** `gcloud builds triggers
+describe` should show a `filename` and no `build:` block, and the first deploy through the file
+should leave `maxScale` at 1 under the `describe` command above. Roll back by importing
+`trigger-backup.yaml`, which is why the copy is taken before the edit rather than after it.
+
 ## Configuration
 
-Non-secret values are environment variables on the service; the five secrets come from Secret
-Manager. Both are listed by:
+Non-secret values are environment variables on the service; the secrets come from Secret
+Manager - five of them, or six once the demo's shared secret is set (see below). Both are listed by:
 
 ```sh
 gcloud run services describe expenso --project=expensa-app-26 --region=europe-west1 \
@@ -114,10 +156,60 @@ consequences here:
   durable.
 - **`TRUST_PROXY_HOPS`** is `1`, **and that number was derived for Fly's topology, not Google's.**
   It has not been re-measured since the move. It decides what `req.ip` means, so if it is wrong
-  every caller lands in one shared rate-limit bucket - and since PET-86 that includes the `demo`
-  limiter, which would make it five hand-outs per hour for the whole world rather than per visitor.
-  Worth an hour's work: reach the deployed API from two networks and confirm one exhausting its
-  budget does not throttle the other.
+  every caller lands in one shared rate-limit bucket. Worth an hour's work: reach the deployed API
+  from two networks and confirm one exhausting its budget does not throttle the other. The auth
+  limiters are what that buys, and they are what it costs while it is wrong.
+  **The `demo` limiter no longer depends on it.** It counts the address the frontend names in
+  `x-demo-client-ip`, which the backend reads only alongside a valid `DEMO_SHARED_SECRET`, so its
+  buckets are per visitor whatever the hop count is - and the header cannot be forged, because a
+  caller who could set it is answered 404 before the limiter runs.
+- **`DEMO_SHARED_SECRET`** is what makes the hand-out route reachable, and it must match the value
+  on the Vercel project exactly. The backend **refuses to boot** without it when `DEMO_ENABLED` is
+  true, so set it before deploying a backend with the demo on:
+
+  It is a **secret**, so it goes in Secret Manager beside the other five rather than into a plain
+  environment variable:
+
+  ```sh
+  openssl rand -base64 32 | tr -d '\n' | \
+    gcloud secrets create demo-shared-secret --project=expensa-app-26 --data-file=-
+  gcloud run services update expenso --project=expensa-app-26 --region=europe-west1 \
+    --update-secrets=DEMO_SHARED_SECRET=demo-shared-secret:latest
+  ```
+
+  Read the value back with `gcloud secrets versions access latest --secret=demo-shared-secret` to
+  set the frontend's half in the Vercel project's Environment Variables, with **no**
+  `NEXT_PUBLIC_` prefix, and redeploy. That makes it six secrets rather than five wherever this
+  guide counts them. A frontend whose value disagrees reaches a 404 and the
+  visitor is told this deployment has no demo; the backend logs a warning naming the header, which
+  is the only way to tell that apart from the demo genuinely being off.
+
+## The Gemini quota, and the project it belongs to
+
+**The Gemini key is not in `expensa-app-26`.** It is an AI Studio key belonging to a second
+project, `gen-lang-client-0566337014` ("Expanso"), which is the one AI Studio created; that project
+has `generativelanguage.googleapis.com` enabled and **billing disabled**, so the key is on the free
+tier. Nothing about the demo can produce a charge today. What it can produce is an exhausted quota,
+which breaks receipt scanning and the assistant for the owner and every visitor at once and
+announces itself nowhere.
+
+Two layers bound that, and only the second is a real ceiling:
+
+- **In the app**, a pooled demo account gets `DEMO_CHAT_RATE_LIMIT` and `DEMO_SCAN_RATE_LIMIT`
+  instead of the ordinary budgets. Per user, in memory, so it bounds one visitor rather than the
+  sum of them.
+- **In the console**, a quota override on the Generative Language API in that project caps the
+  total. This is the layer that survives a bug in every other one, and it is not set today: on the
+  free tier the tier's own limits already are the ceiling, and lowering them further only makes the
+  outage arrive sooner.
+
+**Set both of these on the day billing is enabled on that project**, because that is the day a
+quota stops being an outage and starts being an invoice: a Cloud Billing budget with alerts on the
+billing account, and a per-day request quota override under IAM & Admin, Quotas, filtered to
+`generativelanguage.googleapis.com`. Alerts only tell you; the quota is what stops it.
+
+There is no per-key rate limit in AI Studio, and looking for one is the wrong place: a key is a
+credential, and the limits belong to the project and its tier.
 
 ## Rolling back
 

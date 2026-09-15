@@ -2321,6 +2321,23 @@ that threw never reached the backend at all - so folding the two together would 
 ten people are ahead of them on the strength of no information. `404` is a third case,
 `disabled`, which is a deployment that never had a demo and where "try again" would be a lie.
 
+**`throttled` is the fourth, and it is the same rule applied to a 429.** That status says this
+visitor has asked too often and says nothing whatever about how many accounts are free, so
+borrowing `busy`'s sentence would blame the pool for something the visitor did. It only became
+worth its own copy once the handler started naming the real client - before that a 429 here meant
+the frontend's own shared bucket was empty, which no honest sentence could explain to the person
+reading it.
+
+**The handler proves itself to the backend and names the browser it is acting for.** It sends
+`x-demo-secret` from `DEMO_SHARED_SECRET`, a server-only variable with deliberately no
+`NEXT_PUBLIC_` prefix, and `x-demo-client-ip` from `x-real-ip` or the first entry of
+`x-forwarded-for`. Without the secret the API answers 404, so a Vercel project whose value
+disagrees with Cloud Run's shows every visitor the `disabled` screen - which is the first thing
+to check before debugging anything else about the demo. The address is what turns the hand-out
+limiter from five per hour for the whole internet into five per hour per visitor; the backend
+reads it only alongside the secret, so it cannot be forged, and an empty one is not an error -
+the backend falls back to the connecting address, which is this handler.
+
 **The unavailable screen offers no "try again" control**, deliberately, even for `busy` where
 retrying is the advice. A button there would point back at a GET with side effects, so a visitor
 tapping it would lease and rewrite accounts as fast as the throttler allowed. The copy says to try

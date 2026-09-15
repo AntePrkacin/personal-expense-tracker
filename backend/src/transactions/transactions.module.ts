@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CategoriesModule } from '../categories/categories.module';
+import { DemoMembershipModule } from '../demo/demo-membership.module';
 import { PeriodsModule } from '../periods/periods.module';
 import { ReceiptExtractionService } from './receipt-extraction.service';
 import { ReceiptScanService } from './receipt-scan.service';
@@ -9,7 +10,7 @@ import { TransactionsService } from './transactions.service';
 /**
  * Transaction writes and reads.
  *
- * **Two imports, and both exist for the reads.** `CategoriesModule` exports
+ * **Three imports, and two of them exist for the reads.** `CategoriesModule` exports
  * `CategoriesService`, which owns the per-category aggregation the detail read
  * needs for one category's month stats; `PeriodsModule` exports `PeriodService`,
  * which resolves the list's `period` filter. Those were one import until PET-72,
@@ -25,6 +26,13 @@ import { TransactionsService } from './transactions.service';
  * `POST /transactions/scan` needs (PET-59), so this module needs no import
  * for that either.
  *
+ * The third import is `DemoMembershipModule`, and it is the one that is not
+ * about reads: `POST /transactions/scan` is guarded by `DemoTierThrottlerGuard`
+ * rather than by `ThrottlerGuard`, so a pooled demo account gets a much lower
+ * scan budget on the same bucket. That module deliberately imports nothing, so
+ * depending on it here cannot close a cycle back through `DemoModule` -
+ * which imports `InsightsModule`, which imports this one.
+ *
  * `ReceiptScanService` and `ReceiptExtractionService` are the receipt-scanning
  * feature: the former reads this user's categories and merchant history and
  * validates the model's answer against them, the latter is the one call site
@@ -32,7 +40,7 @@ import { TransactionsService } from './transactions.service';
  * touching the database reads.
  */
 @Module({
-  imports: [CategoriesModule, PeriodsModule],
+  imports: [CategoriesModule, PeriodsModule, DemoMembershipModule],
   controllers: [TransactionsController],
   providers: [
     TransactionsService,

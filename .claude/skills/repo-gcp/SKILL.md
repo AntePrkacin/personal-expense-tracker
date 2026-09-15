@@ -54,6 +54,13 @@ specified" - which is loud, and the one upside.
   being true. **Check it after any change that recreates the service**, and never lower the
   cap's importance because nothing is visibly broken.
 
+- **The cap is declared in `backend/cloudbuild.yaml`, and whether that file is in force is a
+  question about the trigger rather than the repository.** The trigger was created with an inline
+  build and has to be pointed at the file for the flag to reach a deploy;
+  `docs/guides/deployment.md` carries the export-edit-import procedure. Check which one is live
+  with `gcloud builds triggers describe`: a `filename` means the file, a `build:` block means the
+  inline copy, which does not carry the flag.
+
 - **A deploy inherits service settings; recreating the service does not.** The trigger runs
   `services update --image`, which changes only the image, so `--max-instances`, the env vars
   and the secret bindings all survive a deploy. Anything that deletes and recreates the
@@ -70,7 +77,15 @@ specified" - which is loud, and the one upside.
 
 - **`TRUST_PROXY_HOPS` is `1` and was measured for Fly, not Google.** It decides what `req.ip`
   means, so a wrong value puts every caller in one rate-limit bucket. It has not been
-  re-measured since the platform move. Do not assert it is correct; say it is unverified.
+  re-measured since the platform move. Do not assert it is correct; say it is unverified. The
+  two **auth** limiters are what it governs; the `demo` one is not, since that route counts the
+  address the frontend names in a header authenticated by `DEMO_SHARED_SECRET`.
+
+- **`DEMO_SHARED_SECRET` is required whenever `DEMO_ENABLED` is true, and the backend refuses to
+  boot without it.** It is a Secret Manager secret, and the **same value** has to be on the
+  Vercel project or `/demo` answers 404 and the visitor is told this deployment has no demo.
+  Setting one without the other is the mistake to check for before debugging anything else about
+  the demo.
 
 - **Secrets live in Secret Manager, not in env vars.** Five of them are bound by reference.
   Never print a secret's value, and never move one into a plain environment variable to make

@@ -10,6 +10,7 @@ import { isUniqueViolation } from '../common/unique-violation';
 import type { OnboardingPayload } from '../database/central/schema';
 import { renderLoginLinkEmail } from '../mail/login-link.template';
 import { MAILER, type Mailer } from '../mail/mailer';
+import { DemoMembershipService } from '../demo/demo-membership.service';
 import { TemplatesService } from '../templates/templates.service';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
@@ -48,6 +49,7 @@ export class AuthService {
     @Inject(MAILER) private readonly mailer: Mailer,
     private readonly config: ConfigService,
     private readonly templates: TemplatesService,
+    private readonly demoMembership: DemoMembershipService,
   ) {}
 
   /**
@@ -126,10 +128,30 @@ export class AuthService {
    * is identical. Mailing strangers because somebody typed their address into
    * a form is a worse outcome than the enumeration it would be defending
    * against, so every login_links row references a real user.
+   *
+   * **A pooled demo account is the second address that gets nothing**, and it
+   * is refused here rather than at the controller for the reason the first one
+   * is: the answer has to be the same empty 202 either way, so making the
+   * decision where the response is already uniform is what keeps it
+   * enumeration-safe by construction rather than by remembering.
+   *
+   * Why refuse at all. A demo account is a real account with a real address,
+   * so anybody who reads one off a screenshot, a seed script or the pool guide
+   * can ask for a link to it - and this deployment cannot send mail, so the
+   * link is written to a log that anybody with log-read on the project can
+   * see. That would be a session on somebody else's demo data, outside the
+   * lease, outside the hand-out's revoke, and outside the lowered Gemini
+   * budget, since those are properties of the demo route rather than of the
+   * account. Nothing legitimate is lost: `/demo` is how a pooled account is
+   * reached, and it asks for no address at all.
    */
   async requestLoginLink(email: string): Promise<void> {
     const existing = await this.users.findByEmail(email);
     if (!existing) {
+      return;
+    }
+
+    if (await this.demoMembership.isPooled(existing.id)) {
       return;
     }
 

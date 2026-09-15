@@ -33,14 +33,18 @@ MailPace implementation, so re-enabling real email is configuration plus a domai
 The implementation talks to [MailPace](https://mailpace.com). Any other HTTP mail API would be a
 new class behind the same `MAILER` token; this section is for the one that exists.
 
-**Before turning sends on, move every seeded account off `spendifico.eu`.** The demo pool
-(`demo1@spendifico.eu` to `demo10@spendifico.eu`) and the showcase account are registered under a
-domain nobody on this project holds any more, and `POST /api/auth/login-link` accepts any registered
-address. Today that is harmless, because the link goes to a log; the moment a provider is
-configured, whoever owns that domain receives working login links for eleven live accounts.
-Re-seed them onto a domain you control first, or make the login-link route refuse pooled accounts.
-Note also that the logging fallback writes the full tokenised link to the backend's log, so anyone
-with log access on the Cloud Run project can sign in to any account that requests a link.
+**This warning is shorter than it was, because both halves of it were fixed rather than left as a
+pre-flight check.** It used to say that the seeded accounts sit on `spendifico.eu`, a domain nobody
+here holds, so configuring a provider would send working login links for eleven live accounts to
+whoever registers it - and that the logging fallback prints the full tokenised link, so anyone with
+log access on the project can sign in to any account that asks for one. The seed identities are on
+`example.com` now, which RFC 2606 reserves and nobody can register; `POST /api/auth/login-link`
+issues nothing at all for a pooled account, answering the same empty 202 an unknown address gets;
+and the fallback withholds the link in production, logging the recipient and a token prefix.
+
+What is left for you to check before turning sends on is the ordinary thing: **any account you
+seeded by hand with `--email=` is yours to look at.** The pool and the showcase account are
+handled.
 
 1. **Own a domain and authorize it.** Add the domain in MailPace and complete the DKIM
    authorization it walks you through. Until that is done every send is rejected. The spam

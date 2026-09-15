@@ -1210,16 +1210,102 @@ Five things about it are easy to get wrong:
   driver's one connection per database serializes them. Wrapping the pair in `db.transaction()` is
   the defensive move that would actually introduce the bug.
 
-- **The session outlives the lease, deliberately.** A session runs for `SESSION_TTL_D` days and a
-  lease for `DEMO_LEASE_TTL_M` minutes, so a visitor with a tab open keeps a working session onto an
-  account that has since been handed to somebody else and rewritten under them. Shortening the
-  session to the lease would sign a visitor out mid-demo, and what they would see afterwards is the
-  same fixture they started with.
+- **The session dies with the lease, and that reverses an earlier decision here.** This file used
+  to argue that a session outliving its lease was harmless, on the grounds that an abandoned tab
+  would see the fixture it started from. It is not harmless: a visitor who **keeps** the bearer
+  reads and writes every later visitor's transactions, scans and chats on that account for
+  `SESSION_TTL_D` days, which is the one thing the pool exists to make impossible. So a demo
+  session is issued with the lease's own expiry through `issue()`'s optional `expiresAt`, and
+  `revokeAllForUser()` runs both when a lease is reclaimed and again on the claim, before the
+  restore - before, so no kept token can write into the account while the fixture lands on top of
+  it. The cost is the one the old argument named: an abandoned tab is signed out at the hour.
+
+**The hand-out answers nobody but the frontend, and that is what makes its limiter count
+visitors.** `DemoSecretGuard` requires `DEMO_SHARED_SECRET` in an `x-demo-secret` header and
+answers **404** without it - `DemoController`'s own rule rather than a new one, so a wrong
+credential is indistinguishable from a deployment with no demo, at the cost that a misconfigured
+one looks the same to a visitor and is told apart only by the guard's `warn` line. Joi requires
+the variable whenever `DEMO_ENABLED` is true, so the route cannot be opened without it.
+
+Three things about it are easy to get wrong. The guard is listed **before** `ThrottlerGuard` in
+`@UseGuards`, and controller guards run in that order: the `demo` throttler's tracker reads
+`req.demoClientIp`, which this guard sets from `x-demo-client-ip` **after** the secret matched, so
+reversing them silently puts every browser visitor back in the frontend's one egress bucket. That
+header is trusted **only** there, which is the whole difference between it and raising
+`TRUST_PROXY_HOPS` over `X-Forwarded-For` - a caller who could forge it is answered 404 before the
+limiter runs. And the secret is compared over **sha256 digests** with `timingSafeEqual`, which
+throws on a length mismatch, so hashing first is what keeps the length out of the timing.
+
+**A pooled account gets a much lower Gemini budget, and `DemoTierThrottlerGuard` is the whole of
+it.** `POST /api/assistant/messages` and `POST /api/transactions/scan` are guarded by that class
+rather than by `ThrottlerGuard`: it is the same guard with one behaviour added, substituting
+`DEMO_CHAT_RATE_LIMIT` or `DEMO_SCAN_RATE_LIMIT` for the ordinary ceiling when the caller is in
+`demo_accounts`. Ten pooled accounts at the ordinary budget are 20 chats and 10 scans an hour each,
+around the clock, from anybody who keeps a session.
+
+Four things about it are decisions. It **substitutes a limit rather than adding `demoChat` and
+`demoScan`**, so there is one bucket per user per route with the ceiling chosen per caller - two
+named pairs would mean two more `@SkipThrottle` entries on every route not named by them, which is
+the silent mistake this file already warns about, and two buckets one caller could spend both of.
+Membership comes from `DemoMembershipService`, cached per instance, and it lives in
+`DemoMembershipModule` - which imports **nothing**, because its consumers are `AssistantModule` and
+`TransactionsModule` and `DemoModule` reaches `TransactionsModule` through `InsightsModule`, so
+importing the demo feature from a Gemini route would close a cycle. The window is the ordinary
+`CHAT_RATE_TTL_S` / `SCAN_RATE_TTL_S` rather than the lease, so a second visitor inside the hour
+inherits what the first spent - it bounds the **account**, which is the safer direction. And it is
+**not an aggregate cap**: the store is in memory and the key is per user, so what caps total spend
+is a quota override in the Gemini key's own Google project, which `docs/guides/deployment.md` owns
+along with the fact that the key is on a **different project from the app** and has billing off.
+
+**A pooled account is refused a login link, and the refusal lives in `AuthService` rather than in a
+controller.** `requestLoginLink` returns before issuing anything when the address belongs to
+`demo_accounts`, which is the same shape the unknown-address arm already has - one empty 202, so
+nothing tells an enumerator which addresses are pooled. Why it matters: these are real accounts with
+real addresses published in the seed script and the pool guide, and this deployment writes links to
+a log rather than sending them, so a link for a demo account is a session **outside** the lease, the
+hand-out's revoke and the lowered Gemini budget, all three of which are properties of `/demo` rather
+than of the account. Nothing legitimate is lost, because `/demo` asks for no address.
+
+**The seed identities are on `example.com`, and that is a safety property.** `demo1@example.com`
+through `demo10@example.com` plus `slavko@example.com`; they were on `spendifico.eu`, which nobody
+here holds any more, so anybody could register it and receive mail for eleven live accounts. RFC
+2606 reserves `example.com` and nobody can register it. `.invalid` and `.example` are reserved too
+and were rejected for a duller reason - they are not in the IANA TLD list the validators check
+against. A pool seeded before the change keeps its old addresses, so re-seeding adds ten accounts
+rather than renaming ten; `docs/guides/demo-accounts.md` says what to do about that.
+
+**`LogMailer` withholds the link when `NODE_ENV=production`**, logging the recipient and the first
+eight characters of the token. On this deployment that class is not a development fallback, it is
+the **only** mail path - so a full tokenised link in Cloud Logging is a working credential for the
+named account, readable by anybody with log-read on the project and subject to that store's own
+retention and exports. Local development keeps the whole link, which is the entire point of the
+fallback.
 
 **`DEMO_ENABLED` defaults to false and a disabled deployment answers 404**, not 403 and not 503: a
 deployment with no demo has no such route, where 403 would confirm the feature exists and 503 would
 promise it is coming back. That default is also what keeps a fresh clone and the e2e suite from
 publishing an anonymous session minter by accident.
+
+**The restore rebuilds the categories rather than checking them, and that reverses the second of
+this section's decisions.** `assertCategoriesMatch` used to run first, against whatever the last
+visitor left, and throw when it disagreed with the fixture - so a rename, which every visitor can
+perform from the Manage categories modal, made every later hand-out of that account release its
+lease and answer 500. One rename in each of ten accounts killed the only door into the deployed app.
+`reconcileCategories` now deletes every category row and every cap row - **tombstones included**,
+since a soft-deleted row keeps its name and would collide with the one being recreated - and writes
+the fixture's set from `category_templates`, binding the fixture's named transactions and caps to
+the new ids. The assert survives as a **post-condition** on rows the restore itself wrote, which is
+the one place it is safe to throw, and the fallback comes from `FALLBACK_CATEGORY` rather than from
+a template because it is not one. `TemplatesService.byNames()` is the read, and it filters the
+tombstone but not `enabled`, for the reason `resolve()` gives.
+
+**The restore clears what the visitor typed, not only what they spent.** The two assistant tables
+are the only place in a user database holding a visitor's own words and nothing else in the app
+deletes them, so `writeFixture()` empties both - messages first - alongside the transactions and the
+three histories. It also rewrites `profile.full_name` and `profile.currency` from the fixture, which
+Settings lets a visitor change. Insight sets need nothing: `generate()` supersedes them. Anything
+new in `src/database/user/schema.ts` that a visitor can write has to be added to that list, and no
+gate will say so.
 
 **The write phase is shared with the CLI rather than duplicated.** `src/scripts/seed-showcase.ts`
 calls the same `DemoSeedService`, which is why a demo account restored at hand-out and one seeded

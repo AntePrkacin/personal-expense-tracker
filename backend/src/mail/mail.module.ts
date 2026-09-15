@@ -23,7 +23,7 @@ import { MailPaceMailer } from './mailpace.mailer';
         new Logger(MailModule.name).log(
           'MAILPACE_API_TOKEN is not set; login links will be logged, not sent',
         );
-        return new LogMailer();
+        return new LogMailer(config);
       },
     },
   ],

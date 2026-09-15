@@ -73,9 +73,15 @@ export class DemoLeaseService {
    *
    * The order is the whole design: expire first so a pool that looks full is
    * reclaimed before anybody is turned away, claim second so the account is
-   * exclusively ours before a single row of it is rewritten, restore third, and
-   * issue the session strictly last so a session never names an account whose
-   * restore failed half way.
+   * exclusively ours before a single row of it is rewritten, revoke third,
+   * restore fourth, and issue the session strictly last so a session never
+   * names an account whose restore failed half way.
+   *
+   * **Revoking before the restore rather than merely before the issue.** Every
+   * bearer any previous holder of this account still has is dead from this
+   * statement onward, which is the property the pool's isolation rests on - and
+   * placing it here rather than beside `issue()` also means no kept token can
+   * write into the account while the fixture is being written under it.
    */
   async handOut(): Promise<{ token: string; expiresAt: Date }> {
     await this.expireElapsed();
@@ -84,6 +90,8 @@ export class DemoLeaseService {
     if (!claimed) {
       throw new ServiceUnavailableException(POOL_EXHAUSTED);
     }
+
+    await this.sessions.revokeAllForUser(claimed.userId);
 
     try {
       if (this.needsReseed(claimed)) {
@@ -106,7 +114,15 @@ export class DemoLeaseService {
       throw error;
     }
 
-    return this.sessions.issue(claimed.userId);
+    // **Bounded by the lease, not by `SESSION_TTL_D`.** A pooled account belongs
+    // to this visitor until the lease elapses and to somebody else afterwards,
+    // so a 30-day session on it is a 30-day read of whatever the next visitors
+    // type in. The frontend derives its cookie `maxAge` from this same value, so
+    // the browser stops presenting the token at the same instant the backend
+    // stops honouring it.
+    return this.sessions.issue(claimed.userId, {
+      expiresAt: claimed.leaseExpiresAt,
+    });
   }
 
   /**
@@ -161,9 +177,17 @@ export class DemoLeaseService {
    * between requests and scales to zero, so a `setInterval` sweep would run on
    * no schedule anybody could describe - and the only moment a free account is
    * actually needed is the moment somebody asks for one.
+   *
+   * **The sessions die with the leases, here and not only at the next
+   * hand-out.** A session is minted with the lease's own expiry, so this is
+   * belt and braces for the ordinary case - but only for the ordinary case. An
+   * account whose lease is extended, or whose session was minted before this
+   * was true, would otherwise stay readable by its last holder for as long as
+   * nobody happened to claim it, which is precisely the window an account
+   * sitting free is in.
    */
   private async expireElapsed(): Promise<void> {
-    await this.centralDb
+    const reclaimed = await this.centralDb
       .update(demoAccounts)
       .set({ leaseExpiresAt: null, seededAt: null })
       .where(
@@ -172,7 +196,14 @@ export class DemoLeaseService {
           lte(demoAccounts.leaseExpiresAt, new Date()),
           isNull(demoAccounts.deletedAt),
         ),
-      );
+      )
+      .returning({ userId: demoAccounts.userId });
+
+    // Serially rather than in parallel, and the loop is bounded by the pool:
+    // ten accounts is the whole of it, and the usual count here is zero.
+    for (const { userId } of reclaimed) {
+      await this.sessions.revokeAllForUser(userId);
+    }
   }
 
   /**
@@ -209,6 +240,7 @@ export class DemoLeaseService {
         id: demoAccounts.id,
         userId: demoAccounts.userId,
         leasedAt: demoAccounts.leasedAt,
+        leaseExpiresAt: demoAccounts.leaseExpiresAt,
         seededAt: demoAccounts.seededAt,
       });
 
@@ -219,7 +251,14 @@ export class DemoLeaseService {
     // than read it back a second time, freeing a lease is what clears
     // `seeded_at` - see `expireElapsed` and `release`.
     return row
-      ? { id: row.id, userId: row.userId, seededAt: row.seededAt }
+      ? {
+          id: row.id,
+          userId: row.userId,
+          // Read back from the row rather than reusing the local `expiresAt`,
+          // so the session's expiry is the one the pool actually recorded.
+          leaseExpiresAt: row.leaseExpiresAt ?? expiresAt,
+          seededAt: row.seededAt,
+        }
       : undefined;
   }
 
@@ -269,5 +308,7 @@ export class DemoLeaseService {
 interface Claimed {
   id: string;
   userId: string;
+  /** When this lease elapses, and therefore when its session expires. */
+  leaseExpiresAt: Date;
   seededAt: Date | null;
 }

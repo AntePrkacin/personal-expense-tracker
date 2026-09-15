@@ -500,7 +500,7 @@ export interface paths {
         put?: never;
         /**
          * Lease a demo account and start a session on it.
-         * @description Hands the caller their own pre-seeded account out of a small pool, restoring it to the showcase fixture first unless it is untouched and was seeded today. No credential is required and none is accepted. **503** is the one ordinary rejection: every pooled account is leased to somebody else, and a later attempt will succeed as leases elapse. **404** means this deployment has the demo disabled.
+         * @description Hands the caller their own pre-seeded account out of a small pool, restoring it to the showcase fixture first unless it is untouched and was seeded today. No credential is required and none is accepted. **503** is the one ordinary rejection: every pooled account is leased to somebody else, and a later attempt will succeed as leases elapse. **404** means this deployment has the demo disabled, or the caller is not the frontend: this route is reachable only with the shared secret the deployment configures, and the two cases are deliberately indistinguishable from outside.
          */
         post: operations["DemoController_session"];
         delete?: never;

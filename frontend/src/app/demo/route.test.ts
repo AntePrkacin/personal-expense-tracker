@@ -19,8 +19,18 @@ import { GET } from './route';
 
 const SESSION_TOKEN = 'aB3dE6gH9jK2mN5pQ8rS1tU4vW7xY0zA3bC6dE9fG2h';
 
+/**
+ * A visitor's own request, as Vercel presents it to the handler.
+ *
+ * The headers are what the handler reads to name the browser it is acting for; a
+ * request with neither is the local-development case and is deliberately covered too.
+ */
+const visitorRequest = (headers: Record<string, string> = { 'x-real-ip': '203.0.113.7' }) =>
+  new Request('https://spendifico.example/demo', { headers });
+
 const originalFetch = global.fetch;
 const originalBackendUrl = process.env.BACKEND_URL;
+const originalSecret = process.env.DEMO_SHARED_SECRET;
 
 const thirtyDaysOut = () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -36,13 +46,18 @@ function respondWith(status: number, body: unknown = {}) {
 
 beforeEach(() => {
   process.env.BACKEND_URL = 'http://backend.test';
+  process.env.DEMO_SHARED_SECRET = 'shared-secret-for-tests';
 });
 
 afterEach(() => {
   global.fetch = originalFetch;
   process.env.BACKEND_URL = originalBackendUrl;
+  process.env.DEMO_SHARED_SECRET = originalSecret;
   jest.restoreAllMocks();
 });
+
+/** The `RequestInit` of the one call a case made. */
+const init = (fetchMock: jest.Mock) => (fetchMock.mock.calls[0] as [string, RequestInit])[1];
 
 describe('GET /demo', () => {
   it('POSTs the hand-out and signs the visitor in on the dashboard', async () => {
@@ -51,7 +66,7 @@ describe('GET /demo', () => {
       expiresAt: thirtyDaysOut(),
     });
 
-    const response = await GET();
+    const response = await GET(visitorRequest());
 
     // The one call, and its method: this endpoint takes no body and no credential,
     // which is the whole point of it.
@@ -73,7 +88,7 @@ describe('GET /demo', () => {
   it('sets the session cookie httpOnly, so client JavaScript never sees the token', async () => {
     respondWith(200, { token: SESSION_TOKEN, expiresAt: thirtyDaysOut() });
 
-    const response = await GET();
+    const response = await GET(visitorRequest());
     const cookie = response.cookies.get(SESSION_COOKIE);
 
     expect(cookie?.value).toBe(SESSION_TOKEN);
@@ -89,7 +104,7 @@ describe('GET /demo', () => {
   it('sends a 503 to the busy screen', async () => {
     respondWith(503);
 
-    const response = await GET();
+    const response = await GET(visitorRequest());
 
     expect(response.status).toBe(307);
     expect(response.headers.get('Location')).toBe('/demo/unavailable?reason=busy');
@@ -99,21 +114,69 @@ describe('GET /demo', () => {
   it('sends a 404 to the disabled screen, not the busy one', async () => {
     respondWith(404);
 
-    const response = await GET();
+    const response = await GET(visitorRequest());
 
     expect(response.headers.get('Location')).toBe('/demo/unavailable?reason=disabled');
   });
 
   /**
    * A throttled caller is not told the pool is busy, because it is not: the limiter
-   * answered before anything looked at an account.
+   * answered before anything looked at an account. It is not told a fault happened
+   * either, which is what this used to do - the reason has its own copy now.
    */
-  it('folds a 429 into the generic failure', async () => {
+  it('sends a 429 to the throttled screen, not the busy or the generic one', async () => {
     respondWith(429);
 
-    const response = await GET();
+    const response = await GET(visitorRequest());
 
-    expect(response.headers.get('Location')).toBe('/demo/unavailable?reason=failed');
+    expect(response.headers.get('Location')).toBe('/demo/unavailable?reason=throttled');
+  });
+
+  /**
+   * The two headers that make this handler the backend's only recognized caller. The
+   * secret is what the guard checks; the address is what turns the hand-out limiter
+   * from five per hour for the whole internet into five per hour per visitor, and the
+   * backend trusts it only because the secret arrived with it.
+   */
+  it('proves itself to the backend and names the browser it is acting for', async () => {
+    const fetchMock = respondWith(200, {
+      token: SESSION_TOKEN,
+      expiresAt: thirtyDaysOut(),
+    });
+
+    await GET(visitorRequest());
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers['x-demo-secret']).toBe('shared-secret-for-tests');
+    expect(headers['x-demo-client-ip']).toBe('203.0.113.7');
+  });
+
+  it('takes the first entry of a forwarded chain, which is the client', async () => {
+    const fetchMock = respondWith(200, {
+      token: SESSION_TOKEN,
+      expiresAt: thirtyDaysOut(),
+    });
+
+    await GET(visitorRequest({ 'x-forwarded-for': '203.0.113.9, 70.41.3.18, 150.172.238.178' }));
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    // Everything after the first entry is a proxy, and keying the limiter on one of
+    // those would put every visitor behind it in one bucket.
+    expect((init.headers as Record<string, string>)['x-demo-client-ip']).toBe('203.0.113.9');
+  });
+
+  it('names nobody rather than guessing when the platform reported no address', async () => {
+    const fetchMock = respondWith(200, {
+      token: SESSION_TOKEN,
+      expiresAt: thirtyDaysOut(),
+    });
+
+    await GET(visitorRequest({}));
+
+    // Local development, where the backend falls back to the connecting address and
+    // the limiter is no worse than it was before this header existed.
+    expect((init(fetchMock).headers as Record<string, string>)['x-demo-client-ip']).toBe('');
   });
 
   /**
@@ -124,7 +187,7 @@ describe('GET /demo', () => {
   it('does not report an unreachable backend as busy', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
 
-    const response = await GET();
+    const response = await GET(visitorRequest());
 
     expect(response.headers.get('Location')).toBe('/demo/unavailable?reason=failed');
     expect(response.cookies.get(SESSION_COOKIE)).toBeUndefined();
@@ -139,7 +202,7 @@ describe('GET /demo', () => {
       },
     }) as unknown as typeof fetch;
 
-    const response = await GET();
+    const response = await GET(visitorRequest());
 
     expect(response.headers.get('Location')).toBe('/demo/unavailable?reason=failed');
     expect(response.cookies.get(SESSION_COOKIE)).toBeUndefined();
@@ -156,7 +219,7 @@ describe('GET /demo', () => {
       expiresAt: new Date(Date.now() - 1_000).toISOString(),
     });
 
-    const response = await GET();
+    const response = await GET(visitorRequest());
 
     expect(response.headers.get('Location')).toBe('/demo/unavailable?reason=failed');
     expect(response.cookies.get(SESSION_COOKIE)).toBeUndefined();

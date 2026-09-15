@@ -1,5 +1,6 @@
 import { BadRequestException, Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
+import type { DemoMembershipService } from '../demo/demo-membership.service';
 import type { TemplatesService } from '../templates/templates.service';
 import type { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
@@ -39,6 +40,7 @@ describe('AuthService', () => {
   let issue: jest.Mock;
   let send: jest.Mock;
   let templatesExist: jest.Mock;
+  let isPooled: jest.Mock;
   let logError: jest.SpyInstance;
 
   beforeEach(() => {
@@ -48,6 +50,7 @@ describe('AuthService', () => {
     issue = jest.fn().mockResolvedValue('raw-token');
     send = jest.fn().mockResolvedValue(undefined);
     templatesExist = jest.fn().mockResolvedValue([GROCERIES_ID, TRANSPORT_ID]);
+    isPooled = jest.fn().mockResolvedValue(false);
 
     service = new AuthService(
       {
@@ -61,6 +64,7 @@ describe('AuthService', () => {
         get: (_key: string, fallback: unknown) => fallback,
       } as unknown as ConfigService,
       { exists: templatesExist } as unknown as TemplatesService,
+      { isPooled } as unknown as DemoMembershipService,
     );
 
     logError = jest
@@ -220,6 +224,7 @@ describe('AuthService', () => {
           get: (_key: string, fallback: unknown) => fallback,
         } as unknown as ConfigService,
         { exists: templatesExist, resolve } as unknown as TemplatesService,
+        { isPooled } as unknown as DemoMembershipService,
       );
 
       await service.register({ ...dto });
@@ -262,6 +267,43 @@ describe('AuthService', () => {
   });
 
   describe('requestLoginLink', () => {
+    /**
+     * A pooled demo account is a real account with a real address, so anybody
+     * who reads one off the seed script or the pool guide could otherwise ask
+     * for a link to it - and this deployment writes links to a log rather than
+     * sending them. The session that would produce is outside the lease,
+     * outside the hand-out's revoke and outside the lowered Gemini budget,
+     * because all three are properties of `/demo` rather than of the account.
+     */
+    it('issues nothing for a pooled demo account', async () => {
+      findByEmail.mockResolvedValue({
+        id: 'demo-user-id',
+        email: 'demo1@example.com',
+      });
+      isPooled.mockResolvedValue(true);
+
+      await service.requestLoginLink('demo1@example.com');
+      await flush();
+
+      expect(isPooled).toHaveBeenCalledWith('demo-user-id');
+      expect(issue).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('answers a pooled account exactly as it answers an unknown one', async () => {
+      findByEmail.mockResolvedValue({
+        id: 'demo-user-id',
+        email: 'demo1@example.com',
+      });
+      isPooled.mockResolvedValue(true);
+
+      // The whole reason the refusal lives here rather than at the controller:
+      // there is one return shape, so the two cannot be told apart.
+      await expect(
+        service.requestLoginLink('demo1@example.com'),
+      ).resolves.toBeUndefined();
+    });
+
     it('sends a link to an address that has an account', async () => {
       findByEmail.mockResolvedValue({
         id: 'existing-id',

@@ -6,13 +6,18 @@ import { newId } from '../common/ids';
 import { mostRecentAnchor } from '../common/period-rules';
 import { UserDatabaseService } from '../database/user-database.service';
 import {
+  assistantMessages,
+  assistantSessions,
   budgetHistory,
   categories,
   categoryCapHistory,
   periodRules,
+  profile,
   transactions,
 } from '../database/user/schema';
 import { InsightsService } from '../insights/insights.service';
+import { FALLBACK_CATEGORY } from '../database/user/starter-categories';
+import { TemplatesService } from '../templates/templates.service';
 import {
   dateMonthsAgo,
   hasHappened,
@@ -67,6 +72,7 @@ export class DemoSeedService {
     private readonly config: ConfigService,
     private readonly userDatabases: UserDatabaseService,
     private readonly insights: InsightsService,
+    private readonly templates: TemplatesService,
   ) {}
 
   /**
@@ -102,18 +108,19 @@ export class DemoSeedService {
     const fixture = load();
     const userDb = await this.userDatabases.getUserDb(userId);
 
-    // Tombstones filtered, like every other read in this codebase, and here it
-    // is load-bearing rather than conventional: a category deleted through the
-    // API is still a row, so an unfiltered read would satisfy the assert below
-    // and then bind that name to the dead id - filing every transaction for it
-    // under a category each of those reads discards.
-    const allCategories = await userDb
+    const idByName = await this.reconcileCategories(userDb, fixture);
+
+    // A post-condition on rows this method has just written, which is the only
+    // place an assert of this kind is safe. It used to run **before** the
+    // rewrite, against whatever the last visitor left, so renaming one category
+    // on a demo account threw here, released the lease and answered 500 on
+    // every later hand-out - one rename in each of ten accounts killed the
+    // advertised demo until somebody intervened by hand.
+    const written = await userDb
       .select()
       .from(categories)
       .where(isNull(categories.deletedAt));
-    assertCategoriesMatch(fixture, allCategories);
-
-    const idByName = new Map(allCategories.map((c) => [c.name, c.id]));
+    assertCategoriesMatch(fixture, written);
 
     // Today in the app's own zone, not the machine's, so a run just either side
     // of local midnight agrees with every month-scoped figure the dashboard
@@ -206,6 +213,30 @@ export class DemoSeedService {
       })),
     );
 
+    // **What the visitor typed goes with the rows they typed it about.** The two
+    // assistant tables are the only place in this database that holds a
+    // visitor's own words, and nothing else in the app deletes them: left here,
+    // every question one visitor asked is listed under the History tab for
+    // every visitor of this account afterwards, indefinitely. People type real
+    // finances into demo chat boxes.
+    //
+    // Messages before sessions, because the child rows are the ones with a
+    // parent to be orphaned by. There is no foreign key to enforce it - this
+    // schema declares none - so the order is a courtesy to anybody reading the
+    // tables mid-restore rather than a constraint.
+    await userDb.delete(assistantMessages);
+    await userDb.delete(assistantSessions);
+
+    // **The display name and the currency are the visitor's to change too**, and
+    // Settings lets them. Rewritten rather than left, so the next visitor is not
+    // greeted by the last one's idea of a funny name - and so the fixture's
+    // amounts are read back in the currency they were written for. Everything
+    // else in this row is provisioning's and stays as it is.
+    await userDb.update(profile).set({
+      fullName: fixture.profile.fullName,
+      currency: fixture.profile.currency,
+    });
+
     // One transaction, so a failure part-way through leaves the account with the
     // history it had rather than with whichever chunk landed before the error.
     //
@@ -226,6 +257,86 @@ export class DemoSeedService {
     });
 
     return rows.length;
+  }
+
+  /**
+   * Rebuilds the account's categories from the templates, discarding whatever
+   * is there.
+   *
+   * **Reconciling rather than asserting is the whole of this method**, and the
+   * difference is who is allowed to break a demo account. Every visitor can
+   * rename or delete a category, and a restore that demanded the fixture's exact
+   * names simply refused to run afterwards. So nothing here reads the account's
+   * categories to decide anything: it deletes them - **tombstones included**,
+   * which a soft delete through the API leaves behind and which would otherwise
+   * collide with the row being recreated - and writes the fixture's set fresh.
+   *
+   * The cap history goes with them, in the same transaction. A cap names a
+   * category id, so leaving the old rows behind would leave every one of them
+   * pointing at a row that no longer exists; the caps are rewritten against the
+   * new ids further down `writeFixture` regardless.
+   *
+   * **A transaction, and it is the second of the two this file opens rather
+   * than a nesting of one.** They run in sequence and the embedded driver
+   * refuses only *overlapping* transactions on one connection. What it buys is
+   * that an account is never left with no categories at all, which is a state
+   * nothing in the app can render and `categories_fallback_idx` would not let
+   * the next attempt repair blindly.
+   *
+   * @returns the new id for each fixture category name, which is what binds the
+   * fixture's named transactions and caps to rows that exist.
+   */
+  private async reconcileCategories(
+    userDb: Awaited<ReturnType<UserDatabaseService['getUserDb']>>,
+    fixture: Fixture,
+  ): Promise<Map<string, string>> {
+    const wanted = fixture.categories.map((category) => category.name);
+
+    // The fallback is not a template and must never become one - it is the
+    // undeletable reassignment target, seeded for everybody and offered to
+    // nobody - so it is recreated from the same constant provisioning uses.
+    const templates = await this.templates.byNames(
+      wanted.filter((name) => name !== FALLBACK_CATEGORY.name),
+    );
+    const templateByName = new Map(
+      templates.map((template) => [template.name, template]),
+    );
+
+    const rows = wanted.map((name) => {
+      if (name === FALLBACK_CATEGORY.name) {
+        return { id: newId(), ...FALLBACK_CATEGORY, isFallback: true };
+      }
+
+      const template = templateByName.get(name);
+      if (!template) {
+        // The one cause left once a visitor's edits cannot reach here: the
+        // fixture and `category_templates` genuinely disagree. Same remedy as
+        // the assert's, so the message points at the same place.
+        throw new Error(
+          `The showcase fixture names the category ${name}, which is not a ` +
+            `live category template. A template has been renamed or removed ` +
+            `since this data was generated: fix CATEGORY_PLANS in ` +
+            `src/scripts/showcase/plan.ts and run \`mise run seed:fixture\`.`,
+        );
+      }
+
+      return {
+        id: newId(),
+        name: template.name,
+        color: template.color,
+        icon: template.icon,
+        description: template.description,
+        isFallback: false,
+      };
+    });
+
+    await userDb.transaction(async (tx) => {
+      await tx.delete(categoryCapHistory);
+      await tx.delete(categories);
+      await tx.insert(categories).values(rows);
+    });
+
+    return new Map(rows.map((row) => [row.name, row.id]));
   }
 
   /**
@@ -306,15 +417,16 @@ const INSIGHT_POLL_INTERVAL_MS = 250;
  * stop summing to the budget and the allocation summary reports an unallocated
  * remainder the demo never meant to show.
  *
- * The usual cause is `category_templates` changing under a fixture generated
- * before it; the other is this account having a category deleted through the
- * API, which the tombstone filter on the read above turns into the same
- * missing-category failure rather than a silently dead id. So the message says
- * which category, which cause, and what actually fixes it - regenerating does
- * not, since the fixture's categories come from a hand-written table.
- *
- * **A demo visitor deleting a category reaches this**, which is why the lease
- * releases on a failed re-seed rather than handing out the account anyway.
+ * **This runs after the rewrite now, not before it, and that is the difference
+ * between a guard and a trap.** It used to read whatever the last visitor left
+ * and refuse to restore an account that disagreed with the fixture - so renaming
+ * one category, which every visitor can do, poisoned a pooled account until
+ * somebody re-seeded it by hand. `reconcileCategories` deletes and rewrites the
+ * whole set instead, and what is left for this to catch is a fixture that names
+ * a category the templates cannot supply, plus a write that landed only
+ * partially. The message therefore still says which category and what fixes it -
+ * regenerating alone does not, since the fixture's categories come from a
+ * hand-written table.
  */
 export function assertCategoriesMatch(
   fixture: Fixture,

@@ -8,12 +8,20 @@
 // because `npm run build` would reject it.
 
 /**
- * The three outcomes, keyed to what the backend answered.
+ * The four outcomes, keyed to what the backend answered.
  *
- * Three rather than one because the advice genuinely differs, and one of them is not
- * really a failure at all: `busy` means every account is in use and coming back in a
- * minute will work, `disabled` means this deployment never had a demo, and `failed` is
- * everything else.
+ * Four rather than one because the advice genuinely differs, and two of them are not
+ * really failures at all: `busy` means every account is in use and coming back in a
+ * minute will work, `throttled` means this visitor has started several demos already
+ * and the limiter is holding them off, `disabled` means this deployment never had a
+ * demo, and `failed` is everything else.
+ *
+ * **`throttled` is not `busy`**, and separating them is the same argument one paragraph
+ * on rather than a new one. A 429 says this visitor asked too often; it says nothing
+ * whatever about how many accounts are free. Folding it into `busy` - which the plan
+ * for this change first proposed - would tell somebody that ten people are ahead of
+ * them when the pool may be sitting idle. The advice happens to coincide, and the
+ * sentence does not.
  *
  * **`busy` and `failed` must stay distinct**, which is the lesson
  * `docs/agents/api-contract.md` draws from the assistant's 502: the backend answers a
@@ -22,7 +30,7 @@
  * are ahead of them when the truth is that nothing answered at all - a specific,
  * confident claim built out of no information.
  */
-export const DEMO_FAILURE_REASONS = ['busy', 'disabled', 'failed'] as const;
+export const DEMO_FAILURE_REASONS = ['busy', 'throttled', 'disabled', 'failed'] as const;
 
 export type DemoFailureReason = (typeof DEMO_FAILURE_REASONS)[number];
 

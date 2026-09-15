@@ -1643,6 +1643,20 @@ free-tier quota between them, and more than one Fly machine gives each user a fr
 machine on top of that. A genuine cap needs a shared store and a global counter, which is a
 real piece of infrastructure this project has not needed before.
 
+**Three things have changed under that paragraph and none of them closes it.** The demo pool
+made "N users" mean something an attacker chooses rather than something the user base happens to
+be, so `DemoTierThrottlerGuard` gives a pooled account a much lower budget on the same buckets -
+five chats and three scans an hour rather than twenty and ten. That bounds the arm that grew,
+and it is still per user. **The bill this entry implies does not exist**: the key is an AI Studio
+key on project `gen-lang-client-0566337014`, where **billing is disabled**, so what runs out is
+the free tier's quota and the cost is that scanning and the assistant break for everyone at once,
+with nothing announcing it. And **the honest ceiling is not in this codebase at all** - it is a
+quota override on the Generative Language API in that project's console, which is the only layer
+that survives a bug in every other one; `docs/guides/deployment.md` carries what to set and when.
+A process-wide counter was considered and declined for now: in memory it resets whenever Cloud Run
+scales to zero, which on this app's traffic is most nights, and a persistent one is a central
+migration and a write per call bought against a quota rather than a bill.
+
 **A page-count guard on a scanned PDF.** Gemini reads PDFs natively, which is what makes
 accepting one cheap enough to ship - but the backend has no PDF parser, so it cannot look at a
 PDF's page count before sending it. A 40-page bank statement is accepted up to the 4MB size cap
@@ -1967,9 +1981,16 @@ history, and the sentence about A39 designing no logout is too - the product own
 
 What is left is the operator's half, unchanged. Revoking a session **somebody else** holds still
 means setting `sessions.deleted_at` by hand - `validate()` filters on it, so the next request
-with that token answers 401 - and so does revoking **every** session of one user, which
-`sessions_user_id_idx` exists to make one statement. Neither has tooling. Write it before an
-incident needs it, not during one.
+with that token answers 401. There is no tooling for it. Write it before an incident needs it,
+not during one.
+
+**Revoking every session of one user is no longer hand-written SQL**, though it is still not
+operator tooling. The demo pool's session hardening added `SessionService.revokeAllForUser()`,
+one indexed `UPDATE` over `sessions_user_id_idx`, and the lease calls it whenever an account
+changes hands. Anything written for the operator's case should call that rather than a second
+statement doing the same thing - and should stay a script or an admin route, because on Settings
+it would be a "sign out everywhere" control, which is the feature the paragraph below explains was
+deliberately left out of the footer.
 
 Two things worth knowing before that tooling is written. The endpoint deliberately revokes only
 the presented bearer, so it is not a building block for "sign out everywhere": that wants the
@@ -2049,7 +2070,17 @@ client address, and the backend has to be told how many hops to trust. **Do not 
 either half in isolation.** Forwarding a client-supplied `X-Forwarded-For` and then trusting
 it makes the limiter *spoofable*, which is worse than blind - and the backend is publicly
 reachable, so a custom header like `X-Client-IP` is no better without authentication between
-the two apps, which does not exist. Getting this right means deciding the hop count against
+the two apps, which does not exist.
+
+**Authentication between the two apps exists now, for one route, and that is the shape the rest
+of this wants.** The demo hand-out takes a `DEMO_SHARED_SECRET` header, and `DemoSecretGuard`
+reads the client address out of `x-demo-client-ip` **only** once that secret has matched - so
+the last clause above is what changed rather than the argument: the custom header is fine, and
+the authentication is what makes it fine. Applying it to the auth routes is a bigger job than
+copying the guard, because those are called from Server Actions rather than from one route
+handler and every one of them would have to forward the address; the demo route was the cheap
+case, and it was done there because the limiter it fixes guards the only door into the deployed
+app. Getting this right means deciding the hop count against
 the real topology (PET-53's Fly.io deploy, plus whatever sits in front) and probably
 authenticating the frontend to the backend. That is its own ticket, not a line in a form.
 
@@ -3363,8 +3394,16 @@ nothing else.
 
 **The first half is done**: the service carries `--max-instances=1`, set by hand, and
 `docs/guides/deployment.md` shows how to check it. The trigger's `services update --image` inherits
-it, so a deploy does not drop it; recreating the service would. Nothing in this repository or in the
-trigger declares it, which is the half that stays open.
+it, so a deploy does not drop it; recreating the service would.
+
+**The repository now declares it and the trigger does not yet read the declaration.**
+`backend/cloudbuild.yaml` is the trigger's own inline build copied verbatim with
+`--max-instances=1` on the deploy step, so the invariant is written down where somebody reading only
+this repository will find it. What is left is one production action: pointing the trigger at that
+file, which is an export-edit-import rather than a flag, and which `docs/guides/deployment.md`
+carries in full. Until that is done the file is documentation rather than machinery - which is
+better than nothing was, and is not the same as done. **Delete this entry when the trigger names
+`backend/cloudbuild.yaml`.**
 
 ## Nothing in this repository mentions GCP (PET-86)
 
@@ -3385,9 +3424,12 @@ rather than porting it, and writing a second deploy path in Actions would have r
 
 What remains open is narrower and is recorded here rather than solved: `TRUST_PROXY_HOPS` is `1`
 because Fly's topology wanted that, and Google's front end builds `X-Forwarded-For` differently, so
-the value is unverified. It is silent when wrong and it puts every caller in one rate-limit bucket -
-which since PET-86 includes the IP-keyed `demo` limiter, turning five hand-outs per visitor per hour
-into five for the whole internet.
+the value is unverified. It is silent when wrong and it puts every caller in one rate-limit bucket.
+**The `demo` limiter is out of its reach now** and the two auth limiters are not: the hand-out route
+counts the address the frontend names in a header the backend trusts only alongside
+`DEMO_SHARED_SECRET`, so the sentence that used to end this paragraph - five hand-outs per hour for
+the whole internet - describes a state that has been fixed rather than one to expect. What the
+measurement still buys is the per-IP auth budget, and the procedure is in `docs/guides/deployment.md`.
 
 ## The demo pool has no scheduled refresh (PET-86)
 

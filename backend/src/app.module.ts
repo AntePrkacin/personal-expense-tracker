@@ -15,6 +15,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { envValidationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { DemoModule } from './demo/demo.module';
+import { trackByDemoClient } from './demo/demo-headers';
 import { InsightsModule } from './insights/insights.module';
 import { PeriodsModule } from './periods/periods.module';
 import { ProfileModule } from './profile/profile.module';
@@ -166,6 +167,13 @@ const DEFAULT_DEMO_RATE_TTL_S = 3600;
             },
             // Keyed by IP rather than by user, because the whole point of the
             // route it guards is that the caller has no user yet. PET-86.
+            //
+            // **`trackByDemoClient` rather than `trackByIp`**, and the
+            // difference is which IP: `/demo` is a route handler on Vercel, so
+            // `req.ip` is one egress address for every browser in the world and
+            // this limiter distinguished nobody at all. `DemoSecretGuard`
+            // authenticates the frontend and copies the address it names onto
+            // the request; the tracker reads that and falls back to `req.ip`.
             {
               name: 'demo',
               limit: config.get<number>(
@@ -173,7 +181,7 @@ const DEFAULT_DEMO_RATE_TTL_S = 3600;
                 DEFAULT_DEMO_RATE_LIMIT,
               ),
               ttl: demoTtl,
-              getTracker: trackByIp,
+              getTracker: trackByDemoClient,
             },
           ],
         };

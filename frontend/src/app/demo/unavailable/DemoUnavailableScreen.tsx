@@ -24,13 +24,16 @@ import type { DemoFailureReason } from '../reason';
 /**
  * One heading and one line per reason.
  *
- * Three rather than one apology, because only one of these is really an apology.
+ * Four rather than one apology, because only one of these is really an apology.
  *
  * `busy` is the ordinary case and the whole reason the pool is bounded: every account is
  * with somebody else right now and waiting genuinely works, so its copy promises that
- * rather than suggesting anything is broken. `disabled` is a deployment that never had a
- * demo, where waiting will never help and saying "try again" would be a lie. `failed`
- * claims the least of the three, because it covers a backend that did not answer at all.
+ * rather than suggesting anything is broken. `throttled` is the visitor's own doing and
+ * says so plainly - it is what the rate limiter answers, and it must not borrow `busy`'s
+ * sentence, which would blame the pool for something the pool did not do. `disabled` is a
+ * deployment that never had a demo, where waiting will never help and saying "try again"
+ * would be a lie. `failed` claims the least of the four, because it covers a backend that
+ * did not answer at all.
  *
  * Straight apostrophes, following the spec and every other string in the repo rather
  * than Figma's curly ones. Hoisted into a const the way the neighbouring screens do,
@@ -41,6 +44,10 @@ const COPY: Record<DemoFailureReason, { heading: string; body: string }> = {
   busy: {
     heading: 'The demo is busy right now',
     body: 'Every demo account is in use. They free up a few minutes after someone stops, so please try again shortly.',
+  },
+  throttled: {
+    heading: "You've started a few demos already",
+    body: 'We limit how often one visitor can open a new demo account. Please wait a few minutes and try again.',
   },
   disabled: {
     heading: 'The demo is not available here',

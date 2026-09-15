@@ -32,9 +32,21 @@ mise run seed:demo-pool          # local SQLite files under backend/databases/
 mise run seed:demo-pool:cloud    # Turso Cloud, using backend/.env
 ```
 
-This provisions `demo1@spendifico.eu` through `demo10@spendifico.eu` if they do not exist, fills
+This provisions `demo1@example.com` through `demo10@example.com` if they do not exist, fills
 each with the committed fixture, and enrols each into the pool. One application context serves all
 ten, so it costs one boot rather than ten.
+
+**The addresses are on `example.com` deliberately, and they changed.** They were on
+`spendifico.eu`, a domain nobody on this project holds any more, so anybody could have registered it
+and started receiving mail for eleven live accounts; RFC 2606 reserves `example.com` and nobody can
+register it, which makes these permanently undeliverable by construction. A pool seeded before that
+change keeps its old addresses - the seed matches on the address, so re-running it creates ten new
+accounts beside the old ten rather than renaming them. **Tombstone the old entries and their users
+before re-seeding**, or the pool is twenty accounts against a hundred-database cap.
+
+**A pooled account cannot be sent a login link at all**, whatever its address: `POST
+/api/auth/login-link` answers the same empty 202 it gives an unknown address and issues nothing.
+`/demo` is how a pooled account is reached, and it asks for no address.
 
 **Stop your dev server first.** The database engine takes an exclusive file lock, so the seed cannot
 run while a backend is up in either mode. Nothing is written when that happens - the repair is to
@@ -114,17 +126,24 @@ has its lease released and is handed to nobody until the cause is fixed.
 
 **The logs show the restore failing with "the fixture and the category templates disagree".**
 
-A category template was added, renamed or removed since the fixture was generated, or a visitor
-deleted a category through the UI. The message names which category and which cause. A visitor's
-deletion is repaired by re-seeding the pool; a template change needs the fixture rebuilt
+A category template was added, renamed or removed since the fixture was generated. That is now the
+only cause: a visitor renaming or deleting a category used to produce the same message and no longer
+can, because the restore deletes the account's categories - tombstones included - and rewrites them
+from the templates rather than checking the ones it finds. Fixing it means rebuilding the fixture
 (`docs/guides/seeding-dummy-data.md` covers that, and regenerating alone does not fix it).
 
 **A visitor is still signed in to an account somebody else now has.**
 
-Expected, and harmless. A session lasts `SESSION_TTL_D` days while a lease lasts minutes, so an
-abandoned tab keeps a working session onto an account that has since been restored under it. What
-that visitor sees is the same fixture they started from. Shortening the session to the lease would
-sign people out mid-demo, which is worse.
+That cannot happen any more, and if you see it, it is a bug rather than the design. A demo session
+now expires with the lease that minted it rather than after `SESSION_TTL_D` days, and every session
+on a pooled account is revoked twice over: when the lease is reclaimed, and again when the account
+is claimed for the next visitor, before a single row of it is rewritten.
+
+What it costs is real and was accepted: an abandoned tab is signed out at the end of the hour rather
+than showing the fixture it started from. What it buys is the claim the README makes - two visitors
+cannot see each other's data - being true of a visitor who keeps their bearer, not only of one who
+closes the tab. Ending a session on a **non-pooled** account is still an operator's manual tombstone;
+`docs/TODO.md` carries that.
 
 ## What a demo visitor can do
 
@@ -132,6 +151,11 @@ Everything a real user can, on their own account: add, edit and delete transacti
 change the budget and the pay day, scan a receipt, and chat to the assistant. Two of those cost real
 money on a shared Gemini key, and both carry their own per-user rate limits; there is no separate
 cap for demo accounts, which is recorded in `docs/TODO.md` rather than solved.
+
+What they leave behind goes with them. The restore rewrites the transactions, all three histories,
+the display name and the currency, and **deletes every assistant conversation** - so one visitor's
+questions are not listed under the next visitor's History tab. Insight sets regenerate on the same
+pass.
 
 They cannot reach anybody else's data. A demo account is an ordinary account with its own database,
 so isolation is the same structural isolation every user has, not a filter somebody remembered to

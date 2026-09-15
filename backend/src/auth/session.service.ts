@@ -55,13 +55,23 @@ export class SessionService {
   /**
    * Starts a session for a user who has just proved their address.
    *
+   * `expiresAt` overrides `SESSION_TTL_D` for callers whose session is bounded
+   * by something other than the calendar. The demo pool is the only one: a
+   * pooled account is the visitor's until the lease elapses and somebody else's
+   * afterwards, so a session on it must not outlive the lease it was minted
+   * for. Everything else omits it and gets the ordinary persistent session A34
+   * asks for.
+   *
    * @returns the raw token and when it expires. As with a login link, the raw
    * value exists only here and in the response it is handed back in; the row
    * keeps its hash.
    */
-  async issue(userId: string): Promise<{ token: string; expiresAt: Date }> {
+  async issue(
+    userId: string,
+    { expiresAt: until }: { expiresAt?: Date } = {},
+  ): Promise<{ token: string; expiresAt: Date }> {
     const token = randomBytes(TOKEN_BYTES).toString('base64url');
-    const expiresAt = new Date(Date.now() + this.ttlDays * MS_PER_DAY);
+    const expiresAt = until ?? new Date(Date.now() + this.ttlDays * MS_PER_DAY);
 
     await this.centralDb.insert(sessions).values({
       id: newId(),
@@ -142,6 +152,34 @@ export class SessionService {
           isNull(sessions.deletedAt),
         ),
       );
+  }
+
+  /**
+   * Ends every live session a user has, in one indexed statement.
+   *
+   * The deliberate counterpart to `revoke()` rather than a generalization of
+   * it, and the difference is who is being protected. `revoke()` is a person
+   * signing out of one device and must leave their other devices alone. This
+   * is a **pooled demo account changing hands**: the account is about to be
+   * rewritten for somebody else, so every bearer minted against its previous
+   * holders has to die at the same instant, whichever device holds it.
+   *
+   * `sessions_user_id_idx` is what makes it one statement rather than a read
+   * and a loop. The `deletedAt` guard is `revoke()`'s, for `revoke()`'s reason:
+   * the first tombstone is the answer to "when did this session end", so an
+   * already-revoked row is left as it is. Matching zero rows is the ordinary
+   * case - most reclaimed leases have nothing live behind them - and is not an
+   * error.
+   *
+   * **Not offered as a "sign out everywhere" control.** That would be a real
+   * feature with a real button on Settings; this is an internal safety
+   * property of the lease, and nothing outside `src/demo/` calls it.
+   */
+  async revokeAllForUser(userId: string): Promise<void> {
+    await this.centralDb
+      .update(sessions)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(sessions.userId, userId), isNull(sessions.deletedAt)));
   }
 
   /** Days. Fixed, never extended by use; see the class comment. */
