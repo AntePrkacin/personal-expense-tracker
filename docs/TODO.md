@@ -2056,7 +2056,17 @@ client address, and the backend has to be told how many hops to trust. **Do not 
 either half in isolation.** Forwarding a client-supplied `X-Forwarded-For` and then trusting
 it makes the limiter *spoofable*, which is worse than blind - and the backend is publicly
 reachable, so a custom header like `X-Client-IP` is no better without authentication between
-the two apps, which does not exist. Getting this right means deciding the hop count against
+the two apps, which does not exist.
+
+**Authentication between the two apps exists now, for one route, and that is the shape the rest
+of this wants.** The demo hand-out takes a `DEMO_SHARED_SECRET` header, and `DemoSecretGuard`
+reads the client address out of `x-demo-client-ip` **only** once that secret has matched - so
+the last clause above is what changed rather than the argument: the custom header is fine, and
+the authentication is what makes it fine. Applying it to the auth routes is a bigger job than
+copying the guard, because those are called from Server Actions rather than from one route
+handler and every one of them would have to forward the address; the demo route was the cheap
+case, and it was done there because the limiter it fixes guards the only door into the deployed
+app. Getting this right means deciding the hop count against
 the real topology (PET-53's Fly.io deploy, plus whatever sits in front) and probably
 authenticating the frontend to the backend. That is its own ticket, not a line in a form.
 
@@ -3392,9 +3402,12 @@ rather than porting it, and writing a second deploy path in Actions would have r
 
 What remains open is narrower and is recorded here rather than solved: `TRUST_PROXY_HOPS` is `1`
 because Fly's topology wanted that, and Google's front end builds `X-Forwarded-For` differently, so
-the value is unverified. It is silent when wrong and it puts every caller in one rate-limit bucket -
-which since PET-86 includes the IP-keyed `demo` limiter, turning five hand-outs per visitor per hour
-into five for the whole internet.
+the value is unverified. It is silent when wrong and it puts every caller in one rate-limit bucket.
+**The `demo` limiter is out of its reach now** and the two auth limiters are not: the hand-out route
+counts the address the frontend names in a header the backend trusts only alongside
+`DEMO_SHARED_SECRET`, so the sentence that used to end this paragraph - five hand-outs per hour for
+the whole internet - describes a state that has been fixed rather than one to expect. What the
+measurement still buys is the per-IP auth budget, and the procedure is in `docs/guides/deployment.md`.
 
 ## The demo pool has no scheduled refresh (PET-86)
 

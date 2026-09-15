@@ -8,7 +8,14 @@ import { users } from './../src/database/central/schema';
 import { APP_DB } from './../src/database/database.constants';
 import type { CentralDatabase } from './../src/database/database.types';
 import { DemoLeaseService } from './../src/demo/demo-lease.service';
+import {
+  DEMO_CLIENT_IP_HEADER,
+  DEMO_SECRET_HEADER,
+} from './../src/demo/demo-headers';
 import { TemplatesService } from './../src/templates/templates.service';
+
+/** The credential the frontend presents, as these suites configure it. */
+export const DEMO_TEST_SECRET = 'demo-shared-secret-for-tests';
 
 /**
  * Shared setup for the three demo suites.
@@ -29,7 +36,10 @@ import { TemplatesService } from './../src/templates/templates.service';
 export const bootDemoApp = async (
   env: Record<string, string>,
 ): Promise<INestApplication<App>> => {
-  Object.assign(process.env, env);
+  // Joi requires the pair together, so a suite that enables the demo has to
+  // configure the credential for it - exactly as a deployment does. Set before
+  // the caller's own values so a suite can still boot without a demo at all.
+  Object.assign(process.env, { DEMO_SHARED_SECRET: DEMO_TEST_SECRET }, env);
 
   // **`require`, not `import`.** A static import is hoisted above the
   // assignment above and would load the config before the values are set, which
@@ -96,6 +106,25 @@ export const enrolAccount = async (
 
   await app.get(DemoLeaseService).enrol(user.id);
   return user.id;
+};
+
+/**
+ * A hand-out request, carrying the shared secret the frontend presents.
+ *
+ * Every suite goes through this rather than calling the route directly, so the
+ * one place that knows how a legitimate caller is recognized is here. A call
+ * without it is a 404, which `demo.e2e-spec.ts` pins deliberately.
+ *
+ * `clientIp` is the browser the frontend says it is acting for, which is what
+ * the `demo` throttler counts against. Omitted, the limiter falls back to the
+ * caller's own address - one bucket for the whole suite.
+ */
+export const handOut = (app: INestApplication<App>, clientIp?: string) => {
+  const call = request(app.getHttpServer())
+    .post('/api/demo/session')
+    .set(DEMO_SECRET_HEADER, DEMO_TEST_SECRET);
+
+  return clientIp ? call.set(DEMO_CLIENT_IP_HEADER, clientIp) : call;
 };
 
 /** Which account a session token belongs to. */

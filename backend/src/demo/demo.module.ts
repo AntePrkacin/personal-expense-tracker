@@ -5,6 +5,7 @@ import { TemplatesModule } from '../templates/templates.module';
 import { DemoController } from './demo.controller';
 import { DemoLeaseService } from './demo-lease.service';
 import { DemoSeedService } from './demo-seed.service';
+import { DemoSecretGuard } from './demo-secret.guard';
 
 /**
  * The demo pool: restoring a pooled account to the fixture, and (from the rest
@@ -36,7 +37,7 @@ import { DemoSeedService } from './demo-seed.service';
 @Module({
   imports: [InsightsModule, AuthModule, TemplatesModule],
   controllers: [DemoController],
-  providers: [DemoSeedService, DemoLeaseService],
+  providers: [DemoSeedService, DemoLeaseService, DemoSecretGuard],
   exports: [DemoSeedService, DemoLeaseService],
 })
 export class DemoModule {}

@@ -33,6 +33,41 @@ import type { DemoFailureReason } from './reason';
 type DemoSessionResponse = components['schemas']['DemoSessionResponseDto'];
 
 /**
+ * The two headers that make this handler the backend's only recognized caller.
+ *
+ * `x-demo-secret` is what `DemoSecretGuard` checks; without it the API answers 404, so a
+ * visitor cannot skip this handler, call the public Cloud Run URL directly and drain the
+ * pool from as many addresses as they have. `x-demo-client-ip` names the browser this
+ * request is being made for, and the backend trusts it **only** once the secret has
+ * matched - which is what turns the hand-out limiter from five per hour for the whole
+ * internet into five per hour per visitor.
+ *
+ * Deliberately not `X-Forwarded-For`: `docs/TODO.md` sets out why trusting a
+ * client-influenced header by raising `TRUST_PROXY_HOPS` is worse than the state it
+ * would replace.
+ */
+const DEMO_SECRET_HEADER = 'x-demo-secret';
+const DEMO_CLIENT_IP_HEADER = 'x-demo-client-ip';
+
+/**
+ * The browser this hand-out is for, as the platform reported it.
+ *
+ * `x-forwarded-for` is a comma-separated chain and the **first** entry is the client;
+ * everything after it is a proxy. Vercel sets `x-real-ip` too and it is the simpler of
+ * the two, so it is preferred and the chain is the fallback. An empty answer is not an
+ * error: the backend falls back to the connecting address, which is this handler, and
+ * the limiter is no worse than it was before.
+ */
+function clientIpOf(request: Request): string {
+  const real = request.headers.get('x-real-ip');
+  if (real) {
+    return real.trim();
+  }
+
+  return (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim();
+}
+
+/**
  * Which failure screen a backend status means.
  *
  * **503 is the one that is not really a failure**: every pooled account is leased right
@@ -43,11 +78,19 @@ type DemoSessionResponse = components['schemas']['DemoSessionResponseDto'];
  * visitor who followed a link here still deserves to be told that rather than shown a
  * generic fault.
  *
- * Everything absent from this table - a 429 from the throttler, a 500, or no response at
- * all - falls through to `failed`, whose copy claims the least.
+ * **429 is the throttler and is its own reason, not `busy`.** It says this visitor has
+ * asked too often and says nothing at all about how many accounts are free, so borrowing
+ * `busy`'s sentence would blame the pool for something the visitor did. It only became
+ * worth distinguishing once the header above made the limiter count visitors: before
+ * that, a 429 here meant the frontend's shared bucket was empty, which no copy could
+ * honestly explain to the person reading it.
+ *
+ * Everything absent from this table - a 500, or no response at all - falls through to
+ * `failed`, whose copy claims the least.
  */
 const REASON_BY_STATUS: Record<number, DemoFailureReason> = {
   404: 'disabled',
+  429: 'throttled',
   503: 'busy',
 };
 
@@ -73,12 +116,20 @@ function failed(reason: DemoFailureReason) {
   return redirectTo(`${ACCESS_ROUTES.demoUnavailable}?reason=${reason}`);
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   let response: Response;
   try {
     response = await fetch(`${process.env.BACKEND_URL}/api/demo/session`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // Server-side only, like `BACKEND_URL` beside it, and therefore with no
+        // `NEXT_PUBLIC_` prefix: a secret with that prefix is inlined into the browser
+        // bundle and is public forever. An unset value sends the header empty and the
+        // backend answers 404, which is the visible failure a misconfiguration deserves.
+        [DEMO_SECRET_HEADER]: process.env.DEMO_SHARED_SECRET ?? '',
+        [DEMO_CLIENT_IP_HEADER]: clientIpOf(request),
+      },
       // No body at all: the endpoint takes none, and `forbidNonWhitelisted` on the
       // backend would reject anything sent anyway.
       cache: 'no-store',

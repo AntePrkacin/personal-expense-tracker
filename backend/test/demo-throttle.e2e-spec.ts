@@ -1,8 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { rm } from 'node:fs/promises';
-import request from 'supertest';
 import type { App } from 'supertest/types';
-import { bootDemoApp } from './demo-pool';
+import { bootDemoApp, handOut } from './demo-pool';
 
 /**
  * The fifth named throttler.
@@ -31,7 +30,22 @@ describe('Demo endpoint, rate limited (e2e)', () => {
   });
 
   it('refuses a second hand-out inside the window', async () => {
-    await request(app.getHttpServer()).post('/api/demo/session').expect(503);
-    await request(app.getHttpServer()).post('/api/demo/session').expect(429);
+    await handOut(app, '203.0.113.1').expect(503);
+    await handOut(app, '203.0.113.1').expect(429);
+  });
+
+  /**
+   * The bucket is the visitor, not the frontend.
+   *
+   * Every browser reaches this route through one route handler on Vercel, so
+   * `req.ip` is a single egress address for all of them and the limiter used to
+   * put the entire internet in one bucket of five an hour. What separates them
+   * is a header the frontend sets and `DemoSecretGuard` trusts only after the
+   * shared secret has checked out - so this asserts the separation *and*, by
+   * going through `handOut`, that it takes the secret to get it.
+   */
+  it('gives a second visitor their own bucket', async () => {
+    // The first visitor's budget is already spent by the test above.
+    await handOut(app, '203.0.113.2').expect(503);
   });
 });

@@ -14,7 +14,8 @@ import {
   profile,
   transactions,
 } from './../src/database/user/schema';
-import { bootDemoApp, enrolAccount, whoami } from './demo-pool';
+import { DEMO_SECRET_HEADER } from './../src/demo/demo-headers';
+import { bootDemoApp, enrolAccount, handOut, whoami } from './demo-pool';
 
 /**
  * Leasing a pooled demo account to a caller who presents no credential at all.
@@ -48,15 +49,31 @@ describe('Demo endpoint (e2e)', () => {
     // The state a deployment is in between enabling the feature and running the
     // pool seed. A pool with no accounts is a pool with none free, so the
     // ordinary busy answer is the right one.
-    await request(app.getHttpServer()).post('/api/demo/session').expect(503);
+    await handOut(app).expect(503);
+  });
+
+  /**
+   * The direct-URL bypass, closed.
+   *
+   * The API is on a public Cloud Run URL, so before the shared secret anybody
+   * could skip the frontend, call this route from as many addresses as they had
+   * and drain the pool - while every real visitor shared the frontend's single
+   * egress bucket. **404 rather than 401**, so a caller cannot tell a wrong
+   * credential from a deployment that never had a demo.
+   */
+  it('answers 404 to a caller who is not the frontend', async () => {
+    await request(app.getHttpServer()).post('/api/demo/session').expect(404);
+
+    await request(app.getHttpServer())
+      .post('/api/demo/session')
+      .set(DEMO_SECRET_HEADER, 'not-the-shared-secret')
+      .expect(404);
   });
 
   it('hands out a session on a pooled account', async () => {
     await enrolAccount(app, 'demo-one@example.com');
 
-    const response = await request(app.getHttpServer())
-      .post('/api/demo/session')
-      .expect(200);
+    const response = await handOut(app).expect(200);
 
     const body = response.body as { token: string; expiresAt: string };
     expect(typeof body.token).toBe('string');
@@ -68,12 +85,8 @@ describe('Demo endpoint (e2e)', () => {
     await enrolAccount(app, 'demo-two@example.com');
     await enrolAccount(app, 'demo-three@example.com');
 
-    const first = await request(app.getHttpServer())
-      .post('/api/demo/session')
-      .expect(200);
-    const second = await request(app.getHttpServer())
-      .post('/api/demo/session')
-      .expect(200);
+    const first = await handOut(app).expect(200);
+    const second = await handOut(app).expect(200);
 
     const firstEmail = await whoami(
       app,
@@ -90,9 +103,7 @@ describe('Demo endpoint (e2e)', () => {
   it('turns the next caller away once every account is leased', async () => {
     // The three accounts above are leased by now, so this needs no setup: the
     // pool is genuinely exhausted rather than artificially so.
-    const response = await request(app.getHttpServer())
-      .post('/api/demo/session')
-      .expect(503);
+    const response = await handOut(app).expect(503);
 
     // The header a client can act on, and the whole reason the controller takes
     // `@Res` at all.
@@ -114,9 +125,7 @@ describe('Demo endpoint (e2e)', () => {
     const userDb = await app.get(UserDatabaseService).getUserDb(pooled.userId);
     await userDb.delete(transactions);
 
-    const response = await request(app.getHttpServer())
-      .post('/api/demo/session')
-      .expect(200);
+    const response = await handOut(app).expect(200);
 
     const token = (response.body as { token: string }).token;
     const listed = await request(app.getHttpServer())
@@ -149,7 +158,7 @@ describe('Demo endpoint (e2e)', () => {
       .set({ leaseExpiresAt: null, seededAt: twoDaysAgo })
       .where(eq(demoAccounts.id, pooled.id));
 
-    await request(app.getHttpServer()).post('/api/demo/session').expect(200);
+    await handOut(app).expect(200);
 
     const [after] = await centralDb
       .select()
@@ -178,9 +187,7 @@ describe('Demo endpoint (e2e)', () => {
       .set({ leaseExpiresAt: new Date(Date.now() + 60 * 60_000) })
       .where(ne(demoAccounts.userId, userId));
 
-    const first = await request(app.getHttpServer())
-      .post('/api/demo/session')
-      .expect(200);
+    const first = await handOut(app).expect(200);
     const staleToken = (first.body as { token: string }).token;
     expect(await whoami(app, staleToken)).toBe('demo-four@example.com');
 
@@ -204,7 +211,7 @@ describe('Demo endpoint (e2e)', () => {
       .set({ leaseExpiresAt: new Date(Date.now() - 1_000) })
       .where(eq(demoAccounts.userId, userId));
 
-    await request(app.getHttpServer()).post('/api/demo/session').expect(200);
+    await handOut(app).expect(200);
 
     // The bearer the first visitor kept. Dead from the moment the lease was
     // reclaimed, which is the whole point: a 30-day session on an account that
@@ -263,9 +270,7 @@ describe('Demo endpoint (e2e)', () => {
       .where(eq(categories.id, tombstoned.id));
 
     // A hand-out, and the assertion is simply that it is a 200.
-    const response = await request(app.getHttpServer())
-      .post('/api/demo/session')
-      .expect(200);
+    const response = await handOut(app).expect(200);
 
     const live = await userDb
       .select()

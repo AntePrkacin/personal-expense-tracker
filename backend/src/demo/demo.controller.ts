@@ -16,6 +16,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { ApiErrorResponse } from '../common/decorators/api-error-response.decorator';
 import { DemoLeaseService } from './demo-lease.service';
+import { DemoSecretGuard } from './demo-secret.guard';
 import { DemoSessionResponseDto } from './dto/demo-session.response.dto';
 
 /**
@@ -40,14 +41,21 @@ const BUSY_RETRY_AFTER_S = 120;
  * **This is the app's second session issuer**, and the first that asks for no
  * credential at all. `POST /api/auth/verify` is the other, and it at least
  * spends a token that was emailed to the address owner. This one hands a session
- * to anybody who asks, which is the entire point and also why three separate
+ * to anybody who asks, which is the entire point and also why four separate
  * things bound it: it is off unless `DEMO_ENABLED` says otherwise, it can only
- * ever name an account somebody deliberately enrolled into the pool, and it
- * carries a rate limiter of its own.
+ * ever name an account somebody deliberately enrolled into the pool, it carries
+ * a rate limiter of its own, and it answers nobody but the frontend - see
+ * `DemoSecretGuard`, which is also what makes that limiter count visitors
+ * rather than counting Vercel.
  */
 @ApiTags('demo')
 @Controller('demo')
-@UseGuards(ThrottlerGuard)
+// **The order is load-bearing.** Controller guards run in the order they are
+// listed, and the `demo` throttler keys on a request property `DemoSecretGuard`
+// sets from a header it has just authenticated. Reversed, the tracker runs
+// first, sees nothing, and every browser visitor shares the frontend's single
+// egress bucket again - with nothing failing and nothing logged.
+@UseGuards(DemoSecretGuard, ThrottlerGuard)
 // Every throttler this route is not named by, skipped explicitly. A bare
 // `@SkipThrottle()` means `{ default: true }`, and no throttler here is called
 // `default`, so it would silently skip nothing at all.
@@ -78,7 +86,9 @@ export class DemoController {
       'showcase fixture first unless it is untouched and was seeded today. No credential is ' +
       'required and none is accepted. **503** is the one ordinary rejection: every pooled ' +
       'account is leased to somebody else, and a later attempt will succeed as leases elapse. ' +
-      '**404** means this deployment has the demo disabled.',
+      '**404** means this deployment has the demo disabled, or the caller is not the ' +
+      'frontend: this route is reachable only with the shared secret the deployment ' +
+      'configures, and the two cases are deliberately indistinguishable from outside.',
   })
   @ApiOkResponse({ type: DemoSessionResponseDto })
   @ApiErrorResponse(

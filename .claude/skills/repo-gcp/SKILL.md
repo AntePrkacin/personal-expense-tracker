@@ -70,7 +70,15 @@ specified" - which is loud, and the one upside.
 
 - **`TRUST_PROXY_HOPS` is `1` and was measured for Fly, not Google.** It decides what `req.ip`
   means, so a wrong value puts every caller in one rate-limit bucket. It has not been
-  re-measured since the platform move. Do not assert it is correct; say it is unverified.
+  re-measured since the platform move. Do not assert it is correct; say it is unverified. The
+  two **auth** limiters are what it governs; the `demo` one is not, since that route counts the
+  address the frontend names in a header authenticated by `DEMO_SHARED_SECRET`.
+
+- **`DEMO_SHARED_SECRET` is required whenever `DEMO_ENABLED` is true, and the backend refuses to
+  boot without it.** It is a Secret Manager secret, and the **same value** has to be on the
+  Vercel project or `/demo` answers 404 and the visitor is told this deployment has no demo.
+  Setting one without the other is the mistake to check for before debugging anything else about
+  the demo.
 
 - **Secrets live in Secret Manager, not in env vars.** Five of them are bound by reference.
   Never print a secret's value, and never move one into a plain environment variable to make

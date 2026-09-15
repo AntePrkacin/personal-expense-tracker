@@ -1220,6 +1220,22 @@ Five things about it are easy to get wrong:
   restore - before, so no kept token can write into the account while the fixture lands on top of
   it. The cost is the one the old argument named: an abandoned tab is signed out at the hour.
 
+**The hand-out answers nobody but the frontend, and that is what makes its limiter count
+visitors.** `DemoSecretGuard` requires `DEMO_SHARED_SECRET` in an `x-demo-secret` header and
+answers **404** without it - `DemoController`'s own rule rather than a new one, so a wrong
+credential is indistinguishable from a deployment with no demo, at the cost that a misconfigured
+one looks the same to a visitor and is told apart only by the guard's `warn` line. Joi requires
+the variable whenever `DEMO_ENABLED` is true, so the route cannot be opened without it.
+
+Three things about it are easy to get wrong. The guard is listed **before** `ThrottlerGuard` in
+`@UseGuards`, and controller guards run in that order: the `demo` throttler's tracker reads
+`req.demoClientIp`, which this guard sets from `x-demo-client-ip` **after** the secret matched, so
+reversing them silently puts every browser visitor back in the frontend's one egress bucket. That
+header is trusted **only** there, which is the whole difference between it and raising
+`TRUST_PROXY_HOPS` over `X-Forwarded-For` - a caller who could forge it is answered 404 before the
+limiter runs. And the secret is compared over **sha256 digests** with `timingSafeEqual`, which
+throws on a length mismatch, so hashing first is what keeps the length out of the timing.
+
 **`DEMO_ENABLED` defaults to false and a disabled deployment answers 404**, not 403 and not 503: a
 deployment with no demo has no such route, where 403 would confirm the feature exists and 503 would
 promise it is coming back. That default is also what keeps a fresh clone and the e2e suite from

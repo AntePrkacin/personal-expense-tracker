@@ -11,7 +11,7 @@ Copy the templates, then fill in values. Both real files are gitignored.
 | App      | Template                | Real file             | Variables                                       |
 | -------- | ----------------------- | --------------------- | ----------------------------------------------- |
 | Backend  | `backend/.env.example`  | `backend/.env`        | see the table below                             |
-| Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (default `http://localhost:3000`) |
+| Frontend | `frontend/.env.example` | `frontend/.env.local` | `BACKEND_URL` (default `http://localhost:3000`), `DEMO_SHARED_SECRET` |
 
 Backend variables:
 
@@ -42,6 +42,7 @@ Backend variables:
 | `CHAT_RATE_LIMIT`        | `20`                    | Assistant chat turns per window, per session user id  |
 | `CHAT_RATE_TTL_S`        | `3600`                  | Window length in seconds for the chat limiter         |
 | `DEMO_ENABLED`           | `false`                 | Whether `POST /api/demo/session` exists; 404 when off  |
+| `DEMO_SHARED_SECRET`     | -                       | What the frontend presents to reach the hand-out; **required** when the demo is on, 16 characters or more |
 | `DEMO_LEASE_TTL_M`       | `60`                    | How long a visitor keeps a leased demo account         |
 | `DEMO_RATE_LIMIT`        | `5`                     | Demo hand-outs per window, per caller IP               |
 | `DEMO_RATE_TTL_S`        | `3600`                  | Window length in seconds for the demo limiter          |
@@ -55,6 +56,14 @@ lives on the Cloud Run service itself rather than in any file in this repository
 carry consequences: `FRONTEND_URL`, which is the single allowed CORS origin; `TRUST_PROXY_HOPS`,
 which is what makes `req.ip` the real caller rather than Google's front end, and whose value is
 **unverified** since the move off Fly; and `DEMO_ENABLED`, without which `/demo` does not exist.
+
+`DEMO_SHARED_SECRET` is the fourth, and it is the one that must be set in **two** places with the
+same value: on the Cloud Run service and on the Vercel project. Set both before deploying a backend
+with the demo on - the backend refuses to boot without it, and a frontend without it reaches a 404
+that looks exactly like a deployment with no demo. Generate one with `openssl rand -base64 32`.
+Note the demo limiter is the one throttler `TRUST_PROXY_HOPS` does not govern: the hand-out route
+counts the address the frontend names in a header it trusts only alongside that secret, so its
+buckets are per visitor whatever the proxy count is.
 
 Note the filename difference: Nest reads `.env`, Next.js reads `.env.local`.
 A typo or a bad value fails at **boot**, not at first use: the backend validates its environment

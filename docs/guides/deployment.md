@@ -85,8 +85,8 @@ lose it.
 
 ## Configuration
 
-Non-secret values are environment variables on the service; the five secrets come from Secret
-Manager. Both are listed by:
+Non-secret values are environment variables on the service; the secrets come from Secret
+Manager - five of them, or six once the demo's shared secret is set (see below). Both are listed by:
 
 ```sh
 gcloud run services describe expenso --project=expensa-app-26 --region=europe-west1 \
@@ -114,10 +114,33 @@ consequences here:
   durable.
 - **`TRUST_PROXY_HOPS`** is `1`, **and that number was derived for Fly's topology, not Google's.**
   It has not been re-measured since the move. It decides what `req.ip` means, so if it is wrong
-  every caller lands in one shared rate-limit bucket - and since PET-86 that includes the `demo`
-  limiter, which would make it five hand-outs per hour for the whole world rather than per visitor.
-  Worth an hour's work: reach the deployed API from two networks and confirm one exhausting its
-  budget does not throttle the other.
+  every caller lands in one shared rate-limit bucket. Worth an hour's work: reach the deployed API
+  from two networks and confirm one exhausting its budget does not throttle the other. The auth
+  limiters are what that buys, and they are what it costs while it is wrong.
+  **The `demo` limiter no longer depends on it.** It counts the address the frontend names in
+  `x-demo-client-ip`, which the backend reads only alongside a valid `DEMO_SHARED_SECRET`, so its
+  buckets are per visitor whatever the hop count is - and the header cannot be forged, because a
+  caller who could set it is answered 404 before the limiter runs.
+- **`DEMO_SHARED_SECRET`** is what makes the hand-out route reachable, and it must match the value
+  on the Vercel project exactly. The backend **refuses to boot** without it when `DEMO_ENABLED` is
+  true, so set it before deploying a backend with the demo on:
+
+  It is a **secret**, so it goes in Secret Manager beside the other five rather than into a plain
+  environment variable:
+
+  ```sh
+  openssl rand -base64 32 | tr -d '\n' | \
+    gcloud secrets create demo-shared-secret --project=expensa-app-26 --data-file=-
+  gcloud run services update expenso --project=expensa-app-26 --region=europe-west1 \
+    --update-secrets=DEMO_SHARED_SECRET=demo-shared-secret:latest
+  ```
+
+  Read the value back with `gcloud secrets versions access latest --secret=demo-shared-secret` to
+  set the frontend's half in the Vercel project's Environment Variables, with **no**
+  `NEXT_PUBLIC_` prefix, and redeploy. That makes it six secrets rather than five wherever this
+  guide counts them. A frontend whose value disagrees reaches a 404 and the
+  visitor is told this deployment has no demo; the backend logs a warning naming the header, which
+  is the only way to tell that apart from the demo genuinely being off.
 
 ## Rolling back
 
