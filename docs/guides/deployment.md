@@ -83,6 +83,29 @@ gcloud run services describe expenso --project=expensa-app-26 --region=europe-we
 and inherits every other setting, so the cap survives. Recreating the service from scratch would
 lose it.
 
+**`backend/cloudbuild.yaml` is where the cap is declared**, and it exists because the sentence above
+was the only thing standing between this invariant and a silent loss: the cap was set by hand on the
+service, no file in this repository mentioned it, and a service recreated from scratch or a deploy
+path written by somebody reading only the repository drops it with nothing failing. That file is the
+trigger's own inline build copied verbatim with `--max-instances=1` added to the deploy step.
+
+**It is not in force until the trigger is pointed at it**, which is a one-time change on Google's
+side and is a production action. Export the trigger, replace its inline `build:` block with
+`filename: backend/cloudbuild.yaml`, and import it back:
+
+```sh
+gcloud builds triggers export cloudrun-expenso-europe-west1-AntePrkacin-personal-expense-txwv \
+  --project=expensa-app-26 --region=europe-west1 --destination=trigger.yaml
+# Edit trigger.yaml: delete the whole `build:` block, add `filename: backend/cloudbuild.yaml`.
+# Keep `substitutions:` - the `_`-prefixed values live on the trigger, not in the file.
+gcloud builds triggers import --project=expensa-app-26 --region=europe-west1 --source=trigger.yaml
+```
+
+Keep the exported copy until one build has gone green: importing it again is the whole of the
+rollback. Verify with the `describe` above after the first deploy through the file, and note the cap
+is unchanged either way while the trigger still carries the inline build - what changes is whether
+the repository can lose it.
+
 ## Configuration
 
 Non-secret values are environment variables on the service; the secrets come from Secret

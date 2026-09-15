@@ -3394,8 +3394,16 @@ nothing else.
 
 **The first half is done**: the service carries `--max-instances=1`, set by hand, and
 `docs/guides/deployment.md` shows how to check it. The trigger's `services update --image` inherits
-it, so a deploy does not drop it; recreating the service would. Nothing in this repository or in the
-trigger declares it, which is the half that stays open.
+it, so a deploy does not drop it; recreating the service would.
+
+**The repository now declares it and the trigger does not yet read the declaration.**
+`backend/cloudbuild.yaml` is the trigger's own inline build copied verbatim with
+`--max-instances=1` on the deploy step, so the invariant is written down where somebody reading only
+this repository will find it. What is left is one production action: pointing the trigger at that
+file, which is an export-edit-import rather than a flag, and which `docs/guides/deployment.md`
+carries in full. Until that is done the file is documentation rather than machinery - which is
+better than nothing was, and is not the same as done. **Delete this entry when the trigger names
+`backend/cloudbuild.yaml`.**
 
 ## Nothing in this repository mentions GCP (PET-86)
 

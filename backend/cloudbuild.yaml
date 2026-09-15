@@ -1,0 +1,84 @@
+# The build and deploy that run on every push to main, and the one line of it that
+# is not Google's boilerplate.
+#
+# **Why this file exists: `--max-instances=1` is a deployment invariant and nothing
+# in this repository said so.** Three behaviours rest on exactly one instance
+# running - the in-memory rate limiters, the absent cross-process migration lock,
+# and the insight runner's in-process state - and `docs/TODO.md` carries all three.
+# The cap was set on the Cloud Run service by hand, which works and is invisible:
+# a service recreated from scratch, or a deploy path written by somebody reading
+# only this repository, drops it silently and every one of those three behaviours
+# becomes wrong without failing anything.
+#
+# **Everything else here is the trigger's own inline build, copied verbatim.** It
+# was created on 2026-09-10 through Developer Connect and had no file behind it;
+# this is that definition with one flag added, so pointing the trigger at this path
+# changes what deploys in exactly that one way. Do not "tidy" the steps: the pull
+# step's `|| exit 0` is what makes the first build work with no cache to pull, and
+# the labels are what the Cloud Run console reads to show which commit a revision
+# came from.
+#
+# The `_`-prefixed values are trigger substitutions and stay on the trigger rather
+# than being written here, so this file names no project, region or repository and
+# a fork or a second environment needs no edit to it. `docs/guides/deployment.md`
+# lists them and carries the command that points the trigger at this file.
+#
+# **`services update` inherits every setting it is not given**, which is why a
+# deploy does not reset the environment variables or the secret bindings - and why
+# adding the cap here is enough rather than needing the whole service restated.
+
+steps:
+  - id: Pull
+    name: gcr.io/cloud-builders/docker
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - docker pull $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest || exit 0
+
+  - id: Build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --cache-from
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
+      - -t
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - -t
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
+      - backend
+      - -f
+      - backend/Dockerfile
+
+  - id: Push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME
+
+  - id: Deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - update
+      - $_SERVICE_NAME
+      - --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      # The invariant, stated in the deploy rather than only on the service.
+      # Everything else on this line is the trigger's own.
+      - --max-instances=1
+      - --update-labels=managed-by=gcp-cloud-build-deploy-cloud-run,gcb-trigger-id=$_TRIGGER_ID,gcb-trigger-region=$LOCATION,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID
+      - --region=$_DEPLOY_REGION
+      - --quiet
+
+images:
+  - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+  - $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  # Unmatched substitutions are not an error, which is what the trigger's own
+  # inline build set and what keeps a missing `_`-prefixed value from failing the
+  # build before the deploy step can report anything useful.
+  substitutionOption: ALLOW_LOOSE

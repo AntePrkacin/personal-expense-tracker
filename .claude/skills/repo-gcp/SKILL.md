@@ -54,6 +54,13 @@ specified" - which is loud, and the one upside.
   being true. **Check it after any change that recreates the service**, and never lower the
   cap's importance because nothing is visibly broken.
 
+- **The cap is declared in `backend/cloudbuild.yaml`, and whether that file is in force is a
+  question about the trigger rather than the repository.** The trigger was created with an inline
+  build and has to be pointed at the file for the flag to reach a deploy;
+  `docs/guides/deployment.md` carries the export-edit-import procedure. Check which one is live
+  with `gcloud builds triggers describe`: a `filename` means the file, a `build:` block means the
+  inline copy, which does not carry the flag.
+
 - **A deploy inherits service settings; recreating the service does not.** The trigger runs
   `services update --image`, which changes only the image, so `--max-instances`, the env vars
   and the secret bindings all survive a deploy. Anything that deletes and recreates the
