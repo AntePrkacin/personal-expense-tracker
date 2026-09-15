@@ -90,21 +90,40 @@ path written by somebody reading only the repository drops it with nothing faili
 trigger's own inline build copied verbatim with `--max-instances=1` added to the deploy step.
 
 **It is not in force until the trigger is pointed at it**, which is a one-time change on Google's
-side and is a production action. Export the trigger, replace its inline `build:` block with
-`filename: backend/cloudbuild.yaml`, and import it back:
+side and is a production action. **Do it after the file is on `main`, never before**: a trigger
+naming a build config that is not in the commit it is building fails the whole build, so repointing
+early breaks every deploy until the merge lands.
+
+There is **no `gcloud builds triggers export`**; the read half is `describe` with a YAML format.
+Take a copy, remove the inline `build:` block, add `filename:`, and import it back - `import`
+updates an existing trigger rather than creating a second one, matching on the `name` in the file:
 
 ```sh
-gcloud builds triggers export cloudrun-expenso-europe-west1-AntePrkacin-personal-expense-txwv \
-  --project=expensa-app-26 --region=europe-west1 --destination=trigger.yaml
-# Edit trigger.yaml: delete the whole `build:` block, add `filename: backend/cloudbuild.yaml`.
-# Keep `substitutions:` - the `_`-prefixed values live on the trigger, not in the file.
+TRIGGER=cloudrun-expenso-europe-west1-AntePrkacin-personal-expense-txwv
+
+gcloud builds triggers describe "$TRIGGER" \
+  --project=expensa-app-26 --region=europe-west1 --format=yaml > trigger-backup.yaml
+cp trigger-backup.yaml trigger.yaml
+```
+
+Then edit `trigger.yaml`: delete the whole `build:` block, delete the output-only `createTime` and
+`resourceName`, and add one line at the top level.
+
+```yaml
+filename: backend/cloudbuild.yaml
+```
+
+Keep `substitutions:`, `name:` and `id:`. The `_`-prefixed values live on the trigger rather than in
+the file, which is what keeps `backend/cloudbuild.yaml` free of any project, region or service name.
+
+```sh
 gcloud builds triggers import --project=expensa-app-26 --region=europe-west1 --source=trigger.yaml
 ```
 
-Keep the exported copy until one build has gone green: importing it again is the whole of the
-rollback. Verify with the `describe` above after the first deploy through the file, and note the cap
-is unchanged either way while the trigger still carries the inline build - what changes is whether
-the repository can lose it.
+**Verify by what the next build does, not by the import's own output.** `gcloud builds triggers
+describe` should show a `filename` and no `build:` block, and the first deploy through the file
+should leave `maxScale` at 1 under the `describe` command above. Roll back by importing
+`trigger-backup.yaml`, which is why the copy is taken before the edit rather than after it.
 
 ## Configuration
 
